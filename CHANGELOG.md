@@ -12,6 +12,10 @@ tagged version is never reused for changed content.
   `Deriver` without touching the model or the pipeline.
 - A generic command line (`python -m crossfeed derive|validate|schema`, and a `crossfeed` console script)
   that derives a network for any mGrowthDB study, validates a network document, or emits the schema.
+- A `--deriver MODULE:CLASS` flag on `crossfeed derive` to run a custom derivation method live with no
+  glue code, plus a complete, runnable `examples/custom_deriver.py` and tests that keep it working.
+- The README rewritten as a complete guide: install, run, the output format with an annotated example,
+  and how to plug in a method end to end, so a new contributor never has to root around other docs.
 - A published JSON Schema for the neutral format (`schema/interaction_network.schema.json`) plus a
   dependency-free `crossfeed.schema.validate_document`.
 - mGrowthDB client hardening: in-memory and optional on-disk response caching, and retries with backoff

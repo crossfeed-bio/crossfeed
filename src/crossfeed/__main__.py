@@ -24,12 +24,33 @@ def _build(records, study_id, source_db):
     return net
 
 
+def _load_deriver(spec):
+    """Load a custom Deriver given as `module.path:ClassName` (or a ready instance of the same name)."""
+    import importlib
+    if ":" not in spec:
+        raise SystemExit(f"--deriver must be 'module:ClassName', got {spec!r}")
+    mod_name, _, cls_name = spec.partition(":")
+    try:
+        module = importlib.import_module(mod_name)
+    except ImportError as e:
+        raise SystemExit(f"--deriver: cannot import module {mod_name!r}: {e}") from e
+    obj = getattr(module, cls_name, None)
+    if obj is None:
+        raise SystemExit(f"--deriver: {mod_name!r} has no {cls_name!r}")
+    return obj() if isinstance(obj, type) else obj
+
+
 def _derive(a):
+    if a.deriver and not a.live:
+        print("--deriver applies to --live (it derives from raw growth data); "
+              "--fixture already holds derived records.", file=sys.stderr)
+        return 2
     if a.live:
         from .derive import derive_interactions
         from .mgrowthdb import MGrowthDBClient
+        deriver = _load_deriver(a.deriver) if a.deriver else None
         try:
-            records, skipped = derive_interactions(MGrowthDBClient(), a.study)
+            records, skipped = derive_interactions(MGrowthDBClient(), a.study, deriver=deriver)
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
             return 1
@@ -89,6 +110,8 @@ def main(argv=None):
     g = d.add_mutually_exclusive_group(required=True)
     g.add_argument("--live", action="store_true", help="fetch the real study from the mGrowthDB API")
     g.add_argument("--fixture", help="path to a JSON list of interaction records (offline)")
+    d.add_argument("--deriver", metavar="MODULE:CLASS",
+                   help="a custom Deriver to use instead of the provisional baseline (with --live)")
     d.add_argument("--out", help="write the neutral network JSON here (default: stdout)")
     d.set_defaults(fn=_derive)
 

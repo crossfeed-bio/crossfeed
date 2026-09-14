@@ -41,13 +41,13 @@ caveats. Keep it, and the check stays quiet.
 
 ## Adding a derivation method
 
-The comparison method (the growth metric, how to read a per-strain signal inside a community, the
-significance test) is the scientific choice this collaboration exists to make. It plugs in through the
-`Deriver` interface in `src/crossfeed/derive.py`: subclass `Deriver`, implement `derive(study, exps)` to
-return `(records, skipped)`, and it slots into `derive_interactions` and the CLI without touching the
-model or the pipeline. `BaselineDeriver` is the provisional placeholder. Record what the data does not
-support in `skipped` rather than inventing a value. Changes to the method are scientific decisions:
-please open an issue to discuss before implementing.
+The comparison method is the scientific choice this collaboration exists to make. The complete
+walkthrough, with a copy-paste `Deriver`, the record shape, the `--deriver` command to run it live, and
+the runnable `examples/custom_deriver.py`, is in the
+[README](README.md#plug-in-your-own-method); the menu of choices is in
+[docs/METHOD_NOTES.md](docs/METHOD_NOTES.md). Two rules hold: record what the data does not support in
+`skipped` rather than inventing a value, and, because changes to the method are scientific decisions, open
+an issue to discuss before you implement one.
 
 ## The neutral format is a contract
 
