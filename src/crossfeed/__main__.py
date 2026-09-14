@@ -62,7 +62,11 @@ def _derive(a):
         source_db = "mGrowthDB (fixture)"
 
     net = _build(records, a.study, source_db)
-    payload = net.to_json()
+    if a.format == "graphml":
+        from .export import to_graphml
+        payload = to_graphml(net)
+    else:
+        payload = net.to_json()
     if a.out:
         with open(a.out, "w", encoding="utf-8") as f:
             f.write(payload)
@@ -120,7 +124,9 @@ def main(argv=None):
     g.add_argument("--fixture", help="path to a JSON list of interaction records (offline)")
     d.add_argument("--deriver", metavar="MODULE:CLASS",
                    help="a custom Deriver to use instead of the provisional baseline (with --live)")
-    d.add_argument("--out", help="write the neutral network JSON here (default: stdout)")
+    d.add_argument("--format", choices=["json", "graphml"], default="json",
+                   help="output format: json (the neutral format, default) or graphml (for network tools)")
+    d.add_argument("--out", help="write the network here (default: stdout)")
     d.set_defaults(fn=_derive)
 
     v = sub.add_parser("validate", help="validate a network JSON against the neutral-format schema")

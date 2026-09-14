@@ -18,6 +18,8 @@ tagged version is never reused for changed content.
   and how to plug in a method end to end, so a new contributor never has to root around other docs.
 - A published JSON Schema for the neutral format (`schema/interaction_network.schema.json`) plus a
   dependency-free `crossfeed.schema.validate_document`.
+- A GraphML export (`crossfeed derive --format graphml`, and `crossfeed.export.to_graphml`) so a network
+  drops straight into Cytoscape, igraph, networkx, or Gephi. Dependency-free (standard library xml only).
 - mGrowthDB client hardening: in-memory and optional on-disk response caching, and retries with backoff
   on transient network failures and 5xx responses.
 - An expanded guardrail gate (`checks/gate.py`) covering secrets, raw data, local-machine paths,

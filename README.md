@@ -80,7 +80,7 @@ concrete demonstration of the seam.
 ## The command line
 
 ```
-python -m crossfeed derive STUDY [--live | --fixture FILE] [--deriver MODULE:CLASS] [--out FILE]
+python -m crossfeed derive STUDY [--live | --fixture FILE] [--deriver MODULE:CLASS] [--format json|graphml] [--out FILE]
 python -m crossfeed validate FILE
 python -m crossfeed schema [--out FILE]
 ```
@@ -88,8 +88,9 @@ python -m crossfeed schema [--out FILE]
 - `derive STUDY --live` fetches the study from the mGrowthDB API and derives interactions.
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the baseline (see below).
-- `--out FILE` writes the network JSON to a file instead of stdout; attribution and skipped pairs print
-  to stderr.
+- `--format graphml` emits GraphML (for Cytoscape, igraph, networkx, Gephi) instead of the neutral JSON.
+- `--out FILE` writes the network to a file instead of stdout; attribution and skipped pairs print to
+  stderr.
 - `validate FILE` checks a network document against the neutral-format schema and exits non-zero if it
   fails.
 - `schema` prints the JSON Schema (or writes it with `--out`).
@@ -131,7 +132,9 @@ read, and it is pinned by a JSON Schema at
 `effect` is one of `facilitation`, `inhibition`, `neutral`. `strength` and `significance` are your
 method's numbers (or `null`). `study_ids` on every edge is the edge-level attribution and must carry at
 least one study. Validate any document (in Python) with `crossfeed.schema.validate_document(doc)`, which
-returns a list of problems (empty means valid).
+returns a list of problems (empty means valid). For network tools, `derive ... --format graphml` emits
+the same network as GraphML (Cytoscape, igraph, networkx, Gephi); the neutral JSON stays the canonical,
+citable form.
 
 ## Plug in your own method
 
