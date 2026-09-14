@@ -65,7 +65,8 @@ A caveat is recorded on every edge: in the demonstration study the monoculture g
 cytometry or optical density while the per-strain co-culture growth is measured by qPCR, so the direction
 of an interaction is dependable but the magnitude is provisional. The comparison method, the growth
 metric, the per-strain signal inside a community, and the significance test remain the scientific piece to
-be scoped with the KU Leuven side.
+be scoped with the KU Leuven side. The choices are laid out as a menu in
+[docs/METHOD_NOTES.md](docs/METHOD_NOTES.md).
 
 ## Guardrails
 
