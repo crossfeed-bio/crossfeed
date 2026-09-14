@@ -20,8 +20,8 @@ dependencies = ["requests>=2.31"]
 dev = ["pytest>=8"]
 
 [project.urls]
-# TODO: set once the new GitHub org exists (repo name: crossfeed)
-Homepage = "https://github.com/ORG/crossfeed"
+Homepage = "https://github.com/crossfeed-bio/crossfeed"
+Repository = "https://github.com/crossfeed-bio/crossfeed"
 
 [tool.setuptools.packages.find]
 where = ["src"]
