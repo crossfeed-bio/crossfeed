@@ -51,7 +51,12 @@ def main(argv=None):
     a = ap.parse_args(argv)
 
     if a.live:
-        net, skipped = build_live()
+        from ..mgrowthdb import MGrowthDBError
+        try:
+            net, skipped = build_live()
+        except MGrowthDBError as e:
+            print(f"live fetch failed: {e}", file=sys.stderr)
+            return 1
     else:
         with open(a.fixture, encoding="utf-8") as f:
             net, skipped = build_from_fixture(json.load(f))

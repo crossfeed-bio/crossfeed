@@ -1,5 +1,9 @@
 # crossfeed
 
+[![ci](https://github.com/crossfeed-bio/crossfeed/actions/workflows/ci.yml/badge.svg)](https://github.com/crossfeed-bio/crossfeed/actions/workflows/ci.yml)
+[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![python: 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+
 **crossfeed** turns experimentally grounded microbial co-growth data from
 [mGrowthDB](https://mgrowthdb.gbiomed.kuleuven.be/) into directed interaction networks, in a
 neutral and openly citable format that downstream tools (such as Syntropa and microbetag) can
@@ -40,6 +44,19 @@ inside a community, the significance test) is a scientific choice still to be sc
 side. On the published three-species study SMGDB00000004 the baseline already recovers a sensible signal:
 Blautia hydrogenotrophica facilitating Faecalibacterium prausnitzii, consistent with hydrogen and formate
 cross-feeding.
+
+## How interactions are derived (provisional baseline)
+
+An interaction is inferred by comparing a strain's growth alone against its growth with a partner, under
+one condition. The current baseline (`src/crossfeed/derive.py`) uses log2 of the per-strain growth-rate
+ratio (co-culture over monoculture), on two-member co-cultures only, and marks every edge qualitative (no
+significance test yet). It skips any pair the data does not cleanly support rather than inventing a value.
+
+A caveat is recorded on every edge: in the demonstration study the monoculture growth is measured by flow
+cytometry or optical density while the per-strain co-culture growth is measured by qPCR, so the direction
+of an interaction is dependable but the magnitude is provisional. The comparison method, the growth
+metric, the per-strain signal inside a community, and the significance test remain the scientific piece to
+be scoped with the KU Leuven side.
 
 ## Attribution and data governance
 

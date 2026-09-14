@@ -11,6 +11,7 @@ open (see docs/DATA_GOVERNANCE.md); crossfeed pulls from it but never commits ra
 from __future__ import annotations
 
 import json
+import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Iterable, Optional
@@ -19,6 +20,10 @@ from .model import Edge, InteractionNetwork, Node, Study
 
 MGROWTHDB_API = "https://mgrowthdb.gbiomed.kuleuven.be/api/v1"
 API_DOCS = "https://mgrowthdb.readthedocs.io/en/latest/api.html"
+
+
+class MGrowthDBError(RuntimeError):
+    """A failed mGrowthDB request: a bad id, a network error, or the API being unreachable."""
 
 
 class MGrowthDBClient:
@@ -37,8 +42,18 @@ class MGrowthDBClient:
         req = urllib.request.Request(
             url, headers={"Accept": "application/json", "User-Agent": "crossfeed/0.0.1"}
         )
-        with urllib.request.urlopen(req, timeout=self.timeout) as r:
-            return json.load(r)
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            raise MGrowthDBError(
+                f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})"
+            ) from e
+        except urllib.error.URLError as e:
+            raise MGrowthDBError(
+                f"could not reach mGrowthDB at {url}: {e.reason} "
+                "(check your network; the API may be temporarily down)"
+            ) from e
 
     def get_study(self, study_id: str) -> dict:
         """Study metadata: id, name, projectId, description, publishedAt, experiments[{id, name}]."""

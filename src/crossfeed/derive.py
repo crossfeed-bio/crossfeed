@@ -7,7 +7,7 @@ signal inside a community, and the significance test. This module implements ONE
 so the seam runs end to end on real data. It is explicitly PROVISIONAL, meant to be replaced by the
 method agreed with Karoline.
 
-Baseline v0 (documented, conservative, honest):
+Baseline v0 (documented and conservative):
   * metric: per-strain `growthRate` (1/h), a RATE that travels better across techniques than an absolute
     AUC. The mono and co techniques are recorded per edge; a technique mismatch is FLAGGED, not hidden.
   * mono growth: the strain's growthRate in its single-strain experiment (community-level context).
@@ -15,7 +15,7 @@ Baseline v0 (documented, conservative, honest):
     (subject.type == "strain"). Co-cultures with more than two members are SKIPPED (not a clean pairwise
     attribution). A missing per-strain context skips that strain, with a reason; nothing is fabricated.
   * strength = log2(co / mono); effect by sign with a documented deadband; NO significance test yet, so
-    every edge is qualitative (significance = None), recorded honestly by the neutral model.
+    every edge is qualitative (significance = None), recorded as such by the neutral model.
 """
 from __future__ import annotations
 

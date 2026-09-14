@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,8 @@ version = "0.0.1"
 description = "Build experimentally grounded microbial interaction networks from mGrowthDB data, in a neutral format that Syntropa, microbetag, and other tools can consume."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [
     { name = "Syntropa" },
     { name = "KU Leuven, Lab of Molecular Bacteriology" },

@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+title: crossfeed
+message: "If you use crossfeed, please cite it using the metadata below."
+type: software
+authors:
+  - name: "Syntropa"
+  - name: "KU Leuven, Laboratory of Molecular Bacteriology"
+abstract: >-
+  crossfeed builds experimentally grounded microbial interaction networks from mGrowthDB co-growth data,
+  in a neutral, openly citable format that downstream tools such as Syntropa and microbetag can consume.
+repository-code: "https://github.com/crossfeed-bio/crossfeed"
+url: "https://github.com/crossfeed-bio/crossfeed"
+license: Apache-2.0
+version: 0.0.1
+date-released: "2026-09-14"
+keywords:
+  - microbial interactions
+  - cross-feeding
+  - mGrowthDB
+  - metabolic modeling
+  - open science
