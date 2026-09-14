@@ -1,0 +1,22 @@
+[
+  {
+    "source": "fp", "source_name": "Faecalibacterium prausnitzii",
+    "target": "bh", "target_name": "Blautia hydrogenotrophica",
+    "strength": 0.31, "significance": 0.02,
+    "condition": "batch, N2 atmosphere (illustrative)",
+    "method": "mono vs co-culture growth log-ratio (illustrative)",
+    "study_id": "SYNTHETIC-EXAMPLE",
+    "study_citation": "Synthetic illustrative example, not real experimental data",
+    "study_license": "n/a (synthetic)"
+  },
+  {
+    "source": "ri", "source_name": "Roseburia intestinalis",
+    "target": "bh", "target_name": "Blautia hydrogenotrophica",
+    "strength": 0.18, "significance": 0.20,
+    "condition": "batch, N2 atmosphere (illustrative)",
+    "method": "mono vs co-culture growth log-ratio (illustrative)",
+    "study_id": "SYNTHETIC-EXAMPLE",
+    "study_citation": "Synthetic illustrative example, not real experimental data",
+    "study_license": "n/a (synthetic)"
+  }
+]

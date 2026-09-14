@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.coverage
+
+# Data governance: never commit raw or pulled experimental data (mGrowthDB pulls,
+# collaborator data). Only synthetic fixtures under tests/fixtures/ are allowed.
+/data/
+*.csv
+!tests/fixtures/*.csv

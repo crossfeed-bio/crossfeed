@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crossfeed"
+version = "0.0.1"
+description = "Build experimentally grounded microbial interaction networks from mGrowthDB data, in a neutral format that Syntropa, microbetag, and other tools can consume."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Syntropa" },
+    { name = "KU Leuven, Lab of Molecular Bacteriology" },
+]
+keywords = ["microbial-interactions", "cross-feeding", "mGrowthDB", "metabolic-modeling", "open-science"]
+dependencies = ["requests>=2.31"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.urls]
+# TODO: set once the new GitHub org exists (repo name: crossfeed)
+Homepage = "https://github.com/ORG/crossfeed"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
