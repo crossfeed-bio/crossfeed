@@ -14,6 +14,11 @@ each edge names the studies behind it, and a network cites all of its supporting
 licenses. This is preferred over bundling because it keeps the per-study terms clean and makes clear
 exactly which measurements stand behind each edge. Adopted with K. Faust, 2026-09-14.
 
+The per-study license is not currently exposed by the mGrowthDB study endpoint, so edges carry the study
+id and url with the license marked unresolved rather than guessed. Resolving where each study's license is
+published, and wiring it into the `study_license` field, is a pending item to confirm with the mGrowthDB
+side.
+
 ## Unpublished collaborator data
 
 Any unpublished interaction calls, media, or genomes shared by a collaborator are used only for the

@@ -21,17 +21,25 @@ feeding Syntropa, as the concrete demonstration of the seam.
 
 ## Status
 
-Scaffold. The neutral network model, the edge-level attribution, and the guardrails are in place and
-tested. The live mGrowthDB API client is the next step (see `src/crossfeed/mgrowthdb.py`, to be wired
-against the [mGrowthDB API](https://mgrowthdb.readthedocs.io/en/latest/api.html)). You can exercise
-the whole downstream seam today on a synthetic example:
+The mGrowthDB API client is wired against the live REST API (`src/crossfeed/mgrowthdb.py`), and the FP/BH
+first slice runs end to end on real published data. The neutral network model, the edge-level attribution,
+and the guardrails are in place and tested.
 
 ```
 pip install -e ".[dev]"
-python -m crossfeed.slices.fp_bh --fixture tests/fixtures/example_interactions.json
+python -m crossfeed.slices.fp_bh --live      # fetch SMGDB00000004 from mGrowthDB and derive
+python -m crossfeed.slices.fp_bh --fixture tests/fixtures/example_interactions.json   # offline demo
 pytest -q
 python checks/gate.py
 ```
+
+The interaction DERIVATION is a documented, PROVISIONAL baseline (`src/crossfeed/derive.py`): it compares
+a strain's growth alone vs with a partner (log2 growthRate, pairwise co-cultures only) and skips what the
+data does not cleanly support, but the comparison method (the growth metric, reading a per-strain signal
+inside a community, the significance test) is a scientific choice still to be scoped with the KU Leuven
+side. On the published three-species study SMGDB00000004 the baseline already recovers a sensible signal:
+Blautia hydrogenotrophica facilitating Faecalibacterium prausnitzii, consistent with hydrogen and formate
+cross-feeding.
 
 ## Attribution and data governance
 
