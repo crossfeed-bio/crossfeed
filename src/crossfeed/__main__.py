@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections import Counter
 
 from .attribution import render_attribution
 from .mgrowthdb import MGrowthDBError, records_to_network
@@ -74,6 +75,13 @@ def _derive(a):
         print(f"\nskipped {len(skipped)} pair(s) the data did not cleanly support:", file=sys.stderr)
         for label, reason in skipped:
             print(f"  - {label}: {reason}", file=sys.stderr)
+    if not net.edges:
+        top = Counter(r.split(";")[0].strip() for _, r in skipped).most_common(1)
+        why = f" Most common reason: {top[0][0]}." if top else ""
+        print(f"\nNO interactions were derived for {a.study}: the network is empty.{why}\n"
+              "The provisional baseline handles pairwise (two-member) co-cultures only, so a study built "
+              "on larger or deletion consortia yields nothing until a method suited to its design is "
+              "chosen (see docs/METHOD_NOTES.md).", file=sys.stderr)
     return 0
 
 

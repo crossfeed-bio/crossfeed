@@ -45,6 +45,12 @@ A co-culture measures the community; an interaction needs each strain's own grow
 - **larger communities**: possible, but needs a rule for attributing a per-strain change to a specific
   partner rather than to the whole community.
 
+Several real mGrowthDB studies are built on larger communities. Study SMGDB00000007 is mostly pairwise
+and works with the baseline today; study SMGDB00000008 is a species-deletion design with 13 to 14 member
+consortia, so the pairwise baseline skips all of it and the network comes back empty. Supporting that
+class of study (deletion or leave-one-out designs, and community subsets) is one of the higher-value
+method choices to make.
+
 ## 6. The technique-mismatch caveat
 
 In the FP/BH demonstration study the monoculture growth is measured by flow cytometry or optical density
