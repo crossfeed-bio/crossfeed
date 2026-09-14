@@ -76,14 +76,31 @@ def check_secrets(rels):
     return hits
 
 
+# data-shaped files this large outside the allowed dirs are almost certainly a pulled or raw dump; the
+# synthetic fixtures and the schema are tiny, so a low cap catches a data commit without blocking them.
+DATA_EXT = (".json", ".tsv", ".txt", ".xml", ".parquet", ".h5", ".hdf5", ".xlsx", ".ndjson")
+DATA_OK_PREFIXES = ("tests/fixtures/", "schema/")
+DATA_MAX_BYTES = 50 * 1024
+
+
 def check_no_raw_data(rels):
     bad = []
     for rel in rels:
         r = rel.replace("\\", "/")
         if r.startswith("data/"):
             bad.append(f"raw data committed: {r} (data/ must stay out of git)")
-        elif r.endswith(".csv") and not r.startswith("tests/fixtures/"):
+            continue
+        if r.endswith(".csv") and not r.startswith("tests/fixtures/"):
             bad.append(f"csv committed outside tests/fixtures/: {r}")
+            continue
+        if r.endswith(DATA_EXT) and not r.startswith(DATA_OK_PREFIXES):
+            try:
+                size = os.path.getsize(os.path.join(ROOT, rel))
+            except OSError:
+                size = 0
+            if size > DATA_MAX_BYTES:
+                bad.append(f"large data-shaped file outside tests/fixtures/: {r} ({size // 1024} KB); "
+                           "pulled or raw data must not be committed (data governance)")
     return bad
 
 
