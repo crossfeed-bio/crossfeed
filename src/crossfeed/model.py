@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from typing import Optional
 
 SCHEMA = "crossfeed.interaction_network/v0"
 EFFECTS = ("facilitation", "inhibition", "neutral")
@@ -48,8 +47,8 @@ class Edge:
     source: str                   # Node.id of the actor
     target: str                   # Node.id of the affected organism
     effect: str                   # one of EFFECTS
-    strength: Optional[float] = None       # e.g. a growth log-ratio
-    significance: Optional[float] = None   # e.g. an adjusted p-value
+    strength: float | None = None       # e.g. a growth log-ratio
+    significance: float | None = None   # e.g. an adjusted p-value
     condition: str = ""           # the experimental condition (interactions are condition-specific)
     method: str = ""              # how the interaction was quantified
     study_ids: tuple = ()         # the studies supporting THIS edge (edge-level attribution)
@@ -110,7 +109,7 @@ class InteractionNetwork:
         return json.dumps(self.to_dict(), indent=indent, ensure_ascii=False)
 
     @classmethod
-    def from_dict(cls, d: dict) -> "InteractionNetwork":
+    def from_dict(cls, d: dict) -> InteractionNetwork:
         net = cls(meta=d.get("meta", {}), schema=d.get("schema", SCHEMA))
         for s in d.get("studies", []):
             net.add_study(Study(**s))

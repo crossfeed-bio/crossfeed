@@ -1,0 +1,23 @@
+# Local hooks run the same checks as CI, using the tools installed by `pip install -e ".[dev]"`.
+# Enable once with `pre-commit install`; then every commit runs lint, the guardrail gate, and the tests.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff (lint)
+        entry: ruff check
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: gate
+        name: guardrail gate
+        entry: python checks/gate.py
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: pytest
+        name: tests
+        entry: python -m pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true

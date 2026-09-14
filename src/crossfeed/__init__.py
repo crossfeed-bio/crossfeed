@@ -5,4 +5,4 @@ network in a neutral, openly citable format that downstream tools (Syntropa, mic
 can consume. A joint open source project of Syntropa and the KU Leuven Lab of Molecular
 Bacteriology.
 """
-__version__ = "0.0.1"
+__version__ = "0.0.2"

@@ -31,8 +31,17 @@ and the guardrails are in place and tested.
 
 ```
 pip install -e ".[dev]"
-python -m crossfeed.slices.fp_bh --live      # fetch SMGDB00000004 from mGrowthDB and derive
-python -m crossfeed.slices.fp_bh --fixture tests/fixtures/example_interactions.json   # offline demo
+
+# any study, live from the mGrowthDB API (provisional baseline)
+python -m crossfeed derive SMGDB00000004 --live
+
+# the named FP/BH first slice, offline from the bundled fixture
+python -m crossfeed.slices.fp_bh --fixture tests/fixtures/example_interactions.json
+
+# validate a network document against the neutral-format schema
+python -m crossfeed validate network.json
+
+# the tests and the guardrail gate (both run in CI)
 pytest -q
 python checks/gate.py
 ```
@@ -57,6 +66,15 @@ cytometry or optical density while the per-strain co-culture growth is measured 
 of an interaction is dependable but the magnitude is provisional. The comparison method, the growth
 metric, the per-strain signal inside a community, and the significance test remain the scientific piece to
 be scoped with the KU Leuven side.
+
+## Guardrails
+
+Discipline is a feature here. Every commit and every CI run passes the same self-contained gate
+(`checks/gate.py`): no committed secrets, no raw or pulled data (only the synthetic fixtures under
+`tests/fixtures/`), no local-machine paths, imports that resolve to the standard library or crossfeed
+itself, a documented house style, and a schema contract that keeps the shipped
+`schema/interaction_network.schema.json` in step with the code. The tests run on Python 3.10 to 3.12.
+Contributors get the same checks locally with `pre-commit install`; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Attribution and data governance
 

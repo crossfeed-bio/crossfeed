@@ -7,15 +7,25 @@ Important: the API serves RAW growth data (study -> experiments -> bioreplicates
 contexts). It does NOT serve pre-computed interactions. Interactions are DERIVED by comparing a
 strain's growth alone vs with a partner (see crossfeed.derive). Public data needs no auth. mGrowthDB is
 open (see docs/DATA_GOVERNANCE.md); crossfeed pulls from it but never commits raw or pulled data.
+
+The client works for ANY study id (get_study, get_experiment, study_experiments). It caches responses
+in memory for the life of the client (and optionally on disk via `cache_dir`) so repeated pulls of the
+same study do not re-hit the API, and it retries transient network failures and 5xx responses with a
+short backoff. A cache is a convenience, never a substitute for pulling fresh: nothing pulled is
+committed to the repository.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
+from . import __version__
 from .model import Edge, InteractionNetwork, Node, Study
 
 MGROWTHDB_API = "https://mgrowthdb.gbiomed.kuleuven.be/api/v1"
@@ -27,33 +37,94 @@ class MGrowthDBError(RuntimeError):
 
 
 class MGrowthDBClient:
-    """A thin read-only client over the mGrowthDB REST API (public endpoints, no auth needed)."""
+    """A thin read-only client over the mGrowthDB REST API (public endpoints, no auth needed).
 
-    def __init__(self, base_url: str = MGROWTHDB_API, timeout: int = 30):
+    Args:
+      base_url: API base; override to point at a mirror or a test server.
+      timeout:  per-request timeout in seconds.
+      retries:  attempts on a transient failure (network error or HTTP 5xx) before giving up.
+      backoff:  base seconds between retries (grows linearly with the attempt).
+      cache:    keep an in-memory response cache for the life of the client.
+      cache_dir: optional directory for an on-disk JSON cache across runs (never inside the repo).
+    """
+
+    def __init__(self, base_url: str = MGROWTHDB_API, timeout: int = 30, retries: int = 3,
+                 backoff: float = 0.5, cache: bool = True, cache_dir: str | None = None):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.retries = max(1, int(retries))
+        self.backoff = max(0.0, float(backoff))
+        self._mem = {} if cache else None
+        self.cache_dir = cache_dir
+        if cache_dir:
+            os.makedirs(cache_dir, exist_ok=True)
 
-    def _get(self, path: str, params: Optional[dict] = None):
+    def _disk_path(self, key: str) -> str:
+        h = hashlib.sha256(key.encode("utf-8")).hexdigest()[:32]
+        return os.path.join(self.cache_dir, f"{h}.json")
+
+    def _cache_get(self, key: str):
+        if self._mem is not None and key in self._mem:
+            return self._mem[key]
+        if self.cache_dir:
+            p = self._disk_path(key)
+            if os.path.exists(p):
+                try:
+                    with open(p, encoding="utf-8") as f:
+                        data = json.load(f)
+                    if self._mem is not None:
+                        self._mem[key] = data
+                    return data
+                except (OSError, ValueError):
+                    return None
+        return None
+
+    def _cache_put(self, key: str, data) -> None:
+        if self._mem is not None:
+            self._mem[key] = data
+        if self.cache_dir:
+            try:
+                with open(self._disk_path(key), "w", encoding="utf-8") as f:
+                    json.dump(data, f)
+            except OSError:
+                pass
+
+    def _get(self, path: str, params: dict | None = None):
         url = f"{self.base_url}/{path.lstrip('/')}"
         if params:
             clean = {k: v for k, v in params.items() if v is not None}
             if clean:
                 url += "?" + urllib.parse.urlencode(clean, doseq=True)
+
+        cached = self._cache_get(url)
+        if cached is not None:
+            return cached
+
         req = urllib.request.Request(
-            url, headers={"Accept": "application/json", "User-Agent": "crossfeed/0.0.1"}
+            url, headers={"Accept": "application/json", "User-Agent": f"crossfeed/{__version__}"}
         )
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                return json.load(r)
-        except urllib.error.HTTPError as e:
-            raise MGrowthDBError(
-                f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})"
-            ) from e
-        except urllib.error.URLError as e:
-            raise MGrowthDBError(
-                f"could not reach mGrowthDB at {url}: {e.reason} "
-                "(check your network; the API may be temporarily down)"
-            ) from e
+        last = None
+        for attempt in range(self.retries):
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                    data = json.load(r)
+                self._cache_put(url, data)
+                return data
+            except urllib.error.HTTPError as e:
+                # 4xx are real errors (a bad id): do not retry. 5xx may be transient: retry.
+                if e.code < 500:
+                    raise MGrowthDBError(
+                        f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})"
+                    ) from e
+                last = MGrowthDBError(f"mGrowthDB returned HTTP {e.code} for {url} (server error)")
+            except urllib.error.URLError as e:
+                last = MGrowthDBError(
+                    f"could not reach mGrowthDB at {url}: {e.reason} "
+                    "(check your network; the API may be temporarily down)"
+                )
+            if attempt < self.retries - 1:
+                time.sleep(self.backoff * (attempt + 1))
+        raise last
 
     def get_study(self, study_id: str) -> dict:
         """Study metadata: id, name, projectId, description, publishedAt, experiments[{id, name}]."""
@@ -93,7 +164,7 @@ def effect_from_logratio(strength, significance, alpha: float = 0.05) -> str:
     return "facilitation" if strength > 0 else "inhibition"
 
 
-def records_to_network(records: Iterable[dict], meta: Optional[dict] = None) -> InteractionNetwork:
+def records_to_network(records: Iterable[dict], meta: dict | None = None) -> InteractionNetwork:
     """Map interaction records into the neutral network. Real and testable.
 
     Each record:
