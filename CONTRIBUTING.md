@@ -4,6 +4,12 @@ crossfeed is a small open collaboration between Syntropa and the KU Leuven Labor
 Bacteriology. Issues and pull requests are welcome. Discipline is deliberate here: the checks below run
 the same way for everyone, in CI and before every commit, so the repository stays honest and portable.
 
+## Working with coding agents
+
+Features, tasks, and the roles agents take (mayor, worker, verifier) are described in
+[AGENTS.md](AGENTS.md), with shared agent memory in [docs/agents/NOTES.md](docs/agents/NOTES.md). Humans
+propose work by opening a Feature issue.
+
 ## Development setup
 
 ```
