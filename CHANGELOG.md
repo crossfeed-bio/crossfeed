@@ -25,6 +25,11 @@ tagged version is never reused for changed content.
 - An expanded guardrail gate (`checks/gate.py`) covering secrets, raw data, local-machine paths,
   self-contained imports, house style (ASCII punctuation, US spelling, no hedging caveats), and a schema
   contract check. A pre-commit hook and a Makefile run the gate, tests, and lint the same way CI does.
+- Helpers for a pairwise interaction strength from replicate growth curves: `crossfeed.growth`
+  (`GrowthCurve`, `Replicate`, unit and species checks across replicate sets, `curve_features` for the
+  area under the curve and maximal abundance over a shared time window) and
+  `crossfeed.interaction.interaction_strength` (log2 co-culture over monoculture per species, over all
+  replicate combinations, reported as mean, standard deviation, and n).
 
 ### Changed
 - crossfeed now has no runtime dependencies: the client uses the standard library `urllib`, and the
