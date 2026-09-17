@@ -20,6 +20,9 @@ tagged version is never reused for changed content.
   dependency-free `crossfeed.schema.validate_document`.
 - A GraphML export (`crossfeed derive --format graphml`, and `crossfeed.export.to_graphml`) so a network
   drops straight into Cytoscape, igraph, networkx, or Gephi. Dependency-free (standard library xml only).
+- Optional `evidence` (`biculture` or `dropout`) and `community` fields on network edges, in the model,
+  the JSON Schema, and GraphML, so arcs from drop-out communities (not necessarily direct) are labeled
+  apart from mono versus bi-culture arcs. The provisional baseline marks its edges `biculture`.
 - mGrowthDB client hardening: in-memory and optional on-disk response caching, and retries with backoff
   on transient network failures and 5xx responses.
 - An expanded guardrail gate (`checks/gate.py`) covering secrets, raw data, local-machine paths,

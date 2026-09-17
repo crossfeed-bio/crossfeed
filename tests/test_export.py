@@ -38,3 +38,15 @@ def test_graphml_omits_null_numbers():
     neutral = [e for e in root.findall(".//g:edge", NS) if e.get("target") == "c"][0]
     keys = {d.get("key") for d in neutral.findall("g:data", NS)}
     assert "e_strength" not in keys and "e_significance" not in keys
+
+
+def test_graphml_carries_evidence_and_community_when_known():
+    recs = [{"source": "a", "target": "b", "effect": "facilitation", "strength": 1.0, "study_id": "S1",
+             "evidence": "dropout", "community": ["a", "b", "c"]}]
+    root = ET.fromstring(to_graphml(records_to_network(recs)))
+    data = {d.get("key"): d.text for d in root.find(".//g:edge", NS).findall("g:data", NS)}
+    assert data["e_evidence"] == "dropout"
+    assert data["e_community"] == "a b c"
+    # an edge without evidence has neither key
+    unknown = [e for e in ET.fromstring(to_graphml(_net())).findall(".//g:edge", NS) if e.get("target") == "b"][0]
+    assert {"e_evidence", "e_community"}.isdisjoint(d.get("key") for d in unknown.findall("g:data", NS))

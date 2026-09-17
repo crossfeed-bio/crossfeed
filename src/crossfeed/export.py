@@ -5,7 +5,8 @@ This module additionally serializes a network as GraphML, the XML format that Cy
 networkx, and Gephi read, so a crossfeed network drops straight into an existing network workflow.
 
 Dependency-free (standard library xml only). The graph is directed, and every edge keeps its effect,
-strength, significance, condition, method, and the space-joined study_ids (the edge-level attribution).
+strength, significance, condition, method, the space-joined study_ids (the edge-level attribution), and
+when known the evidence (biculture or dropout) and the space-joined community.
 """
 from __future__ import annotations
 
@@ -26,6 +27,8 @@ _KEYS = [
     ("e_condition", "edge", "condition", "string"),
     ("e_method", "edge", "method", "string"),
     ("e_study_ids", "edge", "study_ids", "string"),
+    ("e_evidence", "edge", "evidence", "string"),
+    ("e_community", "edge", "community", "string"),
 ]
 
 
@@ -71,6 +74,8 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(ed, "e_condition", e.condition)
         _data(ed, "e_method", e.method)
         _data(ed, "e_study_ids", " ".join(e.study_ids))
+        _data(ed, "e_evidence", e.evidence)
+        _data(ed, "e_community", " ".join(e.community))
 
     if pretty:
         ET.indent(root)

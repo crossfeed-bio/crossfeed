@@ -104,6 +104,19 @@
             "type": "string"
           },
           "minItems": 1
+        },
+        "evidence": {
+          "enum": [
+            "biculture",
+            "dropout",
+            null
+          ]
+        },
+        "community": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
