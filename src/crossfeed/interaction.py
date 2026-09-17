@@ -24,6 +24,14 @@ Two designs share this comparison:
     necessarily direct (evidence "dropout"); strictly it is a hyper-arc, kept as an arc with the community
     recorded. A two-member community is the bi-culture design.
 
+Zero growth is a result, not an error. When the target has a positive property only with the source present
+(for example it grows in bi-culture but not in monoculture), the source is required for its growth: an
+obligate commensal or mutualist relationship, outcome "obligate". When it has a positive property only
+without the source, the source abolishes its growth, outcome "abolished". A log2 ratio is undefined in both
+cases, so mean, sd, and se are None and the outcome carries the information. Without growth in either set
+the outcome is "no_growth". A comparison with a log2 value is "quantified". Individual replicates with a zero
+or negative property within a set that also has positive replicates are left out and reported.
+
 Comparisons that share replicates are not independent: the two values of a bi-culture pair share the
 co-culture replicates, and drop-out arcs to the same target share the full community replicates.
 
@@ -39,6 +47,7 @@ from .growth import FEATURES, check_replicate_sets, check_sets, curve_features, 
 LOG = "log2"
 BICULTURE = "biculture"
 DROPOUT = "dropout"
+QUANTIFIED, OBLIGATE, ABOLISHED, NO_GROWTH = "quantified", "obligate", "abolished", "no_growth"
 
 
 def _check_method(method: str) -> None:
@@ -65,23 +74,19 @@ def _log_values(reps, species, role, prop, method, skipped) -> list:
 
 
 def _compare(with_log2: list, without_log2: list) -> dict:
-    """The log2 set comparison shared by both designs."""
+    """The log2 set comparison shared by both designs, including the outcomes where one set has no growth."""
     n_with, n_without = len(with_log2), len(without_log2)
-    if n_with > 1 and n_without > 1:
+    result = {"outcome": QUANTIFIED, "mean": None, "sd": None, "se": None, "n_with": n_with,
+              "n_without": n_without, "with_log2": with_log2, "without_log2": without_log2}
+    if not with_log2 or not without_log2:
+        result["outcome"] = OBLIGATE if with_log2 else ABOLISHED if without_log2 else NO_GROWTH
+        return result
+    result["mean"] = statistics.mean(with_log2) - statistics.mean(without_log2)
+    if n_with > 1 and n_without > 1:   # a set with one replicate has no spread to estimate
         var_with, var_without = statistics.variance(with_log2), statistics.variance(without_log2)
-        sd = math.sqrt(var_with + var_without)
-        se = math.sqrt(var_with / n_with + var_without / n_without)
-    else:
-        sd = se = None   # a set with one replicate has no spread to estimate
-    return {
-        "mean": statistics.mean(with_log2) - statistics.mean(without_log2),
-        "sd": sd,
-        "se": se,
-        "n_with": n_with,
-        "n_without": n_without,
-        "with_log2": with_log2,
-        "without_log2": without_log2,
-    }
+        result["sd"] = math.sqrt(var_with + var_without)
+        result["se"] = math.sqrt(var_with / n_with + var_without / n_without)
+    return result
 
 
 def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, method: str = "auc") -> dict:
@@ -91,12 +96,14 @@ def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, met
     each with a curve for species_a and species_b. method: a name in crossfeed.growth.FEATURES.
 
     Raises ValueError when the sets are not comparable (mixed units, missing species, different start
-    times), for an unknown method, or when a set has no replicate with a positive property for a species.
-    Replicates with a zero or negative property are left out of that species' set and reported.
+    times) or for an unknown method. Replicates with a zero or negative property are left out of that
+    species' set and reported; a set left without growth gives the outcome "obligate", "abolished", or
+    "no_growth" (see the module docstring).
 
     Returns a dict with "method", "log", "window" (start, end), "species_a" and "species_b" (each with
-    "species", "mean", "sd", "se", "n_co", "n_mono", "co_log2", "mono_log2"; "sd" and "se" are None when a
-    set has a single replicate), and "skipped" as a list of (label, reason).
+    "species", "outcome", "mean", "sd", "se", "n_co", "n_mono", "co_log2", "mono_log2"; "mean", "sd", and
+    "se" are None unless the outcome is "quantified", and "sd" and "se" are None when a set has a single
+    replicate), and "skipped" as a list of (label, reason).
     """
     _check_method(method)
     check_replicate_sets(mono_a, mono_b, co, species_a, species_b)
@@ -105,14 +112,10 @@ def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, met
 
     result = {"method": method, "log": LOG, "window": (start, end), "skipped": []}
     for key, species, monos in (("species_a", species_a, mono_a), ("species_b", species_b, mono_b)):
-        sets = (("co-culture", co), ("monoculture", monos))
-        co_log2, mono_log2 = (_log_values(reps, species, role, prop, method, result["skipped"])
-                              for role, reps in sets)
-        for (role, _), values in zip(sets, (co_log2, mono_log2), strict=True):
-            if not values:
-                raise ValueError(f"{species}: no {role} replicate has a positive {method}")
+        co_log2 = _log_values(co, species, "co-culture", prop, method, result["skipped"])
+        mono_log2 = _log_values(monos, species, "monoculture", prop, method, result["skipped"])
         c = _compare(co_log2, mono_log2)
-        result[key] = {"species": species, "mean": c["mean"], "sd": c["sd"], "se": c["se"],
+        result[key] = {"species": species, "outcome": c["outcome"], "mean": c["mean"], "sd": c["sd"], "se": c["se"],
                        "n_co": c["n_with"], "n_mono": c["n_without"],
                        "co_log2": c["with_log2"], "mono_log2": c["without_log2"]}
     return result
@@ -132,12 +135,13 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc") -> 
 
     Raises ValueError for an unknown method, empty or inconsistent sets (a drop-out set that still holds R
     or lacks a member, a removed species outside the community), mixed units, or different start times. A
-    replicate with a zero or negative property is left out of its set; an arc whose set has no positive
-    replicate left is skipped. Both are reported in "skipped".
+    replicate with a zero or negative property is left out of its set and reported. An arc whose target
+    grows in only one of the two sets is kept with the outcome "obligate" or "abolished"; an arc whose
+    target grows in neither is skipped and reported.
 
     Returns a dict with "method", "log", "window" (start, end), "arcs" (each with "source", "target",
-    "evidence", "community", "mean", "sd", "se", "n_with", "n_without", "with_log2", "without_log2"), and
-    "skipped" as a list of (label, reason).
+    "evidence", "community", "outcome", "mean", "sd", "se", "n_with", "n_without", "with_log2",
+    "without_log2"), and "skipped" as a list of (label, reason).
     """
     _check_method(method)
     if not full:
@@ -161,14 +165,11 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc") -> 
     for removed, reps in dropouts.items():
         without_role = f"community without {removed}"
         for target in (m for m in members if m != removed):
-            with_log2 = full_log2[target]
-            without_log2 = _log_values(reps, target, without_role, prop, method, result["skipped"])
-            empty = next((role for role, v in (("full community", with_log2), (without_role, without_log2))
-                          if not v), None)
-            if empty:
+            c = _compare(full_log2[target], _log_values(reps, target, without_role, prop, method, result["skipped"]))
+            if c["outcome"] == NO_GROWTH:
                 result["skipped"].append((f"arc {removed} -> {target}",
-                                          f"no {empty} replicate has a positive {method}"))
+                                          f"no growth ({method}) in the full community or the {without_role}"))
                 continue
             result["arcs"].append({"source": removed, "target": target, "evidence": evidence,
-                                   "community": community, **_compare(with_log2, without_log2)})
+                                   "community": community, **c})
     return result

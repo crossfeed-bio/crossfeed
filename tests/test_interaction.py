@@ -32,7 +32,7 @@ def test_auc_default_matches_hand_computed_values():
     #    log2 mono = log2 10, log2 20 (mean log2 10 + 0.5, sd sqrt(0.5))
     #    strength = 1, sd = sqrt(0.5 + 0.5) = 1, se = sqrt(0.5 / 2 + 0.5 / 2) = sqrt(0.5)
     a = r["species_a"]
-    assert a["species"] == A
+    assert a["species"] == A and a["outcome"] == "quantified"
     assert a["mean"] == pytest.approx(1.0)
     assert a["sd"] == pytest.approx(1.0)
     assert a["se"] == pytest.approx(math.sqrt(0.5))
@@ -84,11 +84,25 @@ def test_non_positive_replicate_is_skipped():
     assert r["skipped"] == [(f"{B}: co-culture replicate c3", "non-positive auc (0)")]
 
 
-def test_no_positive_replicate_in_a_set_raises():
+def test_growth_only_with_partner_is_obligate_not_an_error():
     mono_a, _, co = _example()
-    mono_b = [Replicate([_curve(B, (0, 0))], "b0")]
-    with pytest.raises(ValueError, match=f"{B}: no monoculture replicate has a positive auc"):
-        interaction_strength(mono_a, mono_b, co, A, B)
+    mono_b = [Replicate([_curve(B, (0, 0))], "b0")]      # B does not grow alone, but grows in co-culture
+    r = interaction_strength(mono_a, mono_b, co, A, B)
+    b = r["species_b"]
+    assert b["outcome"] == "obligate"
+    assert (b["mean"], b["sd"], b["se"]) == (None, None, None)
+    assert (b["n_co"], b["n_mono"]) == (2, 0)
+    assert r["species_a"]["outcome"] == "quantified" and r["species_a"]["mean"] == pytest.approx(1.0)
+    assert r["skipped"] == [(f"{B}: monoculture replicate b0", "non-positive auc (0)")]
+
+
+def test_growth_only_alone_is_abolished_and_neither_is_no_growth():
+    mono_a, mono_b, _ = _example()
+    co = [Replicate([_curve(A, (1, 3)), _curve(B, (0, 0))], "c1")]    # B grows alone, not with A
+    assert interaction_strength(mono_a, mono_b, co, A, B)["species_b"]["outcome"] == "abolished"
+    none = [Replicate([_curve(B, (0, 0))], "b0")]
+    b = interaction_strength(mono_a, none, co, A, B)["species_b"]
+    assert b["outcome"] == "no_growth" and b["mean"] is None
 
 
 def test_curves_are_cut_to_the_shared_window():
@@ -195,15 +209,31 @@ def test_dropout_set_errors():
         dropout_interaction_strengths(full, dropouts, method="rate")
 
 
-def test_dropout_arc_without_positive_replicates_is_skipped():
+def test_dropout_zero_growth_gives_obligate_and_abolished_arcs():
     full, dropouts = _dropout_example()
-    # C does not grow at all without B: that arc is skipped, the other three remain
+    # C does not grow without B: B is required for C's growth (obligate), and the arc is kept
+    dropouts[B] = [_community("xb1", {A: (1, 3), C: (0, 0)}), _community("xb2", {A: (3, 5), C: (0, 0)})]
+    r = dropout_interaction_strengths(full, dropouts)
+    bc = _arc(r, B, C)
+    assert bc["outcome"] == "obligate" and bc["mean"] is None
+    assert (bc["n_with"], bc["n_without"]) == (2, 0)
+    assert _arc(r, C, A)["outcome"] == "quantified"
+    assert len(r["arcs"]) == 4
+    # C grows only without B: B abolishes C's growth
+    full, dropouts = _dropout_example()
+    full = [_community("f1", {A: (1, 3), B: (1, 1), C: (0, 0)}), _community("f2", {A: (3, 5), B: (1, 1), C: (0, 0)})]
+    r = dropout_interaction_strengths(full, {B: dropouts[B]})
+    assert _arc(r, B, C)["outcome"] == "abolished"
+
+
+def test_dropout_arc_without_growth_in_either_set_is_skipped():
+    full, dropouts = _dropout_example()
+    full = [_community("f1", {A: (1, 3), B: (1, 1), C: (0, 0)}), _community("f2", {A: (3, 5), B: (1, 1), C: (0, 0)})]
     dropouts[B] = [_community("xb1", {A: (1, 3), C: (0, 0)}), _community("xb2", {A: (3, 5), C: (0, 0)})]
     r = dropout_interaction_strengths(full, dropouts)
     assert {(a["source"], a["target"]) for a in r["arcs"]} == {(C, A), (C, B), (B, A)}
-    reasons = dict(r["skipped"])
-    assert reasons[f"{C}: community without {B} replicate xb1"] == "non-positive auc (0)"
-    assert reasons[f"arc {B} -> {C}"] == f"no community without {B} replicate has a positive auc"
+    reason = dict(r["skipped"])[f"arc {B} -> {C}"]
+    assert reason == f"no growth (auc) in the full community or the community without {B}"
 
 
 def test_dropout_full_community_skip_is_reported_once():

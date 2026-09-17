@@ -36,6 +36,9 @@ tagged version is never reused for changed content.
   community against the community without one species), using the same log2 set comparison as
   `interaction_strength`, with each arc labeled `dropout` (not necessarily direct) or `biculture` and its
   community recorded.
+- Zero growth is reported as a result instead of an error: a target that grows only with the source present
+  gets the outcome `obligate` (obligate commensal or mutualist), one that grows only without it `abolished`,
+  in both `interaction_strength` and `dropout_interaction_strengths`.
 
 ### Changed
 - crossfeed now has no runtime dependencies: the client uses the standard library `urllib`, and the
