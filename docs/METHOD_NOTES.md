@@ -78,11 +78,17 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
 3. **Dependence between arcs** (#10, #3). Arcs to the same target from different drop-outs reuse the
    full community replicates, and the two values of a pair reuse the same co-culture replicates, so they
    are not independent. Options: document it only (current), or model the covariance when significance
-   is tested. Proposed default: document it now, decide together with item 5.
+   is tested. Proposed default: document it now, decide together with item 6.
 4. **New optional edge fields in the neutral format** (#11). `evidence` (`biculture` for mono versus
    bi-culture, direct; `dropout`, possibly indirect) and `community` (members of the full community).
    Backward compatible, but a change to the contract downstream tools read. Proposed default: accept.
-5. **Significance testing** (row 4). Still open: which test on the per-replicate log2 values (for
+5. **Zero growth and detection limits** (#16). Decided by Karoline: a species that grows only with the
+   source present is an obligate commensal or mutualist, reported as outcome `obligate` (and `abolished`
+   for growth only without the source), not as an error. Still open: how such arcs appear in the network
+   (proposed default: effect `facilitation` or `inhibition` with a null strength and the outcome recorded),
+   and what counts as no growth in real data, where values rarely reach exactly zero (options: a
+   detection limit per technique, a minimum increase over the first time point, or a pseudocount).
+6. **Significance testing** (row 4). Still open: which test on the per-replicate log2 values (for
    example Welch's t-test), and whether to correct for multiple testing across arcs.
 
 ## The first question for the FP/BH slice
