@@ -4,7 +4,7 @@ import math
 import pytest
 
 from crossfeed.growth import GrowthCurve, Replicate
-from crossfeed.interaction import interaction_strength
+from crossfeed.interaction import dropout_interaction_strengths, interaction_strength
 
 A = "Faecalibacterium prausnitzii"
 B = "Blautia hydrogenotrophica"
@@ -110,3 +110,107 @@ def test_errors_for_method_start_time_and_units():
     days = [Replicate([GrowthCurve(B, (0, 10), (1, 1), "d", "16S copies/mL")], "b1")]
     with pytest.raises(ValueError, match="mixed time units"):
         interaction_strength(mono_a, days, co, A, B)
+
+
+# ---- drop-out communities (#10) ----------------------------------------------------------------------
+
+C = "Bacteroides thetaiotaomicron"
+
+
+def _community(name, areas):
+    """A replicate with one two-point curve per species; `areas` maps species to (v0, v1) over 10 h."""
+    return Replicate([_curve(sp, v) for sp, v in areas.items()], name)
+
+
+def _dropout_example():
+    # Areas are 5 * (v0 + v1).
+    full = [_community("f1", {A: (1, 3), B: (1, 1), C: (1, 1)}),      # A 20, B 10, C 10
+            _community("f2", {A: (3, 5), B: (1, 1), C: (1, 3)})]      # A 40, B 10, C 20
+    without_c = [_community("xc1", {A: (1, 1), B: (1, 1)}),           # A 10, B 10
+                 _community("xc2", {A: (1, 3), B: (1, 1)})]           # A 20, B 10
+    without_b = [_community("xb1", {A: (1, 3), C: (3, 5)}),           # A 20, C 40
+                 _community("xb2", {A: (3, 5), C: (7, 9)})]           # A 40, C 80
+    return full, {C: without_c, B: without_b}
+
+
+def _arc(result, source, target):
+    return next(a for a in result["arcs"] if a["source"] == source and a["target"] == target)
+
+
+def test_dropout_arcs_match_hand_computed_values():
+    full, dropouts = _dropout_example()
+    r = dropout_interaction_strengths(full, dropouts)
+    assert r["method"] == "auc" and r["log"] == "log2" and r["window"] == (0.0, 10.0)
+    assert len(r["arcs"]) == 4 and r["skipped"] == []
+    # C -> A: full A log2 20, log2 40; without C log2 10, log2 20 -> mean 1, sd sqrt(0.5 + 0.5), se sqrt(0.5)
+    ca = _arc(r, C, A)
+    assert ca["mean"] == pytest.approx(1.0)
+    assert ca["sd"] == pytest.approx(1.0)
+    assert ca["se"] == pytest.approx(math.sqrt(0.5))
+    assert (ca["n_with"], ca["n_without"]) == (2, 2)
+    assert ca["with_log2"] == pytest.approx([math.log2(20), math.log2(40)])
+    assert ca["without_log2"] == pytest.approx([math.log2(10), math.log2(20)])
+    # C -> B: 10, 10 in both -> mean 0, sd 0
+    cb = _arc(r, C, B)
+    assert cb["mean"] == pytest.approx(0.0) and cb["sd"] == pytest.approx(0.0)
+    # B -> A: A is 20, 40 with and without B -> mean 0, sd 1
+    ba = _arc(r, B, A)
+    assert ba["mean"] == pytest.approx(0.0) and ba["sd"] == pytest.approx(1.0)
+    # B -> C: full C log2 10, log2 20; without B log2 40, log2 80 -> mean -2
+    assert _arc(r, B, C)["mean"] == pytest.approx(-2.0)
+    for arc in r["arcs"]:
+        assert arc["evidence"] == "dropout"
+        assert arc["community"] == sorted([A, B, C])
+
+
+def test_two_member_community_equals_mono_versus_biculture():
+    mono_a, mono_b, co = _example()
+    pair = interaction_strength(mono_a, mono_b, co, A, B)
+    r = dropout_interaction_strengths(co, {B: mono_a, A: mono_b})
+    ba, ab = _arc(r, B, A), _arc(r, A, B)
+    for arc, side in ((ba, pair["species_a"]), (ab, pair["species_b"])):
+        assert arc["evidence"] == "biculture"
+        assert arc["mean"] == pytest.approx(side["mean"])
+        assert arc["sd"] == pytest.approx(side["sd"])
+        assert arc["se"] == pytest.approx(side["se"])
+
+
+def test_dropout_set_errors():
+    full, dropouts = _dropout_example()
+    still_has_c = {C: [_community("x", {A: (1, 1), B: (1, 1), C: (1, 1)})]}
+    with pytest.raises(ValueError, match=r"community without .* holds species"):
+        dropout_interaction_strengths(full, still_has_c)
+    lacks_b = {C: [_community("x", {A: (1, 1)})]}
+    with pytest.raises(ValueError, match=r"community without .* holds species"):
+        dropout_interaction_strengths(full, lacks_b)
+    outsider = {"Escherichia coli": [_community("x", {A: (1, 1), B: (1, 1), C: (1, 1)})]}
+    with pytest.raises(ValueError, match="not a member of the full community"):
+        dropout_interaction_strengths(full, outsider)
+    uneven = full + [_community("f3", {A: (1, 1), B: (1, 1)})]
+    with pytest.raises(ValueError, match="full community replicate f3 holds species"):
+        dropout_interaction_strengths(uneven, dropouts)
+    with pytest.raises(ValueError, match="no drop-out sets"):
+        dropout_interaction_strengths(full, {})
+    with pytest.raises(ValueError, match="unknown method"):
+        dropout_interaction_strengths(full, dropouts, method="rate")
+
+
+def test_dropout_arc_without_positive_replicates_is_skipped():
+    full, dropouts = _dropout_example()
+    # C does not grow at all without B: that arc is skipped, the other three remain
+    dropouts[B] = [_community("xb1", {A: (1, 3), C: (0, 0)}), _community("xb2", {A: (3, 5), C: (0, 0)})]
+    r = dropout_interaction_strengths(full, dropouts)
+    assert {(a["source"], a["target"]) for a in r["arcs"]} == {(C, A), (C, B), (B, A)}
+    reasons = dict(r["skipped"])
+    assert reasons[f"{C}: community without {B} replicate xb1"] == "non-positive auc (0)"
+    assert reasons[f"arc {B} -> {C}"] == f"no community without {B} replicate has a positive auc"
+
+
+def test_dropout_full_community_skip_is_reported_once():
+    full, dropouts = _dropout_example()
+    # B does not grow in full community replicate f2: its arcs from C use f1 only, reported once
+    full[1] = _community("f2", {A: (3, 5), B: (0, 0), C: (1, 3)})
+    r = dropout_interaction_strengths(full, dropouts)
+    assert r["skipped"] == [(f"{B}: full community replicate f2", "non-positive auc (0)")]
+    cb = _arc(r, C, B)
+    assert (cb["n_with"], cb["mean"], cb["sd"]) == (1, 0.0, None)

@@ -1,22 +1,31 @@
-"""Pairwise interaction strength from replicate growth curves.
+"""Interaction strength from replicate growth curves.
 
-For species A and B, the interaction strength is a value pair, one per species, comparing the species'
-growth in co-culture with its growth alone. The growth property is a growth curve feature chosen by the
-caller (`method`, default "auc", the area under the curve; see crossfeed.growth.FEATURES).
+An interaction strength compares a target species' growth with a source species present against its
+growth with the source absent. The growth property is a growth curve feature chosen by the caller
+(`method`, default "auc", the area under the curve; see crossfeed.growth.FEATURES).
 
 Each replicate set is summarized on the log2 scale first, so no replicate is used twice:
 
-  strength = mean(log2 property over co-culture replicates) - mean(log2 property over monoculture replicates)
-  sd       = sqrt(sd_co^2 + sd_mono^2)                (spread of a single co versus mono comparison)
-  se       = sqrt(sd_co^2 / n_co + sd_mono^2 / n_mono) (standard error of the strength)
+  strength = mean(log2 property with the source) - mean(log2 property without the source)
+  sd       = sqrt(sd_with^2 + sd_without^2)                     (spread of a single comparison)
+  se       = sqrt(sd_with^2 / n_with + sd_without^2 / n_without) (standard error of the strength)
 
-where sd_co and sd_mono are sample standard deviations (n - 1) of the log2 values. The co-culture and the
-monoculture sets are independent replicates, so these are exact for the difference of the two means, and
-the per-replicate log2 values are returned for follow-up tests (for example a Welch t-test). The strength
-is the log2 ratio of geometric means: 1 means the property doubled in co-culture, -1 means it halved.
+where sd_with and sd_without are sample standard deviations (n - 1) of the log2 values. The two sets are
+independent replicates, so these are exact for the difference of the two means, and the per-replicate log2
+values are returned for follow-up tests (for example a Welch t-test). The strength is the log2 ratio of
+geometric means: 1 means the property doubled with the source present, -1 means it halved.
 
-The two values of the pair are not independent of each other: A and B are measured in the same co-culture
-replicates.
+Two designs share this comparison:
+
+  * mono versus bi-culture (`interaction_strength`): the target alone against the target with one partner.
+    The arc is a direct interaction (evidence "biculture").
+  * drop-out communities (`dropout_interaction_strengths`): the full community against the community
+    without the source. The source can act on the target through a third species, so the arc is not
+    necessarily direct (evidence "dropout"); strictly it is a hyper-arc, kept as an arc with the community
+    recorded. A two-member community is the bi-culture design.
+
+Comparisons that share replicates are not independent: the two values of a bi-culture pair share the
+co-culture replicates, and drop-out arcs to the same target share the full community replicates.
 
 Metadata matching of the replicates (condition, medium, and so on) is assumed to have happened upstream.
 """
@@ -25,9 +34,22 @@ from __future__ import annotations
 import math
 import statistics
 
-from .growth import FEATURES, check_replicate_sets, curve_features, shared_window
+from .growth import FEATURES, check_replicate_sets, check_sets, curve_features, shared_window
 
 LOG = "log2"
+BICULTURE = "biculture"
+DROPOUT = "dropout"
+
+
+def _check_method(method: str) -> None:
+    if method not in FEATURES:
+        raise ValueError(f"unknown method {method!r}; choose one of {sorted(FEATURES)}")
+
+
+def _property(end: float, method: str):
+    def prop(rep, species):
+        return curve_features(rep.curve(species), end)[method]
+    return prop
 
 
 def _log_values(reps, species, role, prop, method, skipped) -> list:
@@ -39,33 +61,31 @@ def _log_values(reps, species, role, prop, method, skipped) -> list:
             skipped.append((f"{species}: {role} replicate {rep.name or i}", f"non-positive {method} ({value:g})"))
             continue
         values.append(math.log2(value))
-    if not values:
-        raise ValueError(f"{species}: no {role} replicate has a positive {method}")
     return values
 
 
-def _strength(species: str, co_log2: list, mono_log2: list) -> dict:
-    n_co, n_mono = len(co_log2), len(mono_log2)
-    if n_co > 1 and n_mono > 1:
-        var_co, var_mono = statistics.variance(co_log2), statistics.variance(mono_log2)
-        sd = math.sqrt(var_co + var_mono)
-        se = math.sqrt(var_co / n_co + var_mono / n_mono)
+def _compare(with_log2: list, without_log2: list) -> dict:
+    """The log2 set comparison shared by both designs."""
+    n_with, n_without = len(with_log2), len(without_log2)
+    if n_with > 1 and n_without > 1:
+        var_with, var_without = statistics.variance(with_log2), statistics.variance(without_log2)
+        sd = math.sqrt(var_with + var_without)
+        se = math.sqrt(var_with / n_with + var_without / n_without)
     else:
         sd = se = None   # a set with one replicate has no spread to estimate
     return {
-        "species": species,
-        "mean": statistics.mean(co_log2) - statistics.mean(mono_log2),
+        "mean": statistics.mean(with_log2) - statistics.mean(without_log2),
         "sd": sd,
         "se": se,
-        "n_co": n_co,
-        "n_mono": n_mono,
-        "co_log2": co_log2,
-        "mono_log2": mono_log2,
+        "n_with": n_with,
+        "n_without": n_without,
+        "with_log2": with_log2,
+        "without_log2": without_log2,
     }
 
 
 def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, method: str = "auc") -> dict:
-    """Interaction strength of a species pair from three replicate sets.
+    """Interaction strength of a species pair from mono versus bi-culture replicate sets.
 
     mono_a, mono_b: Replicates of species_a and species_b grown alone. co: Replicates of the co-culture,
     each with a curve for species_a and species_b. method: a name in crossfeed.growth.FEATURES.
@@ -78,18 +98,77 @@ def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, met
     "species", "mean", "sd", "se", "n_co", "n_mono", "co_log2", "mono_log2"; "sd" and "se" are None when a
     set has a single replicate), and "skipped" as a list of (label, reason).
     """
-    if method not in FEATURES:
-        raise ValueError(f"unknown method {method!r}; choose one of {sorted(FEATURES)}")
+    _check_method(method)
     check_replicate_sets(mono_a, mono_b, co, species_a, species_b)
-    all_reps = [*mono_a, *mono_b, *co]
-    start, end = shared_window(c for rep in all_reps for c in rep.curves)
-
-    def prop(rep, species):
-        return curve_features(rep.curve(species), end)[method]
+    start, end = shared_window(c for rep in [*mono_a, *mono_b, *co] for c in rep.curves)
+    prop = _property(end, method)
 
     result = {"method": method, "log": LOG, "window": (start, end), "skipped": []}
     for key, species, monos in (("species_a", species_a, mono_a), ("species_b", species_b, mono_b)):
-        co_log2 = _log_values(co, species, "co-culture", prop, method, result["skipped"])
-        mono_log2 = _log_values(monos, species, "monoculture", prop, method, result["skipped"])
-        result[key] = _strength(species, co_log2, mono_log2)
+        sets = (("co-culture", co), ("monoculture", monos))
+        co_log2, mono_log2 = (_log_values(reps, species, role, prop, method, result["skipped"])
+                              for role, reps in sets)
+        for (role, _), values in zip(sets, (co_log2, mono_log2), strict=True):
+            if not values:
+                raise ValueError(f"{species}: no {role} replicate has a positive {method}")
+        c = _compare(co_log2, mono_log2)
+        result[key] = {"species": species, "mean": c["mean"], "sd": c["sd"], "se": c["se"],
+                       "n_co": c["n_with"], "n_mono": c["n_without"],
+                       "co_log2": c["with_log2"], "mono_log2": c["without_log2"]}
+    return result
+
+
+def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc") -> dict:
+    """Interaction strengths from a full community and drop-out communities.
+
+    full: Replicates of the full community, each with a curve for every member (the same members in every
+    replicate). dropouts: a mapping from a removed species R to the Replicates of the community without R,
+    each with a curve for every member except R. Not every member needs a drop-out set.
+
+    For every removed species R and every remaining member X, the arc R -> X compares X in the full
+    community (with R) against X in the community without R; a positive mean means R affects X positively,
+    directly or indirectly. Arcs carry evidence "dropout", or "biculture" for a two-member community, and
+    the sorted community members.
+
+    Raises ValueError for an unknown method, empty or inconsistent sets (a drop-out set that still holds R
+    or lacks a member, a removed species outside the community), mixed units, or different start times. A
+    replicate with a zero or negative property is left out of its set; an arc whose set has no positive
+    replicate left is skipped. Both are reported in "skipped".
+
+    Returns a dict with "method", "log", "window" (start, end), "arcs" (each with "source", "target",
+    "evidence", "community", "mean", "sd", "se", "n_with", "n_without", "with_log2", "without_log2"), and
+    "skipped" as a list of (label, reason).
+    """
+    _check_method(method)
+    if not full:
+        raise ValueError("no full community replicates")
+    if not dropouts:
+        raise ValueError("no drop-out sets")
+    members = full[0].species
+    outside = [r for r in dropouts if r not in members]
+    if outside:
+        raise ValueError(f"drop-out species {outside} not a member of the full community {sorted(members)}")
+    check_sets([("full community", full, members)]
+               + [(f"community without {r}", reps, [m for m in members if m != r]) for r, reps in dropouts.items()])
+    start, end = shared_window(c for rep in [*full, *(r for reps in dropouts.values() for r in reps)]
+                               for c in rep.curves)
+    prop = _property(end, method)
+
+    evidence = BICULTURE if len(members) == 2 else DROPOUT
+    community = sorted(members)
+    result = {"method": method, "log": LOG, "window": (start, end), "arcs": [], "skipped": []}
+    full_log2 = {m: _log_values(full, m, "full community", prop, method, result["skipped"]) for m in members}
+    for removed, reps in dropouts.items():
+        without_role = f"community without {removed}"
+        for target in (m for m in members if m != removed):
+            with_log2 = full_log2[target]
+            without_log2 = _log_values(reps, target, without_role, prop, method, result["skipped"])
+            empty = next((role for role, v in (("full community", with_log2), (without_role, without_log2))
+                          if not v), None)
+            if empty:
+                result["skipped"].append((f"arc {removed} -> {target}",
+                                          f"no {empty} replicate has a positive {method}"))
+                continue
+            result["arcs"].append({"source": removed, "target": target, "evidence": evidence,
+                                   "community": community, **_compare(with_log2, without_log2)})
     return result

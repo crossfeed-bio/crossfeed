@@ -69,17 +69,13 @@ def _label(rep: Replicate, role: str, i: int) -> str:
     return f"{role} replicate {rep.name or i}"
 
 
-def check_replicate_sets(mono_a, mono_b, co, species_a: str, species_b: str) -> None:
-    """Raise ValueError unless the three replicate sets can be compared.
+def check_sets(sets) -> None:
+    """Raise ValueError unless replicate sets can be compared.
 
-    mono_a holds monocultures of species_a only, mono_b monocultures of species_b only, and every co-culture
-    replicate holds a curve for exactly species_a and species_b. All curves in the three sets share one time
-    unit and one abundance unit (no hours against days, no CFU against OD); units are not converted.
+    sets: (role, replicates, expected species) triples. Every set is non-empty, every replicate in a set
+    holds a curve for exactly the expected species, and all curves across the sets share one time unit and
+    one abundance unit (no hours against days, no CFU against OD); units are not converted.
     """
-    if species_a == species_b:
-        raise ValueError("species A and species B must differ")
-    sets = (("mono A", mono_a, (species_a,)), ("mono B", mono_b, (species_b,)),
-            ("co-culture", co, (species_a, species_b)))
     curves = []
     for role, reps, expected in sets:
         if not reps:
@@ -98,6 +94,18 @@ def check_replicate_sets(mono_a, mono_b, co, species_a: str, species_b: str) -> 
                 by_unit.setdefault(getattr(c, attr), []).append(label)
             detail = "; ".join(f"{u!r}: {', '.join(labels)}" for u, labels in sorted(by_unit.items()))
             raise ValueError(f"mixed {what} across replicate sets ({detail})")
+
+
+def check_replicate_sets(mono_a, mono_b, co, species_a: str, species_b: str) -> None:
+    """Raise ValueError unless the three replicate sets of a mono versus bi-culture comparison can be compared.
+
+    mono_a holds monocultures of species_a only, mono_b monocultures of species_b only, and every co-culture
+    replicate holds a curve for exactly species_a and species_b; units as in `check_sets`.
+    """
+    if species_a == species_b:
+        raise ValueError("species A and species B must differ")
+    check_sets((("mono A", mono_a, (species_a,)), ("mono B", mono_b, (species_b,)),
+                ("co-culture", co, (species_a, species_b))))
 
 
 def shared_window(curves) -> tuple:

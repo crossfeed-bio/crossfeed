@@ -32,6 +32,10 @@ tagged version is never reused for changed content.
   between co-culture and monoculture replicates, with standard deviation, standard error, and n).
 - A shared workflow for coding agents: `AGENTS.md` (instructions and the mayor, worker, and verifier
   roles), Feature and Task issue forms, and `docs/agents/NOTES.md` as shared agent memory.
+- `crossfeed.interaction.dropout_interaction_strengths`: arcs from drop-out communities (the full
+  community against the community without one species), using the same log2 set comparison as
+  `interaction_strength`, with each arc labeled `dropout` (not necessarily direct) or `biculture` and its
+  community recorded.
 
 ### Changed
 - crossfeed now has no runtime dependencies: the client uses the standard library `urllib`, and the
