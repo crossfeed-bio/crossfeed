@@ -26,9 +26,11 @@ Rules for this file:
   (human) and tasks (sub-issues) live in GitHub Issues, not in a master file, because contributors
   without write access can still open and comment on issues, and parallel agents do not conflict. Roles:
   mayor, worker, verifier. The repository is an agreed experiment in agent-based programming.
-- 2026-09-17: Not yet confirmed whether an account with read-only access can attach sub-issues with
-  `gh issue create --parent`. The first mayor should record the result here. Fallback: list the tasks in
-  a comment on the feature and put "Feature: #N" in each task.
+- 2026-09-17: An account with read-only access cannot attach sub-issues: `gh issue create --parent N`
+  creates the issue but fails on `addSubIssue`. Without triage or write access, the mayor lists the
+  tasks in a comment on the feature and writes "Feature: #N" in each task (as on #3).
+- 2026-09-17: Without write access, dependent tasks go out as stacked pull requests from a fork, each
+  based on `main`; the description says to merge in order and review only the last commit.
 
 ## Open questions (need a human)
 
