@@ -30,6 +30,8 @@ tagged version is never reused for changed content.
   area under the curve and maximal abundance over a shared time window) and
   `crossfeed.interaction.interaction_strength` (per species, the difference of mean log2 growth property
   between co-culture and monoculture replicates, with standard deviation, standard error, and n).
+- A shared workflow for coding agents: `AGENTS.md` (instructions and the mayor, worker, and verifier
+  roles), Feature and Task issue forms, and `docs/agents/NOTES.md` as shared agent memory.
 
 ### Changed
 - crossfeed now has no runtime dependencies: the client uses the standard library `urllib`, and the
