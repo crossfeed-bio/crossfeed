@@ -28,8 +28,8 @@ tagged version is never reused for changed content.
 - Helpers for a pairwise interaction strength from replicate growth curves: `crossfeed.growth`
   (`GrowthCurve`, `Replicate`, unit and species checks across replicate sets, `curve_features` for the
   area under the curve and maximal abundance over a shared time window) and
-  `crossfeed.interaction.interaction_strength` (log2 co-culture over monoculture per species, over all
-  replicate combinations, reported as mean, standard deviation, and n).
+  `crossfeed.interaction.interaction_strength` (per species, the difference of mean log2 growth property
+  between co-culture and monoculture replicates, with standard deviation, standard error, and n).
 
 ### Changed
 - crossfeed now has no runtime dependencies: the client uses the standard library `urllib`, and the
