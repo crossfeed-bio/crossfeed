@@ -25,6 +25,8 @@ tagged version is never reused for changed content.
 - An expanded guardrail gate (`checks/gate.py`) covering secrets, raw data, local-machine paths,
   self-contained imports, house style (ASCII punctuation, US spelling, no hedging caveats), and a schema
   contract check. A pre-commit hook and a Makefile run the gate, tests, and lint the same way CI does.
+- A shared workflow for coding agents: `AGENTS.md` (instructions and the mayor, worker, and verifier
+  roles), Feature and Task issue forms, and `docs/agents/NOTES.md` as shared agent memory.
 
 ### Changed
 - crossfeed now has no runtime dependencies: the client uses the standard library `urllib`, and the

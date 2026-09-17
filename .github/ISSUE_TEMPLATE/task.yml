@@ -1,0 +1,28 @@
+name: Task
+description: A concrete, independently mergeable job, usually a sub-issue of a feature (created by a mayor agent).
+labels: ["task"]
+body:
+  - type: input
+    id: feature
+    attributes:
+      label: Feature
+      description: The parent feature issue, for example #12.
+  - type: textarea
+    id: what
+    attributes:
+      label: What to do
+      description: The change, the files likely involved, and the approach if it matters.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: The check that shows this task is complete (a test, a command and its expected output).
+    validations:
+      required: true
+  - type: input
+    id: depends
+    attributes:
+      label: Depends on
+      description: Tasks that must be merged first, for example #13, #14. Leave empty if none.

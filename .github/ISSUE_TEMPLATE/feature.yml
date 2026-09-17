@@ -1,0 +1,36 @@
+name: Feature
+description: A higher-level goal, written by a human. An agent in the mayor role breaks it into tasks.
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe what you want, not how to build it. A mayor agent turns this into sub-issues (tasks).
+        See AGENTS.md for the workflow.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should crossfeed be able to do when this is done, and for whom?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why it matters, related studies or issues, constraints, anything the mayor should read.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checkable statements a verifier can test, ideally with a command. One per line.
+      placeholder: |
+        - [ ] `python -m crossfeed derive SMGDB00000007 --live` emits a network with at least one edge
+        - [ ] the README documents the new flag
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: What this feature deliberately does not include.
