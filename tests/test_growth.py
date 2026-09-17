@@ -1,7 +1,7 @@
 """Tests for growth curves and the replicate set checks (synthetic curves, no network)."""
 import pytest
 
-from crossfeed.growth import GrowthCurve, Replicate, check_replicate_sets
+from crossfeed.growth import GrowthCurve, Replicate, check_replicate_sets, curve_features, shared_window
 
 A = "Faecalibacterium prausnitzii"
 B = "Blautia hydrogenotrophica"
@@ -67,3 +67,38 @@ def test_empty_set_and_same_species_raise():
         check_replicate_sets(mono_a, [], co, A, B)
     with pytest.raises(ValueError, match="must differ"):
         check_replicate_sets(mono_a, mono_a, co, A, A)
+
+
+def test_features_whole_curve():
+    # trapezoids: 12 * (0.1 + 0.4) / 2 + 12 * (0.4 + 0.8) / 2 = 3.0 + 7.2
+    f = curve_features(_curve(A))
+    assert f["auc"] == pytest.approx(10.2)
+    assert f["max"] == pytest.approx(0.8)
+
+
+def test_features_cut_between_points_interpolates():
+    # at t = 18 the interpolated abundance is 0.6: 3.0 + 6 * (0.4 + 0.6) / 2
+    f = curve_features(_curve(A), end=18)
+    assert f["auc"] == pytest.approx(6.0)
+    assert f["max"] == pytest.approx(0.6)
+
+
+def test_features_cut_on_a_point_and_peak_before_end():
+    f = curve_features(_curve(A, values=(0.1, 0.9, 0.5)), end=12)
+    assert f["auc"] == pytest.approx(6.0)
+    assert f["max"] == pytest.approx(0.9)
+    assert curve_features(_curve(A, values=(0.1, 0.9, 0.5)))["max"] == pytest.approx(0.9)
+
+
+def test_features_window_outside_curve_raises():
+    with pytest.raises(ValueError, match="outside the curve"):
+        curve_features(_curve(A), end=30)
+
+
+def test_shared_window_uses_earliest_end():
+    assert shared_window([_curve(A), _curve(B, times=(0, 6, 18))]) == (0.0, 18.0)
+
+
+def test_shared_window_different_starts_raise():
+    with pytest.raises(ValueError, match="start at different time points"):
+        shared_window([_curve(A), _curve(B, times=(1, 12, 24))])
