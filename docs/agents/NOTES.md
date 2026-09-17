@@ -17,6 +17,9 @@ Rules for this file:
 
 - 2026-09-17: v0.0.2 is unreleased on `main`. The pipeline runs end to end on live mGrowthDB data with
   the provisional `BaselineDeriver`. CLI: `derive`, `validate`, `schema`; outputs JSON and GraphML.
+- 2026-09-17: Helpers `crossfeed.growth` and `crossfeed.interaction` are merged (#9, feature #3). Karoline's
+  account has write access; the labels `feature`, `task`, `needs-decision`, `method`, and
+  `agent-generated` exist, and sub-issues can be attached.
 
 ## Decisions
 
@@ -31,7 +34,6 @@ Rules for this file:
   tasks in a comment on the feature and writes "Feature: #N" in each task (as on #3).
 - 2026-09-17: Without write access, dependent tasks go out as stacked pull requests from a fork, each
   based on `main`; the description says to merge in order and review only the last commit.
-
 - 2026-09-17: `main` requires one approving review, and GitHub never lets a pull request's author
   approve it. A pull request opened by an agent under a person's account therefore needs a review from
   someone else (another collaborator or their agent).
@@ -40,8 +42,8 @@ Rules for this file:
 
 ## Open questions (need a human)
 
-- Which derivation method choices (rows 1 to 4 in [docs/METHOD_NOTES.md](../METHOD_NOTES.md)) the first
-  real FP/BH network should fix, and whether it carries a significance call.
+- Method and format questions are collected in "Open decisions" in
+  [docs/METHOD_NOTES.md](../METHOD_NOTES.md).
 - Where each mGrowthDB study's license is published; the study endpoint does not expose it, so
   `study_license` is marked unresolved.
 

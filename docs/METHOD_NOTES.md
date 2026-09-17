@@ -58,6 +58,33 @@ while the per-strain co-culture growth is measured by qPCR. The baseline records
 flags a mismatch, so the direction is dependable while the magnitude is provisional. The options are to
 flag it (baseline), to calibrate between techniques, or to restrict a network to matched techniques.
 
+## Open decisions
+
+This is the single place where open method and format questions are collected, so Karoline and Craig
+can settle several at once. Agents add a question here (with the options, a proposed default, and the
+issue it came from) instead of deciding it; a settled item moves to "Decisions" in
+[docs/agents/NOTES.md](agents/NOTES.md) with the date and who decided.
+
+1. **Status of the replicate set comparison** (#3). `crossfeed.interaction.interaction_strength`
+   compares a species' growth with and without a partner as mean(log2 property with) minus mean(log2
+   property without), with sd and se from the per-set log2 spread, over the area under the curve or the
+   maximal abundance. Specified by Karoline and merged as provisional. Options: adopt it as the agreed
+   comparison (rows 1 and 3 above), or keep it provisional. Proposed default: adopt it, and keep the
+   growth metric (row 1) open for growth rates.
+2. **Arcs from drop-out communities** (#10). Comparing the full community with the community without R
+   gives an arc R to X that is not necessarily direct (R can act through a third species); strictly a
+   hyper-arc. Karoline's position: keep these arcs, labeled by evidence, with the community recorded.
+   To confirm with Craig. This addresses row 5 and study SMGDB00000008.
+3. **Dependence between arcs** (#10, #3). Arcs to the same target from different drop-outs reuse the
+   full community replicates, and the two values of a pair reuse the same co-culture replicates, so they
+   are not independent. Options: document it only (current), or model the covariance when significance
+   is tested. Proposed default: document it now, decide together with item 5.
+4. **New optional edge fields in the neutral format** (#11). `evidence` (`biculture` for mono versus
+   bi-culture, direct; `dropout`, possibly indirect) and `community` (members of the full community).
+   Backward compatible, but a change to the contract downstream tools read. Proposed default: accept.
+5. **Significance testing** (row 4). Still open: which test on the per-replicate log2 values (for
+   example Welch's t-test), and whether to correct for multiple testing across arcs.
+
 ## The first question for the FP/BH slice
 
 Which option in rows 1 to 4 should the first real network fix, and do we want it to carry a significance
