@@ -30,6 +30,13 @@ body:
     validations:
       required: true
   - type: textarea
+    id: test-cases
+    attributes:
+      label: Test cases
+      description: Small examples with inputs and the expected result, computed by hand. Reviews rely on these.
+      placeholder: |
+        - Mono A AUCs 10 and 20, co-culture A AUC 40: strength for A is log2(40 / 15)
+  - type: textarea
     id: out-of-scope
     attributes:
       label: Out of scope

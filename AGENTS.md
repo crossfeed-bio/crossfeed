@@ -43,9 +43,13 @@ is already claimed unless its owner agrees. If you stop without finishing, comme
 ### Role: worker (implements a task)
 
 1. Pick an open `task` with no open dependencies and no claim, and claim it.
-2. Implement it following "How to make a change" below. The pull request says `Closes #N`, so the task
-   closes on merge and the feature's sub-issue progress updates.
-3. Work you discover but do not do becomes a new sub-issue of the same feature, not a note buried in a
+2. Write the tests first from the acceptance criteria and any test cases in the feature, as small
+   synthetic examples with the expected values computed by hand in a comment. Humans review pull
+   requests mainly through these tests, not line by line, so each test must read as a checkable claim.
+3. Implement it following "How to make a change" below. The pull request says `Closes #N`, so the task
+   closes on merge and the feature's sub-issue progress updates. In the description, list the tests
+   and what each one checks.
+4. Work you discover but do not do becomes a new sub-issue of the same feature, not a note buried in a
    pull request.
 
 ### Role: verifier (checks a feature is done)
@@ -121,3 +125,6 @@ them as a dated bullet with who gave them. Keep one-off requests out.
   programming. Humans describe features as issues; agents break them into tasks (mayor), implement them
   (worker), and check them (verifier). Shared state lives in `docs/agents/NOTES.md`, project instructions
   in this file.
+- 2026-09-17 (Karoline's Claude agent): Humans review mainly through good test cases, not detailed code
+  review. Tests use hand-computed synthetic examples, and pull requests list what each test checks.
+  Features may include test cases; the mayor turns them into acceptance criteria.
