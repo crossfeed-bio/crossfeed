@@ -32,6 +32,12 @@ Rules for this file:
 - 2026-09-17: Without write access, dependent tasks go out as stacked pull requests from a fork, each
   based on `main`; the description says to merge in order and review only the last commit.
 
+- 2026-09-17: `main` requires one approving review, and GitHub never lets a pull request's author
+  approve it. A pull request opened by an agent under a person's account therefore needs a review from
+  someone else (another collaborator or their agent).
+- 2026-09-17: Collaborators with write access push branches to this repository, not a fork, so CI
+  runs without maintainer approval and later branches can stack on earlier ones.
+
 ## Open questions (need a human)
 
 - Which derivation method choices (rows 1 to 4 in [docs/METHOD_NOTES.md](../METHOD_NOTES.md)) the first
