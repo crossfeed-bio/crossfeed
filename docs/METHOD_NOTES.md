@@ -207,16 +207,158 @@ so pooling them is a decision to make on purpose.
 **Proposed default (Craig): JSON canonical, GraphML on demand.** Both exist today; the viewer writes the
 same GraphML the CLI does.
 
-## The decisions that actually matter
+## Open decisions
 
-Most rows have an uncontroversial default. The ones worth real discussion, in rough order:
+This is the single place where open method and format questions are collected, so Karoline and Craig
+can settle several at once. Agents add a question here (with the options, a proposed default, and the
+issue it came from) instead of deciding it; a settled item moves to "Decisions" in
+[docs/agents/NOTES.md](agents/NOTES.md) with the date and who decided.
 
-- **Settings 1 and 3**, the metric and comparison as a coupled pair (rate with a log ratio is unstable).
-- **Setting 7**, an NCBI taxid on every node and the merge rank, which is what makes the microbetag and
-  Syntropa overlay actually compose rather than duplicate nodes.
-- **Setting 4**, wiring replicate uncertainty through, then which significance test.
-- **Setting 6**, how far to trust a mismatched-technique sign, and whether to restrict or calibrate.
-- **Setting 10**, merging edges per interaction before a replication floor can mean anything.
+1. **Status of the replicate set comparison** (#3). `crossfeed.interaction.interaction_strength`
+   compares a species' growth with and without a partner as mean(log2 property with) minus mean(log2
+   property without), with sd and se from the per-set log2 spread, over the area under the curve or the
+   maximal abundance. Specified by Karoline and merged as provisional. Options: adopt it as the agreed
+   comparison (settings 1 and 3 above), or keep it provisional. Proposed default: adopt it, and keep the
+   growth metric (setting 1) open for growth rates.
+2. **Arcs from drop-out communities** (#10). Comparing the full community with the community without R
+   gives an arc R to X that is not necessarily direct (R can act through a third species); strictly a
+   hyper-arc. Karoline's position: keep these arcs, labeled by evidence, with the community recorded.
+   To confirm with Craig. This addresses setting 5 and study SMGDB00000008.
+   Status 2026-09-18: #16 merged `interaction.dropout_interaction_strengths`, a complete and tested
+   implementation of the comparison. Emitting these arcs is not a change of default, though: that function
+   takes `Replicate` objects, `derive.py` works from mGrowthDB experiment dicts, and nothing in `src/`
+   builds a `Replicate`, so there is no path from the API to these arcs. Saying yes here commissions that
+   adapter, and the adapter routes the pipeline through `interaction.py`, which also settles items 1, 11
+   and 12. See item 15, which is the reason all four travel together.
+3. **Dependence between arcs** (#10, #3). Arcs to the same target from different drop-outs reuse the
+   full community replicates, and the two values of a pair reuse the same co-culture replicates, so they
+   are not independent. Options: document it only (current), or model the covariance when significance
+   is tested. Proposed default: document it now, decide together with item 10.
+4. **New optional edge fields in the neutral format** (#11). `evidence` (`biculture` for mono versus
+   bi-culture, direct; `dropout`, possibly indirect) and `community` (members of the full community).
+   Backward compatible, but a change to the contract downstream tools read. Proposed default: accept.
+   SETTLED 2026-09-18 (Craig, on merging #17); recorded in "Decisions" in
+   [docs/agents/NOTES.md](agents/NOTES.md).
+5. **Zero growth and detection limits** (#16). Decided by Karoline: a species that grows only with the
+   source present is an obligate commensal or mutualist, reported as outcome `obligate` (and `abolished`
+   for growth only without the source), not as an error. Still open: how such arcs appear in the network
+   (proposed default: effect `facilitation` or `inhibition` with a null strength and the outcome recorded),
+   and what counts as no growth in real data, where values rarely reach exactly zero (options: a
+   detection limit per technique, a minimum increase over the first time point, or a pseudocount).
+6. **Whether crossfeed ships a user interface at all** (#18). Karoline asked for a local page where a
+   person types species names and gets their interactions, with settings hidden behind an "Advanced
+   settings" button. Built as a standard-library server on 127.0.0.1 with no JavaScript, so the promise
+   of no runtime dependencies and nothing to host holds. The question for the maintainers: does a page
+   that shows provisional results to people who do not read the method notes belong in the repository
+   now, or after the method is settled? The page labels every result provisional and cites each study.
+   Proposed default: keep it, since it is the fastest way for the collaboration to look at real data.
+   Status 2026-09-18: #22 merged that page, and #29 added `gui/index.html`, a self-contained viewer for a
+   network that has already been derived. They answer different questions and carry very different
+   exposure: `crossfeed gui` takes a species name from anyone and derives live against mGrowthDB with the
+   provisional baseline, while `gui/index.html` only draws a file its reader already produced and chose to
+   open. The concern in this item lands on the first and barely touches the second, so the two are worth
+   deciding separately. What argues against keeping both as they stand is not disk space but drift: the
+   settings menu is now hand-maintained in three places (`gui.py`, `gui/index.html`, and this document),
+   so a changed default has three chances to go stale. Proposed default: keep both, say in one README
+   sentence which question each answers, and give the settings menu one source in code that both
+   interfaces render.
+7. **Strain-level or species-level identity** (#23). Karoline: arcs should be reported per strain and
+   labeled with the strain name, for all strains of a species that have data. Today nodes are keyed by
+   genus and species, which pools strains and, because names change, splits one strain across nodes
+   (taxon 411483 appears as Faecalibacterium prausnitzii A2-165 and as Faecalibacterium duncaniae A2-165).
+   Proposed default: key nodes by NCBI taxon id, name them with the strain name, keep the species-level id
+   as an attribute, and match monoculture to co-culture by id. This changes how the provisional baseline
+   matches strains and what the emitted network looks like. mGrowthDB entries are being corrected upstream
+   to always point to strains rather than species.
+   Status 2026-09-18: #21 merged the resolver from names to taxon ids, which is the groundwork; nodes are
+   still keyed by genus and species. Two things the proposal needs before it can be implemented, both
+   raised by review rather than by the data:
+   (a) **Rank is not uniform.** 411483 is a strain-rank id, 853 is the species-rank id for the same
+   organism, and mGrowthDB holds both kinds today (the note that entries are being corrected upstream to
+   point at strains is the admission that today they are not). Keying on "the taxon id" therefore still
+   splits one organism across nodes, just at a different place. Proposed amendment: every node carries
+   `taxon_id`, a `rank` saying what that id is, and a `species_taxon_id`, so item 8's shared merge key
+   always exists even when the record is strain-rank, and a consumer can see which it got.
+   (b) **`species_taxon_id` collides with the standing rule that names resolve through mGrowthDB and
+   never by querying NCBI.** Getting the species-rank ancestor of a strain-rank id is a taxonomy lookup.
+   `taxonomy.species_index` sidesteps it today by bucketing on the genus and species of the *name*, which
+   is the unstable thing this item exists to escape. Open: does mGrowthDB expose a species-rank id
+   alongside `NCBId`? If it does, use it. If not, the species key is derived from the name, and the node
+   should say so rather than imply a taxonomy lookup happened.
+   Separately, the pooling this item would fix is worse than pooling: `derive.py` keeps the last
+   monoculture seen per genus and species key, so additional strains are discarded with no entry in
+   `skipped`. That is a defect to fix whichever way this item is settled.
+8. **The node key for merging with other tools** (#25, microbetag). Merging experimentally confirmed
+   interactions with microbetag networks as a multigraph needs matching node identifiers but not matching
+   edge identifiers. Proposed default: the species-level NCBI taxon id as the shared key, with the strain
+   id kept alongside, and every edge stating whether it is experimental or predicted so the two are never
+   blurred. Open: whether crossfeed does the merging at all or only produces networks, and whether a
+   direct route into Cytoscape sits well with the neutral format being tool-neutral.
+9. **Shipping desktop binaries** (#26). Karoline: the typical user runs Windows and has no command line
+   experience, so installing Python, Git, and a virtual environment is out of reach. A CI-built,
+   double-click Windows executable would remove that. The commitments: an unsigned build triggers a
+   SmartScreen warning (a code-signing certificate costs money and institutional paperwork), PyInstaller
+   output draws antivirus false positives, and every release needs a build, a test on real Windows, and
+   support for people new to software. Proposed default: ship it unsigned, explain the warning in the
+   README, and revisit if a certificate becomes available. A lighter step that needs no decision is a
+   PyPI release (#27).
+10. **Significance testing** (setting 4). Still open: which test on the per-replicate log2 values (for
+   example Welch's t-test), and whether to correct for multiple testing across arcs.
+11. **The growth metric and the comparison are one coupled choice** (raised by the Syntropa-side review,
+   2026-09-18). A log ratio suits an extensive quantity (AUC, yield, biomass), where doubling is
+   meaningful and the value stays away from zero. On a growth rate it is unstable: when the monoculture
+   rate is small the denominator drives the ratio to a large magnitude or flips its sign, exactly where an
+   interaction looks strongest. The baseline ships growthRate with log2(co over mono). Options: move the
+   default metric to AUC and keep the log ratio, or keep growthRate and compare by a difference. Proposed
+   default: AUC with the log ratio, since the log ratio is already implemented and AUC is what it suits;
+   growthRate travelling better across techniques is the reason to weigh the difference instead. Settings
+   1 and 3.
+12. **The shipped baseline propagates no uncertainty** (raised by the Syntropa-side review, 2026-09-18).
+   `interaction.py` computes sd and se from replicate log2 values, but the network the pipeline emits
+   comes from `derive.py`, which compares single scalar values and sets significance to null, so an edge
+   carries no error bar and no replicate count. Options: route the baseline through the replicate-aware
+   path and add se, n_co and n_mono to the schema, or state plainly that the baseline is a point estimate.
+   Proposed default: wire the replicate path through, then settle the test in item 10. Setting 4.
+13. **How far to trust a mismatched-technique sign** (raised by the Syntropa-side review, 2026-09-18). A
+   log ratio only cancels a shared scale when both sides share a modality. In the FP/BH study the
+   monoculture is flow cytometry or OD and the per-strain co-culture is qPCR, so a systematic offset
+   between instruments enters the ratio and, near the neutral band, can move the sign and not only the
+   magnitude. Options: flag only (current), restrict a published network to matched-technique comparisons,
+   calibrate an offset between techniques, or widen the neutral band for mismatched edges. Proposed
+   default: flag, and treat a mismatched edge's sign as provisional near the band. Setting 6.
+14. **Merging edges per interaction, before a replication floor can mean anything** (raised by the
+   Syntropa-side review, 2026-09-18). Records for one interaction are never merged, so each condition and
+   study is its own edge and every edge carries exactly one study id. A minimum-supporting-studies
+   threshold above one therefore empties a network rather than selecting well-replicated edges. Options:
+   merge records for the same interaction (unioning study ids and combining strengths by a stated rule),
+   or drop the threshold until merging exists. Proposed default: build the merge, after which a
+   replication floor becomes meaningful. Setting 10.
+
+15. **The repository holds two implementations of the comparison, and the pipeline reaches the weaker one**
+   (raised by the Syntropa-side review, 2026-09-18). `interaction.py` with `growth.py` is the comparison
+   Karoline specified: replicate sets summarized on the log2 scale, AUC by default, sd and se, explicit
+   `obligate`, `abolished` and `no_growth` outcomes, per-replicate values kept for a later test. It is
+   tested against hand-computed examples and it is the method of record. `derive.py` is the provisional
+   placeholder written to make the seam run: single scalar values, growth rate, log2 of a ratio, no
+   uncertainty, no outcomes. The pipeline, the CLI and both interfaces reach only `derive.py`, and a
+   `Replicate` is constructed nowhere outside the tests. So the tool ships the placeholder and the agreed
+   method sits unreachable beside it, and the two disagree on the metric, on the comparison, and on what a
+   node is. This is why items 1, 2, 11 and 12 cannot be answered one at a time: each of them is a request
+   to reach `interaction.py`. Options: build the mGrowthDB to `Replicate` adapter and let `derive.py`
+   shrink to that adapter behind the existing `Deriver` seam, or state in the README that the shipped
+   method and the specified method are different and which one a given output used. Proposed default: build
+   the adapter. It retires the placeholder, and it is the single piece of work that settles four items.
+   Anything that adds a third comparison, including the cheaper-looking route of computing drop-out arcs
+   inside `derive.py`, makes this worse and should be refused.
+16. **How hard crossfeed is allowed to lean on mGrowthDB** (raised by the Syntropa-side review,
+   2026-09-18). `taxonomy.species_index` builds its name index by walking study ids from 1 upward until
+   five consecutive ids are absent, capped at 500, and `crossfeed gui` calls it on a cold cache before it
+   can answer the first query. That is a large number of requests against someone else's service for one
+   person typing one species name. Responses are cached, so this is a cold-start cost rather than a
+   per-query one. Open: is that acceptable to the people who run mGrowthDB, and should crossfeed ship a
+   prebuilt index with releases, refreshed deliberately, instead of crawling on demand. This is a
+   courtesy question toward the database the collaboration depends on, so it wants an answer from them
+   rather than a default from us.
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.
