@@ -78,7 +78,7 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
 3. **Dependence between arcs** (#10, #3). Arcs to the same target from different drop-outs reuse the
    full community replicates, and the two values of a pair reuse the same co-culture replicates, so they
    are not independent. Options: document it only (current), or model the covariance when significance
-   is tested. Proposed default: document it now, decide together with item 9.
+   is tested. Proposed default: document it now, decide together with item 10.
 4. **New optional edge fields in the neutral format** (#11). `evidence` (`biculture` for mono versus
    bi-culture, direct; `dropout`, possibly indirect) and `community` (members of the full community).
    Backward compatible, but a change to the contract downstream tools read. Proposed default: accept.
@@ -109,7 +109,15 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    id kept alongside, and every edge stating whether it is experimental or predicted so the two are never
    blurred. Open: whether crossfeed does the merging at all or only produces networks, and whether a
    direct route into Cytoscape sits well with the neutral format being tool-neutral.
-9. **Significance testing** (row 4). Still open: which test on the per-replicate log2 values (for
+9. **Shipping desktop binaries** (#26). Karoline: the typical user runs Windows and has no command line
+   experience, so installing Python, Git, and a virtual environment is out of reach. A CI-built,
+   double-click Windows executable would remove that. The commitments: an unsigned build triggers a
+   SmartScreen warning (a code-signing certificate costs money and institutional paperwork), PyInstaller
+   output draws antivirus false positives, and every release needs a build, a test on real Windows, and
+   support for people new to software. Proposed default: ship it unsigned, explain the warning in the
+   README, and revisit if a certificate becomes available. A lighter step that needs no decision is a
+   PyPI release (#27).
+10. **Significance testing** (row 4). Still open: which test on the per-replicate log2 values (for
    example Welch's t-test), and whether to correct for multiple testing across arcs.
 
 ## The first question for the FP/BH slice
