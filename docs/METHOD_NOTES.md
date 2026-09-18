@@ -224,9 +224,12 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    gives an arc R to X that is not necessarily direct (R can act through a third species); strictly a
    hyper-arc. Karoline's position: keep these arcs, labeled by evidence, with the community recorded.
    To confirm with Craig. This addresses setting 5 and study SMGDB00000008.
-   Status 2026-09-18: the capability merged in #16 (`interaction.dropout_interaction_strengths`) without
-   touching the default derivation, so what remains open is only whether drop-out arcs enter the default
-   network.
+   Status 2026-09-18: #16 merged `interaction.dropout_interaction_strengths`, a complete and tested
+   implementation of the comparison. Emitting these arcs is not a change of default, though: that function
+   takes `Replicate` objects, `derive.py` works from mGrowthDB experiment dicts, and nothing in `src/`
+   builds a `Replicate`, so there is no path from the API to these arcs. Saying yes here commissions that
+   adapter, and the adapter routes the pipeline through `interaction.py`, which also settles items 1, 11
+   and 12. See item 15, which is the reason all four travel together.
 3. **Dependence between arcs** (#10, #3). Arcs to the same target from different drop-outs reuse the
    full community replicates, and the two values of a pair reuse the same co-culture replicates, so they
    are not independent. Options: document it only (current), or model the covariance when significance
@@ -250,8 +253,15 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    now, or after the method is settled? The page labels every result provisional and cites each study.
    Proposed default: keep it, since it is the fastest way for the collaboration to look at real data.
    Status 2026-09-18: #22 merged that page, and #29 added `gui/index.html`, a self-contained viewer for a
-   network that has already been derived. Both are now in the repository, so a second question follows:
-   keep both, and how should the README point at each.
+   network that has already been derived. They answer different questions and carry very different
+   exposure: `crossfeed gui` takes a species name from anyone and derives live against mGrowthDB with the
+   provisional baseline, while `gui/index.html` only draws a file its reader already produced and chose to
+   open. The concern in this item lands on the first and barely touches the second, so the two are worth
+   deciding separately. What argues against keeping both as they stand is not disk space but drift: the
+   settings menu is now hand-maintained in three places (`gui.py`, `gui/index.html`, and this document),
+   so a changed default has three chances to go stale. Proposed default: keep both, say in one README
+   sentence which question each answers, and give the settings menu one source in code that both
+   interfaces render.
 7. **Strain-level or species-level identity** (#23). Karoline: arcs should be reported per strain and
    labeled with the strain name, for all strains of a species that have data. Today nodes are keyed by
    genus and species, which pools strains and, because names change, splits one strain across nodes
@@ -261,7 +271,23 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    matches strains and what the emitted network looks like. mGrowthDB entries are being corrected upstream
    to always point to strains rather than species.
    Status 2026-09-18: #21 merged the resolver from names to taxon ids, which is the groundwork; nodes are
-   still keyed by genus and species.
+   still keyed by genus and species. Two things the proposal needs before it can be implemented, both
+   raised by review rather than by the data:
+   (a) **Rank is not uniform.** 411483 is a strain-rank id, 853 is the species-rank id for the same
+   organism, and mGrowthDB holds both kinds today (the note that entries are being corrected upstream to
+   point at strains is the admission that today they are not). Keying on "the taxon id" therefore still
+   splits one organism across nodes, just at a different place. Proposed amendment: every node carries
+   `taxon_id`, a `rank` saying what that id is, and a `species_taxon_id`, so item 8's shared merge key
+   always exists even when the record is strain-rank, and a consumer can see which it got.
+   (b) **`species_taxon_id` collides with the standing rule that names resolve through mGrowthDB and
+   never by querying NCBI.** Getting the species-rank ancestor of a strain-rank id is a taxonomy lookup.
+   `taxonomy.species_index` sidesteps it today by bucketing on the genus and species of the *name*, which
+   is the unstable thing this item exists to escape. Open: does mGrowthDB expose a species-rank id
+   alongside `NCBId`? If it does, use it. If not, the species key is derived from the name, and the node
+   should say so rather than imply a taxonomy lookup happened.
+   Separately, the pooling this item would fix is worse than pooling: `derive.py` keeps the last
+   monoculture seen per genus and species key, so additional strains are discarded with no entry in
+   `skipped`. That is a defect to fix whichever way this item is settled.
 8. **The node key for merging with other tools** (#25, microbetag). Merging experimentally confirmed
    interactions with microbetag networks as a multigraph needs matching node identifiers but not matching
    edge identifiers. Proposed default: the species-level NCBI taxon id as the shared key, with the strain
@@ -307,6 +333,32 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    merge records for the same interaction (unioning study ids and combining strengths by a stated rule),
    or drop the threshold until merging exists. Proposed default: build the merge, after which a
    replication floor becomes meaningful. Setting 10.
+
+15. **The repository holds two implementations of the comparison, and the pipeline reaches the weaker one**
+   (raised by the Syntropa-side review, 2026-09-18). `interaction.py` with `growth.py` is the comparison
+   Karoline specified: replicate sets summarized on the log2 scale, AUC by default, sd and se, explicit
+   `obligate`, `abolished` and `no_growth` outcomes, per-replicate values kept for a later test. It is
+   tested against hand-computed examples and it is the method of record. `derive.py` is the provisional
+   placeholder written to make the seam run: single scalar values, growth rate, log2 of a ratio, no
+   uncertainty, no outcomes. The pipeline, the CLI and both interfaces reach only `derive.py`, and a
+   `Replicate` is constructed nowhere outside the tests. So the tool ships the placeholder and the agreed
+   method sits unreachable beside it, and the two disagree on the metric, on the comparison, and on what a
+   node is. This is why items 1, 2, 11 and 12 cannot be answered one at a time: each of them is a request
+   to reach `interaction.py`. Options: build the mGrowthDB to `Replicate` adapter and let `derive.py`
+   shrink to that adapter behind the existing `Deriver` seam, or state in the README that the shipped
+   method and the specified method are different and which one a given output used. Proposed default: build
+   the adapter. It retires the placeholder, and it is the single piece of work that settles four items.
+   Anything that adds a third comparison, including the cheaper-looking route of computing drop-out arcs
+   inside `derive.py`, makes this worse and should be refused.
+16. **How hard crossfeed is allowed to lean on mGrowthDB** (raised by the Syntropa-side review,
+   2026-09-18). `taxonomy.species_index` builds its name index by walking study ids from 1 upward until
+   five consecutive ids are absent, capped at 500, and `crossfeed gui` calls it on a cold cache before it
+   can answer the first query. That is a large number of requests against someone else's service for one
+   person typing one species name. Responses are cached, so this is a cold-start cost rather than a
+   per-query one. Open: is that acceptable to the people who run mGrowthDB, and should crossfeed ship a
+   prebuilt index with releases, refreshed deliberately, instead of crawling on demand. This is a
+   courtesy question toward the database the collaboration depends on, so it wants an answer from them
+   rather than a default from us.
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.
