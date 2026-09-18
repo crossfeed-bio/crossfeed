@@ -19,6 +19,7 @@ import urllib.parse
 import webbrowser
 from collections import Counter
 
+from .attribution import studies_with_edges
 from .derive import DEADBAND, derive_interactions, genus_species
 from .export import to_graphml
 from .mgrowthdb import MGrowthDBError, records_to_network
@@ -26,6 +27,12 @@ from .taxonomy import resolve_species, species_index
 
 TITLE = "crossfeed"
 DEFAULTS = {"metric": "growthRate", "deadband": DEADBAND, "studies": "", "only_entered": True}
+PROVISIONAL = ("These interactions come from the provisional baseline method: log2 of the growth ratio "
+               "between co-culture and monoculture, pairwise co-cultures only, with no significance test. "
+               "The comparison method is a scientific decision still to be settled by the collaboration "
+               "(see docs/METHOD_NOTES.md), so treat the direction as dependable and the size as provisional.")
+MISMATCH = ("Monoculture and co-culture growth were measured by different techniques in some of these "
+            "studies, so the direction of those interactions is dependable while the magnitude is not.")
 EMPTY_HELP = ("The provisional baseline handles pairwise (two-member) co-cultures only, so studies built "
               "on larger or deletion consortia yield nothing until a method suited to their design is "
               "chosen (see docs/METHOD_NOTES.md).")
@@ -40,6 +47,7 @@ th, td { border-bottom: 1px solid #ddd; padding: 0.3rem 0.5rem; text-align: left
 details { margin-top: 1rem; } summary { cursor: pointer; }
 .row { margin: 0.4rem 0; } .muted { color: #555; font-size: 0.9rem; }
 .note { background: #f4f4f4; padding: 0.8rem 1rem; border-radius: 4px; }
+.sources { font-size: 0.9rem; } .sources li { margin-bottom: 0.3rem; }
 """
 
 
@@ -101,6 +109,20 @@ def _arc_rows(net) -> str:
     return "".join(rows)
 
 
+def _sources(net) -> str:
+    """Every study behind the table, with its citation and license: attribution at the edge level."""
+    if not net.studies:
+        return ""
+    by_study = studies_with_edges(net)
+    items = "".join(
+        f"<li>{_esc(sid)}: {_esc(study.citation or sid)} "
+        f"[{_esc(study.license or 'license: see study')}] supports {len(by_study.get(sid, []))} "
+        f"interaction(s)" + (f" &middot; <a href=\"{_esc(study.url)}\">study</a>" if study.url else "") + "</li>"
+        for sid, study in sorted(net.studies.items()))
+    return ("<h2>Sources</h2><p class=\"muted\">Cited at the level of each interaction; per-study licenses "
+            f"are respected.</p><ul class=\"sources\">{items}</ul>")
+
+
 def render_result(token: str, result: dict) -> str:
     resolved = "".join(
         f"<li>{_esc(entry)}: {_esc(', '.join(f'{name} ({tid})' for tid, name in sorted(matches.items())))}</li>"
@@ -108,8 +130,10 @@ def render_result(token: str, result: dict) -> str:
     unresolved = ("<p>Not in mGrowthDB: " + _esc(", ".join(result["unresolved"])) + "</p>"
                   if result["unresolved"] else "")
     net = result["network"]
+    mismatch = any("MISMATCH" in (e.method or "") for e in net.edges)
     if net.edges:
         table = (f"<h2>{len(net.edges)} interaction(s)</h2>"
+                 f"<p class=\"note\">{PROVISIONAL}" + (f" {MISMATCH}" if mismatch else "") + "</p>"
                  "<table><tr><th>source</th><th>affects</th><th>effect</th><th>log2 strength</th>"
                  f"<th>evidence</th><th>study</th></tr>{_arc_rows(net)}</table>"
                  f"<p><a href=\"/download.json?token={_esc(token)}\">Download JSON</a> &middot; "
@@ -129,7 +153,7 @@ def render_result(token: str, result: dict) -> str:
     return _page(f"""<h1>crossfeed</h1>
 <h2>Species</h2><ul>{resolved}</ul>{unresolved}
 <p class="muted">Studies searched: {_esc(studies)}</p>
-{errors}{table}{skipped}
+{errors}{table}{_sources(net)}{skipped}
 <p><a href="/?token={_esc(token)}">New search</a></p>""")
 
 

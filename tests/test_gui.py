@@ -118,6 +118,19 @@ def test_result_page_lists_arcs_and_download_links():
     assert "/download.json?token=tok" in page and "/download.graphml?token=tok" in page
 
 
+def test_result_page_cites_every_study_with_its_license():
+    page = render_result("tok", _query())
+    assert "Sources" in page and "SMGDB00000001" in page and "fake study" in page
+    assert "license: see study" in page and "supports 2 interaction(s)" in page
+
+
+def test_result_page_says_the_method_is_provisional_and_flags_technique_mismatch():
+    page = render_result("tok", _query())
+    assert "provisional baseline method" in page
+    # the fake study measures monoculture growth by flow cytometry and co-culture by qPCR
+    assert "different techniques" in page
+
+
 # ---- the server itself ---------------------------------------------------------------------------
 
 @pytest.fixture
