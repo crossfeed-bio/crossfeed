@@ -4,6 +4,7 @@
   python -m crossfeed derive SMGDB00000004 --fixture records.json  # offline, from interaction records
   python -m crossfeed validate network.json                       # check a network against the schema
   python -m crossfeed schema --out interaction_network.schema.json # emit the neutral-format schema
+  python -m crossfeed gui                                          # a local page for species names
 """
 from __future__ import annotations
 
@@ -113,6 +114,12 @@ def _schema(a):
     return 0
 
 
+def _gui(a):
+    from .gui import serve
+    serve(port=a.port, open_browser=not a.no_browser)
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="crossfeed", description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -132,6 +139,11 @@ def main(argv=None):
     v = sub.add_parser("validate", help="validate a network JSON against the neutral-format schema")
     v.add_argument("file", help="path to a network JSON document")
     v.set_defaults(fn=_validate)
+
+    g2 = sub.add_parser("gui", help="open a local page: type species names, get their interactions")
+    g2.add_argument("--port", type=int, default=0, help="port to serve on (default: a free one)")
+    g2.add_argument("--no-browser", action="store_true", help="do not open a browser window")
+    g2.set_defaults(fn=_gui)
 
     s = sub.add_parser("schema", help="emit the neutral-format JSON schema")
     s.add_argument("--out", help="write the schema here (default: stdout)")
