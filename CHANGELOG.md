@@ -18,6 +18,9 @@ tagged version is never reused for changed content.
   and how to plug in a method end to end, so a new contributor never has to root around other docs.
 - A published JSON Schema for the neutral format (`schema/interaction_network.schema.json`) plus a
   dependency-free `crossfeed.schema.validate_document`.
+- `crossfeed.taxonomy`: species names resolved to NCBI taxon ids from mGrowthDB's own strain records
+  (`species_index`, `resolve_species`), so a person can type names where the API takes ids. A name
+  resolves to every taxon id mGrowthDB holds under that genus and species, species level and strain level.
 - A GraphML export (`crossfeed derive --format graphml`, and `crossfeed.export.to_graphml`) so a network
   drops straight into Cytoscape, igraph, networkx, or Gephi. Dependency-free (standard library xml only).
 - mGrowthDB client hardening: in-memory and optional on-disk response caching, and retries with backoff

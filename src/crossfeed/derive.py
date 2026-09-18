@@ -30,9 +30,12 @@ METHOD = ("crossfeed baseline v0 (PROVISIONAL): log2(growthRate co / mono), pair
 DEADBAND = 0.25   # |log2 ratio| below this reads neutral in the baseline (documented, provisional)
 
 
-def _gs(name: str) -> str:
+def genus_species(name: str) -> str:
     """Genus + species key for matching a strain across experiments (drops the strain designation)."""
     return " ".join((name or "").split()[:2]).lower()
+
+
+_gs = genus_species   # short alias used throughout this module
 
 
 def _strain_growth(exp: dict, want_strain: str = None, metric: str = "growthRate"):
