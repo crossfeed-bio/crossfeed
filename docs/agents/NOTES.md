@@ -17,10 +17,17 @@ Rules for this file:
 
 - 2026-09-17: v0.0.2 is unreleased on `main`. The pipeline runs end to end on live mGrowthDB data with
   the provisional `BaselineDeriver`. CLI: `derive`, `validate`, `schema`; outputs JSON and GraphML.
+- 2026-09-17: Helpers `crossfeed.growth` and `crossfeed.interaction` are merged (#9, feature #3). Karoline's
+  account has write access; the labels `feature`, `task`, `needs-decision`, `method`, and
+  `agent-generated` exist, and sub-issues can be attached.
 - 2026-09-18: added `gui/`, a self-contained HTML viewer (presentation layer: reads the neutral format,
   filters by species, shows edge provenance, downloads JSON and the same GraphML `export.py` writes).
   Rewrote `docs/METHOD_NOTES.md` to describe the baseline as it actually runs and to record opening
   default votes for Karoline and Haris to settle.
+- 2026-09-18: merged the taxonomy resolver (#21), drop-out interaction strengths and the obligate and
+  abolished outcomes (#16), the optional `evidence` and `community` edge fields (#17), and the local
+  `crossfeed gui` server (#22). The default derivation is unchanged by all four: each adds capability the
+  settings in METHOD_NOTES can later switch on.
 
 ## Decisions
 
@@ -35,20 +42,24 @@ Rules for this file:
   tasks in a comment on the feature and writes "Feature: #N" in each task (as on #3).
 - 2026-09-17: Without write access, dependent tasks go out as stacked pull requests from a fork, each
   based on `main`; the description says to merge in order and review only the last commit.
-
 - 2026-09-17: `main` requires one approving review, and GitHub never lets a pull request's author
   approve it. A pull request opened by an agent under a person's account therefore needs a review from
   someone else (another collaborator or their agent).
 - 2026-09-17: Collaborators with write access push branches to this repository, not a fork, so CI
   runs without maintainer approval and later branches can stack on earlier ones.
+- 2026-09-18 (Karoline): species and strain names are resolved through mGrowthDB, never by querying NCBI
+  directly. mGrowthDB is linked to NCBI through a local import that is kept up to date, so following its
+  naming keeps one source of truth. The current name for a taxon id is the one in the most recently
+  published study holding it (#24).
+- 2026-09-18 (Craig, on merging #17): the optional `evidence` and `community` edge fields are accepted
+  into the neutral format (item 4 of "Open decisions"). `evidence` is `biculture` (mono versus bi-culture,
+  direct) or `dropout` (possibly indirect), and `community` records the members of the full community.
+  Both are optional, so the change is backward compatible for downstream readers.
 
 ## Open questions (need a human)
 
-- The derivation defaults in [docs/METHOD_NOTES.md](../METHOD_NOTES.md) carry Craig's opening votes for
-  Karoline and Haris to settle. The ones that actually matter: the growth metric and comparison as a
-  coupled pair (a rate with a log ratio is unstable), an NCBI taxid on every node so the microbetag and
-  Syntropa layers overlay instead of duplicating taxa, wiring replicate uncertainty through, how far to
-  trust a mismatched-technique sign, and merging edges per interaction before a study count means anything.
+- Method and format questions are collected in "Open decisions" in
+  [docs/METHOD_NOTES.md](../METHOD_NOTES.md).
 - Where each mGrowthDB study's license is published; the study endpoint does not expose it, so
   `study_license` is marked unresolved.
 
@@ -65,6 +76,9 @@ Rules for this file:
   strains, so the pick is visible, but it is still a pick: which strain to keep is METHOD_NOTES setting 7.
   Nodes carry no NCBI taxid yet, which is why a crossfeed network does not line up with a microbetag
   network in Cytoscape.
+- One taxon id can appear under several names across studies: 411483 is "Faecalibacterium prausnitzii
+  A2-165" in SMGDB00000004 and "Faecalibacterium duncaniae A2-165" in SMGDB00000005 and SMGDB00000011,
+  after the 2022 reclassification. Names are not stable identity; taxon ids are (#23).
 - Sign is encoded three ways in `gui/index.html` (color, dash, arrowhead), so anything else an edge needs
   to say has to use a different channel. Indirectness (`evidence` = `dropout`) uses an open ring at the
   edge midpoint. `edgeGeom` returns the path and that midpoint together so the two cannot drift apart;
