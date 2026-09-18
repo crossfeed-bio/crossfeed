@@ -58,6 +58,68 @@ while the per-strain co-culture growth is measured by qPCR. The baseline records
 flags a mismatch, so the direction is dependable while the magnitude is provisional. The options are to
 flag it (baseline), to calibrate between techniques, or to restrict a network to matched techniques.
 
+## Open decisions
+
+This is the single place where open method and format questions are collected, so Karoline and Craig
+can settle several at once. Agents add a question here (with the options, a proposed default, and the
+issue it came from) instead of deciding it; a settled item moves to "Decisions" in
+[docs/agents/NOTES.md](agents/NOTES.md) with the date and who decided.
+
+1. **Status of the replicate set comparison** (#3). `crossfeed.interaction.interaction_strength`
+   compares a species' growth with and without a partner as mean(log2 property with) minus mean(log2
+   property without), with sd and se from the per-set log2 spread, over the area under the curve or the
+   maximal abundance. Specified by Karoline and merged as provisional. Options: adopt it as the agreed
+   comparison (rows 1 and 3 above), or keep it provisional. Proposed default: adopt it, and keep the
+   growth metric (row 1) open for growth rates.
+2. **Arcs from drop-out communities** (#10). Comparing the full community with the community without R
+   gives an arc R to X that is not necessarily direct (R can act through a third species); strictly a
+   hyper-arc. Karoline's position: keep these arcs, labeled by evidence, with the community recorded.
+   To confirm with Craig. This addresses row 5 and study SMGDB00000008.
+3. **Dependence between arcs** (#10, #3). Arcs to the same target from different drop-outs reuse the
+   full community replicates, and the two values of a pair reuse the same co-culture replicates, so they
+   are not independent. Options: document it only (current), or model the covariance when significance
+   is tested. Proposed default: document it now, decide together with item 10.
+4. **New optional edge fields in the neutral format** (#11). `evidence` (`biculture` for mono versus
+   bi-culture, direct; `dropout`, possibly indirect) and `community` (members of the full community).
+   Backward compatible, but a change to the contract downstream tools read. Proposed default: accept.
+5. **Zero growth and detection limits** (#16). Decided by Karoline: a species that grows only with the
+   source present is an obligate commensal or mutualist, reported as outcome `obligate` (and `abolished`
+   for growth only without the source), not as an error. Still open: how such arcs appear in the network
+   (proposed default: effect `facilitation` or `inhibition` with a null strength and the outcome recorded),
+   and what counts as no growth in real data, where values rarely reach exactly zero (options: a
+   detection limit per technique, a minimum increase over the first time point, or a pseudocount).
+6. **Whether crossfeed ships a user interface at all** (#18). Karoline asked for a local page where a
+   person types species names and gets their interactions, with settings hidden behind an "Advanced
+   settings" button. Built as a standard-library server on 127.0.0.1 with no JavaScript, so the promise
+   of no runtime dependencies and nothing to host holds. The question for the maintainers: does a page
+   that shows provisional results to people who do not read the method notes belong in the repository
+   now, or after the method is settled? The page labels every result provisional and cites each study.
+   Proposed default: keep it, since it is the fastest way for the collaboration to look at real data.
+7. **Strain-level or species-level identity** (#23). Karoline: arcs should be reported per strain and
+   labeled with the strain name, for all strains of a species that have data. Today nodes are keyed by
+   genus and species, which pools strains and, because names change, splits one strain across nodes
+   (taxon 411483 appears as Faecalibacterium prausnitzii A2-165 and as Faecalibacterium duncaniae A2-165).
+   Proposed default: key nodes by NCBI taxon id, name them with the strain name, keep the species-level id
+   as an attribute, and match monoculture to co-culture by id. This changes how the provisional baseline
+   matches strains and what the emitted network looks like. mGrowthDB entries are being corrected upstream
+   to always point to strains rather than species.
+8. **The node key for merging with other tools** (#25, microbetag). Merging experimentally confirmed
+   interactions with microbetag networks as a multigraph needs matching node identifiers but not matching
+   edge identifiers. Proposed default: the species-level NCBI taxon id as the shared key, with the strain
+   id kept alongside, and every edge stating whether it is experimental or predicted so the two are never
+   blurred. Open: whether crossfeed does the merging at all or only produces networks, and whether a
+   direct route into Cytoscape sits well with the neutral format being tool-neutral.
+9. **Shipping desktop binaries** (#26). Karoline: the typical user runs Windows and has no command line
+   experience, so installing Python, Git, and a virtual environment is out of reach. A CI-built,
+   double-click Windows executable would remove that. The commitments: an unsigned build triggers a
+   SmartScreen warning (a code-signing certificate costs money and institutional paperwork), PyInstaller
+   output draws antivirus false positives, and every release needs a build, a test on real Windows, and
+   support for people new to software. Proposed default: ship it unsigned, explain the warning in the
+   README, and revisit if a certificate becomes available. A lighter step that needs no decision is a
+   PyPI release (#27).
+10. **Significance testing** (row 4). Still open: which test on the per-replicate log2 values (for
+   example Welch's t-test), and whether to correct for multiple testing across arcs.
+
 ## The first question for the FP/BH slice
 
 Which option in rows 1 to 4 should the first real network fix, and do we want it to carry a significance
