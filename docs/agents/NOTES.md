@@ -17,6 +17,10 @@ Rules for this file:
 
 - 2026-09-17: v0.0.2 is unreleased on `main`. The pipeline runs end to end on live mGrowthDB data with
   the provisional `BaselineDeriver`. CLI: `derive`, `validate`, `schema`; outputs JSON and GraphML.
+- 2026-09-18: added `gui/`, a self-contained HTML viewer (presentation layer: reads the neutral format,
+  filters by species, shows edge provenance, downloads JSON and the same GraphML `export.py` writes).
+  Rewrote `docs/METHOD_NOTES.md` to describe the baseline as it actually runs and to record opening
+  default votes for Karoline and Haris to settle.
 
 ## Decisions
 
@@ -40,8 +44,11 @@ Rules for this file:
 
 ## Open questions (need a human)
 
-- Which derivation method choices (rows 1 to 4 in [docs/METHOD_NOTES.md](../METHOD_NOTES.md)) the first
-  real FP/BH network should fix, and whether it carries a significance call.
+- The derivation defaults in [docs/METHOD_NOTES.md](../METHOD_NOTES.md) carry Craig's opening votes for
+  Karoline and Haris to settle. The ones that actually matter: the growth metric and comparison as a
+  coupled pair (a rate with a log ratio is unstable), an NCBI taxid on every node so the microbetag and
+  Syntropa layers overlay instead of duplicating taxa, wiring replicate uncertainty through, how far to
+  trust a mismatched-technique sign, and merging edges per interaction before a study count means anything.
 - Where each mGrowthDB study's license is published; the study endpoint does not expose it, so
   `study_license` is marked unresolved.
 
@@ -51,6 +58,12 @@ Rules for this file:
 - Study SMGDB00000008 (13 to 14 member deletion consortia) yields an empty network under the pairwise
   baseline. That is expected, not a bug.
 - In the FP/BH study, monoculture and co-culture growth use different measurement techniques; edges carry
-  a technique-mismatch flag, so direction is dependable and magnitude is provisional.
+  a technique-mismatch flag. The magnitude is provisional, and near the neutral band the sign can move too
+  under a cross-technique offset, so a mismatched edge's direction is not fully dependable either.
+- The baseline keys nodes at genus and species (`_gs`), so strains of one species collapse to one node and
+  the monoculture lookup keeps the last one seen. Nodes carry no NCBI taxid yet, which is why a crossfeed
+  network does not line up with a microbetag network in Cytoscape (see METHOD_NOTES setting 7).
+- Baseline edges are point estimates with no standard error, and edges for one interaction are never
+  merged (each condition and study is its own edge), so an edge's `study_ids` has one entry today.
 - The gate scans every tracked file, including this one: no dashes as punctuation, US spelling, no
   absolute local paths.
