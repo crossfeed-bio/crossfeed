@@ -18,6 +18,9 @@ tagged version is never reused for changed content.
   and how to plug in a method end to end, so a new contributor never has to root around other docs.
 - A published JSON Schema for the neutral format (`schema/interaction_network.schema.json`) plus a
   dependency-free `crossfeed.schema.validate_document`.
+- `crossfeed gui`: a local page (standard library server on 127.0.0.1, a token in the URL, no JavaScript)
+  where you type species names or NCBI taxon ids and get their interactions as a table, with every
+  setting behind "Advanced settings" and downloads for JSON and GraphML.
 - `crossfeed.taxonomy`: species names resolved to NCBI taxon ids from mGrowthDB's own strain records
   (`species_index`, `resolve_species`), so a person can type names where the API takes ids. A name
   resolves to every taxon id mGrowthDB holds under that genus and species, species level and strain level.

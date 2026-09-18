@@ -21,6 +21,7 @@ own derivation method. Nothing here needs another document to follow.
 - [Quickstart](#quickstart)
 - [What it does](#what-it-does)
 - [The command line](#the-command-line)
+- [The local page](#the-local-page)
 - [The output format](#the-output-format)
 - [Plug in your own method](#plug-in-your-own-method)
 - [How the provisional baseline works](#how-the-provisional-baseline-works)
@@ -96,6 +97,24 @@ python -m crossfeed schema [--out FILE]
 - `schema` prints the JSON Schema (or writes it with `--out`).
 
 A `crossfeed` console command is installed too, so `crossfeed derive ...` works after `pip install`.
+
+## The local page
+
+Prefer clicking to typing commands? `python -m crossfeed gui` starts a small page on your own machine and
+opens it in the browser:
+
+```
+python -m crossfeed gui
+```
+
+Type species names (or NCBI taxon ids), one per line, and press "Find interactions". crossfeed resolves
+the names to taxon ids from mGrowthDB's own strain records, finds the studies holding them, derives the
+interactions, and shows them as a table with downloads for JSON and GraphML. Every setting sits behind
+"Advanced settings" with the same defaults the command line uses.
+
+The page is served from the standard library on 127.0.0.1 with a token in its URL, renders in Python with
+no JavaScript, and uploads nothing: the data is pulled from mGrowthDB to your machine, and the results
+stay there.
 
 ## The output format
 
