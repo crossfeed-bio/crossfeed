@@ -120,7 +120,9 @@ read, and it is pinned by a JSON Schema at
       "significance": null,
       "condition": "FP/BH co-culture",
       "method": "crossfeed baseline v0 (PROVISIONAL): ...",
-      "study_ids": ["SMGDB00000004"]
+      "study_ids": ["SMGDB00000004"],
+      "evidence": "biculture",
+      "community": ["blautia hydrogenotrophica", "faecalibacterium prausnitzii"]
     }
   ],
   "studies": [
@@ -131,7 +133,11 @@ read, and it is pinned by a JSON Schema at
 
 `effect` is one of `facilitation`, `inhibition`, `neutral`. `strength` and `significance` are your
 method's numbers (or `null`). `study_ids` on every edge is the edge-level attribution and must carry at
-least one study. Validate any document (in Python) with `crossfeed.schema.validate_document(doc)`, which
+least one study. `evidence` says what the edge was derived from: `biculture` (a species alone against
+the same species with one partner, a direct interaction) or `dropout` (a full community against the
+community without the source species, so the effect is not necessarily direct; strictly a hyper-arc,
+kept as an arc), or `null` when unknown; `community` lists the node ids of the community it came from.
+Both fields are optional, so documents without them stay valid. Validate any document (in Python) with `crossfeed.schema.validate_document(doc)`, which
 returns a list of problems (empty means valid). For network tools, `derive ... --format graphml` emits
 the same network as GraphML (Cytoscape, igraph, networkx, Gephi); the neutral JSON stays the canonical,
 citable form.

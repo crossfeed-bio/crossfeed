@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import os
 
-from .model import EFFECTS, SCHEMA, InteractionNetwork
+from .model import EFFECTS, EVIDENCE, SCHEMA, InteractionNetwork
 
 SCHEMA_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -60,6 +60,8 @@ SCHEMA_DOC = {
                 "condition": {"type": "string"},
                 "method": {"type": "string"},
                 "study_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                "evidence": {"enum": [*EVIDENCE, None]},
+                "community": {"type": "array", "items": {"type": "string"}},
             },
         },
         "study": {
@@ -119,6 +121,11 @@ def validate_document(doc) -> list:
             problems.append(f"edges[{i}] missing source or target")
         if e.get("effect") not in EFFECTS:
             problems.append(f"edges[{i}] effect {e.get('effect')!r} not in {EFFECTS}")
+        if e.get("evidence") is not None and e.get("evidence") not in EVIDENCE:
+            problems.append(f"edges[{i}] evidence {e.get('evidence')!r} not in {EVIDENCE}")
+        community = e.get("community", [])
+        if not isinstance(community, (list, tuple)) or not all(isinstance(m, str) for m in community):
+            problems.append(f"edges[{i}] community must be a list of node ids")
         if not e.get("study_ids"):
             problems.append(f"edges[{i}] has no study_ids (edge-level attribution requires at least one)")
 

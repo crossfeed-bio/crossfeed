@@ -123,6 +123,7 @@ def interactions_from_experiments(study: dict, exps: list, study_id: str = None,
                 "target": _gs(focal), "target_name": focal,
                 "effect": effect, "strength": round(strength, 4), "significance": None,
                 "condition": cond, "method": note,
+                "evidence": "biculture", "community": sorted([_gs(a), _gs(b)]),
                 "study_id": study_id, **study_meta,
             })
     return records, skipped

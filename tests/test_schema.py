@@ -53,3 +53,45 @@ def test_dangling_edge_endpoint_rejected():
 
 def test_non_object_rejected():
     assert validate_document([1, 2, 3]) == ["document is not a JSON object"]
+
+
+# ---- edge evidence and community (#11) ----------------------------------------------------------------
+
+def _dropout_doc():
+    recs = [{"source": "a", "target": "b", "effect": "facilitation", "strength": 1.0, "study_id": "S1",
+             "evidence": "dropout", "community": ["a", "b", "c"]}]
+    return records_to_network(recs).to_dict()
+
+
+def test_dropout_edge_round_trips_and_validates():
+    from crossfeed.model import InteractionNetwork
+    doc = _dropout_doc()
+    assert doc["edges"][0]["evidence"] == "dropout"
+    assert list(doc["edges"][0]["community"]) == ["a", "b", "c"]
+    assert validate_document(doc) == []
+    edge = InteractionNetwork.from_dict(json.loads(json.dumps(doc))).edges[0]
+    assert edge.evidence == "dropout" and edge.community == ("a", "b", "c")
+
+
+def test_unknown_evidence_rejected():
+    from crossfeed.model import Edge
+    doc = _dropout_doc()
+    doc["edges"][0]["evidence"] = "direct"
+    assert any("evidence" in p for p in validate_document(doc))
+    assert any("evidence" in p for p in Edge("a", "b", "facilitation", study_ids=("S1",), evidence="direct").validate())
+
+
+def test_community_must_be_a_list_of_ids():
+    doc = _dropout_doc()
+    doc["edges"][0]["community"] = "a b c"
+    assert any("community" in p for p in validate_document(doc))
+
+
+def test_document_without_the_new_fields_still_valid():
+    from crossfeed.model import InteractionNetwork
+    doc = _good_doc()
+    for edge in doc["edges"]:
+        del edge["evidence"], edge["community"]
+    assert validate_document(doc) == []
+    edge = InteractionNetwork.from_dict(doc).edges[0]
+    assert edge.evidence is None and edge.community == ()

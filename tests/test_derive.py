@@ -52,3 +52,11 @@ def test_three_member_skipped():
     recs, skipped = interactions_from_experiments(STUDY, exps)
     assert recs == []
     assert any(">2 members" in reason for _, reason in skipped)
+
+
+def test_baseline_edges_are_biculture_evidence():
+    exps = [_mono(A, 0.30), _mono(B, 0.30), _co(A, B, "FP_BH", 0.66, 0.31)]
+    recs, _ = interactions_from_experiments(STUDY, exps)
+    net = records_to_network(recs)
+    assert net.edges and all(e.evidence == "biculture" for e in net.edges)
+    assert all(e.community == tuple(sorted([_gs(A), _gs(B)])) for e in net.edges)

@@ -18,6 +18,9 @@ from dataclasses import asdict, dataclass, field
 
 SCHEMA = "crossfeed.interaction_network/v0"
 EFFECTS = ("facilitation", "inhibition", "neutral")
+# what an edge was derived from: a mono versus bi-culture comparison (a direct interaction), or a full
+# versus drop-out community comparison (not necessarily direct: strictly a hyper-arc, kept as an arc)
+EVIDENCE = ("biculture", "dropout")
 
 
 @dataclass(frozen=True)
@@ -52,11 +55,15 @@ class Edge:
     condition: str = ""           # the experimental condition (interactions are condition-specific)
     method: str = ""              # how the interaction was quantified
     study_ids: tuple = ()         # the studies supporting THIS edge (edge-level attribution)
+    evidence: str | None = None   # one of EVIDENCE, or None when unknown
+    community: tuple = ()         # Node ids of the community the edge was derived from, when applicable
 
     def validate(self) -> list:
         problems = []
         if self.effect not in EFFECTS:
             problems.append(f"edge {self.source}->{self.target}: effect {self.effect!r} not in {EFFECTS}")
+        if self.evidence is not None and self.evidence not in EVIDENCE:
+            problems.append(f"edge {self.source}->{self.target}: evidence {self.evidence!r} not in {EVIDENCE}")
         if not self.study_ids:
             problems.append(
                 f"edge {self.source}->{self.target}: no study_ids "
@@ -118,5 +125,6 @@ class InteractionNetwork:
         for e in d.get("edges", []):
             e = dict(e)
             e["study_ids"] = tuple(e.get("study_ids", ()))
+            e["community"] = tuple(e.get("community", ()))
             net.add_edge(Edge(**e))
         return net
