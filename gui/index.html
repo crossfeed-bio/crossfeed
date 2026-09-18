@@ -45,6 +45,7 @@
   .edge.hit{stroke:transparent;stroke-width:14px}
   .edge.dim,.node.dim{opacity:.22}
   .node circle{stroke:#fff;stroke-width:2px;fill:var(--teal)}
+  .via{pointer-events:none}
   .node text{font-size:12px;fill:var(--ink);paint-order:stroke;stroke:var(--bg);stroke-width:3px;pointer-events:none}
   .node.sel circle{stroke:var(--teal-ink);stroke-width:3px}
   .node{cursor:pointer}
@@ -273,16 +274,20 @@ function applyView(){gView.setAttribute("transform",`translate(${view.x} ${view.
 function screenToWorld(px,py){const r=svg.getBoundingClientRect();return {x:(px-r.left-view.x)/view.k, y:(py-r.top-view.y)/view.k};}
 
 // path data for one edge, shared by render and drag so a dragged node's edges follow it live
-function edgeD(e){
+function edgeGeom(e){
   const a=POS[e.source], b=POS[e.target]; if(!a||!b)return null;
   const key=e.source<e.target?e.source+"|"+e.target:e.target+"|"+e.source;
   const grp=curGroups[key]||[e], gi=Math.max(0,grp.indexOf(e)), off=(gi-(grp.length-1)/2)*26;
-  if(e.source===e.target){const x=a.x,y=a.y,r=22+Math.abs(off);return `M ${x} ${y-10} C ${x+r} ${y-r} ${x-r} ${y-r} ${x} ${y-10}`;}
+  if(e.source===e.target){const x=a.x,y=a.y,r=22+Math.abs(off);
+    // cubic at t=0.5 with P0=P3=(x,y-10), C1=(x+r,y-r), C2=(x-r,y-r)
+    return {d:`M ${x} ${y-10} C ${x+r} ${y-r} ${x-r} ${y-r} ${x} ${y-10}`, mx:x, my:y-2.5-0.75*r};}
   const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1,ux=dx/len,uy=dy/len,px=-uy,py=ux;
   const x1=a.x+ux*14,y1=a.y+uy*14,x2=b.x-ux*16,y2=b.y-uy*16;
   const cx=(x1+x2)/2+px*off,cy=(y1+y2)/2+py*off;
-  return `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`;
+  // quadratic at t=0.5 = 0.25*P0 + 0.5*C + 0.25*P2
+  return {d:`M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`, mx:0.25*x1+0.5*cx+0.25*x2, my:0.25*y1+0.5*cy+0.25*y2};
 }
+function edgeD(e){const g=edgeGeom(e);return g?g.d:null;}
 
 // ---- render ----
 function defsMarkers(){
@@ -314,9 +319,13 @@ function render(){
   edges.forEach(e=>{
     const a=POS[e.source], b=POS[e.target]; if(!a||!b)return;
     const st=styleOf(e), s=num(e.strength), w=1.4+4.6*(s===null?0.3:Math.abs(s)/MAXS);
-    const d=edgeD(e);
+    const g=edgeGeom(e); if(!g)return; const d=g.d;
     const path=el("path",{class:"edge",d,stroke:st.color(),"stroke-width":w,fill:"none","marker-end":"url(#arw-"+st.head+")"});
     if(st.dash)path.setAttribute("stroke-dasharray",st.dash);
+    if(isIndirect(e)){   // open ring at the midpoint: the arc is routed through something else
+      const ring=el("circle",{class:"via",cx:g.mx,cy:g.my,r:4.5,fill:getVar("--bg"),stroke:st.color(),"stroke-width":1.8});
+      ring._edge=e; gEdges.appendChild(ring);
+    }
     const hit=el("path",{class:"edge hit",d});                  // fat invisible path = easy hover/click target
     const bind=()=>{selected=null;showEdge(e);highlight(null);};
     hit.addEventListener("mousemove",ev=>showTip(ev,edgeTip(e)));
@@ -366,9 +375,20 @@ const band=s=>{const a=Math.abs(s);return a<0.25?"near zero":a<1?"weak":a<2?"mod
 function strengthText(e){const s=num(e.strength);if(s===null)return"";return `${s>0?"+":""}${s.toFixed(1)} (${band(s)})`;}
 function provNote(e){const m=String(e.method||"");if(/MISMATCH/i.test(m))return"magnitude provisional: mono and co measured by different techniques";if(/PROVISIONAL/i.test(m))return"provisional baseline method";return"";}
 function qualTag(e){return e.significance==null?"qualitative (no significance test)":"significance "+esc(e.significance);}
+// Evidence is a separate axis from the sign: it says whether the arc is a direct comparison or a
+// drop-out, which may act through a third species. It never reuses the color, dash, or head.
+const isIndirect=e=>String(e.evidence||"")==="dropout";
+function evidenceTag(e){const v=String(e.evidence||"");
+  if(v==="dropout")return "indirect (drop-out)";
+  if(v==="biculture")return "direct (mono vs bi-culture)";
+  return "";}
+function evidenceNote(e){return isIndirect(e)
+  ? "from a drop-out community, so the source may act through a third species; strictly a hyper-arc"
+  : "";}
 
 function edgeTip(e){
   return `<b>${esc(nodeName(e.source))} &rarr; ${esc(nodeName(e.target))}</b><br>${esc(e.effect)} ${strengthText(e)}`+
+    (isIndirect(e)?`<br><span style="opacity:.75">indirect: ${esc(evidenceNote(e))}</span>`:"")+
     (e.condition?`<br><span style="opacity:.75">condition: ${esc(e.condition)}</span>`:"");
 }
 function showTip(ev,html){const r=svg.getBoundingClientRect();let x=ev.clientX-r.left+12,y=ev.clientY-r.top+12;
@@ -384,15 +404,17 @@ function showEdge(e){
   document.getElementById("details").innerHTML=
     `<div class="row"><b>${esc(nodeName(e.source))} &rarr; ${esc(nodeName(e.target))}</b></div>`+
     `<div class="row"><span class="k">effect</span> ${esc(e.effect)}${num(e.strength)!==null?`  <span class="k">strength</span> ${strengthText(e)}`:""}<br><span class="k">${qualTag(e)}</span></div>`+
+    (evidenceTag(e)?`<div class="row"><span class="k">evidence</span> ${esc(evidenceTag(e))}${(e.community||[]).length?`<br><span class="k">community</span> ${(e.community||[]).map(id=>esc(nodeName(id))).join(", ")}`:""}</div>`:"")+
     (e.condition?`<div class="row"><span class="k">condition</span> ${esc(e.condition)}</div>`:"")+
     `<div class="row"><span class="k">studies</span><br>${studies.map(esc).join("<br>")||"none recorded"}</div>`+
+    (evidenceNote(e)?`<div class="prov">${esc(evidenceNote(e))}</div>`:"")+
     (prov?`<div class="prov">${esc(prov)}</div>`:"")+
     (e.method?`<div class="method"><span class="k">method:</span> ${esc(e.method)}</div>`:"");
 }
 function showNode(id){
   const out=(NET.edges||[]).filter(e=>e.source===id&&nodeById[e.target]);
   const inc=(NET.edges||[]).filter(e=>e.target===id&&nodeById[e.source]);
-  const li=arr=>arr.map(e=>`&bull; ${esc(nodeName(e.source))} &rarr; ${esc(nodeName(e.target))} <span class="k">(${esc(e.effect)}${num(e.strength)!==null?" "+strengthText(e):""}${e.condition?", "+esc(e.condition):""})</span>`).join("<br>")||`<span class="empty">none</span>`;
+  const li=arr=>arr.map(e=>`&bull; ${esc(nodeName(e.source))} &rarr; ${esc(nodeName(e.target))} <span class="k">(${esc(e.effect)}${num(e.strength)!==null?" "+strengthText(e):""}${e.condition?", "+esc(e.condition):""})</span>${isIndirect(e)?` <span class="k" title="${esc(evidenceNote(e))}">indirect</span>`:""}`).join("<br>")||`<span class="empty">none</span>`;
   document.getElementById("details").innerHTML=
     `<div class="row"><b>${esc(nodeName(id))}</b></div>`+
     `<div class="row"><span class="k">affects (${out.length})</span><br>${li(out)}</div>`+
@@ -418,6 +440,7 @@ svg.addEventListener("dblclick",()=>{userAdjusted=false;render();});
 function positionNodes(){
   gNodes.querySelectorAll(".node").forEach(g=>{const p=POS[g._id];if(p)g.setAttribute("transform",`translate(${p.x} ${p.y})`);});
   gEdges.querySelectorAll(".edge").forEach(pth=>{const e=pth._edge;if(!e)return;const d=edgeD(e);if(d)pth.setAttribute("d",d);});
+  gEdges.querySelectorAll(".via").forEach(c=>{const e=c._edge;if(!e)return;const g=edgeGeom(e);if(g){c.setAttribute("cx",g.mx);c.setAttribute("cy",g.my);}});
 }
 
 // ---- legend ----
@@ -436,6 +459,13 @@ function buildLegend(){
   const w=document.createElement("div");w.className="li";
   w.innerHTML=`<svg viewBox="0 0 38 14"><line x1="2" y1="7" x2="34" y2="7" stroke="var(--muted)" stroke-width="5"/></svg><span>thicker = larger |strength|</span>`;
   box.appendChild(w);
+  if((NET.edges||[]).some(isIndirect)){
+    const v=document.createElement("div");v.className="li";
+    v.innerHTML=`<svg viewBox="0 0 38 14"><line x1="2" y1="7" x2="34" y2="7" stroke="var(--muted)" stroke-width="2.4"/>`+
+      `<circle cx="18" cy="7" r="4.5" fill="var(--bg)" stroke="var(--muted)" stroke-width="1.8"/></svg>`+
+      `<span>ring = indirect (drop-out), may act through a third species</span>`;
+    box.appendChild(v);
+  }
 }
 
 // ---- source banner ----

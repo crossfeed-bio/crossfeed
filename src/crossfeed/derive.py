@@ -76,15 +76,27 @@ def interactions_from_experiments(study: dict, exps: list, study_id: str = None,
     the data did not cleanly support. This is the PROVISIONAL baseline; see the module docstring."""
     study_id = study_id or study.get("id")
 
-    monos = {}   # genus+species -> (value, technique)
+    records, skipped = [], []
+
+    monos = {}        # genus+species -> (value, technique)
+    mono_strain = {}  # genus+species -> the strain name whose value is held
     for e in exps:
         mem = _members(e)
         if len(mem) == 1:
             v, tech = _strain_growth(e, None, metric)
             if v is not None:
-                monos[_gs(mem[0])] = (v, tech)
+                key = _gs(mem[0])
+                held = mono_strain.get(key)
+                if held is not None and held != mem[0]:
+                    # Nodes are keyed at genus and species, so strains of one species share a key and only
+                    # the last monoculture read is used. Which one to keep is a method choice (METHOD_NOTES
+                    # setting 7), so the baseline keeps its behavior and reports what it dropped.
+                    skipped.append((f"monoculture {held}",
+                                    f"another strain of the same species ({mem[0]}) also has a monoculture; "
+                                    f"both key to '{key}' and only the last is used"))
+                monos[key] = (v, tech)
+                mono_strain[key] = mem[0]
 
-    records, skipped = [], []
     study_meta = {
         "study_citation": study.get("name", study_id),
         "study_url": study.get("url", ""),

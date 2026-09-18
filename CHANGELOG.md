@@ -53,6 +53,16 @@ tagged version is never reused for changed content.
 - crossfeed now has no runtime dependencies: the client uses the standard library `urllib`, and the
   unused `requests` dependency was dropped.
 
+### Fixed
+- The viewer in `gui/` shows an edge's `evidence`. A `dropout` arc is labeled indirect in the interaction
+  list, the detail panel, and the hover text, carries the community it came from, and is drawn with an
+  open ring at its midpoint. The ring is a channel the sign does not use (sign stays color, dash, and
+  arrowhead), so an arc that may act through a third species no longer reads as a direct one.
+- The baseline reports a monoculture it had to drop. Nodes are keyed at genus and species, so two strains
+  of one species share a key and only the last monoculture read is used; that collision now appears in
+  `skipped` naming both strains instead of passing silently. Which strain to keep is a method choice
+  (see "Open decisions" in `docs/METHOD_NOTES.md`), so the derivation itself is unchanged.
+
 ## [0.0.1] (2026-09-14)
 
 ### Added

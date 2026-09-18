@@ -61,8 +61,14 @@ Rules for this file:
   a technique-mismatch flag. The magnitude is provisional, and near the neutral band the sign can move too
   under a cross-technique offset, so a mismatched edge's direction is not fully dependable either.
 - The baseline keys nodes at genus and species (`_gs`), so strains of one species collapse to one node and
-  the monoculture lookup keeps the last one seen. Nodes carry no NCBI taxid yet, which is why a crossfeed
-  network does not line up with a microbetag network in Cytoscape (see METHOD_NOTES setting 7).
+  the monoculture lookup keeps the last one seen. It now records that collision in `skipped` naming both
+  strains, so the pick is visible, but it is still a pick: which strain to keep is METHOD_NOTES setting 7.
+  Nodes carry no NCBI taxid yet, which is why a crossfeed network does not line up with a microbetag
+  network in Cytoscape.
+- Sign is encoded three ways in `gui/index.html` (color, dash, arrowhead), so anything else an edge needs
+  to say has to use a different channel. Indirectness (`evidence` = `dropout`) uses an open ring at the
+  edge midpoint. `edgeGeom` returns the path and that midpoint together so the two cannot drift apart;
+  add to it rather than recomputing the curve anywhere else.
 - Baseline edges are point estimates with no standard error, and edges for one interaction are never
   merged (each condition and study is its own edge), so an edge's `study_ids` has one entry today.
 - The gate scans every tracked file, including this one: no dashes as punctuation, US spelling, no
