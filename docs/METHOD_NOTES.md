@@ -78,7 +78,7 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
 3. **Dependence between arcs** (#10, #3). Arcs to the same target from different drop-outs reuse the
    full community replicates, and the two values of a pair reuse the same co-culture replicates, so they
    are not independent. Options: document it only (current), or model the covariance when significance
-   is tested. Proposed default: document it now, decide together with item 7.
+   is tested. Proposed default: document it now, decide together with item 9.
 4. **New optional edge fields in the neutral format** (#11). `evidence` (`biculture` for mono versus
    bi-culture, direct; `dropout`, possibly indirect) and `community` (members of the full community).
    Backward compatible, but a change to the contract downstream tools read. Proposed default: accept.
@@ -95,7 +95,21 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    that shows provisional results to people who do not read the method notes belong in the repository
    now, or after the method is settled? The page labels every result provisional and cites each study.
    Proposed default: keep it, since it is the fastest way for the collaboration to look at real data.
-7. **Significance testing** (row 4). Still open: which test on the per-replicate log2 values (for
+7. **Strain-level or species-level identity** (#23). Karoline: arcs should be reported per strain and
+   labeled with the strain name, for all strains of a species that have data. Today nodes are keyed by
+   genus and species, which pools strains and, because names change, splits one strain across nodes
+   (taxon 411483 appears as Faecalibacterium prausnitzii A2-165 and as Faecalibacterium duncaniae A2-165).
+   Proposed default: key nodes by NCBI taxon id, name them with the strain name, keep the species-level id
+   as an attribute, and match monoculture to co-culture by id. This changes how the provisional baseline
+   matches strains and what the emitted network looks like. mGrowthDB entries are being corrected upstream
+   to always point to strains rather than species.
+8. **The node key for merging with other tools** (#25, microbetag). Merging experimentally confirmed
+   interactions with microbetag networks as a multigraph needs matching node identifiers but not matching
+   edge identifiers. Proposed default: the species-level NCBI taxon id as the shared key, with the strain
+   id kept alongside, and every edge stating whether it is experimental or predicted so the two are never
+   blurred. Open: whether crossfeed does the merging at all or only produces networks, and whether a
+   direct route into Cytoscape sits well with the neutral format being tool-neutral.
+9. **Significance testing** (row 4). Still open: which test on the per-replicate log2 values (for
    example Welch's t-test), and whether to correct for multiple testing across arcs.
 
 ## The first question for the FP/BH slice
