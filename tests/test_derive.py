@@ -60,3 +60,26 @@ def test_baseline_edges_are_biculture_evidence():
     net = records_to_network(recs)
     assert net.edges and all(e.evidence == "biculture" for e in net.edges)
     assert all(e.community == tuple(sorted([_gs(A), _gs(B)])) for e in net.edges)
+
+
+def test_two_strains_of_one_species_report_the_dropped_monoculture():
+    # Nodes are keyed at genus and species, so both A2-165 and the second strain key to
+    # "faecalibacterium prausnitzii". Only the last monoculture read is used, and the baseline
+    # says so instead of dropping one silently.
+    A2 = "Faecalibacterium prausnitzii L2-6"
+    exps = [_mono(A, 0.30), _mono(A2, 0.90), _mono(B, 0.30), _co(A, B, "FP_BH", 0.66, 0.31)]
+    recs, skipped = interactions_from_experiments(STUDY, exps)
+    dropped = [(label, reason) for label, reason in skipped if label.startswith("monoculture ")]
+    assert len(dropped) == 1
+    label, reason = dropped[0]
+    assert label == f"monoculture {A}"                 # the one whose value was replaced
+    assert A2 in reason and _gs(A) in reason           # names the replacement and the shared key
+    # behavior is unchanged: the last monoculture read (0.90) is the one compared against
+    ba = next(r for r in recs if r["source"] == _gs(B) and r["target"] == _gs(A))
+    assert ba["effect"] == "inhibition"                # log2(0.66 / 0.90) < -0.25
+
+
+def test_one_strain_per_species_reports_nothing():
+    exps = [_mono(A, 0.30), _mono(B, 0.30), _co(A, B, "FP_BH", 0.66, 0.31)]
+    _, skipped = interactions_from_experiments(STUDY, exps)
+    assert [s for s in skipped if s[0].startswith("monoculture ")] == []
