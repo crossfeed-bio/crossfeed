@@ -47,6 +47,11 @@ Rules for this file:
 - Where each mGrowthDB study's license is published; the study endpoint does not expose it, so
   `study_license` is marked unresolved.
 
+- 2026-09-18 (Karoline): species and strain names are resolved through mGrowthDB, never by querying NCBI
+  directly. mGrowthDB is linked to NCBI through a local import that is kept up to date, so following its
+  naming keeps one source of truth. The current name for a taxon id is the one in the most recently
+  published study holding it (#24).
+
 ## Gotchas
 
 - mGrowthDB serves growth curves, not interactions; interactions are derived.
@@ -54,5 +59,8 @@ Rules for this file:
   baseline. That is expected, not a bug.
 - In the FP/BH study, monoculture and co-culture growth use different measurement techniques; edges carry
   a technique-mismatch flag, so direction is dependable and magnitude is provisional.
+- One taxon id can appear under several names across studies: 411483 is "Faecalibacterium prausnitzii
+  A2-165" in SMGDB00000004 and "Faecalibacterium duncaniae A2-165" in SMGDB00000005 and SMGDB00000011,
+  after the 2022 reclassification. Names are not stable identity; taxon ids are (#23).
 - The gate scans every tracked file, including this one: no dashes as punctuation, US spelling, no
   absolute local paths.
