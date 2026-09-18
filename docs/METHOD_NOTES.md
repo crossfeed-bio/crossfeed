@@ -78,7 +78,7 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
 3. **Dependence between arcs** (#10, #3). Arcs to the same target from different drop-outs reuse the
    full community replicates, and the two values of a pair reuse the same co-culture replicates, so they
    are not independent. Options: document it only (current), or model the covariance when significance
-   is tested. Proposed default: document it now, decide together with item 6.
+   is tested. Proposed default: document it now, decide together with item 7.
 4. **New optional edge fields in the neutral format** (#11). `evidence` (`biculture` for mono versus
    bi-culture, direct; `dropout`, possibly indirect) and `community` (members of the full community).
    Backward compatible, but a change to the contract downstream tools read. Proposed default: accept.
@@ -88,7 +88,14 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    (proposed default: effect `facilitation` or `inhibition` with a null strength and the outcome recorded),
    and what counts as no growth in real data, where values rarely reach exactly zero (options: a
    detection limit per technique, a minimum increase over the first time point, or a pseudocount).
-6. **Significance testing** (row 4). Still open: which test on the per-replicate log2 values (for
+6. **Whether crossfeed ships a user interface at all** (#18). Karoline asked for a local page where a
+   person types species names and gets their interactions, with settings hidden behind an "Advanced
+   settings" button. Built as a standard-library server on 127.0.0.1 with no JavaScript, so the promise
+   of no runtime dependencies and nothing to host holds. The question for the maintainers: does a page
+   that shows provisional results to people who do not read the method notes belong in the repository
+   now, or after the method is settled? The page labels every result provisional and cites each study.
+   Proposed default: keep it, since it is the fastest way for the collaboration to look at real data.
+7. **Significance testing** (row 4). Still open: which test on the per-replicate log2 values (for
    example Welch's t-test), and whether to correct for multiple testing across arcs.
 
 ## The first question for the FP/BH slice
