@@ -16,7 +16,9 @@ committed to the repository.
 """
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
 import os
 import time
@@ -89,6 +91,27 @@ class MGrowthDBClient:
             except OSError:
                 pass
 
+    def _get_text(self, path: str) -> str:
+        """Fetch a non-JSON representation (the CSV of a measurement context), cached like the rest."""
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        cached = self._cache_get(url)
+        if cached is not None:
+            return cached
+        req = urllib.request.Request(
+            url, headers={"Accept": "text/csv", "User-Agent": f"crossfeed/{__version__}"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                text = r.read().decode("utf-8")
+        except urllib.error.HTTPError as e:
+            raise MGrowthDBError(
+                f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})"
+            ) from e
+        except urllib.error.URLError as e:
+            raise MGrowthDBError(f"could not reach mGrowthDB at {url}: {e.reason}") from e
+        self._cache_put(url, text)
+        return text
+
     def _get(self, path: str, params: dict | None = None):
         url = f"{self.base_url}/{path.lstrip('/')}"
         if params:
@@ -140,6 +163,27 @@ class MGrowthDBClient:
     def get_measurement_context(self, context_id) -> dict:
         """A single measurement context: techniqueType, subject, auc, growthRate, units, ..."""
         return self._get(f"measurement-context/{context_id}.json")
+
+    def get_measurement_series(self, context_id) -> list:
+        """The measured time series of one measurement context: [(time, value, std or None), ...].
+
+        mGrowthDB serves the points as CSV (`measurement-context/<id>.csv`, columns time, value, std); the
+        JSON representation carries only the summarized growthRate and auc. Rows without a readable time
+        or value are dropped, and the points are returned in time order.
+        """
+        text = self._get_text(f"measurement-context/{context_id}.csv")
+        points = []
+        for row in csv.DictReader(io.StringIO(text)):
+            try:
+                time_point, value = float(row["time"]), float(row["value"])
+            except (TypeError, ValueError, KeyError):
+                continue
+            try:
+                std = float(row.get("std") or "")
+            except ValueError:
+                std = None
+            points.append((time_point, value, std))
+        return sorted(points)
 
     def search(self, strain_ncbi_ids=None, metabolite_chebi_ids=None) -> dict:
         return self._get("search.json", {
