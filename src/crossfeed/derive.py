@@ -23,6 +23,9 @@ from __future__ import annotations
 
 import math
 
+from .adapter import replicates_for_experiment
+from .growth import GrowthCurve, Replicate
+from .interaction import ABOLISHED, NO_GROWTH, OBLIGATE, interaction_strength
 from .mgrowthdb import MGrowthDBClient
 
 METHOD = ("crossfeed baseline v0 (PROVISIONAL): log2(growthRate co / mono), pairwise co-cultures only, "
@@ -141,6 +144,121 @@ def interactions_from_experiments(study: dict, exps: list, study_id: str = None,
     return records, skipped
 
 
+REPLICATE_METHOD = ("crossfeed replicate v1: mean log2({metric} in co-culture) minus mean log2({metric} in "
+                    "monoculture) over replicate sets, with the standard error of that difference; "
+                    "no significance test yet")
+
+
+def _mono_index(client, exps, skipped) -> dict:
+    """genus and species key -> the monoculture replicates for it, across a study's single-member experiments."""
+    index = {}
+    for exp in exps:
+        members = _members(exp)
+        if len(members) != 1:
+            continue
+        replicates, skips = replicates_for_experiment(client, exp)
+        skipped += skips
+        index.setdefault(genus_species(members[0]), []).extend(replicates)
+    return index
+
+
+def _renamed(replicates, species: str):
+    """The same replicates with their single curve named `species`.
+
+    A strain is named slightly differently between experiments (and taxon 411483 even appears under two
+    species names), so monoculture and co-culture records are matched at genus and species and the name
+    from the co-culture record is used for both. Node identity by taxon id replaces this (issue #23).
+    """
+    out = []
+    for replicate in replicates:
+        curve = replicate.curves[0]
+        if curve.species == species:
+            out.append(replicate)
+            continue
+        renamed = GrowthCurve(species, curve.times, curve.values, curve.time_unit, curve.abundance_unit)
+        out.append(Replicate([renamed], replicate.name))
+    return out
+
+
+def _effect(mean, outcome: str, deadband: float) -> str:
+    """Facilitation, inhibition, or neutral, from the comparison's outcome."""
+    if outcome == OBLIGATE:
+        return "facilitation"      # the target grows only when the source is present
+    if outcome == ABOLISHED:
+        return "inhibition"        # the target grows only when the source is absent
+    if mean is None:
+        return "neutral"
+    return "neutral" if abs(mean) < deadband else ("facilitation" if mean > 0 else "inhibition")
+
+
+def interactions_from_replicates(client, study: dict, exps: list, study_id: str = None,
+                                 method: str = "auc", deadband: float = DEADBAND):
+    """The specified comparison, run on a study: (records, skipped).
+
+    For each pairwise co-culture experiment, the replicates of that experiment are compared with the
+    monoculture replicates of each member through `crossfeed.interaction.interaction_strength`, so every
+    edge carries the spread across replicates (se, n) rather than a single number. One edge per condition,
+    as before; merging edges across conditions is a separate decision.
+    """
+    study_id = study_id or study.get("id")
+    study_meta = {
+        "study_citation": study.get("name", study_id),
+        "study_url": study.get("url", ""),
+        "study_license": "",
+    }
+    records, skipped = [], []
+    monos = _mono_index(client, exps, skipped)
+
+    for exp in exps:
+        members = _members(exp)
+        if len(members) < 2:
+            continue
+        cond = exp.get("name", "")
+        if len(members) > 2:
+            skipped.append((f"{cond}", "co-culture has >2 members; not a clean pairwise attribution"))
+            continue
+        a, b = members
+        co_reps, skips = replicates_for_experiment(client, exp)
+        skipped += skips
+        sets = {}
+        for species in (a, b):
+            found = monos.get(genus_species(species))
+            if not found:
+                skipped.append((f"{a} with {b} [{cond}]", f"no monoculture replicates for {species}"))
+            sets[species] = _renamed(found or [], species)
+        if not (sets[a] and sets[b] and co_reps):
+            if not co_reps:
+                skipped.append((f"{a} with {b} [{cond}]", "no usable co-culture replicates"))
+            continue
+        try:
+            result = interaction_strength(sets[a], sets[b], co_reps, a, b, method=method)
+        except ValueError as e:
+            skipped.append((f"{a} with {b} [{cond}]", str(e)))
+            continue
+        skipped += result["skipped"]
+        note = REPLICATE_METHOD.format(metric=method)
+        for key, (source, target) in (("species_a", (b, a)), ("species_b", (a, b))):
+            side = result[key]
+            if side["outcome"] == NO_GROWTH:
+                skipped.append((f"{source} -> {target} [{cond}]", f"no growth ({method}) in either set"))
+                continue
+            mean = side["mean"]
+            records.append({
+                "source": genus_species(source), "source_name": source,
+                "target": genus_species(target), "target_name": target,
+                "effect": _effect(mean, side["outcome"], deadband),
+                "strength": None if mean is None else round(mean, 4),
+                "significance": None,
+                "se": None if side["se"] is None else round(side["se"], 4),
+                "n_with": side["n_co"], "n_without": side["n_mono"],
+                "outcome": side["outcome"], "metric": method,
+                "condition": cond, "method": note,
+                "evidence": "biculture", "community": sorted([genus_species(a), genus_species(b)]),
+                "study_id": study_id, **study_meta,
+            })
+    return records, skipped
+
+
 # ---- the pluggable derivation seam ---------------------------------------------------------------
 
 class Deriver:
@@ -163,6 +281,30 @@ class Deriver:
         raise NotImplementedError
 
 
+class ReplicateDeriver(Deriver):
+    """The comparison the collaboration specified, over replicate growth curves.
+
+    Reads each replicate's measured series through `crossfeed.adapter`, compares the replicate sets with
+    `crossfeed.interaction.interaction_strength` (area under the curve by default, maximal abundance
+    selectable), and emits edges carrying the standard error and the replicate counts. This is the default
+    for a live derivation; `BaselineDeriver` remains only as the retired placeholder it always was.
+    """
+
+    name = "replicate-v1"
+    needs_client = True
+
+    def __init__(self, method: str = "auc", deadband: float = DEADBAND, client=None):
+        self.method = method
+        self.deadband = deadband
+        self.client = client
+
+    def derive(self, study: dict, exps: list):
+        if self.client is None:
+            raise ValueError("ReplicateDeriver needs a client: it reads each replicate's measured series")
+        return interactions_from_replicates(self.client, study, exps, study.get("id"),
+                                            self.method, self.deadband)
+
+
 class BaselineDeriver(Deriver):
     """The provisional v0 baseline: log2(growthRate co / mono), pairwise co-cultures only, no significance
     test. A transparent placeholder that runs the seam end to end; meant to be replaced by the method
@@ -180,10 +322,13 @@ class BaselineDeriver(Deriver):
 
 
 def derive_interactions(client: MGrowthDBClient, study_id: str, deriver: Deriver = None,
-                        metric: str = "growthRate", deadband: float = DEADBAND):
+                        metric: str = "auc", deadband: float = DEADBAND):
     """Fetch a study and its experiments from the API, then derive interactions with `deriver`
-    (default: the provisional BaselineDeriver). `metric`/`deadband` configure the default deriver only."""
-    deriver = deriver or BaselineDeriver(metric=metric, deadband=deadband)
+    (default: ReplicateDeriver, the specified comparison). `metric`/`deadband` configure the default
+    deriver only. A deriver that reads measured series says so with `needs_client`."""
+    deriver = deriver or ReplicateDeriver(method=metric, deadband=deadband)
+    if getattr(deriver, "needs_client", False) and getattr(deriver, "client", None) is None:
+        deriver.client = client
     study = dict(client.get_study(study_id))
     study.setdefault("id", study_id)
     exps = [client.get_experiment(e["id"]) for e in study.get("experiments", [])]

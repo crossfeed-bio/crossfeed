@@ -105,6 +105,36 @@
           },
           "minItems": 1
         },
+        "se": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "n_with": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "n_without": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "quantified",
+            "obligate",
+            "abolished",
+            "no_growth",
+            null
+          ]
+        },
+        "metric": {
+          "type": "string"
+        },
         "evidence": {
           "enum": [
             "biculture",
