@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import os
 
-from .model import EFFECTS, EVIDENCE, SCHEMA, InteractionNetwork
+from .model import EFFECTS, EVIDENCE, OUTCOMES, SCHEMA, InteractionNetwork
 
 SCHEMA_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -60,6 +60,11 @@ SCHEMA_DOC = {
                 "condition": {"type": "string"},
                 "method": {"type": "string"},
                 "study_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                "se": {"type": ["number", "null"]},
+                "n_with": {"type": ["integer", "null"]},
+                "n_without": {"type": ["integer", "null"]},
+                "outcome": {"enum": [*OUTCOMES, None]},
+                "metric": {"type": "string"},
                 "evidence": {"enum": [*EVIDENCE, None]},
                 "community": {"type": "array", "items": {"type": "string"}},
             },
@@ -121,6 +126,8 @@ def validate_document(doc) -> list:
             problems.append(f"edges[{i}] missing source or target")
         if e.get("effect") not in EFFECTS:
             problems.append(f"edges[{i}] effect {e.get('effect')!r} not in {EFFECTS}")
+        if e.get("outcome") is not None and e.get("outcome") not in OUTCOMES:
+            problems.append(f"edges[{i}] outcome {e.get('outcome')!r} not in {OUTCOMES}")
         if e.get("evidence") is not None and e.get("evidence") not in EVIDENCE:
             problems.append(f"edges[{i}] evidence {e.get('evidence')!r} not in {EVIDENCE}")
         community = e.get("community", [])

@@ -21,6 +21,12 @@ tagged version is never reused for changed content.
 - `crossfeed gui`: a local page (standard library server on 127.0.0.1, a token in the URL, no JavaScript)
   where you type species names or NCBI taxon ids and get their interactions as a table, with every
   setting behind "Advanced settings" and downloads for JSON and GraphML.
+- The pipeline now derives through the comparison the collaboration specified: `ReplicateDeriver` is the
+  default for a live derivation, comparing replicate sets on the log2 scale (area under the curve by
+  default, maximal abundance selectable with `--metric`), so every edge carries a standard error, the
+  replicate counts, and the outcome. `BaselineDeriver` remains only as the retired placeholder.
+- Network edges gained optional `se`, `n_with`, `n_without`, `outcome`, and `metric` fields, in the model,
+  the JSON Schema, and GraphML.
 - `crossfeed.adapter`: mGrowthDB experiments become replicate growth curves, so the comparison the
   collaboration specified (`crossfeed.interaction`) can run on real data. Time series come from the CSV
   representation of a measurement context (`MGrowthDBClient.get_measurement_series`); `Average(...)`

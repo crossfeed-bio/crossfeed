@@ -16,24 +16,37 @@ A = "Faecalibacterium prausnitzii A2-165"
 B = "Blautia hydrogenotrophica DSM 10507"
 
 
-def _mono(name, rate, taxon):
-    return {"id": "E" + name, "name": name, "communityStrains": [{"name": name, "NCBId": taxon}],
-            "bioreplicates": [{"name": "r1", "measurementContexts": [
-                {"techniqueType": "fc", "subject": {"type": "bioreplicate", "name": name}, "growthRate": rate}]}]}
+# Two-point curves over 10 h, so the area under the curve is 5 * (v0 + v1). A alone: 10 and 20;
+# A with B: 20 and 40, so B facilitates A by mean log2 = 1. B alone and B with A are identical, so A
+# leaves B unchanged.
+CURVES = {
+    ("mono A", A): [(1, 1), (1, 3)],
+    ("mono B", B): [(1, 1), (1, 3)],
+    ("co", A): [(1, 3), (3, 5)],
+    ("co", B): [(1, 1), (1, 3)],
+}
+TAXA = {A: 853, B: 53443}
 
 
-CO = {"id": "Eco", "name": "FP/BH co-culture",
-      "communityStrains": [{"name": A, "NCBId": 853}, {"name": B, "NCBId": 53443}],
-      "bioreplicates": [{"name": "Average", "measurementContexts": [
-          {"techniqueType": "qpcr", "subject": {"type": "strain", "name": A}, "growthRate": 0.66},
-          {"techniqueType": "qpcr", "subject": {"type": "strain", "name": B}, "growthRate": 0.31}]}]}
-EXPERIMENTS = [_mono(A, 0.30, 853), _mono(B, 0.30, 53443), CO]
+def _experiment(name, species):
+    """One experiment with two bioreplicates, each carrying a per-strain context per species."""
+    return {
+        "id": "E_" + name, "name": name,
+        "communityStrains": [{"name": sp, "NCBId": TAXA[sp]} for sp in species],
+        "bioreplicates": [{"id": f"{name}/{i}", "name": f"{name}_{i}"} for i in (0, 1)],
+    }
+
+
+EXPERIMENTS = [_experiment("mono A", [A]), _experiment("mono B", [B]), _experiment("co", [A, B])]
 
 
 class FakeClient:
-    """One study (SMGDB00000001) with the FP/BH mono and co-culture experiments."""
+    """One study whose experiments carry measured series, the way mGrowthDB serves them."""
 
     study_id = "SMGDB00000001"
+
+    def _experiment_of(self, name):
+        return next(e for e in EXPERIMENTS if e["name"] == name)
 
     def study_experiments(self, study_id):
         if study_id != self.study_id:
@@ -49,6 +62,24 @@ class FakeClient:
     def get_experiment(self, experiment_id):
         return next(e for e in EXPERIMENTS if e["id"] == experiment_id)
 
+    def get_bioreplicate(self, bioreplicate_id):
+        name, _, index = str(bioreplicate_id).partition("/")
+        experiment = self._experiment_of(name)
+        return {
+            "id": bioreplicate_id, "name": f"{name}_{index}", "isAverage": False,
+            "measurementTimeUnits": "h",
+            "measurementContexts": [
+                {"id": f"{name}/{index}/{strain['name']}", "techniqueType": "qpcr",
+                 "techniqueUnits": "Cells/mL", "subject": {"type": "strain", "name": strain["name"]}}
+                for strain in experiment["communityStrains"]
+            ],
+        }
+
+    def get_measurement_series(self, context_id):
+        name, index, species = str(context_id).split("/")
+        v0, v1 = CURVES[(name, species)][int(index)]
+        return [(0.0, float(v0), None), (10.0, float(v1), None)]
+
     def search(self, strain_ncbi_ids=None, metabolite_chebi_ids=None):
         return {"studies": [self.study_id]}
 
@@ -62,7 +93,7 @@ def test_species_names_reach_a_network():
     assert r["taxon_ids"] == [853, 53443]
     assert r["studies"] == ["SMGDB00000001"]
     assert r["unresolved"] == [] and r["errors"] == []
-    # B facilitates A (0.66 against 0.30 alone); A leaves B about unchanged
+    # B facilitates A (mean log2 1.0 over the replicate sets); A leaves B unchanged
     effects = {(e.source, e.target): e.effect for e in r["network"].edges}
     assert effects[("blautia hydrogenotrophica", "faecalibacterium prausnitzii")] == "facilitation"
     assert effects[("faecalibacterium prausnitzii", "blautia hydrogenotrophica")] == "neutral"
@@ -124,11 +155,11 @@ def test_result_page_cites_every_study_with_its_license():
     assert "license: see study" in page and "supports 2 interaction(s)" in page
 
 
-def test_result_page_says_the_method_is_provisional_and_flags_technique_mismatch():
+def test_result_page_says_the_method_is_provisional():
     page = render_result("tok", _query())
     assert "provisional baseline method" in page
-    # the fake study measures monoculture growth by flow cytometry and co-culture by qPCR
-    assert "different techniques" in page
+    # the replicate comparison refuses to compare across techniques, so nothing is flagged here
+    assert "different techniques" not in page
 
 
 # ---- the server itself ---------------------------------------------------------------------------

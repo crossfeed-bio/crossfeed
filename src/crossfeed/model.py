@@ -21,6 +21,8 @@ EFFECTS = ("facilitation", "inhibition", "neutral")
 # what an edge was derived from: a mono versus bi-culture comparison (a direct interaction), or a full
 # versus drop-out community comparison (not necessarily direct: strictly a hyper-arc, kept as an arc)
 EVIDENCE = ("biculture", "dropout")
+# what the comparison could say about the target's growth (crossfeed.interaction)
+OUTCOMES = ("quantified", "obligate", "abolished", "no_growth")
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,11 @@ class Edge:
     condition: str = ""           # the experimental condition (interactions are condition-specific)
     method: str = ""              # how the interaction was quantified
     study_ids: tuple = ()         # the studies supporting THIS edge (edge-level attribution)
+    se: float | None = None       # standard error of the strength, from the replicate spread
+    n_with: int | None = None     # replicates with the source present
+    n_without: int | None = None  # replicates with the source absent
+    outcome: str | None = None    # one of OUTCOMES, or None when the deriver does not report one
+    metric: str = ""              # the growth property compared (for example auc)
     evidence: str | None = None   # one of EVIDENCE, or None when unknown
     community: tuple = ()         # Node ids of the community the edge was derived from, when applicable
 
@@ -62,6 +69,8 @@ class Edge:
         problems = []
         if self.effect not in EFFECTS:
             problems.append(f"edge {self.source}->{self.target}: effect {self.effect!r} not in {EFFECTS}")
+        if self.outcome is not None and self.outcome not in OUTCOMES:
+            problems.append(f"edge {self.source}->{self.target}: outcome {self.outcome!r} not in {OUTCOMES}")
         if self.evidence is not None and self.evidence not in EVIDENCE:
             problems.append(f"edge {self.source}->{self.target}: evidence {self.evidence!r} not in {EVIDENCE}")
         if not self.study_ids:

@@ -1,5 +1,11 @@
 """The pluggable derivation seam: the baseline matches the pure function, and a custom method plugs in."""
-from crossfeed.derive import BaselineDeriver, Deriver, derive_interactions, interactions_from_experiments
+from crossfeed.derive import (
+    BaselineDeriver,
+    Deriver,
+    ReplicateDeriver,
+    derive_interactions,
+    interactions_from_experiments,
+)
 
 A = "Faecalibacterium prausnitzii A2-165"
 B = "Blautia hydrogenotrophica DSM 10507"
@@ -52,10 +58,28 @@ def test_custom_deriver_is_honored():
     assert skipped == []
 
 
-def test_derive_interactions_runs_baseline_via_client():
+def test_derive_interactions_runs_the_retired_baseline_when_asked():
     exps = [_mono(A, 0.30), _mono(B, 0.30), _co(A, B, "FP_BH", 0.66, 0.31)]
     study = {"id": "S", "experiments": [{"id": "E_" + A}, {"id": "E_" + B}, {"id": "E_FP_BH"}]}
     client = _FakeClient(study, exps)
-    records, skipped = derive_interactions(client, "S")
+    records, skipped = derive_interactions(client, "S", deriver=BaselineDeriver())
     assert any(r["effect"] == "facilitation" for r in records)
     assert all("PROVISIONAL" in r["method"] for r in records)
+
+
+def test_the_default_is_the_replicate_comparison():
+    # the fake client serves summarized values only, so the default deriver reports that it cannot read
+    # the measured series rather than falling back to the retired baseline
+    exps = [_mono(A, 0.30), _mono(B, 0.30), _co(A, B, "FP_BH", 0.66, 0.31)]
+    study = {"id": "S", "experiments": [{"id": "E_" + A}, {"id": "E_" + B}, {"id": "E_FP_BH"}]}
+    records, skipped = derive_interactions(_FakeClient(study, exps), "S")
+    assert records == []
+    assert any("could not read it" in reason for _, reason in skipped)
+
+
+def test_a_deriver_that_reads_series_is_given_the_client():
+    study = {"id": "S", "experiments": [{"id": "E1"}]}
+    client = _FakeClient(study, [_mono(A, 0.30)])
+    deriver = ReplicateDeriver()
+    derive_interactions(client, "S", deriver=deriver)
+    assert deriver.needs_client and deriver.client is client

@@ -26,9 +26,10 @@ from .mgrowthdb import MGrowthDBError, records_to_network
 from .taxonomy import resolve_species, species_index
 
 TITLE = "crossfeed"
-DEFAULTS = {"metric": "growthRate", "deadband": DEADBAND, "studies": "", "only_entered": True}
-PROVISIONAL = ("These interactions come from the provisional baseline method: log2 of the growth ratio "
-               "between co-culture and monoculture, pairwise co-cultures only, with no significance test. "
+DEFAULTS = {"metric": "auc", "deadband": DEADBAND, "studies": "", "only_entered": True}
+PROVISIONAL = ("These interactions come from the provisional baseline method: the mean log2 difference "
+               "between co-culture and monoculture replicates, pairwise co-cultures only, with no "
+               "significance test. "
                "The comparison method is a scientific decision still to be settled by the collaboration "
                "(see docs/METHOD_NOTES.md), so treat the direction as dependable and the size as provisional.")
 MISMATCH = ("Monoculture and co-culture growth were measured by different techniques in some of these "
@@ -66,12 +67,12 @@ def _settings_block(settings: dict) -> str:
     s = {**DEFAULTS, **settings}
     checked = " checked" if s["only_entered"] else ""
     options = "".join(f"<option value=\"{m}\"{' selected' if s['metric'] == m else ''}>{m}</option>"
-                      for m in ("growthRate", "auc"))
+                      for m in ("auc", "max"))
     return f"""<details>
 <summary>Advanced settings</summary>
 <div class="row"><label>Growth measure
   <select name="metric">{options}</select></label>
-  <span class="muted">what a strain's growth is read from (default growthRate)</span></div>
+  <span class="muted">the growth property compared: area under the curve (default) or maximal abundance</span></div>
 <div class="row"><label>Neutral range
   <input name="deadband" type="text" size="6" value="{_esc(s['deadband'])}"></label>
   <span class="muted">a log2 change smaller than this counts as neutral</span></div>
@@ -161,7 +162,7 @@ def parse_settings(form: dict) -> dict:
     """Settings from the posted form, falling back to the defaults for anything missing or unreadable."""
     settings = dict(DEFAULTS)
     metric = form.get("metric", [""])[0]
-    if metric in ("growthRate", "auc"):
+    if metric in ("auc", "max"):
         settings["metric"] = metric
     try:
         settings["deadband"] = abs(float(form.get("deadband", [""])[0]))

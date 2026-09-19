@@ -52,7 +52,8 @@ def _derive(a):
         from .mgrowthdb import MGrowthDBClient
         deriver = _load_deriver(a.deriver) if a.deriver else None
         try:
-            records, skipped = derive_interactions(MGrowthDBClient(), a.study, deriver=deriver)
+            records, skipped = derive_interactions(MGrowthDBClient(), a.study, deriver=deriver,
+                                                   metric=a.metric)
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
             return 1
@@ -131,6 +132,8 @@ def main(argv=None):
     g.add_argument("--fixture", help="path to a JSON list of interaction records (offline)")
     d.add_argument("--deriver", metavar="MODULE:CLASS",
                    help="a custom Deriver to use instead of the provisional baseline (with --live)")
+    d.add_argument("--metric", choices=["auc", "max"], default="auc",
+                   help="the growth property compared (default: auc, the area under the curve)")
     d.add_argument("--format", choices=["json", "graphml"], default="json",
                    help="output format: json (the neutral format, default) or graphml (for network tools)")
     d.add_argument("--out", help="write the network here (default: stdout)")

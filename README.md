@@ -140,6 +140,11 @@ read, and it is pinned by a JSON Schema at
       "condition": "FP/BH co-culture",
       "method": "crossfeed baseline v0 (PROVISIONAL): ...",
       "study_ids": ["SMGDB00000004"],
+      "se": 0.25,
+      "n_with": 3,
+      "n_without": 3,
+      "outcome": "quantified",
+      "metric": "auc",
       "evidence": "biculture",
       "community": ["blautia hydrogenotrophica", "faecalibacterium prausnitzii"]
     }
@@ -152,7 +157,11 @@ read, and it is pinned by a JSON Schema at
 
 `effect` is one of `facilitation`, `inhibition`, `neutral`. `strength` and `significance` are your
 method's numbers (or `null`). `study_ids` on every edge is the edge-level attribution and must carry at
-least one study. `evidence` says what the edge was derived from: `biculture` (a species alone against
+least one study. `se` is the standard error of the strength across replicates, with `n_with` and
+`n_without` the replicate counts behind it, and `metric` the growth property compared (`auc` by default,
+`max` selectable). `outcome` says what the comparison could establish: `quantified`, `obligate` (the
+target grows only with the source present), `abolished` (only without it), or `no_growth`. `evidence`
+says what the edge was derived from: `biculture` (a species alone against
 the same species with one partner, a direct interaction) or `dropout` (a full community against the
 community without the source species, so the effect is not necessarily direct; strictly a hyper-arc,
 kept as an arc), or `null` when unknown; `community` lists the node ids of the community it came from.
