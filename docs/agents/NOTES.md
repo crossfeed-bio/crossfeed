@@ -55,6 +55,38 @@ Rules for this file:
   into the neutral format (item 4 of "Open decisions"). `evidence` is `biculture` (mono versus bi-culture,
   direct) or `dropout` (possibly indirect), and `community` records the members of the full community.
   Both are optional, so the change is backward compatible for downstream readers.
+- 2026-09-19 (Karoline, item 15): the pipeline derives through the comparison she specified. Her words:
+  "go with your recommendation". So the mGrowthDB to `Replicate` adapter is built, `interaction.py`
+  becomes the engine, and `derive.py` shrinks to that adapter behind the `Deriver` seam. This carries
+  items 1 and 12 with it: the replicate set comparison is adopted, and every edge gains a standard error
+  and replicate counts. Her agent claimed the work so it would not be built twice (#34, #35, #36).
+- 2026-09-19 (Karoline, item 11): both growth metrics ship. Her words: "both should be supported by the
+  method, with a sensible default (AUC) but users should be able to switch to growth rate. There can be
+  checks in place to avoid zero growth rates (see item 5)." AUC is the default, `max` is selectable, and
+  growth rate joins as a third entry in `growth.FEATURES` once a stated rule for it exists (#41).
+- 2026-09-19 (Karoline, item 5): no growth is a test across replicates, not a detection limit. Her words:
+  "we have no systematic knowledge of detection limits. For growth, if there are replicates and there is
+  no significant difference between start abundance and maximum abundance, then it's no growth." It feeds
+  the existing `no_growth`, `obligate` and `abolished` outcomes. Two things stay open for us: which test
+  and its alpha (the same choice as item 10), and what to do when a set has no replicates to test with.
+- 2026-09-19 (Karoline, item 7): mGrowthDB will not expose species-rank or higher taxa. Her words: "not
+  planned, primarily because experiments happen with concrete entities (strains), not abstractions. In
+  future, we may include that for easier querying, but there's no active development now." So a node
+  carries `taxon_id` and a `rank`, and the species-level key has to come from somewhere other than the
+  database.
+- 2026-09-19 (Karoline, item 8): the shared node key is derived from the genus and species of the name,
+  and the node says so rather than implying a taxonomy lookup happened. A cached NCBI lookup for the
+  species-rank ancestor stays available as the upgrade if the mGrowthDB-only naming rule is ever relaxed,
+  and matching at strain rank is the guarantee the README should state for any consumer. Open for Haris:
+  whether microbetag can meet crossfeed at strain rank, which would make the derived species key a
+  convenience rather than the join column.
+- 2026-09-19 (Karoline, outlier replicates): a replicate whose curve carries an implausible spike is
+  flagged, never dropped silently, with the factor an advanced setting (#39). Found by running the
+  specified comparison on SMGDB00000004: one qPCR trace (BH_14, context 3465) holds two consecutive
+  points at 5.264e13 cells/mL between neighbors of 1.06e8 and 4.84e8, which moved B. hydrogenotrophica's
+  standard error to 3.5 on a log2 scale.
+- 2026-09-19 (Karoline): items 10, 13 and 14 of "Open decisions" are deferred until the settled items
+  above have landed.
 
 ## Open questions (need a human)
 
