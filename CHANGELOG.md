@@ -21,6 +21,10 @@ tagged version is never reused for changed content.
 - `crossfeed gui`: a local page (standard library server on 127.0.0.1, a token in the URL, no JavaScript)
   where you type species names or NCBI taxon ids and get their interactions as a table, with every
   setting behind "Advanced settings" and downloads for JSON and GraphML.
+- `crossfeed.adapter`: mGrowthDB experiments become replicate growth curves, so the comparison the
+  collaboration specified (`crossfeed.interaction`) can run on real data. Time series come from the CSV
+  representation of a measurement context (`MGrowthDBClient.get_measurement_series`); `Average(...)`
+  bioreplicates are left out, since they are the mean of the real replicates.
 - `crossfeed.taxonomy`: species names resolved to NCBI taxon ids from mGrowthDB's own strain records
   (`species_index`, `resolve_species`), so a person can type names where the API takes ids. A name
   resolves to every taxon id mGrowthDB holds under that genus and species, species level and strain level.
