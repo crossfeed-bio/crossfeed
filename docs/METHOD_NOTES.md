@@ -13,6 +13,11 @@ weigh in, we settle each default together, and the settled value ships as the de
 
 ## What the provisional baseline does today
 
+**Status 2026-09-20.** What follows describes `BaselineDeriver`, which is still what `main` runs. It is
+being retired: #38 landed the adapter that reads real replicate curves, and #40 makes `ReplicateDeriver`
+the default and moves `BaselineDeriver` behind `--deriver`. Until #40 lands, the defaults settled above
+are decisions rather than shipped behavior, and this section is the accurate account of the code.
+
 So the note matches the code rather than an intention. `src/crossfeed/derive.py` (`BaselineDeriver`) is a
 transparent placeholder that runs the seam end to end on real data. For each pairwise (two-member)
 co-culture it reads mGrowthDB's reported per-strain `growthRate`, and sets
@@ -41,15 +46,16 @@ mGrowthDB reports. Some consequences worth stating plainly, because several are 
 
 ## Defaults at a glance
 
-1. Growth metric: **growthRate (1/h)**, paired with a comparison that suits a rate (see 1 and 3 together)
+1. Growth metric: **AUC** (settled 2026-09-19), `max` selectable, growth rate to follow once it has a rule
 2. Per-strain signal in a community: **per-strain qPCR, as the study reports it**
-3. Mono versus co comparison: **log2(co / mono) with a deadband**, coupled to the metric in 1
-4. Significance and uncertainty: **qualitative point estimate now**, replicate-based once it is wired
+3. Mono versus co comparison: **mean log2 over replicate sets, with a deadband** (settled), coupled to 1
+4. Significance and uncertainty: **a standard error and replicate counts on every edge** (settled); the
+   test itself is deferred
 5. Co-culture scope: **pairwise, two member**
 6. Technique mismatch: **flag on every edge**, and do not trust the sign near the band under a mismatch
 7. Taxonomic identity: **genus and species today**, plus an NCBI taxid on every node (needs building)
 8. Environment and medium: **keep all conditions, tag each edge**; restriction waits on mGrowthDB metadata
-9. Drop-out (leave one out) communities: **exclude from the default network**
+9. Drop-out (leave one out) communities: **exclude from the default network**, pending Craig on item 2
 10. Edge thresholds: **minimum strength 0, minimum supporting studies 1**, meaningful once edges merge
 11. Minimum time points: **carry the fit quality mGrowthDB reports**, gate on it rather than a fixed count
 12. Chemostats and serial dilutions: **flag and keep separate from batch**
@@ -220,6 +226,8 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    maximal abundance. Specified by Karoline and merged as provisional. Options: adopt it as the agreed
    comparison (settings 1 and 3 above), or keep it provisional. Proposed default: adopt it, and keep the
    growth metric (setting 1) open for growth rates.
+   SETTLED 2026-09-19 (Karoline); recorded in "Decisions" in [docs/agents/NOTES.md](agents/NOTES.md).
+   Adopted: the pipeline derives through this comparison (#34).
 2. **Arcs from drop-out communities** (#10). Comparing the full community with the community without R
    gives an arc R to X that is not necessarily direct (R can act through a third species); strictly a
    hyper-arc. Karoline's position: keep these arcs, labeled by evidence, with the community recorded.
@@ -230,6 +238,9 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    builds a `Replicate`, so there is no path from the API to these arcs. Saying yes here commissions that
    adapter, and the adapter routes the pipeline through `interaction.py`, which also settles items 1, 11
    and 12. See item 15, which is the reason all four travel together.
+   Status 2026-09-20: the adapter landed in #38, so the blocker named above is gone and these arcs are
+   now reachable. Karoline's position stands (keep them, labeled by evidence, with the community
+   recorded); what is still open is only Craig's confirmation that they enter the default network.
 3. **Dependence between arcs** (#10, #3). Arcs to the same target from different drop-outs reuse the
    full community replicates, and the two values of a pair reuse the same co-culture replicates, so they
    are not independent. Options: document it only (current), or model the covariance when significance
@@ -245,6 +256,10 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    (proposed default: effect `facilitation` or `inhibition` with a null strength and the outcome recorded),
    and what counts as no growth in real data, where values rarely reach exactly zero (options: a
    detection limit per technique, a minimum increase over the first time point, or a pseudocount).
+   SETTLED 2026-09-19 (Karoline); recorded in "Decisions" in [docs/agents/NOTES.md](agents/NOTES.md). No
+   growth is a test across replicates comparing start abundance to maximum abundance, not a
+   detection limit. Still ours to pick: which test and its alpha (the same choice as item 10), and what
+   to do when a set has no replicates to test with.
 6. **Whether crossfeed ships a user interface at all** (#18). Karoline asked for a local page where a
    person types species names and gets their interactions, with settings hidden behind an "Advanced
    settings" button. Built as a standard-library server on 127.0.0.1 with no JavaScript, so the promise
@@ -288,12 +303,21 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    Separately, the pooling this item would fix is worse than pooling: `derive.py` keeps the last
    monoculture seen per genus and species key, so additional strains are discarded with no entry in
    `skipped`. That is a defect to fix whichever way this item is settled.
+   SETTLED 2026-09-19 (Karoline); recorded in "Decisions" in [docs/agents/NOTES.md](agents/NOTES.md). Part
+   (b) is answered: mGrowthDB will not expose species-rank or higher taxa, so a node carries
+   `taxon_id` and a `rank`, and the species key comes from elsewhere (item 8). The pooling defect noted
+   just above was fixed in #33, which reports the collision instead of passing it silently.
 8. **The node key for merging with other tools** (#25, microbetag). Merging experimentally confirmed
    interactions with microbetag networks as a multigraph needs matching node identifiers but not matching
    edge identifiers. Proposed default: the species-level NCBI taxon id as the shared key, with the strain
    id kept alongside, and every edge stating whether it is experimental or predicted so the two are never
    blurred. Open: whether crossfeed does the merging at all or only produces networks, and whether a
    direct route into Cytoscape sits well with the neutral format being tool-neutral.
+   SETTLED 2026-09-19 (Karoline); recorded in "Decisions" in [docs/agents/NOTES.md](agents/NOTES.md). The
+   shared key is derived from the genus and species of the name, and the node says so rather than
+   implying a taxonomy lookup happened; matching at strain rank stays the guarantee for any consumer, and
+   a cached NCBI lookup is the upgrade if the mGrowthDB-only naming rule is relaxed. Open for Haris:
+   whether microbetag can meet crossfeed at strain rank.
 9. **Shipping desktop binaries** (#26). Karoline: the typical user runs Windows and has no command line
    experience, so installing Python, Git, and a virtual environment is out of reach. A CI-built,
    double-click Windows executable would remove that. The commitments: an unsigned build triggers a
@@ -304,6 +328,8 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    PyPI release (#27).
 10. **Significance testing** (setting 4). Still open: which test on the per-replicate log2 values (for
    example Welch's t-test), and whether to correct for multiple testing across arcs.
+   DEFERRED by Karoline 2026-09-19 until the settled items have landed. Note that this and item 5's
+   no-growth test are the same choice of test and alpha.
 11. **The growth metric and the comparison are one coupled choice** (raised by the Syntropa-side review,
    2026-09-18). A log ratio suits an extensive quantity (AUC, yield, biomass), where doubling is
    meaningful and the value stays away from zero. On a growth rate it is unstable: when the monoculture
@@ -313,12 +339,17 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    default: AUC with the log ratio, since the log ratio is already implemented and AUC is what it suits;
    growthRate travelling better across techniques is the reason to weigh the difference instead. Settings
    1 and 3.
+   SETTLED 2026-09-19 (Karoline); recorded in "Decisions" in [docs/agents/NOTES.md](agents/NOTES.md). Both
+   metrics ship, AUC the default, `max` selectable, and growth rate joins once it has a stated
+   rule (#41).
 12. **The shipped baseline propagates no uncertainty** (raised by the Syntropa-side review, 2026-09-18).
    `interaction.py` computes sd and se from replicate log2 values, but the network the pipeline emits
    comes from `derive.py`, which compares single scalar values and sets significance to null, so an edge
    carries no error bar and no replicate count. Options: route the baseline through the replicate-aware
    path and add se, n_co and n_mono to the schema, or state plainly that the baseline is a point estimate.
    Proposed default: wire the replicate path through, then settle the test in item 10. Setting 4.
+   SETTLED 2026-09-19 (Karoline); recorded in "Decisions" in [docs/agents/NOTES.md](agents/NOTES.md).
+   Wired: every edge carries a standard error and the replicate counts (#36).
 13. **How far to trust a mismatched-technique sign** (raised by the Syntropa-side review, 2026-09-18). A
    log ratio only cancels a shared scale when both sides share a modality. In the FP/BH study the
    monoculture is flow cytometry or OD and the per-strain co-culture is qPCR, so a systematic offset
@@ -350,6 +381,9 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    the adapter. It retires the placeholder, and it is the single piece of work that settles four items.
    Anything that adds a third comparison, including the cheaper-looking route of computing drop-out arcs
    inside `derive.py`, makes this worse and should be refused.
+   SETTLED 2026-09-19 (Karoline); recorded in "Decisions" in [docs/agents/NOTES.md](agents/NOTES.md).
+   Karoline: "go with your recommendation". Built as #38 (the adapter) and #40 (the deriver), so the
+   placeholder retires.
 16. **How hard crossfeed is allowed to lean on mGrowthDB** (raised by the Syntropa-side review,
    2026-09-18). `taxonomy.species_index` builds its name index by walking study ids from 1 upward until
    five consecutive ids are absent, capped at 500, and `crossfeed gui` calls it on a cold cache before it
@@ -359,6 +393,16 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    prebuilt index with releases, refreshed deliberately, instead of crawling on demand. This is a
    courtesy question toward the database the collaboration depends on, so it wants an answer from them
    rather than a default from us.
+17. **Outlier replicates need a stated rule** (#39, found in real data 2026-09-19). Running the specified
+   comparison on SMGDB00000004 gave B. hydrogenotrophica a standard error of 3.5 on the log2 scale, which
+   traces to one replicate: BH_14's qPCR trace (context 3465) holds two consecutive points at 5.264e13
+   cells/mL between neighbors of 1.06e8 and 4.84e8. The community traces in the study's visualizer look
+   fine; the artifact is in the per-strain qPCR trace the comparison reads. With BH_14 left out the three
+   metrics agree (AUC +1.29 se 0.12, max +1.15 se 0.17, growth rate +0.33 se 0.11, all facilitation), and
+   the biology points the same way: F. prausnitzii produces CO2 and formate that B. hydrogenotrophica
+   consumes. SETTLED 2026-09-19 (Karoline): flag such replicates, never drop them silently, with the
+   factor an advanced setting. Growth rate is the more robust metric under an artifact like this, which is
+   part of why item 11 ships both.
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.
