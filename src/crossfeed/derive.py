@@ -371,13 +371,15 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
                 absence_threshold: float = ABSENCE_THRESHOLD) -> tuple:
     """(edges, meta) for writing a network.
 
-    Sets each record's `status` from the absence threshold k and its `significance` from the chosen
-    correction, drops low-quality edges unless asked, and records all of it in `meta`, so a file says how
-    it was made and how many edges each rule touched.
+    Sets each record's `status` from the absence threshold k (None, undetermined, for a low-quality
+    edge, which is never read as an absence) and its `significance` from the chosen correction, drops
+    low-quality edges unless asked, and records all of it in `meta`, so a file says how it was made and
+    how many edges each rule touched.
     """
     for record in records:
-        record["status"] = absence(record.get("strength"), record.get("sd"), record.get("outcome"),
-                                   absence_threshold)
+        # a low-quality edge is never read as the absence of an interaction (Karoline, on #40; #50)
+        record["status"] = None if is_low_quality(record) else absence(
+            record.get("strength"), record.get("sd"), record.get("outcome"), absence_threshold)
     tests = adjust_significance(records, correction)
     edges, hidden = select_edges(records, include_low_quality)
     statistics = {**STATISTICS, "correction": STATISTICS["correction"].format(name=CORRECTIONS[correction][0]),

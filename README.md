@@ -191,8 +191,9 @@ Both fields are optional, so documents without them stay valid.
 - **Obligate** (the target grows only with the source present) and **abolished** (it grows only without
   it) are the extremes of facilitation and inhibition. They have no log2 ratio, so no `weight` and no
   `effect_over_sd`; they are always present and are drawn with their own style.
-- A mean of exactly zero is always absent. An edge with no spread estimate (a single replicate) has no
-  `effect_over_sd`; its `status` is `null` (undetermined) and it is flagged low quality.
+- A mean of exactly zero is always absent. A low-quality edge's `status` is `null` (undetermined) whatever
+  its numbers, since low quality is never read as an absence; an edge with no spread estimate (a single
+  replicate) is one such case and also has no `effect_over_sd`.
 - Absent edges stay in the output. Hiding them is the display's job: the Cytoscape style hides `absent`
   edges by default, and the local page lists them in their own section. `meta.absence` records the rule,
   the k used, and how many edges it marked absent.

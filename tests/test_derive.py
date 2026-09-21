@@ -253,6 +253,15 @@ def test_absent_edges_stay_in_the_output_and_low_quality_is_left_out_by_default(
     assert meta["absence"]["absent"] == 0
 
 
+def test_a_low_quality_edge_is_never_marked_absent():
+    # issue #50: even with a zero mean or a spread that would place it below k, a low-quality edge's status
+    # is undetermined, never absent
+    records = [{"strength": 0.0, "sd": 0.3, "outcome": "quantified", "quality": ["strains_pooled"]},
+               {"strength": 0.1, "sd": 0.3, "outcome": "quantified", "quality": ["strains_pooled"]}]
+    edges, meta = output_meta(records, include_low_quality=True)
+    assert [e["status"] for e in edges] == [None, None] and meta["absence"]["absent"] == 0
+
+
 def test_significance_is_benjamini_hochberg_over_every_tested_comparison():
     records = [{"p_value": 0.01}, {"p_value": 0.04}, {"p_value": None}, {"p_value": 0.03}, {"p_value": 0.005}]
     assert adjust_significance(records) == 4                # the untested record is not a test
