@@ -123,6 +123,8 @@
       <legend>Filter this view (live)</legend>
       <div class="fld"><label>Minimum |interaction strength|: <span id="thrv" class="badge">0.0</span></label><input id="s_thr" type="range" min="0" max="3" step="0.1" value="0"></div>
       <div class="fld"><label>Show effects</label><select id="s_eff"><option>all</option><option>facilitation only</option><option>inhibition only</option><option>hide neutral</option></select></div>
+      <div class="fld"><label><input type="checkbox" id="s_lowq"> Show low-quality edges</label>
+        <div class="status">Off by default, as the pipeline exports them. A low-quality edge keeps the sign of its mean; its flags say why it is not trusted.</div></div>
       <div class="fld"><label>Minimum supporting studies</label><input id="s_studies" type="number" min="1" value="1"><div class="status">Acts per edge today. A cross-study count needs edges for one interaction to be merged first (a planned step).</div></div>
     </fieldset>
   </div>
@@ -203,6 +205,7 @@ function visible(){
   const thr=num(document.getElementById("s_thr").value)||0;
   const minStudies=parseInt(document.getElementById("s_studies").value)||1;
   const eff=document.getElementById("s_eff").value;
+  const showLowQ=document.getElementById("s_lowq").checked;
   const present=new Set((NET.nodes||[]).map(n=>n.id));
   const matches=n=>!terms.length||terms.some(t=>String(n.id).toLowerCase().includes(t)||String(n.name||"").toLowerCase().includes(t));
   const queried=new Set((NET.nodes||[]).filter(matches).map(n=>n.id));
@@ -211,6 +214,7 @@ function visible(){
     const s=num(e.strength);
     if(s!==null&&Math.abs(s)<thr)return false;
     if((e.study_ids?e.study_ids.length:0)<minStudies)return false;
+    if(isLowQuality(e)&&!showLowQ)return false;
     if(eff==="facilitation only"&&e.effect!=="facilitation")return false;
     if(eff==="inhibition only"&&e.effect!=="inhibition")return false;
     if(eff==="hide neutral"&&e.effect==="neutral")return false;
@@ -322,6 +326,7 @@ function render(){
     const g=edgeGeom(e); if(!g)return; const d=g.d;
     const path=el("path",{class:"edge",d,stroke:st.color(),"stroke-width":w,fill:"none","marker-end":"url(#arw-"+st.head+")"});
     if(st.dash)path.setAttribute("stroke-dasharray",st.dash);
+    if(isLowQuality(e))path.setAttribute("opacity","0.45");
     if(isIndirect(e)){   // open ring at the midpoint: the arc is routed through something else
       const ring=el("circle",{class:"via",cx:g.mx,cy:g.my,r:4.5,fill:getVar("--bg"),stroke:st.color(),"stroke-width":1.8});
       ring._edge=e; gEdges.appendChild(ring);
@@ -372,9 +377,31 @@ function highlight(id){
 
 // ---- details, with honest precision: one decimal, an explicit qualitative tag, condition on every line ----
 const band=s=>{const a=Math.abs(s);return a<0.25?"near zero":a<1?"weak":a<2?"moderate":"strong";};
+// Kept for networks with no spread: the retired baseline and files derived before sd existed. Where an
+// edge does carry a spread, showing a coarse band instead of the interval is strictly less honest.
 function strengthText(e){const s=num(e.strength);if(s===null)return"";return `${s>0?"+":""}${s.toFixed(1)} (${band(s)})`;}
 function provNote(e){const m=String(e.method||"");if(/MISMATCH/i.test(m))return"magnitude provisional: mono and co measured by different techniques";if(/PROVISIONAL/i.test(m))return"provisional baseline method";return"";}
-function qualTag(e){return e.significance==null?"qualitative (no significance test)":"significance "+esc(e.significance);}
+// An edge now carries its spread and a test result. Saying "no significance test" when one ran, or
+// showing a magnitude with no interval, is how a viewer quietly overstates its data.
+const isLowQuality=e=>Array.isArray(e.quality)&&e.quality.length>0;
+function spreadText(e){
+  const s=num(e.strength), sd=num(e.sd);
+  if(s===null)return "";
+  if(sd===null)return `${s>0?"+":""}${s.toFixed(2)} (no spread: one replicate)`;
+  return `${s>0?"+":""}${s.toFixed(2)} &plusmn; ${sd.toFixed(2)}`;
+}
+function qualTag(e){
+  const adj=num(e.significance), raw=num(e.p_value);
+  if(adj===null&&raw===null)return "no test reported";
+  const bits=[];
+  if(raw!==null)bits.push(`p ${raw.toFixed(3)}`);
+  if(adj!==null)bits.push(`adjusted ${adj.toFixed(3)}`);
+  return bits.join(", ")+" (support, not the decision)";
+}
+function countsText(e){
+  const a=e.n_with, b=e.n_without;
+  return (a==null&&b==null)?"":`${a} replicate(s) with, ${b} without`;
+}
 // Evidence is a separate axis from the sign: it says whether the arc is a direct comparison or a
 // drop-out, which may act through a third species. It never reuses the color, dash, or head.
 const isIndirect=e=>String(e.evidence||"")==="dropout";
@@ -403,7 +430,11 @@ function showEdge(e){
   const prov=provNote(e);
   document.getElementById("details").innerHTML=
     `<div class="row"><b>${esc(nodeName(e.source))} &rarr; ${esc(nodeName(e.target))}</b></div>`+
-    `<div class="row"><span class="k">effect</span> ${esc(e.effect)}${num(e.strength)!==null?`  <span class="k">strength</span> ${strengthText(e)}`:""}<br><span class="k">${qualTag(e)}</span></div>`+
+    `<div class="row"><span class="k">effect</span> ${esc(e.effect)}${num(e.strength)!==null?`  <span class="k">strength</span> ${spreadText(e)}`:""}`+
+      `${e.outcome&&e.outcome!=="quantified"?`  <span class="k">outcome</span> ${esc(e.outcome)}`:""}`+
+      `<br><span class="k">${qualTag(e)}</span>${countsText(e)?`<br><span class="k">${esc(countsText(e))}</span>`:""}</div>`+
+    (isLowQuality(e)?`<div class="prov">low quality: ${(e.quality||[]).map(esc).join(", ")}. The sign is the sign of the mean; the flags say why it is not trusted.</div>`:"")+
+    ((e.notes||[]).length?`<div class="method"><span class="k">notes:</span> ${(e.notes||[]).map(esc).join("; ")}</div>`:"")+
     (evidenceTag(e)?`<div class="row"><span class="k">evidence</span> ${esc(evidenceTag(e))}${(e.community||[]).length?`<br><span class="k">community</span> ${(e.community||[]).map(id=>esc(nodeName(id))).join(", ")}`:""}</div>`:"")+
     (e.condition?`<div class="row"><span class="k">condition</span> ${esc(e.condition)}</div>`:"")+
     `<div class="row"><span class="k">studies</span><br>${studies.map(esc).join("<br>")||"none recorded"}</div>`+
@@ -414,7 +445,7 @@ function showEdge(e){
 function showNode(id){
   const out=(NET.edges||[]).filter(e=>e.source===id&&nodeById[e.target]);
   const inc=(NET.edges||[]).filter(e=>e.target===id&&nodeById[e.source]);
-  const li=arr=>arr.map(e=>`&bull; ${esc(nodeName(e.source))} &rarr; ${esc(nodeName(e.target))} <span class="k">(${esc(e.effect)}${num(e.strength)!==null?" "+strengthText(e):""}${e.condition?", "+esc(e.condition):""})</span>${isIndirect(e)?` <span class="k" title="${esc(evidenceNote(e))}">indirect</span>`:""}`).join("<br>")||`<span class="empty">none</span>`;
+  const li=arr=>arr.map(e=>`&bull; ${esc(nodeName(e.source))} &rarr; ${esc(nodeName(e.target))} <span class="k">(${esc(e.effect)}${num(e.strength)!==null?" "+(num(e.sd)!==null?spreadText(e):strengthText(e)):""}${e.condition?", "+esc(e.condition):""})</span>${isIndirect(e)?` <span class="k" title="${esc(evidenceNote(e))}">indirect</span>`:""}${isLowQuality(e)?` <span class="k" title="${esc((e.quality||[]).join(", "))}">low quality</span>`:""}`).join("<br>")||`<span class="empty">none</span>`;
   document.getElementById("details").innerHTML=
     `<div class="row"><b>${esc(nodeName(id))}</b></div>`+
     `<div class="row"><span class="k">affects (${out.length})</span><br>${li(out)}</div>`+
@@ -520,7 +551,7 @@ document.getElementById("advbtn").onclick=function(){const open=document.getElem
 document.getElementById("q").addEventListener("input",debounce(()=>{selected=null;userAdjusted=false;render();},160));
 document.getElementById("clearq").onclick=()=>{document.getElementById("q").value="";selected=null;userAdjusted=false;render();};
 document.getElementById("s_thr").addEventListener("input",e=>{document.getElementById("thrv").textContent=(num(e.target.value)||0).toFixed(1);render();});
-["s_studies","s_eff"].forEach(id=>document.getElementById(id).addEventListener("input",render));
+["s_studies","s_eff","s_lowq"].forEach(id=>document.getElementById(id).addEventListener("input",render));
 document.getElementById("dljson").onclick=()=>save("crossfeed_network.json",JSON.stringify(currentView(),null,2),"application/json");
 document.getElementById("dlgraphml").onclick=()=>save("crossfeed_network.graphml",toGraphML(currentView()),"application/xml");
 document.getElementById("file").addEventListener("change",ev=>{
