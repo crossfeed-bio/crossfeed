@@ -152,6 +152,14 @@ Rules for this file:
 - Where each mGrowthDB study's license is published; the study endpoint does not expose it, so
   `study_license` is marked unresolved.
 
+- Signing and SmartScreen, which is easy to get wrong in both directions. A purchased certificate does
+  not clear the warning on a new binary, so paying for EV to avoid it is wasted. But signing does matter:
+  reputation cannot carry from one release to the next unless both are signed by the same publisher, so
+  unsigned builds restart from zero forever, and Smart App Control on Windows 11 blocks unsigned
+  executables rather than warning about them. The SignPath Foundation signs open-source projects free.
+  The Microsoft Store removes the warning entirely, signs the app itself, and its registration is now
+  free. See METHOD_NOTES item 9 for the full comparison.
+
 ## Gotchas
 
 - mGrowthDB serves growth curves, not interactions; interactions are derived.

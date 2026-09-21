@@ -374,11 +374,48 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
 9. **Shipping desktop binaries** (#26). Karoline: the typical user runs Windows and has no command line
    experience, so installing Python, Git, and a virtual environment is out of reach. A CI-built,
    double-click Windows executable would remove that. The commitments: an unsigned build triggers a
-   SmartScreen warning (a code-signing certificate costs money and institutional paperwork), PyInstaller
-   output draws antivirus false positives, and every release needs a build, a test on real Windows, and
-   support for people new to software. Proposed default: ship it unsigned, explain the warning in the
-   README, and revisit if a certificate becomes available. A lighter step that needs no decision is a
-   PyPI release (#27).
+   SmartScreen warning, PyInstaller output draws antivirus false positives, and every release needs a
+   build, a test on real Windows, and support for people new to software. A lighter step that needs no
+   decision is a PyPI release (#27).
+   Corrected 2026-09-21, after a review of the actual mechanics (#26). This item previously said a
+   code-signing certificate "costs money and institutional paperwork" and that the decision should be
+   revisited "if a certificate becomes available". Both are wrong:
+   (a) **No purchased certificate removes the warning.** Since 2024 Microsoft treats OV and EV
+   certificates alike, so paying a premium for EV to clear SmartScreen is not justified.
+   (b) **But signing still matters, for two reasons.** Reputation has two signals, the publisher
+   certificate and the file hash, and "reputation cannot transfer from previous versions unless both
+   were signed using the same publisher identity". So a signed publisher accumulates reputation across
+   releases while an unsigned build restarts from zero at every release, permanently. Separately, Smart
+   App Control on Windows 11 blocks unsigned executables that lack positive reputation, rather than
+   warning about them, so for those users unsigned is not a warning to click through.
+   (c) **Signing is free for this project.** The SignPath Foundation signs open-source projects at no
+   cost; Apache-2.0 qualifies and it verifies the repository rather than a person. It also cuts the
+   antivirus false positives PyInstaller output attracts. Two conditions shape the order: a release must
+   already exist in the form to be signed, so shipping unsigned is the prerequisite rather than a
+   compromise; and the certificate is issued to the Foundation, which becomes the publisher a user sees.
+   (d) **The Microsoft Store removes the warning outright, and is also free.** Microsoft's own guidance
+   leads with it: a Store-distributed app is signed by a Microsoft certificate and is never subject to a
+   SmartScreen download warning. Registration fees were dropped for individuals in 2025 and for
+   companies in 2026. Packaged as MSIX, Microsoft hosts the binary, signs it, and delivers updates, and
+   the PyInstaller antivirus problem goes away with the packaging.
+   Proposed default (Craig's side, awaiting his ruling): three steps, each costing nothing. Ship
+   unsigned now, since SignPath requires an existing release; say what Windows will do in the README and
+   on the release page; add SignPath signing once a release exists; and move to the Store when the
+   method is settled enough to list. Never buy a commercial certificate. Azure Artifact Signing, about
+   ten dollars a month, is a fallback only if SignPath eligibility fails.
+   What this turns on is not cost. A Store listing is far more public than a repository release, which
+   sharpens item 6's question about showing provisional results to people who will not read these notes,
+   and it names a publisher in public, which is Karoline's decision as much as Craig's.
+   ANSWERED 2026-09-21 (Karoline), the two questions that were hers:
+   **Build shape:** a one-folder build in a zip rather than `--onefile`. Her words: "zip sounds fine".
+   So the antivirus worst case is avoided and the download is still a single file.
+   **Timing: not yet, and not even for testing.** Her words: "it's even too early for testing purposes
+   I'd say. I didn't even yet look at the tool here on Mac Tahoe." So no Windows build and no signing
+   now.
+   DEFERRED 2026-09-21 (Karoline) on that timing. The comparison above stands for whenever it is taken
+   up, so the work does not have to be done twice; what is settled is the shape of the build and that no
+   certificate is ever bought. Note her remark separately: the tool has not yet been run by the person
+   who asked for it, which bears on item 6 more directly than on this item.
 10. **Significance testing** (setting 4). Still open: which test on the per-replicate log2 values (for
    example Welch's t-test), and whether to correct for multiple testing across arcs.
    DEFERRED by Karoline 2026-09-19 until the settled items have landed. Note that this and item 5's
