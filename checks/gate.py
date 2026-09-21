@@ -218,6 +218,7 @@ def check_claims(_rels):
     problems = []
     claims_check.check_default_deriver(problems)
     claims_check.check_retired_claims(problems)
+    claims_check.check_viewer_knows_the_vocabulary(problems)
     return problems
 
 

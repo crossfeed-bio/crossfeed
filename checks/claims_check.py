@@ -129,6 +129,43 @@ def check_default_deriver(problems: list) -> None:
             f"`derive_interactions` falls back to. A reader cannot tell what the tool runs.")
 
 
+VIEWER = "gui/index.html"
+# Vocabularies the viewer has to understand to draw an edge correctly. Each is a tuple in model.py.
+VOCABULARIES = ("QUALITY_FLAGS", "CAUTIONS", "EVIDENCE", "OUTCOMES")
+
+
+def model_vocabulary(name: str) -> list:
+    """The string values of a module-level tuple in model.py, read from the source."""
+    src = open(os.path.join(ROOT, "src", "crossfeed", "model.py"), encoding="utf-8").read()
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.Assign) and any(
+                isinstance(tgt, ast.Name) and tgt.id == name for tgt in node.targets):
+            if isinstance(node.value, (ast.Tuple, ast.List)):
+                return [e.value for e in node.value.elts if isinstance(e, ast.Constant)
+                        and isinstance(e.value, str)]
+    return []
+
+
+def check_viewer_knows_the_vocabulary(problems: list) -> None:
+    """The viewer must name every flag the model can put on an edge.
+
+    It has fallen behind three times: once when `evidence` arrived and an indirect arc drew as a direct
+    one, once when `status` arrived and absent comparisons drew as interactions, and once when
+    `single_replicate` changed from hidden to shown. Each time the model moved and nothing said so. A
+    value the viewer does not name is a value it cannot be drawing correctly.
+    """
+    text = _read(VIEWER)
+    if not text:
+        return
+    for name in VOCABULARIES:
+        for value in model_vocabulary(name):
+            if value not in text:
+                problems.append(
+                    f"{VIEWER}: model.{name} includes {value!r} and the viewer never names it, so it "
+                    f"cannot be drawing or filtering it. Handle it, or say in a comment why it needs no "
+                    f"treatment.")
+
+
 def check_retired_claims(problems: list) -> None:
     for rel in DOCS:
         text = _read(rel)
@@ -148,6 +185,7 @@ def main() -> int:
     problems: list = []
     check_default_deriver(problems)
     check_retired_claims(problems)
+    check_viewer_knows_the_vocabulary(problems)
 
     if problems:
         print("CLAIMS CHECK FAILED:")
