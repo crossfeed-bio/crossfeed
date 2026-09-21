@@ -25,14 +25,16 @@ tagged version is never reused for changed content.
   default for a live derivation, comparing replicate sets on the log2 scale (area under the curve by
   default, maximal abundance selectable with `--metric`), so every edge carries a standard error, the
   replicate counts, and the outcome. `BaselineDeriver` remains only as the retired placeholder.
-- Network edges gained optional `sd`, `se`, `n_with`, `n_without`, `outcome`, `metric`, `quality`, and
+- Network edges gained optional `p_value`, `sd`, `se`, `n_with`, `n_without`, `outcome`, `metric`, `quality`, and
   `notes` fields, in the model, the JSON Schema, and GraphML.
-- An edge's effect follows its spread: facilitation or inhibition only when the mean plus or minus its
-  standard deviation stays on one side of zero, neutral (no interaction) when it crosses zero on an edge
-  without quality issues. Low-quality edges (a single replicate, pooled strains) keep the sign of their
-  mean and are flagged, never read as no interaction. Neutral and low-quality edges are hidden by default
-  (`--include-neutral`, `--include-low-quality`, and the matching advanced settings), and `meta.hidden`
-  counts them. The fixed neutral band applies only to the retired baseline.
+- An interaction is decided from its spread: an edge (facilitation or inhibition) only when the mean plus
+  or minus its standard deviation stays on one side of zero. Otherwise, on data without quality issues,
+  there is no interaction: such comparisons are listed in `meta.absent` and never as edges ("neutral" is
+  now used only by the retired baseline). Low-quality edges (a single replicate, pooled strains) keep the
+  sign of their mean, are flagged in `quality`, and are hidden by default (`--include-low-quality`).
+- Welch's t-test on the per-replicate log2 values is reported on every comparison with two replicates per
+  side, with the raw `p_value` and the Benjamini-Hochberg adjusted `significance`; it supports an edge but
+  does not decide one (`crossfeed.stats`, standard library only).
 - An implausible spike in a growth curve is flagged and that curve left out for its species only, never
   dropped silently (`crossfeed.growth.spike`: the curve's maximum over its median, default limit 100, 0 to
   switch off). The report names the time points and, for the flagged strain, whether other measurements

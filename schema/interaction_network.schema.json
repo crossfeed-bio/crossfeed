@@ -105,6 +105,12 @@
           },
           "minItems": 1
         },
+        "p_value": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "sd": {
           "type": [
             "number",

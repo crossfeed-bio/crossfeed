@@ -27,6 +27,7 @@ from .adapter import replicates_for_experiment
 from .growth import SPIKE_FACTOR, GrowthCurve, Replicate
 from .interaction import ABOLISHED, NO_GROWTH, OBLIGATE, interaction_strength
 from .mgrowthdb import MGrowthDBClient
+from .stats import benjamini_hochberg, welch
 
 METHOD = ("crossfeed baseline v0 (PROVISIONAL): log2(growthRate co / mono), pairwise co-cultures only, "
           "no significance test; comparison method to be scoped with K. Faust")
@@ -145,8 +146,12 @@ def interactions_from_experiments(study: dict, exps: list, study_id: str = None,
 
 
 REPLICATE_METHOD = ("crossfeed replicate v1: mean log2({metric} in co-culture) minus mean log2({metric} in "
-                    "monoculture) over replicate sets; effect from the mean plus or minus its standard "
-                    "deviation; no significance test yet")
+                    "monoculture) over replicate sets; presence decided by the mean plus or minus its standard "
+                    "deviation; Welch's t-test reported, Benjamini-Hochberg corrected, not used to decide")
+ABSENT = "absent"      # a tested comparison with no interaction: kept, but never an edge
+STATISTICS = {"test": "Welch's two-sided t-test on the per-replicate log2 values",
+              "correction": "Benjamini-Hochberg over every comparison tested in this derivation",
+              "role": "reported as support for an edge; presence is decided by mean plus or minus sd"}
 
 # Quality flags make an edge low quality: hidden by default, and never read as the absence of an
 # interaction (Karoline, on #40). Notes inform without disqualifying, such as an excluded outlier.
@@ -194,26 +199,25 @@ def _renamed(replicates, species: str):
 
 
 def classify(mean, sd, outcome: str, quality) -> str:
-    """The effect of an edge (Karoline, on #40).
+    """Whether a comparison is an edge, and which (Karoline, on #40).
 
-    Without quality issues: facilitation when mean - sd > 0, inhibition when mean + sd < 0, and neutral,
-    the absence of an interaction, when the interval crosses zero. With a quality issue the edge keeps the
-    sign of its mean and its flags say why it is not trusted, so a low-quality edge is never reported as
-    the absence of an interaction. `obligate` and `abolished` outcomes carry no log ratio: the target grows
-    only with, or only without, the source.
+    Without quality issues: facilitation when mean - sd > 0, inhibition when mean + sd < 0, and `absent`
+    when the interval crosses zero. An absent comparison is the absence of an edge, not a "neutral edge":
+    it is kept as a tested absence but never enters the edge list. With a quality issue the comparison
+    stays an edge with the sign of its mean, flagged, so low quality is never read as an absence.
+    `obligate` and `abolished` outcomes carry no log ratio: the target grows only with, or only without,
+    the source. A statistical test is reported alongside but does not decide.
     """
     if outcome == OBLIGATE:
         return "facilitation"
     if outcome == ABOLISHED:
         return "inhibition"
-    if mean is None or mean == 0:
-        return "neutral"
-    sign = "facilitation" if mean > 0 else "inhibition"
+    sign = None if not mean else ("facilitation" if mean > 0 else "inhibition")
     if quality or sd is None:
-        return sign
+        return sign or ABSENT
     if mean - sd > 0 or mean + sd < 0:
         return sign
-    return "neutral"
+    return ABSENT
 
 
 def interactions_from_replicates(client, study: dict, exps: list, study_id: str = None,
@@ -280,12 +284,14 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
                      f"{f['ratio']:.0f} times the median at {', '.join(f'{t:g}' for t in f['times'])}"
                      for f in result["flagged"] if f["species"] == target]
             mean, sd = side["mean"], side["sd"]
+            test = welch(side["co_log2"], side["mono_log2"])
             records.append({
                 "source": genus_species(source), "source_name": source,
                 "target": genus_species(target), "target_name": target,
                 "effect": classify(mean, sd, side["outcome"], quality),
                 "strength": None if mean is None else round(mean, 4),
-                "significance": None,
+                "significance": None,           # Benjamini-Hochberg adjusted, set at output
+                "p_value": None if test is None else test["p"],
                 "sd": None if sd is None else round(sd, 4),
                 "se": None if side["se"] is None else round(side["se"], 4),
                 "n_with": side["n_co"], "n_without": side["n_mono"],
@@ -302,23 +308,48 @@ def is_low_quality(record) -> bool:
     return bool(record.get("quality"))
 
 
-def select_edges(records, include_neutral: bool = False, include_low_quality: bool = False) -> tuple:
-    """(kept, hidden) at output: neutral and low-quality edges are hidden by default (Karoline, on #40).
+def adjust_significance(records) -> int:
+    """Fill each record's `significance` with its Benjamini-Hochberg adjusted p-value, in place.
 
-    hidden counts what was left out, {"neutral": n, "low_quality": n}, so the output can say so. A
-    low-quality edge is counted as low quality whatever its effect, never as neutral.
+    The family is every comparison tested in this derivation, edges, absences and low-quality ones alike,
+    since all were tested. Returns the number of tests. Records without a p-value (a single replicate on
+    a side) are not tests and keep `significance` None.
     """
-    kept, hidden = [], {"neutral": 0, "low_quality": 0}
+    tested = [r for r in records if r.get("p_value") is not None]
+    for record, adjusted in zip(tested, benjamini_hochberg([r["p_value"] for r in tested]), strict=True):
+        record["significance"] = round(adjusted, 6)
+    return len(tested)
+
+
+ABSENT_FIELDS = ("source", "source_name", "target", "target_name", "condition", "strength", "sd", "se",
+                 "n_with", "n_without", "p_value", "significance", "metric", "notes", "study_id")
+
+
+def select_edges(records, include_low_quality: bool = False) -> tuple:
+    """(edges, hidden, absent) at output (Karoline, on #40).
+
+    Tested absences never become edges; they are returned separately, with the numbers an edge would carry,
+    so they can be kept and shown. Low-quality edges are hidden by default. `hidden` counts what was left
+    out of the edge list: {"low_quality": n}.
+    """
+    edges, absent, hidden = [], [], {"low_quality": 0}
     for record in records:
-        if is_low_quality(record):
-            if not include_low_quality:
-                hidden["low_quality"] += 1
-                continue
-        elif record.get("effect") == "neutral" and not include_neutral:
-            hidden["neutral"] += 1
-            continue
-        kept.append(record)
-    return kept, hidden
+        if record.get("effect") == ABSENT:
+            absent.append({k: record.get(k) for k in ABSENT_FIELDS})
+        elif is_low_quality(record) and not include_low_quality:
+            hidden["low_quality"] += 1
+        else:
+            edges.append(record)
+    return edges, hidden, absent
+
+
+def output_meta(records, include_low_quality: bool = False) -> tuple:
+    """(edges, meta) for writing a network: significance adjusted, absences and the filter recorded."""
+    tests = adjust_significance(records)
+    edges, hidden, absent = select_edges(records, include_low_quality)
+    meta = {"statistics": {**STATISTICS, "tests": tests}, "absent": absent,
+            "filters": {"include_low_quality": include_low_quality}, "hidden": hidden}
+    return edges, meta
 
 
 # ---- the pluggable derivation seam ---------------------------------------------------------------
