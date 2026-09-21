@@ -21,6 +21,18 @@ tagged version is never reused for changed content.
 - `crossfeed gui`: a local page (standard library server on 127.0.0.1, a token in the URL, no JavaScript)
   where you type species names or NCBI taxon ids and get their interactions as a table, with every
   setting behind "Advanced settings" and downloads for JSON and GraphML.
+- The pipeline now derives through the comparison the collaboration specified: `ReplicateDeriver` is the
+  default for a live derivation, comparing replicate sets on the log2 scale (area under the curve by
+  default, maximal abundance selectable with `--metric`), so every edge carries a standard error, the
+  replicate counts, and the outcome. `BaselineDeriver` remains only as the retired placeholder.
+- Network edges gained optional `sd`, `se`, `n_with`, `n_without`, `outcome`, `metric`, `quality`, and
+  `notes` fields, in the model, the JSON Schema, and GraphML.
+- An edge's effect follows its spread: facilitation or inhibition only when the mean plus or minus its
+  standard deviation stays on one side of zero, neutral (no interaction) when it crosses zero on an edge
+  without quality issues. Low-quality edges (a single replicate, pooled strains) keep the sign of their
+  mean and are flagged, never read as no interaction. Neutral and low-quality edges are hidden by default
+  (`--include-neutral`, `--include-low-quality`, and the matching advanced settings), and `meta.hidden`
+  counts them. The fixed neutral band applies only to the retired baseline.
 - An implausible spike in a growth curve is flagged and that curve left out for its species only, never
   dropped silently (`crossfeed.growth.spike`: the curve's maximum over its median, default limit 100, 0 to
   switch off). The report names the time points and, for the flagged strain, whether other measurements

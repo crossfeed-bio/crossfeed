@@ -140,6 +140,14 @@ read, and it is pinned by a JSON Schema at
       "condition": "FP/BH co-culture",
       "method": "crossfeed baseline v0 (PROVISIONAL): ...",
       "study_ids": ["SMGDB00000004"],
+      "sd": 0.43,
+      "se": 0.25,
+      "n_with": 3,
+      "n_without": 3,
+      "outcome": "quantified",
+      "metric": "auc",
+      "quality": [],
+      "notes": [],
       "evidence": "biculture",
       "community": ["blautia hydrogenotrophica", "faecalibacterium prausnitzii"]
     }
@@ -152,11 +160,26 @@ read, and it is pinned by a JSON Schema at
 
 `effect` is one of `facilitation`, `inhibition`, `neutral`. `strength` and `significance` are your
 method's numbers (or `null`). `study_ids` on every edge is the edge-level attribution and must carry at
-least one study. `evidence` says what the edge was derived from: `biculture` (a species alone against
+least one study. `sd` and `se` are the standard deviation and standard error of the strength across
+replicates, with `n_with` and `n_without` the replicate counts behind it, and `metric` the growth property compared (`auc` by default,
+`max` selectable). `outcome` says what the comparison could establish: `quantified`, `obligate` (the
+target grows only with the source present), `abolished` (only without it), or `no_growth`. `evidence`
+says what the edge was derived from: `biculture` (a species alone against
 the same species with one partner, a direct interaction) or `dropout` (a full community against the
 community without the source species, so the effect is not necessarily direct; strictly a hyper-arc,
 kept as an arc), or `null` when unknown; `community` lists the node ids of the community it came from.
-Both fields are optional, so documents without them stay valid. Validate any document (in Python) with `crossfeed.schema.validate_document(doc)`, which
+Both fields are optional, so documents without them stay valid.
+
+**How an effect is decided.** An edge is `facilitation` when its mean minus its standard deviation stays
+above zero, `inhibition` when its mean plus its standard deviation stays below zero, and `neutral` (no
+interaction) when that interval crosses zero on an edge with no quality issue. `quality` lists what makes
+an edge low quality: `single_replicate` (no spread can be estimated, so an edge from one replicate carries
+no `sd` or `se`), `strains_pooled` (monocultures of different strains of one species were pooled, until
+nodes are keyed by taxon id), and `non_batch`. A low-quality edge keeps the sign of its mean and is never
+reported as the absence of an interaction. `notes` inform without disqualifying, for example a replicate
+left out for an implausible spike. By default the command line and the local page emit neither neutral nor
+low-quality edges; `--include-neutral` and `--include-low-quality` (or the matching advanced settings)
+show them, and the network's `meta.hidden` counts what was left out. Validate any document (in Python) with `crossfeed.schema.validate_document(doc)`, which
 returns a list of problems (empty means valid). For network tools, `derive ... --format graphml` emits
 the same network as GraphML (Cytoscape, igraph, networkx, Gephi); the neutral JSON stays the canonical,
 citable form.

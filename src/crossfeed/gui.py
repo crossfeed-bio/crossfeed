@@ -20,17 +20,19 @@ import webbrowser
 from collections import Counter
 
 from .attribution import studies_with_edges
-from .derive import DEADBAND, derive_interactions, genus_species
+from .derive import derive_interactions, genus_species, select_edges
 from .export import to_graphml
+from .growth import SPIKE_FACTOR
 from .mgrowthdb import MGrowthDBError, records_to_network
 from .taxonomy import resolve_species, species_index
 
 TITLE = "crossfeed"
-DEFAULTS = {"metric": "growthRate", "deadband": DEADBAND, "studies": "", "only_entered": True}
-PROVISIONAL = ("These interactions come from the provisional baseline method: log2 of the growth ratio "
-               "between co-culture and monoculture, pairwise co-cultures only, with no significance test. "
-               "The comparison method is a scientific decision still to be settled by the collaboration "
-               "(see docs/METHOD_NOTES.md), so treat the direction as dependable and the size as provisional.")
+DEFAULTS = {"metric": "auc", "spike_factor": SPIKE_FACTOR, "include_neutral": False,
+            "include_low_quality": False, "studies": "", "only_entered": True}
+PROVISIONAL = ("Each interaction compares a species' growth with and without its partner across replicates "
+               "(mean log2 difference). An effect is reported only when the mean plus or minus its standard "
+               "deviation stays on one side of zero; there is no significance test yet, so treat these as "
+               "provisional (see docs/METHOD_NOTES.md).")
 MISMATCH = ("Monoculture and co-culture growth were measured by different techniques in some of these "
             "studies, so the direction of those interactions is dependable while the magnitude is not.")
 EMPTY_HELP = ("The provisional baseline handles pairwise (two-member) co-cultures only, so studies built "
@@ -65,16 +67,24 @@ def _settings_block(settings: dict) -> str:
     """Every setting, collapsed behind one button. The plain page shows species and a submit button."""
     s = {**DEFAULTS, **settings}
     checked = " checked" if s["only_entered"] else ""
+    neutral = " checked" if s["include_neutral"] else ""
+    low = " checked" if s["include_low_quality"] else ""
     options = "".join(f"<option value=\"{m}\"{' selected' if s['metric'] == m else ''}>{m}</option>"
-                      for m in ("growthRate", "auc"))
+                      for m in ("auc", "max"))
     return f"""<details>
 <summary>Advanced settings</summary>
 <div class="row"><label>Growth measure
   <select name="metric">{options}</select></label>
-  <span class="muted">what a strain's growth is read from (default growthRate)</span></div>
-<div class="row"><label>Neutral range
-  <input name="deadband" type="text" size="6" value="{_esc(s['deadband'])}"></label>
-  <span class="muted">a log2 change smaller than this counts as neutral</span></div>
+  <span class="muted">the growth property compared: area under the curve (default) or maximal abundance</span></div>
+<div class="row"><label><input type="checkbox" name="include_neutral" value="1"{neutral}>
+  Show neutral edges</label>
+  <span class="muted">no interaction: a clean comparison whose mean &plusmn; sd crosses zero</span></div>
+<div class="row"><label><input type="checkbox" name="include_low_quality" value="1"{low}>
+  Show low-quality edges</label>
+  <span class="muted">for example a single replicate; shown with the reason, never read as no interaction</span></div>
+<div class="row"><label>Spike limit
+  <input name="spike_factor" type="text" size="6" value="{_esc(s['spike_factor'])}"></label>
+  <span class="muted">leave out a curve whose maximum exceeds this many times its median; 0 keeps all</span></div>
 <div class="row"><label>Only these studies
   <input name="studies" type="text" size="40" value="{_esc(s['studies'])}"></label>
   <span class="muted">comma separated study ids; empty means every study holding the species</span></div>
@@ -100,13 +110,26 @@ def _arc_rows(net) -> str:
     rows = []
     for e in net.edges:
         strength = "" if e.strength is None else f"{e.strength:+.2f}"
+        if e.strength is not None and e.sd is not None:
+            strength += f" &plusmn; {e.sd:.2f}"
+        remarks = "; ".join([*(f"low quality: {q.replace('_', ' ')}" for q in e.quality), *e.notes])
         rows.append(f"<tr><td>{_esc(net.nodes[e.source].name or e.source)}</td>"
                     f"<td>{_esc(net.nodes[e.target].name or e.target)}</td>"
-                    f"<td>{_esc(e.effect)}</td><td>{_esc(strength)}</td>"
-                    # evidence arrives with #17; until then the column stays empty
-                    f"<td>{_esc(getattr(e, 'evidence', None) or '')}</td>"
+                    f"<td>{_esc(e.effect)}</td><td>{strength}</td>"
+                    f"<td>{_esc(e.n_with if e.n_with is not None else '')} / "
+                    f"{_esc(e.n_without if e.n_without is not None else '')}</td>"
+                    f"<td>{_esc(e.condition)}</td><td>{_esc(remarks)}</td>"
                     f"<td>{_esc(' '.join(e.study_ids))}</td></tr>")
     return "".join(rows)
+
+
+def _hidden_note(hidden: dict) -> str:
+    parts = [f"{n} {what}" for what, n in (("neutral", hidden.get("neutral", 0)),
+                                             ("low-quality", hidden.get("low_quality", 0))) if n]
+    if not parts:
+        return ""
+    return (f"<p class=\"muted\">Hidden by default: {' and '.join(parts)} edge(s). Tick them in Advanced "
+            "settings to show them.</p>")
 
 
 def _sources(net) -> str:
@@ -131,18 +154,21 @@ def render_result(token: str, result: dict) -> str:
                   if result["unresolved"] else "")
     net = result["network"]
     mismatch = any("MISMATCH" in (e.method or "") for e in net.edges)
+    hidden = _hidden_note(result.get("hidden", {}))
     if net.edges:
         table = (f"<h2>{len(net.edges)} interaction(s)</h2>"
                  f"<p class=\"note\">{PROVISIONAL}" + (f" {MISMATCH}" if mismatch else "") + "</p>"
-                 "<table><tr><th>source</th><th>affects</th><th>effect</th><th>log2 strength</th>"
-                 f"<th>evidence</th><th>study</th></tr>{_arc_rows(net)}</table>"
+                 f"{hidden}"
+                 "<table><tr><th>source</th><th>affects</th><th>effect</th><th>log2 mean &plusmn; sd</th>"
+                 "<th>replicates with / without</th><th>condition</th><th>remarks</th><th>study</th></tr>"
+                 f"{_arc_rows(net)}</table>"
                  f"<p><a href=\"/download.json?token={_esc(token)}\">Download JSON</a> &middot; "
                  f"<a href=\"/download.graphml?token={_esc(token)}\">Download GraphML</a></p>")
     else:
         top = Counter(r.split(";")[0].strip() for _, r in result["skipped"]).most_common(1)
         why = f" Most common reason: {_esc(top[0][0])}." if top else ""
         table = ("<h2>No interactions</h2><p class=\"note\">Nothing was derived for these species."
-                 f"{why} {EMPTY_HELP}</p>")
+                 f"{why} {EMPTY_HELP}</p>{hidden}")
     studies = ", ".join(result["studies"]) or "none"
     skipped = ""
     if result["skipped"]:
@@ -161,12 +187,14 @@ def parse_settings(form: dict) -> dict:
     """Settings from the posted form, falling back to the defaults for anything missing or unreadable."""
     settings = dict(DEFAULTS)
     metric = form.get("metric", [""])[0]
-    if metric in ("growthRate", "auc"):
+    if metric in ("auc", "max"):
         settings["metric"] = metric
     try:
-        settings["deadband"] = abs(float(form.get("deadband", [""])[0]))
+        settings["spike_factor"] = abs(float(form.get("spike_factor", [""])[0]))
     except ValueError:
         pass
+    settings["include_neutral"] = bool(form.get("include_neutral"))
+    settings["include_low_quality"] = bool(form.get("include_low_quality"))
     settings["studies"] = form.get("studies", [""])[0].strip()
     settings["only_entered"] = bool(form.get("only_entered"))
     return settings
@@ -196,7 +224,8 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     wanted = {genus_species(name) for _, matches in resolved["resolved"] for name in matches.values()}
     for study_id in studies:
         try:
-            recs, skips = derive_interactions(client, study_id, metric=s["metric"], deadband=s["deadband"])
+            recs, skips = derive_interactions(client, study_id, metric=s["metric"],
+                                              spike_factor=s["spike_factor"])
         except MGrowthDBError as e:
             errors.append(f"{study_id}: {e}")
             continue
@@ -205,11 +234,14 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         records += recs
         skipped += skips
 
-    net = records_to_network(records, meta={"source_db": "mGrowthDB (live)", "species": names,
-                                            "studies": studies})
+    records, hidden = select_edges(records, s["include_neutral"], s["include_low_quality"])
+    net = records_to_network(records, meta={
+        "source_db": "mGrowthDB (live)", "species": names, "studies": studies,
+        "filters": {"include_neutral": s["include_neutral"], "include_low_quality": s["include_low_quality"]},
+        "hidden": hidden})
     return {"resolved": resolved["resolved"], "unresolved": resolved["unresolved"],
             "taxon_ids": resolved["taxon_ids"], "studies": studies, "network": net,
-            "skipped": skipped, "errors": errors}
+            "skipped": skipped, "errors": errors, "hidden": hidden}
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
