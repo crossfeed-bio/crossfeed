@@ -226,6 +226,7 @@ def test_classify_gives_the_direction(mean, outcome, effect):
     (1.0, 0.3, "quantified", 4.0, "absent"),           # |1.0| < 4 * 0.3
     (0.0, 0.3, "quantified", 0.0, "absent"),           # a mean of exactly zero is always absent
     (0.2, None, "quantified", 1.0, None),              # no spread (one replicate): undetermined
+    (0.0, None, "quantified", 1.0, None),              # even with a zero mean (review of #58)
     (0.2, 0.0, "quantified", 1.0, "present"),          # replicates agree exactly: present
     (None, None, "obligate", 1.0, "present"),
     (None, None, "abolished", 1.0, "present"),

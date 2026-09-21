@@ -240,10 +240,10 @@ def absence(mean, sd, outcome: str, k: float = ABSENCE_THRESHOLD):
     """
     if outcome in (OBLIGATE, ABOLISHED):
         return PRESENT
+    if sd is None:
+        return None          # checked before the zero mean: with no spread nothing can be decided
     if not mean:
         return ABSENT
-    if sd is None:
-        return None
     return ABSENT if abs(mean) < k * sd else PRESENT
 
 
