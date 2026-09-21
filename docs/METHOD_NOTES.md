@@ -366,6 +366,7 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    magnitude. Options: flag only (current), restrict a published network to matched-technique comparisons,
    calibrate an offset between techniques, or widen the neutral band for mismatched edges. Proposed
    default: flag, and treat a mismatched edge's sign as provisional near the band. Setting 6.
+   DEFERRED by Karoline 2026-09-19 until the settled items have landed.
 14. **Merging edges per interaction, before a replication floor can mean anything** (raised by the
    Syntropa-side review, 2026-09-18). Records for one interaction are never merged, so each condition and
    study is its own edge and every edge carries exactly one study id. A minimum-supporting-studies
@@ -373,6 +374,7 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    merge records for the same interaction (unioning study ids and combining strengths by a stated rule),
    or drop the threshold until merging exists. Proposed default: build the merge, after which a
    replication floor becomes meaningful. Setting 10.
+   DEFERRED by Karoline 2026-09-19 until the settled items have landed.
 
 15. **The repository holds two implementations of the comparison, and the pipeline reaches the weaker one**
    (raised by the Syntropa-side review, 2026-09-18). `interaction.py` with `growth.py` is the comparison
