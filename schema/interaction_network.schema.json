@@ -55,6 +55,19 @@
         },
         "model_ref": {
           "type": "string"
+        },
+        "taxon_id": {
+          "type": "string"
+        },
+        "species": {
+          "type": "string"
+        },
+        "identity": {
+          "enum": [
+            "ncbi",
+            "name",
+            ""
+          ]
         }
       }
     },

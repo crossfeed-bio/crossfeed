@@ -368,6 +368,11 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    (b) is answered: mGrowthDB will not expose species-rank or higher taxa, so a node carries
    `taxon_id` and a `rank`, and the species key comes from elsewhere (item 8). The pooling defect noted
    just above was fixed in #33, which reports the collision instead of passing it silently.
+   BUILT 2026-09-21 (#23, Karoline: "taxon id should be strain level. That requires a node label with the
+   name of the strain to keep the network readable"). Nodes are keyed `ncbi:<taxon id>` and named with the
+   strain name, with `species` (from the name, item 8) and `identity` as attributes. No `rank`: mGrowthDB
+   does not report one, and inferring it would be a taxonomy lookup. An id that a study gives to strains
+   with different designations falls back to genus and species (identity `name`) and is reported.
 8. **The node key for merging with other tools** (#25, microbetag). Merging experimentally confirmed
    interactions with microbetag networks as a multigraph needs matching node identifiers but not matching
    edge identifiers. Proposed default: the species-level NCBI taxon id as the shared key, with the strain

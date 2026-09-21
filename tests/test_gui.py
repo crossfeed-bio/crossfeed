@@ -93,8 +93,9 @@ def test_species_names_reach_a_network():
     assert r["unresolved"] == [] and r["errors"] == []
     # B facilitates A (mean log2 1.0 +/- 0.26); A leaves B unchanged (mean 0: absent at any threshold)
     status = {(e.source, e.target): (e.effect, e.status) for e in r["network"].edges}
-    assert status == {("blautia hydrogenotrophica", "faecalibacterium prausnitzii"): ("facilitation", "present"),
-                      ("faecalibacterium prausnitzii", "blautia hydrogenotrophica"): ("neutral", "absent")}
+    # nodes are strains keyed by taxon id (#23): 853 is F. prausnitzii, 53443 B. hydrogenotrophica here
+    assert status == {("ncbi:53443", "ncbi:853"): ("facilitation", "present"),
+                      ("ncbi:853", "ncbi:53443"): ("neutral", "absent")}
 
 
 def test_taxon_ids_work_as_input():

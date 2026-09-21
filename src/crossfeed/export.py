@@ -22,6 +22,9 @@ _KEYS = [
     ("n_name", "node", "name", "string"),
     ("n_taxonomy", "node", "taxonomy", "string"),
     ("n_model_ref", "node", "model_ref", "string"),
+    ("n_taxon_id", "node", "taxon_id", "string"),
+    ("n_species", "node", "species", "string"),
+    ("n_identity", "node", "identity", "string"),
     ("e_effect", "edge", "effect", "string"),
     ("e_strength", "edge", "strength", "double"),
     ("e_significance", "edge", "significance", "double"),
@@ -75,6 +78,9 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(n, "n_name", node.name)
         _data(n, "n_taxonomy", node.taxonomy)
         _data(n, "n_model_ref", node.model_ref)
+        _data(n, "n_taxon_id", node.taxon_id)
+        _data(n, "n_species", node.species)
+        _data(n, "n_identity", node.identity)
 
     for i, e in enumerate(net.edges):
         ed = ET.SubElement(graph, f"{{{_NS}}}edge")

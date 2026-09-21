@@ -116,3 +116,12 @@ def test_an_unknown_caution_or_a_non_string_experiment_is_rejected():
     doc = _dropout_doc()
     doc["edges"][0]["experiments"] = [7]
     assert any("experiments" in p for p in validate_document(doc))
+
+
+def test_node_identity_fields_validate_and_a_wrong_identity_is_rejected():
+    recs = [{"source": "ncbi:1", "target": "b", "source_taxon_id": "1", "source_species": "x y",
+             "source_identity": "ncbi", "target_identity": "name", "effect": "facilitation", "study_id": "S1"}]
+    doc = records_to_network(recs).to_dict()
+    assert validate_document(doc) == []
+    doc["nodes"][0]["identity"] = "guessed"
+    assert any("identity" in p for p in validate_document(doc))
