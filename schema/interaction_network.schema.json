@@ -111,6 +111,27 @@
             "null"
           ]
         },
+        "weight": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "effect_over_sd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "status": {
+          "enum": [
+            "present",
+            "absent",
+            null
+          ]
+        },
         "sd": {
           "type": [
             "number",

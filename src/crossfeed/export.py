@@ -28,6 +28,9 @@ _KEYS = [
     ("e_method", "edge", "method", "string"),
     ("e_study_ids", "edge", "study_ids", "string"),
     ("e_p_value", "edge", "p_value", "double"),
+    ("e_weight", "edge", "weight", "double"),
+    ("e_effect_over_sd", "edge", "effect_over_sd", "double"),
+    ("e_status", "edge", "status", "string"),
     ("e_sd", "edge", "sd", "double"),
     ("e_se", "edge", "se", "double"),
     ("e_n_with", "edge", "n_with", "int"),
@@ -83,12 +86,15 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(ed, "e_condition", e.condition)
         _data(ed, "e_method", e.method)
         _data(ed, "e_study_ids", " ".join(e.study_ids))
-        for key, value in (("e_p_value", e.p_value), ("e_sd", e.sd), ("e_se", e.se)):
+        numbers = (("e_p_value", e.p_value), ("e_weight", e.weight), ("e_effect_over_sd", e.effect_over_sd),
+                   ("e_sd", e.sd), ("e_se", e.se))
+        for key, value in numbers:
             if value is not None:
                 _data(ed, key, value)
         for key, value in (("e_n_with", e.n_with), ("e_n_without", e.n_without)):
             if value is not None:
                 _data(ed, key, value)
+        _data(ed, "e_status", e.status)
         _data(ed, "e_outcome", e.outcome)
         _data(ed, "e_metric", e.metric)
         _data(ed, "e_quality", " ".join(e.quality))

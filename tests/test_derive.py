@@ -5,12 +5,13 @@ import pytest
 
 from crossfeed.derive import (
     _gs,
+    absence,
     adjust_significance,
     classify,
+    effect_over_sd,
     interactions_from_experiments,
     interactions_from_replicates,
     output_meta,
-    select_edges,
 )
 from crossfeed.mgrowthdb import records_to_network
 
@@ -162,8 +163,10 @@ def test_replicate_comparison_carries_uncertainty_onto_every_edge():
     assert (ba["n_with"], ba["n_without"]) == (2, 2)
     assert ba["outcome"] == "quantified" and ba["metric"] == "auc"
     assert ba["evidence"] == "biculture" and ba["quality"] == [] and ba["notes"] == []
+    assert ba["weight"] == pytest.approx(1.0, abs=1e-4)
+    assert ba["effect_over_sd"] == pytest.approx(1.0 / SPREAD, abs=1e-3)       # 3.80: well above k = 1
     ab = by_pair[(A, B)]
-    assert ab["effect"] == "absent" and ab["strength"] == pytest.approx(0.0)    # 0 +/- 0.263 crosses zero
+    assert ab["strength"] == pytest.approx(0.0) and ab["weight"] == pytest.approx(0.0)
     # Welch's t on 2 vs 2 log2 values is reported but does not decide; B -> A differs, A -> B does not
     assert ba["p_value"] < 0.05 and ab["p_value"] == pytest.approx(1.0)
 
@@ -204,28 +207,50 @@ def test_a_larger_community_is_skipped_with_a_reason():
 
 # ---- the effect rule and edge quality (Karoline, on #40) -----------------------------------------
 
-@pytest.mark.parametrize("mean, sd, outcome, quality, effect", [
-    (1.0, 0.3, "quantified", [], "facilitation"),       # interval entirely above zero
-    (-1.0, 0.3, "quantified", [], "inhibition"),        # entirely below
-    (0.2, 0.3, "quantified", [], "absent"),             # crosses zero on clean data: no edge at all
-    (0.2, 0.3, "quantified", ["single_replicate"], "facilitation"),   # low quality keeps the mean's sign
-    (0.2, None, "quantified", ["single_replicate"], "facilitation"),  # no sd with one replicate
-    (None, None, "obligate", [], "facilitation"),       # grows only with the source
-    (None, None, "abolished", [], "inhibition"),        # grows only without it
+@pytest.mark.parametrize("mean, outcome, effect", [
+    (1.0, "quantified", "facilitation"),
+    (-1.0, "quantified", "inhibition"),
+    (0.0, "quantified", "neutral"),                    # no direction at all; always absent
+    (None, "obligate", "facilitation"),                # the extreme of facilitation
+    (None, "abolished", "inhibition"),                 # the extreme of inhibition
 ])
-def test_classify_follows_the_decided_rule(mean, sd, outcome, quality, effect):
-    assert classify(mean, sd, outcome, quality) == effect
+def test_classify_gives_the_direction(mean, outcome, effect):
+    assert classify(mean, outcome) == effect
 
 
-def test_absences_never_become_edges_and_low_quality_is_hidden_by_default():
-    records = [{"effect": "facilitation", "quality": []}, {"effect": "absent", "quality": [], "source": "a"},
-               {"effect": "facilitation", "quality": ["single_replicate"]}]
-    edges, hidden, absent = select_edges(records)
-    assert edges == records[:1]
-    assert hidden == {"low_quality": 1}
-    assert [r["source"] for r in absent] == ["a"]
-    edges, _, absent = select_edges(records, include_low_quality=True)
-    assert len(edges) == 2 and len(absent) == 1           # an absence is never an edge, whatever the setting
+@pytest.mark.parametrize("mean, sd, outcome, k, status", [
+    (1.0, 0.3, "quantified", 1.0, "present"),          # |1.0| >= 1 * 0.3
+    (0.2, 0.3, "quantified", 1.0, "absent"),           # |0.2| < 1 * 0.3: the mean +/- sd rule
+    (0.2, 0.3, "quantified", 0.5, "present"),          # |0.2| >= 0.5 * 0.3
+    (0.2, 0.3, "quantified", 0.0, "present"),          # k = 0 marks nothing absent
+    (1.0, 0.3, "quantified", 4.0, "absent"),           # |1.0| < 4 * 0.3
+    (0.0, 0.3, "quantified", 0.0, "absent"),           # a mean of exactly zero is always absent
+    (0.2, None, "quantified", 1.0, None),              # no spread (one replicate): undetermined
+    (0.2, 0.0, "quantified", 1.0, "present"),          # replicates agree exactly: present
+    (None, None, "obligate", 1.0, "present"),
+    (None, None, "abolished", 1.0, "present"),
+])
+def test_absence_is_a_threshold_on_the_effect_relative_to_its_spread(mean, sd, outcome, k, status):
+    assert absence(mean, sd, outcome, k) == status
+
+
+def test_effect_over_sd_is_the_quantity_the_threshold_cuts():
+    assert effect_over_sd(-0.6, 0.3) == pytest.approx(2.0)
+    assert effect_over_sd(0.6, None) is None and effect_over_sd(0.6, 0.0) is None
+    assert effect_over_sd(None, 0.3) is None
+
+
+def test_absent_edges_stay_in_the_output_and_low_quality_is_left_out_by_default():
+    records = [{"strength": 1.0, "sd": 0.3, "outcome": "quantified", "quality": []},
+               {"strength": 0.1, "sd": 0.3, "outcome": "quantified", "quality": []},
+               {"strength": 1.0, "sd": None, "outcome": "quantified", "quality": ["single_replicate"]}]
+    edges, meta = output_meta(records)
+    assert [e["status"] for e in edges] == ["present", "absent"]        # the absent edge is still an edge
+    assert meta["hidden"] == {"low_quality": 1}
+    assert meta["absence"] == {"rule": "absent when |log2 mean| < k * sd", "k": 1.0, "absent": 1}
+    edges, meta = output_meta(records, include_low_quality=True, absence_threshold=0.0)
+    assert [e["status"] for e in edges] == ["present", "present", None]
+    assert meta["absence"]["absent"] == 0
 
 
 def test_significance_is_benjamini_hochberg_over_every_tested_comparison():
@@ -234,16 +259,16 @@ def test_significance_is_benjamini_hochberg_over_every_tested_comparison():
     assert [r.get("significance") for r in records] == pytest.approx([0.02, 0.04, None, 0.04, 0.02])
 
 
-def test_output_meta_records_the_statistics_and_the_absences():
+def test_output_meta_records_the_statistics_and_the_absence_rule():
     client, study, exps = _replicate_study()
     records, _ = interactions_from_replicates(client, study, exps)
     edges, meta = output_meta(records)
-    assert [e["source_name"] for e in edges] == [B]
+    status = {e["source_name"]: e["status"] for e in edges}
+    assert status == {B: "present", A: "absent"}                        # both are edges
     assert meta["statistics"]["tests"] == 2 and "Benjamini-Hochberg" in meta["statistics"]["correction"]
+    assert meta["absence"]["absent"] == 1
     _, conservative = output_meta(records, correction="by")
     assert "Benjamini-Yekutieli" in conservative["statistics"]["correction"]
-    assert [a["source_name"] for a in meta["absent"]] == [A]
-    assert meta["absent"][0]["n_with"] == 2 and meta["absent"][0]["significance"] is not None
 
 
 def test_a_single_replicate_edge_is_kept_and_flagged_low_quality():
@@ -251,7 +276,7 @@ def test_a_single_replicate_edge_is_kept_and_flagged_low_quality():
     exps[2]["bioreplicates"] = exps[2]["bioreplicates"][:1]            # one co-culture replicate
     records, _ = interactions_from_replicates(client, study, exps)
     ba = next(r for r in records if r["source_name"] == B)
-    assert ba["quality"] == ["single_replicate"] and ba["sd"] is None
+    assert ba["quality"] == ["single_replicate"] and ba["sd"] is None and ba["effect_over_sd"] is None
     assert ba["effect"] == "facilitation"                              # the sign of the mean, flagged
 
 
@@ -281,3 +306,4 @@ def test_an_excluded_outlier_is_a_note_not_a_quality_issue():
     ba = next(r for r in records if r["source_name"] == B)
     assert ba["quality"] == [] and ba["effect"] == "facilitation"
     assert ba["notes"] and "implausible spike" in ba["notes"][0] and "mono A_2" in ba["notes"][0]
+    assert absence(ba["strength"], ba["sd"], ba["outcome"]) == "present"
