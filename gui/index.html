@@ -123,6 +123,11 @@
       <legend>Filter this view (live)</legend>
       <div class="fld"><label>Minimum |interaction strength|: <span id="thrv" class="badge">0.0</span></label><input id="s_thr" type="range" min="0" max="3" step="0.1" value="0"></div>
       <div class="fld"><label>Show effects</label><select id="s_eff"><option>all</option><option>facilitation only</option><option>inhibition only</option><option>hide neutral</option></select></div>
+      <div class="fld"><label>Absence threshold k: <span id="kv" class="badge">1.0</span></label>
+        <input id="s_k" type="range" min="0" max="3" step="0.1" value="1">
+        <div class="status" id="knote">A comparison reads absent when |log2 mean| is under k standard deviations of its own spread. Moving k retunes the view; it does not rederive.</div></div>
+      <div class="fld"><label><input type="checkbox" id="s_absent"> Show absent comparisons (tested, no interaction)</label>
+        <div class="status">Off by default, as the pipeline and the Cytoscape style do. An absence is a measured result, not missing data.</div></div>
       <div class="fld"><label><input type="checkbox" id="s_lowq"> Show low-quality edges</label>
         <div class="status">Off by default, as the pipeline exports them. A low-quality edge keeps the sign of its mean; its flags say why it is not trusted.</div></div>
       <div class="fld"><label>Minimum supporting studies</label><input id="s_studies" type="number" min="1" value="1"><div class="status">Acts per edge today. A cross-study count needs edges for one interaction to be merged first (a planned step).</div></div>
@@ -206,6 +211,8 @@ function visible(){
   const minStudies=parseInt(document.getElementById("s_studies").value)||1;
   const eff=document.getElementById("s_eff").value;
   const showLowQ=document.getElementById("s_lowq").checked;
+  const showAbsent=document.getElementById("s_absent").checked;
+  const k=viewK();
   const present=new Set((NET.nodes||[]).map(n=>n.id));
   const matches=n=>!terms.length||terms.some(t=>String(n.id).toLowerCase().includes(t)||String(n.name||"").toLowerCase().includes(t));
   const queried=new Set((NET.nodes||[]).filter(matches).map(n=>n.id));
@@ -215,6 +222,7 @@ function visible(){
     if(s!==null&&Math.abs(s)<thr)return false;
     if((e.study_ids?e.study_ids.length:0)<minStudies)return false;
     if(isLowQuality(e)&&!showLowQ)return false;
+    if(statusAt(e,k)==="absent"&&!showAbsent)return false;
     if(eff==="facilitation only"&&e.effect!=="facilitation")return false;
     if(eff==="inhibition only"&&e.effect!=="inhibition")return false;
     if(eff==="hide neutral"&&e.effect==="neutral")return false;
@@ -384,6 +392,27 @@ function provNote(e){const m=String(e.method||"");if(/MISMATCH/i.test(m))return"
 // An edge now carries its spread and a test result. Saying "no significance test" when one ran, or
 // showing a magnitude with no interval, is how a viewer quietly overstates its data.
 const isLowQuality=e=>Array.isArray(e.quality)&&e.quality.length>0;
+// An edge carries the status it was derived at, and `effect_over_sd` (|log2 mean| / sd), which is the
+// quantity the absence threshold k cuts. Because that number is on the edge, a reader can move k here
+// and see the answer change without rederiving. The file's own k is in meta.absence.
+function fileK(){const a=(NET.meta||{}).absence;return a&&a.k!=null?num(a.k):null;}
+function viewK(){const el=document.getElementById("s_k");return el?(num(el.value)||0):(fileK()??1);}
+function statusAt(e,k){
+  const r=num(e.effect_over_sd);
+  if(r===null)return e.status??null;          // no ratio to cut: keep what the file decided
+  return r<k?"absent":"present";
+}
+function retuned(){const f=fileK();return f!==null&&Math.abs(viewK()-f)>1e-9;}
+function syncK(){
+  const el=document.getElementById("s_k"); if(!el)return;
+  const f=fileK();
+  el.value=(f===null?1:f);
+  document.getElementById("kv").textContent=(num(el.value)||0).toFixed(1);
+  const note=document.getElementById("knote");
+  if(note)note.textContent=(f===null
+    ? "This network carries no absence threshold, so nothing is marked absent unless an edge says so."
+    : `Derived at k = ${f.toFixed(1)}. A comparison reads absent when |log2 mean| is under k standard deviations of its own spread. Moving k retunes the view; it does not rederive.`);
+}
 function spreadText(e){
   const s=num(e.strength), sd=num(e.sd);
   if(s===null)return "";
@@ -432,7 +461,9 @@ function showEdge(e){
     `<div class="row"><b>${esc(nodeName(e.source))} &rarr; ${esc(nodeName(e.target))}</b></div>`+
     `<div class="row"><span class="k">effect</span> ${esc(e.effect)}${num(e.strength)!==null?`  <span class="k">strength</span> ${spreadText(e)}`:""}`+
       `${e.outcome&&e.outcome!=="quantified"?`  <span class="k">outcome</span> ${esc(e.outcome)}`:""}`+
-      `<br><span class="k">${qualTag(e)}</span>${countsText(e)?`<br><span class="k">${esc(countsText(e))}</span>`:""}</div>`+
+      `<br><span class="k">${qualTag(e)}</span>${countsText(e)?`<br><span class="k">${esc(countsText(e))}</span>`:""}`+
+      `${statusAt(e,viewK())?`<br><span class="k">status</span> ${esc(statusAt(e,viewK()))}${num(e.effect_over_sd)!==null?` <span class="k">(|effect| / sd = ${num(e.effect_over_sd).toFixed(2)}, k = ${viewK().toFixed(1)})</span>`:""}`:""}</div>`+
+    (retuned()?`<div class="prov">This view uses k = ${viewK().toFixed(1)}; the file was derived at k = ${fileK().toFixed(1)}. The numbers are unchanged, only the cut.</div>`:"")+
     (isLowQuality(e)?`<div class="prov">low quality: ${(e.quality||[]).map(esc).join(", ")}. The sign is the sign of the mean; the flags say why it is not trusted.</div>`:"")+
     ((e.notes||[]).length?`<div class="method"><span class="k">notes:</span> ${(e.notes||[]).map(esc).join("; ")}</div>`:"")+
     (evidenceTag(e)?`<div class="row"><span class="k">evidence</span> ${esc(evidenceTag(e))}${(e.community||[]).length?`<br><span class="k">community</span> ${(e.community||[]).map(id=>esc(nodeName(id))).join(", ")}`:""}</div>`:"")+
@@ -540,6 +571,7 @@ function loadNetwork(d){
   const ids=new Set(d.nodes.map(n=>n&&n.id));
   const dangling=d.edges.filter(e=>!ids.has(e.source)||!ids.has(e.target)).length;
   NET=d; POS={}; selected=null; userAdjusted=false; reindex();
+  syncK();   // start the threshold where the file was derived, not at a number of our own
   document.getElementById("q").value="";
   updateBanner(); render();
   if(dangling)console.warn(`${dangling} edge(s) reference a missing node and are not shown or exported.`);
@@ -551,7 +583,8 @@ document.getElementById("advbtn").onclick=function(){const open=document.getElem
 document.getElementById("q").addEventListener("input",debounce(()=>{selected=null;userAdjusted=false;render();},160));
 document.getElementById("clearq").onclick=()=>{document.getElementById("q").value="";selected=null;userAdjusted=false;render();};
 document.getElementById("s_thr").addEventListener("input",e=>{document.getElementById("thrv").textContent=(num(e.target.value)||0).toFixed(1);render();});
-["s_studies","s_eff","s_lowq"].forEach(id=>document.getElementById(id).addEventListener("input",render));
+["s_studies","s_eff","s_lowq","s_absent"].forEach(id=>document.getElementById(id).addEventListener("input",render));
+document.getElementById("s_k").addEventListener("input",e=>{document.getElementById("kv").textContent=(num(e.target.value)||0).toFixed(1);render();});
 document.getElementById("dljson").onclick=()=>save("crossfeed_network.json",JSON.stringify(currentView(),null,2),"application/json");
 document.getElementById("dlgraphml").onclick=()=>save("crossfeed_network.graphml",toGraphML(currentView()),"application/xml");
 document.getElementById("file").addEventListener("change",ev=>{
