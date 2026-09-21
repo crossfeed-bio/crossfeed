@@ -166,7 +166,10 @@ method's numbers (or `null`). `study_ids` on every edge is the edge-level attrib
 least one study. `sd` and `se` are the standard deviation and standard error of the strength across
 replicates, with `n_with` and `n_without` the replicate counts behind it, and `metric` the growth property compared (`auc` by default,
 `max` selectable). `outcome` says what the comparison could establish: `quantified`, `obligate` (the
-target grows only with the source present), `abolished` (only without it), or `no_growth`. `evidence`
+target grows only with the source present), `abolished` (only without it), or `no_growth`. For an
+obligate or abolished edge, the count on the side without growth is its replicates without growth. A
+comparison whose set was emptied by exclusions (every replicate spiked, for example) says nothing about
+growth; it is skipped with a reason rather than read as obligate. `evidence`
 says what the edge was derived from: `biculture` (a species alone against
 the same species with one partner, a direct interaction) or `dropout` (a full community against the
 community without the source species, so the effect is not necessarily direct; strictly a hyper-arc,
@@ -181,7 +184,11 @@ remaining one. The arc is labeled `evidence: dropout` because the removed member
 species. Drop-out arcs are included by default; `--no-dropout` (or the matching advanced setting) leaves
 them out. Experiments are pooled into one replicate set only when their conditions (cultivation mode and
 the compartment records: medium, pH, temperature, gases, and so on) are identical, since interactions are
-usually environmentally specific; under different conditions they give separate arcs. A design does not
+usually environmentally specific; under different conditions they give separate arcs. Because mGrowthDB
+does not detail medium components well, their descriptions must also agree, apart from a trailing run
+number ("All 1" and "All 2" pool; "with initial acetate" and "without initial acetate" do not).
+Each arc is compared over its own window, the target's curves in the two sets, so one short curve
+elsewhere in the design does not shorten every arc. A design does not
 need every drop-out. mGrowthDB still measures the removed member in a drop-out experiment; that curve is
 not used, and if it shows a positive signal the drop-out may not be clean, so its arcs are flagged
 `removed_member_detected`. A larger community with no drop-out experiment is skipped, with a reason.

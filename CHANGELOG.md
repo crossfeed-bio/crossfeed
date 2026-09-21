@@ -88,6 +88,10 @@ tagged version is never reused for changed content.
   unused `requests` dependency was dropped.
 
 ### Fixed
+- An obligate or abolished edge is no longer flagged `single_replicate` for having no growing replicates on
+  the side where no growth is its result; that side counts its replicates without growth (#47).
+- A comparison whose replicate set was emptied by exclusions (every replicate spiked) is skipped with a
+  reason instead of being reported as obligate or abolished; four such edges in SMGDB00000013 were false.
 - The viewer in `gui/` shows an edge's `evidence`. A `dropout` arc is labeled indirect in the interaction
   list, the detail panel, and the hover text, carries the community it came from, and is drawn with an
   open ring at its midpoint. The ring is a channel the sign does not use (sign stays color, dash, and

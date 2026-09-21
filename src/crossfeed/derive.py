@@ -23,11 +23,12 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections import Counter
 
 from .adapter import replicates_for_experiment
 from .growth import SPIKE_FACTOR, GrowthCurve, Replicate
-from .interaction import ABOLISHED, NO_GROWTH, OBLIGATE, dropout_interaction_strengths, interaction_strength
+from .interaction import ABOLISHED, NO_GROWTH, OBLIGATE, UNUSABLE, dropout_interaction_strengths, interaction_strength
 from .mgrowthdb import MGrowthDBClient
 from .stats import CORRECTIONS, welch
 
@@ -342,6 +343,9 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
         if side["outcome"] == NO_GROWTH:
             skipped.append((f"{source} -> {target} [{cond}]", f"no growth ({method}) in either set"))
             continue
+        if side["outcome"] == UNUSABLE:
+            skipped.append((f"{source} -> {target} [{cond}]", "every replicate of a set was left out (see above)"))
+            continue
         c = {"mean": side["mean"], "sd": side["sd"], "se": side["se"], "outcome": side["outcome"],
              "n_with": side["n_co"], "n_without": side["n_mono"],
              "with_log2": side["co_log2"], "without_log2": side["mono_log2"]}
@@ -353,31 +357,52 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
                                [_exp_id(exp), *origin[target]], study_id, study_meta))
 
 
+def run_group(exp: dict) -> str:
+    """What must agree, besides the structured conditions, for experiments to be replicates of each other.
+
+    mGrowthDB does not detail medium components well: in SMGDB00000004 `RI_BH +Ac` and `RI_BH -Ac` (with
+    and without initial acetate) have identical conditions, and only the description tells them apart
+    (Karoline, on #47). So experiments of one community are pooled only when their descriptions also agree,
+    ignoring a trailing run number, which is how duplicate runs are told apart ("All 1", "All 2"). Pooling
+    similar but not identical conditions would need a good description of them, and is not done for now.
+    """
+    text = (exp.get("description") or exp.get("name") or "").strip()
+    return re.sub(r"[\s_-]*\d+$", "", text).casefold()
+
+
 def dropout_designs(exps, skipped) -> list:
     """The drop-out designs among a study's experiments: [(members, full experiments, {removed: experiments})].
 
     A design is a community of three or more members (the full community) together with experiments under
-    the same conditions that each hold it minus exactly one member. Experiments of one community under
-    identical conditions are replicates of each other and are pooled; under different conditions they
-    belong to different designs. Not every member needs a drop-out (Karoline, on #47). A community of
-    more than two members that is neither a full community with a drop-out nor a drop-out of one is
-    reported, with what was missing.
+    the same conditions that each hold it minus exactly one member. Experiments of one community are
+    pooled when they are replicates: identical conditions and the same `run_group`. Otherwise they give
+    separate arcs, so a full community or a drop-out with several groups takes part in several designs.
+    Not every member needs a drop-out (Karoline, on #47). A community of more than two members that is
+    neither a full community with a drop-out nor a drop-out of one is reported, with what was missing.
     """
     by_condition = {}
     for exp in exps:
         members = frozenset(_members(exp))
         if len(members) >= 2:
-            by_condition.setdefault(conditions(exp), {}).setdefault(members, []).append(exp)
+            groups = by_condition.setdefault(conditions(exp), {}).setdefault(members, {})
+            groups.setdefault(run_group(exp), []).append(exp)
     designs, used = [], set()
     for communities in by_condition.values():
-        for members, full in communities.items():
+        for members, full_groups in communities.items():
             if len(members) < 3:
                 continue
-            drops = {r: communities[members - {r}] for r in sorted(members) if members - {r} in communities}
-            if drops:
-                designs.append((members, full, drops))
+            partners = {r: list(communities[members - {r}].values())
+                        for r in sorted(members) if members - {r} in communities}
+            if not partners:
+                continue
+            for full in full_groups.values():
+                remaining = {r: list(groups) for r, groups in partners.items()}
+                while any(remaining.values()):
+                    # one group per removed member per design; a member with several groups takes more designs
+                    drops = {r: groups.pop(0) for r, groups in remaining.items() if groups}
+                    designs.append((members, full, drops))
                 used.update(id(e) for e in full)
-                used.update(id(e) for group in drops.values() for e in group)
+            used.update(id(e) for groups in partners.values() for group in groups for e in group)
     for exp in exps:
         if len(_members(exp)) > 2 and id(exp) not in used:
             skipped.append((exp.get("name", ""), f"community of {len(_members(exp))} members with no drop-out "

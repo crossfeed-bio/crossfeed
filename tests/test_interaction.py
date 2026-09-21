@@ -91,7 +91,8 @@ def test_growth_only_with_partner_is_obligate_not_an_error():
     b = r["species_b"]
     assert b["outcome"] == "obligate"
     assert (b["mean"], b["sd"], b["se"]) == (None, None, None)
-    assert (b["n_co"], b["n_mono"]) == (2, 0)
+    # the monoculture set shows no growth by definition, so its one replicate is counted (#47)
+    assert (b["n_co"], b["n_mono"]) == (2, 1)
     assert r["species_a"]["outcome"] == "quantified" and r["species_a"]["mean"] == pytest.approx(1.0)
     assert r["skipped"] == [(f"{B}: monoculture replicate b0", "non-positive auc (0)")]
 
@@ -216,7 +217,7 @@ def test_dropout_zero_growth_gives_obligate_and_abolished_arcs():
     r = dropout_interaction_strengths(full, dropouts)
     bc = _arc(r, B, C)
     assert bc["outcome"] == "obligate" and bc["mean"] is None
-    assert (bc["n_with"], bc["n_without"]) == (2, 0)
+    assert (bc["n_with"], bc["n_without"]) == (2, 2)    # both replicates without B show no growth
     assert _arc(r, C, A)["outcome"] == "quantified"
     assert len(r["arcs"]) == 4
     # C grows only without B: B abolishes C's growth
@@ -290,3 +291,41 @@ def test_the_note_about_alternatives_is_carried_into_the_report():
     r = interaction_strength(mono_a, mono_b + [flagged], co, A, B)
     reason = dict(r["skipped"])[f"{B}: monoculture replicate b_spike"]
     assert reason.endswith("community fc clean (max/median 3.2)")
+
+
+def test_abolished_counts_the_replicates_without_growth():
+    mono_a, mono_b, _ = _example()
+    co = [Replicate([_curve(A, (1, 3)), _curve(B, (0, 0))], "c1"),
+          Replicate([_curve(A, (1, 3)), _curve(B, (0, 0))], "c2")]
+    b = interaction_strength(mono_a, mono_b, co, A, B)["species_b"]
+    assert b["outcome"] == "abolished" and (b["n_co"], b["n_mono"]) == (2, 2)
+
+
+def test_each_dropout_arc_has_its_own_window():
+    full, dropouts = _dropout_example()
+    # C's curves in the drop-out without B end at 5 h; only the arc B -> C is cut there
+    dropouts[B] = [Replicate([_curve(A, (1, 3)), _curve(C, (3, 4), times=(0, 5))], "xb1"),
+                   Replicate([_curve(A, (3, 5)), _curve(C, (7, 8), times=(0, 5))], "xb2")]
+    r = dropout_interaction_strengths(full, dropouts)
+    assert r["window"] == (0.0, 5.0)                       # the design as a whole
+    assert _arc(r, C, A)["window"] == (0.0, 10.0) and _arc(r, B, A)["window"] == (0.0, 10.0)
+    bc = _arc(r, B, C)
+    assert bc["window"] == (0.0, 5.0)
+    # full C cut at 5 h: f1 (1, 1) has area 5, f2 (1, 3) is 1 then 2 at 5 h, area 7.5;
+    # without B: xb1 (3, 4) area 17.5, xb2 (7, 8) area 37.5
+    expected = (math.log2(5) + math.log2(7.5)) / 2 - (math.log2(17.5) + math.log2(37.5)) / 2
+    assert bc["mean"] == pytest.approx(expected)
+    # C -> A keeps the full 10 h: unchanged from the hand-computed value
+    assert _arc(r, C, A)["mean"] == pytest.approx(1.0)
+
+
+def test_a_set_emptied_by_exclusions_is_not_read_as_no_growth():
+    # SMGDB00000013: every monoculture replicate was left out by the spike guard, and the empty set was
+    # read as "no growth", which made the edge look obligate
+    mono_a, _, co = _example()
+    spiked = [Replicate([_curve(B, (1, 1000, 1, 1, 1), times=(0, 1, 2, 3, 4))], f"b{i}") for i in (0, 1)]
+    co4 = [Replicate([_curve(A, (1, 3, 3, 3, 3), times=(0, 1, 2, 3, 4)),
+                      _curve(B, (1, 3, 3, 3, 3), times=(0, 1, 2, 3, 4))], "c1")]
+    mono_a4 = [Replicate([_curve(A, (1, 1, 1, 1, 1), times=(0, 1, 2, 3, 4))], "a1")]
+    b = interaction_strength(mono_a4, spiked, co4, A, B)["species_b"]
+    assert b["outcome"] == "unusable" and b["mean"] is None

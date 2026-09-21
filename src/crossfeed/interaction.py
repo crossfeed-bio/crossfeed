@@ -48,6 +48,8 @@ LOG = "log2"
 BICULTURE = "biculture"
 DROPOUT = "dropout"
 QUANTIFIED, OBLIGATE, ABOLISHED, NO_GROWTH = "quantified", "obligate", "abolished", "no_growth"
+# a set left empty by exclusions (for example every replicate spiked): not a growth result, never exported
+UNUSABLE = "unusable"
 
 
 def _check_method(method: str) -> None:
@@ -70,7 +72,8 @@ def _spike_reason(rep, species, found: dict, factor: float) -> str:
     return f"{reason}; {note}" if note else reason
 
 
-def _log_values(reps, species, role, prop, method, skipped, spike_factor=SPIKE_FACTOR, flagged=None) -> list:
+def _log_values(reps, species, role, prop, method, skipped, spike_factor=SPIKE_FACTOR, flagged=None,
+                no_growth=None) -> list:
     """log2 of the property for each replicate in a set.
 
     A replicate whose curve for `species` carries an implausible spike (`crossfeed.growth.spike`) is left
@@ -90,18 +93,34 @@ def _log_values(reps, species, role, prop, method, skipped, spike_factor=SPIKE_F
         value = prop(rep, species)
         if value <= 0:
             skipped.append((label, f"non-positive {method} ({value:g})"))
+            if no_growth is not None:
+                no_growth.append(label)
             continue
         values.append(math.log2(value))
     return values
 
 
-def _compare(with_log2: list, without_log2: list) -> dict:
-    """The log2 set comparison shared by both designs, including the outcomes where one set has no growth."""
+def _compare(with_log2: list, without_log2: list, zero_with: int = 0, zero_without: int = 0) -> dict:
+    """The log2 set comparison shared by both designs, including the outcomes where one set has no growth.
+
+    n_with and n_without count the replicates behind the result: the growing ones, or for the set that
+    shows no growth in an obligate or abolished comparison, the replicates without growth (`zero_with`,
+    `zero_without`). That set has no log2 values by definition, so counting its log2 values would call
+    every such edge a single replicate (Karoline, on #47).
+    """
     n_with, n_without = len(with_log2), len(without_log2)
     result = {"outcome": QUANTIFIED, "mean": None, "sd": None, "se": None, "n_with": n_with,
               "n_without": n_without, "with_log2": with_log2, "without_log2": without_log2}
+    if (not with_log2 and not zero_with) or (not without_log2 and not zero_without):
+        # every replicate of a set was left out (a spike, for example): absence of data, not of growth
+        result["outcome"] = UNUSABLE
+        return result
     if not with_log2 or not without_log2:
         result["outcome"] = OBLIGATE if with_log2 else ABOLISHED if without_log2 else NO_GROWTH
+        if result["outcome"] == OBLIGATE:
+            result["n_without"] = zero_without
+        elif result["outcome"] == ABOLISHED:
+            result["n_with"] = zero_with
         return result
     result["mean"] = statistics.mean(with_log2) - statistics.mean(without_log2)
     if n_with > 1 and n_without > 1:   # a set with one replicate has no spread to estimate
@@ -135,11 +154,12 @@ def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, met
 
     result = {"method": method, "log": LOG, "window": (start, end), "skipped": [], "flagged": []}
     for key, species, monos in (("species_a", species_a, mono_a), ("species_b", species_b, mono_b)):
+        zero_co, zero_mono = [], []
         co_log2 = _log_values(co, species, "co-culture", prop, method, result["skipped"],
-                              spike_factor, result["flagged"])
+                              spike_factor, result["flagged"], zero_co)
         mono_log2 = _log_values(monos, species, "monoculture", prop, method, result["skipped"],
-                                spike_factor, result["flagged"])
-        c = _compare(co_log2, mono_log2)
+                                spike_factor, result["flagged"], zero_mono)
+        c = _compare(co_log2, mono_log2, len(zero_co), len(zero_mono))
         result[key] = {"species": species, "outcome": c["outcome"], "mean": c["mean"], "sd": c["sd"], "se": c["se"],
                        "n_co": c["n_with"], "n_mono": c["n_without"],
                        "co_log2": c["with_log2"], "mono_log2": c["without_log2"]}
@@ -165,10 +185,13 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc",
     grows in only one of the two sets is kept with the outcome "obligate" or "abolished"; an arc whose
     target grows in neither is skipped and reported.
 
-    Returns a dict with "method", "log", "window" (start, end), "arcs" (each with "source", "target",
-    "evidence", "community", "outcome", "mean", "sd", "se", "n_with", "n_without", "with_log2",
-    "without_log2"), "skipped" as a list of (label, reason), and "flagged" as in `interaction_strength`.
-    `spike_factor` works as there.
+    Each arc is compared over its own window: from the common start to the earliest last time point of
+    the target's curves in the two sets, so one short curve elsewhere in the design does not shorten it.
+
+    Returns a dict with "method", "log", "window" (start, end) over the whole design, "arcs" (each with
+    "source", "target", "evidence", "community", "window", "outcome", "mean", "sd", "se", "n_with",
+    "n_without", "with_log2", "without_log2"), "skipped" as a list of (label, reason), and "flagged" as
+    in `interaction_strength`. `spike_factor` works as there.
     """
     _check_method(method)
     if not full:
@@ -183,23 +206,36 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc",
                + [(f"community without {r}", reps, [m for m in members if m != r]) for r, reps in dropouts.items()])
     start, end = shared_window(c for rep in [*full, *(r for reps in dropouts.values() for r in reps)]
                                for c in rep.curves)
-    prop = _property(end, method)
 
     evidence = BICULTURE if len(members) == 2 else DROPOUT
     community = sorted(members)
     result = {"method": method, "log": LOG, "window": (start, end), "arcs": [], "skipped": [], "flagged": []}
-    full_log2 = {m: _log_values(full, m, "full community", prop, method, result["skipped"],
-                                spike_factor, result["flagged"]) for m in members}
+
+    def once(found: list, into: list) -> None:
+        # the full community set takes part in several arcs; report each of its skips once
+        into.extend(x for x in found if x not in into)
+
     for removed, reps in dropouts.items():
         without_role = f"community without {removed}"
         for target in (m for m in members if m != removed):
-            without_log2 = _log_values(reps, target, without_role, prop, method, result["skipped"],
-                                       spike_factor, result["flagged"])
-            c = _compare(full_log2[target], without_log2)
+            # each arc has its own window: the target's curves in the two sets (Karoline, on #47)
+            window = shared_window(rep.curve(target) for rep in [*full, *reps])
+            prop = _property(window[1], method)
+            skips, flags, zero_full, zero_without = [], [], [], []
+            full_log2 = _log_values(full, target, "full community", prop, method, skips, spike_factor,
+                                    flags, zero_full)
+            without_log2 = _log_values(reps, target, without_role, prop, method, skips, spike_factor,
+                                       flags, zero_without)
+            once(skips, result["skipped"])
+            once(flags, result["flagged"])
+            c = _compare(full_log2, without_log2, len(zero_full), len(zero_without))
             if c["outcome"] == NO_GROWTH:
                 result["skipped"].append((f"arc {removed} -> {target}",
                                           f"no growth ({method}) in the full community or the {without_role}"))
                 continue
+            if c["outcome"] == UNUSABLE:
+                result["skipped"].append((f"arc {removed} -> {target}", "every replicate of a set was left out"))
+                continue
             result["arcs"].append({"source": removed, "target": target, "evidence": evidence,
-                                   "community": community, **c})
+                                   "community": community, "window": window, **c})
     return result

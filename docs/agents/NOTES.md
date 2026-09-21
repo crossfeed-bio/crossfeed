@@ -157,6 +157,13 @@ Rules for this file:
   drop-out arcs for one pair are parallel arcs: "yes, multi-arcs. could be condensed into an arc with a
   number-of-studies-supporting-the-arc attribute", which is the merge step of register item 10. Arcs come
   from whichever drop-outs exist ("agree"). Drop-out arcs get their own Cytoscape style (#25).
+- 2026-09-21 (Karoline, on #62): each drop-out arc has its own window ("alright, per arc"). On pooling:
+  "RI_BH +Ac" and "RI_BH -Ac" "do have different conditions: 1 contains acetate, the other doesn't";
+  mGrowthDB "does not detail medium components well", and combining similar but not identical conditions
+  "could be allowed later, but would need a good description of the conditions. Not for now." So
+  experiments pool only when their descriptions also agree apart from a trailing run number. Obligate
+  edges must not be hidden "just because they don't have the measurements on one side by definition":
+  the side without growth counts its replicates without growth.
 
 ## Open questions (need a human)
 
@@ -168,12 +175,17 @@ Rules for this file:
 ## Gotchas
 
 - mGrowthDB serves growth curves, not interactions; interactions are derived.
-- Study SMGDB00000008 (13 to 14 member deletion consortia) yields drop-out arcs only (#47). Its replicates
-  are measured at 0, 10, 20 and 30 h, a few curves lack a point, and the window of a drop-out design is
-  shared by all its curves, so one curve ending at 20 h cuts every arc's area to 0 to 20 h.
+- Study SMGDB00000008 (Gutierrez and Garrido 2019, mSystems, doi 10.1128/mSystems.00185-19) yields
+  drop-out arcs only (#47). Per its methods, each deletion was a single bioreactor and only the full
+  community ("All") ran in duplicate, so `DeltaAll_1` and `DeltaAll_2` are biological replicates while the
+  two bioreplicates inside each mGrowthDB experiment are not independent cultures (the qPCR reactions were
+  run in triplicate). The paper names the lack of replicates as a limitation. Its sd values are therefore
+  technical spread. qPCR samples are at 0, 10, 20 and 30 h.
 - mGrowthDB's structured conditions can miss a difference that only the free-text description records:
   in SMGDB00000004, `RI_BH +Ac` and `RI_BH -Ac` (with and without initial acetate) have identical
-  compartment records, so the conditions rule pools them.
+  compartment records. `crossfeed.derive.run_group` keeps them apart by their descriptions.
+- The spike guard (max/median above 100) also fires on a declining curve whose maximum is the inoculum at
+  0 h, which is not a spike (SMGDB00000013, Microbacterium and Ochrobactrum monocultures).
 - In the FP/BH study, monoculture and co-culture growth use different measurement techniques; edges carry
   a technique-mismatch flag. The magnitude is provisional, and near the neutral band the sign can move too
   under a cross-technique offset, so a mismatched edge's direction is not fully dependable either.

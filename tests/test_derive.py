@@ -475,3 +475,29 @@ def test_a_replicate_with_a_late_starting_curve_is_left_out_and_reported():
     assert (arcs[(B, A)]["n_with"], arcs[(B, A)]["n_without"]) == (2, 2)   # the other drop-out is untouched
     assert any(label == "community without " + C + " replicate without C_1" and "starting after" in reason
                for label, reason in skipped)
+
+
+def test_experiments_whose_descriptions_differ_are_not_pooled():
+    # SMGDB00000004: RI_BH +Ac and RI_BH -Ac have identical structured conditions; only the description
+    # says one had initial acetate (Karoline, on #47). Duplicate runs differ by a trailing number only.
+    client, study, exps = _dropout_study(full_names=("full 1", "full 2"))
+    exps[0]["description"], exps[1]["description"] = "all strains, run 1", "all strains, run 2"
+    records, _ = interactions_from_replicates(client, study, exps)
+    assert _by_arc(records)[(C, A)]["n_with"] == 4                        # pooled
+    exps[0]["description"], exps[1]["description"] = "all strains with acetate", "all strains without acetate"
+    records, _ = interactions_from_replicates(client, study, exps)
+    ca = [r for r in records if (r["source_name"], r["target_name"]) == (C, A)]
+    assert len(ca) == 2 and all(r["n_with"] == 2 for r in ca)            # two arcs, one per full community
+    assert {tuple(r["experiments"]) for r in ca} == {("E_full 1", "E_without C"), ("E_full 2", "E_without C")}
+
+
+def test_an_obligate_edge_counts_its_replicates_without_growth_and_is_shown():
+    client, study, exps = _replicate_study()
+    client.curves[("mono B", B)] = [(0, 0), (0, 0)]      # B does not grow alone, in either replicate
+    records, _ = interactions_from_replicates(client, study, exps)
+    ab = next(r for r in records if r["source_name"] == A and r["target_name"] == B)
+    assert ab["outcome"] == "obligate" and (ab["n_with"], ab["n_without"]) == (2, 2)
+    assert ab["quality"] == [] and ab["cautions"] == ["two_replicates"]
+    edges, meta = output_meta(records)
+    assert meta["hidden"]["low_quality"] == 0
+    assert next(e for e in edges if e["source_name"] == A)["status"] == "present"
