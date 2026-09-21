@@ -104,7 +104,16 @@ def replicates_for_experiment(client, experiment: dict, spike_factor: float = SP
             continue
         time_unit = bioreplicate.get("measurementTimeUnits") or ""
         strain_contexts = list(_strain_contexts(bioreplicate))
-        single_strain = len({species for species, _ in strain_contexts}) == 1
+        counts = {}
+        for species, _ in strain_contexts:
+            counts[species] = counts.get(species, 0) + 1
+        for species, n in counts.items():
+            if n > 1:   # for example one context per compartment, which the API does not tell apart
+                skipped.append((f"{label}: {name}, {species}",
+                                f"{n} measurement contexts for this strain in one replicate (for example one per "
+                                "compartment), and nothing says which to use; left out"))
+        strain_contexts = [(species, context) for species, context in strain_contexts if counts[species] == 1]
+        single_strain = len(counts) == 1
         curves, notes = [], {}
         for species, context in strain_contexts:
             try:

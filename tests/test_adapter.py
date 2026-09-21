@@ -170,3 +170,15 @@ def test_alternatives_are_only_fetched_for_a_flagged_curve():
     client = FakeClient({1: _bioreplicate(1, "m1", [_context(11, B), community_fc])}, {11: CLEAN, 91: CLEAN})
     replicates, _ = replicates_for_experiment(client, _experiment("BH", ((1, "m1"),)))
     assert replicates[0].notes == {} and 91 not in client.series_calls
+
+
+
+def test_two_contexts_for_one_strain_in_a_replicate_are_reported_not_fatal():
+    # SMGDB00000002: mucin experiments carry one context per compartment for the same strain, with the same
+    # technique and label, and the API does not say which compartment each belongs to
+    client = _client_with_pair()
+    client.bioreplicates[1]["measurementContexts"].append(_context(19, A))
+    client.series[19] = SERIES
+    replicates, skipped = replicates_for_experiment(client, _experiment(stubs=((1, "r1"), (2, "r2"))))
+    assert [r.species for r in replicates] == [(B,), (A, B)]      # r1 keeps B, r2 is untouched
+    assert "2 measurement contexts for this strain" in dict(skipped)[f"co-culture: r1, {A}"]
