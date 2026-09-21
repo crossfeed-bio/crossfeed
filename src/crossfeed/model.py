@@ -27,6 +27,8 @@ OUTCOMES = ("quantified", "obligate", "abolished", "no_growth")
 QUALITY_FLAGS = ("single_replicate", "strains_pooled", "non_batch", "removed_member_detected")
 # cautions a reader should see that do not make an edge low quality: it keeps its status and is shown
 CAUTIONS = ("two_replicates",)
+# what a node's id rests on: the NCBI taxon id of the strain, or genus and species of its name (#23)
+IDENTITIES = ("ncbi", "name")
 # whether a comparison counts as an interaction under the absence threshold (crossfeed.derive.absence)
 STATUSES = ("present", "absent")
 
@@ -49,6 +51,9 @@ class Node:
     name: str = ""                # e.g. "Faecalibacterium prausnitzii"
     taxonomy: str = ""            # optional lineage or NCBI taxid
     model_ref: str = ""           # optional link to a metabolic model (for Syntropa)
+    taxon_id: str = ""            # NCBI taxon id of the strain, as mGrowthDB records it
+    species: str = ""             # genus and species from the name: the key to merge with species-level networks
+    identity: str = ""            # what the id rests on: "ncbi" (the taxon id) or "name" (genus and species)
 
 
 @dataclass(frozen=True)

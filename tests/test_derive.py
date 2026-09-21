@@ -506,3 +506,71 @@ def test_an_obligate_edge_counts_its_replicates_without_growth_and_is_shown():
     edges, meta = output_meta(records)
     assert meta["hidden"]["low_quality"] == 0
     assert next(e for e in edges if e["source_name"] == A)["status"] == "present"
+
+
+# ---- strain identity by taxon id (#23) -----------------------------------------------------------
+
+from crossfeed.derive import strain_identities  # noqa: E402
+
+A2 = "Faecalibacterium prausnitzii L2-6"
+
+
+def _strain_study(names_and_taxa, mono_of=None):
+    """Monocultures of each strain and one co-culture of the first two. `mono_of` names the strain whose
+    monoculture the co-culture's first member uses, to test that another strain's monoculture is not used."""
+    (a, ta), (b, tb) = names_and_taxa[:2]
+    taxa = dict(names_and_taxa)
+    monos = [_rep_experiment("mono " + n, [n], taxa) for n, _ in names_and_taxa if n != a or mono_of is None]
+    if mono_of:
+        monos.append(_rep_experiment("mono " + mono_of, [mono_of], taxa))
+    co = _rep_experiment("co", [a, b], taxa)
+    curves = {("co", a): [(1, 3), (1, 3.8)], ("co", b): [(1, 1), (1, 1.4)]}
+    for e in monos:
+        curves[(e["name"], e["communityStrains"][0]["name"])] = [(1, 1), (1, 1.4)]
+    return _SeriesClient(monos + [co], curves), {"id": "S", "name": "study"}, monos + [co]
+
+
+def test_nodes_are_strains_keyed_by_taxon_id_and_named_by_strain():
+    client, study, exps = _strain_study([(A, 411483), (B, 853), (A2, 718252)])
+    records, _ = interactions_from_replicates(client, study, exps)
+    net = records_to_network(records)
+    node = net.nodes["ncbi:411483"]
+    assert node.name == A and node.taxon_id == "411483" and node.identity == "ncbi"
+    assert node.species == "faecalibacterium prausnitzii"          # derived from the name (#25, item 8)
+    assert {(e.source, e.target) for e in net.edges} == {("ncbi:853", "ncbi:411483"), ("ncbi:411483", "ncbi:853")}
+    assert "ncbi:718252" not in net.nodes                              # the other strain has no co-culture
+
+
+def test_a_monoculture_of_another_strain_of_the_species_is_never_used():
+    # the co-culture holds A (A2-165); only L2-6 was grown alone. By genus and species they would match.
+    client, study, exps = _strain_study([(A, 411483), (B, 853)], mono_of=A2)
+    exps[-2]["communityStrains"][0]["NCBId"] = 718252                  # the L2-6 monoculture
+    records, skipped = interactions_from_replicates(client, study, exps)
+    assert records == []
+    assert any(f"no monoculture replicates for {A}" in reason for _, reason in skipped)
+
+
+def test_one_taxon_id_under_two_names_is_one_node():
+    # 411483 is "prausnitzii A2-165" in one record and "duncaniae A2-165" in another (a reclassification)
+    renamed = "Faecalibacterium duncaniae A2-165"
+    exps = [_rep_experiment("mono", [renamed], {renamed: 411483}), _rep_experiment("co", [A, B], {A: 411483, B: 853})]
+    ids = strain_identities(exps, [])
+    assert ids[A]["id"] == ids[renamed]["id"] == "ncbi:411483"
+
+
+def test_a_taxon_id_given_to_two_different_strains_falls_back_to_names_and_is_reported():
+    # SMGDB00000008 gives 1506553 to L. clostridioforme 2_1_49FAA and L. symbiosum WAL-14673
+    lc, ls = "Lachnoclostridium clostridioforme 2_1_49FAA", "Lachnoclostridium symbiosum WAL-14673"
+    skipped = []
+    ids = strain_identities([_rep_experiment("co", [lc, ls], {lc: 1506553, ls: 1506553})], skipped)
+    assert ids[lc]["id"] == "lachnoclostridium clostridioforme" and ids[lc]["identity"] == "name"
+    assert ids[ls]["id"] == "lachnoclostridium symbiosum" and ids[ls]["taxon_id"] == "1506553"
+    assert any(label == "taxon id 1506553" and "different strains" in reason for label, reason in skipped)
+
+
+def test_a_strain_without_a_taxon_id_is_identified_by_name_and_marked():
+    client, study, exps = _replicate_study()                          # these records carry no taxon ids
+    records, _ = interactions_from_replicates(client, study, exps)
+    net = records_to_network(records)
+    assert set(net.nodes) == {_gs(A), _gs(B)}
+    assert all(n.identity == "name" and n.taxon_id == "" for n in net.nodes.values())

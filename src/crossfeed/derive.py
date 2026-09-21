@@ -185,9 +185,65 @@ def _replicate_flags(n_with: int, n_without: int) -> tuple:
     return [], []
 
 
-def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR) -> dict:
-    """(genus and species key, conditions) -> (monoculture replicates, the distinct strain names pooled
-    under it, the ids of the experiments they come from)."""
+NCBI, BY_NAME = "ncbi", "name"
+
+
+def _designation(name: str) -> str:
+    """The strain designation: what follows genus and species ("A2-165" in "Faecalibacterium duncaniae A2-165")."""
+    return " ".join((name or "").split()[2:])
+
+
+def strain_identities(exps, skipped) -> dict:
+    """strain name -> {"id", "taxon_id", "species", "identity"} for every community strain of a study.
+
+    A strain is identified by its NCBI taxon id (Karoline, #23): node id `ncbi:<id>`, so a strain renamed
+    after a reclassification (411483 is "Faecalibacterium prausnitzii A2-165" in one study and
+    "Faecalibacterium duncaniae A2-165" in others) stays one node, and two strains of one species stay
+    two. The node is named with the strain name, so the network stays readable.
+
+    An id is not trusted where it is ambiguous: when a study gives one taxon id to strains with different
+    designations (in SMGDB00000008, 1506553 is both "Lachnoclostridium clostridioforme 2_1_49FAA" and
+    "Lachnoclostridium symbiosum WAL-14673"), those strains, like strains without an id, are identified by
+    genus and species instead (identity `name`), and the conflict is reported. `species` is always the
+    genus and species of the name, the shared key for merging with species-level networks, derived from
+    the name and not from a taxonomy lookup (Karoline, item 8 on #25).
+    """
+    names_by_taxon = {}
+    for exp in exps:
+        for strain in exp.get("communityStrains", []):
+            if strain.get("NCBId") is not None and strain.get("name"):
+                names_by_taxon.setdefault(str(strain["NCBId"]), set()).add(strain["name"])
+    ambiguous = set()
+    for taxon, names in names_by_taxon.items():
+        if len({_designation(n) for n in names if _designation(n)}) > 1:
+            ambiguous.add(taxon)
+            skipped.append((f"taxon id {taxon}", "given to different strains in this study "
+                            f"({', '.join(sorted(names))}); they are identified by genus and species instead"))
+    identities = {}
+    for exp in exps:
+        for strain in exp.get("communityStrains", []):
+            name = strain.get("name", "")
+            taxon = None if strain.get("NCBId") is None else str(strain["NCBId"])
+            if name in identities:
+                continue
+            if taxon is not None and taxon not in ambiguous:
+                identities[name] = {"id": f"ncbi:{taxon}", "taxon_id": taxon, "species": genus_species(name),
+                                    "identity": NCBI}
+            else:
+                identities[name] = {"id": genus_species(name), "taxon_id": taxon or "",
+                                    "species": genus_species(name), "identity": BY_NAME}
+    return identities
+
+
+def _identity(identities: dict, name: str) -> dict:
+    return identities.get(name) or {"id": genus_species(name), "taxon_id": "", "species": genus_species(name),
+                                    "identity": BY_NAME}
+
+
+def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, identities=None) -> dict:
+    """(node id, conditions) -> (monoculture replicates, the distinct strain names pooled under it, the ids
+    of the experiments they come from). Only strains identified by name can pool different strains."""
+    identities = identities if identities is not None else strain_identities(exps, [])
     index = {}
     for exp in exps:
         members = _members(exp)
@@ -195,12 +251,13 @@ def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR) -> di
             continue
         replicates, skips = replicates_for_experiment(client, exp, spike_factor)
         skipped += skips
-        reps, strains, ids = index.setdefault((genus_species(members[0]), conditions(exp)), ([], set(), []))
+        key = (_identity(identities, members[0])["id"], conditions(exp))
+        reps, strains, ids = index.setdefault(key, ([], set(), []))
         reps.extend(replicates)
         strains.add(members[0])
         ids.append(_exp_id(exp))
     for (key, _), (_, strains, _) in index.items():
-        if len(strains) > 1:
+        if len(strains) > 1 and not key.startswith("ncbi:"):
             skipped.append((f"monocultures of {key}", f"{len(strains)} strains pooled into one monoculture set "
                             f"({', '.join(sorted(strains))}); edges using it are flagged {STRAINS_POOLED}"))
     return index
@@ -213,10 +270,10 @@ def _exp_id(exp: dict) -> str:
 def _renamed(replicates, species: str):
     """The same replicates with their single curve named `species`.
 
-    A strain is named slightly differently between experiments (and taxon 411483 even appears under two
-    species names), so monoculture and co-culture records are matched at genus and species and the name
-    from the co-culture record is used for both. When the key holds genuinely different strains, the edge
-    is flagged `strains_pooled`. Node identity by taxon id replaces this (issue #23).
+    Monoculture and co-culture records are matched by node id (`strain_identities`), and one strain can
+    carry different names in different records (taxon 411483 appears under two species names), so the name
+    from the co-culture record is used for both. Only strains identified by name can pool genuinely
+    different strains; such an edge is flagged `strains_pooled`.
     """
     out = []
     for replicate in replicates:
@@ -279,15 +336,19 @@ def absence(mean, sd, outcome: str, k: float = ABSENCE_THRESHOLD):
 
 
 def _record(source: str, target: str, c: dict, method: str, quality: list, cautions: list, notes: list,
-            cond: str, evidence: str, community, experiments, study_id, study_meta) -> dict:
+            cond: str, evidence: str, community, experiments, study_id, study_meta, identities=None) -> dict:
     """One edge record from a comparison `c` (mean, sd, se, n_with, n_without, outcome, with_log2,
     without_log2), the shape `records_to_network` reads."""
     mean, sd = c["mean"], c["sd"]
     test = welch(c["with_log2"], c["without_log2"])
     ratio = effect_over_sd(mean, sd)
+    identities = identities or {}
+    src, tgt = _identity(identities, source), _identity(identities, target)
     return {
-        "source": genus_species(source), "source_name": source,
-        "target": genus_species(target), "target_name": target,
+        "source": src["id"], "source_name": source,
+        "target": tgt["id"], "target_name": target,
+        "source_taxon_id": src["taxon_id"], "source_species": src["species"], "source_identity": src["identity"],
+        "target_taxon_id": tgt["taxon_id"], "target_species": tgt["species"], "target_identity": tgt["identity"],
         "effect": classify(mean, c["outcome"]),
         "strength": None if mean is None else round(mean, 4),
         "weight": None if mean is None else round(abs(mean), 4),
@@ -301,7 +362,7 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
         "outcome": c["outcome"], "metric": method,
         "quality": quality, "cautions": cautions, "notes": notes,
         "condition": cond, "method": REPLICATE_METHOD.format(metric=method),
-        "evidence": evidence, "community": sorted(genus_species(m) for m in community),
+        "evidence": evidence, "community": sorted(_identity(identities, m)["id"] for m in community),
         "experiments": list(experiments),
         "study_id": study_id, **study_meta,
     }
@@ -313,7 +374,8 @@ def _spike_notes(flagged, target: str) -> list:
             for f in flagged if f["species"] == target]
 
 
-def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, records, skipped) -> None:
+def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, records, skipped,
+              identities=None) -> None:
     """The edges of one two-member co-culture against the monocultures of its members."""
     a, b = _members(exp)
     cond = exp.get("name", "")
@@ -321,12 +383,13 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
     skipped += skips
     sets, pooled, origin = {}, {}, {}
     for species in (a, b):
-        found, strains, ids = monos.get((genus_species(species), conditions(exp)), ([], set(), []))
+        key = (_identity(identities or {}, species)["id"], conditions(exp))
+        found, strains, ids = monos.get(key, ([], set(), []))
         if not found:
             skipped.append((f"{a} with {b} [{cond}]",
                             f"no monoculture replicates for {species} under this experiment's conditions"))
         sets[species] = _renamed(found, species)
-        pooled[species] = len(strains) > 1
+        pooled[species] = len(strains) > 1 and not key[0].startswith("ncbi:")
         origin[species] = ids
     if not (sets[a] and sets[b] and co_reps):
         if not co_reps:
@@ -354,7 +417,7 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
             quality.append(STRAINS_POOLED)
         records.append(_record(source, target, c, method, quality, cautions,
                                _spike_notes(result["flagged"], target), cond, "biculture", (a, b),
-                               [_exp_id(exp), *origin[target]], study_id, study_meta))
+                               [_exp_id(exp), *origin[target]], study_id, study_meta, identities))
 
 
 def run_group(exp: dict) -> str:
@@ -470,7 +533,8 @@ def _common_start(full, dropouts, skipped) -> tuple:
     return keep("full community", full), {r: group for r, group in kept.items() if group}
 
 
-def _dropout(client, design, method, spike_factor, study_id, study_meta, records, skipped) -> None:
+def _dropout(client, design, method, spike_factor, study_id, study_meta, records, skipped,
+             identities=None) -> None:
     """The arcs of one drop-out design, from `crossfeed.interaction.dropout_interaction_strengths`."""
     members, full_exps, drops = design
     label = f"drop-out design of {len(members)} members ({', '.join(e.get('name', '') for e in full_exps)})"
@@ -508,7 +572,7 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
         cond = ", ".join(e.get("name", "") for e in drops[removed])
         experiments = [_exp_id(e) for e in [*full_exps, *drops[removed]]]
         records.append(_record(removed, target, arc, method, quality, cautions, notes, cond, arc["evidence"],
-                               members, experiments, study_id, study_meta))
+                               members, experiments, study_id, study_meta, identities))
 
 
 def interactions_from_replicates(client, study: dict, exps: list, study_id: str = None,
@@ -536,13 +600,15 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
         "study_license": "",
     }
     records, skipped = [], []
-    monos = _mono_index(client, exps, skipped, spike_factor)
+    identities = strain_identities(exps, skipped)
+    monos = _mono_index(client, exps, skipped, spike_factor, identities)
     for exp in exps:
         if len(_members(exp)) == 2:
-            _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, records, skipped)
+            _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, records, skipped,
+                      identities)
     if dropout:
         for design in dropout_designs(exps, skipped):
-            _dropout(client, design, method, spike_factor, study_id, study_meta, records, skipped)
+            _dropout(client, design, method, spike_factor, study_id, study_meta, records, skipped, identities)
     elif any(len(_members(exp)) > 2 for exp in exps):
         skipped.append(("communities of more than two members", "drop-out designs switched off; no arcs derived"))
     return records, skipped
