@@ -403,12 +403,19 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    on the release page; add SignPath signing once a release exists; and move to the Store when the
    method is settled enough to list. Never buy a commercial certificate. Azure Artifact Signing, about
    ten dollars a month, is a fallback only if SignPath eligibility fails.
-   What this now turns on is not cost. A Store listing is far more public than a repository release,
-   which sharpens item 6's question about showing provisional results to people who will not read these
-   notes, and it names a publisher in public, which is Karoline's decision as much as Craig's. The
-   remaining questions are timing and identity. A smaller one for Karoline: a one-folder build in a zip
-   beats `--onefile` for antivirus and trades against her "download one file" requirement, though it
-   matters less on the Store route.
+   What this turns on is not cost. A Store listing is far more public than a repository release, which
+   sharpens item 6's question about showing provisional results to people who will not read these notes,
+   and it names a publisher in public, which is Karoline's decision as much as Craig's.
+   ANSWERED 2026-09-21 (Karoline), the two questions that were hers:
+   **Build shape:** a one-folder build in a zip rather than `--onefile`. Her words: "zip sounds fine".
+   So the antivirus worst case is avoided and the download is still a single file.
+   **Timing: not yet, and not even for testing.** Her words: "it's even too early for testing purposes
+   I'd say. I didn't even yet look at the tool here on Mac Tahoe." So no Windows build and no signing
+   now.
+   DEFERRED 2026-09-21 (Karoline) on that timing. The comparison above stands for whenever it is taken
+   up, so the work does not have to be done twice; what is settled is the shape of the build and that no
+   certificate is ever bought. Note her remark separately: the tool has not yet been run by the person
+   who asked for it, which bears on item 6 more directly than on this item.
 10. **Significance testing** (setting 4). Still open: which test on the per-replicate log2 values (for
    example Welch's t-test), and whether to correct for multiple testing across arcs.
    DEFERRED by Karoline 2026-09-19 until the settled items have landed. Note that this and item 5's
