@@ -85,3 +85,19 @@ def benjamini_hochberg(p_values) -> list:
         running = min(running, p * m / rank)
         adjusted[i] = running
     return adjusted
+
+
+def benjamini_yekutieli(p_values) -> list:
+    """Benjamini-Yekutieli adjusted p-values: Benjamini-Hochberg scaled by c(m) = 1 + 1/2 + ... + 1/m.
+
+    Valid under any dependence between the tests. Benjamini-Hochberg needs independence or positive
+    regression dependence, which the shared replicate sets of one derivation plausibly give, so it is the
+    default and this is the conservative alternative (Karoline, on #54).
+    """
+    m = sum(1 for p in p_values if p is not None)
+    c = sum(1.0 / i for i in range(1, m + 1)) if m else 1.0
+    return [None if a is None else min(1.0, a * c) for a in benjamini_hochberg(p_values)]
+
+
+CORRECTIONS = {"bh": ("Benjamini-Hochberg", benjamini_hochberg),
+               "by": ("Benjamini-Yekutieli", benjamini_yekutieli)}

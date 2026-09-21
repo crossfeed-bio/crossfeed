@@ -56,7 +56,7 @@ def _derive(a):
         try:
             records, skipped = derive_interactions(MGrowthDBClient(), a.study, deriver=deriver,
                                                    metric=a.metric, spike_factor=a.spike_factor)
-            records, extra = output_meta(records, a.include_low_quality)
+            records, extra = output_meta(records, a.include_low_quality, a.correction)
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
             return 1
@@ -146,6 +146,8 @@ def main(argv=None):
                    help="the growth property compared (default: auc, the area under the curve)")
     d.add_argument("--include-low-quality", action="store_true",
                    help="also emit low-quality edges (for example a single replicate), flagged with the reason")
+    d.add_argument("--correction", choices=["bh", "by"], default="bh",
+                   help="multiple testing correction: bh (Benjamini-Hochberg, default) or by (Benjamini-Yekutieli)")
     d.add_argument("--spike-factor", type=float, default=100.0,
                    help="leave out a curve whose maximum exceeds this many times its median (0 keeps all)")
     d.add_argument("--format", choices=["json", "graphml"], default="json",
