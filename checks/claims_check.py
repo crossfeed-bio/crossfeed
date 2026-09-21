@@ -59,10 +59,10 @@ RETIRED_CLAIMS = [
     ),
     (
         re.compile(r"--include-neutral|neutral (and low-quality )?edges? (are|is) (computed|hidden|shown)", re.I),
-        re.compile(r"absence of an edge|not a .?neutral edge|meta\.absent|replaces", re.I),
+        re.compile(r"absence of an edge|no .?neutral edge|not a .?neutral edge|absence threshold|replaces", re.I),
         "a comparison with no interaction was described as a neutral edge, hidden by default and shown with "
-        "--include-neutral. Corrected 2026-09-21 (Karoline): a neutral edge is a contradiction; such a "
-        "comparison is the absence of an edge, listed in meta.absent and never among the edges.",
+        "--include-neutral. Corrected 2026-09-21 (Karoline): a neutral edge is a contradiction; a comparison "
+        "below the absence threshold k is the absence of an edge, exported with status absent.",
     ),
 ]
 

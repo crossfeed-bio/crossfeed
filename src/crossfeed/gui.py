@@ -20,18 +20,19 @@ import webbrowser
 from collections import Counter
 
 from .attribution import studies_with_edges
-from .derive import derive_interactions, genus_species, output_meta
+from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, output_meta
 from .export import to_graphml
 from .growth import SPIKE_FACTOR
 from .mgrowthdb import MGrowthDBError, records_to_network
 from .taxonomy import resolve_species, species_index
 
 TITLE = "crossfeed"
-DEFAULTS = {"metric": "auc", "spike_factor": SPIKE_FACTOR, "include_low_quality": False,
-            "studies": "", "only_entered": True}
+DEFAULTS = {"metric": "auc", "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
+            "include_low_quality": False, "correction": "bh", "studies": "", "only_entered": True}
 PROVISIONAL = ("Each interaction compares a species' growth with and without its partner across replicates "
-               "(mean log2 difference). An interaction is reported when the mean plus or minus its standard "
-               "deviation stays on one side of zero. Welch's t-test, corrected for multiple testing, is shown "
+               "(mean log2 difference). An interaction is reported when |mean| is at least k standard "
+               "deviations (the absence threshold, default 1: the mean plus or minus its standard deviation "
+               "stays on one side of zero). Welch's t-test, corrected for multiple testing, is shown "
                "as supporting evidence and does not decide; with few replicates, more experiments may change "
                "any of these results (see docs/METHOD_NOTES.md).")
 MISMATCH = ("Monoculture and co-culture growth were measured by different techniques in some of these "
@@ -69,6 +70,8 @@ def _settings_block(settings: dict) -> str:
     s = {**DEFAULTS, **settings}
     checked = " checked" if s["only_entered"] else ""
     low = " checked" if s["include_low_quality"] else ""
+    corrections = "".join(f"<option value=\"{c}\"{' selected' if s['correction'] == c else ''}>{label}</option>"
+                          for c, label in (("bh", "Benjamini-Hochberg"), ("by", "Benjamini-Yekutieli")))
     options = "".join(f"<option value=\"{m}\"{' selected' if s['metric'] == m else ''}>{m}</option>"
                       for m in ("auc", "max"))
     return f"""<details>
@@ -79,6 +82,13 @@ def _settings_block(settings: dict) -> str:
 <div class="row"><label><input type="checkbox" name="include_low_quality" value="1"{low}>
   Show low-quality edges</label>
   <span class="muted">for example a single replicate; shown with the reason, never read as no interaction</span></div>
+<div class="row"><label>Absence threshold k
+  <input name="absence_threshold" type="text" size="6" value="{_esc(s['absence_threshold'])}"></label>
+  <span class="muted">absent when |log2 mean| &lt; k &times; sd; 1 is mean &plusmn; sd, 0 marks none
+  absent</span></div>
+<div class="row"><label>Multiple testing correction
+  <select name="correction">{corrections}</select></label>
+  <span class="muted">Benjamini-Hochberg (default) or the more conservative Benjamini-Yekutieli</span></div>
 <div class="row"><label>Spike limit
   <input name="spike_factor" type="text" size="6" value="{_esc(s['spike_factor'])}"></label>
   <span class="muted">leave out a curve whose maximum exceeds this many times its median; 0 keeps all</span></div>
@@ -103,19 +113,35 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
 <p class="muted">Interactions are derived from mGrowthDB growth data on this machine. Nothing is uploaded.</p>""")
 
 
-def _arc_rows(net) -> str:
+HEADER = ("<tr><th>source</th><th>affects</th><th>direction</th><th>log2 mean &plusmn; sd</th>"
+          "<th>|mean| / sd</th><th>replicates with / without</th><th>adjusted p</th><th>condition</th>"
+          "<th>remarks</th><th>study</th></tr>")
+
+
+def _direction(e) -> str:
+    """The effect, with obligate and abolished named, since they are the extremes of each direction."""
+    if e.outcome == "obligate":
+        return "facilitation (obligate)"
+    if e.outcome == "abolished":
+        return "inhibition (abolished)"
+    return e.effect
+
+
+def _number(x, fmt: str) -> str:
+    return "" if x is None else format(x, fmt)
+
+
+def _arc_rows(net, edges) -> str:
     rows = []
-    for e in net.edges:
-        strength = _mean_sd(e.strength, e.sd)
+    for e in edges:
         remarks = "; ".join([*(f"low quality: {q.replace('_', ' ')}" for q in e.quality), *e.notes])
-        adjusted = "" if e.significance is None else f"{e.significance:.3g}"
         rows.append(f"<tr><td>{_esc(net.nodes[e.source].name or e.source)}</td>"
                     f"<td>{_esc(net.nodes[e.target].name or e.target)}</td>"
-                    f"<td>{_esc(e.effect)}</td><td>{strength}</td>"
-                    f"<td>{_esc(e.n_with if e.n_with is not None else '')} / "
-                    f"{_esc(e.n_without if e.n_without is not None else '')}</td>"
-                    f"<td>{_esc(adjusted)}</td><td>{_esc(e.condition)}</td><td>{_esc(remarks)}</td>"
-                    f"<td>{_esc(' '.join(e.study_ids))}</td></tr>")
+                    f"<td>{_esc(_direction(e))}</td><td>{_mean_sd(e.strength, e.sd)}</td>"
+                    f"<td>{_number(e.effect_over_sd, '.2f')}</td>"
+                    f"<td>{_esc(_number(e.n_with, 'd'))} / {_esc(_number(e.n_without, 'd'))}</td>"
+                    f"<td>{_number(e.significance, '.3g')}</td><td>{_esc(e.condition)}</td>"
+                    f"<td>{_esc(remarks)}</td><td>{_esc(' '.join(e.study_ids))}</td></tr>")
     return "".join(rows)
 
 
@@ -133,22 +159,16 @@ def _mean_sd(mean, sd) -> str:
     return f"{mean:+.2f}" + ("" if sd is None else f" &plusmn; {sd:.2f}")
 
 
-def _absent_section(absent: list) -> str:
-    """Tested comparisons with no interaction: shown on request, never as edges."""
+def _absent_section(net, absence: dict) -> str:
+    """Edges below the absence threshold: kept and shown on request, apart from the interactions."""
+    absent = [e for e in net.edges if e.status == "absent"]
     if not absent:
         return ""
-    rows = []
-    for r in absent:
-        adjusted = "" if r["significance"] is None else f"{r['significance']:.3g}"
-        rows.append(f"<tr><td>{_esc(r['source_name'])}</td><td>{_esc(r['target_name'])}</td>"
-                    f"<td>{_mean_sd(r['strength'], r['sd'])}</td>"
-                    f"<td>{_esc(r['n_with'])} / {_esc(r['n_without'])}</td>"
-                    f"<td>{_esc(adjusted)}</td><td>{_esc(r['condition'])}</td></tr>")
-    return (f"<details><summary>{len(absent)} tested comparison(s) with no interaction</summary>"
-            "<p class=\"muted\">Mean &plusmn; sd crosses zero on data without quality issues: the absence of "
-            "an edge, not an edge.</p><table><tr><th>source</th><th>target</th><th>log2 mean &plusmn; sd</th>"
-            "<th>replicates with / without</th><th>adjusted p</th><th>condition</th></tr>"
-            f"{''.join(rows)}</table></details>")
+    k = absence.get("k", ABSENCE_THRESHOLD)
+    return (f"<details><summary>{len(absent)} edge(s) below the absence threshold (k = {k:g})</summary>"
+            f"<p class=\"muted\">|log2 mean| &lt; {k:g} &times; sd: no interaction at this threshold. Kept in the "
+            "downloads with status absent; the Cytoscape style hides them by default.</p>"
+            f"<table>{HEADER}{_arc_rows(net, absent)}</table></details>")
 
 
 def _sources(net) -> str:
@@ -174,16 +194,16 @@ def render_result(token: str, result: dict) -> str:
     net = result["network"]
     mismatch = any("MISMATCH" in (e.method or "") for e in net.edges)
     hidden = _hidden_note(result.get("hidden", {}))
-    if net.edges:
-        table = (f"<h2>{len(net.edges)} interaction(s)</h2>"
-                 f"<p class=\"note\">{PROVISIONAL}" + (f" {MISMATCH}" if mismatch else "") + "</p>"
-                 f"{hidden}"
-                 "<table><tr><th>source</th><th>affects</th><th>effect</th><th>log2 mean &plusmn; sd</th>"
-                 "<th>replicates with / without</th><th>adjusted p</th><th>condition</th><th>remarks</th>"
-                 "<th>study</th></tr>"
-                 f"{_arc_rows(net)}</table>"
-                 f"<p><a href=\"/download.json?token={_esc(token)}\">Download JSON</a> &middot; "
+    shown = [e for e in net.edges if e.status != "absent"]
+    downloads = (f"<p><a href=\"/download.json?token={_esc(token)}\">Download JSON</a> &middot; "
                  f"<a href=\"/download.graphml?token={_esc(token)}\">Download GraphML</a></p>")
+    if shown:
+        table = (f"<h2>{len(shown)} interaction(s)</h2>"
+                 f"<p class=\"note\">{PROVISIONAL}" + (f" {MISMATCH}" if mismatch else "") + "</p>"
+                 f"{hidden}<table>{HEADER}{_arc_rows(net, shown)}</table>{downloads}")
+    elif net.edges:
+        table = ("<h2>No interactions above the absence threshold</h2>"
+                 f"<p class=\"note\">{PROVISIONAL}</p>{hidden}{downloads}")
     else:
         top = Counter(r.split(";")[0].strip() for _, r in result["skipped"]).most_common(1)
         why = f" Most common reason: {_esc(top[0][0])}." if top else ""
@@ -199,7 +219,7 @@ def render_result(token: str, result: dict) -> str:
     return _page(f"""<h1>crossfeed</h1>
 <h2>Species</h2><ul>{resolved}</ul>{unresolved}
 <p class="muted">Studies searched: {_esc(studies)}</p>
-{errors}{table}{_absent_section(result.get("absent", []))}{_sources(net)}{skipped}
+{errors}{table}{_absent_section(net, result.get("absence", {}))}{_sources(net)}{skipped}
 <p><a href="/?token={_esc(token)}">New search</a></p>""")
 
 
@@ -214,6 +234,13 @@ def parse_settings(form: dict) -> dict:
     except ValueError:
         pass
     settings["include_low_quality"] = bool(form.get("include_low_quality"))
+    try:
+        settings["absence_threshold"] = abs(float(form.get("absence_threshold", [""])[0]))
+    except ValueError:
+        pass
+    correction = form.get("correction", [""])[0]
+    if correction in ("bh", "by"):
+        settings["correction"] = correction
     settings["studies"] = form.get("studies", [""])[0].strip()
     settings["only_entered"] = bool(form.get("only_entered"))
     return settings
@@ -253,12 +280,12 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         records += recs
         skipped += skips
 
-    records, extra = output_meta(records, s["include_low_quality"])
+    records, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"])
     net = records_to_network(records, meta={
         "source_db": "mGrowthDB (live)", "species": names, "studies": studies, **extra})
     return {"resolved": resolved["resolved"], "unresolved": resolved["unresolved"],
             "taxon_ids": resolved["taxon_ids"], "studies": studies, "network": net,
-            "skipped": skipped, "errors": errors, "hidden": extra["hidden"], "absent": extra["absent"]}
+            "skipped": skipped, "errors": errors, "hidden": extra["hidden"], "absence": extra["absence"]}
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
