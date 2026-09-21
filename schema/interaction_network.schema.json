@@ -105,6 +105,12 @@
           },
           "minItems": 1
         },
+        "sd": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "se": {
           "type": [
             "number",
@@ -134,6 +140,22 @@
         },
         "metric": {
           "type": "string"
+        },
+        "quality": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "single_replicate",
+              "strains_pooled",
+              "non_batch"
+            ]
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "evidence": {
           "enum": [

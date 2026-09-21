@@ -23,6 +23,8 @@ EFFECTS = ("facilitation", "inhibition", "neutral")
 EVIDENCE = ("biculture", "dropout")
 # what the comparison could say about the target's growth (crossfeed.interaction)
 OUTCOMES = ("quantified", "obligate", "abolished", "no_growth")
+# why an edge is low quality: hidden by default and never read as the absence of an interaction
+QUALITY_FLAGS = ("single_replicate", "strains_pooled", "non_batch")
 
 
 @dataclass(frozen=True)
@@ -57,11 +59,14 @@ class Edge:
     condition: str = ""           # the experimental condition (interactions are condition-specific)
     method: str = ""              # how the interaction was quantified
     study_ids: tuple = ()         # the studies supporting THIS edge (edge-level attribution)
+    sd: float | None = None       # standard deviation of the strength, the spread of a single comparison
     se: float | None = None       # standard error of the strength, from the replicate spread
     n_with: int | None = None     # replicates with the source present
     n_without: int | None = None  # replicates with the source absent
     outcome: str | None = None    # one of OUTCOMES, or None when the deriver does not report one
     metric: str = ""              # the growth property compared (for example auc)
+    quality: tuple = ()           # QUALITY_FLAGS that make the edge low quality; empty means no issue found
+    notes: tuple = ()             # informative remarks that do not disqualify (an excluded outlier)
     evidence: str | None = None   # one of EVIDENCE, or None when unknown
     community: tuple = ()         # Node ids of the community the edge was derived from, when applicable
 
@@ -69,6 +74,9 @@ class Edge:
         problems = []
         if self.effect not in EFFECTS:
             problems.append(f"edge {self.source}->{self.target}: effect {self.effect!r} not in {EFFECTS}")
+        for flag in self.quality:
+            if flag not in QUALITY_FLAGS:
+                problems.append(f"edge {self.source}->{self.target}: quality flag {flag!r} not in {QUALITY_FLAGS}")
         if self.outcome is not None and self.outcome not in OUTCOMES:
             problems.append(f"edge {self.source}->{self.target}: outcome {self.outcome!r} not in {OUTCOMES}")
         if self.evidence is not None and self.evidence not in EVIDENCE:
@@ -135,5 +143,7 @@ class InteractionNetwork:
             e = dict(e)
             e["study_ids"] = tuple(e.get("study_ids", ()))
             e["community"] = tuple(e.get("community", ()))
+            e["quality"] = tuple(e.get("quality", ()))
+            e["notes"] = tuple(e.get("notes", ()))
             net.add_edge(Edge(**e))
         return net

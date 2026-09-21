@@ -24,7 +24,7 @@ from __future__ import annotations
 import math
 
 from .adapter import replicates_for_experiment
-from .growth import GrowthCurve, Replicate
+from .growth import SPIKE_FACTOR, GrowthCurve, Replicate
 from .interaction import ABOLISHED, NO_GROWTH, OBLIGATE, interaction_strength
 from .mgrowthdb import MGrowthDBClient
 
@@ -145,20 +145,31 @@ def interactions_from_experiments(study: dict, exps: list, study_id: str = None,
 
 
 REPLICATE_METHOD = ("crossfeed replicate v1: mean log2({metric} in co-culture) minus mean log2({metric} in "
-                    "monoculture) over replicate sets, with the standard error of that difference; "
-                    "no significance test yet")
+                    "monoculture) over replicate sets; effect from the mean plus or minus its standard "
+                    "deviation; no significance test yet")
+
+# Quality flags make an edge low quality: hidden by default, and never read as the absence of an
+# interaction (Karoline, on #40). Notes inform without disqualifying, such as an excluded outlier.
+SINGLE_REPLICATE = "single_replicate"
+STRAINS_POOLED = "strains_pooled"
 
 
-def _mono_index(client, exps, skipped) -> dict:
-    """genus and species key -> the monoculture replicates for it, across a study's single-member experiments."""
+def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR) -> dict:
+    """genus and species key -> (monoculture replicates, the distinct strain names pooled under it)."""
     index = {}
     for exp in exps:
         members = _members(exp)
         if len(members) != 1:
             continue
-        replicates, skips = replicates_for_experiment(client, exp)
+        replicates, skips = replicates_for_experiment(client, exp, spike_factor)
         skipped += skips
-        index.setdefault(genus_species(members[0]), []).extend(replicates)
+        reps, strains = index.setdefault(genus_species(members[0]), ([], set()))
+        reps.extend(replicates)
+        strains.add(members[0])
+    for key, (_, strains) in index.items():
+        if len(strains) > 1:
+            skipped.append((f"monocultures of {key}", f"{len(strains)} strains pooled into one monoculture set "
+                            f"({', '.join(sorted(strains))}); edges using it are flagged {STRAINS_POOLED}"))
     return index
 
 
@@ -167,7 +178,8 @@ def _renamed(replicates, species: str):
 
     A strain is named slightly differently between experiments (and taxon 411483 even appears under two
     species names), so monoculture and co-culture records are matched at genus and species and the name
-    from the co-culture record is used for both. Node identity by taxon id replaces this (issue #23).
+    from the co-culture record is used for both. When the key holds genuinely different strains, the edge
+    is flagged `strains_pooled`. Node identity by taxon id replaces this (issue #23).
     """
     out = []
     for replicate in replicates:
@@ -176,29 +188,44 @@ def _renamed(replicates, species: str):
             out.append(replicate)
             continue
         renamed = GrowthCurve(species, curve.times, curve.values, curve.time_unit, curve.abundance_unit)
-        out.append(Replicate([renamed], replicate.name))
+        notes = {species: replicate.notes[curve.species]} if curve.species in replicate.notes else {}
+        out.append(Replicate([renamed], replicate.name, notes))
     return out
 
 
-def _effect(mean, outcome: str, deadband: float) -> str:
-    """Facilitation, inhibition, or neutral, from the comparison's outcome."""
+def classify(mean, sd, outcome: str, quality) -> str:
+    """The effect of an edge (Karoline, on #40).
+
+    Without quality issues: facilitation when mean - sd > 0, inhibition when mean + sd < 0, and neutral,
+    the absence of an interaction, when the interval crosses zero. With a quality issue the edge keeps the
+    sign of its mean and its flags say why it is not trusted, so a low-quality edge is never reported as
+    the absence of an interaction. `obligate` and `abolished` outcomes carry no log ratio: the target grows
+    only with, or only without, the source.
+    """
     if outcome == OBLIGATE:
-        return "facilitation"      # the target grows only when the source is present
+        return "facilitation"
     if outcome == ABOLISHED:
-        return "inhibition"        # the target grows only when the source is absent
-    if mean is None:
+        return "inhibition"
+    if mean is None or mean == 0:
         return "neutral"
-    return "neutral" if abs(mean) < deadband else ("facilitation" if mean > 0 else "inhibition")
+    sign = "facilitation" if mean > 0 else "inhibition"
+    if quality or sd is None:
+        return sign
+    if mean - sd > 0 or mean + sd < 0:
+        return sign
+    return "neutral"
 
 
 def interactions_from_replicates(client, study: dict, exps: list, study_id: str = None,
-                                 method: str = "auc", deadband: float = DEADBAND):
+                                 method: str = "auc", spike_factor: float = SPIKE_FACTOR):
     """The specified comparison, run on a study: (records, skipped).
 
     For each pairwise co-culture experiment, the replicates of that experiment are compared with the
-    monoculture replicates of each member through `crossfeed.interaction.interaction_strength`, so every
-    edge carries the spread across replicates (se, n) rather than a single number. One edge per condition,
-    as before; merging edges across conditions is a separate decision.
+    monoculture replicates of each member through `crossfeed.interaction.interaction_strength`. Every edge
+    carries its mean, sd, se and replicate counts, an effect from `classify`, `quality` flags that make it
+    low quality, and `notes` that do not (an excluded outlier). One edge per condition, as before; merging
+    edges across conditions is a separate decision. Filtering neutral and low-quality edges happens at
+    output (`select_edges`), so nothing computed is lost.
     """
     study_id = study_id or study.get("id")
     study_meta = {
@@ -207,7 +234,7 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
         "study_license": "",
     }
     records, skipped = [], []
-    monos = _mono_index(client, exps, skipped)
+    monos = _mono_index(client, exps, skipped, spike_factor)
 
     for exp in exps:
         members = _members(exp)
@@ -218,45 +245,80 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
             skipped.append((f"{cond}", "co-culture has >2 members; not a clean pairwise attribution"))
             continue
         a, b = members
-        co_reps, skips = replicates_for_experiment(client, exp)
+        co_reps, skips = replicates_for_experiment(client, exp, spike_factor)
         skipped += skips
-        sets = {}
+        sets, pooled = {}, {}
         for species in (a, b):
-            found = monos.get(genus_species(species))
+            found, strains = monos.get(genus_species(species), ([], set()))
             if not found:
                 skipped.append((f"{a} with {b} [{cond}]", f"no monoculture replicates for {species}"))
-            sets[species] = _renamed(found or [], species)
+            sets[species] = _renamed(found, species)
+            pooled[species] = len(strains) > 1
         if not (sets[a] and sets[b] and co_reps):
             if not co_reps:
                 skipped.append((f"{a} with {b} [{cond}]", "no usable co-culture replicates"))
             continue
         try:
-            result = interaction_strength(sets[a], sets[b], co_reps, a, b, method=method)
+            result = interaction_strength(sets[a], sets[b], co_reps, a, b, method=method,
+                                          spike_factor=spike_factor)
         except ValueError as e:
             skipped.append((f"{a} with {b} [{cond}]", str(e)))
             continue
         skipped += result["skipped"]
-        note = REPLICATE_METHOD.format(metric=method)
+        method_note = REPLICATE_METHOD.format(metric=method)
         for key, (source, target) in (("species_a", (b, a)), ("species_b", (a, b))):
             side = result[key]
             if side["outcome"] == NO_GROWTH:
                 skipped.append((f"{source} -> {target} [{cond}]", f"no growth ({method}) in either set"))
                 continue
-            mean = side["mean"]
+            quality = []
+            if side["n_co"] < 2 or side["n_mono"] < 2:
+                quality.append(SINGLE_REPLICATE)
+            if pooled[target]:
+                quality.append(STRAINS_POOLED)
+            notes = [f"{f['role']} replicate {f['replicate']} left out: implausible spike, maximum "
+                     f"{f['ratio']:.0f} times the median at {', '.join(f'{t:g}' for t in f['times'])}"
+                     for f in result["flagged"] if f["species"] == target]
+            mean, sd = side["mean"], side["sd"]
             records.append({
                 "source": genus_species(source), "source_name": source,
                 "target": genus_species(target), "target_name": target,
-                "effect": _effect(mean, side["outcome"], deadband),
+                "effect": classify(mean, sd, side["outcome"], quality),
                 "strength": None if mean is None else round(mean, 4),
                 "significance": None,
+                "sd": None if sd is None else round(sd, 4),
                 "se": None if side["se"] is None else round(side["se"], 4),
                 "n_with": side["n_co"], "n_without": side["n_mono"],
                 "outcome": side["outcome"], "metric": method,
-                "condition": cond, "method": note,
+                "quality": quality, "notes": notes,
+                "condition": cond, "method": method_note,
                 "evidence": "biculture", "community": sorted([genus_species(a), genus_species(b)]),
                 "study_id": study_id, **study_meta,
             })
     return records, skipped
+
+
+def is_low_quality(record) -> bool:
+    return bool(record.get("quality"))
+
+
+def select_edges(records, include_neutral: bool = False, include_low_quality: bool = False) -> tuple:
+    """(kept, hidden) at output: neutral and low-quality edges are hidden by default (Karoline, on #40).
+
+    hidden counts what was left out, {"neutral": n, "low_quality": n}, so the output can say so. A
+    low-quality edge is counted as low quality whatever its effect, never as neutral.
+    """
+    kept, hidden = [], {"neutral": 0, "low_quality": 0}
+    for record in records:
+        if is_low_quality(record):
+            if not include_low_quality:
+                hidden["low_quality"] += 1
+                continue
+        elif record.get("effect") == "neutral" and not include_neutral:
+            hidden["neutral"] += 1
+            continue
+        kept.append(record)
+    return kept, hidden
 
 
 # ---- the pluggable derivation seam ---------------------------------------------------------------
@@ -293,16 +355,16 @@ class ReplicateDeriver(Deriver):
     name = "replicate-v1"
     needs_client = True
 
-    def __init__(self, method: str = "auc", deadband: float = DEADBAND, client=None):
+    def __init__(self, method: str = "auc", spike_factor: float = SPIKE_FACTOR, client=None):
         self.method = method
-        self.deadband = deadband
+        self.spike_factor = spike_factor
         self.client = client
 
     def derive(self, study: dict, exps: list):
         if self.client is None:
             raise ValueError("ReplicateDeriver needs a client: it reads each replicate's measured series")
         return interactions_from_replicates(self.client, study, exps, study.get("id"),
-                                            self.method, self.deadband)
+                                            self.method, self.spike_factor)
 
 
 class BaselineDeriver(Deriver):
@@ -322,11 +384,11 @@ class BaselineDeriver(Deriver):
 
 
 def derive_interactions(client: MGrowthDBClient, study_id: str, deriver: Deriver = None,
-                        metric: str = "auc", deadband: float = DEADBAND):
+                        metric: str = "auc", spike_factor: float = SPIKE_FACTOR):
     """Fetch a study and its experiments from the API, then derive interactions with `deriver`
-    (default: ReplicateDeriver, the specified comparison). `metric`/`deadband` configure the default
-    deriver only. A deriver that reads measured series says so with `needs_client`."""
-    deriver = deriver or ReplicateDeriver(method=metric, deadband=deadband)
+    (default: ReplicateDeriver, the specified comparison). `metric` and `spike_factor` configure the
+    default deriver only. A deriver that reads measured series says so with `needs_client`."""
+    deriver = deriver or ReplicateDeriver(method=metric, spike_factor=spike_factor)
     if getattr(deriver, "needs_client", False) and getattr(deriver, "client", None) is None:
         deriver.client = client
     study = dict(client.get_study(study_id))

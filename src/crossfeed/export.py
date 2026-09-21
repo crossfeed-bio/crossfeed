@@ -27,11 +27,14 @@ _KEYS = [
     ("e_condition", "edge", "condition", "string"),
     ("e_method", "edge", "method", "string"),
     ("e_study_ids", "edge", "study_ids", "string"),
+    ("e_sd", "edge", "sd", "double"),
     ("e_se", "edge", "se", "double"),
     ("e_n_with", "edge", "n_with", "int"),
     ("e_n_without", "edge", "n_without", "int"),
     ("e_outcome", "edge", "outcome", "string"),
     ("e_metric", "edge", "metric", "string"),
+    ("e_quality", "edge", "quality", "string"),
+    ("e_notes", "edge", "notes", "string"),
     ("e_evidence", "edge", "evidence", "string"),
     ("e_community", "edge", "community", "string"),
 ]
@@ -79,13 +82,16 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(ed, "e_condition", e.condition)
         _data(ed, "e_method", e.method)
         _data(ed, "e_study_ids", " ".join(e.study_ids))
-        if e.se is not None:
-            _data(ed, "e_se", e.se)
+        for key, value in (("e_sd", e.sd), ("e_se", e.se)):
+            if value is not None:
+                _data(ed, key, value)
         for key, value in (("e_n_with", e.n_with), ("e_n_without", e.n_without)):
             if value is not None:
                 _data(ed, key, value)
         _data(ed, "e_outcome", e.outcome)
         _data(ed, "e_metric", e.metric)
+        _data(ed, "e_quality", " ".join(e.quality))
+        _data(ed, "e_notes", "; ".join(e.notes))
         _data(ed, "e_evidence", e.evidence)
         _data(ed, "e_community", " ".join(e.community))
 

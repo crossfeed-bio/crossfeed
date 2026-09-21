@@ -3,7 +3,13 @@ import math
 
 import pytest
 
-from crossfeed.derive import _gs, interactions_from_experiments, interactions_from_replicates
+from crossfeed.derive import (
+    _gs,
+    classify,
+    interactions_from_experiments,
+    interactions_from_replicates,
+    select_edges,
+)
 from crossfeed.mgrowthdb import records_to_network
 
 STUDY = {"id": "SMGDB_TEST", "name": "synthetic test study", "url": "http://example/study"}
@@ -129,11 +135,17 @@ class _SeriesClient:
 
 def _replicate_study():
     experiments = [_rep_experiment("mono A", [A]), _rep_experiment("mono B", [B]), _rep_experiment("co", [A, B])]
-    curves = {("mono A", A): [(1, 1), (1, 3)],     # areas 10 and 20
-              ("mono B", B): [(1, 1), (1, 3)],
-              ("co", A): [(1, 3), (3, 5)],          # areas 20 and 40 -> mean log2 difference +1
-              ("co", B): [(1, 1), (1, 3)]}          # unchanged -> 0
+    # Two-point curves over 10 h, so the area is 5 * (v0 + v1).
+    curves = {("mono A", A): [(1, 1), (1, 1.4)],    # areas 10 and 12
+              ("mono B", B): [(1, 1), (1, 1.4)],
+              ("co", A): [(1, 3), (1, 3.8)],        # areas 20 and 24: each doubles, mean log2 difference 1
+              ("co", B): [(1, 1), (1, 1.4)]}        # unchanged: mean 0, and the spread crosses zero
     return _SeriesClient(experiments, curves), {"id": "S", "name": "study"}, experiments
+
+
+# log2 10 and log2 12 differ by 0.2630, so each set's variance is 0.2630^2 / 2 = 0.0346, the sd of the
+# comparison is sqrt(0.0346 + 0.0346) = 0.2630, and the se is sqrt(0.0346 / 2 + 0.0346 / 2) = 0.1860.
+SPREAD = math.log2(12 / 10)
 
 
 def test_replicate_comparison_carries_uncertainty_onto_every_edge():
@@ -141,21 +153,24 @@ def test_replicate_comparison_carries_uncertainty_onto_every_edge():
     records, skipped = interactions_from_replicates(client, study, exps)
     by_pair = {(r["source_name"], r["target_name"]): r for r in records}
     ba = by_pair[(B, A)]
-    assert ba["effect"] == "facilitation"
-    assert ba["strength"] == pytest.approx(1.0)
-    assert ba["se"] == pytest.approx(math.sqrt(0.5), abs=1e-4)   # records round to four decimals
+    assert ba["effect"] == "facilitation"                         # 1.0 - 0.263 stays above zero
+    assert ba["strength"] == pytest.approx(1.0, abs=1e-4)
+    assert ba["sd"] == pytest.approx(SPREAD, abs=1e-4)            # records round to four decimals
+    assert ba["se"] == pytest.approx(SPREAD / math.sqrt(2), abs=1e-4)
     assert (ba["n_with"], ba["n_without"]) == (2, 2)
     assert ba["outcome"] == "quantified" and ba["metric"] == "auc"
-    assert ba["evidence"] == "biculture"
+    assert ba["evidence"] == "biculture" and ba["quality"] == [] and ba["notes"] == []
     ab = by_pair[(A, B)]
-    assert ab["effect"] == "neutral" and ab["strength"] == pytest.approx(0.0)
+    assert ab["effect"] == "neutral" and ab["strength"] == pytest.approx(0.0)   # 0 +/- 0.263 crosses zero
 
 
 def test_replicate_comparison_accepts_another_metric():
     client, study, exps = _replicate_study()
     records, _ = interactions_from_replicates(client, study, exps, method="max")
     ba = next(r for r in records if r["source_name"] == B)
-    assert ba["metric"] == "max" and ba["strength"] == pytest.approx(math.log2(5) / 2, abs=1e-4)
+    # maxima: A alone 1 and 1.4, A with B 3 and 3.8
+    expected = (math.log2(3) + math.log2(3.8)) / 2 - (math.log2(1) + math.log2(1.4)) / 2
+    assert ba["metric"] == "max" and ba["strength"] == pytest.approx(expected, abs=1e-4)
 
 
 def test_growth_only_with_the_partner_is_reported_as_obligate_facilitation():
@@ -180,3 +195,68 @@ def test_a_larger_community_is_skipped_with_a_reason():
     records, skipped = interactions_from_replicates(client, study, exps + [trio])
     assert len(records) == 2
     assert any(">2 members" in reason for _, reason in skipped)
+
+
+
+# ---- the effect rule and edge quality (Karoline, on #40) -----------------------------------------
+
+@pytest.mark.parametrize("mean, sd, outcome, quality, effect", [
+    (1.0, 0.3, "quantified", [], "facilitation"),       # interval entirely above zero
+    (-1.0, 0.3, "quantified", [], "inhibition"),        # entirely below
+    (0.2, 0.3, "quantified", [], "neutral"),            # crosses zero on a clean edge: no interaction
+    (0.2, 0.3, "quantified", ["single_replicate"], "facilitation"),   # low quality keeps the mean's sign
+    (0.2, None, "quantified", ["single_replicate"], "facilitation"),  # no sd with one replicate
+    (None, None, "obligate", [], "facilitation"),       # grows only with the source
+    (None, None, "abolished", [], "inhibition"),        # grows only without it
+])
+def test_classify_follows_the_decided_rule(mean, sd, outcome, quality, effect):
+    assert classify(mean, sd, outcome, quality) == effect
+
+
+def test_neutral_and_low_quality_edges_are_hidden_by_default_and_counted():
+    records = [{"effect": "facilitation", "quality": []}, {"effect": "neutral", "quality": []},
+               {"effect": "facilitation", "quality": ["single_replicate"]},
+               {"effect": "neutral", "quality": ["strains_pooled"]}]
+    kept, hidden = select_edges(records)
+    assert kept == records[:1]
+    assert hidden == {"neutral": 1, "low_quality": 2}   # a low-quality edge never counts as neutral
+    assert len(select_edges(records, include_neutral=True)[0]) == 2
+    assert len(select_edges(records, include_low_quality=True)[0]) == 3
+    assert len(select_edges(records, True, True)[0]) == 4
+
+
+def test_a_single_replicate_edge_is_kept_and_flagged_low_quality():
+    client, study, exps = _replicate_study()
+    exps[2]["bioreplicates"] = exps[2]["bioreplicates"][:1]            # one co-culture replicate
+    records, _ = interactions_from_replicates(client, study, exps)
+    ba = next(r for r in records if r["source_name"] == B)
+    assert ba["quality"] == ["single_replicate"] and ba["sd"] is None
+    assert ba["effect"] == "facilitation"                              # the sign of the mean, flagged
+
+
+def test_pooled_strains_are_reported_and_flag_the_edge():
+    client, study, exps = _replicate_study()
+    other = _rep_experiment("mono A2", ["Faecalibacterium prausnitzii L2-6"])
+    client.curves[("mono A2", "Faecalibacterium prausnitzii L2-6")] = [(1, 1), (1, 1.4)]
+    records, skipped = interactions_from_replicates(client, study, exps + [other])
+    ba = next(r for r in records if r["source_name"] == B)
+    assert "strains_pooled" in ba["quality"]
+    assert any("2 strains pooled" in reason for _, reason in skipped)
+
+
+def test_an_excluded_outlier_is_a_note_not_a_quality_issue():
+    client, study, exps = _replicate_study()
+    exps[0]["bioreplicates"].append({"id": "mono A/2", "name": "mono A_2"})
+    client.curves[("mono A", A)] = client.curves[("mono A", A)] + [(1, 1)]
+    real = client.get_measurement_series
+
+    def spiked(context_id):
+        if context_id == f"mono A/2/{A}":
+            return [(0.0, 1.0, None), (5.0, 1.0e6, None), (10.0, 1.0, None)]
+        return real(context_id)
+
+    client.get_measurement_series = spiked
+    records, _ = interactions_from_replicates(client, study, exps)
+    ba = next(r for r in records if r["source_name"] == B)
+    assert ba["quality"] == [] and ba["effect"] == "facilitation"
+    assert ba["notes"] and "implausible spike" in ba["notes"][0] and "mono A_2" in ba["notes"][0]

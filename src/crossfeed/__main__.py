@@ -18,8 +18,11 @@ from .mgrowthdb import MGrowthDBError, records_to_network
 from .schema import schema_json, validate_document
 
 
-def _build(records, study_id, source_db):
-    net = records_to_network(records, meta={"source_db": source_db, "study_id": study_id})
+def _build(records, study_id, source_db, hidden=None):
+    meta = {"source_db": source_db, "study_id": study_id}
+    if hidden is not None:
+        meta["hidden"] = hidden
+    net = records_to_network(records, meta=meta)
     problems = net.validate()
     if problems:
         raise SystemExit("network invalid:\n  " + "\n  ".join(problems))
@@ -47,13 +50,15 @@ def _derive(a):
         print("--deriver applies to --live (it derives from raw growth data); "
               "--fixture already holds derived records.", file=sys.stderr)
         return 2
+    hidden = None
     if a.live:
-        from .derive import derive_interactions
+        from .derive import derive_interactions, select_edges
         from .mgrowthdb import MGrowthDBClient
         deriver = _load_deriver(a.deriver) if a.deriver else None
         try:
             records, skipped = derive_interactions(MGrowthDBClient(), a.study, deriver=deriver,
-                                                   metric=a.metric)
+                                                   metric=a.metric, spike_factor=a.spike_factor)
+            records, hidden = select_edges(records, a.include_neutral, a.include_low_quality)
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
             return 1
@@ -63,7 +68,7 @@ def _derive(a):
             records, skipped = json.load(f), []
         source_db = "mGrowthDB (fixture)"
 
-    net = _build(records, a.study, source_db)
+    net = _build(records, a.study, source_db, hidden)
     if a.format == "graphml":
         from .export import to_graphml
         payload = to_graphml(net)
@@ -81,6 +86,9 @@ def _derive(a):
         print(f"\nskipped {len(skipped)} pair(s) the data did not cleanly support:", file=sys.stderr)
         for label, reason in skipped:
             print(f"  - {label}: {reason}", file=sys.stderr)
+    if hidden and any(hidden.values()):
+        print(f"\nhidden by default: {hidden['neutral']} neutral and {hidden['low_quality']} low-quality edge(s); "
+              "show them with --include-neutral and --include-low-quality.", file=sys.stderr)
     if not net.edges:
         top = Counter(r.split(";")[0].strip() for _, r in skipped).most_common(1)
         why = f" Most common reason: {top[0][0]}." if top else ""
@@ -134,6 +142,12 @@ def main(argv=None):
                    help="a custom Deriver to use instead of the provisional baseline (with --live)")
     d.add_argument("--metric", choices=["auc", "max"], default="auc",
                    help="the growth property compared (default: auc, the area under the curve)")
+    d.add_argument("--include-neutral", action="store_true",
+                   help="also emit neutral edges (no interaction: mean plus or minus sd crosses zero)")
+    d.add_argument("--include-low-quality", action="store_true",
+                   help="also emit low-quality edges (for example a single replicate), flagged with the reason")
+    d.add_argument("--spike-factor", type=float, default=100.0,
+                   help="leave out a curve whose maximum exceeds this many times its median (0 keeps all)")
     d.add_argument("--format", choices=["json", "graphml"], default="json",
                    help="output format: json (the neutral format, default) or graphml (for network tools)")
     d.add_argument("--out", help="write the network here (default: stdout)")
