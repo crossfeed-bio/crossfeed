@@ -88,7 +88,10 @@ Rules for this file:
 - 2026-09-19 (Karoline): items 10, 13 and 14 of "Open decisions" are deferred until the settled items
   above have landed.
 - 2026-09-20 (Craig, item 2): drop-out arcs enter the default network, labeled by evidence with the
-  community recorded. This is Craig's call, not a ratification of a stated position: the register
+  community recorded, as the default value of a user setting. Karoline's own words (2026-09-18) put
+  "whether or not to include drop-out communities" among the advanced settings that "can be given
+  sensible default values", so the setting exists either way and Craig's call is what its default is.
+  His call on the default, not a ratification of a stated position on inclusion: the register
   attributes "keep these arcs, labeled by evidence" to Karoline, but that line is her agent's
   characterization, is not quoted anywhere in her own words, and carried "to confirm with Craig" when it
   was written. She settled eight register items on 09-19 without settling this one. The wording also has
