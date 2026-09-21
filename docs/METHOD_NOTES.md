@@ -48,7 +48,8 @@ mGrowthDB reports. Some consequences worth stating plainly, because several are 
 
 1. Growth metric: **AUC** (settled 2026-09-19), `max` selectable, growth rate to follow once it has a rule
 2. Per-strain signal in a community: **per-strain qPCR, as the study reports it**
-3. Mono versus co comparison: **mean log2 over replicate sets, with a deadband** (settled), coupled to 1
+3. Mono versus co comparison: **mean log2 over replicate sets** (settled), coupled to 1; the neutral call
+   comes from the spread, not a constant band (item 19)
 4. Significance and uncertainty: **a standard error and replicate counts on every edge** (settled); the
    test itself is deferred
 5. Co-culture scope: **pairwise, two member**
@@ -63,6 +64,8 @@ mGrowthDB reports. Some consequences worth stating plainly, because several are 
 13. Output format: **JSON canonical, GraphML on demand**
 14. Query scope: **no default chosen yet**; whether a query for a species also returns its other strains,
     or other species of its genus (Karoline's list, 2026-09-18)
+15. Show neutral edges: **off** (settled 2026-09-21); an absence of interaction is computed and hidden
+16. Show low-quality edges: **off** (settled 2026-09-21); computed, flagged, and hidden
 
 ## 1 and 3. The growth metric and how mono is compared to co (one coupled choice)
 
@@ -251,15 +254,18 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    is clicked", under her general rule that "unless you have an argument against a particular
    implementation, I'd leave it as a user choice in advanced settings. We can perhaps put our votes on
    defaults in METHOD_NOTES." So the setting exists either way; Craig's decision is that its default is
-   include. Recorded as Craig's call on the default and not as agreement with a stated position on
-   inclusion: the line above attributing "keep these arcs"
-   to Karoline is her agent's characterization, is nowhere quoted in her own words, and carried "to
-   confirm with Craig" when written; she settled eight items on 09-19 without settling this one. It also
-   has two readings, produce and label these arcs, or include them by default, and only the second
-   changes anything. A clarification is pending on #34, and this is revisited if she meant the narrower
-   one. No implementation exists yet: `BaselineDeriver`, the only deriver on `main`, skips experiments with
-   more than two members, and so does the `ReplicateDeriver` arriving in #40, so
-   nothing detects a drop-out design and routes it to `dropout_interaction_strengths`.
+   include.
+   RESOLVED 2026-09-21: Karoline's own words, given when she specified the drop-out feature on
+   2026-09-17 and confirmed as her answer here: "I'd still like to include these arcs, because they are
+   still informative, but any arcs in the interaction network coming from drop-out communities should be
+   labeled as such." That is inclusion in the network with a label, which is what Craig's decision on the
+   default does, so the two agree. The earlier line attributing "keep these arcs" to her was her agent's
+   paraphrase rather than a quotation, which is why it was queried on #34; the paraphrase turned out to
+   carry her meaning, and the quotation now stands in its place.
+   Implementation: routing a drop-out design (a full community plus experiments each missing one member)
+   to `dropout_interaction_strengths` is claimed on the KU Leuven side under #34. Neither deriver does it
+   yet: `BaselineDeriver` skips experiments with more than two members, and so does the `ReplicateDeriver`
+   arriving in #40.
 3. **Dependence between arcs** (#10, #3). Arcs to the same target from different drop-outs reuse the
    full community replicates, and the two values of a pair reuse the same co-culture replicates, so they
    are not independent. Options: document it only (current), or model the covariance when significance
@@ -434,6 +440,51 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    as a choice. Options: the typed strain only, all strains of the species, or all species of the genus.
    No proposed default yet; Karoline called it a can of worms and she is right, because widening the
    query silently changes which arcs a person sees.
+19. **How an edge's effect label relates to its spread** (raised by the Syntropa-side review on #40,
+   2026-09-20). The label was decided from the mean against a fixed 0.25 band while the spread computed
+   alongside it went unread, so on the flagship study six of ten edges carried a direction their own
+   spread did not support.
+   SETTLED 2026-09-21 (Karoline). The label follows the spread, using the standard deviation rather than
+   the standard error, because sd describes the spread of a single comparison and does not shrink as
+   replicates are added, so the test cannot be passed by running more of them. Her words: "if both mean
+   and standard deviation are in the positive range, then it's facilitation and if in the negative range,
+   then inhibition. If the standard deviation crosses the sign, I suggest to label the edge as
+   unreliable, with the sign assigned from the mean". She then separated two things a crossing interval
+   could mean: "neutral is the absence of an interaction. However, we need to differentiate carefully
+   between edges with low quality and absence of an interaction. So an absence of an interaction is an
+   edge that has no quality issues but the sd crosses the sign or better, a robust statistical test on the
+   selected mono- and co-culture growth curve characteristic is not significant."
+
+   | quality flags | mean plus or minus sd | effect |
+   | --- | --- | --- |
+   | none | entirely above zero | facilitation |
+   | none | entirely below zero | inhibition |
+   | none | crosses zero | neutral, meaning no interaction |
+   | any | any | the sign of the mean, flagged low quality |
+
+   The sd rule stands in for a statistical test until item 10 settles one, and is replaced by the test in
+   the neutral row when it does. The fixed 0.25 band retires with `BaselineDeriver`: neutral is defined by
+   the data, not by a constant. OPEN within this item: `obligate` and `abolished` carry no mean and no sd
+   by construction, so no row above can place them, and the Syntropa side has proposed a fifth row
+   showing them by default with the effect taken from the outcome (see #40).
+20. **Edge quality as an attribute** (Karoline, 2026-09-21). Rather than drop a weak edge or silently
+   keep it, an edge carries a list of quality flags saying what is wrong with it, so a consumer can filter
+   on the specific problem. Her words: "keep edges computed on a single replicate but flag them as
+   somewhat less reliable. So that means we need an edge quality attribute ... If we record these
+   different issues in the quality attribute, a user can filter differentially later."
+   SETTLED 2026-09-21: accepted by Karoline as the method and by Craig as a change to the neutral format,
+   which it is. `quality` and `sd` join the edge as optional fields, backward compatible in the way
+   `evidence` and `community` were (item 4), with the schema regenerated from the model. Flags in view so
+   far: a single replicate, a spread crossing the sign, an outlier replicate in the set (#39), strains of
+   one species pooled into one monoculture set (until #23), and a non-batch cultivation mode (#42).
+21. **Which edges a network shows by default** (Karoline, 2026-09-21). Her words: "The user should be
+   able to display 'neutral' and/or 'low-quality' edges at wish, but I suggest to filter out both by
+   default."
+   SETTLED 2026-09-21: two display settings, both off by default, in the command line and both interfaces.
+   The derivation computes every edge and the filter applies at output, so nothing is lost, only hidden,
+   and the network's `meta` records which filters were applied so a reader of a file knows what was left
+   out. Note for item 10: a threshold on strength has to treat a null strength as not comparable rather
+   than as zero, or an `obligate` edge disappears at that filter instead of this one.
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.
