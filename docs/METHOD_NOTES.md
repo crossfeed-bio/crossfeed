@@ -55,7 +55,8 @@ mGrowthDB reports. Some consequences worth stating plainly, because several are 
 6. Technique mismatch: **flag on every edge**, and do not trust the sign near the band under a mismatch
 7. Taxonomic identity: **genus and species today**, plus an NCBI taxid on every node (needs building)
 8. Environment and medium: **keep all conditions, tag each edge**; restriction waits on mGrowthDB metadata
-9. Drop-out (leave one out) communities: **exclude from the default network**, pending Craig on item 2
+9. Drop-out (leave one out) communities: **include, labeled by evidence** (settled by Craig 2026-09-20);
+   not implemented yet
 10. Edge thresholds: **minimum strength 0, minimum supporting studies 1**, meaningful once edges merge
 11. Minimum time points: **carry the fit quality mGrowthDB reports**, gate on it rather than a fixed count
 12. Chemostats and serial dilutions: **flag and keep separate from batch**
@@ -239,8 +240,16 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    adapter, and the adapter routes the pipeline through `interaction.py`, which also settles items 1, 11
    and 12. See item 15, which is the reason all four travel together.
    Status 2026-09-20: the adapter landed in #38, so the blocker named above is gone and these arcs are
-   now reachable. Karoline's position stands (keep them, labeled by evidence, with the community
-   recorded); what is still open is only Craig's confirmation that they enter the default network.
+   now reachable.
+   SETTLED 2026-09-20 (Craig); recorded in "Decisions" in [docs/agents/NOTES.md](agents/NOTES.md).
+   Drop-out arcs enter the default network, labeled by evidence with the community recorded. Recorded as
+   Craig's call and not as agreement with a stated position: the line above attributing "keep these arcs"
+   to Karoline is her agent's characterization, is nowhere quoted in her own words, and carried "to
+   confirm with Craig" when written; she settled eight items on 09-19 without settling this one. It also
+   has two readings, produce and label these arcs, or include them by default, and only the second
+   changes anything. A clarification is pending on #34, and this is revisited if she meant the narrower
+   one. No implementation exists yet: both derivers still skip experiments with more than two members, so
+   nothing detects a drop-out design and routes it to `dropout_interaction_strengths`.
 3. **Dependence between arcs** (#10, #3). Arcs to the same target from different drop-outs reuse the
    full community replicates, and the two values of a pair reuse the same co-culture replicates, so they
    are not independent. Options: document it only (current), or model the covariance when significance
