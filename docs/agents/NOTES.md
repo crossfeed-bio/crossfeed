@@ -152,11 +152,13 @@ Rules for this file:
 - Where each mGrowthDB study's license is published; the study endpoint does not expose it, so
   `study_license` is marked unresolved.
 
-- Code signing does not remove a SmartScreen warning. Since 2024 Microsoft treats OV and EV
-  certificates alike and reputation accrues per file hash through download volume, so a low-download
-  tool keeps the warning whether signed or not. Buying a certificate for that reason is wasted money;
-  the SignPath Foundation signs open-source projects free, which is worth having for the antivirus
-  false positives and the publisher identity rather than for the warning (see METHOD_NOTES item 9).
+- Signing and SmartScreen, which is easy to get wrong in both directions. A purchased certificate does
+  not clear the warning on a new binary, so paying for EV to avoid it is wasted. But signing does matter:
+  reputation cannot carry from one release to the next unless both are signed by the same publisher, so
+  unsigned builds restart from zero forever, and Smart App Control on Windows 11 blocks unsigned
+  executables rather than warning about them. The SignPath Foundation signs open-source projects free.
+  The Microsoft Store removes the warning entirely, signs the app itself, and its registration is now
+  free. See METHOD_NOTES item 9 for the full comparison.
 
 ## Gotchas
 
