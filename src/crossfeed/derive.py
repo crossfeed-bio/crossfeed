@@ -146,12 +146,13 @@ def interactions_from_experiments(study: dict, exps: list, study_id: str = None,
 
 
 REPLICATE_METHOD = ("crossfeed replicate v1: mean log2({metric} in co-culture) minus mean log2({metric} in "
-                    "monoculture) over replicate sets; presence decided by the mean plus or minus its standard "
-                    "deviation; Welch's t-test reported, Benjamini-Hochberg corrected, not used to decide")
-ABSENT = "absent"      # a tested comparison with no interaction: kept, but never an edge
+                    "monoculture) over replicate sets; absent when |mean| < k * sd; Welch's t-test "
+                    "reported and corrected for multiple testing, not used to decide")
+PRESENT, ABSENT = "present", "absent"
+ABSENCE_THRESHOLD = 1.0    # k: absent when |log2 mean| < k * sd. k = 1 is the mean plus or minus sd rule
 STATISTICS = {"test": "Welch's two-sided t-test on the per-replicate log2 values",
               "correction": "{name} over every comparison tested in this derivation",
-              "role": "reported as support for an edge; presence is decided by mean plus or minus sd"}
+              "role": "reported as support for an edge; presence is decided by the absence threshold"}
 
 # Quality flags make an edge low quality: hidden by default, and never read as the absence of an
 # interaction (Karoline, on #40). Notes inform without disqualifying, such as an excluded outlier.
@@ -198,26 +199,52 @@ def _renamed(replicates, species: str):
     return out
 
 
-def classify(mean, sd, outcome: str, quality) -> str:
-    """Whether a comparison is an edge, and which (Karoline, on #40).
+def classify(mean, outcome: str) -> str:
+    """The direction of a comparison: facilitation or inhibition.
 
-    Without quality issues: facilitation when mean - sd > 0, inhibition when mean + sd < 0, and `absent`
-    when the interval crosses zero. An absent comparison is the absence of an edge, not a "neutral edge":
-    it is kept as a tested absence but never enters the edge list. With a quality issue the comparison
-    stays an edge with the sign of its mean, flagged, so low quality is never read as an absence.
-    `obligate` and `abolished` outcomes carry no log ratio: the target grows only with, or only without,
-    the source. A statistical test is reported alongside but does not decide.
+    `obligate` (the target grows only with the source present) is the extreme of facilitation and
+    `abolished` (the target grows only without it) the extreme of inhibition; neither has a log2 ratio.
+    Otherwise the sign of the mean decides. A mean of exactly zero has no direction and is `neutral`, and
+    is always absent (see `absence`). Whether the comparison counts as an interaction is `absence`'s
+    business, not this function's.
     """
     if outcome == OBLIGATE:
         return "facilitation"
     if outcome == ABOLISHED:
         return "inhibition"
-    sign = None if not mean else ("facilitation" if mean > 0 else "inhibition")
-    if quality or sd is None:
-        return sign or ABSENT
-    if mean - sd > 0 or mean + sd < 0:
-        return sign
-    return ABSENT
+    if not mean:
+        return "neutral"
+    return "facilitation" if mean > 0 else "inhibition"
+
+
+def effect_over_sd(mean, sd):
+    """|log2 mean| / sd: the effect relative to its spread, the quantity the absence threshold k cuts.
+
+    None when there is no log ratio (obligate, abolished) or no spread to divide by (a single replicate,
+    or replicates that agree exactly).
+    """
+    if mean is None or sd is None or sd == 0:
+        return None
+    return abs(mean) / sd
+
+
+def absence(mean, sd, outcome: str, k: float = ABSENCE_THRESHOLD):
+    """`present` or `absent` under the absence threshold k (Karoline, option B on #54), or None.
+
+    A comparison is absent when |log2 mean| < k * sd: its effect is smaller than k standard deviations
+    of its own spread. k = 1 is the mean plus or minus sd rule; k = 0 marks nothing absent (except a mean
+    of exactly zero), so everything can be exported and the cut tuned later on `effect_over_sd`. Obligate
+    and abolished comparisons are present. With no spread estimate (a single replicate) the status is
+    None: undetermined, and such an edge is flagged low quality anyway. With zero spread and a non-zero
+    mean the comparison is present.
+    """
+    if outcome in (OBLIGATE, ABOLISHED):
+        return PRESENT
+    if not mean:
+        return ABSENT
+    if sd is None:
+        return None
+    return ABSENT if abs(mean) < k * sd else PRESENT
 
 
 def interactions_from_replicates(client, study: dict, exps: list, study_id: str = None,
@@ -288,8 +315,11 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
             records.append({
                 "source": genus_species(source), "source_name": source,
                 "target": genus_species(target), "target_name": target,
-                "effect": classify(mean, sd, side["outcome"], quality),
+                "effect": classify(mean, side["outcome"]),
                 "strength": None if mean is None else round(mean, 4),
+                "weight": None if mean is None else round(abs(mean), 4),
+                "effect_over_sd": None if effect_over_sd(mean, sd) is None else round(effect_over_sd(mean, sd), 4),
+                "status": None,                 # present or absent, set at output from the threshold k
                 "significance": None,           # Benjamini-Hochberg adjusted, set at output
                 "p_value": None if test is None else test["p"],
                 "sd": None if sd is None else round(sd, 4),
@@ -325,35 +355,36 @@ def adjust_significance(records, correction: str = "bh") -> int:
     return len(tested)
 
 
-ABSENT_FIELDS = ("source", "source_name", "target", "target_name", "condition", "strength", "sd", "se",
-                 "n_with", "n_without", "p_value", "significance", "metric", "notes", "study_id")
-
-
 def select_edges(records, include_low_quality: bool = False) -> tuple:
-    """(edges, hidden, absent) at output (Karoline, on #40).
-
-    Tested absences never become edges; they are returned separately, with the numbers an edge would carry,
-    so they can be kept and shown. Low-quality edges are hidden by default. `hidden` counts what was left
-    out of the edge list: {"low_quality": n}.
-    """
-    edges, absent, hidden = [], [], {"low_quality": 0}
+    """(edges, hidden) at output. Low-quality edges are left out by default (Karoline, on #40 and #54);
+    `hidden` counts them. Absent edges stay in: hiding them is the display's job, so a user can see them."""
+    edges, hidden = [], {"low_quality": 0}
     for record in records:
-        if record.get("effect") == ABSENT:
-            absent.append({k: record.get(k) for k in ABSENT_FIELDS})
-        elif is_low_quality(record) and not include_low_quality:
+        if is_low_quality(record) and not include_low_quality:
             hidden["low_quality"] += 1
         else:
             edges.append(record)
-    return edges, hidden, absent
+    return edges, hidden
 
 
-def output_meta(records, include_low_quality: bool = False, correction: str = "bh") -> tuple:
-    """(edges, meta) for writing a network: significance adjusted, absences and the filter recorded."""
+def output_meta(records, include_low_quality: bool = False, correction: str = "bh",
+                absence_threshold: float = ABSENCE_THRESHOLD) -> tuple:
+    """(edges, meta) for writing a network.
+
+    Sets each record's `status` from the absence threshold k and its `significance` from the chosen
+    correction, drops low-quality edges unless asked, and records all of it in `meta`, so a file says how
+    it was made and how many edges each rule touched.
+    """
+    for record in records:
+        record["status"] = absence(record.get("strength"), record.get("sd"), record.get("outcome"),
+                                   absence_threshold)
     tests = adjust_significance(records, correction)
-    edges, hidden, absent = select_edges(records, include_low_quality)
+    edges, hidden = select_edges(records, include_low_quality)
     statistics = {**STATISTICS, "correction": STATISTICS["correction"].format(name=CORRECTIONS[correction][0]),
                   "tests": tests}
-    meta = {"statistics": statistics, "absent": absent,
+    absent = sum(1 for e in edges if e.get("status") == ABSENT)
+    meta = {"statistics": statistics,
+            "absence": {"rule": "absent when |log2 mean| < k * sd", "k": absence_threshold, "absent": absent},
             "filters": {"include_low_quality": include_low_quality}, "hidden": hidden}
     return edges, meta
 

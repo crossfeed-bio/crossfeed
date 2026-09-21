@@ -56,7 +56,7 @@ def _derive(a):
         try:
             records, skipped = derive_interactions(MGrowthDBClient(), a.study, deriver=deriver,
                                                    metric=a.metric, spike_factor=a.spike_factor)
-            records, extra = output_meta(records, a.include_low_quality, a.correction)
+            records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold)
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
             return 1
@@ -85,9 +85,10 @@ def _derive(a):
         for label, reason in skipped:
             print(f"  - {label}: {reason}", file=sys.stderr)
     if extra:
-        if extra["absent"]:
-            print(f"\n{len(extra['absent'])} tested comparison(s) showed no interaction (absent); they are "
-                  "listed in meta.absent, not as edges.", file=sys.stderr)
+        if extra["absence"]["absent"]:
+            print(f"\n{extra['absence']['absent']} edge(s) have status absent (|log2 mean| < "
+                  f"{extra['absence']['k']:g} * sd); they are in the file, and the Cytoscape style hides them "
+                  "by default.", file=sys.stderr)
         if extra["hidden"]["low_quality"]:
             print(f"{extra['hidden']['low_quality']} low-quality edge(s) hidden; show them with "
                   "--include-low-quality.", file=sys.stderr)
@@ -146,6 +147,9 @@ def main(argv=None):
                    help="the growth property compared (default: auc, the area under the curve)")
     d.add_argument("--include-low-quality", action="store_true",
                    help="also emit low-quality edges (for example a single replicate), flagged with the reason")
+    d.add_argument("--absence-threshold", type=float, default=1.0, metavar="K",
+                   help="an edge is absent when |log2 mean| < K * sd (default 1, the mean plus or minus sd rule; "
+                        "0 marks nothing absent)")
     d.add_argument("--correction", choices=["bh", "by"], default="bh",
                    help="multiple testing correction: bh (Benjamini-Hochberg, default) or by (Benjamini-Yekutieli)")
     d.add_argument("--spike-factor", type=float, default=100.0,

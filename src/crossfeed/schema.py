@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import os
 
-from .model import EFFECTS, EVIDENCE, OUTCOMES, QUALITY_FLAGS, SCHEMA, InteractionNetwork
+from .model import EFFECTS, EVIDENCE, OUTCOMES, QUALITY_FLAGS, SCHEMA, STATUSES, InteractionNetwork
 
 SCHEMA_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -61,6 +61,9 @@ SCHEMA_DOC = {
                 "method": {"type": "string"},
                 "study_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1},
                 "p_value": {"type": ["number", "null"]},
+                "weight": {"type": ["number", "null"], "minimum": 0},
+                "effect_over_sd": {"type": ["number", "null"], "minimum": 0},
+                "status": {"enum": [*STATUSES, None]},
                 "sd": {"type": ["number", "null"]},
                 "se": {"type": ["number", "null"]},
                 "n_with": {"type": ["integer", "null"]},
@@ -130,6 +133,10 @@ def validate_document(doc) -> list:
             problems.append(f"edges[{i}] missing source or target")
         if e.get("effect") not in EFFECTS:
             problems.append(f"edges[{i}] effect {e.get('effect')!r} not in {EFFECTS}")
+        if e.get("status") is not None and e.get("status") not in STATUSES:
+            problems.append(f"edges[{i}] status {e.get('status')!r} not in {STATUSES}")
+        if isinstance(e.get("weight"), (int, float)) and e["weight"] < 0:
+            problems.append(f"edges[{i}] weight must not be negative")
         quality = e.get("quality", [])
         if not isinstance(quality, (list, tuple)) or any(q not in QUALITY_FLAGS for q in quality):
             problems.append(f"edges[{i}] quality must be a list of {QUALITY_FLAGS}")

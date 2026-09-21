@@ -25,6 +25,8 @@ EVIDENCE = ("biculture", "dropout")
 OUTCOMES = ("quantified", "obligate", "abolished", "no_growth")
 # why an edge is low quality: hidden by default and never read as the absence of an interaction
 QUALITY_FLAGS = ("single_replicate", "strains_pooled", "non_batch")
+# whether a comparison counts as an interaction under the absence threshold (crossfeed.derive.absence)
+STATUSES = ("present", "absent")
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,9 @@ class Edge:
     strength: float | None = None       # e.g. a growth log-ratio
     significance: float | None = None   # e.g. an adjusted p-value
     p_value: float | None = None        # the unadjusted p-value behind `significance`, when a test ran
+    weight: float | None = None         # |strength|, always positive, for widths and layouts
+    effect_over_sd: float | None = None  # |strength| / sd, the quantity the absence threshold cuts
+    status: str | None = None           # one of STATUSES, or None when undetermined (no spread)
     condition: str = ""           # the experimental condition (interactions are condition-specific)
     method: str = ""              # how the interaction was quantified
     study_ids: tuple = ()         # the studies supporting THIS edge (edge-level attribution)
@@ -75,6 +80,10 @@ class Edge:
         problems = []
         if self.effect not in EFFECTS:
             problems.append(f"edge {self.source}->{self.target}: effect {self.effect!r} not in {EFFECTS}")
+        if self.status is not None and self.status not in STATUSES:
+            problems.append(f"edge {self.source}->{self.target}: status {self.status!r} not in {STATUSES}")
+        if self.weight is not None and self.weight < 0:
+            problems.append(f"edge {self.source}->{self.target}: weight {self.weight} is negative")
         for flag in self.quality:
             if flag not in QUALITY_FLAGS:
                 problems.append(f"edge {self.source}->{self.target}: quality flag {flag!r} not in {QUALITY_FLAGS}")
