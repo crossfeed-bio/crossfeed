@@ -20,11 +20,15 @@ below are shipped behavior rather than intentions. Every edge carries its mean, 
 counts, outcome, metric, `quality` flags and `notes`.
 
 - **Area under the curve by default**, `max` selectable with `--metric` (setting 1).
-- **The effect follows the spread**, not a fixed band: facilitation when the interval mean plus or minus
-  sd lies above zero, inhibition when it lies below, and neutral (an absence of interaction) when it
-  crosses zero on an edge with no quality issues (item 19).
-- **Neutral and low-quality edges are computed and hidden**, with `--include-neutral` and
-  `--include-low-quality` to show them and `meta.hidden` counting what was left out (item 21).
+- **Presence follows the spread**, not a fixed band: facilitation when the interval mean plus or minus
+  sd lies above zero, inhibition when it lies below. When it crosses zero on data with no quality issues
+  there is no interaction, which is the absence of an edge rather than a "neutral edge" (Karoline,
+  2026-09-21): such comparisons are listed in `meta.absent` and never as edges (item 19).
+- **Low-quality edges are computed and hidden**, with `--include-low-quality` to show them and
+  `meta.hidden` counting what was left out (item 21).
+- **A statistical test is reported, never used to decide** (Karoline, 2026-09-21): Welch's t-test on the
+  per-replicate log2 values, `p_value` raw and `significance` Benjamini-Hochberg adjusted over every
+  comparison tested in one derivation, named in `meta.statistics` (item 10).
 - **An implausible spike in a curve is flagged and the curve left out for its species only** (#48),
   recorded on the edge as a note rather than as a quality issue while two replicates remain.
 
@@ -64,8 +68,9 @@ mGrowthDB reports. Some consequences worth stating plainly, because several are 
 2. Per-strain signal in a community: **per-strain qPCR, as the study reports it**
 3. Mono versus co comparison: **mean log2 over replicate sets** (settled), coupled to 1; the neutral call
    comes from the spread, not a constant band (item 19)
-4. Significance and uncertainty: **sd, se and replicate counts on every edge** (shipped); the effect
-   follows the spread (item 19), and a statistical test is deferred (item 10)
+4. Significance and uncertainty: **sd, se and replicate counts on every edge** (shipped); presence
+   follows the spread (item 19); Welch's t-test with Benjamini-Hochberg correction is reported as support
+   and does not decide (settled 2026-09-21, item 10)
 5. Co-culture scope: **pairwise, two member**
 6. Technique mismatch: **flag on every edge**, and do not trust the sign near the band under a mismatch
 7. Taxonomic identity: **genus and species today**, plus an NCBI taxid on every node (needs building);
@@ -79,7 +84,8 @@ mGrowthDB reports. Some consequences worth stating plainly, because several are 
 13. Output format: **JSON canonical, GraphML on demand**
 14. Query scope: **no default chosen yet**; whether a query for a species also returns its other strains,
     or other species of its genus (Karoline's list, 2026-09-18)
-15. Show neutral edges: **off** (settled 2026-09-21); an absence of interaction is computed and hidden
+15. Absences of interaction: **listed in `meta.absent`, never edges** (settled 2026-09-21; replaces
+    "show neutral edges", since a neutral edge is a contradiction)
 16. Show low-quality edges: **off** (settled 2026-09-21); computed, flagged, and hidden
 
 ## 1 and 3. The growth metric and how mono is compared to co (one coupled choice)
@@ -370,6 +376,12 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    example Welch's t-test), and whether to correct for multiple testing across arcs.
    DEFERRED by Karoline 2026-09-19 until the settled items have landed. Note that this and item 5's
    no-growth test are the same choice of test and alpha.
+   SETTLED 2026-09-21 (Karoline). Her words: "let's drop the significance test as a decision-making tool
+   but keep its result in an edge attribute, since a significant result supports an edge (whereas a
+   non-significant result is not informative)", and "when we apply a statistical test, I think it's
+   better to include multiple testing correction." So Welch's two-sided t-test on the per-replicate log2
+   values, `p_value` raw and `significance` Benjamini-Hochberg adjusted over every comparison tested in one
+   derivation; presence stays decided by mean plus or minus sd (item 19).
 11. **The growth metric and the comparison are one coupled choice** (raised by the Syntropa-side review,
    2026-09-18). A log ratio suits an extensive quantity (AUC, yield, biomass), where doubling is
    meaningful and the value stays away from zero. On a growth rate it is unstable: when the monoculture
