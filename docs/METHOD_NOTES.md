@@ -11,14 +11,28 @@ a reader can see how a network was made. This note records the defaults. The "Pr
 under each setting is Craig's opening vote, so there is something concrete to react to. Karoline and Haris
 weigh in, we settle each default together, and the settled value ships as the default.
 
-## What the provisional baseline does today
+## What the default derivation does today
 
-**Status 2026-09-20.** What follows describes `BaselineDeriver`, which is still what `main` runs. It is
-being retired: #38 landed the adapter that reads real replicate curves, and #40 makes `ReplicateDeriver`
-the default and moves `BaselineDeriver` behind `--deriver`. Until #40 lands, the defaults settled above
-are decisions rather than shipped behavior, and this section is the accurate account of the code.
+**Status 2026-09-21.** `ReplicateDeriver` is the default for a live derivation (#40). It reads each
+replicate's measured curve through `crossfeed.adapter` (#38) and compares replicate sets with
+`crossfeed.interaction.interaction_strength`, the comparison Karoline specified, so the defaults settled
+below are shipped behavior rather than intentions. Every edge carries its mean, `sd`, `se`, replicate
+counts, outcome, metric, `quality` flags and `notes`.
 
-So the note matches the code rather than an intention. `src/crossfeed/derive.py` (`BaselineDeriver`) is a
+- **Area under the curve by default**, `max` selectable with `--metric` (setting 1).
+- **The effect follows the spread**, not a fixed band: facilitation when the interval mean plus or minus
+  sd lies above zero, inhibition when it lies below, and neutral (an absence of interaction) when it
+  crosses zero on an edge with no quality issues (item 19).
+- **Neutral and low-quality edges are computed and hidden**, with `--include-neutral` and
+  `--include-low-quality` to show them and `meta.hidden` counting what was left out (item 21).
+- **An implausible spike in a curve is flagged and the curve left out for its species only** (#48),
+  recorded on the edge as a note rather than as a quality issue while two replicates remain.
+
+### The retired placeholder
+
+`BaselineDeriver` remains only as the placeholder it always was, reachable with `--deriver` and no longer
+the default. What follows describes it, and is kept because networks derived before 2026-09-21 came from
+it. `src/crossfeed/derive.py` (`BaselineDeriver`) is a
 transparent placeholder that runs the seam end to end on real data. For each pairwise (two-member)
 co-culture it reads mGrowthDB's reported per-strain `growthRate`, and sets
 
@@ -50,11 +64,12 @@ mGrowthDB reports. Some consequences worth stating plainly, because several are 
 2. Per-strain signal in a community: **per-strain qPCR, as the study reports it**
 3. Mono versus co comparison: **mean log2 over replicate sets** (settled), coupled to 1; the neutral call
    comes from the spread, not a constant band (item 19)
-4. Significance and uncertainty: **a standard error and replicate counts on every edge** (settled); the
-   test itself is deferred
+4. Significance and uncertainty: **sd, se and replicate counts on every edge** (shipped); the effect
+   follows the spread (item 19), and a statistical test is deferred (item 10)
 5. Co-culture scope: **pairwise, two member**
 6. Technique mismatch: **flag on every edge**, and do not trust the sign near the band under a mismatch
-7. Taxonomic identity: **genus and species today**, plus an NCBI taxid on every node (needs building)
+7. Taxonomic identity: **genus and species today**, plus an NCBI taxid on every node (needs building);
+   an edge whose monoculture set pooled two strains is flagged `strains_pooled`
 8. Environment and medium: **keep all conditions, tag each edge**; restriction waits on mGrowthDB metadata
 9. Drop-out (leave one out) communities: **include, labeled by evidence** (settled by Craig 2026-09-20);
    not implemented yet
