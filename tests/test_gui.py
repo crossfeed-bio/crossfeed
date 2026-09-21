@@ -235,3 +235,14 @@ def test_server_asks_for_a_species_when_none_given(server):
     data = urllib.parse.urlencode({"species": "  "}).encode()
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
         assert "Type at least one species" in r.read().decode("utf-8")
+
+
+def test_a_port_in_use_gives_a_plain_message_not_a_traceback():
+    import socket
+
+    with socket.socket() as taken:
+        taken.bind(("127.0.0.1", 0))
+        taken.listen()
+        port = taken.getsockname()[1]
+        with pytest.raises(SystemExit, match=f"cannot use port {port}"):
+            serve(port=port, open_browser=False)

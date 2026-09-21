@@ -31,6 +31,35 @@ own derivation method. Nothing here needs another document to follow.
 
 ## Install
 
+### To use it (macOS and Linux)
+
+The quickest route is [uv](https://docs.astral.sh/uv/), which fetches a suitable Python by itself. The
+Python that ships with macOS (3.9) is too old for crossfeed, and uv avoids that. Install uv once:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Then open the local page (the first run installs crossfeed; later runs start at once):
+
+```bash
+uvx --from git+https://github.com/crossfeed-bio/crossfeed crossfeed gui
+```
+
+Any `crossfeed` command works the same way, for example
+`uvx --from git+https://github.com/crossfeed-bio/crossfeed crossfeed derive SMGDB00000004 --live`.
+
+With Python 3.10 or newer already installed (Homebrew, conda, python.org), plain pip works too:
+
+```bash
+python3 -m pip install --user "git+https://github.com/crossfeed-bio/crossfeed"
+```
+
+Windows users: a double-click build is planned (#26). Until then, install uv with the PowerShell command
+on [its site](https://docs.astral.sh/uv/getting-started/installation/); the `uvx` command is the same.
+
+### To develop it
+
 Python 3.10 or newer.
 
 ```
