@@ -50,3 +50,12 @@ def test_graphml_carries_evidence_and_community_when_known():
     # an edge without evidence has neither key
     unknown = [e for e in ET.fromstring(to_graphml(_net())).findall(".//g:edge", NS) if e.get("target") == "b"][0]
     assert {"e_evidence", "e_community"}.isdisjoint(d.get("key") for d in unknown.findall("g:data", NS))
+
+
+def test_graphml_carries_cautions_and_experiments():
+    recs = [{"source": "a", "target": "b", "effect": "facilitation", "strength": 1.0, "study_id": "S1",
+             "evidence": "dropout", "cautions": ["two_replicates"], "experiments": ["E1", "E2"]}]
+    root = ET.fromstring(to_graphml(records_to_network(recs)))
+    data = {d.get("key"): d.text for d in root.find(".//g:edge", NS).findall("g:data", NS)}
+    assert data["e_cautions"] == "two_replicates"
+    assert data["e_experiments"] == "E1 E2"

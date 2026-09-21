@@ -144,6 +144,38 @@ Rules for this file:
   Obligate and abolished edges are the extremes of each direction, always present, with their own style.
   Low-quality edges are not exported by default. This closes the gap that a tested absence did not reach
   GraphML. The three new edge fields replace `meta.absent` and need Craig's acceptance as a format change.
+- 2026-09-21 (Karoline, drop-out designs, #47): experiments are pooled only when they are replicates.
+  Her words: "if both experiments are replicates (performed with the same medium and settings) then they
+  can be treated as such. if not, these would have to be treated as different arcs, since interactions
+  are usually environmentally specific. we could support multi-arcs, i.e. interactions supported by
+  different experiments." Filtering by environment is a separate discussion (#61); by default nothing is
+  filtered. A positive signal for the removed member in a drop-out experiment makes that drop-out's arcs
+  unreliable (flag `removed_member_detected`). Exactly two replicates on a side gets a flag, "I'd go for the
+  quality flag", which she chose as a caution (`two_replicates`) that does not hide the edge or undo its
+  status. On dependence: "such arcs should have an attribute whose value is the experiment of origin and a
+  flag that they come from a drop-out experiment" (`experiments`, and `evidence: dropout`). Pairwise and
+  drop-out arcs for one pair are parallel arcs: "yes, multi-arcs. could be condensed into an arc with a
+  number-of-studies-supporting-the-arc attribute", which is the merge step of register item 10. Arcs come
+  from whichever drop-outs exist ("agree"). Drop-out arcs get their own Cytoscape style (#25).
+- 2026-09-21 (Karoline, on #62): each drop-out arc has its own window ("alright, per arc"). On pooling:
+  "RI_BH +Ac" and "RI_BH -Ac" "do have different conditions: 1 contains acetate, the other doesn't";
+  mGrowthDB "does not detail medium components well", and combining similar but not identical conditions
+  "could be allowed later, but would need a good description of the conditions. Not for now." So
+  experiments pool only when their descriptions also agree apart from a trailing run number. Obligate
+  edges must not be hidden "just because they don't have the measurements on one side by definition":
+  the side without growth counts its replicates without growth.
+- 2026-09-21 (Karoline, on #62): "Yes to the spike guard": a spike is one or two consecutive interior points
+  above both neighbours by the factor, replacing the maximum over the median, which flagged die-offs and
+  late growth in SMGDB00000013 and SMGDB00000014. The first and last points are never a spike. Edge case
+  she named: "perturbations may explain spikes, but right now only occur in chemostats"
+  (SMGDB00000005). On line styles: "Cytoscape supports different dash styles", so single-replicate and
+  drop-out arcs get different dash patterns (#25).
+- 2026-09-21 (Karoline, on #62): single-replicate edges are shown by default: "change the default
+  treatment for the single_replicate case and to show those edges but take care in the cytoscape style
+  that they are marked somehow, e.g. dashed." They keep the `single_replicate` flag and an undetermined
+  status; strains_pooled, removed_member_detected and non_batch stay hidden by default. Study 8's missing
+  biological replicates are for mGrowthDB to fix: "We can't start correcting data in the tool; this needs
+  to happen in mGrowthDB." Karoline has noted it for mGrowthDB development.
 
 ## Open questions (need a human)
 
@@ -155,8 +187,19 @@ Rules for this file:
 ## Gotchas
 
 - mGrowthDB serves growth curves, not interactions; interactions are derived.
-- Study SMGDB00000008 (13 to 14 member deletion consortia) yields an empty network under the pairwise
-  baseline. That is expected, not a bug.
+- Study SMGDB00000008 (Gutierrez and Garrido 2019, mSystems, doi 10.1128/mSystems.00185-19) yields
+  drop-out arcs only (#47). Per its methods, each deletion was a single bioreactor and only the full
+  community ("All") ran in duplicate, so `DeltaAll_1` and `DeltaAll_2` are biological replicates while the
+  two bioreplicates inside each mGrowthDB experiment are not independent cultures (the qPCR reactions were
+  run in triplicate). The paper names the lack of replicates as a limitation. Its sd values are therefore
+  technical spread. crossfeed does not correct source data; the fix belongs in mGrowthDB (Karoline).
+  qPCR samples are at 0, 10, 20 and 30 h.
+- mGrowthDB's structured conditions can miss a difference that only the free-text description records:
+  in SMGDB00000004, `RI_BH +Ac` and `RI_BH -Ac` (with and without initial acetate) have identical
+  compartment records. `crossfeed.derive.run_group` keeps them apart by their descriptions.
+- Perturbations (substrate pulses, dilutions) can explain a jump in a curve. mGrowthDB records them only
+  for chemostats so far (SMGDB00000005); a batch study with perturbations would need the spike guard to
+  take them into account (Karoline, on #62).
 - In the FP/BH study, monoculture and co-culture growth use different measurement techniques; edges carry
   a technique-mismatch flag. The magnitude is provisional, and near the neutral band the sign can move too
   under a cross-technique offset, so a mismatched edge's direction is not fully dependable either.

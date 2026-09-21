@@ -6,7 +6,8 @@ networkx, and Gephi read, so a crossfeed network drops straight into an existing
 
 Dependency-free (standard library xml only). The graph is directed, and every edge keeps its effect,
 strength, significance, condition, method, the space-joined study_ids (the edge-level attribution), and
-when known the evidence (biculture or dropout) and the space-joined community.
+when known the evidence (biculture or dropout), the space-joined community, the space-joined cautions,
+and the space-joined ids of the experiments the edge compares.
 """
 from __future__ import annotations
 
@@ -41,6 +42,8 @@ _KEYS = [
     ("e_notes", "edge", "notes", "string"),
     ("e_evidence", "edge", "evidence", "string"),
     ("e_community", "edge", "community", "string"),
+    ("e_cautions", "edge", "cautions", "string"),
+    ("e_experiments", "edge", "experiments", "string"),
 ]
 
 
@@ -101,6 +104,8 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(ed, "e_notes", "; ".join(e.notes))
         _data(ed, "e_evidence", e.evidence)
         _data(ed, "e_community", " ".join(e.community))
+        _data(ed, "e_cautions", " ".join(e.cautions))
+        _data(ed, "e_experiments", " ".join(e.experiments))
 
     if pretty:
         ET.indent(root)

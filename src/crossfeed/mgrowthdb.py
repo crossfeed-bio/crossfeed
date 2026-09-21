@@ -214,7 +214,7 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
     Each record:
       {source, target, source_name?, target_name?, strength, significance, condition, method?, effect?,
        evidence?, community?, p_value?, weight?, effect_over_sd?, status?, sd?, se?, n_with?,
-       n_without?, outcome?, metric?, quality?, notes?,
+       n_without?, outcome?, metric?, quality?, notes?, cautions?, experiments?,
        study_id, study_citation?, study_license?, study_url?}
     """
     net = InteractionNetwork(meta=dict(meta or {}))
@@ -240,5 +240,6 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             n_with=r.get("n_with"), n_without=r.get("n_without"),
             outcome=r.get("outcome"), metric=r.get("metric", ""),
             quality=tuple(r.get("quality", ())), notes=tuple(r.get("notes", ())),
+            cautions=tuple(r.get("cautions", ())), experiments=tuple(r.get("experiments", ())),
         ))
     return net
