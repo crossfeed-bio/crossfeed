@@ -56,6 +56,7 @@ class Edge:
     effect: str                   # one of EFFECTS
     strength: float | None = None       # e.g. a growth log-ratio
     significance: float | None = None   # e.g. an adjusted p-value
+    p_value: float | None = None        # the unadjusted p-value behind `significance`, when a test ran
     condition: str = ""           # the experimental condition (interactions are condition-specific)
     method: str = ""              # how the interaction was quantified
     study_ids: tuple = ()         # the studies supporting THIS edge (edge-level attribution)

@@ -136,7 +136,8 @@ read, and it is pinned by a JSON Schema at
       "target": "faecalibacterium prausnitzii",
       "effect": "facilitation",
       "strength": 1.28,
-      "significance": null,
+      "significance": 0.064,
+      "p_value": 0.032,
       "condition": "FP/BH co-culture",
       "method": "crossfeed baseline v0 (PROVISIONAL): ...",
       "study_ids": ["SMGDB00000004"],
@@ -170,19 +171,20 @@ community without the source species, so the effect is not necessarily direct; s
 kept as an arc), or `null` when unknown; `community` lists the node ids of the community it came from.
 Both fields are optional, so documents without them stay valid.
 
-**How an effect is decided.** An edge is `facilitation` when its mean minus its standard deviation stays
-above zero, `inhibition` when its mean plus its standard deviation stays below zero, and `neutral` (no
-interaction) when that interval crosses zero on an edge with no quality issue. `quality` lists what makes
-an edge low quality: `single_replicate` (no spread can be estimated, so an edge from one replicate carries
-no `sd` or `se`), `strains_pooled` (monocultures of different strains of one species were pooled, until
-nodes are keyed by taxon id), and `non_batch`. A low-quality edge keeps the sign of its mean and is never
-reported as the absence of an interaction. `notes` inform without disqualifying, for example a replicate
-left out for an implausible spike. By default the command line and the local page emit neither neutral nor
-low-quality edges; `--include-neutral` and `--include-low-quality` (or the matching advanced settings)
-show them, and the network's `meta.hidden` counts what was left out. Validate any document (in Python) with `crossfeed.schema.validate_document(doc)`, which
-returns a list of problems (empty means valid). For network tools, `derive ... --format graphml` emits
-the same network as GraphML (Cytoscape, igraph, networkx, Gephi); the neutral JSON stays the canonical,
-citable form.
+**How an interaction is decided.** A comparison is an edge when its mean plus or minus its standard
+deviation stays on one side of zero: `facilitation` above, `inhibition` below. When that interval crosses
+zero on data without quality issues there is no interaction, which is the absence of an edge, not a
+"neutral edge": such comparisons are listed in the network's `meta.absent`, with the same numbers an edge
+carries, and never in `edges`. `quality` lists what makes an edge low quality: `single_replicate` (no
+spread can be estimated, so such an edge carries no `sd`, `se` or test), `strains_pooled` (monocultures of
+different strains of one species were pooled, until nodes are keyed by taxon id), and `non_batch`. A
+low-quality edge keeps the sign of its mean and is never read as an absence; low-quality edges are hidden
+by default (`--include-low-quality`, or the matching advanced setting), and `meta.hidden` counts them.
+`notes` inform without disqualifying, for example a replicate left out for an implausible spike. Every
+comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2 values:
+`p_value` is the raw value and `significance` the Benjamini-Hochberg adjusted one across all comparisons
+tested in the derivation (`meta.statistics`). The test supports an edge when significant and decides
+nothing: with few replicates, any of these results may change with more experiments.
 
 ## Plug in your own method
 

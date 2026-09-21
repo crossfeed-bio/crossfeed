@@ -60,6 +60,7 @@ SCHEMA_DOC = {
                 "condition": {"type": "string"},
                 "method": {"type": "string"},
                 "study_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                "p_value": {"type": ["number", "null"]},
                 "sd": {"type": ["number", "null"]},
                 "se": {"type": ["number", "null"]},
                 "n_with": {"type": ["integer", "null"]},
