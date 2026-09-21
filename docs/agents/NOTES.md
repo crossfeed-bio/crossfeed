@@ -170,6 +170,11 @@ Rules for this file:
   she named: "perturbations may explain spikes, but right now only occur in chemostats"
   (SMGDB00000005). On line styles: "Cytoscape supports different dash styles", so single-replicate and
   drop-out arcs get different dash patterns (#25).
+- 2026-09-21 (Karoline, #23): "taxon id should be strain level. That requires a node label with the name
+  of the strain to keep the network readable." Nodes are `ncbi:<taxon id>`, named with the strain name;
+  monocultures match co-cultures by id. An id given to different strains in one study (SMGDB00000008:
+  1506553 for both L. clostridioforme 2_1_49FAA and L. symbiosum WAL-14673) falls back to genus and
+  species and is reported, as is a record without an id.
 - 2026-09-21 (Karoline, on #62): single-replicate edges are shown by default: "change the default
   treatment for the single_replicate case and to show those edges but take care in the cytoscape style
   that they are marked somehow, e.g. dashed." They keep the `single_replicate` flag and an undetermined

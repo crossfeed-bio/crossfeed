@@ -59,3 +59,15 @@ def test_graphml_carries_cautions_and_experiments():
     data = {d.get("key"): d.text for d in root.find(".//g:edge", NS).findall("g:data", NS)}
     assert data["e_cautions"] == "two_replicates"
     assert data["e_experiments"] == "E1 E2"
+
+
+def test_graphml_nodes_carry_taxon_id_species_and_identity():
+    recs = [{"source": "ncbi:853", "target": "ncbi:53443", "source_name": "Faecalibacterium prausnitzii A2-165",
+             "source_taxon_id": "853", "source_species": "faecalibacterium prausnitzii", "source_identity": "ncbi",
+             "effect": "facilitation", "strength": 1.0, "study_id": "S1"}]
+    root = ET.fromstring(to_graphml(records_to_network(recs)))
+    node = next(n for n in root.findall(".//g:node", NS) if n.get("id") == "ncbi:853")
+    data = {d.get("key"): d.text for d in node.findall("g:data", NS)}
+    assert data["n_name"] == "Faecalibacterium prausnitzii A2-165"      # the label Cytoscape shows
+    assert (data["n_taxon_id"], data["n_species"], data["n_identity"]) == \
+        ("853", "faecalibacterium prausnitzii", "ncbi")

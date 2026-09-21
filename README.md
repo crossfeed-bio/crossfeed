@@ -127,13 +127,15 @@ read, and it is pinned by a JSON Schema at
   "schema": "crossfeed.interaction_network/v0",
   "meta": {"source_db": "mGrowthDB (live)", "study_id": "SMGDB00000004"},
   "nodes": [
-    {"id": "blautia hydrogenotrophica", "name": "Blautia hydrogenotrophica", "taxonomy": "", "model_ref": ""},
-    {"id": "faecalibacterium prausnitzii", "name": "Faecalibacterium prausnitzii", "taxonomy": "", "model_ref": ""}
+    {"id": "ncbi:476272", "name": "Blautia hydrogenotrophica DSM 10507", "taxon_id": "476272",
+     "species": "blautia hydrogenotrophica", "identity": "ncbi", "taxonomy": "", "model_ref": ""},
+    {"id": "ncbi:411483", "name": "Faecalibacterium prausnitzii A2-165", "taxon_id": "411483",
+     "species": "faecalibacterium prausnitzii", "identity": "ncbi", "taxonomy": "", "model_ref": ""}
   ],
   "edges": [
     {
-      "source": "blautia hydrogenotrophica",
-      "target": "faecalibacterium prausnitzii",
+      "source": "ncbi:476272",
+      "target": "ncbi:411483",
       "effect": "facilitation",
       "strength": 1.28,
       "significance": 0.064,
@@ -150,7 +152,7 @@ read, and it is pinned by a JSON Schema at
       "quality": [],
       "notes": [],
       "evidence": "biculture",
-      "community": ["blautia hydrogenotrophica", "faecalibacterium prausnitzii"]
+      "community": ["ncbi:411483", "ncbi:476272"]
     }
   ],
   "studies": [
@@ -158,6 +160,17 @@ read, and it is pinned by a JSON Schema at
   ]
 }
 ```
+
+**Nodes are strains.** A node's `id` is the strain's NCBI taxon id as mGrowthDB records it
+(`ncbi:411483`), and its `name` is the strain name, so the network reads by strain while one strain
+renamed after a reclassification (411483 is "Faecalibacterium prausnitzii A2-165" in one study and
+"Faecalibacterium duncaniae A2-165" in others) stays one node and two strains of one species stay two.
+Monocultures are matched to co-cultures by that id, never by species. `species` is the genus and species
+of the name, derived from the name and not from a taxonomy lookup, for merging with species-level
+networks such as microbetag's. `identity` says what the id rests on: `ncbi`, or `name` when a record has no
+taxon id or a study gives one id to different strains (then the id is genus and species, and different
+strains of that species can pool, which flags their edges `strains_pooled`). mGrowthDB does not report a
+taxon's rank, and a few records still carry a species-level id, which mGrowthDB is correcting upstream.
 
 `effect` is the direction, one of `facilitation`, `inhibition`, `neutral`; the default derivation uses
 `neutral` only for a mean of exactly zero, which has no direction and is always absent (see below), and it
