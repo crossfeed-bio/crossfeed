@@ -118,10 +118,10 @@ Rules for this file:
 - 2026-09-21 (Karoline): #39, the outlier rule, merges before #40, and #40 rebases onto it, so the
   default deriver never ships with the SMGDB00000004 qPCR artifact inside a monoculture set.
 - 2026-09-21 (Karoline, item 19 revised): there is no neutral edge. Her words: "'neutral edge' is
-  contradictory; the neutral case is the true absence of an edge." A clean comparison whose interval
-  crosses zero is not an edge; it is kept as a tested absence with the same numbers in `meta.absent`, so
-  a measured "we looked and found nothing" is not discarded. `neutral` remains in the format only for the
-  retired baseline and for networks already derived.
+  contradictory; the neutral case is the true absence of an edge." Refined the same night (see the
+  absence threshold entry below): a comparison below the threshold is exported as an edge with `status`
+  absent, not kept apart in `meta.absent`, so a measured "we looked and found nothing" reaches Cytoscape
+  too. `neutral` remains in the format only for the retired baseline and for networks already derived.
 - 2026-09-21 (Karoline, item 10): a statistical test is reported, not used to decide. Her words: "let's
   drop the significance test as a decision-making tool but keep its result in an edge attribute, since a
   significant result supports an edge (whereas a non-significant result is not informative)." Welch's
@@ -129,14 +129,21 @@ Rules for this file:
   derivation. `p_value` holds the raw value, `significance` the adjusted one.
 - 2026-09-21 (Craig, the format): `p_value` and `meta.absent` accepted, after `sd`, `quality` and
   `notes`. All optional and backward compatible; the schema is regenerated from the model.
-- 2026-09-21: item 3 reserved the dependence question to be settled together with item 10, and item 10
-  was settled without it. Benjamini-Hochberg controls the false discovery rate under independence or
-  positive regression dependence; the replicate reuse item 3 describes is plausibly positive, so the
-  choice is likely right, but it is a judgment nobody has recorded making. Benjamini-Yekutieli is the
-  alternative that holds under arbitrary dependence.
-- 2026-09-21: a tested absence does not reach GraphML. `export.py` reads nothing from `meta`, and
-  `meta.absent` is where absences live, so the Cytoscape path loses them. That path is how a layered
-  network gets built, and a tested absence is evidence a prediction layer cannot supply.
+- 2026-09-21 (Karoline, the dependence judgment item 3 left open): Benjamini-Hochberg is the default,
+  since it holds under positive regression dependence and the replicate reuse item 3 describes is
+  plausibly positive; Benjamini-Yekutieli, which holds under any dependence, is a setting
+  (`--correction by`). Her words: "Fine for your proposal on BH vs BY." `meta.statistics` names the one used.
+- 2026-09-21 (Karoline, the absence threshold, option B): absences reach Cytoscape as edges. Her words:
+  "in the exported network, assign an edge weight reflecting the strength of the edge based on the log2
+  ... we'd keep the edges but do not visualise/report them by default"; "the status 'absent' depends on a
+  user-defined threshold with a sensible default already set in the tool"; "meta.absent is not needed";
+  "OK for option B, but it has to be carefully documented." Every tested comparison is an edge with
+  `weight` (|log2 mean|, always positive), `effect_over_sd` (|log2 mean| / sd) and `status`, `absent` when
+  |log2 mean| < k * sd, default k = 1 (the mean plus or minus sd rule), 0 marking nothing absent. The
+  Cytoscape style hides absent edges by default; a column filter on `effect_over_sd` reproduces any k.
+  Obligate and abolished edges are the extremes of each direction, always present, with their own style.
+  Low-quality edges are not exported by default. This closes the gap that a tested absence did not reach
+  GraphML. The three new edge fields replace `meta.absent` and need Craig's acceptance as a format change.
 
 ## Open questions (need a human)
 
