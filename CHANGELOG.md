@@ -21,6 +21,10 @@ tagged version is never reused for changed content.
 - `crossfeed gui`: a local page (standard library server on 127.0.0.1, a token in the URL, no JavaScript)
   where you type species names or NCBI taxon ids and get their interactions as a table, with every
   setting behind "Advanced settings" and downloads for JSON and GraphML.
+- An implausible spike in a growth curve is flagged and that curve left out for its species only, never
+  dropped silently (`crossfeed.growth.spike`: the curve's maximum over its median, default limit 100, 0 to
+  switch off). The report names the time points and, for the flagged strain, whether other measurements
+  of it in the same replicate are clean; a community trace counts only in a monoculture.
 - `crossfeed.adapter`: mGrowthDB experiments become replicate growth curves, so the comparison the
   collaboration specified (`crossfeed.interaction`) can run on real data. Time series come from the CSV
   representation of a measurement context (`MGrowthDBClient.get_measurement_series`); `Average(...)`

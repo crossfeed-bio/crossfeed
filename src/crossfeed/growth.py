@@ -14,7 +14,8 @@ checks here only refuse comparisons that are meaningless by construction (mixed 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+import statistics
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ class Replicate:
 
     curves: tuple                 # GrowthCurve, one per species
     name: str = ""
+    notes: dict = field(default_factory=dict, compare=False)   # species -> text for reports (see adapter)
 
     def __post_init__(self):
         object.__setattr__(self, "curves", tuple(self.curves))
@@ -159,3 +161,31 @@ def curve_features(curve: GrowthCurve, end: float | None = None) -> dict:
     ("auc" in time unit times abundance unit, "max" in abundance unit) mapped to its value."""
     times, values = _cut(curve, end)
     return {name: fn(times, values) for name, fn in FEATURES.items()}
+
+
+SPIKE_FACTOR = 100.0   # default for `spike`; an advanced setting (0 switches the check off)
+
+
+def spike(curve: GrowthCurve, factor: float = SPIKE_FACTOR) -> dict | None:
+    """An implausible spike in a curve, or None.
+
+    The statistic is the curve's maximum over its own median. Healthy per-strain curves in mGrowthDB
+    study SMGDB00000004 sit between 1.5 and 14.1; the BH_14 qPCR trace, whose two consecutive points of
+    5.264e13 cells/mL sit between neighbours near 1e8, reaches 38766. Two other statistics were tried and
+    fail: the maximum over the last value mistakes an honest decline after a peak for a spike, and the
+    maximum over its neighbours misses a spike that spans two identical points.
+
+    Returns {"ratio": max/median, "times": [time points above factor * median]} when the ratio exceeds
+    `factor`; None when it does not, when `factor` is 0, or when the median is not positive (a curve
+    that does not grow is the no-growth rule's business, not this one's).
+    """
+    if not factor:
+        return None
+    median = statistics.median(curve.values)
+    if median <= 0:
+        return None
+    ratio = max(curve.values) / median
+    if ratio <= factor:
+        return None
+    limit = factor * median
+    return {"ratio": ratio, "times": [t for t, v in zip(curve.times, curve.values, strict=True) if v > limit]}
