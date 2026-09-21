@@ -152,6 +152,12 @@ Rules for this file:
 - Where each mGrowthDB study's license is published; the study endpoint does not expose it, so
   `study_license` is marked unresolved.
 
+- Code signing does not remove a SmartScreen warning. Since 2024 Microsoft treats OV and EV
+  certificates alike and reputation accrues per file hash through download volume, so a low-download
+  tool keeps the warning whether signed or not. Buying a certificate for that reason is wasted money;
+  the SignPath Foundation signs open-source projects free, which is worth having for the antivirus
+  false positives and the publisher identity rather than for the warning (see METHOD_NOTES item 9).
+
 ## Gotchas
 
 - mGrowthDB serves growth curves, not interactions; interactions are derived.

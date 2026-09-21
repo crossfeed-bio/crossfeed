@@ -374,11 +374,28 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
 9. **Shipping desktop binaries** (#26). Karoline: the typical user runs Windows and has no command line
    experience, so installing Python, Git, and a virtual environment is out of reach. A CI-built,
    double-click Windows executable would remove that. The commitments: an unsigned build triggers a
-   SmartScreen warning (a code-signing certificate costs money and institutional paperwork), PyInstaller
-   output draws antivirus false positives, and every release needs a build, a test on real Windows, and
-   support for people new to software. Proposed default: ship it unsigned, explain the warning in the
-   README, and revisit if a certificate becomes available. A lighter step that needs no decision is a
-   PyPI release (#27).
+   SmartScreen warning, PyInstaller output draws antivirus false positives, and every release needs a
+   build, a test on real Windows, and support for people new to software. A lighter step that needs no
+   decision is a PyPI release (#27).
+   Corrected 2026-09-21, after a review of the actual mechanics (#26). This item previously said a
+   code-signing certificate "costs money and institutional paperwork" and that the decision should be
+   revisited "if a certificate becomes available". Both are wrong:
+   (a) **No certificate removes the warning.** Since 2024 Microsoft treats OV and EV certificates alike
+   for SmartScreen, and reputation accrues per file hash through download volume. A tool used by dozens
+   of microbial ecologists will very likely never earn it, signed or not, so a purchased certificate
+   buys nothing a user sees. Microsoft Store distribution is the only route that removes the warning,
+   and it is out of scope here.
+   (b) **Signing is free for this project.** The SignPath Foundation signs open-source projects at no
+   cost; Apache-2.0 qualifies and it verifies the repository rather than a person. What it buys is a
+   large reduction in antivirus false positives, tamper-evidence, and a verifiable publisher. Two
+   conditions shape the order: a release must already exist in the form to be signed, so shipping
+   unsigned is the prerequisite rather than a compromise; and the certificate is issued to the
+   Foundation, which becomes the publisher a user sees.
+   Proposed default (Craig's side, awaiting his ruling): ship unsigned, say what Windows will do in the
+   README and on the release page as the primary mitigation rather than a stopgap, apply to the SignPath
+   Foundation once a release exists, and never buy a certificate. Two questions for Karoline: whether a
+   one-folder build in a zip is preferable to `--onefile`, which is the worst case for antivirus and
+   trades against her "download one file" requirement; and the timing, which bears on item 6.
 10. **Significance testing** (setting 4). Still open: which test on the per-replicate log2 values (for
    example Welch's t-test), and whether to correct for multiple testing across arcs.
    DEFERRED by Karoline 2026-09-19 until the settled items have landed. Note that this and item 5's
