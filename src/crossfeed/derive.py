@@ -569,12 +569,23 @@ def adjust_significance(records, correction: str = "bh") -> int:
     return len(tested)
 
 
+# Low-quality flags that leave an edge out of the output by default (Karoline, on #40 and #54). A
+# single-replicate edge is shown by default and marked in the Cytoscape style instead (Karoline, on #62):
+# it keeps its flag and its undetermined status, since with no spread there is nothing to decide absence on.
+HIDDEN_BY_DEFAULT = (STRAINS_POOLED, REMOVED_MEMBER_DETECTED, "non_batch")
+
+
+def is_hidden_by_default(record) -> bool:
+    return any(flag in HIDDEN_BY_DEFAULT for flag in record.get("quality", ()))
+
+
 def select_edges(records, include_low_quality: bool = False) -> tuple:
-    """(edges, hidden) at output. Low-quality edges are left out by default (Karoline, on #40 and #54);
-    `hidden` counts them. Absent edges stay in: hiding them is the display's job, so a user can see them."""
+    """(edges, hidden) at output. Edges with a flag in HIDDEN_BY_DEFAULT are left out unless asked;
+    `hidden` counts them. Single-replicate edges and absent edges stay in: marking or hiding them is the
+    display's job, so a user can see them."""
     edges, hidden = [], {"low_quality": 0}
     for record in records:
-        if is_low_quality(record) and not include_low_quality:
+        if is_hidden_by_default(record) and not include_low_quality:
             hidden["low_quality"] += 1
         else:
             edges.append(record)

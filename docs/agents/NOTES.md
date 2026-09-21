@@ -164,6 +164,12 @@ Rules for this file:
   experiments pool only when their descriptions also agree apart from a trailing run number. Obligate
   edges must not be hidden "just because they don't have the measurements on one side by definition":
   the side without growth counts its replicates without growth.
+- 2026-09-21 (Karoline, on #62): single-replicate edges are shown by default: "change the default
+  treatment for the single_replicate case and to show those edges but take care in the cytoscape style
+  that they are marked somehow, e.g. dashed." They keep the `single_replicate` flag and an undetermined
+  status; strains_pooled, removed_member_detected and non_batch stay hidden by default. Study 8's missing
+  biological replicates are for mGrowthDB to fix: "We can't start correcting data in the tool; this needs
+  to happen in mGrowthDB." Karoline has noted it for mGrowthDB development.
 
 ## Open questions (need a human)
 
@@ -180,7 +186,8 @@ Rules for this file:
   community ("All") ran in duplicate, so `DeltaAll_1` and `DeltaAll_2` are biological replicates while the
   two bioreplicates inside each mGrowthDB experiment are not independent cultures (the qPCR reactions were
   run in triplicate). The paper names the lack of replicates as a limitation. Its sd values are therefore
-  technical spread. qPCR samples are at 0, 10, 20 and 30 h.
+  technical spread. crossfeed does not correct source data; the fix belongs in mGrowthDB (Karoline).
+  qPCR samples are at 0, 10, 20 and 30 h.
 - mGrowthDB's structured conditions can miss a difference that only the free-text description records:
   in SMGDB00000004, `RI_BH +Ac` and `RI_BH -Ac` (with and without initial acetate) have identical
   compartment records. `crossfeed.derive.run_group` keeps them apart by their descriptions.

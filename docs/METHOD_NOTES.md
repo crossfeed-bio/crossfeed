@@ -28,7 +28,8 @@ counts, outcome, metric, `quality` flags and `notes`.
   including in Cytoscape (item 19). Karoline asked for this to be carefully documented; the README's
   output-format section is the reference.
 - **Low-quality edges are computed and hidden**, with `--include-low-quality` to show them and
-  `meta.hidden` counting what was left out (item 21).
+  `meta.hidden` counting what was left out (item 21). Single-replicate edges are shown by default and
+  marked in the Cytoscape style (Karoline, on #62).
 - **A statistical test is reported, never used to decide** (Karoline, 2026-09-21): Welch's t-test on the
   per-replicate log2 values, `p_value` raw and `significance` Benjamini-Hochberg adjusted over every
   comparison tested in one derivation, named in `meta.statistics` (item 10).
@@ -526,6 +527,9 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    and the network's `meta` records which filters were applied so a reader of a file knows what was left
    out. Note for item 10: a threshold on strength has to treat a null strength as not comparable rather
    than as zero, or an `obligate` edge disappears at that filter instead of this one.
+   AMENDED 2026-09-21 (Karoline, on #62): "change the default treatment for the single_replicate case and
+   ... show those edges but take care in the cytoscape style that they are marked somehow, e.g. dashed."
+   They keep the flag and an undetermined `status`; the other low-quality flags stay hidden by default.
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

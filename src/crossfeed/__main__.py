@@ -148,7 +148,8 @@ def main(argv=None):
     d.add_argument("--metric", choices=["auc", "max"], default="auc",
                    help="the growth property compared (default: auc, the area under the curve)")
     d.add_argument("--include-low-quality", action="store_true",
-                   help="also emit low-quality edges (for example a single replicate), flagged with the reason")
+                   help="also emit the low-quality edges hidden by default (pooled strains, an unclean drop-out); "
+                        "single-replicate edges are always emitted, flagged")
     d.add_argument("--no-dropout", action="store_true",
                    help="leave out arcs from drop-out designs (a community against the same community without "
                         "one member); included by default, labeled evidence dropout")

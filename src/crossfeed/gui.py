@@ -84,7 +84,8 @@ def _settings_block(settings: dict) -> str:
   <span class="muted">the growth property compared: area under the curve (default) or maximal abundance</span></div>
 <div class="row"><label><input type="checkbox" name="include_low_quality" value="1"{low}>
   Show low-quality edges</label>
-  <span class="muted">for example a single replicate; shown with the reason, never read as no interaction</span></div>
+  <span class="muted">pooled strains or an unclean drop-out; single-replicate edges are always shown,
+  flagged</span></div>
 <div class="row"><label><input type="checkbox" name="include_dropout" value="1"{dropout}>
   Include drop-out communities</label>
   <span class="muted">arcs from a community compared with the same community without one member; possibly

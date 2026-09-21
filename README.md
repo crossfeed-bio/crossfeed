@@ -223,7 +223,9 @@ edge carries no `sd`, `se` or test), `strains_pooled` (monocultures of different
 pooled, until nodes are keyed by taxon id), `non_batch`, and `removed_member_detected` (a drop-out
 experiment measured the member it should lack). A low-quality edge keeps the sign of its mean
 and is never read as an absence. Low-quality edges are left out of the output by default
-(`--include-low-quality`, or the matching advanced setting), and `meta.hidden` counts them.
+(`--include-low-quality`, or the matching advanced setting), and `meta.hidden` counts them, except
+`single_replicate` edges: those are shown by default with their `status` undetermined, and the Cytoscape
+style marks them (for example dashed), since one replicate is often all a study has.
 `cautions` are shown without making an edge low quality: `two_replicates` marks an edge with exactly two
 replicates on a side, whose sd rests on two values. Such an edge keeps its `status` and is exported.
 `notes` inform without disqualifying, for example a replicate left out for an implausible spike. Every
@@ -303,6 +305,7 @@ keeps the sign of its mean and is never reported as an absence of interaction. `
 worth knowing without disqualifying it, such as a replicate left out because its curve carried an
 implausible spike. Low-quality edges are computed and then hidden at output, with `--include-low-quality`
 to show them; `meta.hidden` says how many were left out, so a network file never quietly under-reports.
+Single-replicate edges are the exception: they are shown, flagged, and marked by the Cytoscape style.
 
 Each comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2
 values, reported as `p_value` and as `significance`, the Benjamini-Hochberg adjusted value over every

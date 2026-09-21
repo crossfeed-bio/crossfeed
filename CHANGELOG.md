@@ -82,6 +82,8 @@ tagged version is never reused for changed content.
   `removed_member_detected`.
 
 ### Changed
+- Single-replicate edges are shown by default, keeping the `single_replicate` flag and an undetermined
+  status, for the Cytoscape style to mark; the other low-quality flags stay hidden by default.
 - A co-culture is compared only with monocultures grown under the same conditions (cultivation mode and
   compartments); no current study is affected.
 - crossfeed now has no runtime dependencies: the client uses the standard library `urllib`, and the

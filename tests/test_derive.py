@@ -248,13 +248,16 @@ def test_effect_over_sd_is_the_quantity_the_threshold_cuts():
 def test_absent_edges_stay_in_the_output_and_low_quality_is_left_out_by_default():
     records = [{"strength": 1.0, "sd": 0.3, "outcome": "quantified", "quality": []},
                {"strength": 0.1, "sd": 0.3, "outcome": "quantified", "quality": []},
-               {"strength": 1.0, "sd": None, "outcome": "quantified", "quality": ["single_replicate"]}]
+               {"strength": 1.0, "sd": None, "outcome": "quantified", "quality": ["single_replicate"]},
+               {"strength": 1.0, "sd": 0.3, "outcome": "quantified", "quality": ["strains_pooled"]}]
     edges, meta = output_meta(records)
-    assert [e["status"] for e in edges] == ["present", "absent"]        # the absent edge is still an edge
+    # the absent edge is still an edge, and a single-replicate edge is shown with its status undetermined
+    # (Karoline, on #62); pooled strains stay hidden
+    assert [e["status"] for e in edges] == ["present", "absent", None]
     assert meta["hidden"] == {"low_quality": 1}
     assert meta["absence"] == {"rule": "absent when |log2 mean| < k * sd", "k": 1.0, "absent": 1}
     edges, meta = output_meta(records, include_low_quality=True, absence_threshold=0.0)
-    assert [e["status"] for e in edges] == ["present", "present", None]
+    assert [e["status"] for e in edges] == ["present", "present", None, None]
     assert meta["absence"]["absent"] == 0
 
 
@@ -292,6 +295,8 @@ def test_a_single_replicate_edge_is_kept_and_flagged_low_quality():
     ba = next(r for r in records if r["source_name"] == B)
     assert ba["quality"] == ["single_replicate"] and ba["sd"] is None and ba["effect_over_sd"] is None
     assert ba["effect"] == "facilitation"                              # the sign of the mean, flagged
+    edges, meta = output_meta(records)                                 # shown by default (Karoline, on #62)
+    assert any(e["source_name"] == B for e in edges) and meta["hidden"]["low_quality"] == 0
 
 
 def test_pooled_strains_are_reported_and_flag_the_edge():
