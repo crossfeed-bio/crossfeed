@@ -235,18 +235,33 @@ and [`tests/test_deriver.py`](tests/test_deriver.py) shows how to unit-test a me
 no network required. Changes to the method are scientific decisions, so please open an issue to discuss
 before you implement one.
 
-## How the provisional baseline works
+## How the derivation works
 
-`BaselineDeriver` (`src/crossfeed/derive.py`) is a documented, provisional placeholder so the seam runs
-end to end today. It uses log2 of the per-strain growth-rate ratio (co-culture over monoculture), on
-two-member co-cultures only, and marks every edge qualitative (no significance test yet). It skips any
-pair the data does not cleanly support rather than inventing a value.
+`ReplicateDeriver` (`src/crossfeed/derive.py`) is the default. It reads each replicate's measured growth
+curve from mGrowthDB and compares replicate sets on the log2 scale, over the area under the curve by
+default (`--metric max` for maximal abundance). Every edge therefore carries a spread, not just a number:
+its mean, standard deviation, standard error, and the replicate counts behind each side.
 
-A caveat is recorded on every edge: in the demonstration study the monoculture growth is measured by flow
-cytometry or optical density while the per-strain co-culture growth is measured by qPCR, so the direction
-of an interaction is dependable while the magnitude is provisional. The comparison method, the growth
-metric, the per-strain signal inside a community, and the significance test are the pieces to scope
-together; see [docs/METHOD_NOTES.md](docs/METHOD_NOTES.md).
+An edge's effect follows that spread rather than a fixed cutoff. An interval that sits entirely above
+zero is facilitation, entirely below is inhibition, and one that crosses zero on an otherwise sound edge
+is neutral, meaning an absence of interaction rather than an absence of evidence.
+
+Edges that cannot be trusted are kept and labeled rather than dropped. `quality` says what is wrong with
+an edge (a single replicate, or strains of one species pooled into one monoculture set) and such an edge
+keeps the sign of its mean and is never reported as an absence of interaction. `notes` records what is
+worth knowing without disqualifying it, such as a replicate left out because its curve carried an
+implausible spike. Neutral and low-quality edges are computed and then hidden at output, with
+`--include-neutral` and `--include-low-quality` to show them; `meta.hidden` says how many were left out,
+so a network file never quietly under-reports.
+
+Two things to read before trusting a magnitude. Where a study measures monoculture growth by flow
+cytometry or optical density and per-strain co-culture growth by qPCR, each edge records both techniques
+and flags the mismatch: a systematic offset between instruments enters the comparison, so near the
+neutral band the sign can move and not only the size. And an edge computed from a single replicate
+carries no sd or se at all, which is why it is flagged.
+
+`BaselineDeriver` remains only as the retired placeholder, reachable with `--deriver`. The open method
+choices, and who settled each, are in [docs/METHOD_NOTES.md](docs/METHOD_NOTES.md).
 
 ## Guardrails
 

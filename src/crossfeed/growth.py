@@ -175,6 +175,13 @@ def spike(curve: GrowthCurve, factor: float = SPIKE_FACTOR) -> dict | None:
     fail: the maximum over the last value mistakes an honest decline after a peak for a spike, and the
     maximum over its neighbours misses a spike that spans two identical points.
 
+    Two limits of the statistic, both checked rather than assumed, so neither reads as a bug later:
+    a two-point curve can never be flagged, because its median is the mean of the two values and so
+    max/median stays below 2 whatever they are; and a curve with more than half its points corrupted is
+    not flagged either, because the median has itself become extreme. The second is the ordinary
+    breakdown point of any median-based rule, and it is the right trade for the shape this exists to
+    catch, where a handful of points in an otherwise sound curve run away.
+
     Returns {"ratio": max/median, "times": [time points above factor * median]} when the ratio exceeds
     `factor`; None when it does not, when `factor` is 0, or when the median is not positive (a curve
     that does not grow is the no-growth rule's business, not this one's).
