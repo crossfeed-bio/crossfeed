@@ -87,6 +87,13 @@ Rules for this file:
   standard error to 3.5 on a log2 scale.
 - 2026-09-19 (Karoline): items 10, 13 and 14 of "Open decisions" are deferred until the settled items
   above have landed.
+- 2026-09-20 (Craig, item 2): drop-out arcs enter the default network, labeled by evidence with the
+  community recorded. This is Craig's call, not a ratification of a stated position: the register
+  attributes "keep these arcs, labeled by evidence" to Karoline, but that line is her agent's
+  characterization, is not quoted anywhere in her own words, and carried "to confirm with Craig" when it
+  was written. She settled eight register items on 09-19 without settling this one. The wording also has
+  two readings, produce and label them, or include them by default, and only the second is a change here.
+  A clarification is pending from her side (#34). Revisit if she meant the narrower one.
 
 ## Open questions (need a human)
 
