@@ -136,7 +136,8 @@ read, and it is pinned by a JSON Schema at
       "target": "faecalibacterium prausnitzii",
       "effect": "facilitation",
       "strength": 1.28,
-      "significance": null,
+      "significance": 0.064,
+      "p_value": 0.032,
       "condition": "FP/BH co-culture",
       "method": "crossfeed baseline v0 (PROVISIONAL): ...",
       "study_ids": ["SMGDB00000004"],
@@ -158,7 +159,9 @@ read, and it is pinned by a JSON Schema at
 }
 ```
 
-`effect` is one of `facilitation`, `inhibition`, `neutral`. `strength` and `significance` are your
+`effect` is one of `facilitation`, `inhibition`, `neutral`; the default derivation emits only the first
+two, since a comparison showing no interaction is the absence of an edge (listed in `meta.absent`), and
+`neutral` remains for the retired baseline and existing files. `strength` and `significance` are your
 method's numbers (or `null`). `study_ids` on every edge is the edge-level attribution and must carry at
 least one study. `sd` and `se` are the standard deviation and standard error of the strength across
 replicates, with `n_with` and `n_without` the replicate counts behind it, and `metric` the growth property compared (`auc` by default,
@@ -170,19 +173,20 @@ community without the source species, so the effect is not necessarily direct; s
 kept as an arc), or `null` when unknown; `community` lists the node ids of the community it came from.
 Both fields are optional, so documents without them stay valid.
 
-**How an effect is decided.** An edge is `facilitation` when its mean minus its standard deviation stays
-above zero, `inhibition` when its mean plus its standard deviation stays below zero, and `neutral` (no
-interaction) when that interval crosses zero on an edge with no quality issue. `quality` lists what makes
-an edge low quality: `single_replicate` (no spread can be estimated, so an edge from one replicate carries
-no `sd` or `se`), `strains_pooled` (monocultures of different strains of one species were pooled, until
-nodes are keyed by taxon id), and `non_batch`. A low-quality edge keeps the sign of its mean and is never
-reported as the absence of an interaction. `notes` inform without disqualifying, for example a replicate
-left out for an implausible spike. By default the command line and the local page emit neither neutral nor
-low-quality edges; `--include-neutral` and `--include-low-quality` (or the matching advanced settings)
-show them, and the network's `meta.hidden` counts what was left out. Validate any document (in Python) with `crossfeed.schema.validate_document(doc)`, which
-returns a list of problems (empty means valid). For network tools, `derive ... --format graphml` emits
-the same network as GraphML (Cytoscape, igraph, networkx, Gephi); the neutral JSON stays the canonical,
-citable form.
+**How an interaction is decided.** A comparison is an edge when its mean plus or minus its standard
+deviation stays on one side of zero: `facilitation` above, `inhibition` below. When that interval crosses
+zero on data without quality issues there is no interaction, which is the absence of an edge, not a
+"neutral edge": such comparisons are listed in the network's `meta.absent`, with the same numbers an edge
+carries, and never in `edges`. `quality` lists what makes an edge low quality: `single_replicate` (no
+spread can be estimated, so such an edge carries no `sd`, `se` or test), `strains_pooled` (monocultures of
+different strains of one species were pooled, until nodes are keyed by taxon id), and `non_batch`. A
+low-quality edge keeps the sign of its mean and is never read as an absence; low-quality edges are hidden
+by default (`--include-low-quality`, or the matching advanced setting), and `meta.hidden` counts them.
+`notes` inform without disqualifying, for example a replicate left out for an implausible spike. Every
+comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2 values:
+`p_value` is the raw value and `significance` the Benjamini-Hochberg adjusted one across all comparisons
+tested in the derivation (`meta.statistics`). The test supports an edge when significant and decides
+nothing: with few replicates, any of these results may change with more experiments.
 
 ## Plug in your own method
 
@@ -242,17 +246,24 @@ curve from mGrowthDB and compares replicate sets on the log2 scale, over the are
 default (`--metric max` for maximal abundance). Every edge therefore carries a spread, not just a number:
 its mean, standard deviation, standard error, and the replicate counts behind each side.
 
-An edge's effect follows that spread rather than a fixed cutoff. An interval that sits entirely above
-zero is facilitation, entirely below is inhibition, and one that crosses zero on an otherwise sound edge
-is neutral, meaning an absence of interaction rather than an absence of evidence.
+Whether there is an edge follows that spread rather than a fixed cutoff. An interval that sits entirely
+above zero is facilitation, entirely below is inhibition, and one that crosses zero on otherwise sound data
+is no interaction at all: the absence of an edge, not a "neutral edge" (Karoline). Such comparisons are
+listed in `meta.absent` with the numbers an edge would carry, so they are kept and can be shown, but they
+never appear among the edges.
 
 Edges that cannot be trusted are kept and labeled rather than dropped. `quality` says what is wrong with
 an edge (a single replicate, or strains of one species pooled into one monoculture set) and such an edge
 keeps the sign of its mean and is never reported as an absence of interaction. `notes` records what is
 worth knowing without disqualifying it, such as a replicate left out because its curve carried an
-implausible spike. Neutral and low-quality edges are computed and then hidden at output, with
-`--include-neutral` and `--include-low-quality` to show them; `meta.hidden` says how many were left out,
-so a network file never quietly under-reports.
+implausible spike. Low-quality edges are computed and then hidden at output, with `--include-low-quality`
+to show them; `meta.hidden` says how many were left out, so a network file never quietly under-reports.
+
+Each comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2
+values, reported as `p_value` and as `significance`, the Benjamini-Hochberg adjusted value over every
+comparison tested in the derivation (`meta.statistics`). The test supports an edge when significant and
+decides nothing: with two or three replicates a real effect often fails to reach significance, and any of
+these results may change with more experiments.
 
 Two things to read before trusting a magnitude. Where a study measures monoculture growth by flow
 cytometry or optical density and per-strain co-culture growth by qPCR, each edge records both techniques

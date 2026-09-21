@@ -5,9 +5,11 @@ import pytest
 
 from crossfeed.derive import (
     _gs,
+    adjust_significance,
     classify,
     interactions_from_experiments,
     interactions_from_replicates,
+    output_meta,
     select_edges,
 )
 from crossfeed.mgrowthdb import records_to_network
@@ -161,7 +163,9 @@ def test_replicate_comparison_carries_uncertainty_onto_every_edge():
     assert ba["outcome"] == "quantified" and ba["metric"] == "auc"
     assert ba["evidence"] == "biculture" and ba["quality"] == [] and ba["notes"] == []
     ab = by_pair[(A, B)]
-    assert ab["effect"] == "neutral" and ab["strength"] == pytest.approx(0.0)   # 0 +/- 0.263 crosses zero
+    assert ab["effect"] == "absent" and ab["strength"] == pytest.approx(0.0)    # 0 +/- 0.263 crosses zero
+    # Welch's t on 2 vs 2 log2 values is reported but does not decide; B -> A differs, A -> B does not
+    assert ba["p_value"] < 0.05 and ab["p_value"] == pytest.approx(1.0)
 
 
 def test_replicate_comparison_accepts_another_metric():
@@ -203,7 +207,7 @@ def test_a_larger_community_is_skipped_with_a_reason():
 @pytest.mark.parametrize("mean, sd, outcome, quality, effect", [
     (1.0, 0.3, "quantified", [], "facilitation"),       # interval entirely above zero
     (-1.0, 0.3, "quantified", [], "inhibition"),        # entirely below
-    (0.2, 0.3, "quantified", [], "neutral"),            # crosses zero on a clean edge: no interaction
+    (0.2, 0.3, "quantified", [], "absent"),             # crosses zero on clean data: no edge at all
     (0.2, 0.3, "quantified", ["single_replicate"], "facilitation"),   # low quality keeps the mean's sign
     (0.2, None, "quantified", ["single_replicate"], "facilitation"),  # no sd with one replicate
     (None, None, "obligate", [], "facilitation"),       # grows only with the source
@@ -213,16 +217,31 @@ def test_classify_follows_the_decided_rule(mean, sd, outcome, quality, effect):
     assert classify(mean, sd, outcome, quality) == effect
 
 
-def test_neutral_and_low_quality_edges_are_hidden_by_default_and_counted():
-    records = [{"effect": "facilitation", "quality": []}, {"effect": "neutral", "quality": []},
-               {"effect": "facilitation", "quality": ["single_replicate"]},
-               {"effect": "neutral", "quality": ["strains_pooled"]}]
-    kept, hidden = select_edges(records)
-    assert kept == records[:1]
-    assert hidden == {"neutral": 1, "low_quality": 2}   # a low-quality edge never counts as neutral
-    assert len(select_edges(records, include_neutral=True)[0]) == 2
-    assert len(select_edges(records, include_low_quality=True)[0]) == 3
-    assert len(select_edges(records, True, True)[0]) == 4
+def test_absences_never_become_edges_and_low_quality_is_hidden_by_default():
+    records = [{"effect": "facilitation", "quality": []}, {"effect": "absent", "quality": [], "source": "a"},
+               {"effect": "facilitation", "quality": ["single_replicate"]}]
+    edges, hidden, absent = select_edges(records)
+    assert edges == records[:1]
+    assert hidden == {"low_quality": 1}
+    assert [r["source"] for r in absent] == ["a"]
+    edges, _, absent = select_edges(records, include_low_quality=True)
+    assert len(edges) == 2 and len(absent) == 1           # an absence is never an edge, whatever the setting
+
+
+def test_significance_is_benjamini_hochberg_over_every_tested_comparison():
+    records = [{"p_value": 0.01}, {"p_value": 0.04}, {"p_value": None}, {"p_value": 0.03}, {"p_value": 0.005}]
+    assert adjust_significance(records) == 4                # the untested record is not a test
+    assert [r.get("significance") for r in records] == pytest.approx([0.02, 0.04, None, 0.04, 0.02])
+
+
+def test_output_meta_records_the_statistics_and_the_absences():
+    client, study, exps = _replicate_study()
+    records, _ = interactions_from_replicates(client, study, exps)
+    edges, meta = output_meta(records)
+    assert [e["source_name"] for e in edges] == [B]
+    assert meta["statistics"]["tests"] == 2 and "Benjamini-Hochberg" in meta["statistics"]["correction"]
+    assert [a["source_name"] for a in meta["absent"]] == [A]
+    assert meta["absent"][0]["n_with"] == 2 and meta["absent"][0]["significance"] is not None
 
 
 def test_a_single_replicate_edge_is_kept_and_flagged_low_quality():

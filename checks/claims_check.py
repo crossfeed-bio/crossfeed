@@ -57,6 +57,13 @@ RETIRED_CLAIMS = [
         "provisional. Corrected 2026-09-18: near the neutral band a cross-technique offset can move the "
         "sign as well, so a mismatched edge's direction is not fully dependable either.",
     ),
+    (
+        re.compile(r"--include-neutral|neutral (and low-quality )?edges? (are|is) (computed|hidden|shown)", re.I),
+        re.compile(r"absence of an edge|not a .?neutral edge|meta\.absent|replaces", re.I),
+        "a comparison with no interaction was described as a neutral edge, hidden by default and shown with "
+        "--include-neutral. Corrected 2026-09-21 (Karoline): a neutral edge is a contradiction; such a "
+        "comparison is the absence of an edge, listed in meta.absent and never among the edges.",
+    ),
 ]
 
 
