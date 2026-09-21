@@ -96,7 +96,27 @@ Rules for this file:
   characterization, is not quoted anywhere in her own words, and carried "to confirm with Craig" when it
   was written. She settled eight register items on 09-19 without settling this one. The wording also has
   two readings, produce and label them, or include them by default, and only the second is a change here.
-  A clarification is pending from her side (#34). Revisit if she meant the narrower one.
+  RESOLVED 2026-09-21 (Karoline, her own words, given 2026-09-17 and confirmed on #34): "I'd still like
+  to include these arcs, because they are still informative, but any arcs in the interaction network
+  coming from drop-out communities should be labeled as such." That is the second reading, so her
+  position and Craig's decision agree. The paraphrase carried her meaning; the quotation now replaces it.
+- 2026-09-21 (Karoline, item 19): an edge's effect label follows its spread, not a fixed band, using the
+  standard deviation rather than the standard error because sd does not shrink as replicates are added.
+  mean plus or minus sd entirely above zero is facilitation, entirely below is inhibition, and a crossing
+  interval on an edge with no quality flags is neutral, meaning an absence of interaction. An edge with
+  any quality flag keeps the sign of its mean and is flagged rather than called neutral, because low
+  quality and absence of interaction are different things. The sd rule stands in for a statistical test
+  until item 10 settles one. The fixed 0.25 deadband retires with `BaselineDeriver`.
+- 2026-09-21 (Karoline as method, Craig as the format contract, item 20): edges carry a `quality` list
+  saying what is wrong with them, and `sd` alongside `se`. Both optional and backward compatible, like
+  `evidence` and `community`; the schema is regenerated from the model. Flags so far: a single replicate,
+  a spread crossing the sign, an outlier replicate (#39), pooled strains (until #23), non-batch
+  cultivation (#42).
+- 2026-09-21 (Karoline, item 21): neutral edges and low-quality edges are both computed and both hidden
+  by default, each behind its own display setting. The filter applies at output, not in the derivation,
+  and the network's `meta` records which filters were applied so a reader of a file knows what is missing.
+- 2026-09-21 (Karoline): #39, the outlier rule, merges before #40, and #40 rebases onto it, so the
+  default deriver never ships with the SMGDB00000004 qPCR artifact inside a monoculture set.
 
 ## Open questions (need a human)
 
