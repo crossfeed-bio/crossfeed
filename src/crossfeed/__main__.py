@@ -159,7 +159,8 @@ def main(argv=None):
     d.add_argument("--correction", choices=["bh", "by"], default="bh",
                    help="multiple testing correction: bh (Benjamini-Hochberg, default) or by (Benjamini-Yekutieli)")
     d.add_argument("--spike-factor", type=float, default=100.0,
-                   help="leave out a curve whose maximum exceeds this many times its median (0 keeps all)")
+                   help="leave out a curve with one or two points this many times above both neighbours "
+                        "(0 keeps all)")
     d.add_argument("--format", choices=["json", "graphml"], default="json",
                    help="output format: json (the neutral format, default) or graphml (for network tools)")
     d.add_argument("--out", help="write the network here (default: stdout)")

@@ -38,8 +38,8 @@ tagged version is never reused for changed content.
   side, with the raw `p_value` and the Benjamini-Hochberg adjusted `significance`; it supports an edge but
   does not decide one (`crossfeed.stats`, standard library only).
 - An implausible spike in a growth curve is flagged and that curve left out for its species only, never
-  dropped silently (`crossfeed.growth.spike`: the curve's maximum over its median, default limit 100, 0 to
-  switch off). The report names the time points and, for the flagged strain, whether other measurements
+  dropped silently (`crossfeed.growth.spike`: one or two consecutive interior points more than the limit above both
+  neighbours, default limit 100, 0 to switch off). The report names the time points and, for the flagged strain, whether other measurements
   of it in the same replicate are clean; a community trace counts only in a monoculture.
 - `crossfeed.adapter`: mGrowthDB experiments become replicate growth curves, so the comparison the
   collaboration specified (`crossfeed.interaction`) can run on real data. Time series come from the CSV
@@ -90,6 +90,11 @@ tagged version is never reused for changed content.
   unused `requests` dependency was dropped.
 
 ### Fixed
+- The spike guard no longer mistakes a die-off or late growth for a spike (#62). It compared a curve's
+  maximum with its median, which flagged curves spanning several orders of magnitude (22 curves in
+  SMGDB00000013, 7 in SMGDB00000014, 2 in SMGDB00000004) and emptied whole replicate sets. A spike is now
+  one or two consecutive points above both neighbours by the limit, never the first or last point. The
+  BH_14 spike it was built for is still caught; SMGDB00000013 goes from 10 edges to 16.
 - An obligate or abolished edge is no longer flagged `single_replicate` for having no growing replicates on
   the side where no growth is its result; that side counts its replicates without growth (#47).
 - A comparison whose replicate set was emptied by exclusions (every replicate spiked) is skipped with a

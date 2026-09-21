@@ -66,7 +66,7 @@ def _property(end: float, method: str):
 def _spike_reason(rep, species, found: dict, factor: float) -> str:
     curve = rep.curve(species)
     times = ", ".join(f"{t:g}" for t in found["times"])
-    reason = (f"implausible spike: maximum is {found['ratio']:.0f} times the curve's median (limit {factor:g}), "
+    reason = (f"implausible spike: {found['ratio']:.0f} times both neighbouring points (limit {factor:g}), "
               f"at {times} {curve.time_unit}; left out for this species only")
     note = rep.notes.get(species)
     return f"{reason}; {note}" if note else reason

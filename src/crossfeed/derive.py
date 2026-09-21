@@ -309,7 +309,7 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
 
 def _spike_notes(flagged, target: str) -> list:
     return [f"{f['role']} replicate {f['replicate']} left out: implausible spike, maximum "
-            f"{f['ratio']:.0f} times the median at {', '.join(f'{t:g}' for t in f['times'])}"
+            f"{f['ratio']:.0f} times its neighbours at {', '.join(f'{t:g}' for t in f['times'])}"
             for f in flagged if f["species"] == target]
 
 

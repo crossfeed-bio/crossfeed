@@ -122,7 +122,7 @@ def test_the_bh14_shape_is_flagged_with_its_time_points():
 
 
 def test_a_decline_after_a_peak_is_not_a_spike():
-    # rises tenfold, then falls tenfold: max over last is 10, max over median stays small
+    # rises tenfold, then falls tenfold: no point jumps above both of its neighbours
     assert spike(_series((1e7, 1e8, 1e9, 1e9, 5e8, 2e8, 1e8))) is None
 
 
@@ -134,5 +134,30 @@ def test_factor_zero_switches_the_check_off():
     assert spike(_series(BH14), factor=0) is None
 
 
-def test_a_curve_without_positive_median_is_left_to_the_no_growth_rule():
+def test_a_jump_from_zero_is_left_to_the_no_growth_rule():
     assert spike(_series((0.0, 0.0, 0.0, 5.0))) is None
+    assert spike(_series((0.0, 5.0, 0.0, 0.0))) is None         # a zero neighbour gives no scale
+
+
+# SMGDB00000013 (CFU/mL over 288 h), which the earlier max/median statistic flagged (Karoline, on #62)
+DIE_OFF = (3.5e7, 2.1e6, 2.9e5, 3.7e5, 4.7e4, 3.6e4, 1.9e4, 3.0e2, 1.0)        # Microbacterium alone
+LATE_GROWTH = (1.2e7, 8.1e5, 5.7e5, 5.3e5, 3.0e5, 2.9e5, 2.2e7, 1.3e8, 2.8e8)  # Ochrobactrum with Comamonas
+
+
+def test_a_die_off_and_late_growth_are_not_spikes():
+    assert spike(_series(DIE_OFF)) is None          # the maximum is the inoculum, the first point
+    assert spike(_series(LATE_GROWTH)) is None      # the maximum is the last point
+
+
+def test_a_single_point_spike_and_the_largest_run_are_reported():
+    # 1e11 against neighbours 1e6 and 2e6: ratio 1e11 / 2e6 = 5e4
+    found = spike(_series((1e6, 1e11, 2e6, 4e6, 8e6)))
+    assert found["times"] == [1] and found["ratio"] == pytest.approx(5e4)
+    # a jump of 50 is below the default factor of 100 and above a factor of 10
+    assert spike(_series((1e6, 5e7, 1e6, 1e6))) is None
+    assert spike(_series((1e6, 5e7, 1e6, 1e6)), factor=10)["ratio"] == pytest.approx(50)
+
+
+def test_a_run_of_three_is_not_a_spike():
+    # three consecutive high points are a phase of the curve, not a spike
+    assert spike(_series((1e6, 1e11, 1e11, 1e11, 1e6))) is None

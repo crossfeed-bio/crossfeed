@@ -99,7 +99,8 @@ def _settings_block(settings: dict) -> str:
   <span class="muted">Benjamini-Hochberg (default) or the more conservative Benjamini-Yekutieli</span></div>
 <div class="row"><label>Spike limit
   <input name="spike_factor" type="text" size="6" value="{_esc(s['spike_factor'])}"></label>
-  <span class="muted">leave out a curve whose maximum exceeds this many times its median; 0 keeps all</span></div>
+  <span class="muted">leave out a curve with one or two points this many times above both neighbours;
+  0 keeps all</span></div>
 <div class="row"><label>Only these studies
   <input name="studies" type="text" size="40" value="{_esc(s['studies'])}"></label>
   <span class="muted">comma separated study ids; empty means every study holding the species</span></div>

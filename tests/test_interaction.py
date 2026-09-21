@@ -286,11 +286,11 @@ def test_spike_factor_zero_keeps_everything():
 
 def test_the_note_about_alternatives_is_carried_into_the_report():
     mono_a, mono_b, co = _example()
-    note = "other measurements ...: community fc clean (max/median 3.2)"
+    note = "other measurements ...: community fc clean"
     flagged = Replicate([_spiked(B, 1.0)], "b_spike", {B: note})
     r = interaction_strength(mono_a, mono_b + [flagged], co, A, B)
     reason = dict(r["skipped"])[f"{B}: monoculture replicate b_spike"]
-    assert reason.endswith("community fc clean (max/median 3.2)")
+    assert reason.endswith("community fc clean")
 
 
 def test_abolished_counts_the_replicates_without_growth():
