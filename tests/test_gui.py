@@ -21,7 +21,7 @@ CURVES = {
     ("mono A", A): [(1, 1), (1, 1.4)],     # areas 10 and 12
     ("mono B", B): [(1, 1), (1, 1.4)],
     ("co", A): [(1, 3), (1, 3.8)],         # areas 20 and 24: B doubles A, 1.0 +/- 0.26 -> facilitation
-    ("co", B): [(1, 1), (1, 1.4)],         # unchanged: 0 +/- 0.26 crosses zero -> absent, not an edge
+    ("co", B): [(1, 1), (1, 1.4)],         # unchanged: mean 0 -> an edge with status absent
 }
 TAXA = {A: 853, B: 53443}
 
@@ -91,11 +91,10 @@ def test_species_names_reach_a_network():
     assert r["taxon_ids"] == [853, 53443]
     assert r["studies"] == ["SMGDB00000001"]
     assert r["unresolved"] == [] and r["errors"] == []
-    # B facilitates A (mean log2 1.0 +/- 0.26); A leaves B unchanged (0 +/- 0.26 crosses zero: absent)
-    effects = {(e.source, e.target): e.effect for e in r["network"].edges}
-    assert effects == {("blautia hydrogenotrophica", "faecalibacterium prausnitzii"): "facilitation"}
-    assert [(a["source"], a["target"]) for a in r["absent"]] == [
-        ("faecalibacterium prausnitzii", "blautia hydrogenotrophica")]
+    # B facilitates A (mean log2 1.0 +/- 0.26); A leaves B unchanged (mean 0: absent at any threshold)
+    status = {(e.source, e.target): (e.effect, e.status) for e in r["network"].edges}
+    assert status == {("blautia hydrogenotrophica", "faecalibacterium prausnitzii"): ("facilitation", "present"),
+                      ("faecalibacterium prausnitzii", "blautia hydrogenotrophica"): ("neutral", "absent")}
 
 
 def test_taxon_ids_work_as_input():
@@ -110,21 +109,21 @@ def test_unknown_species_is_reported_without_results():
     assert "Not in mGrowthDB" in page and "No interactions" in page
 
 
-def test_absences_are_listed_apart_from_the_edges():
+def test_absent_edges_are_kept_and_shown_apart():
     r = _query()
-    assert len(r["network"].edges) == 1
-    assert len(r["network"].meta["absent"]) == 1
+    assert len(r["network"].edges) == 2 and r["absence"]["absent"] == 1
     page = render_result("tok", r)
-    assert "1 tested comparison(s) with no interaction" in page and "adjusted p" in page
+    assert "1 interaction(s)" in page
+    assert "1 edge(s) below the absence threshold (k = 1)" in page and "|mean| / sd" in page
 
 
 def test_only_entered_species_filters_other_pairs():
     both = _query()
     one = _query(entries=("Faecalibacterium prausnitzii",))
-    assert len(both["network"].edges) == 1 and len(both["absent"]) == 1
-    assert one["network"].edges == [] and one["absent"] == []     # the partner was not entered
+    assert len(both["network"].edges) == 2
+    assert one["network"].edges == []                   # the partner was not entered
     rest = _query(entries=("Faecalibacterium prausnitzii",), only_entered=False)
-    assert len(rest["network"].edges) == 1 and len(rest["absent"]) == 1
+    assert len(rest["network"].edges) == 2
 
 
 def test_a_study_that_fails_is_reported_not_raised():
@@ -146,7 +145,8 @@ def test_form_hides_every_setting_behind_one_button():
     ({}, {**DEFAULTS, "only_entered": False}),   # an unticked checkbox is simply absent from a post
     ({"metric": ["max"], "spike_factor": ["50"], "studies": [" S1 "], "only_entered": ["1"],
       "include_low_quality": ["1"]},
-     {"metric": "max", "spike_factor": 50.0, "studies": "S1", "only_entered": True, "include_low_quality": True}),
+     {"metric": "max", "spike_factor": 50.0, "studies": "S1", "only_entered": True, "include_low_quality": True,
+      "correction": "bh", "absence_threshold": 1.0}),
     ({"metric": ["nonsense"], "spike_factor": ["not a number"]}, {**DEFAULTS, "only_entered": False}),
 ])
 def test_settings_fall_back_to_defaults(form, expected):
@@ -162,7 +162,7 @@ def test_result_page_lists_arcs_and_download_links():
 def test_result_page_cites_every_study_with_its_license():
     page = render_result("tok", _query())
     assert "Sources" in page and "SMGDB00000001" in page and "fake study" in page
-    assert "license: see study" in page and "supports 1 interaction(s)" in page
+    assert "license: see study" in page and "supports 2 interaction(s)" in page
 
 
 def test_result_page_says_the_method_is_provisional():
@@ -217,8 +217,8 @@ def test_server_serves_the_form_and_runs_a_search(server):
         page = r.read().decode("utf-8")
     assert "interaction(s)" in page and "facilitation" in page
     doc = json.loads(_get(f"{base}/download.json?token={token}"))
-    assert len(doc["edges"]) == 1                      # the absent comparison is not an edge
-    assert len(doc["meta"]["absent"]) == 1 and doc["meta"]["statistics"]["tests"] == 2
+    assert [e["status"] for e in doc["edges"]] == ["present", "absent"]    # the absent edge is kept
+    assert doc["meta"]["absence"]["k"] == 1.0 and doc["meta"]["statistics"]["tests"] == 2
     assert ET.fromstring(_get(f"{base}/download.graphml?token={token}")) is not None
 
 

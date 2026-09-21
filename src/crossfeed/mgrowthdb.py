@@ -213,7 +213,8 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
 
     Each record:
       {source, target, source_name?, target_name?, strength, significance, condition, method?, effect?,
-       evidence?, community?, p_value?, sd?, se?, n_with?, n_without?, outcome?, metric?, quality?, notes?,
+       evidence?, community?, p_value?, weight?, effect_over_sd?, status?, sd?, se?, n_with?,
+       n_without?, outcome?, metric?, quality?, notes?,
        study_id, study_citation?, study_license?, study_url?}
     """
     net = InteractionNetwork(meta=dict(meta or {}))
@@ -234,7 +235,8 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             strength=r.get("strength"), significance=r.get("significance"),
             condition=r.get("condition", ""), method=r.get("method", ""), study_ids=(sid,),
             evidence=r.get("evidence"), community=tuple(r.get("community", ())),
-            p_value=r.get("p_value"), sd=r.get("sd"), se=r.get("se"),
+            p_value=r.get("p_value"), weight=r.get("weight"), effect_over_sd=r.get("effect_over_sd"),
+            status=r.get("status"), sd=r.get("sd"), se=r.get("se"),
             n_with=r.get("n_with"), n_without=r.get("n_without"),
             outcome=r.get("outcome"), metric=r.get("metric", ""),
             quality=tuple(r.get("quality", ())), notes=tuple(r.get("notes", ())),

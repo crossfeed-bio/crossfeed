@@ -25,13 +25,15 @@ tagged version is never reused for changed content.
   default for a live derivation, comparing replicate sets on the log2 scale (area under the curve by
   default, maximal abundance selectable with `--metric`), so every edge carries a standard error, the
   replicate counts, and the outcome. `BaselineDeriver` remains only as the retired placeholder.
-- Network edges gained optional `p_value`, `sd`, `se`, `n_with`, `n_without`, `outcome`, `metric`, `quality`, and
+- Network edges gained optional `p_value`, `weight`, `effect_over_sd`, `status`, `sd`, `se`, `n_with`, `n_without`, `outcome`, `metric`, `quality`, and
   `notes` fields, in the model, the JSON Schema, and GraphML.
-- An interaction is decided from its spread: an edge (facilitation or inhibition) only when the mean plus
-  or minus its standard deviation stays on one side of zero. Otherwise, on data without quality issues,
-  there is no interaction: such comparisons are listed in `meta.absent` and never as edges ("neutral" is
-  now used only by the retired baseline). Low-quality edges (a single replicate, pooled strains) keep the
-  sign of their mean, are flagged in `quality`, and are hidden by default (`--include-low-quality`).
+- Presence and absence follow an absence threshold k: an edge's `status` is `absent` when its
+  |log2 mean| is below k times its standard deviation, `present` otherwise (default k = 1, the mean plus
+  or minus sd rule; `--absence-threshold`, 0 marks nothing absent). Every tested comparison is exported as
+  an edge with `status`, `weight` (|log2 mean|, always positive) and `effect_over_sd` (|log2 mean| / sd), so
+  the threshold can be changed later, including in Cytoscape; the display hides absent edges by default.
+  There is no neutral edge. Low-quality edges (a single replicate, pooled strains) keep the sign of their
+  mean, are flagged in `quality`, and are left out by default (`--include-low-quality`).
 - Welch's t-test on the per-replicate log2 values is reported on every comparison with two replicates per
   side, with the raw `p_value` and the Benjamini-Hochberg adjusted `significance`; it supports an edge but
   does not decide one (`crossfeed.stats`, standard library only).

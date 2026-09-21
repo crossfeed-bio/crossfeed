@@ -20,10 +20,13 @@ below are shipped behavior rather than intentions. Every edge carries its mean, 
 counts, outcome, metric, `quality` flags and `notes`.
 
 - **Area under the curve by default**, `max` selectable with `--metric` (setting 1).
-- **Presence follows the spread**, not a fixed band: facilitation when the interval mean plus or minus
-  sd lies above zero, inhibition when it lies below. When it crosses zero on data with no quality issues
-  there is no interaction, which is the absence of an edge rather than a "neutral edge" (Karoline,
-  2026-09-21): such comparisons are listed in `meta.absent` and never as edges (item 19).
+- **Presence follows the spread, through the absence threshold k** (option B, Karoline, 2026-09-21): a
+  comparison's `status` is `absent` when |log2 mean| < k × sd and `present` otherwise, default k = 1 (the
+  mean ± sd rule), k = 0 marking nothing absent. There is no "neutral edge", the absence of an edge is
+  what a sub-threshold comparison is; every tested comparison is exported as an edge with `status`,
+  `weight` (|log2 mean|) and `effect_over_sd` (|log2 mean| / sd), so the threshold can be changed later,
+  including in Cytoscape (item 19). Karoline asked for this to be carefully documented; the README's
+  output-format section is the reference.
 - **Low-quality edges are computed and hidden**, with `--include-low-quality` to show them and
   `meta.hidden` counting what was left out (item 21).
 - **A statistical test is reported, never used to decide** (Karoline, 2026-09-21): Welch's t-test on the
@@ -84,8 +87,9 @@ mGrowthDB reports. Some consequences worth stating plainly, because several are 
 13. Output format: **JSON canonical, GraphML on demand**
 14. Query scope: **no default chosen yet**; whether a query for a species also returns its other strains,
     or other species of its genus (Karoline's list, 2026-09-18)
-15. Absences of interaction: **listed in `meta.absent`, never edges** (settled 2026-09-21; replaces
-    "show neutral edges", since a neutral edge is a contradiction)
+15. Absences of interaction: **exported as edges with `status` absent under threshold k, default 1,
+    hidden by the display** (settled 2026-09-21; replaces "show neutral edges", since a neutral edge is a
+    contradiction)
 16. Show low-quality edges: **off** (settled 2026-09-21); computed, flagged, and hidden
 
 ## 1 and 3. The growth metric and how mono is compared to co (one coupled choice)

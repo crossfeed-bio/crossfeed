@@ -159,9 +159,9 @@ read, and it is pinned by a JSON Schema at
 }
 ```
 
-`effect` is one of `facilitation`, `inhibition`, `neutral`; the default derivation emits only the first
-two, since a comparison showing no interaction is the absence of an edge (listed in `meta.absent`), and
-`neutral` remains for the retired baseline and existing files. `strength` and `significance` are your
+`effect` is the direction, one of `facilitation`, `inhibition`, `neutral`; the default derivation uses
+`neutral` only for a mean of exactly zero, which has no direction and is always absent (see below), and it
+remains for the retired baseline and existing files. `strength` and `significance` are your
 method's numbers (or `null`). `study_ids` on every edge is the edge-level attribution and must carry at
 least one study. `sd` and `se` are the standard deviation and standard error of the strength across
 replicates, with `n_with` and `n_without` the replicate counts behind it, and `metric` the growth property compared (`auc` by default,
@@ -173,15 +173,36 @@ community without the source species, so the effect is not necessarily direct; s
 kept as an arc), or `null` when unknown; `community` lists the node ids of the community it came from.
 Both fields are optional, so documents without them stay valid.
 
-**How an interaction is decided.** A comparison is an edge when its mean plus or minus its standard
-deviation stays on one side of zero: `facilitation` above, `inhibition` below. When that interval crosses
-zero on data without quality issues there is no interaction, which is the absence of an edge, not a
-"neutral edge": such comparisons are listed in the network's `meta.absent`, with the same numbers an edge
-carries, and never in `edges`. `quality` lists what makes an edge low quality: `single_replicate` (no
-spread can be estimated, so such an edge carries no `sd`, `se` or test), `strains_pooled` (monocultures of
-different strains of one species were pooled, until nodes are keyed by taxon id), and `non_batch`. A
-low-quality edge keeps the sign of its mean and is never read as an absence; low-quality edges are hidden
-by default (`--include-low-quality`, or the matching advanced setting), and `meta.hidden` counts them.
+**How presence and absence are decided.** Every tested comparison is exported as an edge, and its
+`status` says whether it counts as an interaction under the **absence threshold k**:
+
+- `status` is `absent` when |log2 mean| < k × sd, and `present` otherwise. In words: an effect smaller than
+  k standard deviations of its own spread is not treated as an interaction.
+- The default is **k = 1**, which is the rule that the interval mean ± sd must stay on one side of zero.
+  `--absence-threshold K` (or the matching advanced setting) changes it. **k = 0 marks nothing absent**, so
+  every comparison is exported as present and the cut can be chosen later.
+- `effect_over_sd` holds |log2 mean| / sd, the exact quantity the threshold cuts. In Cytoscape, a column
+  filter keeping edges with `effect_over_sd` ≥ k reproduces the tool's rule for any k, so exporting with
+  k = 0 and filtering in Cytoscape lets you watch how the network changes with the threshold.
+- `weight` is |log2 mean|, always positive, for line widths and layouts. The sign stays in `effect` and
+  `strength`.
+- Example: an edge with log2 mean +0.53 and sd 0.91 has `effect_over_sd` 0.58, so it is absent at k = 1 and
+  present at k = 0.5. An edge with −2.66 ± 2.38 has 1.12 and is present at k = 1.
+- **Obligate** (the target grows only with the source present) and **abolished** (it grows only without
+  it) are the extremes of facilitation and inhibition. They have no log2 ratio, so no `weight` and no
+  `effect_over_sd`; they are always present and are drawn with their own style.
+- A mean of exactly zero is always absent. A low-quality edge's `status` is `null` (undetermined) whatever
+  its numbers, since low quality is never read as an absence; an edge with no spread estimate (a single
+  replicate) is one such case and also has no `effect_over_sd`.
+- Absent edges stay in the output. Hiding them is the display's job: the Cytoscape style hides `absent`
+  edges by default, and the local page lists them in their own section. `meta.absence` records the rule,
+  the k used, and how many edges it marked absent.
+
+`quality` lists what makes an edge low quality: `single_replicate` (no spread can be estimated, so such an
+edge carries no `sd`, `se` or test), `strains_pooled` (monocultures of different strains of one species were
+pooled, until nodes are keyed by taxon id), and `non_batch`. A low-quality edge keeps the sign of its mean
+and is never read as an absence. Low-quality edges are left out of the output by default
+(`--include-low-quality`, or the matching advanced setting), and `meta.hidden` counts them.
 `notes` inform without disqualifying, for example a replicate left out for an implausible spike. Every
 comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2 values:
 `p_value` is the raw value and `significance` the Benjamini-Hochberg adjusted one across all comparisons
@@ -246,11 +267,12 @@ curve from mGrowthDB and compares replicate sets on the log2 scale, over the are
 default (`--metric max` for maximal abundance). Every edge therefore carries a spread, not just a number:
 its mean, standard deviation, standard error, and the replicate counts behind each side.
 
-Whether there is an edge follows that spread rather than a fixed cutoff. An interval that sits entirely
-above zero is facilitation, entirely below is inhibition, and one that crosses zero on otherwise sound data
-is no interaction at all: the absence of an edge, not a "neutral edge" (Karoline). Such comparisons are
-listed in `meta.absent` with the numbers an edge would carry, so they are kept and can be shown, but they
-never appear among the edges.
+Whether a comparison counts as an interaction follows that spread rather than a fixed cutoff on the
+effect: it is `absent` when its effect is smaller than k standard deviations of its own spread
+(|log2 mean| < k × sd, default k = 1, the mean ± sd rule), and `present` otherwise. There is no
+"neutral edge": a comparison is either an interaction or the absence of one (Karoline). Absent comparisons
+are kept as edges with `status` absent, so they can be shown and the threshold changed later, including in
+Cytoscape on the `effect_over_sd` column. The section on the output format above spells out every case.
 
 Edges that cannot be trusted are kept and labeled rather than dropped. `quality` says what is wrong with
 an edge (a single replicate, or strains of one species pooled into one monoculture set) and such an edge
