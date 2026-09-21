@@ -367,7 +367,12 @@ def serve(port: int = 0, open_browser: bool = True, client_factory=None) -> None
         "client_factory": staticmethod(client_factory or MGrowthDBClient),
         "state": {},
     })
-    with _Server(("127.0.0.1", port), handler) as httpd:
+    try:
+        server = _Server(("127.0.0.1", port), handler)
+    except OSError as e:
+        raise SystemExit(f"crossfeed gui: cannot use port {port} ({e.strerror}). Pick another with --port, "
+                         "or leave it out to use a free one.") from None
+    with server as httpd:
         url = f"http://127.0.0.1:{httpd.server_address[1]}/?token={handler.token}"
         print(f"crossfeed is at {url}\nPress Ctrl+C to stop.")
         if open_browser:
