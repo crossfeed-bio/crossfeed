@@ -10,6 +10,8 @@ Checks:
   4. self-contained   every import under src/ resolves to the standard library or crossfeed itself
   5. house-style      docs use ASCII punctuation and US spelling; prose carries no hedging caveats
   6. schema-contract  the shipped JSON Schema matches the code, and emitted networks validate against it
+  7. claims          the docs a stranger reads name the deriver the code actually defaults to, and do not
+                     restate a claim that has been corrected (see checks/claims_check.py)
 
 Tests run separately (pytest), in CI and from the pre-commit hook.
 """
@@ -207,6 +209,18 @@ def check_schema_contract(_rels):
     return bad
 
 
+def check_claims(_rels):
+    """Delegate to checks/claims_check.py: the docs a stranger reads agree with the code and with each
+    other. Kept in its own file because its retired-claim list grows as claims are corrected, and that
+    list is worth reading on its own."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import claims_check
+    problems = []
+    claims_check.check_default_deriver(problems)
+    claims_check.check_retired_claims(problems)
+    return problems
+
+
 CHECKS = [
     ("secrets", check_secrets),
     ("no-raw-data", check_no_raw_data),
@@ -214,6 +228,7 @@ CHECKS = [
     ("self-contained", check_self_contained),
     ("house-style", check_house_style),
     ("schema-contract", check_schema_contract),
+    ("claims", check_claims),
 ]
 
 
