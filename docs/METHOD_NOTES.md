@@ -61,6 +61,8 @@ mGrowthDB reports. Some consequences worth stating plainly, because several are 
 11. Minimum time points: **carry the fit quality mGrowthDB reports**, gate on it rather than a fixed count
 12. Chemostats and serial dilutions: **flag and keep separate from batch**
 13. Output format: **JSON canonical, GraphML on demand**
+14. Query scope: **no default chosen yet**; whether a query for a species also returns its other strains,
+    or other species of its genus (Karoline's list, 2026-09-18)
 
 ## 1 and 3. The growth metric and how mono is compared to co (one coupled choice)
 
@@ -242,13 +244,21 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    Status 2026-09-20: the adapter landed in #38, so the blocker named above is gone and these arcs are
    now reachable.
    SETTLED 2026-09-20 (Craig); recorded in "Decisions" in [docs/agents/NOTES.md](agents/NOTES.md).
-   Drop-out arcs enter the default network, labeled by evidence with the community recorded. Recorded as
-   Craig's call and not as agreement with a stated position: the line above attributing "keep these arcs"
+   Drop-out arcs enter the default network, labeled by evidence with the community recorded, as the
+   default value of a user setting. Karoline's own words put it among the advanced settings (2026-09-18):
+   the interface should offer "whether or not to include drop-out communities" among choices that "can be
+   given sensible default values and hidden in a window that only appears when an Advanced settings button
+   is clicked", under her general rule that "unless you have an argument against a particular
+   implementation, I'd leave it as a user choice in advanced settings. We can perhaps put our votes on
+   defaults in METHOD_NOTES." So the setting exists either way; Craig's decision is that its default is
+   include. Recorded as Craig's call on the default and not as agreement with a stated position on
+   inclusion: the line above attributing "keep these arcs"
    to Karoline is her agent's characterization, is nowhere quoted in her own words, and carried "to
    confirm with Craig" when written; she settled eight items on 09-19 without settling this one. It also
    has two readings, produce and label these arcs, or include them by default, and only the second
    changes anything. A clarification is pending on #34, and this is revisited if she meant the narrower
-   one. No implementation exists yet: both derivers still skip experiments with more than two members, so
+   one. No implementation exists yet: `BaselineDeriver`, the only deriver on `main`, skips experiments with
+   more than two members, and so does the `ReplicateDeriver` arriving in #40, so
    nothing detects a drop-out design and routes it to `dropout_interaction_strengths`.
 3. **Dependence between arcs** (#10, #3). Arcs to the same target from different drop-outs reuse the
    full community replicates, and the two values of a pair reuse the same co-culture replicates, so they
@@ -414,6 +424,16 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    consumes. SETTLED 2026-09-19 (Karoline): flag such replicates, never drop them silently, with the
    factor an advanced setting. Growth rate is the more robust metric under an artifact like this, which is
    part of why item 11 ships both.
+
+18. **Query scope, whether a species query pulls in its relatives** (setting 14, unregistered until
+   2026-09-21). Karoline's advanced-settings list names "whether to include other strains of the same
+   species or other species of the same genus [a whole can of worms]", and it had no setting and no
+   register item. It is not item 7: item 7 is how a node is keyed once derived, this is what a query
+   returns before anything is derived. `taxonomy.resolve_species` already returns every taxon id
+   mGrowthDB holds under a typed genus and species, so the strain half is partly built and undocumented
+   as a choice. Options: the typed strain only, all strains of the species, or all species of the genus.
+   No proposed default yet; Karoline called it a can of worms and she is right, because widening the
+   query silently changes which arcs a person sees.
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.
