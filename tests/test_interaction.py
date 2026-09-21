@@ -244,3 +244,49 @@ def test_dropout_full_community_skip_is_reported_once():
     assert r["skipped"] == [(f"{B}: full community replicate f2", "non-positive auc (0)")]
     cb = _arc(r, C, B)
     assert (cb["n_with"], cb["mean"], cb["sd"]) == (1, 0.0, None)
+
+
+# ---- implausible spikes (#39) --------------------------------------------------------------------
+
+def _spiked(species, base):
+    """A two-point-like curve with one absurd point in the middle; its area is dominated by the spike."""
+    return GrowthCurve(species, (0, 5, 10), (base, base * 1e5, base), "h", "16S copies/mL")
+
+
+def test_a_spiked_monoculture_replicate_is_left_out_and_reported():
+    mono_a, mono_b, co = _example()
+    mono_b = mono_b + [Replicate([_spiked(B, 1.0)], "b_spike")]
+    # the co-culture and monoculture curves must share the time window: extend the others to 10 h is
+    # already true (two-point curves over 0 to 10 h)
+    r = interaction_strength(mono_a, mono_b, co, A, B)
+    assert r["species_b"]["n_mono"] == 2                     # the spiked replicate did not count
+    assert r["species_b"]["mean"] == pytest.approx(-1.5)     # the same as without it
+    label, reason = next(s for s in r["skipped"] if "b_spike" in s[0])
+    assert label == f"{B}: monoculture replicate b_spike"
+    assert "implausible spike" in reason and "at 5 h" in reason
+    assert r["flagged"] == [{"species": B, "role": "monoculture", "replicate": "b_spike",
+                             "ratio": pytest.approx(1e5), "times": [5.0]}]
+
+
+def test_a_spiked_curve_is_left_out_for_its_species_only():
+    mono_a, mono_b, co = _example()
+    co = co + [Replicate([_curve(A, (2, 2)), _spiked(B, 1.0)], "c_spike")]
+    r = interaction_strength(mono_a, mono_b, co, A, B)
+    assert r["species_a"]["n_co"] == 3       # A's curve in that replicate still counts
+    assert r["species_b"]["n_co"] == 2       # B's spiked curve does not
+
+
+def test_spike_factor_zero_keeps_everything():
+    mono_a, mono_b, co = _example()
+    mono_b = mono_b + [Replicate([_spiked(B, 1.0)], "b_spike")]
+    r = interaction_strength(mono_a, mono_b, co, A, B, spike_factor=0)
+    assert r["species_b"]["n_mono"] == 3 and r["flagged"] == []
+
+
+def test_the_note_about_alternatives_is_carried_into_the_report():
+    mono_a, mono_b, co = _example()
+    note = "other measurements ...: community fc clean (max/median 3.2)"
+    flagged = Replicate([_spiked(B, 1.0)], "b_spike", {B: note})
+    r = interaction_strength(mono_a, mono_b + [flagged], co, A, B)
+    reason = dict(r["skipped"])[f"{B}: monoculture replicate b_spike"]
+    assert reason.endswith("community fc clean (max/median 3.2)")

@@ -14,12 +14,21 @@ Two rules worth stating, because both are choices:
     context's technique units, falling back to the technique name when no unit string is reported (an OD
     reading and a qPCR count then still refuse to be compared, which is the point of the check).
 
+When a strain's curve carries an implausible spike (`crossfeed.growth.spike`), the adapter looks for
+other measurements of the same strain in the same replicate and says whether they are clean, because they
+are evidence about the flag (in BH_14 the qPCR trace spikes while the flow cytometry trace does not). A
+community-level trace counts as such an alternative only in a monoculture, where it measures that single
+strain; in a co-culture it is the sum of the members. The alternative is named, never substituted: mixing
+techniques between monoculture and co-culture is what register item 13 warns about.
+
 Anything that cannot be built is reported with a reason rather than guessed at, as everywhere else in
 crossfeed. Nothing pulled here is written into the repository.
 """
 from __future__ import annotations
 
-from .growth import GrowthCurve, Replicate
+import statistics
+
+from .growth import SPIKE_FACTOR, GrowthCurve, Replicate, spike
 
 MIN_POINTS = 2
 
@@ -32,12 +41,50 @@ def _strain_contexts(bioreplicate: dict):
             yield subject["name"], context
 
 
+def _alternatives(bioreplicate: dict, species: str, own_id, single_strain: bool):
+    """(technique, context) for other measurements of `species` in this replicate."""
+    for context in bioreplicate.get("measurementContexts", []):
+        if context.get("id") == own_id:
+            continue
+        subject = context.get("subject") or {}
+        technique = context.get("techniqueType") or "unknown technique"
+        if subject.get("type") == "strain" and subject.get("name") == species:
+            yield technique, context
+        elif single_strain and subject.get("type") == "bioreplicate" and technique != "metabolite":
+            yield f"community {technique}", context
+
+
+def _alternatives_note(client, bioreplicate: dict, species: str, own_id, single_strain: bool,
+                       spike_factor: float) -> str:
+    """What the other measurements of a flagged strain say, for the report."""
+    parts = []
+    for technique, context in _alternatives(bioreplicate, species, own_id, single_strain):
+        try:
+            values = [v for _, v, _ in client.get_measurement_series(context["id"])]
+        except Exception:  # noqa: BLE001 - an unreadable alternative is reported, not fatal
+            parts.append(f"{technique} unreadable")
+            continue
+        median = statistics.median(values) if values else 0
+        if len(values) < MIN_POINTS or median <= 0:
+            parts.append(f"{technique} not comparable")
+            continue
+        ratio = max(values) / median
+        verdict = "also spiked" if ratio > spike_factor else "clean"
+        parts.append(f"{technique} {verdict} (max/median {ratio:.1f})")
+    if parts:
+        return "other measurements of this strain in this replicate, not substituted: " + ", ".join(parts)
+    if not single_strain:
+        return ("no other measurement of this strain in this replicate (the community traces measure all "
+                "members together)")
+    return "no other measurement of this strain in this replicate"
+
+
 def _abundance_unit(context: dict) -> str:
     return (context.get("techniqueUnits") or context.get("techniqueOriginalUnits")
             or context.get("techniqueType") or "")
 
 
-def replicates_for_experiment(client, experiment: dict) -> tuple:
+def replicates_for_experiment(client, experiment: dict, spike_factor: float = SPIKE_FACTOR) -> tuple:
     """(replicates, skipped) for one mGrowthDB experiment.
 
     replicates: a `Replicate` per independent bioreplicate, holding one `GrowthCurve` per strain that
@@ -56,8 +103,10 @@ def replicates_for_experiment(client, experiment: dict) -> tuple:
             skipped.append((f"{label}: {name}", "average of the replicates, not an independent replicate"))
             continue
         time_unit = bioreplicate.get("measurementTimeUnits") or ""
-        curves = []
-        for species, context in _strain_contexts(bioreplicate):
+        strain_contexts = list(_strain_contexts(bioreplicate))
+        single_strain = len({species for species, _ in strain_contexts}) == 1
+        curves, notes = [], {}
+        for species, context in strain_contexts:
             try:
                 points = client.get_measurement_series(context["id"])
             except Exception as e:  # noqa: BLE001 - report the context, keep the others
@@ -70,17 +119,23 @@ def replicates_for_experiment(client, experiment: dict) -> tuple:
             times = [t for t, _, _ in points]
             values = [v for _, v, _ in points]
             try:
-                curves.append(GrowthCurve(species, times, values, time_unit, _abundance_unit(context)))
+                curve = GrowthCurve(species, times, values, time_unit, _abundance_unit(context))
             except ValueError as e:
                 skipped.append((f"{label}: {name}, {species}", str(e)))
+                continue
+            curves.append(curve)
+            if spike(curve, spike_factor):
+                notes[species] = _alternatives_note(client, bioreplicate, species, context["id"],
+                                                    single_strain, spike_factor)
         if curves:
-            replicates.append(Replicate(curves, name))
+            replicates.append(Replicate(curves, name, notes))
         else:
             skipped.append((f"{label}: {name}", "no usable per-strain series"))
     return replicates, skipped
 
 
-def replicate_sets(client, experiments, species_a: str, species_b: str) -> tuple:
+def replicate_sets(client, experiments, species_a: str, species_b: str,
+                   spike_factor: float = SPIKE_FACTOR) -> tuple:
     """(mono_a, mono_b, co, skipped) for a species pair, across a study's experiments.
 
     An experiment is a monoculture set when its replicates carry one species, and the co-culture set when
@@ -88,7 +143,7 @@ def replicate_sets(client, experiments, species_a: str, species_b: str) -> tuple
     """
     mono_a, mono_b, co, skipped = [], [], [], []
     for experiment in experiments:
-        replicates, skips = replicates_for_experiment(client, experiment)
+        replicates, skips = replicates_for_experiment(client, experiment, spike_factor)
         skipped += skips
         label = experiment.get("name") or experiment.get("id") or "experiment"
         for replicate in replicates:

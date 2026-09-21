@@ -134,3 +134,39 @@ def test_unusable_time_points_are_reported(bad_series):
     client.series[11] = bad_series
     _, skipped = replicates_for_experiment(client, _experiment(stubs=((1, "r1"),)))
     assert any("increasing" in reason for _, reason in skipped)
+
+
+# ---- alternatives for a flagged curve (#39) --------------------------------------------------------
+
+SPIKY = [(0.0, 1.0e6, None), (2.0, 1.0e11, None), (4.0, 2.0e6, None), (6.0, 4.0e6, None), (8.0, 8.0e6, None)]
+CLEAN = [(0.0, 1.0e6, None), (2.0, 2.0e6, None), (4.0, 4.0e6, None), (6.0, 8.0e6, None), (8.0, 9.0e6, None)]
+
+
+def test_a_spiked_monoculture_curve_names_the_clean_community_trace():
+    community_fc = {"id": 91, "techniqueType": "fc", "techniqueUnits": "Cells/mL",
+                    "subject": {"type": "bioreplicate", "name": "m1"}}
+    metabolite = {"id": 92, "techniqueType": "metabolite", "techniqueUnits": "mM",
+                  "subject": {"type": "metabolite", "name": "formic acid"}}
+    client = FakeClient({1: _bioreplicate(1, "m1", [_context(11, B), community_fc, metabolite])},
+                        {11: SPIKY, 91: CLEAN, 92: CLEAN})
+    replicates, _ = replicates_for_experiment(client, _experiment("BH", ((1, "m1"),)))
+    note = replicates[0].notes[B]
+    assert "community fc clean" in note and "not substituted" in note
+    assert "metabolite" not in note          # a metabolite trace is not a measurement of the strain
+
+
+def test_in_a_co_culture_the_community_trace_is_not_an_alternative():
+    community_fc = {"id": 91, "techniqueType": "fc", "subject": {"type": "bioreplicate", "name": "r1"}}
+    client = FakeClient({1: _bioreplicate(1, "r1", [_context(11, A), _context(12, B), community_fc])},
+                        {11: CLEAN, 12: SPIKY, 91: CLEAN})
+    replicates, _ = replicates_for_experiment(client, _experiment("co", ((1, "r1"),)))
+    note = replicates[0].notes[B]
+    assert "community" in note and "measure all members together" in note
+    assert A not in replicates[0].notes      # A's clean curve gets no note
+
+
+def test_alternatives_are_only_fetched_for_a_flagged_curve():
+    community_fc = {"id": 91, "techniqueType": "fc", "subject": {"type": "bioreplicate", "name": "m1"}}
+    client = FakeClient({1: _bioreplicate(1, "m1", [_context(11, B), community_fc])}, {11: CLEAN, 91: CLEAN})
+    replicates, _ = replicates_for_experiment(client, _experiment("BH", ((1, "m1"),)))
+    assert replicates[0].notes == {} and 91 not in client.series_calls

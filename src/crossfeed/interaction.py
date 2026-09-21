@@ -42,7 +42,7 @@ from __future__ import annotations
 import math
 import statistics
 
-from .growth import FEATURES, check_replicate_sets, check_sets, curve_features, shared_window
+from .growth import FEATURES, SPIKE_FACTOR, check_replicate_sets, check_sets, curve_features, shared_window, spike
 
 LOG = "log2"
 BICULTURE = "biculture"
@@ -61,13 +61,35 @@ def _property(end: float, method: str):
     return prop
 
 
-def _log_values(reps, species, role, prop, method, skipped) -> list:
-    """log2 of the property for each replicate in a set; non-positive replicates are skipped and reported."""
+def _spike_reason(rep, species, found: dict, factor: float) -> str:
+    curve = rep.curve(species)
+    times = ", ".join(f"{t:g}" for t in found["times"])
+    reason = (f"implausible spike: maximum is {found['ratio']:.0f} times the curve's median (limit {factor:g}), "
+              f"at {times} {curve.time_unit}; left out for this species only")
+    note = rep.notes.get(species)
+    return f"{reason}; {note}" if note else reason
+
+
+def _log_values(reps, species, role, prop, method, skipped, spike_factor=SPIKE_FACTOR, flagged=None) -> list:
+    """log2 of the property for each replicate in a set.
+
+    A replicate whose curve for `species` carries an implausible spike (`crossfeed.growth.spike`) is left
+    out for that species and reported, never dropped silently; its other species still take part. A
+    non-positive property is left out and reported as before.
+    """
     values = []
     for i, rep in enumerate(reps):
+        label = f"{species}: {role} replicate {rep.name or i}"
+        found = spike(rep.curve(species), spike_factor)
+        if found:
+            skipped.append((label, _spike_reason(rep, species, found, spike_factor)))
+            if flagged is not None:
+                flagged.append({"species": species, "role": role, "replicate": rep.name or str(i),
+                                "ratio": found["ratio"], "times": found["times"]})
+            continue
         value = prop(rep, species)
         if value <= 0:
-            skipped.append((f"{species}: {role} replicate {rep.name or i}", f"non-positive {method} ({value:g})"))
+            skipped.append((label, f"non-positive {method} ({value:g})"))
             continue
         values.append(math.log2(value))
     return values
@@ -89,7 +111,8 @@ def _compare(with_log2: list, without_log2: list) -> dict:
     return result
 
 
-def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, method: str = "auc") -> dict:
+def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, method: str = "auc",
+                         spike_factor: float = SPIKE_FACTOR) -> dict:
     """Interaction strength of a species pair from mono versus bi-culture replicate sets.
 
     mono_a, mono_b: Replicates of species_a and species_b grown alone. co: Replicates of the co-culture,
@@ -110,10 +133,12 @@ def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, met
     start, end = shared_window(c for rep in [*mono_a, *mono_b, *co] for c in rep.curves)
     prop = _property(end, method)
 
-    result = {"method": method, "log": LOG, "window": (start, end), "skipped": []}
+    result = {"method": method, "log": LOG, "window": (start, end), "skipped": [], "flagged": []}
     for key, species, monos in (("species_a", species_a, mono_a), ("species_b", species_b, mono_b)):
-        co_log2 = _log_values(co, species, "co-culture", prop, method, result["skipped"])
-        mono_log2 = _log_values(monos, species, "monoculture", prop, method, result["skipped"])
+        co_log2 = _log_values(co, species, "co-culture", prop, method, result["skipped"],
+                              spike_factor, result["flagged"])
+        mono_log2 = _log_values(monos, species, "monoculture", prop, method, result["skipped"],
+                                spike_factor, result["flagged"])
         c = _compare(co_log2, mono_log2)
         result[key] = {"species": species, "outcome": c["outcome"], "mean": c["mean"], "sd": c["sd"], "se": c["se"],
                        "n_co": c["n_with"], "n_mono": c["n_without"],
@@ -121,7 +146,8 @@ def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, met
     return result
 
 
-def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc") -> dict:
+def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc",
+                                  spike_factor: float = SPIKE_FACTOR) -> dict:
     """Interaction strengths from a full community and drop-out communities.
 
     full: Replicates of the full community, each with a curve for every member (the same members in every
@@ -141,7 +167,8 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc") -> 
 
     Returns a dict with "method", "log", "window" (start, end), "arcs" (each with "source", "target",
     "evidence", "community", "outcome", "mean", "sd", "se", "n_with", "n_without", "with_log2",
-    "without_log2"), and "skipped" as a list of (label, reason).
+    "without_log2"), "skipped" as a list of (label, reason), and "flagged" as in `interaction_strength`.
+    `spike_factor` works as there.
     """
     _check_method(method)
     if not full:
@@ -160,12 +187,15 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc") -> 
 
     evidence = BICULTURE if len(members) == 2 else DROPOUT
     community = sorted(members)
-    result = {"method": method, "log": LOG, "window": (start, end), "arcs": [], "skipped": []}
-    full_log2 = {m: _log_values(full, m, "full community", prop, method, result["skipped"]) for m in members}
+    result = {"method": method, "log": LOG, "window": (start, end), "arcs": [], "skipped": [], "flagged": []}
+    full_log2 = {m: _log_values(full, m, "full community", prop, method, result["skipped"],
+                                spike_factor, result["flagged"]) for m in members}
     for removed, reps in dropouts.items():
         without_role = f"community without {removed}"
         for target in (m for m in members if m != removed):
-            c = _compare(full_log2[target], _log_values(reps, target, without_role, prop, method, result["skipped"]))
+            without_log2 = _log_values(reps, target, without_role, prop, method, result["skipped"],
+                                       spike_factor, result["flagged"])
+            c = _compare(full_log2[target], without_log2)
             if c["outcome"] == NO_GROWTH:
                 result["skipped"].append((f"arc {removed} -> {target}",
                                           f"no growth ({method}) in the full community or the {without_role}"))

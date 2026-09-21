@@ -102,3 +102,37 @@ def test_shared_window_uses_earliest_end():
 def test_shared_window_different_starts_raise():
     with pytest.raises(ValueError, match="start at different time points"):
         shared_window([_curve(A), _curve(B, times=(1, 12, 24))])
+
+
+# ---- implausible spikes (#39) --------------------------------------------------------------------
+
+from crossfeed.growth import spike  # noqa: E402
+
+BH14 = (8.5e6, 2.4e7, 5.1e7, 7.1e7, 1.06e8, 5.264e13, 5.264e13, 4.8e8, 1.1e9, 1.4e9, 2.1e9, 2.9e9, 2.8e9)
+
+
+def _series(values, species=A):
+    return GrowthCurve(species, range(len(values)), values, "h", "Cells/mL")
+
+
+def test_the_bh14_shape_is_flagged_with_its_time_points():
+    found = spike(_series(BH14))
+    assert found and found["ratio"] > 1000
+    assert found["times"] == [5, 6]          # both identical extreme points, not only the first
+
+
+def test_a_decline_after_a_peak_is_not_a_spike():
+    # rises tenfold, then falls tenfold: max over last is 10, max over median stays small
+    assert spike(_series((1e7, 1e8, 1e9, 1e9, 5e8, 2e8, 1e8))) is None
+
+
+def test_a_clean_growth_curve_is_not_flagged():
+    assert spike(_series((1e6, 2e6, 8e6, 3e7, 9e7, 1e8, 1.1e8))) is None
+
+
+def test_factor_zero_switches_the_check_off():
+    assert spike(_series(BH14), factor=0) is None
+
+
+def test_a_curve_without_positive_median_is_left_to_the_no_growth_rule():
+    assert spike(_series((0.0, 0.0, 0.0, 5.0))) is None
