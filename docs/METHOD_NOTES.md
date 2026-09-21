@@ -65,7 +65,8 @@ mGrowthDB reports. Some consequences worth stating plainly, because several are 
 3. Mono versus co comparison: **mean log2 over replicate sets** (settled), coupled to 1; the neutral call
    comes from the spread, not a constant band (item 19)
 4. Significance and uncertainty: **sd, se and replicate counts on every edge** (shipped); the effect
-   follows the spread (item 19), and a statistical test is deferred (item 10)
+   follows the spread (item 19), and Welch's t-test with Benjamini-Hochberg is reported but does not
+   decide (item 10, settled 2026-09-21, not yet built)
 5. Co-culture scope: **pairwise, two member**
 6. Technique mismatch: **flag on every edge**, and do not trust the sign near the band under a mismatch
 7. Taxonomic identity: **genus and species today**, plus an NCBI taxid on every node (needs building);
@@ -79,7 +80,7 @@ mGrowthDB reports. Some consequences worth stating plainly, because several are 
 13. Output format: **JSON canonical, GraphML on demand**
 14. Query scope: **no default chosen yet**; whether a query for a species also returns its other strains,
     or other species of its genus (Karoline's list, 2026-09-18)
-15. Show neutral edges: **off** (settled 2026-09-21); an absence of interaction is computed and hidden
+15. Tested absences: **not edges** (settled 2026-09-21); kept with their numbers in `meta.absent`
 16. Show low-quality edges: **off** (settled 2026-09-21); computed, flagged, and hidden
 
 ## 1 and 3. The growth metric and how mono is compared to co (one coupled choice)
@@ -285,6 +286,9 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    full community replicates, and the two values of a pair reuse the same co-culture replicates, so they
    are not independent. Options: document it only (current), or model the covariance when significance
    is tested. Proposed default: document it now, decide together with item 10.
+   Status 2026-09-21: item 10 has been settled (Welch's t-test with Benjamini-Hochberg) without this one,
+   which it had reserved. Settling this decides whether that correction holds for the dependence actually
+   present, so it is no longer only documentation.
 4. **New optional edge fields in the neutral format** (#11). `evidence` (`biculture` for mono versus
    bi-culture, direct; `dropout`, possibly indirect) and `community` (members of the full community).
    Backward compatible, but a change to the contract downstream tools read. Proposed default: accept.
@@ -368,8 +372,19 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    PyPI release (#27).
 10. **Significance testing** (setting 4). Still open: which test on the per-replicate log2 values (for
    example Welch's t-test), and whether to correct for multiple testing across arcs.
-   DEFERRED by Karoline 2026-09-19 until the settled items have landed. Note that this and item 5's
-   no-growth test are the same choice of test and alpha.
+   SETTLED 2026-09-21 (Karoline); recorded in "Decisions" in [docs/agents/NOTES.md](agents/NOTES.md).
+   A test is reported, not used to decide. Her words: "let's drop the significance test as a
+   decision-making tool but keep its result in an edge attribute, since a significant result supports an
+   edge (whereas a non-significant result is not informative)." The spread rule of item 19 decides whether
+   an edge exists; Welch's t-test on the per-replicate log2 values runs for every comparison with at
+   least two replicates a side, and "when we apply a statistical test, I think it's better to include
+   multiple testing correction", so Benjamini-Hochberg is applied across every comparison in one
+   derivation. `p_value` holds the raw value and `significance` the adjusted one.
+   OPEN, raised by the Syntropa-side review: item 3 reserved the dependence question to be settled
+   together with this one, and this was settled without it. Benjamini-Hochberg controls the false
+   discovery rate under independence or positive regression dependence; the reuse item 3 describes is
+   plausibly positive, so the choice is likely right, but it should be recorded as a judgment rather than
+   inherited as a default. Benjamini-Yekutieli is the alternative that holds under arbitrary dependence.
 11. **The growth metric and the comparison are one coupled choice** (raised by the Syntropa-side review,
    2026-09-18). A log ratio suits an extensive quantity (AUC, yield, biomass), where doubling is
    meaningful and the value stays away from zero. On a growth rate it is unstable: when the monoculture
@@ -474,14 +489,23 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    | --- | --- | --- |
    | none | entirely above zero | facilitation |
    | none | entirely below zero | inhibition |
-   | none | crosses zero | neutral, meaning no interaction |
+   | none | crosses zero | not an edge: a tested absence (see below) |
    | any | any | the sign of the mean, flagged low quality |
 
    The sd rule stands in for a statistical test until item 10 settles one, and is replaced by the test in
    the neutral row when it does. The fixed 0.25 band retires with `BaselineDeriver`: neutral is defined by
-   the data, not by a constant. OPEN within this item: `obligate` and `abolished` carry no mean and no sd
-   by construction, so no row above can place them, and the Syntropa side has proposed a fifth row
-   showing them by default with the effect taken from the outcome (see #40).
+   the data, not by a constant. `obligate` and `abolished` carry no mean and no sd by construction, so
+   they take their effect from the outcome before any interval is tested (shipped in #40).
+   REVISED 2026-09-21 (Karoline): there is no such thing as a neutral edge. Her words: "'neutral edge' is
+   contradictory; the neutral case is the true absence of an edge." A clean comparison whose interval
+   crosses zero is therefore **not an edge**. It is kept as a tested absence carrying the same numbers,
+   in `meta.absent`, so the fact that a pair was measured and no interaction found is not thrown away.
+   `neutral` stays in the format only for the retired baseline and for networks derived before this.
+   OPEN, raised by the Syntropa-side review: `export.py` reads nothing from `meta`, so a tested absence
+   does not reach GraphML, which is the route into Cytoscape and therefore the route the layered network
+   is built on. A tested absence is evidence a prediction layer cannot supply, so losing it on that path
+   costs the thing the experimental layer is uniquely able to contribute. Either GraphML gains its own
+   representation for an absence, or an absence goes back into the edge list with a marker.
 20. **Edge quality as an attribute** (Karoline, 2026-09-21). Rather than drop a weak edge or silently
    keep it, an edge carries a list of quality flags saying what is wrong with it, so a consumer can filter
    on the specific problem. Her words: "keep edges computed on a single replicate but flag them as
@@ -495,7 +519,10 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
 21. **Which edges a network shows by default** (Karoline, 2026-09-21). Her words: "The user should be
    able to display 'neutral' and/or 'low-quality' edges at wish, but I suggest to filter out both by
    default."
-   SETTLED 2026-09-21: two display settings, both off by default, in the command line and both interfaces.
+   REVISED 2026-09-21: with the neutral edge retired (item 19) there is nothing to filter on that side,
+   so what remains is one setting for low-quality edges, off by default, and tested absences kept in
+   `meta.absent` where a reader can ask for them.
+   SETTLED 2026-09-21: the display settings sit in the command line and both interfaces.
    The derivation computes every edge and the filter applies at output, so nothing is lost, only hidden,
    and the network's `meta` records which filters were applied so a reader of a file knows what was left
    out. Note for item 10: a threshold on strength has to treat a null strength as not comparable rather

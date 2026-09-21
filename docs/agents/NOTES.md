@@ -117,6 +117,20 @@ Rules for this file:
   and the network's `meta` records which filters were applied so a reader of a file knows what is missing.
 - 2026-09-21 (Karoline): #39, the outlier rule, merges before #40, and #40 rebases onto it, so the
   default deriver never ships with the SMGDB00000004 qPCR artifact inside a monoculture set.
+- 2026-09-21 (Karoline, item 19 revised): there is no neutral edge. Her words: "'neutral edge' is
+  contradictory; the neutral case is the true absence of an edge." A clean comparison whose interval
+  crosses zero is not an edge; it is kept as a tested absence with the same numbers in `meta.absent`, so
+  a measured "we looked and found nothing" is not discarded. `neutral` remains in the format only for the
+  retired baseline and for networks already derived.
+- 2026-09-21 (Karoline, item 10): a statistical test is reported, not used to decide. Her words: "let's
+  drop the significance test as a decision-making tool but keep its result in an edge attribute, since a
+  significant result supports an edge (whereas a non-significant result is not informative)." Welch's
+  t-test on the per-replicate log2 values, for every comparison with at least two replicates a side, with
+  Benjamini-Hochberg across every comparison in one derivation. `p_value` holds the raw value,
+  `significance` the adjusted one. Item 3 had reserved the dependence question to be settled with this
+  one and is still open, so which correction suits the dependence actually present is not yet recorded.
+- 2026-09-21 (Craig, the format): `p_value` and `meta.absent` accepted, after `sd`, `quality` and
+  `notes`. All optional and backward compatible; the schema is regenerated from the model.
 
 ## Open questions (need a human)
 
