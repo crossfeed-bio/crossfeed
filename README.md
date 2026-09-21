@@ -171,7 +171,20 @@ says what the edge was derived from: `biculture` (a species alone against
 the same species with one partner, a direct interaction) or `dropout` (a full community against the
 community without the source species, so the effect is not necessarily direct; strictly a hyper-arc,
 kept as an arc), or `null` when unknown; `community` lists the node ids of the community it came from.
-Both fields are optional, so documents without them stay valid.
+`experiments` lists the ids of the mGrowthDB experiments whose replicates the edge compares, so edges that
+share replicates (every drop-out arc of one design shares the full community) can be recognized.
+These fields are optional, so documents without them stay valid.
+
+**Drop-out designs.** A community of three or more members, together with experiments holding the same
+community without one member under the same conditions, gives an arc from each removed member to each
+remaining one. The arc is labeled `evidence: dropout` because the removed member may act through a third
+species. Drop-out arcs are included by default; `--no-dropout` (or the matching advanced setting) leaves
+them out. Experiments are pooled into one replicate set only when their conditions (cultivation mode and
+the compartment records: medium, pH, temperature, gases, and so on) are identical, since interactions are
+usually environmentally specific; under different conditions they give separate arcs. A design does not
+need every drop-out. mGrowthDB still measures the removed member in a drop-out experiment; that curve is
+not used, and if it shows a positive signal the drop-out may not be clean, so its arcs are flagged
+`removed_member_detected`. A larger community with no drop-out experiment is skipped, with a reason.
 
 **How presence and absence are decided.** Every tested comparison is exported as an edge, and its
 `status` says whether it counts as an interaction under the **absence threshold k**:
@@ -200,9 +213,12 @@ Both fields are optional, so documents without them stay valid.
 
 `quality` lists what makes an edge low quality: `single_replicate` (no spread can be estimated, so such an
 edge carries no `sd`, `se` or test), `strains_pooled` (monocultures of different strains of one species were
-pooled, until nodes are keyed by taxon id), and `non_batch`. A low-quality edge keeps the sign of its mean
+pooled, until nodes are keyed by taxon id), `non_batch`, and `removed_member_detected` (a drop-out
+experiment measured the member it should lack). A low-quality edge keeps the sign of its mean
 and is never read as an absence. Low-quality edges are left out of the output by default
 (`--include-low-quality`, or the matching advanced setting), and `meta.hidden` counts them.
+`cautions` are shown without making an edge low quality: `two_replicates` marks an edge with exactly two
+replicates on a side, whose sd rests on two values. Such an edge keeps its `status` and is exported.
 `notes` inform without disqualifying, for example a replicate left out for an implausible spike. Every
 comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2 values:
 `p_value` is the raw value and `significance` the Benjamini-Hochberg adjusted one across all comparisons

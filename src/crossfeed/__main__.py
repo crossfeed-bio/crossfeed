@@ -55,7 +55,8 @@ def _derive(a):
         deriver = _load_deriver(a.deriver) if a.deriver else None
         try:
             records, skipped = derive_interactions(MGrowthDBClient(), a.study, deriver=deriver,
-                                                   metric=a.metric, spike_factor=a.spike_factor)
+                                                   metric=a.metric, spike_factor=a.spike_factor,
+                                                   dropout=not a.no_dropout)
             records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold)
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
@@ -96,9 +97,10 @@ def _derive(a):
         top = Counter(r.split(";")[0].strip() for _, r in skipped).most_common(1)
         why = f" Most common reason: {top[0][0]}." if top else ""
         print(f"\nNO interactions were derived for {a.study}: the network is empty.{why}\n"
-              "The provisional baseline handles pairwise (two-member) co-cultures only, so a study built "
-              "on larger or deletion consortia yields nothing until a method suited to its design is "
-              "chosen (see docs/METHOD_NOTES.md).", file=sys.stderr)
+              "crossfeed derives interactions from pairwise (two-member) co-cultures and from drop-out "
+              "designs (a community plus the same community without one member); other larger communities "
+              "yield nothing until a method suited to their design is chosen (see docs/METHOD_NOTES.md).",
+              file=sys.stderr)
     return 0
 
 
@@ -147,6 +149,9 @@ def main(argv=None):
                    help="the growth property compared (default: auc, the area under the curve)")
     d.add_argument("--include-low-quality", action="store_true",
                    help="also emit low-quality edges (for example a single replicate), flagged with the reason")
+    d.add_argument("--no-dropout", action="store_true",
+                   help="leave out arcs from drop-out designs (a community against the same community without "
+                        "one member); included by default, labeled evidence dropout")
     d.add_argument("--absence-threshold", type=float, default=1.0, metavar="K",
                    help="an edge is absent when |log2 mean| < K * sd (default 1, the mean plus or minus sd rule; "
                         "0 marks nothing absent)")

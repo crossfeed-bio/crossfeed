@@ -144,6 +144,19 @@ Rules for this file:
   Obligate and abolished edges are the extremes of each direction, always present, with their own style.
   Low-quality edges are not exported by default. This closes the gap that a tested absence did not reach
   GraphML. The three new edge fields replace `meta.absent` and need Craig's acceptance as a format change.
+- 2026-09-21 (Karoline, drop-out designs, #47): experiments are pooled only when they are replicates.
+  Her words: "if both experiments are replicates (performed with the same medium and settings) then they
+  can be treated as such. if not, these would have to be treated as different arcs, since interactions
+  are usually environmentally specific. we could support multi-arcs, i.e. interactions supported by
+  different experiments." Filtering by environment is a separate discussion (#61); by default nothing is
+  filtered. A positive signal for the removed member in a drop-out experiment makes that drop-out's arcs
+  unreliable (flag `removed_member_detected`). Exactly two replicates on a side gets a flag, "I'd go for the
+  quality flag", which she chose as a caution (`two_replicates`) that does not hide the edge or undo its
+  status. On dependence: "such arcs should have an attribute whose value is the experiment of origin and a
+  flag that they come from a drop-out experiment" (`experiments`, and `evidence: dropout`). Pairwise and
+  drop-out arcs for one pair are parallel arcs: "yes, multi-arcs. could be condensed into an arc with a
+  number-of-studies-supporting-the-arc attribute", which is the merge step of register item 10. Arcs come
+  from whichever drop-outs exist ("agree"). Drop-out arcs get their own Cytoscape style (#25).
 
 ## Open questions (need a human)
 
@@ -155,8 +168,12 @@ Rules for this file:
 ## Gotchas
 
 - mGrowthDB serves growth curves, not interactions; interactions are derived.
-- Study SMGDB00000008 (13 to 14 member deletion consortia) yields an empty network under the pairwise
-  baseline. That is expected, not a bug.
+- Study SMGDB00000008 (13 to 14 member deletion consortia) yields drop-out arcs only (#47). Its replicates
+  are measured at 0, 10, 20 and 30 h, a few curves lack a point, and the window of a drop-out design is
+  shared by all its curves, so one curve ending at 20 h cuts every arc's area to 0 to 20 h.
+- mGrowthDB's structured conditions can miss a difference that only the free-text description records:
+  in SMGDB00000004, `RI_BH +Ac` and `RI_BH -Ac` (with and without initial acetate) have identical
+  compartment records, so the conditions rule pools them.
 - In the FP/BH study, monoculture and co-culture growth use different measurement techniques; edges carry
   a technique-mismatch flag. The magnitude is provisional, and near the neutral band the sign can move too
   under a cross-technique offset, so a mismatched edge's direction is not fully dependable either.

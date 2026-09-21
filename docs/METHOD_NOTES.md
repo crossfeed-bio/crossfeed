@@ -200,8 +200,10 @@ interaction information the pairwise baseline (setting 5) skips.
 - **include**: an opt-in deriver that attributes a per-strain change under a deletion to the removed member,
   which recovers studies like SMGDB00000008.
 
-**Proposed default (Craig): exclude from the default network, support as an opt-in deriver.** One of the
-higher-value builds, since it unlocks a class of real studies without changing the pairwise default.
+Craig's first proposal was to exclude them from the default network behind an opt-in deriver. SETTLED
+2026-09-20 and 2026-09-21 (register item 2): include them by default, labeled `evidence: dropout`, with a
+setting to leave them out. Built in #47; the rules Karoline set for it are in "Decisions" in
+[docs/agents/NOTES.md](agents/NOTES.md).
 
 ## 10. Edge thresholds: strength and supporting studies
 
@@ -298,6 +300,11 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    Status 2026-09-21: item 10 has been settled (Welch's t-test with Benjamini-Hochberg) without this one,
    which it had reserved. Settling this decides whether that correction suits the dependence actually
    present, so it is no longer only documentation.
+   SETTLED 2026-09-21 (Karoline, on #47): document it, keep Benjamini-Hochberg as the default with
+   Benjamini-Yekutieli as a setting, and make the dependence visible on each edge. Her words: "such arcs
+   should have an attribute whose value is the experiment of origin and a flag that they come from a
+   drop-out experiment". Edges carry `experiments` and `evidence`; arcs sharing an experiment share
+   replicates.
 4. **New optional edge fields in the neutral format** (#11). `evidence` (`biculture` for mono versus
    bi-culture, direct; `dropout`, possibly indirect) and `community` (members of the full community).
    Backward compatible, but a change to the contract downstream tools read. Proposed default: accept.

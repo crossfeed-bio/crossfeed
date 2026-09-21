@@ -73,7 +73,17 @@ tagged version is never reused for changed content.
   gets the outcome `obligate` (obligate commensal or mutualist), one that grows only without it `abolished`,
   in both `interaction_strength` and `dropout_interaction_strengths`.
 
+- Drop-out designs reach the default network (#47): a community plus experiments holding it without one
+  member give arcs labeled `evidence: dropout`, included by default and left out with `--no-dropout` or
+  the matching advanced setting. Experiments are pooled only under identical conditions, and
+  SMGDB00000008 now derives.
+- Edges gained optional `cautions` (`two_replicates`, shown without making an edge low quality) and
+  `experiments` (the ids of the experiments an edge compares), plus the quality flag
+  `removed_member_detected`.
+
 ### Changed
+- A co-culture is compared only with monocultures grown under the same conditions (cultivation mode and
+  compartments); no current study is affected.
 - crossfeed now has no runtime dependencies: the client uses the standard library `urllib`, and the
   unused `requests` dependency was dropped.
 

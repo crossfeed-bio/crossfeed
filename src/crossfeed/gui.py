@@ -28,7 +28,8 @@ from .taxonomy import resolve_species, species_index
 
 TITLE = "crossfeed"
 DEFAULTS = {"metric": "auc", "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
-            "include_low_quality": False, "correction": "bh", "studies": "", "only_entered": True}
+            "include_low_quality": False, "correction": "bh", "include_dropout": True, "studies": "",
+            "only_entered": True}
 PROVISIONAL = ("Each interaction compares a species' growth with and without its partner across replicates "
                "(mean log2 difference). An interaction is reported when |mean| is at least k standard "
                "deviations (the absence threshold, default 1: the mean plus or minus its standard deviation "
@@ -36,10 +37,11 @@ PROVISIONAL = ("Each interaction compares a species' growth with and without its
                "as supporting evidence and does not decide; with few replicates, more experiments may change "
                "any of these results (see docs/METHOD_NOTES.md).")
 MISMATCH = ("Monoculture and co-culture growth were measured by different techniques in some of these "
-            "studies, so the direction of those interactions is dependable while the magnitude is not.")
-EMPTY_HELP = ("The provisional baseline handles pairwise (two-member) co-cultures only, so studies built "
-              "on larger or deletion consortia yield nothing until a method suited to their design is "
-              "chosen (see docs/METHOD_NOTES.md).")
+            "studies, so neither the magnitude nor, near zero, the direction of those interactions is fully "
+            "dependable.")
+EMPTY_HELP = ("crossfeed derives interactions from pairwise (two-member) co-cultures and from drop-out "
+              "designs (a community plus the same community without one member). Other larger communities "
+              "yield nothing until a method suited to their design is chosen (see docs/METHOD_NOTES.md).")
 
 CSS = """
 body { font: 16px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 52rem; padding: 2rem 1rem; }
@@ -70,6 +72,7 @@ def _settings_block(settings: dict) -> str:
     s = {**DEFAULTS, **settings}
     checked = " checked" if s["only_entered"] else ""
     low = " checked" if s["include_low_quality"] else ""
+    dropout = " checked" if s["include_dropout"] else ""
     corrections = "".join(f"<option value=\"{c}\"{' selected' if s['correction'] == c else ''}>{label}</option>"
                           for c, label in (("bh", "Benjamini-Hochberg"), ("by", "Benjamini-Yekutieli")))
     options = "".join(f"<option value=\"{m}\"{' selected' if s['metric'] == m else ''}>{m}</option>"
@@ -82,6 +85,10 @@ def _settings_block(settings: dict) -> str:
 <div class="row"><label><input type="checkbox" name="include_low_quality" value="1"{low}>
   Show low-quality edges</label>
   <span class="muted">for example a single replicate; shown with the reason, never read as no interaction</span></div>
+<div class="row"><label><input type="checkbox" name="include_dropout" value="1"{dropout}>
+  Include drop-out communities</label>
+  <span class="muted">arcs from a community compared with the same community without one member; possibly
+  indirect, so labeled as such</span></div>
 <div class="row"><label>Absence threshold k
   <input name="absence_threshold" type="text" size="6" value="{_esc(s['absence_threshold'])}"></label>
   <span class="muted">absent when |log2 mean| &lt; k &times; sd; 1 is mean &plusmn; sd, 0 marks none
@@ -134,7 +141,9 @@ def _number(x, fmt: str) -> str:
 def _arc_rows(net, edges) -> str:
     rows = []
     for e in edges:
-        remarks = "; ".join([*(f"low quality: {q.replace('_', ' ')}" for q in e.quality), *e.notes])
+        remarks = "; ".join([*(["drop-out community, possibly indirect"] if e.evidence == "dropout" else []),
+                             *(f"low quality: {q.replace('_', ' ')}" for q in e.quality),
+                             *(f"caution: {c.replace('_', ' ')}" for c in e.cautions), *e.notes])
         rows.append(f"<tr><td>{_esc(net.nodes[e.source].name or e.source)}</td>"
                     f"<td>{_esc(net.nodes[e.target].name or e.target)}</td>"
                     f"<td>{_esc(_direction(e))}</td><td>{_mean_sd(e.strength, e.sd)}</td>"
@@ -234,6 +243,7 @@ def parse_settings(form: dict) -> dict:
     except ValueError:
         pass
     settings["include_low_quality"] = bool(form.get("include_low_quality"))
+    settings["include_dropout"] = bool(form.get("include_dropout"))
     try:
         settings["absence_threshold"] = abs(float(form.get("absence_threshold", [""])[0]))
     except ValueError:
@@ -271,7 +281,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     for study_id in studies:
         try:
             recs, skips = derive_interactions(client, study_id, metric=s["metric"],
-                                              spike_factor=s["spike_factor"])
+                                              spike_factor=s["spike_factor"], dropout=s["include_dropout"])
         except MGrowthDBError as e:
             errors.append(f"{study_id}: {e}")
             continue
