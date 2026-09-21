@@ -117,6 +117,26 @@ Rules for this file:
   and the network's `meta` records which filters were applied so a reader of a file knows what is missing.
 - 2026-09-21 (Karoline): #39, the outlier rule, merges before #40, and #40 rebases onto it, so the
   default deriver never ships with the SMGDB00000004 qPCR artifact inside a monoculture set.
+- 2026-09-21 (Karoline, item 19 revised): there is no neutral edge. Her words: "'neutral edge' is
+  contradictory; the neutral case is the true absence of an edge." A clean comparison whose interval
+  crosses zero is not an edge; it is kept as a tested absence with the same numbers in `meta.absent`, so
+  a measured "we looked and found nothing" is not discarded. `neutral` remains in the format only for the
+  retired baseline and for networks already derived.
+- 2026-09-21 (Karoline, item 10): a statistical test is reported, not used to decide. Her words: "let's
+  drop the significance test as a decision-making tool but keep its result in an edge attribute, since a
+  significant result supports an edge (whereas a non-significant result is not informative)." Welch's
+  t-test on the per-replicate log2 values, with Benjamini-Hochberg across every comparison in one
+  derivation. `p_value` holds the raw value, `significance` the adjusted one.
+- 2026-09-21 (Craig, the format): `p_value` and `meta.absent` accepted, after `sd`, `quality` and
+  `notes`. All optional and backward compatible; the schema is regenerated from the model.
+- 2026-09-21: item 3 reserved the dependence question to be settled together with item 10, and item 10
+  was settled without it. Benjamini-Hochberg controls the false discovery rate under independence or
+  positive regression dependence; the replicate reuse item 3 describes is plausibly positive, so the
+  choice is likely right, but it is a judgment nobody has recorded making. Benjamini-Yekutieli is the
+  alternative that holds under arbitrary dependence.
+- 2026-09-21: a tested absence does not reach GraphML. `export.py` reads nothing from `meta`, and
+  `meta.absent` is where absences live, so the Cytoscape path loses them. That path is how a layered
+  network gets built, and a tested absence is evidence a prediction layer cannot supply.
 
 ## Open questions (need a human)
 
