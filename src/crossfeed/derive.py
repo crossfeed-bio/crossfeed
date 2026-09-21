@@ -27,7 +27,7 @@ from .adapter import replicates_for_experiment
 from .growth import SPIKE_FACTOR, GrowthCurve, Replicate
 from .interaction import ABOLISHED, NO_GROWTH, OBLIGATE, interaction_strength
 from .mgrowthdb import MGrowthDBClient
-from .stats import benjamini_hochberg, welch
+from .stats import CORRECTIONS, welch
 
 METHOD = ("crossfeed baseline v0 (PROVISIONAL): log2(growthRate co / mono), pairwise co-cultures only, "
           "no significance test; comparison method to be scoped with K. Faust")
@@ -150,7 +150,7 @@ REPLICATE_METHOD = ("crossfeed replicate v1: mean log2({metric} in co-culture) m
                     "deviation; Welch's t-test reported, Benjamini-Hochberg corrected, not used to decide")
 ABSENT = "absent"      # a tested comparison with no interaction: kept, but never an edge
 STATISTICS = {"test": "Welch's two-sided t-test on the per-replicate log2 values",
-              "correction": "Benjamini-Hochberg over every comparison tested in this derivation",
+              "correction": "{name} over every comparison tested in this derivation",
               "role": "reported as support for an edge; presence is decided by mean plus or minus sd"}
 
 # Quality flags make an edge low quality: hidden by default, and never read as the absence of an
@@ -308,15 +308,19 @@ def is_low_quality(record) -> bool:
     return bool(record.get("quality"))
 
 
-def adjust_significance(records) -> int:
-    """Fill each record's `significance` with its Benjamini-Hochberg adjusted p-value, in place.
+def adjust_significance(records, correction: str = "bh") -> int:
+    """Fill each record's `significance` with its adjusted p-value, in place.
+
+    `correction` is "bh" (Benjamini-Hochberg, the default) or "by" (Benjamini-Yekutieli, valid under any
+    dependence between the tests).
 
     The family is every comparison tested in this derivation, edges, absences and low-quality ones alike,
     since all were tested. Returns the number of tests. Records without a p-value (a single replicate on
     a side) are not tests and keep `significance` None.
     """
     tested = [r for r in records if r.get("p_value") is not None]
-    for record, adjusted in zip(tested, benjamini_hochberg([r["p_value"] for r in tested]), strict=True):
+    adjust = CORRECTIONS[correction][1]
+    for record, adjusted in zip(tested, adjust([r["p_value"] for r in tested]), strict=True):
         record["significance"] = round(adjusted, 6)
     return len(tested)
 
@@ -343,11 +347,13 @@ def select_edges(records, include_low_quality: bool = False) -> tuple:
     return edges, hidden, absent
 
 
-def output_meta(records, include_low_quality: bool = False) -> tuple:
+def output_meta(records, include_low_quality: bool = False, correction: str = "bh") -> tuple:
     """(edges, meta) for writing a network: significance adjusted, absences and the filter recorded."""
-    tests = adjust_significance(records)
+    tests = adjust_significance(records, correction)
     edges, hidden, absent = select_edges(records, include_low_quality)
-    meta = {"statistics": {**STATISTICS, "tests": tests}, "absent": absent,
+    statistics = {**STATISTICS, "correction": STATISTICS["correction"].format(name=CORRECTIONS[correction][0]),
+                  "tests": tests}
+    meta = {"statistics": statistics, "absent": absent,
             "filters": {"include_low_quality": include_low_quality}, "hidden": hidden}
     return edges, meta
 

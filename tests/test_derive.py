@@ -240,6 +240,8 @@ def test_output_meta_records_the_statistics_and_the_absences():
     edges, meta = output_meta(records)
     assert [e["source_name"] for e in edges] == [B]
     assert meta["statistics"]["tests"] == 2 and "Benjamini-Hochberg" in meta["statistics"]["correction"]
+    _, conservative = output_meta(records, correction="by")
+    assert "Benjamini-Yekutieli" in conservative["statistics"]["correction"]
     assert [a["source_name"] for a in meta["absent"]] == [A]
     assert meta["absent"][0]["n_with"] == 2 and meta["absent"][0]["significance"] is not None
 

@@ -146,7 +146,8 @@ def test_form_hides_every_setting_behind_one_button():
     ({}, {**DEFAULTS, "only_entered": False}),   # an unticked checkbox is simply absent from a post
     ({"metric": ["max"], "spike_factor": ["50"], "studies": [" S1 "], "only_entered": ["1"],
       "include_low_quality": ["1"]},
-     {"metric": "max", "spike_factor": 50.0, "studies": "S1", "only_entered": True, "include_low_quality": True}),
+     {"metric": "max", "spike_factor": 50.0, "studies": "S1", "only_entered": True, "include_low_quality": True,
+      "correction": "bh"}),
     ({"metric": ["nonsense"], "spike_factor": ["not a number"]}, {**DEFAULTS, "only_entered": False}),
 ])
 def test_settings_fall_back_to_defaults(form, expected):

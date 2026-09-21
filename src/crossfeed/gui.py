@@ -28,7 +28,7 @@ from .taxonomy import resolve_species, species_index
 
 TITLE = "crossfeed"
 DEFAULTS = {"metric": "auc", "spike_factor": SPIKE_FACTOR, "include_low_quality": False,
-            "studies": "", "only_entered": True}
+            "correction": "bh", "studies": "", "only_entered": True}
 PROVISIONAL = ("Each interaction compares a species' growth with and without its partner across replicates "
                "(mean log2 difference). An interaction is reported when the mean plus or minus its standard "
                "deviation stays on one side of zero. Welch's t-test, corrected for multiple testing, is shown "
@@ -69,6 +69,8 @@ def _settings_block(settings: dict) -> str:
     s = {**DEFAULTS, **settings}
     checked = " checked" if s["only_entered"] else ""
     low = " checked" if s["include_low_quality"] else ""
+    corrections = "".join(f"<option value=\"{c}\"{' selected' if s['correction'] == c else ''}>{label}</option>"
+                          for c, label in (("bh", "Benjamini-Hochberg"), ("by", "Benjamini-Yekutieli")))
     options = "".join(f"<option value=\"{m}\"{' selected' if s['metric'] == m else ''}>{m}</option>"
                       for m in ("auc", "max"))
     return f"""<details>
@@ -79,6 +81,9 @@ def _settings_block(settings: dict) -> str:
 <div class="row"><label><input type="checkbox" name="include_low_quality" value="1"{low}>
   Show low-quality edges</label>
   <span class="muted">for example a single replicate; shown with the reason, never read as no interaction</span></div>
+<div class="row"><label>Multiple testing correction
+  <select name="correction">{corrections}</select></label>
+  <span class="muted">Benjamini-Hochberg (default) or the more conservative Benjamini-Yekutieli</span></div>
 <div class="row"><label>Spike limit
   <input name="spike_factor" type="text" size="6" value="{_esc(s['spike_factor'])}"></label>
   <span class="muted">leave out a curve whose maximum exceeds this many times its median; 0 keeps all</span></div>
@@ -214,6 +219,9 @@ def parse_settings(form: dict) -> dict:
     except ValueError:
         pass
     settings["include_low_quality"] = bool(form.get("include_low_quality"))
+    correction = form.get("correction", [""])[0]
+    if correction in ("bh", "by"):
+        settings["correction"] = correction
     settings["studies"] = form.get("studies", [""])[0].strip()
     settings["only_entered"] = bool(form.get("only_entered"))
     return settings
@@ -253,7 +261,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         records += recs
         skipped += skips
 
-    records, extra = output_meta(records, s["include_low_quality"])
+    records, extra = output_meta(records, s["include_low_quality"], s["correction"])
     net = records_to_network(records, meta={
         "source_db": "mGrowthDB (live)", "species": names, "studies": studies, **extra})
     return {"resolved": resolved["resolved"], "unresolved": resolved["unresolved"],
