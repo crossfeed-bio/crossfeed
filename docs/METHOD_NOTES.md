@@ -291,6 +291,9 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    full community replicates, and the two values of a pair reuse the same co-culture replicates, so they
    are not independent. Options: document it only (current), or model the covariance when significance
    is tested. Proposed default: document it now, decide together with item 10.
+   Status 2026-09-21: item 10 has been settled (Welch's t-test with Benjamini-Hochberg) without this one,
+   which it had reserved. Settling this decides whether that correction suits the dependence actually
+   present, so it is no longer only documentation.
 4. **New optional edge fields in the neutral format** (#11). `evidence` (`biculture` for mono versus
    bi-culture, direct; `dropout`, possibly indirect) and `community` (members of the full community).
    Backward compatible, but a change to the contract downstream tools read. Proposed default: accept.
