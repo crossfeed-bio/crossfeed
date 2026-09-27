@@ -55,7 +55,10 @@ def report_text(result: dict) -> str:
              f"derived on: {meta.get('derived_on', '')}",
              f"data: {meta.get('source_db', 'mGrowthDB')}, {MGROWTHDB_API}", ""]
 
-    lines.append("species entered: " + (", ".join(result.get("entries", [])) or "none"))
+    if result.get("study"):
+        lines.append(f"study derived: {result['study']} (every species in it)")
+    else:
+        lines.append("species entered: " + (", ".join(result.get("entries", [])) or "none"))
     for entry, matches in result["resolved"]:
         lines.append(f"  {entry}: " + ", ".join(f"{n} (taxon {t})" for t, n in sorted(matches.items())))
     if result["unresolved"]:

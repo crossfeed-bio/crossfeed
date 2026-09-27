@@ -113,7 +113,7 @@ concrete demonstration of the seam.
 
 ```
 python -m crossfeed derive STUDY [--live | --fixture FILE] [--deriver MODULE:CLASS] [--format json|graphml] [--out FILE]
-python -m crossfeed derive --live --species NAME [NAME ...] [--all-partners] [STUDY,STUDY] [--out FILE]
+python -m crossfeed derive --live --species NAME [NAME ...] [--all-partners] [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
 python -m crossfeed validate FILE
 python -m crossfeed schema [--out FILE]
 ```
@@ -125,6 +125,10 @@ python -m crossfeed schema [--out FILE]
   command line: `crossfeed derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"`.
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the baseline (see below).
+- The command line does everything the local page does: every advanced setting has its option, and
+  the page's three outputs are `--out FILE` (with `--format`), `--to-cytoscape` and `--report FILE`, the
+  same report the page shows. `crossfeed derive --help` lists every option in the page's words, with
+  examples.
 - `--format graphml` emits GraphML (for Cytoscape, igraph, networkx, Gephi) instead of the neutral JSON.
 - `--out FILE` writes the network to a file instead of stdout; attribution and skipped pairs print to
   stderr.

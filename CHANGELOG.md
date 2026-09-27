@@ -14,6 +14,9 @@ tagged version is never reused for changed content.
   require an entry for every setting, command line option and model field, so it cannot fall behind (#78).
 - `derive --live --species NAME ...` runs the local page's search from the command line, with
   `--all-partners` for the page's "only the species entered" box unticked (#78).
+- `derive --report FILE` writes the page's report from the command line, and `crossfeed derive --help`
+  groups its options as the page does (what to derive, the settings, the outputs), in the page's
+  wording, with examples. A test requires an option for every setting and all three outputs.
 - Clearer advanced settings: the absence threshold says it decides when an interaction counts as absent
   (the species do not affect each other), and the no-growth settings say they test the replicate growth
   curves of one species in one culture condition. A new setting, Exclude these studies

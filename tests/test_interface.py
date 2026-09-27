@@ -174,3 +174,31 @@ def test_the_input_field_starts_empty_under_a_header_naming_the_options_and_a_ro
     for example in gui.INPUT_EXAMPLES:                              # one species, one strain, one taxon id
         assert example in page[examples:page.index("<textarea")]
     assert ".examples {" in page and "font-size: .82rem" in page   # in a smaller font
+
+
+def test_the_command_line_gives_everything_the_page_does(monkeypatch, tmp_path, capsys):
+    """Every advanced setting has its option, and the page's three outputs (network in either format,
+    Cytoscape, the report) are there, with the page's own report. `crossfeed derive --help` lists them."""
+    from crossfeed.__main__ import build_parser, main
+    derive = next(a for a in build_parser()._actions if a.dest == "cmd").choices["derive"]
+    options = {o for action in derive._actions for o in action.option_strings}
+    for key, (_, flag, _) in SETTINGS.items():
+        assert key in ("studies",) or flag.split()[0] in options, key          # studies is the argument
+    assert {"--format", "--out", "--to-cytoscape", "--report"} <= options
+    help_text = derive.format_help()
+    assert "examples:" in help_text and "--report FILE" in help_text and "a set " not in help_text
+
+    monkeypatch.setattr("crossfeed.mgrowthdb.MGrowthDBClient", FakeClient)
+    sent = {}
+    monkeypatch.setattr("crossfeed.cytoscape.send", lambda net, **kw: sent.update(n=len(net.edges)) or
+                        {"suid": 3, "style": "grownet", "warning": ""})
+    out, report = tmp_path / "net.graphml", tmp_path / "report.txt"
+    assert main(["derive", "--live", "--species", A, B, "--format", "graphml", "--out", str(out),
+                 "--report", str(report), "--to-cytoscape", "--absence-threshold", "2"]) == 0
+    assert ET.fromstring(out.read_text(encoding="utf-8")).tag.endswith("graphml") and sent["n"] == 2
+    text = report.read_text(encoding="utf-8")
+    assert f"tool: grownet {__version__}" in text and "Absence threshold k (--absence-threshold): 2.0" in text
+    # the report is the page's own, for the same search
+    page = gui.run_query(FakeClient(), [A, B], {"absence_threshold": 2.0})
+    from crossfeed.report import report_text
+    assert text == report_text(page)

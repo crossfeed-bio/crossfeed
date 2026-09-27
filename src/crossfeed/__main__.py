@@ -1,6 +1,6 @@
-"""crossfeed command line: derive a network for any mGrowthDB study, or validate the neutral format.
+"""grownet command line (the command is still crossfeed): derive interaction networks from mGrowthDB.
 
-  python -m crossfeed derive SMGDB00000004 --live                 # fetch + derive one study
+  python -m crossfeed derive SMGDB00000004 --live                 # every species in one study
   python -m crossfeed derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"
   python -m crossfeed derive SMGDB00000004 --fixture records.json  # offline, from interaction records
   python -m crossfeed validate network.json                       # check a network against the schema
@@ -17,6 +17,21 @@ from collections import Counter
 from .attribution import render_attribution
 from .mgrowthdb import MGrowthDBError, records_to_network
 from .schema import schema_json, validate_document
+
+DERIVE_EXAMPLES = """examples:
+  the local page's Example, written to a file, with its report, and sent to Cytoscape:
+    crossfeed derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica" \\
+        --out example.json --report example_report.txt --to-cytoscape
+
+  a strain and a taxon id, every partner, as GraphML:
+    crossfeed derive --live --species "Faecalibacterium duncaniae A2-165" 476272 --all-partners \\
+        --format graphml --out example.graphml
+
+  every species in one study, stricter about what counts as an interaction:
+    crossfeed derive SMGDB00000004 --live --absence-threshold 2 --out study4.json
+
+The command becomes grownet when the package is renamed.
+"""
 
 
 def _build(records, study_id, source_db, extra=None):
@@ -84,7 +99,9 @@ def _derive(a):
         source_db = "mGrowthDB (fixture)"
 
     net = _build(records, a.study, source_db, extra)
-    return _emit(a, net, skipped, extra, a.study)
+    result = {"study": a.study, "entries": [], "resolved": [], "unresolved": [], "studies": [a.study],
+              "skipped": skipped, "errors": [], "network": net}
+    return _emit(a, net, skipped, extra, a.study, result)
 
 
 def _derive_species(a):
@@ -122,11 +139,11 @@ def _derive_species(a):
     if problems:
         raise SystemExit("network invalid:\n  " + "\n  ".join(problems))
     extra = {"absence": result["absence"], "hidden": result["hidden"]}
-    return _emit(a, net, result["skipped"], extra, " and ".join(a.species))
+    return _emit(a, net, result["skipped"], extra, " and ".join(a.species), result)
 
 
-def _emit(a, net, skipped, extra, label):
-    """Write the network and report what it holds, what was skipped, and what is hidden."""
+def _emit(a, net, skipped, extra, label, result):
+    """Write the network, and the report when asked, and say what it holds, skipped and hid."""
     if a.format == "graphml":
         from .export import to_graphml
         payload = to_graphml(net)
@@ -139,12 +156,19 @@ def _emit(a, net, skipped, extra, label):
     else:
         print(payload)
 
+    if a.report:
+        # the same report the local page shows and downloads (#76): every setting, the version, every reason
+        from .report import report_text
+        with open(a.report, "w", encoding="utf-8") as f:
+            f.write(report_text(result))
+        print(f"wrote the report to {a.report}", file=sys.stderr)
+
     if a.to_cytoscape:
         from .cytoscape import CytoscapeError, send
         try:
             sent = send(net, port=a.cytoscape_port, name=label)
         except CytoscapeError as e:
-            print(f"crossfeed: {e}", file=sys.stderr)
+            print(f"grownet: {e}", file=sys.stderr)
             return 1
         print(f"sent to Cytoscape: network {sent['suid']}"
               + (f", style {sent['style']}" if sent["style"] else "")
@@ -222,56 +246,81 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="crossfeed", description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    d = sub.add_parser("derive", help="derive an interaction network for a study, or for species")
-    d.add_argument("study", nargs="?", default="",
-                   help="mGrowthDB study id, e.g. SMGDB00000004; with --species, comma separated study ids "
-                        "to search instead of every study holding the species")
-    d.add_argument("--species", nargs="+", metavar="NAME",
-                   help="species or strain names, or NCBI taxon ids, as on the local page: every study holding "
-                        "them is searched and one network returned (needs --live)")
-    d.add_argument("--exclude-studies", default="", metavar="IDS",
-                   help="with --species, comma separated study ids never to search (default: none)")
-    d.add_argument("--all-partners", action="store_true",
-                   help="with --species, keep interactions with species not entered too (the page's "
-                        "'Only interactions between the species entered', unticked)")
-    g = d.add_mutually_exclusive_group(required=True)
-    g.add_argument("--live", action="store_true", help="fetch the real study from the mGrowthDB API")
-    g.add_argument("--fixture", help="path to a JSON list of interaction records (offline)")
-    d.add_argument("--deriver", metavar="MODULE:CLASS",
-                   help="a custom Deriver to use instead of the provisional baseline (with --live)")
-    d.add_argument("--metric", choices=["auc", "max"], default="auc",
-                   help="the growth property compared (default: auc, the area under the curve)")
-    d.add_argument("--include-low-quality", action="store_true",
-                   help="also emit the low-quality edges hidden by default (pooled strains, an unclean drop-out); "
-                        "single-replicate edges are always emitted, flagged")
-    d.add_argument("--no-dropout", action="store_true",
-                   help="leave out arcs from drop-out designs (a community against the same community without "
-                        "one member); included by default, labeled evidence dropout")
-    d.add_argument("--include-non-batch", action="store_true",
-                   help="also derive from chemostat and serial dilution experiments (excluded by default: "
-                        "a continuous-culture curve is not comparable with a batch one)")
-    d.add_argument("--to-cytoscape", action="store_true",
-                   help="also send the network into a running Cytoscape through CyREST on localhost")
-    d.add_argument("--cytoscape-port", type=int, default=1234, metavar="PORT",
-                   help="the CyREST port to send to (default 1234)")
-    d.add_argument("--absence-threshold", type=float, default=1.0, metavar="K",
-                   help="an edge is absent when |log2 mean| < K * sd (default 1, the mean plus or minus sd rule; "
-                        "0 marks nothing absent)")
-    d.add_argument("--correction", choices=["bh", "by"], default="bh",
-                   help="multiple testing correction: bh (Benjamini-Hochberg, default) or by (Benjamini-Yekutieli)")
-    d.add_argument("--spike-factor", type=float, default=100.0,
-                   help="leave out a curve with one or two points this many times above both neighbours "
-                        "(0 keeps all)")
-    d.add_argument("--no-growth-alpha", type=float, default=None, metavar="ALPHA",
-                   help="a set has not grown when its rise from the first time point is not significant at "
-                        "ALPHA (paired t-test on log2 max / start per replicate; default 0.05, 0 switches the "
-                        "rule off)")
-    d.add_argument("--no-growth-factor", type=float, default=None, metavar="F",
-                   help="a set that rose at least F times (geometric mean over replicates) has grown whatever "
-                        "the test says (default 1.5; 2, one doubling, is more stringent; 0 leaves the test alone)")
-    d.add_argument("--format", choices=["json", "graphml"], default="json",
-                   help="output format: json (the neutral format, default) or graphml (for network tools)")
-    d.add_argument("--out", help="write the network here (default: stdout)")
+    d = sub.add_parser(
+        "derive", help="derive an interaction network for species, or for one study",
+        description="Derive an interaction network from mGrowthDB growth curves: for species, strains or\n"
+                    "NCBI taxon ids (as the local page does), or for every species in one study. The\n"
+                    "settings are the local page's Advanced settings, with the same defaults.",
+        epilog=DERIVE_EXAMPLES, formatter_class=argparse.RawDescriptionHelpFormatter)
+    what = d.add_argument_group("what to derive")
+    what.add_argument("study", nargs="?", default="",
+                      help="an mGrowthDB study id (e.g. SMGDB00000004) to derive every species in it; with "
+                           "--species, comma separated study ids to search instead of every study holding "
+                           "them (the page's Only these studies)")
+    what.add_argument("--species", nargs="+", metavar="NAME",
+                      help="species or strain names, or NCBI taxon ids: every study holding them is searched "
+                           "and one network returned, as on the local page (needs --live)")
+    what.add_argument("--exclude-studies", default="", metavar="IDS",
+                      help="with --species, comma separated study ids never to search (default: none)")
+    what.add_argument("--all-partners", action="store_true",
+                      help="with --species, also keep interactions with species not entered (the page's "
+                           "'Only interactions between the species entered', unticked)")
+    source = what.add_mutually_exclusive_group(required=True)
+    source.add_argument("--live", action="store_true", help="read the growth curves from the mGrowthDB API")
+    source.add_argument("--fixture", help="derive from a JSON list of interaction records instead (offline, "
+                                          "for testing)")
+    what.add_argument("--deriver", metavar="MODULE:CLASS",
+                      help="plug in your own derivation method instead of the default one (one study, with "
+                           "--live)")
+
+    settings = d.add_argument_group("settings (the local page's Advanced settings)")
+    settings.add_argument("--metric", choices=["auc", "max"], default="auc",
+                          help="the growth property compared: auc, the area under the curve (default), or max, "
+                               "the maximal abundance")
+    settings.add_argument("--include-low-quality", action="store_true",
+                          help="also show low-quality interactions (pooled strains, a chemostat curve, a "
+                               "drop-out whose removed member was still detected); single-replicate ones are "
+                               "always shown, flagged")
+    settings.add_argument("--no-dropout", action="store_true",
+                          help="leave out interactions from drop-out communities (a community against the same "
+                               "community without one member); included by default, labeled as possibly "
+                               "indirect")
+    settings.add_argument("--include-non-batch", action="store_true",
+                          help="also derive from chemostat and serial dilution experiments (excluded by "
+                               "default: a continuous-culture curve is not comparable with a batch one)")
+    settings.add_argument("--absence-threshold", type=float, default=1.0, metavar="K",
+                          help="an interaction counts as absent (the species do not affect each other) when "
+                               "its effect is small against its spread, |log2 mean| < K * sd; default 1, the "
+                               "mean plus or minus sd crossing zero; 0 marks no interaction absent")
+    settings.add_argument("--correction", choices=["bh", "by"], default="bh",
+                          help="multiple testing correction of the reported p-values: bh (Benjamini-Hochberg, "
+                               "default) or by (Benjamini-Yekutieli)")
+    settings.add_argument("--spike-factor", type=float, default=100.0, metavar="F",
+                          help="leave out a growth curve with one or two points F times above both neighbors "
+                               "(default 100; 0 keeps every curve)")
+    settings.add_argument("--no-growth-alpha", type=float, default=None, metavar="ALPHA",
+                          help="before any comparison, check that a species grew: across the replicate growth "
+                               "curves of that species in one culture condition, the rise from the first time "
+                               "point to the maximum is tested (paired t-test); not significant at ALPHA and "
+                               "below the factor means no growth (default 0.05; 0 switches the check off)")
+    settings.add_argument("--no-growth-factor", type=float, default=None, metavar="F",
+                          help="replicate growth curves that rose at least F times (geometric mean over the "
+                               "replicates) count as growth whatever the test says (default 1.5; 2 is "
+                               "stricter; 0 leaves the test alone)")
+
+    outputs = d.add_argument_group("outputs (the local page's three buttons)")
+    outputs.add_argument("--format", choices=["json", "graphml"], default="json",
+                         help="the network format: json (the neutral format, default) or graphml (Cytoscape, "
+                              "Gephi, igraph, networkx)")
+    outputs.add_argument("--out", metavar="FILE", help="write the network to FILE (default: the screen)")
+    outputs.add_argument("--to-cytoscape", action="store_true",
+                         help="also send the network into a Cytoscape running on this machine, styled as in "
+                              "the legend")
+    outputs.add_argument("--cytoscape-port", type=int, default=1234, metavar="PORT",
+                         help="the port Cytoscape's CyREST listens on (default 1234)")
+    outputs.add_argument("--report", metavar="FILE",
+                         help="write the report of the search to FILE: every setting, the tool version, every "
+                              "interaction, every pair the data did not support, and the sources")
     d.set_defaults(fn=_derive)
 
     y = sub.add_parser("style", help="write the Cytoscape style, for Import Styles from File")

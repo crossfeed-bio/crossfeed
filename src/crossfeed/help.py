@@ -83,6 +83,7 @@ CLI_ONLY = {
     "--deriver": "plug in your own derivation method, given as module:ClassName (one study at a time)",
     "--format": "json (the neutral format, default) or graphml (Cytoscape, igraph, networkx, Gephi)",
     "--out": "write the network to a file instead of the screen",
+    "--report": "write the report of the search to a file, as the page's Report button downloads it",
     "--to-cytoscape": "also send the network into a running Cytoscape on this machine, with the legend's style",
     "--cytoscape-port": "the port Cytoscape's CyREST listens on (default 1234)",
 }
@@ -221,7 +222,7 @@ QA = (
 )
 
 EXAMPLE_CLI = (f'{COMMAND} derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica" '
-               '--out example.json')
+               '--out example.json --report example_report.txt --to-cytoscape')
 
 
 def _e(x) -> str:
@@ -307,7 +308,8 @@ itself records the tool, <code>tool_version</code>, <code>derived_on</code> and 
 <ul class="decisions">{decisions}</ul>
 
 <h2 id="cli">The command line</h2>
-<p>The same search as the Example button, written to a file:</p>
+<p>The same search as the Example button, with the page's three outputs: the network written to a file,
+its report, and the network sent to Cytoscape:</p>
 <pre>{_e(EXAMPLE_CLI)}</pre>
 <p>Without installing anything, <code>uvx --from git+{REPOSITORY} {COMMAND} ...</code> runs the same
 command. The command is still called <code>{COMMAND}</code>: it becomes <code>{NAME}</code> when the package
