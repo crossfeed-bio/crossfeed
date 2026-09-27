@@ -5,15 +5,19 @@ import threading
 
 import pytest
 
+from crossfeed import brand
 from crossfeed.cytoscape import (
     OBLIGATE_WIDTH,
     CytoscapeError,
+    genus,
+    genus_colors,
     line_style,
     network_json,
     send,
     style,
 )
 from crossfeed.mgrowthdb import records_to_network
+from crossfeed.model import Node
 
 
 def _net():
@@ -32,35 +36,51 @@ def _net():
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
+    """A fake CyREST that answers the way the real one does (checked against Cytoscape 3.10.3): applying a
+    style or a layout is a GET, and a POST there is refused with 405, as it was in Karoline's session."""
+
     seen = []
     fail_style = False
+    styles = []
 
     def log_message(self, *_args):
         pass
 
-    styles = []
-
-    def do_GET(self):             # noqa: N802 - the name http.server requires
-        payload = json.dumps(_Handler.styles).encode()
-        self.send_response(200)
+    def _reply(self, payload, code=200):
+        data = json.dumps(payload).encode()
+        self.send_response(code)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Content-Length", str(len(data)))
         self.end_headers()
-        self.wfile.write(payload)
+        self.wfile.write(data)
 
-    def do_POST(self):            # noqa: N802 - the name http.server requires
+    def _body(self):
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length).decode("utf-8")
-        _Handler.seen.append((self.path, json.loads(body) if body.strip() else {}))
-        if "/styles" in self.path and _Handler.fail_style:
-            self.send_error(400, "style exists")
+        return json.loads(body) if body.strip() else {}
+
+    def do_GET(self):             # noqa: N802 - the name http.server requires
+        _Handler.seen.append(("GET", self.path, {}))
+        self._reply(_Handler.styles if self.path == "/v1/styles" else {"message": "done"})
+
+    def do_POST(self):            # noqa: N802 - the name http.server requires
+        body = self._body()
+        _Handler.seen.append(("POST", self.path, body))
+        if self.path.startswith("/v1/apply/"):
+            self.send_error(405, "Method Not Allowed")
             return
-        payload = json.dumps({"networkSUID": 52} if "/networks" in self.path else {}).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(payload)))
-        self.end_headers()
-        self.wfile.write(payload)
+        if "/styles" in self.path and _Handler.fail_style:
+            self.send_error(400, "style refused")
+            return
+        self._reply({"networkSUID": 52} if "/networks" in self.path else {})
+
+    def do_PUT(self):             # noqa: N802 - the name http.server requires
+        _Handler.seen.append(("PUT", self.path, self._body()))
+        self._reply({})
+
+    def do_DELETE(self):          # noqa: N802 - the name http.server requires
+        _Handler.seen.append(("DELETE", self.path, {}))
+        self._reply({})
 
 
 @pytest.fixture
@@ -111,24 +131,40 @@ def test_the_style_maps_what_the_legend_shows():
     assert dashes == {"SOLID", "LONG_DASH", "DOT", "DASH_DOT"}
 
 
-def test_a_network_is_posted_and_its_id_reported_back(cyrest):
+def test_a_network_is_posted_styled_and_laid_out(cyrest):
     port, seen = cyrest
     sent = send(_net(), port=port, name="study 4")
-    assert sent["suid"] == 52 and sent["style"] == "crossfeed"
-    paths = [path for path, _ in seen]
-    assert any(p.startswith("/v1/networks") for p in paths)
-    assert "/v1/styles" in paths and any(p.startswith("/v1/apply/styles/crossfeed/52") for p in paths)
-    posted = next(body for path, body in seen if path.startswith("/v1/networks"))
+    assert sent["suid"] == 52 and sent["style"] == "grownet" and sent["warning"] == ""
+    calls = [(method, path) for method, path, _ in seen]
+    assert ("POST", "/v1/styles") in calls                                   # a new style is posted
+    # and applied with a GET, which is what CyREST takes (a POST there is refused: the bug Karoline hit)
+    assert ("GET", "/v1/apply/styles/grownet/52") in calls
+    assert ("GET", "/v1/apply/layouts/force-directed/52") in calls
+    assert not any(method == "POST" and path.startswith("/v1/apply/") for method, path in calls)
+    posted = next(body for method, path, body in seen if path.startswith("/v1/networks"))
     assert len(posted["elements"]["nodes"]) == 2 and len(posted["elements"]["edges"]) == 3
 
 
-def test_a_style_cytoscape_already_has_is_left_alone(cyrest):
-    # Cytoscape renames a style whose title it already has (crossfeed_0), so copies would pile up
+def test_a_style_cytoscape_already_has_is_brought_up_to_date(cyrest):
+    # an older grownet style (say, with the old red and bar heads) is updated in place: posting again would
+    # make Cytoscape keep the old one and add a renamed copy
     port, seen = cyrest
-    _Handler.styles = ["default", "crossfeed"]
-    assert send(_net(), port=port)["suid"] == 52
-    assert not any(path == "/v1/styles" for path, _ in seen)
-    assert any(path.startswith("/v1/apply/styles/crossfeed/52") for path, _ in seen)
+    _Handler.styles = ["default", "grownet"]
+    assert send(_net(), port=port)["style"] == "grownet"
+    calls = [(method, path) for method, path, _ in seen]
+    assert ("POST", "/v1/styles") not in calls
+    assert ("PUT", "/v1/styles/grownet/defaults") in calls and ("DELETE", "/v1/styles/grownet/mappings") in calls
+    mappings = next(body for method, path, body in seen if (method, path) == ("POST", "/v1/styles/grownet/mappings"))
+    assert mappings == style()["mappings"]
+    assert calls.index(("DELETE", "/v1/styles/grownet/mappings")) < calls.index(("POST", "/v1/styles/grownet/mappings"))
+
+
+def test_a_style_that_cannot_be_applied_is_reported_not_swallowed(cyrest):
+    port, _ = cyrest
+    _Handler.fail_style = True
+    sent = send(_net(), port=port)
+    assert sent["suid"] == 52 and sent["style"] == ""
+    assert "style could not be applied" in sent["warning"] and "400" in sent["warning"]
 
 
 def test_cytoscape_not_running_says_what_to_do(cyrest):
@@ -153,3 +189,29 @@ def test_the_sign_is_a_column_and_no_label_is_drawn():
     data = network_json(_net())["elements"]["edges"][1]["data"]
     assert data["strength"] == -0.2 and data["effect"] == "inhibition" and data["weight"] == 0.2
     assert not [m for m in style()["mappings"] if m["visualProperty"] == "EDGE_LABEL"]
+
+
+def test_the_genus_is_the_first_word_of_the_name():
+    assert genus(Node("ncbi:1", name="Faecalibacterium duncaniae A2-165")) == "Faecalibacterium"
+    assert genus(Node("ncbi:2", name="[Clostridium] scindens ATCC 35704")) == "Clostridium"
+    assert genus(Node("ncbi:3", name="Candidatus Arthromitus sp.")) == "Arthromitus"
+    assert genus(Node("x", species="blautia hydrogenotrophica")) == "Blautia"      # the species key, no name
+    assert genus(Node("x")) == "unknown"
+
+
+def test_nodes_are_colored_by_genus_with_the_four_checked_hues_then_grey():
+    names = ["Bacteroides a", "Bacteroides b", "Bacteroides c", "Blautia a", "Blautia b", "Roseburia a",
+             "Akkermansia a", "Dorea a", "Eubacterium a"]
+    recs = [{"source": f"n{i}", "target": f"n{i + 1}", "source_name": names[i], "target_name": names[i + 1],
+             "effect": "facilitation", "strength": 1.0, "study_id": "S"} for i in range(len(names) - 1)]
+    net = records_to_network(recs)
+    colors = genus_colors(net)
+    # most nodes first (Bacteroides 3, Blautia 2), then alphabetical among the ties
+    assert [colors[g] for g in ("Bacteroides", "Blautia", "Akkermansia", "Dorea")] == list(brand.GENUS_COLORS)
+    assert colors["Eubacterium"] == colors["Roseburia"] == brand.NODE           # a fifth genus: node grey
+    # the genus colors never reuse the two arc colors
+    assert not {brand.GROWTH, brand.INHIBITION} & set(brand.GENUS_COLORS)
+    node = network_json(net)["elements"]["nodes"][0]["data"]
+    assert (node["genus"], node["genus_color"]) == ("Bacteroides", brand.GENUS_COLORS[0])
+    fill = next(m for m in style()["mappings"] if m["visualProperty"] == "NODE_FILL_COLOR")
+    assert (fill["mappingType"], fill["mappingColumn"]) == ("passthrough", "genus_color")

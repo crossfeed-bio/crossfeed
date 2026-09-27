@@ -17,7 +17,12 @@ What the style draws, decided with Karoline (#25, #47, #62):
   * obligate and abolished arcs, which have no ratio, drawn at a fixed width rather than disappearing at
     width zero;
   * no edge labels: a network stays readable, and the sign is a column instead, so a reader who wants it
-    in the picture maps Label to `strength` themselves (Karoline, 2026-09-27).
+    in the picture maps Label to `strength` themselves (Karoline, 2026-09-27);
+  * nodes colored by genus, taken from the first word of the name, so no lineage is needed (Karoline,
+    2026-09-27). Four hues checked for color vision deficiency against the two arc colors
+    (`brand.GENUS_COLORS`); the most common genera get them, and any further genus the logo's node grey.
+    The color is computed per network into `genus_color`, and the style passes it through, so sending a
+    second network never recolors the first. The label sits below the node, in ink, readable on any fill.
 
 Cytoscape maps one column to one visual property, so the two dash channels and the missing width are
 computed here into `line_style` and `display_weight` columns rather than layered as several mappings.
@@ -31,13 +36,15 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import Counter
 
+from . import brand
 from .model import InteractionNetwork
 
 PORT = 1234
-STYLE_NAME = "crossfeed"
+STYLE_NAME = brand.NAME
 # the legend's colors, and the same reason for the orange (see crossfeed.legend)
-FACILITATION, INHIBITION, MUTED = "#1A7F5A", "#C2410C", "#8A8A8A"
+FACILITATION, INHIBITION, MUTED = brand.GROWTH, brand.INHIBITION, "#8A8A8A"
 OBLIGATE_WIDTH = 8.0          # obligate and abolished arcs have no |log2 mean| to scale with
 
 
@@ -65,10 +72,30 @@ def display_weight(edge) -> float:
     return float(edge.weight or 0.0)
 
 
-def network_json(net: InteractionNetwork, name: str = "crossfeed") -> dict:
+def genus(node) -> str:
+    """The genus of a node, from the first word of its name ("[Clostridium] scindens" -> Clostridium,
+    "Candidatus Arthromitus" -> Arthromitus), or of its genus-and-species key."""
+    words = (node.name or node.species or "").replace("[", "").replace("]", "").split()
+    if words and words[0].lower() == "candidatus":
+        words = words[1:]
+    return words[0].capitalize() if words else "unknown"
+
+
+def genus_colors(net: InteractionNetwork) -> dict:
+    """genus -> color: the most common genera of this network take the four checked hues, in order (ties
+    alphabetical), and any further genus the node grey, rather than a hue too close to tell apart."""
+    counts = Counter(genus(node) for node in net.nodes.values())
+    ranked = sorted(counts, key=lambda g: (-counts[g], g))
+    return {g: (brand.GENUS_COLORS[i] if i < len(brand.GENUS_COLORS) else brand.NODE)
+            for i, g in enumerate(ranked)}
+
+
+def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
     """The network as Cytoscape.js JSON: every node and edge attribute becomes a column."""
+    colors = genus_colors(net)
     nodes = [{"data": {"id": node.id, "name": node.name or node.id, "taxon_id": node.taxon_id,
-                       "species": node.species, "identity": node.identity}}
+                       "species": node.species, "identity": node.identity, "genus": genus(node),
+                       "genus_color": colors[genus(node)]}}
              for node in net.nodes.values()]
     edges = []
     for edge in net.edges:
@@ -104,16 +131,23 @@ def style(name: str = STYLE_NAME) -> dict:
         "title": name,
         "defaults": [
             {"visualProperty": "NODE_SHAPE", "value": "ELLIPSE"},
-            {"visualProperty": "NODE_FILL_COLOR", "value": "#F2F2F2"},
-            {"visualProperty": "NODE_BORDER_PAINT", "value": "#666666"},
+            {"visualProperty": "NODE_FILL_COLOR", "value": brand.NODE},
+            {"visualProperty": "NODE_BORDER_PAINT", "value": "#FFFFFF"},
+            {"visualProperty": "NODE_BORDER_WIDTH", "value": 2},
+            {"visualProperty": "NODE_LABEL_COLOR", "value": brand.INK},
             {"visualProperty": "NODE_LABEL_FONT_SIZE", "value": 12},
-            {"visualProperty": "NODE_SIZE", "value": 45},
+            # the label under the node, on the canvas, so it reads whatever the genus color
+            {"visualProperty": "NODE_LABEL_POSITION", "value": "S,N,c,0.00,4.00"},
+            {"visualProperty": "NODE_SIZE", "value": 40},
             {"visualProperty": "EDGE_TRANSPARENCY", "value": 200},
             {"visualProperty": "EDGE_WIDTH", "value": 2},
         ],
         "mappings": [
             {"mappingType": "passthrough", "mappingColumn": "name", "mappingColumnType": "String",
              "visualProperty": "NODE_LABEL"},
+            # the genus color computed for this network (genus_colors)
+            {"mappingType": "passthrough", "mappingColumn": "genus_color", "mappingColumnType": "String",
+             "visualProperty": "NODE_FILL_COLOR"},
             _discrete("effect", "EDGE_STROKE_UNSELECTED_PAINT",
                       {"facilitation": FACILITATION, "inhibition": INHIBITION, "neutral": MUTED}),
             _discrete("effect", "EDGE_TARGET_ARROW_UNSELECTED_PAINT",
@@ -153,16 +187,16 @@ def _post(url: str, payload, timeout: float = 30.0):
     return json.loads(text) if text.strip() else {}
 
 
-def send(net: InteractionNetwork, port: int = PORT, name: str = "crossfeed",
+def send(net: InteractionNetwork, port: int = PORT, name: str = "grownet",
          apply_style: bool = True, layout: str = "force-directed", timeout: float = 30.0) -> dict:
-    """Post `net` into a running Cytoscape and return {"suid", "style", "url"}.
+    """Post `net` into a running Cytoscape and return {"suid", "style", "warning", "url"}.
 
     Raises CytoscapeError with what to do when Cytoscape is not running, the port is wrong, or CyREST
     refuses the request. Nothing is sent anywhere but this port on the loopback interface.
     """
     root = base_url(port)
     try:
-        created = _post(f"{root}/networks?title={urllib.parse.quote(name)}&collection=crossfeed",
+        created = _post(f"{root}/networks?title={urllib.parse.quote(name)}&collection={brand.NAME}",
                         network_json(net, name), timeout)
     except urllib.error.URLError as e:
         reason = getattr(e, "reason", e)
@@ -173,24 +207,42 @@ def send(net: InteractionNetwork, port: int = PORT, name: str = "crossfeed",
     if suid is None:
         raise CytoscapeError(f"Cytoscape accepted the network but reported no network id: {created!r}")
 
-    applied = ""
+    applied, warning = "", ""
     if apply_style:
         try:
-            # Cytoscape does not refuse a style whose title it already has: it renames the new one
-            # (crossfeed_0, crossfeed_1, ...), so a second run would pile up copies. Ask first, and leave
-            # a style that is already there alone, since the user may have adjusted it.
-            existing = _get(f"{root}/styles", timeout) or []
-            if STYLE_NAME not in existing:
-                _post(f"{root}/styles", style(name=STYLE_NAME), timeout)
-        except urllib.error.HTTPError as e:
-            raise CytoscapeError(f"Cytoscape refused the style ({e.code} {e.reason})") from None
-        except urllib.error.URLError as e:
-            raise CytoscapeError(f"could not send the style to Cytoscape ({getattr(e, 'reason', e)})") from None
-        try:
-            _post(f"{root}/apply/styles/{urllib.parse.quote(STYLE_NAME)}/{suid}", {}, timeout)
+            _ensure_style(root, timeout)
+            # applying a style or a layout is a GET in CyREST; a POST is refused (405), which is how the
+            # style went missing before (#76)
+            _get(f"{root}/apply/styles/{urllib.parse.quote(STYLE_NAME)}/{suid}", timeout)
+            applied = STYLE_NAME
             if layout:
-                _post(f"{root}/apply/layouts/{urllib.parse.quote(layout)}/{suid}", {}, timeout)
-        except urllib.error.URLError:
-            pass                                 # the network is in; a style or layout is cosmetic
-        applied = STYLE_NAME
-    return {"suid": suid, "style": applied, "url": f"{root}/networks/{suid}"}
+                _get(f"{root}/apply/layouts/{urllib.parse.quote(layout)}/{suid}", timeout)
+        except urllib.error.HTTPError as e:
+            warning = f"the network is in Cytoscape, but its style could not be applied ({e.code} {e.reason})"
+        except urllib.error.URLError as e:
+            warning = f"the network is in Cytoscape, but its style could not be applied ({getattr(e, 'reason', e)})"
+    return {"suid": suid, "style": applied, "warning": warning, "url": f"{root}/networks/{suid}"}
+
+
+def _ensure_style(root: str, timeout: float) -> None:
+    """Make the grownet style in Cytoscape the one this version draws.
+
+    A new style is posted. One that exists is updated in place (defaults replaced, mappings replaced), so
+    it always matches the legend: posting again would make Cytoscape keep the old one and add a renamed
+    copy (grownet_0), and leaving it alone kept an old red and bar heads in use.
+    """
+    wanted = style(STYLE_NAME)
+    name = urllib.parse.quote(STYLE_NAME)
+    if STYLE_NAME not in (_get(f"{root}/styles", timeout) or []):
+        _post(f"{root}/styles", wanted, timeout)
+        return
+    _request("PUT", f"{root}/styles/{name}/defaults", wanted["defaults"], timeout)
+    _request("DELETE", f"{root}/styles/{name}/mappings", None, timeout)
+    _post(f"{root}/styles/{name}/mappings", wanted["mappings"], timeout)
+
+
+def _request(method: str, url: str, payload, timeout: float = 30.0):
+    body = None if payload is None else json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(url, data=body, method=method, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:   # noqa: S310 - localhost only
+        return response.read()

@@ -14,6 +14,11 @@ tagged version is never reused for changed content.
   require an entry for every setting, command line option and model field, so it cannot fall behind (#78).
 - `derive --live --species NAME ...` runs the local page's search from the command line, with
   `--all-partners` for the page's "only the species entered" box unticked (#78).
+- Fixed: Send to Cytoscape delivered the network without its style. CyREST applies styles and layouts
+  by GET and refused the POST (405), and the error was swallowed. The style is now called grownet,
+  brought up to date in place when Cytoscape already has it, and a failure is reported on the page.
+  Nodes are colored by genus (the first word of the name): four hues checked for color vision
+  deficiency against the arc colors, then grey; labels sit under the nodes.
 - The species box starts empty, under the header "Species, strains or NCBI taxon ids" and a smaller row
   of examples (a species, a strain, a taxon id). An empty result says which step found nothing. GraphML
   nodes carry a `label` (the strain name), which Gephi uses as the node label.

@@ -141,12 +141,13 @@ def _emit(a, net, skipped, extra, label):
     if a.to_cytoscape:
         from .cytoscape import CytoscapeError, send
         try:
-            sent = send(net, port=a.cytoscape_port, name=a.study)
+            sent = send(net, port=a.cytoscape_port, name=label)
         except CytoscapeError as e:
             print(f"crossfeed: {e}", file=sys.stderr)
             return 1
         print(f"sent to Cytoscape: network {sent['suid']}"
-              + (f", style {sent['style']}" if sent["style"] else ""), file=sys.stderr)
+              + (f", style {sent['style']}" if sent["style"] else "")
+              + (f"; {sent['warning']}" if sent.get("warning") else ""), file=sys.stderr)
 
     print(render_attribution(net), file=sys.stderr)
     if skipped:

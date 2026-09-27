@@ -15,6 +15,11 @@ COMMAND = "crossfeed"            # the installed command until the package is re
 
 INK, MUTED, LINE, PANEL, PAGE = "#1C1F1E", "#5B625F", "#D9DDDA", "#F6F8F7", "#EEF1EF"
 GROWTH, INHIBITION, NODE = "#1A7F5A", "#C2410C", "#7A8580"
+# node colors by genus in Cytoscape: blue, yellow, pink, violet. The green, orange, red and aqua slots of the
+# categorical palette are left out, since they would read as a sign next to the arcs. Checked with the
+# dataviz palette validator together with GROWTH and INHIBITION: every pair separates under deuteranopia,
+# protanopia and normal vision (worst normal-vision pair 16.3, worst color vision deficiency pair 10.1).
+GENUS_COLORS = ("#2A78D6", "#EDA100", "#E87BA4", "#4A3AA7")
 
 # The mark (docs/logo.svg): three grey nodes joined by directed edges, green for facilitation and
 # orange-red for inhibition, the same arrowhead on both. The legend and the page both take it from here.

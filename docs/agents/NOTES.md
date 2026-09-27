@@ -234,6 +234,19 @@ QUALITY_FLAGS, CAUTIONS, EVIDENCE and STATUSES, and the shipped file to equal wh
 flag therefore means adding a line to the legend, the same way Craig's viewer guard works (#57). The dash
 patterns are the ones the Cytoscape style will use (#25): long dashes for drop-out evidence, dots for a
 single replicate.
+## Cytoscape (CyREST) quirks
+
+- Applying a style or a layout is a GET (`/v1/apply/styles/{name}/{suid}`, `/v1/apply/layouts/...`); a
+  POST gets 405. The first version posted, swallowed the error, and every network arrived unstyled
+  (found by Karoline, 2026-09-27). The fake CyREST in `tests/test_cytoscape.py` now refuses that POST too.
+- Posting a style whose title exists makes Cytoscape add a renamed copy (grownet_0). So `_ensure_style`
+  updates an existing grownet style in place: PUT defaults, DELETE mappings, POST mappings.
+- Node colors are a per-network `genus_color` column with a passthrough mapping, so one shared style
+  never recolors an earlier network. Colors: `brand.GENUS_COLORS`, validated with the dataviz palette
+  script together with the two arc colors; a fifth genus gets the node grey.
+- Verify against the real app by reading back view properties: `GET /v1/networks/{suid}/views/{view}/
+  nodes?visualProperty=NODE_FILL_COLOR` (and the same for edges).
+
 ## Page style and name
 
 `src/crossfeed/brand.py` holds the tool's name (`NAME` = grownet), the command users type today

@@ -525,8 +525,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             sent = send(result["network"], name=TITLE)
         except CytoscapeError as e:
             return render_result(self.token, result, message=str(e))
-        return render_result(self.token, result,
-                             message=f"Sent to Cytoscape: network {sent['suid']}, styled.")
+        if sent.get("warning"):
+            return render_result(self.token, result, message=f"Sent to Cytoscape: network {sent['suid']}; "
+                                 f"{sent['warning']}.")
+        return render_result(self.token, result, message=f"Sent to Cytoscape: network {sent['suid']}, in the "
+                             "grownet style (arcs as in the legend, nodes colored by genus).")
 
     def _start(self, entries: list, settings: dict) -> dict:
         """Run a search in a thread, so the page can show its progress while it runs (#75)."""
