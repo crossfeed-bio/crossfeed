@@ -243,7 +243,7 @@ single replicate.
   updates an existing grownet style in place: PUT defaults, DELETE mappings, POST mappings.
 - Node colors are a per-network `genus_color` column with a passthrough mapping, so one shared style
   never recolors an earlier network. Colors: `brand.GENUS_COLORS`, validated with the dataviz palette
-  script together with the two arc colors; a fifth genus gets the node grey.
+  script together with the two arc colors; a fifth genus gets the node gray.
 - Verify against the real app by reading back view properties: `GET /v1/networks/{suid}/views/{view}/
   nodes?visualProperty=NODE_FILL_COLOR` (and the same for edges).
 

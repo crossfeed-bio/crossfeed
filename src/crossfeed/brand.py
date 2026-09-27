@@ -21,7 +21,7 @@ GROWTH, INHIBITION, NODE = "#1A7F5A", "#C2410C", "#7A8580"
 # protanopia and normal vision (worst normal-vision pair 16.3, worst color vision deficiency pair 10.1).
 GENUS_COLORS = ("#2A78D6", "#EDA100", "#E87BA4", "#4A3AA7")
 
-# The mark (docs/logo.svg): three grey nodes joined by directed edges, green for facilitation and
+# The mark (docs/logo.svg): three gray nodes joined by directed edges, green for facilitation and
 # orange-red for inhibition, the same arrowhead on both. The legend and the page both take it from here.
 LOGO = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="{size}" height="{size}" '
         'role="img" aria-label="grownet">'

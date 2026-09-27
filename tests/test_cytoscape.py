@@ -208,7 +208,7 @@ def test_nodes_are_colored_by_genus_with_the_four_checked_hues_then_grey():
     colors = genus_colors(net)
     # most nodes first (Bacteroides 3, Blautia 2), then alphabetical among the ties
     assert [colors[g] for g in ("Bacteroides", "Blautia", "Akkermansia", "Dorea")] == list(brand.GENUS_COLORS)
-    assert colors["Eubacterium"] == colors["Roseburia"] == brand.NODE           # a fifth genus: node grey
+    assert colors["Eubacterium"] == colors["Roseburia"] == brand.NODE           # a fifth genus: node gray
     # the genus colors never reuse the two arc colors
     assert not {brand.GROWTH, brand.INHIBITION} & set(brand.GENUS_COLORS)
     node = network_json(net)["elements"]["nodes"][0]["data"]

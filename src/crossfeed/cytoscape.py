@@ -20,7 +20,7 @@ What the style draws, decided with Karoline (#25, #47, #62):
     in the picture maps Label to `strength` themselves (Karoline, 2026-09-27);
   * nodes colored by genus, taken from the first word of the name, so no lineage is needed (Karoline,
     2026-09-27). Four hues checked for color vision deficiency against the two arc colors
-    (`brand.GENUS_COLORS`); the most common genera get them, and any further genus the logo's node grey.
+    (`brand.GENUS_COLORS`); the most common genera get them, and any further genus the logo's node gray.
     The color is computed per network into `genus_color`, and the style passes it through, so sending a
     second network never recolors the first. The label sits below the node, in ink, readable on any fill.
 
@@ -83,7 +83,7 @@ def genus(node) -> str:
 
 def genus_colors(net: InteractionNetwork) -> dict:
     """genus -> color: the most common genera of this network take the four checked hues, in order (ties
-    alphabetical), and any further genus the node grey, rather than a hue too close to tell apart."""
+    alphabetical), and any further genus the node gray, rather than a hue too close to tell apart."""
     counts = Counter(genus(node) for node in net.nodes.values())
     ranked = sorted(counts, key=lambda g: (-counts[g], g))
     return {g: (brand.GENUS_COLORS[i] if i < len(brand.GENUS_COLORS) else brand.NODE)
