@@ -409,3 +409,16 @@ def test_an_empty_result_caused_by_a_setting_names_the_setting():
     assert "each involves a species you did not enter" in partners and "untick Only interactions" in partners
     typo = render_result("tok", _query(entries=("Blautia hydrogenotrophca",)))
     assert "Did you mean: Blautia hydrogenotrophica?" in typo
+
+
+def test_a_strain_is_named_by_its_current_name():
+    # taxon 853 is "Faecalibacterium prausnitzii A2-165" in the fake study; a later study calls it duncaniae,
+    # so the node and the resolved list use that name, while the old name still finds it (#24)
+    from crossfeed.taxonomy import SpeciesIndex
+    index = SpeciesIndex({"faecalibacterium prausnitzii": {853: A}, "blautia hydrogenotrophica": {53443: B}},
+                         current={853: "Faecalibacterium duncaniae A2-165"})
+    r = run_query(FakeClient(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"], {}, index=index)
+    node = r["network"].nodes["ncbi:853"]
+    assert (node.name, node.species) == ("Faecalibacterium duncaniae A2-165", "faecalibacterium duncaniae")
+    assert r["resolved"][0] == ("Faecalibacterium prausnitzii", {853: "Faecalibacterium duncaniae A2-165"})
+    assert len(r["network"].edges) == 2

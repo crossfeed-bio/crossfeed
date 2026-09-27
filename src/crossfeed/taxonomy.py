@@ -34,6 +34,16 @@ def _strain_entries(exp: dict):
             yield name, int(taxon)
 
 
+class SpeciesIndex(dict):
+    """The species list: genus and species key -> {taxon id: a name seen for it}, as a plain dict, plus
+    `current`: taxon id -> its current name, the one used by the most recently published study holding it
+    (Karoline, #24, 2026-09-18). Old names stay in the list, so they still resolve."""
+
+    def __init__(self, *args, current=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.current = dict(current or {})
+
+
 def species_index(client, max_studies: int = MAX_STUDIES, progress=None) -> dict:
     """Map a genus and species key to {taxon id: a name seen for it}, crawled from mGrowthDB.
 
@@ -49,8 +59,8 @@ def species_index(client, max_studies: int = MAX_STUDIES, progress=None) -> dict
     ids = study_ids_in_order(client, STUDY_ID, max_studies, MISS_RUN)
     experiment_ids = [e["id"] for sid in ids for e in (client.get_study(sid) or {}).get("experiments", [])]
     _each(client.get_experiment, experiment_ids, progress, "Reading the species list of mGrowthDB")
-    index = {}
-    for sid in ids:
+    index, published = {}, []
+    for order, sid in enumerate(ids):
         try:
             experiments = client.study_experiments(sid)       # from the cache the parallel reads filled
         except Exception:      # noqa: BLE001 - one unreadable study is skipped, the rest still count
@@ -58,7 +68,13 @@ def species_index(client, max_studies: int = MAX_STUDIES, progress=None) -> dict
         for exp in experiments:
             for name, taxon in _strain_entries(exp):
                 index.setdefault(genus_species(name), {}).setdefault(taxon, name)
-    return index
+        published.append(((client.get_study(sid) or {}).get("publishedAt") or "", order, experiments))
+    current = {}
+    for _, _, experiments in sorted(published, key=lambda p: (p[0], p[1])):    # the latest publication last
+        for exp in experiments:
+            for name, taxon in _strain_entries(exp):
+                current[taxon] = name
+    return SpeciesIndex(index, current=current)
 
 
 def _species_index_one_by_one(client, max_studies: int) -> dict:

@@ -27,6 +27,9 @@ tagged version is never reused for changed content.
   (the species do not affect each other), and the no-growth settings say they test the replicate growth
   curves of one species in one culture condition. A new setting, Exclude these studies
   (`--exclude-studies` with `--species`), leaves the listed studies out of a search; empty by default.
+- A strain is shown by its current name (#24, Karoline's rule of 2026-09-18): the name used by the most
+  recently published study holding its taxon id, in the network's nodes and the resolved list; old names
+  still find it. Taxon 411483 now reads Faecalibacterium duncaniae throughout.
 - Growth rate as a metric (#41): `--metric growth_rate` and the Growth measure setting, with the
   implementation as its own setting (`--rate-method`): easylinear by default, as mGrowthDB computes its
   reported rates (it matched them on 190 of 192 curves within 10%), window 5 (`--rate-window`); or a

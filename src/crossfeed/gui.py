@@ -11,6 +11,7 @@ Rendering is in `render_form` and `render_result`, so both are testable without 
 """
 from __future__ import annotations
 
+import dataclasses
 import html
 import http.server
 import secrets
@@ -446,6 +447,16 @@ def parse_settings(form: dict) -> dict:
     return settings
 
 
+def _current_names(net, current: dict) -> None:
+    """Name each strain node by its current name (#24): a study from before a reclassification may call
+    taxon 411483 Faecalibacterium prausnitzii A2-165, the most recent one Faecalibacterium duncaniae
+    A2-165. The genus and species key follows the name; the taxon id, which is the node's identity, stays."""
+    for nid, node in list(net.nodes.items()):
+        name = current.get(int(node.taxon_id)) if str(node.taxon_id or "").isdigit() else None
+        if name and name != node.name:
+            net.nodes[nid] = dataclasses.replace(node, name=name, species=genus_species(name))
+
+
 def run_query(client, entries, settings: dict | None = None, index: dict | None = None, progress=None) -> dict:
     """Species names or taxon ids to an interaction network, through mGrowthDB and the existing derivation.
 
@@ -463,6 +474,10 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     say(0, None, "Looking up the species in mGrowthDB")
     index = species_index(client) if index is None else index
     resolved = resolve_species(names, index)
+    current = getattr(index, "current", {})
+    # show each strain by its current name, the one its most recent study uses (#24)
+    resolved["resolved"] = [(entry, {t: current.get(t, n) for t, n in matches.items()})
+                            for entry, matches in resolved["resolved"]]
     errors, skipped, records = [], [], []
 
     studies = [sid.strip() for sid in s["studies"].split(",") if sid.strip()]
@@ -517,6 +532,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     net = records_to_network(records, meta={
         "source_db": "mGrowthDB (live)", "species": names, "studies": studies, "settings": dict(s), **extra})
     net.meta["data"] = data_versions(client, studies, net.meta["derived_at"])
+    _current_names(net, current)
     say(len(studies), len(studies), "Preparing the result")
     return {"entries": names, "settings": dict(s), "resolved": resolved["resolved"],
             "reasons": resolved["reasons"], "suggestions": resolved["suggestions"], "excluded": left_out,

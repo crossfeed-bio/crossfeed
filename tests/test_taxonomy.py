@@ -114,3 +114,28 @@ def test_common_ways_of_typing_are_understood_and_the_rest_say_why():
     assert hints["Blautia hydrogentrophica"] == ["Blautia hydrogenotrophica"]  # a close spelling
     assert why["99999999"] == "no strain in mGrowthDB has NCBI taxon id 99999999"   # not taken as found
     assert why["%%%"].startswith("not readable")
+
+
+def test_the_current_name_is_the_most_recently_published_one():
+    from crossfeed.taxonomy import species_index as build
+
+    class Dated(_FakeClient):
+        dates = {"SMGDB00000001": "2025-11-01", "SMGDB00000003": "2024-01-01"}
+
+        def get_study(self, sid):
+            if sid not in self.studies:
+                from crossfeed.mgrowthdb import MGrowthDBError
+                raise MGrowthDBError("mGrowthDB returned HTTP 404")        # as the real client does
+            return {"id": sid, "publishedAt": self.dates[sid], "experiments": [{"id": sid}]}
+
+        def get_experiment(self, eid):
+            return self.studies[eid][0]
+
+        def study_experiments(self, sid):
+            return [self.get_experiment(e["id"]) for e in self.get_study(sid)["experiments"]]
+
+    client = Dated({"SMGDB00000001": [_exp(("Faecalibacterium duncaniae A2-165", FP))],
+                    "SMGDB00000003": [_exp(("Faecalibacterium prausnitzii A2-165", FP))]})
+    index = build(client)
+    assert index.current[FP] == "Faecalibacterium duncaniae A2-165"          # study 1 is the more recent
+    assert "faecalibacterium prausnitzii" in index and "faecalibacterium duncaniae" in index   # both resolve
