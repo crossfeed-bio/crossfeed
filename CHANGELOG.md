@@ -96,6 +96,10 @@ tagged version is never reused for changed content.
   `removed_member_detected`.
 
 ### Changed
+- Inhibition is drawn in orange-red (#C2410C) rather than red (Karoline, 2026-09-27). With uniform arc
+  tips the color is the only cue for the sign, and green against red is the hardest pair for a reader with
+  a color vision deficiency: simulated, the new pair stays about 90 sRGB units apart under protanopia and
+  deuteranopia, where green and red managed 58. `tests/test_palette.py` keeps it that way.
 - Arcs end in the same arrowhead whether they facilitate or inhibit: the color carries the sign, in the
   legend and in the Cytoscape style (Karoline, 2026-09-27). The bar head is retired.
 - Nodes are strains keyed by NCBI taxon id (`ncbi:411483`) and named with the strain name, with `taxon_id`,

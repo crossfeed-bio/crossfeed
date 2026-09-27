@@ -189,6 +189,17 @@ Rules for this file:
 - Where each mGrowthDB study's license is published; the study endpoint does not expose it, so
   `study_license` is marked unresolved.
 
+## Color and readers with a color vision deficiency
+
+Facilitation is green #1A7F5A, inhibition orange-red #C2410C, an absent edge gray #8A8A8A, in the legend,
+the Cytoscape style and the mark. The orange replaced a plain red on 2026-09-27, when Karoline made the arc
+tips uniform: the color became the only cue for the sign, and green against red is the pair a reader with a
+color vision deficiency finds hardest. `tests/test_palette.py` simulates protanopia and deuteranopia
+(Vienot 1999) and requires the two to stay 70 sRGB units apart; they manage 87 and 97, where green and red
+managed 58. It also checks that both read as text on white and that the legend and the style use one
+palette. Gray is separated from both by lightness, not hue, and an absent edge is thinner and hidden by
+default, so color is never its only cue.
+
 ## The mark
 
 `docs/logo.svg` and `legend.LOGO`: three gray nodes joined by directed edges, one green (facilitation) and

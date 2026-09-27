@@ -21,7 +21,11 @@ from xml.sax.saxutils import escape
 WIDTH = 900
 LEFT, TEXT_X = 40, 214          # sample arcs on the left, their meaning to the right of this
 LINE, WRAP = 16, 72             # line height, and characters per line (SVG has no text flow)
-FACILITATION, INHIBITION, MUTED, INK = "#1a7f5a", "#b3352e", "#8a8a8a", "#222222"
+# Facilitation green and inhibition orange-red. The orange replaces a plain red (Karoline, 2026-09-27):
+# the arc tips are uniform, so the color is the only cue for the sign, and green against red is the hardest
+# pair for a reader with a color vision deficiency. Simulated (Vienot 1999), these two stay about 90 sRGB
+# units apart under protanopia and deuteranopia, where green and red were about 58. The test keeps it so.
+FACILITATION, INHIBITION, MUTED, INK = "#1a7f5a", "#c2410c", "#8a8a8a", "#222222"
 
 # (dash pattern, stroke width, color, head, label, meaning)
 ARCS = [
@@ -76,9 +80,9 @@ LOGO = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="{siz
         '<line x1="16.6" y1="42.5" x2="24.9" y2="27.8" stroke="#1A7F5A" stroke-width="5.0" stroke-linecap="round"/>'
         '<path d="M 27.80 22.51 L 27.33 34.84 L 17.55 29.38 z" fill="#1A7F5A" '
         'stroke="#1A7F5A" stroke-width="0.6" stroke-linejoin="round"/>'
-        '<line x1="36.2" y1="21.1" x2="43.7" y2="31.9" stroke="#B3352E" stroke-width="5.0" stroke-linecap="round"/>'
-        '<path d="M 47.12 36.92 L 36.26 31.04 L 45.48 24.69 z" fill="#B3352E" '
-        'stroke="#B3352E" stroke-width="0.6" stroke-linejoin="round"/>'
+        '<line x1="36.2" y1="21.1" x2="43.7" y2="31.9" stroke="#C2410C" stroke-width="5.0" stroke-linecap="round"/>'
+        '<path d="M 47.12 36.92 L 36.26 31.04 L 45.48 24.69 z" fill="#C2410C" '
+        'stroke="#C2410C" stroke-width="0.6" stroke-linejoin="round"/>'
         '<circle cx="13" cy="49" r="6.4" fill="#7A8580"/><circle cx="32" cy="15" r="6.4" fill="#7A8580"/>'
         '<circle cx="52" cy="44" r="6.4" fill="#7A8580"/></g>'
         '</svg>')

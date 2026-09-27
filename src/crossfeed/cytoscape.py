@@ -34,7 +34,8 @@ from .model import InteractionNetwork
 
 PORT = 1234
 STYLE_NAME = "crossfeed"
-FACILITATION, INHIBITION, MUTED = "#1A7F5A", "#B3352E", "#8A8A8A"
+# the legend's colors, and the same reason for the orange (see crossfeed.legend)
+FACILITATION, INHIBITION, MUTED = "#1A7F5A", "#C2410C", "#8A8A8A"
 OBLIGATE_WIDTH = 8.0          # obligate and abolished arcs have no |log2 mean| to scale with
 
 
