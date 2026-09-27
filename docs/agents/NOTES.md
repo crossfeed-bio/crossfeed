@@ -189,6 +189,15 @@ Rules for this file:
 - Where each mGrowthDB study's license is published; the study endpoint does not expose it, so
   `study_license` is marked unresolved.
 
+## Legend
+
+`src/crossfeed/legend.py` draws the legend; `docs/legend.svg` is its output (`make legend`) and the README
+embeds it. `tests/test_legend.py` requires the drawing to name every value of EFFECTS, OUTCOMES,
+QUALITY_FLAGS, CAUTIONS, EVIDENCE and STATUSES, and the shipped file to equal what the code draws. Adding a
+flag therefore means adding a line to the legend, the same way Craig's viewer guard works (#57). The dash
+patterns are the ones the Cytoscape style will use (#25): long dashes for drop-out evidence, dots for a
+single replicate.
+
 ## Gotchas
 
 - mGrowthDB serves growth curves, not interactions; interactions are derived.

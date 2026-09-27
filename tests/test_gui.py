@@ -251,3 +251,13 @@ def test_a_port_in_use_gives_a_plain_message_not_a_traceback():
         port = taken.getsockname()[1]
         with pytest.raises(SystemExit, match=f"cannot use port {port}"):
             serve(port=port, open_browser=False)
+
+
+def test_the_legend_is_reachable_from_the_page_and_needs_the_token(server):
+    base, token = server
+    assert 'href="/legend?token=tok"' in render_form("tok")
+    assert 'href="/legend?token=tok"' in render_result("tok", _query())
+    assert "crossfeed network legend" in _get(f"{base}/legend?token={token}")
+    with pytest.raises(urllib.error.HTTPError) as bad:
+        _get(f"{base}/legend?token=wrong")
+    assert bad.value.code == 403

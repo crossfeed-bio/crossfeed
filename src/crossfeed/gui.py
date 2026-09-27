@@ -23,6 +23,7 @@ from .attribution import studies_with_edges
 from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, output_meta
 from .export import to_graphml
 from .growth import SPIKE_FACTOR
+from .legend import legend_page
 from .mgrowthdb import MGrowthDBError, records_to_network
 from .taxonomy import resolve_species, species_index
 
@@ -119,7 +120,8 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
 {_settings_block(settings or {})}
 <button type="submit">Find interactions</button>
 </form>
-<p class="muted">Interactions are derived from mGrowthDB growth data on this machine. Nothing is uploaded.</p>""")
+<p class="muted">Interactions are derived from mGrowthDB growth data on this machine. Nothing is uploaded.</p>
+<p><a href="/legend?token={_esc(token)}">What the arcs mean</a></p>""")
 
 
 HEADER = ("<tr><th>source</th><th>affects</th><th>direction</th><th>log2 mean &plusmn; sd</th>"
@@ -231,7 +233,8 @@ def render_result(token: str, result: dict) -> str:
 <h2>Species</h2><ul>{resolved}</ul>{unresolved}
 <p class="muted">Studies searched: {_esc(studies)}</p>
 {errors}{table}{_absent_section(net, result.get("absence", {}))}{_sources(net)}{skipped}
-<p><a href="/?token={_esc(token)}">New search</a></p>""")
+<p><a href="/?token={_esc(token)}">New search</a> &middot;
+<a href="/legend?token={_esc(token)}">What the arcs mean</a></p>""")
 
 
 def parse_settings(form: dict) -> dict:
@@ -336,6 +339,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         if parsed.path == "/":
             self._send(render_form(self.token))
+        elif parsed.path == "/legend":
+            self._send(legend_page(self.token))
         elif parsed.path in ("/download.json", "/download.graphml"):
             result = self.state.get("result")
             if not result:
