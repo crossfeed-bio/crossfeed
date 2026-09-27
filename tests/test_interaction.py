@@ -458,3 +458,27 @@ def test_the_rule_as_it_ran_is_recorded():
     assert (meta["alpha"], meta["factor"], meta["applied"]) == (0.01, 4.0, True)
     assert "paired" in meta["test"] and "its own time" in meta["test"]
     assert rule_meta(0.0, 2.0)["applied"] is False
+
+
+def _measured(species, values, technique):
+    return GrowthCurve(species, (0, 10), values, "h", "Cells/mL", technique)
+
+
+def test_a_monoculture_is_compared_only_with_a_co_culture_measured_the_same_way():
+    # Karoline, 2026-09-27: flow cytometry alone against qPCR in co-culture, both in Cells/mL, is not
+    # compared: an effect could be the change of technique rather than the partner
+    mono_a = [Replicate([_measured(A, (1, 1.4), "fc")], f"a{i}") for i in range(2)]
+    mono_b = [Replicate([_measured(B, (1, 1.4), "qpcr")], f"b{i}") for i in range(2)]
+    co = [Replicate([_measured(A, (1, 3), "qpcr"), _measured(B, (1, 1.4), "qpcr")], f"c{i}") for i in range(2)]
+    with pytest.raises(ValueError, match="measured by different techniques") as e:
+        interaction_strength(mono_a, mono_b, co, A, B)
+    assert "fc: " in str(e.value) and "qpcr: " in str(e.value) and A in str(e.value)
+
+
+def test_different_species_may_be_measured_by_different_techniques():
+    # A by qPCR on both sides, B by plating on both sides: each species is compared with itself
+    mono_a = [Replicate([_measured(A, (1, 1.4), "qpcr")], f"a{i}") for i in range(2)]
+    mono_b = [Replicate([_measured(B, (1, 1.4), "plates")], f"b{i}") for i in range(2)]
+    co = [Replicate([_measured(A, (1, 3), "qpcr"), _measured(B, (1, 1.4), "plates")], f"c{i}") for i in range(2)]
+    r = interaction_strength(mono_a, mono_b, co, A, B)
+    assert r["species_a"]["outcome"] == "quantified"

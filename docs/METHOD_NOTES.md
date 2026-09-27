@@ -588,5 +588,15 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    monoculture variants per strain differing in concentrations no name or description ties to a
    co-culture.
 
+23. **One species-identifying technique on both sides** (Karoline, 2026-09-27). Her words: "mono-cultures
+   should only be compared to co-cultures if both use the same, species-identifying technique, even if
+   another technique would result in the same unit, because otherwise we do not know whether an effect is
+   due to the co-culture or due to the change in technique." So a species' curves in the sets compared
+   (monocultures and co-cultures, or a full community and a drop-out) must share mGrowthDB's
+   `techniqueType`, beyond the unit check; different species may be measured differently. Whole-culture
+   measurements (subject bioreplicate: OD, pH, total counts) are not species-identifying and are not used
+   for monocultures either, as before (SMGDB00000010 and SMGDB00000015 measure their monocultures only that
+   way). No edge derived from mGrowthDB on 2026-09-27 changed: every one already compared one technique.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

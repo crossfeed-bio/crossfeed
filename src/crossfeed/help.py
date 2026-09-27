@@ -176,6 +176,10 @@ DECISIONS = (
      "only, which keeps one source of truth (#23, #24)."),
     ("Drop-out communities count, labeled as possibly indirect.",
      "A community without one member shows what that member does, but maybe through the others (#47)."),
+    ("A species is compared only with itself measured the same way.",
+     "Its monocultures and co-cultures must use the same species-identifying technique, not only the same "
+     "unit, since otherwise an effect could be the change of technique; whole-culture measurements such as "
+     "OD are not used for this."),
     ("Experiments are pooled only when they are replicates.",
      "Interactions depend on the environment, so experiments with different conditions give parallel "
      "arcs, one each (#47)."),

@@ -128,7 +128,8 @@ def replicates_for_experiment(client, experiment: dict, spike_factor: float = SP
             times = [t for t, _, _ in points]
             values = [v for _, v, _ in points]
             try:
-                curve = GrowthCurve(species, times, values, time_unit, _abundance_unit(context))
+                curve = GrowthCurve(species, times, values, time_unit, _abundance_unit(context),
+                                    context.get("techniqueType") or "")
             except ValueError as e:
                 skipped.append((f"{label}: {name}, {species}", str(e)))
                 continue

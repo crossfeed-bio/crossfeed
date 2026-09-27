@@ -26,6 +26,7 @@ class GrowthCurve:
     values: tuple                 # abundance at each time point, specific to `species`
     time_unit: str                # e.g. "h"
     abundance_unit: str           # e.g. "OD600", "CFU/mL", "16S copies/mL"
+    technique: str = ""           # how the species was measured (mGrowthDB techniqueType: qpcr, 16s, fc, ...)
 
     def __post_init__(self):
         object.__setattr__(self, "times", tuple(float(t) for t in self.times))
@@ -86,6 +87,19 @@ def check_sets(sets) -> None:
                 raise ValueError(f"{_label(rep, role, i)} holds species {list(rep.species)}, "
                                  f"expected {list(expected)}")
             curves.extend((f"{_label(rep, role, i)}, {c.species}", c) for c in rep.curves)
+
+    # one species, one technique: a monoculture is compared with a co-culture (or a full community with a
+    # drop-out) only when both measured the species the same, species-identifying way, even when another
+    # technique gives the same unit, since otherwise an effect may be the change of technique (Karoline,
+    # 2026-09-27). Different species may be measured differently.
+    by_species = {}
+    for label, c in curves:
+        by_species.setdefault(c.species, {}).setdefault(c.technique, []).append(label)
+    for species, techniques in sorted(by_species.items()):
+        if len(techniques) > 1:
+            detail = "; ".join(f"{t or 'unrecorded'}: {', '.join(labels)}" for t, labels in sorted(techniques.items()))
+            raise ValueError(f"{species} is measured by different techniques in the sets compared ({detail}); "
+                             "they are compared only when both use the same technique")
 
     for attr, what in (("time_unit", "time units"), ("abundance_unit", "abundance units")):
         units = {getattr(c, attr) for _, c in curves}

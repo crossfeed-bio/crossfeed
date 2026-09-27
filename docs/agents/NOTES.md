@@ -197,6 +197,10 @@ Rules for this file:
   before the last, "Evolved AtCt" -> "evolved"; Karoline: "yes"), else the pair is skipped; description-only
   variants of a pair or a drop-out design get the caution `conditions_unverified`, unless a member's set
   was matched by name or qualifier.
+- 2026-09-27 (Karoline, METHOD_NOTES item 23): a monoculture is compared with a co-culture only when both
+  use the same species-identifying technique, even when another technique gives the same unit.
+  `growth.check_sets` requires one `GrowthCurve.technique` per species across the sets compared; the
+  adapter fills it from `techniqueType`. Whole-culture traces stay out of monoculture comparisons.
 
 ## Open questions (need a human)
 
