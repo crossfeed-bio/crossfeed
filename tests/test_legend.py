@@ -60,3 +60,19 @@ def test_every_arc_ends_in_the_same_head():
     heads = re.findall(r'<path d="M [\d.]+ [\d.]+ l -15 -7\.5 l 0 15 z" fill="(#[0-9A-Fa-f]{6})"/>', svg)
     assert len(heads) == len(ARCS)
     assert len(set(heads)) > 1                       # they differ in color, which is the whole point
+
+
+def test_the_viewer_draws_the_same_vocabulary():
+    # gui/index.html, the standalone viewer, uses the legend's colors, one arrowhead for every arc (no
+    # T-bar), dashes only for evidence and quality, and the genus colors of crossfeed.brand (2026-09-27)
+    import json
+    import re
+    from pathlib import Path
+
+    from crossfeed import brand
+    page = (Path(__file__).resolve().parents[1] / "gui" / "index.html").read_text(encoding="utf-8")
+    assert f"--fac:{brand.GROWTH};" in page and f"--inh:{brand.INHIBITION};" in page
+    assert "M10,1 L10,11" not in page                                   # the T-bar head is gone
+    assert 'inhibition:{color:()=>getVar("--inh"),dash:"",head:"inh"}' in page
+    colors = json.loads(re.search(r"const GENUS_COLORS=(\[.*?\]);", page).group(1))
+    assert colors == list(brand.GENUS_COLORS)

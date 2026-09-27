@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>crossfeed network viewer</title>
+<title>grownet network viewer</title>
 <style>
   /* Self-contained: no external scripts, styles, or fonts, so this file opens offline by double-click and
      stays as portable as the neutral format it reads. It is the separate presentation layer; the Python
@@ -14,7 +14,7 @@
     --teal:#2f6f6b; --teal-ink:#1c4744; --accent:#eef4f3;
     /* Okabe-Ito, safe across the common color-vision deficiencies. Sign is also carried by line style and
        arrowhead shape (see the legend), so color is never the only channel. */
-    --fac:#0072b2; --inh:#d55e00; --neu:#6b7a79; --warn:#9a6700;
+    --fac:#1A7F5A; --inh:#C2410C; --neu:#6b7a79; --warn:#9a6700;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
@@ -84,7 +84,7 @@
 <header>
   <div class="row1">
     <h1>crossfeed &middot; network viewer</h1>
-    <span class="tag">Read a crossfeed interaction network: focus by species, inspect the evidence behind each edge, download for Cytoscape or the pipeline.</span>
+    <span class="tag">Read a grownet interaction network: focus by species, inspect the evidence behind each edge, download for Cytoscape or the pipeline.</span>
   </div>
   <div id="srcbanner"></div>
 </header>
@@ -195,13 +195,24 @@ const nodeById={};
 function reindex(){for(const k in nodeById)delete nodeById[k];(NET.nodes||[]).forEach(n=>nodeById[n.id]=n);}
 const nodeName=id=>{const n=nodeById[id];return n?(n.name||n.id):id;};
 
-// effect -> visual style. Sign, color, line dash, and arrowhead shape all encode the same thing, so a
-// reader who cannot separate the colors still reads the sign from the dash and the head.
+// effect -> visual style, as the legend and the Cytoscape style draw it (Karoline, 2026-09-27): every arc ends
+// in the same arrowhead and the color alone carries the sign, facilitation green and inhibition the
+// orange-red chosen for readers with a color vision deficiency. Dashes carry evidence and quality, never the
+// sign: long dashes for a drop-out arc, dots for a single replicate (see dashOf).
 const STYLE={
   facilitation:{color:()=>getVar("--fac"),dash:"",head:"fac"},
-  inhibition:{color:()=>getVar("--inh"),dash:"7 5",head:"inh"},
-  neutral:{color:()=>getVar("--neu"),dash:"2 5",head:"neu"}
+  inhibition:{color:()=>getVar("--inh"),dash:"",head:"inh"},
+  neutral:{color:()=>getVar("--neu"),dash:"",head:"neu"}
 };
+const dashOf=e=>{const drop=isIndirect(e), one=flagsOf(e).includes("single_replicate");
+  return drop&&one?"11 4 2 4":drop?"11 6":one?"2 5":"";};
+// nodes by genus, the first word of the name, each genus its own color (crossfeed.brand.GENUS_COLORS)
+const GENUS_COLORS=["#2A78D6", "#EDA100", "#E87BA4", "#4A3AA7", "#A2C5FF", "#762E61", "#069CE4", "#C7CA85", "#B8892D", "#635A93", "#F1ACCC", "#A3B472", "#A74FBB", "#8AACE4", "#583A84", "#D75EB4", "#854E73", "#B25977", "#CC96C6", "#544EC5", "#9DDA4F", "#738242", "#8080FC", "#3C561C", "#92689C", "#4CDBE3", "#88194A", "#878CC9", "#4C701A", "#84C030", "#E5598E", "#BA93FB", "#959754", "#6B2094", "#724AAB", "#984260", "#9E658B", "#7B67CC", "#7E0F7A", "#7A5283", "#C8729C", "#E38AB5", "#B249AC", "#8E35A1", "#64B8D2", "#6C4302", "#A76C12", "#623B6B"];
+const genusOf=name=>{const w=String(name||"").replace(/[\[\]]/g,"").split(/\s+/).filter(Boolean);
+  const g=w[0]&&w[0].toLowerCase()==="candidatus"?w[1]:w[0];return g?g[0].toUpperCase()+g.slice(1).toLowerCase():"unknown";};
+function genusColors(list){const n={};list.forEach(nd=>{const g=genusOf(nodeName(nd.id));n[g]=(n[g]||0)+1;});
+  const ranked=Object.keys(n).sort((a,b)=>n[b]-n[a]||(a<b?-1:a>b?1:0));const c={};
+  ranked.forEach((g,i)=>c[g]=GENUS_COLORS[i%GENUS_COLORS.length]);return c;}
 const styleOf=e=>STYLE[e.effect]||STYLE.neutral;
 
 // ---- filtering: the species box plus the live filters. Never returns an edge whose endpoints are absent. ----
@@ -308,8 +319,7 @@ function defsMarkers(){
   for(const key of ["fac","inh","neu"]){
     const color=getVar("--"+key);
     const m=el("marker",{id:"arw-"+key,viewBox:"0 0 12 12",refX:"10",refY:"6",markerWidth:"9",markerHeight:"9",markerUnits:"userSpaceOnUse",orient:"auto-start-reverse"});
-    if(key==="inh") m.appendChild(el("path",{d:"M10,1 L10,11",stroke:color,"stroke-width":"2.4",fill:"none"}));         // T-bar = repression
-    else if(key==="neu") m.appendChild(el("path",{d:"M2,2 L10,6 L2,10",stroke:color,"stroke-width":"1.6",fill:"none"})); // open chevron
+    if(key==="neu") m.appendChild(el("path",{d:"M2,2 L10,6 L2,10",stroke:color,"stroke-width":"1.6",fill:"none"})); // open chevron
     else m.appendChild(el("path",{d:"M2,1 L11,6 L2,11 z",fill:color}));                                                  // filled arrow
     defs.appendChild(m);
   }
@@ -333,7 +343,7 @@ function render(){
     const st=styleOf(e), s=num(e.strength), w=1.4+4.6*(s===null?0.3:Math.abs(s)/MAXS);
     const g=edgeGeom(e); if(!g)return; const d=g.d;
     const path=el("path",{class:"edge",d,stroke:st.color(),"stroke-width":w,fill:"none","marker-end":"url(#arw-"+st.head+")"});
-    if(st.dash)path.setAttribute("stroke-dasharray",st.dash);
+    const dash=dashOf(e); if(dash)path.setAttribute("stroke-dasharray",dash);
     if(isLowQuality(e))path.setAttribute("opacity","0.45");   // flagged: shown, but not fully trusted
     if(isIndirect(e)){   // open ring at the midpoint: the arc is routed through something else
       const ring=el("circle",{class:"via",cx:g.mx,cy:g.my,r:4.5,fill:getVar("--bg"),stroke:st.color(),"stroke-width":1.8});
@@ -349,11 +359,12 @@ function render(){
   });
 
   const cxAll=nodes.length?nodes.reduce((s,nd)=>s+POS[nd.id].x,0)/nodes.length:0;
+  const fills=genusColors(nodes);
   nodes.forEach(nd=>{
     const p=POS[nd.id];
     const lft=p.x>cxAll;   // right-of-center nodes get their label on the left so it stays inside the canvas
     const g=el("g",{class:"node"+(selected===nd.id?" sel":""),"data-id":nd.id,transform:`translate(${p.x} ${p.y})`,tabindex:"0",role:"button","aria-label":nodeName(nd.id)});
-    g.appendChild(el("circle",{r:10}));
+    g.appendChild(el("circle",{r:10,style:"fill:"+fills[genusOf(nodeName(nd.id))]}));
     const t=el("text",{x:lft?-14:14,y:4}); if(lft)t.setAttribute("text-anchor","end"); t.textContent=nodeName(nd.id); g.appendChild(t);
     g._id=nd.id;
     g.addEventListener("click",()=>{if(dragMoved){dragMoved=false;return;}selectNode(nd.id);});
@@ -529,12 +540,13 @@ function positionNodes(){
 
 // ---- legend ----
 function buildLegend(){
-  const rows=[["facilitation (co grows more)","fac",""],["inhibition (co grows less)","inh","7 4"],["neutral","neu","2 4"]];
+  const rows=[["facilitation (co grows more)","fac",""],["inhibition (co grows less)","inh",""],
+              ["drop-out evidence (long dashes)","fac","11 6"],["single replicate (dots)","fac","2 5"]];
   const box=document.getElementById("legend"); box.textContent="";
   rows.forEach(([label,key,dash])=>{
     const div=document.createElement("div");div.className="li";
     div.innerHTML=`<svg viewBox="0 0 38 14"><defs><marker id="lg-${key}" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-reverse">`+
-      (key==="inh"?`<path d="M10,1 L10,11" stroke="var(--inh)" stroke-width="2.4" fill="none"/>`:
+      (key==="inh"?`<path d="M2,1 L11,6 L2,11 z" fill="var(--inh)"/>`:
        key==="neu"?`<path d="M2,2 L10,6 L2,10" stroke="var(--neu)" stroke-width="1.6" fill="none"/>`:
        `<path d="M2,1 L11,6 L2,11 z" fill="var(--fac)"/>`)+
       `</marker></defs><line x1="2" y1="7" x2="28" y2="7" stroke="var(--${key})" stroke-width="2.4" ${dash?`stroke-dasharray="${dash}"`:""} marker-end="url(#lg-${key})"/></svg><span>${label}</span>`;
