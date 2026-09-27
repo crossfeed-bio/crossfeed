@@ -296,6 +296,10 @@ def test_output_meta_records_the_statistics_and_the_absence_rule():
     assert meta["absence"]["absent"] == 1
     _, conservative = output_meta(records, correction="by")
     assert "Benjamini-Yekutieli" in conservative["statistics"]["correction"]
+    # the no-growth rule's numbers travel with the network, since the obligate count depends on them (#37)
+    assert (meta["no_growth"]["alpha"], meta["no_growth"]["obligate"], meta["no_growth"]["abolished"]) == (0.0, 0, 0)
+    _, chosen = output_meta(records, no_growth_alpha=0.01, no_growth_factor=4.0)
+    assert (chosen["no_growth"]["alpha"], chosen["no_growth"]["factor"]) == (0.01, 4.0)
 
 
 def test_a_single_replicate_edge_is_kept_and_flagged_low_quality():

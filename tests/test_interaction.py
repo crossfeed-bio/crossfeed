@@ -5,7 +5,8 @@ import pytest
 
 from crossfeed import interaction
 from crossfeed.growth import GrowthCurve, Replicate
-from crossfeed.interaction import dropout_interaction_strengths, grew, interaction_strength
+from crossfeed.interaction import dropout_interaction_strengths, grew, interaction_strength, rule_meta
+from crossfeed.stats import welch
 
 
 @pytest.fixture(autouse=True)
@@ -371,11 +372,48 @@ class TestNoGrowthRule:
         assert not grew(self._set(A, [(100, 1), (120, 2), (90, 1)]), A, 10.0)["grew"]
 
     def test_a_rise_that_misses_significance_but_doubles_counts_as_growth(self):
-        # starts 1, 1; maxima 1, 8: mean 4.5 is above 2 times 1, while Welch on two values per side is
-        # nowhere near p < 0.05. Without this, an ordinary comparison would be called obligate (#37)
+        # rises log2(1/1) = 0 and log2(8/1) = 3: mean 1.5, at least log2(2) = 1 (geometric mean of the
+        # ratios sqrt(8) = 2.83, above 2). The paired test on 0, 3 has t = 1.5 / (2.12 / sqrt(2)) = 1 with
+        # df 1, p = 0.5. Without the factor, an ordinary comparison would be called obligate (#37)
         reps = self._set(A, [(1, 1), (1, 8)])
         verdict = grew(reps, A, 10.0)
-        assert verdict["grew"] and verdict["p"] > 0.05
+        assert verdict["grew"] and verdict["p"] == pytest.approx(0.5) and verdict["log2_rise"] == pytest.approx(1.5)
+
+    def test_each_replicate_peaks_at_its_own_time(self):
+        # replicate 1 peaks at 5 h, replicate 2 at 10 h (Karoline, on #68: the time of maximum abundance
+        # varies across replicates). Each rise is log2(8 / 1) = 3, so the differences do not vary and the
+        # test gives p = 0. At one shared time point the rises would be 3 and 1 at 5 h, or 1 and 3 at 10 h.
+        times = (0, 5, 10)
+        reps = [Replicate([_curve(A, (1, 8, 2), times)], "r1"), Replicate([_curve(A, (1, 2, 8), times)], "r2")]
+        verdict = grew(reps, A, 10.0, factor=0.0)                       # the test alone decides here
+        assert verdict["grew"] and verdict["log2_rise"] == pytest.approx(3.0) and verdict["p"] == 0.0
+
+    def test_pairing_removes_the_spread_between_inocula(self):
+        # inocula 1, 10, 100 each rise 1.5 times: every log2 rise is log2(1.5) = 0.585, so the paired test
+        # gives p = 0. Comparing the maxima (1.5, 15, 150) with the starts (1, 10, 100) as unrelated samples,
+        # Welch's test gives t = 18.5 / sqrt((6743.25 + 2997) / 3) = 0.325 with df 3.48, p = 0.76, because
+        # the inocula differ far more than each replicate rose.
+        reps = self._set(A, [(1, 1.5), (10, 15), (100, 150)])
+        verdict = grew(reps, A, 10.0, factor=0.0)
+        assert verdict["grew"] and verdict["p"] == 0.0
+        assert welch([1.5, 15, 150], [1, 10, 100])["p"] == pytest.approx(0.764, abs=0.005)
+
+    def test_one_replicate_cannot_carry_the_factor_for_the_set(self):
+        # ratios 1, 1, 7: their arithmetic mean is 3, but the geometric mean is 7 ** (1/3) = 1.91, below 2
+        # (mean log2 rise 2.807 / 3 = 0.936 < 1). The paired test on 0, 0, 2.807 gives t = 1, p = 0.42.
+        verdict = grew(self._set(A, [(1, 1), (1, 1), (1, 7)]), A, 10.0)
+        assert not verdict["grew"] and verdict["log2_rise"] == pytest.approx(math.log2(7) / 3)
+        assert verdict["p"] == pytest.approx(1 - 1 / math.sqrt(3), abs=1e-3)
+
+    def test_factor_zero_leaves_the_test_alone(self):
+        # the rise of 0 and 3 from before, which only the factor called growth
+        assert not grew(self._set(A, [(1, 1), (1, 8)]), A, 10.0, factor=0.0)["grew"]
+
+    def test_a_start_without_a_ratio_is_left_out_of_the_rule(self):
+        # a start of 0 has no log2 rise, so the rule cannot run on these replicates and the set falls back
+        # to its growth property, as before the rule existed
+        verdict = grew(self._set(A, [(0, 5), (0, 6)]), A, 10.0)
+        assert verdict["grew"] and verdict["n"] == 0
 
     def test_one_replicate_cannot_establish_an_absence_of_growth(self):
         # the test needs two per side, so the rule falls back to the values themselves
@@ -403,3 +441,10 @@ class TestNoGrowthRule:
                                   Replicate([_curve(A, (1, 0.99)), _curve(B, (1, 1.01))], "c3")], A, B)
         assert r["species_a"]["outcome"] == "no_growth" and r["species_b"]["outcome"] == "no_growth"
         assert any("not significantly above" in reason for _, reason in r["skipped"])
+
+
+def test_the_rule_as_it_ran_is_recorded():
+    meta = rule_meta(0.01, 4.0)
+    assert (meta["alpha"], meta["factor"], meta["applied"]) == (0.01, 4.0, True)
+    assert "paired" in meta["test"] and "its own time" in meta["test"]
+    assert rule_meta(0.0, 2.0)["applied"] is False

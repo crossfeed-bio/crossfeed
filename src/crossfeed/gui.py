@@ -19,6 +19,7 @@ import urllib.parse
 import webbrowser
 from collections import Counter
 
+from . import interaction
 from .attribution import studies_with_edges
 from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, output_meta
 from .export import to_graphml
@@ -33,7 +34,9 @@ TITLE = "crossfeed"
 EXAMPLE = ("Faecalibacterium duncaniae", "Blautia hydrogenotrophica")
 DEFAULTS = {"metric": "auc", "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
             "include_low_quality": False, "correction": "bh", "include_dropout": True,
-            "include_non_batch": False, "studies": "", "only_entered": True}
+            "include_non_batch": False, "studies": "", "only_entered": True,
+            # None: the no-growth rule's own defaults, read when used (crossfeed.interaction.grew)
+            "no_growth_alpha": None, "no_growth_factor": None}
 PROVISIONAL = ("Each interaction compares a species' growth with and without its partner across replicates "
                "(mean log2 difference). An interaction is reported when |mean| is at least k standard "
                "deviations (the absence threshold, default 1: the mean plus or minus its standard deviation "
@@ -111,6 +114,14 @@ def _settings_block(settings: dict) -> str:
   <input name="spike_factor" type="text" size="6" value="{_esc(s['spike_factor'])}"></label>
   <span class="muted">leave out a curve with one or two points this many times above both neighbours;
   0 keeps all</span></div>
+<div class="row"><label>No-growth alpha
+  <input name="no_growth_alpha" type="text" size="6" value="{_esc(_no_growth(s, 'alpha'))}"></label>
+  <span class="muted">a set has not grown when its rise from the first time point is not significant at
+  this level (paired t-test); 0 switches the rule off</span></div>
+<div class="row"><label>No-growth factor
+  <input name="no_growth_factor" type="text" size="6" value="{_esc(_no_growth(s, 'factor'))}"></label>
+  <span class="muted">a set that rose at least this many times (geometric mean over replicates) has
+  grown whatever the test says; 0 leaves the test alone</span></div>
 <div class="row"><label>Only these studies
   <input name="studies" type="text" size="40" value="{_esc(s['studies'])}"></label>
   <span class="muted">comma separated study ids; empty means every study holding the species</span></div>
@@ -273,6 +284,12 @@ def render_result(token: str, result: dict) -> str:
 <a href="/legend?token={_esc(token)}">What the arcs mean</a></p>""")
 
 
+def _no_growth(s: dict, which: str) -> float:
+    """A no-growth setting as the form shows it: the value chosen, or the rule's default."""
+    value = s.get(f"no_growth_{which}")
+    return value if value is not None else getattr(interaction, f"NO_GROWTH_{which.upper()}")
+
+
 def parse_settings(form: dict) -> dict:
     """Settings from the posted form, falling back to the defaults for anything missing or unreadable."""
     settings = dict(DEFAULTS)
@@ -290,6 +307,11 @@ def parse_settings(form: dict) -> dict:
         settings["absence_threshold"] = abs(float(form.get("absence_threshold", [""])[0]))
     except ValueError:
         pass
+    for key in ("no_growth_alpha", "no_growth_factor"):
+        try:
+            settings[key] = abs(float(form.get(key, [""])[0]))
+        except ValueError:
+            pass
     correction = form.get("correction", [""])[0]
     if correction in ("bh", "by"):
         settings["correction"] = correction
@@ -329,7 +351,9 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         try:
             recs, skips = derive_interactions(client, study_id, metric=s["metric"],
                                               spike_factor=s["spike_factor"], dropout=s["include_dropout"],
-                                              include_non_batch=s["include_non_batch"])
+                                              include_non_batch=s["include_non_batch"],
+                                              no_growth_alpha=s["no_growth_alpha"],
+                                              no_growth_factor=s["no_growth_factor"])
         except MGrowthDBError as e:
             errors.append(f"{study_id}: {e}")
             continue
@@ -342,7 +366,8 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         records += recs
         skipped += skips
 
-    records, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"])
+    records, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"],
+                                 s["no_growth_alpha"], s["no_growth_factor"])
     net = records_to_network(records, meta={
         "source_db": "mGrowthDB (live)", "species": names, "studies": studies, **extra})
     return {"resolved": resolved["resolved"], "unresolved": resolved["unresolved"],

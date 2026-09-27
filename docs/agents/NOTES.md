@@ -181,6 +181,11 @@ Rules for this file:
   status; strains_pooled, removed_member_detected and non_batch stay hidden by default. Study 8's missing
   biological replicates are for mGrowthDB to fix: "We can't start correcting data in the tool; this needs
   to happen in mGrowthDB." Karoline has noted it for mGrowthDB development.
+- 2026-09-27 (Karoline, on #68, the no-growth rule of item 5): her words: "yes to all 3, as long as the
+  maximum in the paired test can come from different time points (since the time of maximum abundance may
+  vary across replicates)." The three were her agent's proposals: keep the twofold half at a factor of 2;
+  make alpha and the factor settings and record them in the network (Craig's agent's request); test with
+  a paired test on each replicate's log2(maximum / start) instead of Welch on unrelated samples.
 
 ## Open questions (need a human)
 
@@ -207,12 +212,15 @@ nothing, which is the point of the rule.
 ## The no-growth rule
 
 `crossfeed.interaction.grew` decides whether a species grew in a replicate set, before any ratio is
-computed (#37, register item 5). A set has grown when its maxima are significantly above its first time
-points (Welch, `NO_GROWTH_ALPHA` = 0.05) or when it rose by at least `NO_GROWTH_FACTOR` (2). The second
-half is not Karoline's wording; it exists because the test alone is underpowered at two or three
-replicates, which inflates obligate and abolished claims (numbers in register item 5). It is open for her
-decision. Tests that predate the rule switch it off through an autouse fixture and say so, so each keeps
-checking what it claims; `TestNoGrowthRule` covers the rule itself.
+computed (#37, register item 5, settled on #68). One rise per replicate, log2(maximum / first time
+point), each maximum at its own time; grown when a paired t-test finds the rises above zero
+(`NO_GROWTH_ALPHA` = 0.05) or their mean reaches log2(`NO_GROWTH_FACTOR`) (2). Both are settings; `None`
+in the plumbing means "read the module constant when used", so tests can switch the rule off by
+monkeypatching the constants. Tests that predate the rule do that through an autouse fixture and say so;
+`TestNoGrowthRule` covers the rule itself. Pass the same two values to `output_meta` as to the derivation,
+or `meta.no_growth` will misstate the rule. The paired test is not uniformly stronger than Welch: where
+the ratios vary more across replicates than the raw values do, its p is larger (SMGDB00000013, Comamonas
+in co-culture: Welch 0.02, paired 0.07).
 
 ## Gotchas
 

@@ -18,9 +18,12 @@ tagged version is never reused for changed content.
   are flagged `non_batch`. An experiment with no recorded mode counts as not batch. Edges gained
   `cultivation_mode`. SMGDB00000001, SMGDB00000005 and SMGDB00000011 now say why they derive nothing.
 - The no-growth rule (#37): before any ratio, a species counts as grown in a replicate set only when its
-  maxima are significantly above its first time points (Welch, alpha 0.05) or it rose at least twofold.
-  A set that did not grow feeds the existing `obligate`, `abolished` and `no_growth` outcomes instead of a
-  ratio between two near-zero quantities. In SMGDB00000013 this makes Comamonas to Ochrobactrum obligate.
+  rise from the first time point, log2(maximum / start) per replicate with each maximum at its own time,
+  is significant (paired t-test, alpha 0.05) or reaches twofold as a geometric mean. A set that did not
+  grow feeds the existing `obligate`, `abolished` and `no_growth` outcomes instead of a ratio between two
+  near-zero quantities. Both numbers are settings (`--no-growth-alpha`, `--no-growth-factor`, and the
+  advanced settings on the local page), and `meta.no_growth` records them with the obligate and abolished
+  counts. In SMGDB00000013 this makes Comamonas to Ochrobactrum obligate.
 - A pluggable derivation seam (`crossfeed.derive.Deriver`): the comparison method is a drop-in strategy,
   with the provisional `BaselineDeriver` as one implementation. The agreed method arrives as another
   `Deriver` without touching the model or the pipeline.

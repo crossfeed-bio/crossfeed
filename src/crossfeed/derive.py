@@ -28,7 +28,15 @@ from collections import Counter
 
 from .adapter import replicates_for_experiment
 from .growth import SPIKE_FACTOR, GrowthCurve, Replicate
-from .interaction import ABOLISHED, NO_GROWTH, OBLIGATE, UNUSABLE, dropout_interaction_strengths, interaction_strength
+from .interaction import (
+    ABOLISHED,
+    NO_GROWTH,
+    OBLIGATE,
+    UNUSABLE,
+    dropout_interaction_strengths,
+    interaction_strength,
+    rule_meta,
+)
 from .mgrowthdb import MGrowthDBClient
 from .stats import CORRECTIONS, welch
 
@@ -404,8 +412,13 @@ def _spike_notes(flagged, target: str) -> list:
             for f in flagged if f["species"] == target]
 
 
+def _no_growth_kwargs(no_growth) -> dict:
+    alpha, factor = no_growth or (None, None)
+    return {"no_growth_alpha": alpha, "no_growth_factor": factor}
+
+
 def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, records, skipped,
-              identities=None) -> None:
+              identities=None, no_growth=None) -> None:
     """The edges of one two-member co-culture against the monocultures of its members."""
     a, b = _members(exp)
     cond = exp.get("name", "")
@@ -426,7 +439,8 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
             skipped.append((f"{a} with {b} [{cond}]", "no usable co-culture replicates"))
         return
     try:
-        result = interaction_strength(sets[a], sets[b], co_reps, a, b, method=method, spike_factor=spike_factor)
+        result = interaction_strength(sets[a], sets[b], co_reps, a, b, method=method, spike_factor=spike_factor,
+                                      **_no_growth_kwargs(no_growth))
     except ValueError as e:
         skipped.append((f"{a} with {b} [{cond}]", str(e)))
         return
@@ -567,7 +581,7 @@ def _common_start(full, dropouts, skipped) -> tuple:
 
 
 def _dropout(client, design, method, spike_factor, study_id, study_meta, records, skipped,
-             identities=None) -> None:
+             identities=None, no_growth=None) -> None:
     """The arcs of one drop-out design, from `crossfeed.interaction.dropout_interaction_strengths`."""
     members, full_exps, drops = design
     label = f"drop-out design of {len(members)} members ({', '.join(e.get('name', '') for e in full_exps)})"
@@ -586,7 +600,8 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
         skipped.append((label, "no usable full community replicates" if not full else "no usable drop-out"))
         return
     try:
-        result = dropout_interaction_strengths(full, dropouts, method=method, spike_factor=spike_factor)
+        result = dropout_interaction_strengths(full, dropouts, method=method, spike_factor=spike_factor,
+                                               **_no_growth_kwargs(no_growth))
     except ValueError as e:
         skipped.append((label, str(e)))
         return
@@ -613,7 +628,8 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
 
 def interactions_from_replicates(client, study: dict, exps: list, study_id: str = None,
                                  method: str = "auc", spike_factor: float = SPIKE_FACTOR,
-                                 dropout: bool = True, include_non_batch: bool = False):
+                                 dropout: bool = True, include_non_batch: bool = False,
+                                 no_growth_alpha: float = None, no_growth_factor: float = None):
     """The specified comparison, run on a study: (records, skipped).
 
     Two designs give edges. Each two-member co-culture is compared with the monoculture replicates of
@@ -629,8 +645,10 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
     apart. One edge per experiment; merging edges is a separate decision. Filtering low-quality edges
     happens at output (`select_edges`), so nothing computed is lost. Only batch experiments are derived
     unless `include_non_batch` is set; every edge records its `cultivation_mode`, and a non-batch edge is
-    flagged `non_batch` (Karoline, #42).
+    flagged `non_batch` (Karoline, #42). `no_growth_alpha` and `no_growth_factor` set the no-growth rule
+    (`crossfeed.interaction.grew`; None means the defaults there).
     """
+    no_growth = (no_growth_alpha, no_growth_factor)
     study_id = study_id or study.get("id")
     study_meta = {
         "study_citation": study.get("name", study_id),
@@ -644,10 +662,11 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
     for exp in exps:
         if len(_members(exp)) == 2:
             _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, records, skipped,
-                      identities)
+                      identities, no_growth)
     if dropout:
         for design in dropout_designs(exps, skipped):
-            _dropout(client, design, method, spike_factor, study_id, study_meta, records, skipped, identities)
+            _dropout(client, design, method, spike_factor, study_id, study_meta, records, skipped, identities,
+                     no_growth)
     elif any(len(_members(exp)) > 2 for exp in exps):
         skipped.append(("communities of more than two members", "drop-out designs switched off; no arcs derived"))
     return records, skipped
@@ -698,13 +717,16 @@ def select_edges(records, include_low_quality: bool = False) -> tuple:
 
 
 def output_meta(records, include_low_quality: bool = False, correction: str = "bh",
-                absence_threshold: float = ABSENCE_THRESHOLD) -> tuple:
+                absence_threshold: float = ABSENCE_THRESHOLD, no_growth_alpha: float = None,
+                no_growth_factor: float = None) -> tuple:
     """(edges, meta) for writing a network.
 
     Sets each record's `status` from the absence threshold k (None, undetermined, for a low-quality
     edge, which is never read as an absence) and its `significance` from the chosen correction, drops
     low-quality edges unless asked, and records all of it in `meta`, so a file says how it was made and
-    how many edges each rule touched.
+    how many edges each rule touched. `meta.no_growth` records the no-growth rule the derivation ran with,
+    since the count of obligate and abolished edges depends on it (#37); pass the same values given to
+    the derivation.
     """
     for record in records:
         # a low-quality edge is never read as the absence of an interaction (Karoline, on #40; #50)
@@ -717,6 +739,9 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
     absent = sum(1 for e in edges if e.get("status") == ABSENT)
     meta = {"statistics": statistics,
             "absence": {"rule": "absent when |log2 mean| < k * sd", "k": absence_threshold, "absent": absent},
+            "no_growth": {**rule_meta(no_growth_alpha, no_growth_factor),
+                          "obligate": sum(1 for e in edges if e.get("outcome") == OBLIGATE),
+                          "abolished": sum(1 for e in edges if e.get("outcome") == ABOLISHED)},
             "filters": {"include_low_quality": include_low_quality}, "hidden": hidden}
     return edges, meta
 
@@ -756,19 +781,23 @@ class ReplicateDeriver(Deriver):
     needs_client = True
 
     def __init__(self, method: str = "auc", spike_factor: float = SPIKE_FACTOR, client=None,
-                 dropout: bool = True, include_non_batch: bool = False):
+                 dropout: bool = True, include_non_batch: bool = False, no_growth_alpha: float = None,
+                 no_growth_factor: float = None):
         self.method = method
         self.spike_factor = spike_factor
         self.client = client
         self.dropout = dropout
         self.include_non_batch = include_non_batch
+        self.no_growth_alpha = no_growth_alpha
+        self.no_growth_factor = no_growth_factor
 
     def derive(self, study: dict, exps: list):
         if self.client is None:
             raise ValueError("ReplicateDeriver needs a client: it reads each replicate's measured series")
         return interactions_from_replicates(self.client, study, exps, study.get("id"),
                                             self.method, self.spike_factor, self.dropout,
-                                            self.include_non_batch)
+                                            self.include_non_batch, self.no_growth_alpha,
+                                            self.no_growth_factor)
 
 
 class BaselineDeriver(Deriver):
@@ -789,12 +818,14 @@ class BaselineDeriver(Deriver):
 
 def derive_interactions(client: MGrowthDBClient, study_id: str, deriver: Deriver = None,
                         metric: str = "auc", spike_factor: float = SPIKE_FACTOR, dropout: bool = True,
-                        include_non_batch: bool = False):
+                        include_non_batch: bool = False, no_growth_alpha: float = None,
+                        no_growth_factor: float = None):
     """Fetch a study and its experiments from the API, then derive interactions with `deriver`
     (default: ReplicateDeriver, the specified comparison). `metric`, `spike_factor` and `dropout` configure
     the default deriver only. A deriver that reads measured series says so with `needs_client`."""
     deriver = deriver or ReplicateDeriver(method=metric, spike_factor=spike_factor, dropout=dropout,
-                                         include_non_batch=include_non_batch)
+                                         include_non_batch=include_non_batch, no_growth_alpha=no_growth_alpha,
+                                         no_growth_factor=no_growth_factor)
     if getattr(deriver, "needs_client", False) and getattr(deriver, "client", None) is None:
         deriver.client = client
     study = dict(client.get_study(study_id))

@@ -54,7 +54,7 @@ from .growth import (
     shared_window,
     spike,
 )
-from .stats import welch
+from .stats import paired
 
 LOG = "log2"
 BICULTURE = "biculture"
@@ -63,16 +63,19 @@ QUANTIFIED, OBLIGATE, ABOLISHED, NO_GROWTH = "quantified", "obligate", "abolishe
 # a set left empty by exclusions (for example every replicate spiked): not a growth result, never exported
 UNUSABLE = "unusable"
 
-# The no-growth rule (Karoline, register item 5): a species has not grown in a set when its maximum is not
-# significantly above its abundance at the first time point, across the replicates of that set. It is
-# applied before any ratio, so a set that only drifts never produces a log ratio of two near-zero
-# quantities (register item 11). The test and its alpha are register item 10's business; this is the one
-# place they are named.
+# The no-growth rule (Karoline, register item 5, settled on #68): a species has not grown in a set when
+# its maximum is not significantly above its abundance at the first time point, across the replicates of
+# that set, and it did not rise by NO_GROWTH_FACTOR either. Each replicate is paired with itself: its own
+# maximum, at whatever time that replicate peaks, against its own start, on a log2 scale. It is applied
+# before any ratio, so a set that only drifts never produces a log ratio of two near-zero quantities
+# (register item 11). Both numbers are settings, and `rule_meta` records them in every network.
 NO_GROWTH_ALPHA = 0.05
-# A set also counts as grown when it rose by at least this factor, whatever the test says: with two or
-# three replicates a real rise often fails significance, and reading that as "no growth" turns an ordinary
-# comparison into an obligate or abolished claim (measured on live studies, #37).
+# With two or three replicates a real rise often fails significance, and reading that as "no growth" turns
+# an ordinary comparison into an obligate or abolished claim (measured on live studies, #37). So a set also
+# counts as grown when the geometric mean of its rises, max / start per replicate, reaches this factor.
 NO_GROWTH_FACTOR = 2.0
+NO_GROWTH_TEST = ("paired two-sided t-test of log2(maximum / first time point) per replicate against 0; "
+                  "each replicate's maximum is taken at its own time")
 
 
 def _check_method(method: str) -> None:
@@ -124,18 +127,21 @@ def _log_values(reps, species, role, prop, method, skipped, spike_factor=SPIKE_F
 
 
 def grew(reps, species: str, end: float, alpha: float = None, factor: float = None) -> dict:
-    """Whether `species` grew in a replicate set: {"grew", "n", "p", "reason"}.
+    """Whether `species` grew in a replicate set: {"grew", "n", "p", "log2_rise", "reason"}.
 
-    Welch's two-sided t-test compares each replicate's maximum with its abundance at the first time point
-    of the shared window. Growth means the maxima are above the starts and the difference reaches `alpha`.
-    Below two replicates the test cannot run, so the set counts as grown when its maximum exceeds its
-    start: one replicate cannot establish an absence of growth, and such an edge is flagged
-    `single_replicate` anyway. `alpha` of 0 switches the rule off, leaving a positive property as the only
-    requirement, as before this rule existed.
+    Each replicate gives one rise, log2(maximum / abundance at the first time point) within the shared
+    window, with the maximum taken wherever that replicate peaks (the time of maximum abundance varies
+    across replicates; Karoline, on #68). The set has grown when the mean rise is above 0 and a paired
+    t-test finds it different from 0 at `alpha`, or when the mean rise reaches log2(`factor`), which is
+    the geometric mean of the ratios reaching the factor. One replicate cannot be tested, so it counts as
+    grown when its maximum exceeds its start; such an edge is flagged `single_replicate` anyway. A
+    replicate whose start is not positive has no ratio and is left out of the rule, and a set with no
+    replicate left falls back to the property itself, as before this rule existed. `alpha` of 0 switches
+    the rule off; `factor` of 0 leaves the test alone.
     """
     alpha = NO_GROWTH_ALPHA if alpha is None else alpha
     factor = NO_GROWTH_FACTOR if factor is None else factor
-    starts, maxima = [], []
+    starts, maxima, found = [], [], 0
     for rep_ in reps:
         curve = rep_.curve(species)
         if curve is None:
@@ -143,26 +149,41 @@ def grew(reps, species: str, end: float, alpha: float = None, factor: float = No
         times, values = cut(curve, end)
         if not values:
             continue
-        starts.append(values[0])
-        maxima.append(max(values))
-    if not starts:
-        return {"grew": False, "n": 0, "p": None, "reason": "no usable curve for this species"}
-    rose = statistics.mean(maxima) > statistics.mean(starts)
-    if not alpha:
-        return {"grew": True, "n": len(starts), "p": None, "reason": ""}
-    test = welch(maxima, starts)
-    if test is None:
-        grew_ = max(maxima) > max(starts)
-        reason = "" if grew_ else "the maximum does not exceed the abundance at the first time point"
-        return {"grew": grew_, "n": len(starts), "p": None, "reason": reason}
-    if rose and test["p"] < alpha:
-        return {"grew": True, "n": len(starts), "p": test["p"], "reason": ""}
-    if factor and statistics.mean(maxima) >= factor * statistics.mean(starts):
-        return {"grew": True, "n": len(starts), "p": test["p"], "reason": ""}
-    return {"grew": False, "n": len(starts), "p": test["p"],
-            "reason": f"the maximum is not significantly above the abundance at the first time point "
-                      f"and did not reach {factor:g} times it (Welch p = {test['p']:.3g}, "
-                      f"alpha {alpha:g}, {len(starts)} replicates)"}
+        found += 1
+        if values[0] > 0:
+            starts.append(values[0])
+            maxima.append(max(values))
+    if not found:
+        return {"grew": False, "n": 0, "p": None, "log2_rise": None, "reason": "no usable curve for this species"}
+    if not alpha or not starts:
+        return {"grew": True, "n": len(starts), "p": None, "log2_rise": None, "reason": ""}
+    rises = [math.log2(m / s) for m, s in zip(maxima, starts, strict=True)]
+    rise = statistics.mean(rises)
+    verdict = {"n": len(rises), "log2_rise": rise, "p": None, "reason": ""}
+    if len(rises) < 2:
+        grew_ = rise > 0
+        return {**verdict, "grew": grew_,
+                "reason": "" if grew_ else "the maximum does not exceed the abundance at the first time point"}
+    test = paired(rises, [0.0] * len(rises))
+    verdict["p"] = test["p"]
+    if rise > 0 and test["p"] < alpha:
+        return {**verdict, "grew": True}
+    if factor and rise >= math.log2(factor):
+        return {**verdict, "grew": True}
+    also = f" and did not reach {factor:g} times it" if factor else ""
+    return {**verdict, "grew": False,
+            "reason": f"the maximum is not significantly above the abundance at the first time point{also} "
+                      f"(mean log2 rise {rise:.3g}, paired t-test p = {test['p']:.3g}, alpha {alpha:g}, "
+                      f"{len(rises)} replicates)"}
+
+
+def rule_meta(alpha: float = None, factor: float = None) -> dict:
+    """The no-growth rule as it ran, for a network's `meta`: a reader of any obligate or abolished edge
+    can see which rule produced it (Craig's agent, on #68)."""
+    alpha = NO_GROWTH_ALPHA if alpha is None else alpha
+    factor = NO_GROWTH_FACTOR if factor is None else factor
+    return {"rule": "grown when the mean log2 rise is significantly above 0, or reaches log2(factor)",
+            "test": NO_GROWTH_TEST, "alpha": alpha, "factor": factor, "applied": bool(alpha)}
 
 
 def _grown_values(reps, species, role, prop, method, skipped, spike_factor, flagged, no_growth, end,
