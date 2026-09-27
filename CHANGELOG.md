@@ -82,6 +82,11 @@ tagged version is never reused for changed content.
   `removed_member_detected`.
 
 ### Changed
+- Nodes are strains keyed by NCBI taxon id (`ncbi:411483`) and named with the strain name, with `taxon_id`,
+  `species` (genus and species from the name) and `identity` as node fields (#23). Monocultures are matched
+  to co-cultures by taxon id, so another strain of the same species is never used: in SMGDB00000006,
+  L. bulgaricus to S. thermophilus LMG 18311 is now obligate instead of a +2.93 edge computed against the
+  STpos strain's monoculture. A taxon id a study gives to different strains falls back to names.
 - Single-replicate edges are shown by default, keeping the `single_replicate` flag and an undetermined
   status, for the Cytoscape style to mark; the other low-quality flags stay hidden by default.
 - A co-culture is compared only with monocultures grown under the same conditions (cultivation mode and

@@ -279,6 +279,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         except MGrowthDBError as e:
             errors.append(f"search failed: {e}")
 
+    # a species name resolves to every strain of that species, so edges are kept by the species key
     wanted = {genus_species(name) for _, matches in resolved["resolved"] for name in matches.values()}
     for study_id in studies:
         try:
@@ -288,7 +289,8 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
             errors.append(f"{study_id}: {e}")
             continue
         if s["only_entered"]:
-            recs = [r for r in recs if r["source"] in wanted and r["target"] in wanted]
+            recs = [r for r in recs if r.get("source_species", r["source"]) in wanted
+                    and r.get("target_species", r["target"]) in wanted]
         records += recs
         skipped += skips
 

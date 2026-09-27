@@ -13,7 +13,17 @@ from __future__ import annotations
 import json
 import os
 
-from .model import CAUTIONS, EFFECTS, EVIDENCE, OUTCOMES, QUALITY_FLAGS, SCHEMA, STATUSES, InteractionNetwork
+from .model import (
+    CAUTIONS,
+    EFFECTS,
+    EVIDENCE,
+    IDENTITIES,
+    OUTCOMES,
+    QUALITY_FLAGS,
+    SCHEMA,
+    STATUSES,
+    InteractionNetwork,
+)
 
 SCHEMA_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -46,6 +56,9 @@ SCHEMA_DOC = {
                 "name": {"type": "string"},
                 "taxonomy": {"type": "string"},
                 "model_ref": {"type": "string"},
+                "taxon_id": {"type": "string"},
+                "species": {"type": "string"},
+                "identity": {"enum": [*IDENTITIES, ""]},
             },
         },
         "edge": {
@@ -127,6 +140,8 @@ def validate_document(doc) -> list:
     for i, n in enumerate(lists.get("nodes", [])):
         if not n.get("id"):
             problems.append(f"nodes[{i}] missing id")
+        if n.get("identity", "") not in (*IDENTITIES, ""):
+            problems.append(f"nodes[{i}] identity {n.get('identity')!r} not in {IDENTITIES}")
     for i, s in enumerate(lists.get("studies", [])):
         if not s.get("id"):
             problems.append(f"studies[{i}] missing id")
