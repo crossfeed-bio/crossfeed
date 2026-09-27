@@ -50,3 +50,24 @@ def test_graphml_carries_evidence_and_community_when_known():
     # an edge without evidence has neither key
     unknown = [e for e in ET.fromstring(to_graphml(_net())).findall(".//g:edge", NS) if e.get("target") == "b"][0]
     assert {"e_evidence", "e_community"}.isdisjoint(d.get("key") for d in unknown.findall("g:data", NS))
+
+
+def test_graphml_carries_cautions_and_experiments():
+    recs = [{"source": "a", "target": "b", "effect": "facilitation", "strength": 1.0, "study_id": "S1",
+             "evidence": "dropout", "cautions": ["two_replicates"], "experiments": ["E1", "E2"]}]
+    root = ET.fromstring(to_graphml(records_to_network(recs)))
+    data = {d.get("key"): d.text for d in root.find(".//g:edge", NS).findall("g:data", NS)}
+    assert data["e_cautions"] == "two_replicates"
+    assert data["e_experiments"] == "E1 E2"
+
+
+def test_graphml_nodes_carry_taxon_id_species_and_identity():
+    recs = [{"source": "ncbi:853", "target": "ncbi:53443", "source_name": "Faecalibacterium prausnitzii A2-165",
+             "source_taxon_id": "853", "source_species": "faecalibacterium prausnitzii", "source_identity": "ncbi",
+             "effect": "facilitation", "strength": 1.0, "study_id": "S1"}]
+    root = ET.fromstring(to_graphml(records_to_network(recs)))
+    node = next(n for n in root.findall(".//g:node", NS) if n.get("id") == "ncbi:853")
+    data = {d.get("key"): d.text for d in node.findall("g:data", NS)}
+    assert data["n_name"] == "Faecalibacterium prausnitzii A2-165"      # the label Cytoscape shows
+    assert (data["n_taxon_id"], data["n_species"], data["n_identity"]) == \
+        ("853", "faecalibacterium prausnitzii", "ncbi")

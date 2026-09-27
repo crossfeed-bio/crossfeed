@@ -26,8 +26,6 @@ crossfeed. Nothing pulled here is written into the repository.
 """
 from __future__ import annotations
 
-import statistics
-
 from .growth import SPIKE_FACTOR, GrowthCurve, Replicate, spike
 
 MIN_POINTS = 2
@@ -60,17 +58,19 @@ def _alternatives_note(client, bioreplicate: dict, species: str, own_id, single_
     parts = []
     for technique, context in _alternatives(bioreplicate, species, own_id, single_strain):
         try:
-            values = [v for _, v, _ in client.get_measurement_series(context["id"])]
+            points = client.get_measurement_series(context["id"])
         except Exception:  # noqa: BLE001 - an unreadable alternative is reported, not fatal
             parts.append(f"{technique} unreadable")
             continue
-        median = statistics.median(values) if values else 0
-        if len(values) < MIN_POINTS or median <= 0:
+        try:
+            other = GrowthCurve(species, [t for t, _, _ in points], [v for _, v, _ in points], "time",
+                                _abundance_unit(context) or technique)
+        except ValueError:
             parts.append(f"{technique} not comparable")
             continue
-        ratio = max(values) / median
-        verdict = "also spiked" if ratio > spike_factor else "clean"
-        parts.append(f"{technique} {verdict} (max/median {ratio:.1f})")
+        found = spike(other, spike_factor)
+        parts.append(f"{technique} also spiked ({found['ratio']:.0f} times its neighbours)" if found
+                     else f"{technique} clean")
     if parts:
         return "other measurements of this strain in this replicate, not substituted: " + ", ".join(parts)
     if not single_strain:

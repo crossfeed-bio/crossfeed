@@ -23,12 +23,17 @@ from .attribution import studies_with_edges
 from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, output_meta
 from .export import to_graphml
 from .growth import SPIKE_FACTOR
+from .legend import legend_page
 from .mgrowthdb import MGrowthDBError, records_to_network
 from .taxonomy import resolve_species, species_index
 
 TITLE = "crossfeed"
+# species that derive a non-empty network, for the Example button (Karoline's proposal, #73). The first is
+# taxon 411483, which mGrowthDB holds under both its names after the 2022 reclassification.
+EXAMPLE = ("Faecalibacterium duncaniae", "Blautia hydrogenotrophica")
 DEFAULTS = {"metric": "auc", "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
-            "include_low_quality": False, "correction": "bh", "studies": "", "only_entered": True}
+            "include_low_quality": False, "correction": "bh", "include_dropout": True,
+            "include_non_batch": False, "studies": "", "only_entered": True}
 PROVISIONAL = ("Each interaction compares a species' growth with and without its partner across replicates "
                "(mean log2 difference). An interaction is reported when |mean| is at least k standard "
                "deviations (the absence threshold, default 1: the mean plus or minus its standard deviation "
@@ -36,16 +41,18 @@ PROVISIONAL = ("Each interaction compares a species' growth with and without its
                "as supporting evidence and does not decide; with few replicates, more experiments may change "
                "any of these results (see docs/METHOD_NOTES.md).")
 MISMATCH = ("Monoculture and co-culture growth were measured by different techniques in some of these "
-            "studies, so the direction of those interactions is dependable while the magnitude is not.")
-EMPTY_HELP = ("The provisional baseline handles pairwise (two-member) co-cultures only, so studies built "
-              "on larger or deletion consortia yield nothing until a method suited to their design is "
-              "chosen (see docs/METHOD_NOTES.md).")
+            "studies, so neither the magnitude nor, near zero, the direction of those interactions is fully "
+            "dependable.")
+EMPTY_HELP = ("crossfeed derives interactions from pairwise (two-member) co-cultures and from drop-out "
+              "designs (a community plus the same community without one member). Other larger communities "
+              "yield nothing until a method suited to their design is chosen (see docs/METHOD_NOTES.md).")
 
 CSS = """
 body { font: 16px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 52rem; padding: 2rem 1rem; }
 h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 2rem; }
 textarea, input, select { font: inherit; } textarea { width: 100%; }
-button { font: inherit; padding: 0.4rem 1.2rem; margin-top: 0.8rem; }
+button, .button { font: inherit; padding: 0.4rem 1.2rem; margin-top: 0.8rem; display: inline-block; }
+.button { text-decoration: none; border: 1px solid #999; border-radius: 4px; color: inherit; }
 table { border-collapse: collapse; width: 100%; margin-top: 0.5rem; }
 th, td { border-bottom: 1px solid #ddd; padding: 0.3rem 0.5rem; text-align: left; vertical-align: top; }
 details { margin-top: 1rem; } summary { cursor: pointer; }
@@ -70,6 +77,8 @@ def _settings_block(settings: dict) -> str:
     s = {**DEFAULTS, **settings}
     checked = " checked" if s["only_entered"] else ""
     low = " checked" if s["include_low_quality"] else ""
+    dropout = " checked" if s["include_dropout"] else ""
+    non_batch = " checked" if s["include_non_batch"] else ""
     corrections = "".join(f"<option value=\"{c}\"{' selected' if s['correction'] == c else ''}>{label}</option>"
                           for c, label in (("bh", "Benjamini-Hochberg"), ("by", "Benjamini-Yekutieli")))
     options = "".join(f"<option value=\"{m}\"{' selected' if s['metric'] == m else ''}>{m}</option>"
@@ -81,7 +90,16 @@ def _settings_block(settings: dict) -> str:
   <span class="muted">the growth property compared: area under the curve (default) or maximal abundance</span></div>
 <div class="row"><label><input type="checkbox" name="include_low_quality" value="1"{low}>
   Show low-quality edges</label>
-  <span class="muted">for example a single replicate; shown with the reason, never read as no interaction</span></div>
+  <span class="muted">pooled strains or an unclean drop-out; single-replicate edges are always shown,
+  flagged</span></div>
+<div class="row"><label><input type="checkbox" name="include_dropout" value="1"{dropout}>
+  Include drop-out communities</label>
+  <span class="muted">arcs from a community compared with the same community without one member; possibly
+  indirect, so labeled as such</span></div>
+<div class="row"><label><input type="checkbox" name="include_non_batch" value="1"{non_batch}>
+  Include chemostat and serial dilution experiments</label>
+  <span class="muted">excluded by default: a continuous-culture curve is not comparable with a batch
+  one</span></div>
 <div class="row"><label>Absence threshold k
   <input name="absence_threshold" type="text" size="6" value="{_esc(s['absence_threshold'])}"></label>
   <span class="muted">absent when |log2 mean| &lt; k &times; sd; 1 is mean &plusmn; sd, 0 marks none
@@ -91,7 +109,8 @@ def _settings_block(settings: dict) -> str:
   <span class="muted">Benjamini-Hochberg (default) or the more conservative Benjamini-Yekutieli</span></div>
 <div class="row"><label>Spike limit
   <input name="spike_factor" type="text" size="6" value="{_esc(s['spike_factor'])}"></label>
-  <span class="muted">leave out a curve whose maximum exceeds this many times its median; 0 keeps all</span></div>
+  <span class="muted">leave out a curve with one or two points this many times above both neighbours;
+  0 keeps all</span></div>
 <div class="row"><label>Only these studies
   <input name="studies" type="text" size="40" value="{_esc(s['studies'])}"></label>
   <span class="muted">comma separated study ids; empty means every study holding the species</span></div>
@@ -109,8 +128,36 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
 >{_esc(entries)}</textarea>
 {_settings_block(settings or {})}
 <button type="submit">Find interactions</button>
+<button type="submit" name="example" value="1">Example</button>
+<a class="button" href="/help?token={_esc(token)}">Help</a>
 </form>
-<p class="muted">Interactions are derived from mGrowthDB growth data on this machine. Nothing is uploaded.</p>""")
+<p class="muted">Interactions are derived from mGrowthDB growth data on this machine. Nothing is uploaded.</p>
+<p><a href="/legend?token={_esc(token)}">What the arcs mean</a></p>""")
+
+
+HELP = f"""<h1>Help</h1>
+<h2>What this does</h2>
+<p>Type species names, one per line, or NCBI taxon ids. crossfeed looks them up in mGrowthDB, reads the
+growth curves of every study that holds them, and derives the interactions between them on this machine.
+Nothing is uploaded, and nothing is written outside the file you download.</p>
+<h2>Try it</h2>
+<p>The Example button fills the box with {" and ".join(EXAMPLE)}, a pair with enough data to show a
+result.</p>
+<h2>Reading the result</h2>
+<p>Each row is one directed interaction: a source species, the species it affects, the direction, and the
+mean log2 difference with its standard deviation. An interaction counts as present when the effect is at
+least k standard deviations of its own spread, with k the absence threshold in Advanced settings. The
+adjusted p-value is shown as support and decides nothing.</p>
+<p><a href="/legend?token={{token}}">The legend</a> explains every line, arrowhead and flag, and is the
+same vocabulary the Cytoscape style draws.</p>
+<h2>Settings</h2>
+<p>Everything behind "Advanced settings" has a sensible default; each one says what it does next to it.
+The README in the repository documents them in full, together with the method.</p>"""
+
+
+def render_help(token: str) -> str:
+    return _page(HELP.replace("{token}", _esc(token))
+                 + f"<p><a href=\"/?token={_esc(token)}\">Back</a></p>")
 
 
 HEADER = ("<tr><th>source</th><th>affects</th><th>direction</th><th>log2 mean &plusmn; sd</th>"
@@ -134,7 +181,9 @@ def _number(x, fmt: str) -> str:
 def _arc_rows(net, edges) -> str:
     rows = []
     for e in edges:
-        remarks = "; ".join([*(f"low quality: {q.replace('_', ' ')}" for q in e.quality), *e.notes])
+        remarks = "; ".join([*(["drop-out community, possibly indirect"] if e.evidence == "dropout" else []),
+                             *(f"low quality: {q.replace('_', ' ')}" for q in e.quality),
+                             *(f"caution: {c.replace('_', ' ')}" for c in e.cautions), *e.notes])
         rows.append(f"<tr><td>{_esc(net.nodes[e.source].name or e.source)}</td>"
                     f"<td>{_esc(net.nodes[e.target].name or e.target)}</td>"
                     f"<td>{_esc(_direction(e))}</td><td>{_mean_sd(e.strength, e.sd)}</td>"
@@ -220,7 +269,8 @@ def render_result(token: str, result: dict) -> str:
 <h2>Species</h2><ul>{resolved}</ul>{unresolved}
 <p class="muted">Studies searched: {_esc(studies)}</p>
 {errors}{table}{_absent_section(net, result.get("absence", {}))}{_sources(net)}{skipped}
-<p><a href="/?token={_esc(token)}">New search</a></p>""")
+<p><a href="/?token={_esc(token)}">New search</a> &middot;
+<a href="/legend?token={_esc(token)}">What the arcs mean</a></p>""")
 
 
 def parse_settings(form: dict) -> dict:
@@ -234,6 +284,8 @@ def parse_settings(form: dict) -> dict:
     except ValueError:
         pass
     settings["include_low_quality"] = bool(form.get("include_low_quality"))
+    settings["include_dropout"] = bool(form.get("include_dropout"))
+    settings["include_non_batch"] = bool(form.get("include_non_batch"))
     try:
         settings["absence_threshold"] = abs(float(form.get("absence_threshold", [""])[0]))
     except ValueError:
@@ -267,16 +319,26 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         except MGrowthDBError as e:
             errors.append(f"search failed: {e}")
 
+    # A species name resolves to every strain of that species, and a strain keeps its taxon id across the
+    # renamings mGrowthDB records (411483 is Faecalibacterium prausnitzii A2-165 in one study and
+    # Faecalibacterium duncaniae A2-165 in others), so an edge is kept when either matches. Matching names
+    # alone dropped every edge for a name the study does not use (#73).
     wanted = {genus_species(name) for _, matches in resolved["resolved"] for name in matches.values()}
+    wanted_ids = {str(taxon) for taxon in resolved["taxon_ids"]}
     for study_id in studies:
         try:
             recs, skips = derive_interactions(client, study_id, metric=s["metric"],
-                                              spike_factor=s["spike_factor"])
+                                              spike_factor=s["spike_factor"], dropout=s["include_dropout"],
+                                              include_non_batch=s["include_non_batch"])
         except MGrowthDBError as e:
             errors.append(f"{study_id}: {e}")
             continue
         if s["only_entered"]:
-            recs = [r for r in recs if r["source"] in wanted and r["target"] in wanted]
+            def entered(record, side):
+                return (record.get(f"{side}_taxon_id") in wanted_ids
+                        or record.get(f"{side}_species", record[side]) in wanted)
+
+            recs = [r for r in recs if entered(r, "source") and entered(r, "target")]
         records += recs
         skipped += skips
 
@@ -322,6 +384,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         if parsed.path == "/":
             self._send(render_form(self.token))
+        elif parsed.path == "/help":
+            self._send(render_help(self.token))
+        elif parsed.path == "/legend":
+            self._send(legend_page(self.token))
         elif parsed.path in ("/download.json", "/download.graphml"):
             result = self.state.get("result")
             if not result:
@@ -342,6 +408,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         form = urllib.parse.parse_qs(self.rfile.read(length).decode("utf-8"))
         entries = form.get("species", [""])[0].splitlines()
         settings = parse_settings(form)
+        if form.get("example"):
+            self._send(render_form(self.token, "\n".join(EXAMPLE), settings))
+            return
         if not [e for e in entries if e.strip()]:
             self._send(render_form(self.token, settings=settings, message="Type at least one species."))
             return
@@ -367,7 +436,12 @@ def serve(port: int = 0, open_browser: bool = True, client_factory=None) -> None
         "client_factory": staticmethod(client_factory or MGrowthDBClient),
         "state": {},
     })
-    with _Server(("127.0.0.1", port), handler) as httpd:
+    try:
+        server = _Server(("127.0.0.1", port), handler)
+    except OSError as e:
+        raise SystemExit(f"crossfeed gui: cannot use port {port} ({e.strerror}). Pick another with --port, "
+                         "or leave it out to use a free one.") from None
+    with server as httpd:
         url = f"http://127.0.0.1:{httpd.server_address[1]}/?token={handler.token}"
         print(f"crossfeed is at {url}\nPress Ctrl+C to stop.")
         if open_browser:

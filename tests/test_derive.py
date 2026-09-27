@@ -100,19 +100,20 @@ def test_one_strain_per_species_reports_nothing():
 
 # ---- the replicate comparison (#36) --------------------------------------------------------------
 
-def _rep_experiment(name, species, taxa=None):
+def _rep_experiment(name, species, taxa=None, replicates=2, medium="broth"):
     taxa = taxa or {}
-    return {"id": "E_" + name, "name": name,
+    return {"id": "E_" + name, "name": name, "cultivationMode": "batch", "compartments": [{"mediumName": medium}],
             "communityStrains": [{"name": sp, "NCBId": taxa.get(sp)} for sp in species],
-            "bioreplicates": [{"id": f"{name}/{i}", "name": f"{name}_{i}"} for i in (0, 1)]}
+            "bioreplicates": [{"id": f"{name}/{i}", "name": f"{name}_{i}"} for i in range(replicates)]}
 
 
 class _SeriesClient:
     """A client whose experiments carry measured series: curves[(experiment, species)] = [(v0, v1), ...]."""
 
-    def __init__(self, experiments, curves):
+    def __init__(self, experiments, curves, measured=None):
         self.experiments = experiments
         self.curves = curves
+        self.measured = measured or {}     # experiment name -> strains measured, when not its members
 
     def get_study(self, study_id):
         return {"id": study_id, "name": "study", "experiments": [{"id": e["id"]} for e in self.experiments]}
@@ -128,7 +129,7 @@ class _SeriesClient:
                 "measurementContexts": [
                     {"id": f"{name}/{index}/{s['name']}", "techniqueType": "qpcr", "techniqueUnits": "Cells/mL",
                      "subject": {"type": "strain", "name": s["name"]}}
-                    for s in experiment["communityStrains"]]}
+                    for s in self.measured.get(name, experiment["communityStrains"])]}
 
     def get_measurement_series(self, context_id):
         name, index, species = str(context_id).split("/")
@@ -163,6 +164,8 @@ def test_replicate_comparison_carries_uncertainty_onto_every_edge():
     assert (ba["n_with"], ba["n_without"]) == (2, 2)
     assert ba["outcome"] == "quantified" and ba["metric"] == "auc"
     assert ba["evidence"] == "biculture" and ba["quality"] == [] and ba["notes"] == []
+    assert ba["cautions"] == ["two_replicates"]                   # two replicates per side (#47)
+    assert ba["experiments"] == ["E_co", "E_mono A"]              # the co-culture, then the target's monocultures
     assert ba["weight"] == pytest.approx(1.0, abs=1e-4)
     assert ba["effect_over_sd"] == pytest.approx(1.0 / SPREAD, abs=1e-3)       # 3.80: well above k = 1
     ab = by_pair[(A, B)]
@@ -198,10 +201,11 @@ def test_a_missing_monoculture_is_reported_not_guessed():
 
 def test_a_larger_community_is_skipped_with_a_reason():
     client, study, exps = _replicate_study()
-    trio = _rep_experiment("trio", [A, B, "Roseburia intestinalis L1-82"])
+    # no experiment holds this trio minus one member, so it is not a drop-out design
+    trio = _rep_experiment("trio", [A, "Roseburia intestinalis L1-82", "Bacteroides thetaiotaomicron VPI-5482"])
     records, skipped = interactions_from_replicates(client, study, exps + [trio])
     assert len(records) == 2
-    assert any(">2 members" in reason for _, reason in skipped)
+    assert any("no drop-out experiment" in reason for _, reason in skipped)
 
 
 
@@ -244,13 +248,16 @@ def test_effect_over_sd_is_the_quantity_the_threshold_cuts():
 def test_absent_edges_stay_in_the_output_and_low_quality_is_left_out_by_default():
     records = [{"strength": 1.0, "sd": 0.3, "outcome": "quantified", "quality": []},
                {"strength": 0.1, "sd": 0.3, "outcome": "quantified", "quality": []},
-               {"strength": 1.0, "sd": None, "outcome": "quantified", "quality": ["single_replicate"]}]
+               {"strength": 1.0, "sd": None, "outcome": "quantified", "quality": ["single_replicate"]},
+               {"strength": 1.0, "sd": 0.3, "outcome": "quantified", "quality": ["strains_pooled"]}]
     edges, meta = output_meta(records)
-    assert [e["status"] for e in edges] == ["present", "absent"]        # the absent edge is still an edge
+    # the absent edge is still an edge, and a single-replicate edge is shown with its status undetermined
+    # (Karoline, on #62); pooled strains stay hidden
+    assert [e["status"] for e in edges] == ["present", "absent", None]
     assert meta["hidden"] == {"low_quality": 1}
     assert meta["absence"] == {"rule": "absent when |log2 mean| < k * sd", "k": 1.0, "absent": 1}
     edges, meta = output_meta(records, include_low_quality=True, absence_threshold=0.0)
-    assert [e["status"] for e in edges] == ["present", "present", None]
+    assert [e["status"] for e in edges] == ["present", "present", None, None]
     assert meta["absence"]["absent"] == 0
 
 
@@ -288,6 +295,8 @@ def test_a_single_replicate_edge_is_kept_and_flagged_low_quality():
     ba = next(r for r in records if r["source_name"] == B)
     assert ba["quality"] == ["single_replicate"] and ba["sd"] is None and ba["effect_over_sd"] is None
     assert ba["effect"] == "facilitation"                              # the sign of the mean, flagged
+    edges, meta = output_meta(records)                                 # shown by default (Karoline, on #62)
+    assert any(e["source_name"] == B for e in edges) and meta["hidden"]["low_quality"] == 0
 
 
 def test_pooled_strains_are_reported_and_flag_the_edge():
@@ -317,3 +326,300 @@ def test_an_excluded_outlier_is_a_note_not_a_quality_issue():
     assert ba["quality"] == [] and ba["effect"] == "facilitation"
     assert ba["notes"] and "implausible spike" in ba["notes"][0] and "mono A_2" in ba["notes"][0]
     assert absence(ba["strength"], ba["sd"], ba["outcome"]) == "present"
+
+
+# ---- drop-out designs (#47) ----------------------------------------------------------------------
+
+C = "Bacteroides thetaiotaomicron VPI-5482"
+
+
+def _dropout_study(full_names=("full",), drops=("without C", "without B")):
+    """The drop-out example of tests/test_interaction.py as mGrowthDB experiments. Areas are 5 * (v0 + v1):
+
+    full community: A 20, 40; B 10, 10; C 10, 20. Without C: A 10, 20; B 10, 10. Without B: A 20, 40;
+    C 40, 80.
+    """
+    members = {"without C": [A, B], "without B": [A, C]}
+    experiments = [_rep_experiment(n, [A, B, C]) for n in full_names]
+    experiments += [_rep_experiment(n, members[n]) for n in drops]
+    curves = {}
+    for n in full_names:
+        curves.update({(n, A): [(1, 3), (3, 5)], (n, B): [(1, 1), (1, 1)], (n, C): [(1, 1), (1, 3)]})
+    curves.update({("without C", A): [(1, 1), (1, 3)], ("without C", B): [(1, 1), (1, 1)],
+                   ("without B", A): [(1, 3), (3, 5)], ("without B", C): [(3, 5), (7, 9)]})
+    return _SeriesClient(experiments, curves), {"id": "S", "name": "study"}, experiments
+
+
+def _by_arc(records):
+    return {(r["source_name"], r["target_name"]): r for r in records}
+
+
+def test_a_dropout_design_gives_the_hand_computed_arcs():
+    client, study, exps = _dropout_study()
+    records, skipped = interactions_from_replicates(client, study, exps)
+    arcs = _by_arc(records)
+    assert set(arcs) == {(C, A), (C, B), (B, A), (B, C)}
+    # C -> A: log2 20, 40 against log2 10, 20: mean 1, sd sqrt(0.5 + 0.5) = 1
+    assert arcs[(C, A)]["strength"] == pytest.approx(1.0) and arcs[(C, A)]["sd"] == pytest.approx(1.0)
+    assert arcs[(C, B)]["strength"] == pytest.approx(0.0) and arcs[(C, B)]["sd"] == pytest.approx(0.0)
+    assert arcs[(B, A)]["strength"] == pytest.approx(0.0) and arcs[(B, A)]["sd"] == pytest.approx(1.0)
+    assert arcs[(B, C)]["strength"] == pytest.approx(-2.0)      # log2 10, 20 against log2 40, 80
+    for (source, _), arc in arcs.items():
+        assert arc["evidence"] == "dropout" and arc["community"] == sorted([_gs(A), _gs(B), _gs(C)])
+        assert arc["quality"] == [] and arc["cautions"] == ["two_replicates"]
+        drop = "without C" if source == C else "without B"
+        assert arc["condition"] == drop and arc["experiments"] == ["E_full", "E_" + drop]
+    assert not any("members" in reason for _, reason in skipped)
+
+
+def test_dropout_arcs_share_the_absence_rule_and_the_network_contract():
+    client, study, exps = _dropout_study()
+    records, _ = interactions_from_replicates(client, study, exps)
+    edges, _ = output_meta(records)
+    status = {(e["source_name"], e["target_name"]): e["status"] for e in edges}
+    # |mean| against k = 1 times sd: C -> A 1 vs 1 is not below, so present; B -> A 0 vs 1 absent;
+    # C -> B has mean 0 (absent); B -> C 2 against sd sqrt(0.5 + 0.5) = 1 present
+    assert status == {(C, A): "present", (B, A): "absent", (C, B): "absent", (B, C): "present"}
+    net = records_to_network(edges)
+    assert net.validate() == []
+    assert all(e.evidence == "dropout" and e.experiments for e in net.edges)
+
+
+def test_full_community_experiments_under_identical_conditions_are_pooled():
+    client, study, exps = _dropout_study(full_names=("full 1", "full 2"))
+    records, _ = interactions_from_replicates(client, study, exps)
+    ca = _by_arc(records)[(C, A)]
+    # the full community now has 4 replicates (A 20, 40, 20, 40), the drop-out 2; the mean stays 1
+    assert (ca["n_with"], ca["n_without"]) == (4, 2)
+    assert ca["strength"] == pytest.approx(1.0)
+    assert ca["experiments"] == ["E_full 1", "E_full 2", "E_without C"]
+
+
+def test_experiments_under_different_conditions_are_not_pooled():
+    client, study, exps = _dropout_study(full_names=("full", "full in another medium"))
+    exps[1]["compartments"] = [{"mediumName": "another medium"}]
+    records, skipped = interactions_from_replicates(client, study, exps)
+    assert all(r["n_with"] == 2 and "E_full in another medium" not in r["experiments"] for r in records)
+    assert any(label == "full in another medium" and "no drop-out experiment" in reason
+               for label, reason in skipped)
+    # the same holds for monocultures: a co-culture is compared only with monocultures in its conditions
+    client, study, exps = _replicate_study()
+    for e in exps:
+        if e["name"] == "mono B":
+            e["compartments"] = [{"mediumName": "another medium"}]
+    records, skipped = interactions_from_replicates(client, study, exps)
+    assert records == []
+    assert any("no monoculture replicates for " + B + " under this experiment's conditions" in reason
+               for _, reason in skipped)
+
+
+def test_an_incomplete_design_gives_arcs_for_the_dropouts_it_has():
+    client, study, exps = _dropout_study(drops=("without C",))
+    records, _ = interactions_from_replicates(client, study, exps)
+    assert set(_by_arc(records)) == {(C, A), (C, B)}
+
+
+def test_dropout_designs_can_be_switched_off():
+    client, study, exps = _dropout_study()
+    mono = _replicate_study()
+    client.experiments += mono[2]
+    client.curves.update(mono[0].curves)
+    with_dropout, _ = interactions_from_replicates(client, study, exps + mono[2])
+    without, skipped = interactions_from_replicates(client, study, exps + mono[2], dropout=False)
+    assert {r["evidence"] for r in with_dropout} == {"biculture", "dropout"}
+    assert [r for r in with_dropout if r["evidence"] == "biculture"] == without
+    assert any("drop-out designs switched off" in reason for _, reason in skipped)
+
+
+def test_the_removed_member_is_ignored_when_absent_and_flags_the_arcs_when_detected():
+    # mGrowthDB still measures the removed member in a drop-out experiment, as in SMGDB00000008
+    client, study, exps = _dropout_study()
+    client.measured["without C"] = [{"name": A}, {"name": B}, {"name": C}]
+    client.curves[("without C", C)] = [(0, 0), (0, 0)]
+    records, _ = interactions_from_replicates(client, study, exps)
+    assert _by_arc(records)[(C, A)]["quality"] == []            # read zero: a clean drop-out
+    client.curves[("without C", C)] = [(0, 0), (0, 2)]          # detected in replicate 1
+    records, _ = interactions_from_replicates(client, study, exps)
+    arcs = _by_arc(records)
+    for target in (A, B):
+        assert arcs[(C, target)]["quality"] == ["removed_member_detected"]
+        assert any("without C_1" in note and C in note for note in arcs[(C, target)]["notes"])
+    assert arcs[(B, A)]["quality"] == []                        # the other drop-out is unaffected
+    edges, meta = output_meta(records)
+    assert meta["hidden"]["low_quality"] == 2 and len(edges) == 2
+
+
+def test_three_replicates_carry_no_caution_and_a_caution_does_not_hide_an_edge():
+    client, study, exps = _replicate_study()
+    for e in exps:
+        e["bioreplicates"] = [{"id": f"{e['name']}/{i}", "name": f"{e['name']}_{i}"} for i in range(3)]
+        for species in (A, B):
+            if (e["name"], species) in client.curves:
+                client.curves[(e["name"], species)].append(client.curves[(e["name"], species)][1])
+    records, _ = interactions_from_replicates(client, study, exps)
+    assert all(r["cautions"] == [] for r in records)
+    client, study, exps = _replicate_study()
+    records, _ = interactions_from_replicates(client, study, exps)
+    edges, meta = output_meta(records)
+    assert len(edges) == 2 and meta["hidden"]["low_quality"] == 0
+    assert {e["status"] for e in edges} == {"present", "absent"}   # cautioned edges keep their status
+
+
+def test_a_replicate_with_a_late_starting_curve_is_left_out_and_reported():
+    # SMGDB00000008 has two such curves: a member's first measurement (0 h) is missing
+    client, study, exps = _dropout_study()
+
+    def late_series(context_id, original=client.get_measurement_series):
+        points = original(context_id)
+        return points[1:] + [(20.0, points[-1][1], None)] if context_id == f"without C/1/{A}" else points
+    client.get_measurement_series = late_series
+    records, skipped = interactions_from_replicates(client, study, exps)
+    arcs = _by_arc(records)
+    assert (arcs[(C, A)]["n_with"], arcs[(C, A)]["n_without"]) == (2, 1)   # without C keeps replicate 0 only
+    assert arcs[(C, A)]["quality"] == ["single_replicate"]
+    assert (arcs[(B, A)]["n_with"], arcs[(B, A)]["n_without"]) == (2, 2)   # the other drop-out is untouched
+    assert any(label == "community without " + C + " replicate without C_1" and "starting after" in reason
+               for label, reason in skipped)
+
+
+def test_experiments_whose_descriptions_differ_are_not_pooled():
+    # SMGDB00000004: RI_BH +Ac and RI_BH -Ac have identical structured conditions; only the description
+    # says one had initial acetate (Karoline, on #47). Duplicate runs differ by a trailing number only.
+    client, study, exps = _dropout_study(full_names=("full 1", "full 2"))
+    exps[0]["description"], exps[1]["description"] = "all strains, run 1", "all strains, run 2"
+    records, _ = interactions_from_replicates(client, study, exps)
+    assert _by_arc(records)[(C, A)]["n_with"] == 4                        # pooled
+    exps[0]["description"], exps[1]["description"] = "all strains with acetate", "all strains without acetate"
+    records, _ = interactions_from_replicates(client, study, exps)
+    ca = [r for r in records if (r["source_name"], r["target_name"]) == (C, A)]
+    assert len(ca) == 2 and all(r["n_with"] == 2 for r in ca)            # two arcs, one per full community
+    assert {tuple(r["experiments"]) for r in ca} == {("E_full 1", "E_without C"), ("E_full 2", "E_without C")}
+
+
+def test_an_obligate_edge_counts_its_replicates_without_growth_and_is_shown():
+    client, study, exps = _replicate_study()
+    client.curves[("mono B", B)] = [(0, 0), (0, 0)]      # B does not grow alone, in either replicate
+    records, _ = interactions_from_replicates(client, study, exps)
+    ab = next(r for r in records if r["source_name"] == A and r["target_name"] == B)
+    assert ab["outcome"] == "obligate" and (ab["n_with"], ab["n_without"]) == (2, 2)
+    assert ab["quality"] == [] and ab["cautions"] == ["two_replicates"]
+    edges, meta = output_meta(records)
+    assert meta["hidden"]["low_quality"] == 0
+    assert next(e for e in edges if e["source_name"] == A)["status"] == "present"
+
+
+# ---- strain identity by taxon id (#23) -----------------------------------------------------------
+
+from crossfeed.derive import strain_identities  # noqa: E402
+
+A2 = "Faecalibacterium prausnitzii L2-6"
+
+
+def _strain_study(names_and_taxa, mono_of=None):
+    """Monocultures of each strain and one co-culture of the first two. `mono_of` names the strain whose
+    monoculture the co-culture's first member uses, to test that another strain's monoculture is not used."""
+    (a, ta), (b, tb) = names_and_taxa[:2]
+    taxa = dict(names_and_taxa)
+    monos = [_rep_experiment("mono " + n, [n], taxa) for n, _ in names_and_taxa if n != a or mono_of is None]
+    if mono_of:
+        monos.append(_rep_experiment("mono " + mono_of, [mono_of], taxa))
+    co = _rep_experiment("co", [a, b], taxa)
+    curves = {("co", a): [(1, 3), (1, 3.8)], ("co", b): [(1, 1), (1, 1.4)]}
+    for e in monos:
+        curves[(e["name"], e["communityStrains"][0]["name"])] = [(1, 1), (1, 1.4)]
+    return _SeriesClient(monos + [co], curves), {"id": "S", "name": "study"}, monos + [co]
+
+
+def test_nodes_are_strains_keyed_by_taxon_id_and_named_by_strain():
+    client, study, exps = _strain_study([(A, 411483), (B, 853), (A2, 718252)])
+    records, _ = interactions_from_replicates(client, study, exps)
+    net = records_to_network(records)
+    node = net.nodes["ncbi:411483"]
+    assert node.name == A and node.taxon_id == "411483" and node.identity == "ncbi"
+    assert node.species == "faecalibacterium prausnitzii"          # derived from the name (#25, item 8)
+    assert {(e.source, e.target) for e in net.edges} == {("ncbi:853", "ncbi:411483"), ("ncbi:411483", "ncbi:853")}
+    assert "ncbi:718252" not in net.nodes                              # the other strain has no co-culture
+
+
+def test_a_monoculture_of_another_strain_of_the_species_is_never_used():
+    # the co-culture holds A (A2-165); only L2-6 was grown alone. By genus and species they would match.
+    client, study, exps = _strain_study([(A, 411483), (B, 853)], mono_of=A2)
+    exps[-2]["communityStrains"][0]["NCBId"] = 718252                  # the L2-6 monoculture
+    records, skipped = interactions_from_replicates(client, study, exps)
+    assert records == []
+    assert any(f"no monoculture replicates for {A}" in reason for _, reason in skipped)
+
+
+def test_one_taxon_id_under_two_names_is_one_node():
+    # 411483 is "prausnitzii A2-165" in one record and "duncaniae A2-165" in another (a reclassification)
+    renamed = "Faecalibacterium duncaniae A2-165"
+    exps = [_rep_experiment("mono", [renamed], {renamed: 411483}), _rep_experiment("co", [A, B], {A: 411483, B: 853})]
+    ids = strain_identities(exps, [])
+    assert ids[A]["id"] == ids[renamed]["id"] == "ncbi:411483"
+
+
+def test_a_taxon_id_given_to_two_different_strains_falls_back_to_names_and_is_reported():
+    # SMGDB00000008 gives 1506553 to L. clostridioforme 2_1_49FAA and L. symbiosum WAL-14673
+    lc, ls = "Lachnoclostridium clostridioforme 2_1_49FAA", "Lachnoclostridium symbiosum WAL-14673"
+    skipped = []
+    ids = strain_identities([_rep_experiment("co", [lc, ls], {lc: 1506553, ls: 1506553})], skipped)
+    assert ids[lc]["id"] == "lachnoclostridium clostridioforme" and ids[lc]["identity"] == "name"
+    assert ids[ls]["id"] == "lachnoclostridium symbiosum" and ids[ls]["taxon_id"] == "1506553"
+    assert any(label == "taxon id 1506553" and "different strains" in reason for label, reason in skipped)
+
+
+def test_a_strain_without_a_taxon_id_is_identified_by_name_and_marked():
+    client, study, exps = _replicate_study()                          # these records carry no taxon ids
+    records, _ = interactions_from_replicates(client, study, exps)
+    net = records_to_network(records)
+    assert set(net.nodes) == {_gs(A), _gs(B)}
+    assert all(n.identity == "name" and n.taxon_id == "" for n in net.nodes.values())
+
+
+# ---- cultivation mode (#42) ----------------------------------------------------------------------
+
+def _mode(exps, mode):
+    for e in exps:
+        e["cultivationMode"] = mode
+    return exps
+
+
+def test_a_batch_study_derives_and_every_edge_records_the_mode():
+    client, study, exps = _replicate_study()
+    records, skipped = interactions_from_replicates(client, study, exps)
+    assert len(records) == 2 and all(r["cultivation_mode"] == "batch" for r in records)
+    assert all(r["quality"] == [] for r in records)
+    assert not any("excluded by default" in reason for _, reason in skipped)
+
+
+def test_a_chemostat_study_derives_nothing_and_the_reason_names_the_mode():
+    client, study, exps = _replicate_study()
+    records, skipped = interactions_from_replicates(client, study, _mode(exps, "chemostat"))
+    assert records == []
+    excluded = [(label, reason) for label, reason in skipped if "excluded by default" in reason]
+    assert len(excluded) == 3 and all("chemostat" in reason for _, reason in excluded)
+
+
+def test_chemostats_derive_when_asked_and_their_edges_are_flagged():
+    client, study, exps = _replicate_study()
+    records, _ = interactions_from_replicates(client, study, _mode(exps, "chemostat"), include_non_batch=True)
+    assert len(records) == 2
+    assert all(r["cultivation_mode"] == "chemostat" and r["quality"] == ["non_batch"] for r in records)
+    edges, meta = output_meta(records)          # non_batch is hidden by default, like the other flags
+    assert edges == [] and meta["hidden"]["low_quality"] == 2
+
+
+def test_an_experiment_without_a_mode_is_excluded_rather_than_assumed_to_be_batch():
+    client, study, exps = _replicate_study()
+    for e in exps:
+        del e["cultivationMode"]
+    records, skipped = interactions_from_replicates(client, study, exps)
+    assert records == []
+    assert any("unspecified, excluded by default" in reason for _, reason in skipped)
+
+
+def test_a_dropout_design_in_a_chemostat_is_excluded_too():
+    client, study, exps = _dropout_study()
+    records, skipped = interactions_from_replicates(client, study, _mode(exps, "serial dilution"))
+    assert records == []
+    assert any("serial dilution, excluded by default" in reason for _, reason in skipped)

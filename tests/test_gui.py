@@ -9,6 +9,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
+from crossfeed import gui
 from crossfeed.gui import DEFAULTS, parse_settings, render_form, render_result, run_query, serve
 from crossfeed.mgrowthdb import MGrowthDBError
 
@@ -29,7 +30,7 @@ TAXA = {A: 853, B: 53443}
 def _experiment(name, species):
     """One experiment with two bioreplicates, each carrying a per-strain context per species."""
     return {
-        "id": "E_" + name, "name": name,
+        "id": "E_" + name, "name": name, "cultivationMode": "batch",
         "communityStrains": [{"name": sp, "NCBId": TAXA[sp]} for sp in species],
         "bioreplicates": [{"id": f"{name}/{i}", "name": f"{name}_{i}"} for i in (0, 1)],
     }
@@ -93,8 +94,9 @@ def test_species_names_reach_a_network():
     assert r["unresolved"] == [] and r["errors"] == []
     # B facilitates A (mean log2 1.0 +/- 0.26); A leaves B unchanged (mean 0: absent at any threshold)
     status = {(e.source, e.target): (e.effect, e.status) for e in r["network"].edges}
-    assert status == {("blautia hydrogenotrophica", "faecalibacterium prausnitzii"): ("facilitation", "present"),
-                      ("faecalibacterium prausnitzii", "blautia hydrogenotrophica"): ("neutral", "absent")}
+    # nodes are strains keyed by taxon id (#23): 853 is F. prausnitzii, 53443 B. hydrogenotrophica here
+    assert status == {("ncbi:53443", "ncbi:853"): ("facilitation", "present"),
+                      ("ncbi:853", "ncbi:53443"): ("neutral", "absent")}
 
 
 def test_taxon_ids_work_as_input():
@@ -139,15 +141,19 @@ def test_form_hides_every_setting_behind_one_button():
     assert "<select" not in head and "<input name=" not in head    # nothing but the species box is visible
     assert 'name="metric"' in tail and 'name="spike_factor"' in tail
     assert 'name="include_low_quality"' in tail and 'name="include_neutral"' not in page
+    # drop-out communities are included by default, so the box starts ticked (#47)
+    assert 'name="include_dropout" value="1" checked' in tail
 
 
 @pytest.mark.parametrize("form, expected", [
-    ({}, {**DEFAULTS, "only_entered": False}),   # an unticked checkbox is simply absent from a post
+    # an unticked checkbox is simply absent from a post
+    ({}, {**DEFAULTS, "only_entered": False, "include_dropout": False}),
     ({"metric": ["max"], "spike_factor": ["50"], "studies": [" S1 "], "only_entered": ["1"],
-      "include_low_quality": ["1"]},
+      "include_low_quality": ["1"], "include_dropout": ["1"]},
      {"metric": "max", "spike_factor": 50.0, "studies": "S1", "only_entered": True, "include_low_quality": True,
-      "correction": "bh", "absence_threshold": 1.0}),
-    ({"metric": ["nonsense"], "spike_factor": ["not a number"]}, {**DEFAULTS, "only_entered": False}),
+      "correction": "bh", "absence_threshold": 1.0, "include_dropout": True, "include_non_batch": False}),
+    ({"metric": ["nonsense"], "spike_factor": ["not a number"]},
+     {**DEFAULTS, "only_entered": False, "include_dropout": False}),
 ])
 def test_settings_fall_back_to_defaults(form, expected):
     assert parse_settings(form) == expected
@@ -235,3 +241,65 @@ def test_server_asks_for_a_species_when_none_given(server):
     data = urllib.parse.urlencode({"species": "  "}).encode()
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
         assert "Type at least one species" in r.read().decode("utf-8")
+
+
+def test_a_port_in_use_gives_a_plain_message_not_a_traceback():
+    import socket
+
+    with socket.socket() as taken:
+        taken.bind(("127.0.0.1", 0))
+        taken.listen()
+        port = taken.getsockname()[1]
+        with pytest.raises(SystemExit, match=f"cannot use port {port}"):
+            serve(port=port, open_browser=False)
+
+
+def test_the_legend_is_reachable_from_the_page_and_needs_the_token(server):
+    base, token = server
+    assert 'href="/legend?token=tok"' in render_form("tok")
+    assert 'href="/legend?token=tok"' in render_result("tok", _query())
+    assert "Interaction network legend" in _get(f"{base}/legend?token={token}")
+    with pytest.raises(urllib.error.HTTPError) as bad:
+        _get(f"{base}/legend?token=wrong")
+    assert bad.value.code == 403
+
+
+def test_the_example_button_fills_the_box_with_species_that_work(server):
+    base, token = server
+    data = urllib.parse.urlencode({"species": "", "example": "1"}).encode()
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
+        page = r.read().decode("utf-8")
+    for name in gui.EXAMPLE:
+        assert name in page
+    assert "<textarea" in page and "interaction(s)" not in page      # the form, not a search
+
+    # and what the button fills in is what a search takes: the fake study holds A and B under other
+    # names, so the mechanism is checked with those (the real pair is checked live, see the description)
+    filled = urllib.parse.urlencode({"species": f"{A}\n{B}", "only_entered": "1"}).encode()
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=filled, timeout=10) as r:
+        assert "interaction(s)" in r.read().decode("utf-8")
+
+
+def test_the_help_button_opens_a_help_page_behind_the_token(server):
+    base, token = server
+    assert f'href="/help?token={token}"' in _get(f"{base}/?token={token}")
+    page = _get(f"{base}/help?token={token}")
+    assert "<h1>Help</h1>" in page and "Advanced settings" in page
+    assert f'href="/legend?token={token}"' in page                   # the legend is reachable from help
+    for name in gui.EXAMPLE:
+        assert name in page
+    with pytest.raises(urllib.error.HTTPError) as bad:
+        _get(f"{base}/help?token=wrong")
+    assert bad.value.code == 403
+
+
+def test_a_species_entered_under_its_new_name_still_matches_the_study_that_uses_the_old_one():
+    # taxon 411483 is "Faecalibacterium prausnitzii A2-165" in SMGDB00000004 and "Faecalibacterium
+    # duncaniae A2-165" in others. Matching the entered name against the study's name dropped every edge
+    # (#73); the taxon id is what holds across the renaming.
+    index = {"faecalibacterium duncaniae": {853: "Faecalibacterium duncaniae A2-165"},
+             "blautia hydrogenotrophica": {53443: B}}
+    r = run_query(FakeClient(), ["Faecalibacterium duncaniae", "Blautia hydrogenotrophica"],
+                  {"only_entered": True}, index=index)
+    assert r["taxon_ids"] == [853, 53443]
+    assert len(r["network"].edges) == 2          # the study names the strain prausnitzii, the ids agree

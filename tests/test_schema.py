@@ -95,3 +95,33 @@ def test_document_without_the_new_fields_still_valid():
     assert validate_document(doc) == []
     edge = InteractionNetwork.from_dict(doc).edges[0]
     assert edge.evidence is None and edge.community == ()
+
+
+# ---- cautions and experiments of origin (#47) -----------------------------------------------------
+
+def test_cautions_and_experiments_round_trip_and_validate():
+    from crossfeed.model import InteractionNetwork
+    recs = [{"source": "a", "target": "b", "effect": "facilitation", "strength": 1.0, "study_id": "S1",
+             "cautions": ["two_replicates"], "experiments": ["E1", "E2"]}]
+    doc = records_to_network(recs).to_dict()
+    assert validate_document(doc) == []
+    edge = InteractionNetwork.from_dict(doc).edges[0]
+    assert edge.cautions == ("two_replicates",) and edge.experiments == ("E1", "E2")
+
+
+def test_an_unknown_caution_or_a_non_string_experiment_is_rejected():
+    doc = _dropout_doc()
+    doc["edges"][0]["cautions"] = ["few_replicates"]
+    assert any("cautions" in p for p in validate_document(doc))
+    doc = _dropout_doc()
+    doc["edges"][0]["experiments"] = [7]
+    assert any("experiments" in p for p in validate_document(doc))
+
+
+def test_node_identity_fields_validate_and_a_wrong_identity_is_rejected():
+    recs = [{"source": "ncbi:1", "target": "b", "source_taxon_id": "1", "source_species": "x y",
+             "source_identity": "ncbi", "target_identity": "name", "effect": "facilitation", "study_id": "S1"}]
+    doc = records_to_network(recs).to_dict()
+    assert validate_document(doc) == []
+    doc["nodes"][0]["identity"] = "guessed"
+    assert any("identity" in p for p in validate_document(doc))

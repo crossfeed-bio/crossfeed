@@ -7,6 +7,16 @@ tagged version is never reused for changed content.
 ## [0.0.2] (unreleased)
 
 ### Added
+- The local page gained an Example button, which fills the species box with a pair that derives a network
+  (Faecalibacterium duncaniae and Blautia hydrogenotrophica), and a Help button opening a help page that
+  explains what the tool does, how to read a result, and links the legend (#73).
+- A legend (`docs/legend.svg`, `make legend`, and "What the arcs mean" on the local page): one picture of
+  what each arc, head, dash and flag means. It is drawn from the code, and a test requires it to name every
+  value in the model's vocabulary, so it cannot drift from what the network shows.
+- Chemostat and serial dilution experiments are left out of a derivation by default (#42), reported with
+  their mode, and derived with `--include-non-batch` or the matching advanced setting, where their edges
+  are flagged `non_batch`. An experiment with no recorded mode counts as not batch. Edges gained
+  `cultivation_mode`. SMGDB00000001, SMGDB00000005 and SMGDB00000011 now say why they derive nothing.
 - A pluggable derivation seam (`crossfeed.derive.Deriver`): the comparison method is a drop-in strategy,
   with the provisional `BaselineDeriver` as one implementation. The agreed method arrives as another
   `Deriver` without touching the model or the pipeline.
@@ -38,8 +48,8 @@ tagged version is never reused for changed content.
   side, with the raw `p_value` and the Benjamini-Hochberg adjusted `significance`; it supports an edge but
   does not decide one (`crossfeed.stats`, standard library only).
 - An implausible spike in a growth curve is flagged and that curve left out for its species only, never
-  dropped silently (`crossfeed.growth.spike`: the curve's maximum over its median, default limit 100, 0 to
-  switch off). The report names the time points and, for the flagged strain, whether other measurements
+  dropped silently (`crossfeed.growth.spike`: one or two consecutive interior points more than the limit above both
+  neighbours, default limit 100, 0 to switch off). The report names the time points and, for the flagged strain, whether other measurements
   of it in the same replicate are clean; a community trace counts only in a monoculture.
 - `crossfeed.adapter`: mGrowthDB experiments become replicate growth curves, so the comparison the
   collaboration specified (`crossfeed.interaction`) can run on real data. Time series come from the CSV
@@ -73,11 +83,40 @@ tagged version is never reused for changed content.
   gets the outcome `obligate` (obligate commensal or mutualist), one that grows only without it `abolished`,
   in both `interaction_strength` and `dropout_interaction_strengths`.
 
+- Drop-out designs reach the default network (#47): a community plus experiments holding it without one
+  member give arcs labeled `evidence: dropout`, included by default and left out with `--no-dropout` or
+  the matching advanced setting. Experiments are pooled only under identical conditions, and
+  SMGDB00000008 now derives.
+- Edges gained optional `cautions` (`two_replicates`, shown without making an edge low quality) and
+  `experiments` (the ids of the experiments an edge compares), plus the quality flag
+  `removed_member_detected`.
+
 ### Changed
+- Nodes are strains keyed by NCBI taxon id (`ncbi:411483`) and named with the strain name, with `taxon_id`,
+  `species` (genus and species from the name) and `identity` as node fields (#23). Monocultures are matched
+  to co-cultures by taxon id, so another strain of the same species is never used: in SMGDB00000006,
+  L. bulgaricus to S. thermophilus LMG 18311 is now obligate instead of a +2.93 edge computed against the
+  STpos strain's monoculture. A taxon id a study gives to different strains falls back to names.
+- Single-replicate edges are shown by default, keeping the `single_replicate` flag and an undetermined
+  status, for the Cytoscape style to mark; the other low-quality flags stay hidden by default.
+- A co-culture is compared only with monocultures grown under the same conditions (cultivation mode and
+  compartments); no current study is affected.
 - crossfeed now has no runtime dependencies: the client uses the standard library `urllib`, and the
   unused `requests` dependency was dropped.
 
 ### Fixed
+- "Only interactions between the species entered" no longer drops every edge when a study records a strain
+  under another name: a species entered as Faecalibacterium duncaniae now matches the same taxon recorded
+  as Faecalibacterium prausnitzii, because the filter matches taxon ids as well as names (#73).
+- The spike guard no longer mistakes a die-off or late growth for a spike (#62). It compared a curve's
+  maximum with its median, which flagged curves spanning several orders of magnitude (22 curves in
+  SMGDB00000013, 7 in SMGDB00000014, 2 in SMGDB00000004) and emptied whole replicate sets. A spike is now
+  one or two consecutive points above both neighbours by the limit, never the first or last point. The
+  BH_14 spike it was built for is still caught; SMGDB00000013 goes from 10 edges to 16.
+- An obligate or abolished edge is no longer flagged `single_replicate` for having no growing replicates on
+  the side where no growth is its result; that side counts its replicates without growth (#47).
+- A comparison whose replicate set was emptied by exclusions (every replicate spiked) is skipped with a
+  reason instead of being reported as obligate or abolished; four such edges in SMGDB00000013 were false.
 - The viewer in `gui/` shows an edge's `evidence`. A `dropout` arc is labeled indirect in the interaction
   list, the detail panel, and the hover text, carries the community it came from, and is drawn with an
   open ring at its midpoint. The ring is a channel the sign does not use (sign stays color, dash, and

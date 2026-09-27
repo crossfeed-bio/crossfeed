@@ -212,9 +212,10 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
     """Map interaction records into the neutral network. Real and testable.
 
     Each record:
-      {source, target, source_name?, target_name?, strength, significance, condition, method?, effect?,
+      {source, target, source_name?, target_name?, source_taxon_id?, source_species?, source_identity?
+       (and the same for target), strength, significance, condition, method?, effect?,
        evidence?, community?, p_value?, weight?, effect_over_sd?, status?, sd?, se?, n_with?,
-       n_without?, outcome?, metric?, quality?, notes?,
+       n_without?, outcome?, metric?, quality?, notes?, cautions?, experiments?,
        study_id, study_citation?, study_license?, study_url?}
     """
     net = InteractionNetwork(meta=dict(meta or {}))
@@ -222,7 +223,8 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
         for side in ("source", "target"):
             nid = r[side]
             if nid not in net.nodes:
-                net.add_node(Node(id=nid, name=r.get(f"{side}_name", "")))
+                net.add_node(Node(id=nid, name=r.get(f"{side}_name", ""), taxon_id=r.get(f"{side}_taxon_id", ""),
+                                  species=r.get(f"{side}_species", ""), identity=r.get(f"{side}_identity", "")))
         sid = r["study_id"]
         if sid not in net.studies:
             net.add_study(Study(
@@ -240,5 +242,7 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             n_with=r.get("n_with"), n_without=r.get("n_without"),
             outcome=r.get("outcome"), metric=r.get("metric", ""),
             quality=tuple(r.get("quality", ())), notes=tuple(r.get("notes", ())),
+            cautions=tuple(r.get("cautions", ())), experiments=tuple(r.get("experiments", ())),
+            cultivation_mode=r.get("cultivation_mode", ""),
         ))
     return net

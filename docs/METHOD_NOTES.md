@@ -28,7 +28,8 @@ counts, outcome, metric, `quality` flags and `notes`.
   including in Cytoscape (item 19). Karoline asked for this to be carefully documented; the README's
   output-format section is the reference.
 - **Low-quality edges are computed and hidden**, with `--include-low-quality` to show them and
-  `meta.hidden` counting what was left out (item 21).
+  `meta.hidden` counting what was left out (item 21). Single-replicate edges are shown by default and
+  marked in the Cytoscape style (Karoline, on #62).
 - **A statistical test is reported, never used to decide** (Karoline, 2026-09-21): Welch's t-test on the
   per-replicate log2 values, `p_value` raw and `significance` Benjamini-Hochberg adjusted over every
   comparison tested in one derivation, named in `meta.statistics` (item 10).
@@ -200,8 +201,10 @@ interaction information the pairwise baseline (setting 5) skips.
 - **include**: an opt-in deriver that attributes a per-strain change under a deletion to the removed member,
   which recovers studies like SMGDB00000008.
 
-**Proposed default (Craig): exclude from the default network, support as an opt-in deriver.** One of the
-higher-value builds, since it unlocks a class of real studies without changing the pairwise default.
+Craig's first proposal was to exclude them from the default network behind an opt-in deriver. SETTLED
+2026-09-20 and 2026-09-21 (register item 2): include them by default, labeled `evidence: dropout`, with a
+setting to leave them out. Built in #47; the rules Karoline set for it are in "Decisions" in
+[docs/agents/NOTES.md](agents/NOTES.md).
 
 ## 10. Edge thresholds: strength and supporting studies
 
@@ -235,6 +238,11 @@ Continuous culture and serial dilution are different growth regimes from a batch
 
 **Proposed default (Craig): flag and keep separate from batch.** The regimes are not obviously comparable,
 so pooling them is a decision to make on purpose.
+
+BUILT 2026-09-27 (#42, Karoline): only batch is derived by default; other modes, and a missing mode, are
+reported with the mode and left out. `--include-non-batch` derives them with the edges flagged
+`non_batch`, which is hidden by default like the other quality flags. Every edge carries
+`cultivation_mode`.
 
 ## 13. Output format
 
@@ -298,6 +306,11 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    Status 2026-09-21: item 10 has been settled (Welch's t-test with Benjamini-Hochberg) without this one,
    which it had reserved. Settling this decides whether that correction suits the dependence actually
    present, so it is no longer only documentation.
+   SETTLED 2026-09-21 (Karoline, on #47): document it, keep Benjamini-Hochberg as the default with
+   Benjamini-Yekutieli as a setting, and make the dependence visible on each edge. Her words: "such arcs
+   should have an attribute whose value is the experiment of origin and a flag that they come from a
+   drop-out experiment". Edges carry `experiments` and `evidence`; arcs sharing an experiment share
+   replicates.
 4. **New optional edge fields in the neutral format** (#11). `evidence` (`biculture` for mono versus
    bi-culture, direct; `dropout`, possibly indirect) and `community` (members of the full community).
    Backward compatible, but a change to the contract downstream tools read. Proposed default: accept.
@@ -360,6 +373,11 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    (b) is answered: mGrowthDB will not expose species-rank or higher taxa, so a node carries
    `taxon_id` and a `rank`, and the species key comes from elsewhere (item 8). The pooling defect noted
    just above was fixed in #33, which reports the collision instead of passing it silently.
+   BUILT 2026-09-21 (#23, Karoline: "taxon id should be strain level. That requires a node label with the
+   name of the strain to keep the network readable"). Nodes are keyed `ncbi:<taxon id>` and named with the
+   strain name, with `species` (from the name, item 8) and `identity` as attributes. No `rank`: mGrowthDB
+   does not report one, and inferring it would be a taxonomy lookup. An id that a study gives to strains
+   with different designations falls back to genus and species (identity `name`) and is reported.
 8. **The node key for merging with other tools** (#25, microbetag). Merging experimentally confirmed
    interactions with microbetag networks as a multigraph needs matching node identifiers but not matching
    edge identifiers. Proposed default: the species-level NCBI taxon id as the shared key, with the strain
@@ -556,6 +574,9 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    and the network's `meta` records which filters were applied so a reader of a file knows what was left
    out. Note for item 10: a threshold on strength has to treat a null strength as not comparable rather
    than as zero, or an `obligate` edge disappears at that filter instead of this one.
+   AMENDED 2026-09-21 (Karoline, on #62): "change the default treatment for the single_replicate case and
+   ... show those edges but take care in the cytoscape style that they are marked somehow, e.g. dashed."
+   They keep the flag and an undetermined `status`; the other low-quality flags stay hidden by default.
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.
