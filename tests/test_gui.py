@@ -9,6 +9,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
+from crossfeed import gui
 from crossfeed.gui import DEFAULTS, parse_settings, render_form, render_result, run_query, serve
 from crossfeed.mgrowthdb import MGrowthDBError
 
@@ -261,3 +262,44 @@ def test_the_legend_is_reachable_from_the_page_and_needs_the_token(server):
     with pytest.raises(urllib.error.HTTPError) as bad:
         _get(f"{base}/legend?token=wrong")
     assert bad.value.code == 403
+
+
+def test_the_example_button_fills_the_box_with_species_that_work(server):
+    base, token = server
+    data = urllib.parse.urlencode({"species": "", "example": "1"}).encode()
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
+        page = r.read().decode("utf-8")
+    for name in gui.EXAMPLE:
+        assert name in page
+    assert "<textarea" in page and "interaction(s)" not in page      # the form, not a search
+
+    # and what the button fills in is what a search takes: the fake study holds A and B under other
+    # names, so the mechanism is checked with those (the real pair is checked live, see the description)
+    filled = urllib.parse.urlencode({"species": f"{A}\n{B}", "only_entered": "1"}).encode()
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=filled, timeout=10) as r:
+        assert "interaction(s)" in r.read().decode("utf-8")
+
+
+def test_the_help_button_opens_a_help_page_behind_the_token(server):
+    base, token = server
+    assert f'href="/help?token={token}"' in _get(f"{base}/?token={token}")
+    page = _get(f"{base}/help?token={token}")
+    assert "<h1>Help</h1>" in page and "Advanced settings" in page
+    assert f'href="/legend?token={token}"' in page                   # the legend is reachable from help
+    for name in gui.EXAMPLE:
+        assert name in page
+    with pytest.raises(urllib.error.HTTPError) as bad:
+        _get(f"{base}/help?token=wrong")
+    assert bad.value.code == 403
+
+
+def test_a_species_entered_under_its_new_name_still_matches_the_study_that_uses_the_old_one():
+    # taxon 411483 is "Faecalibacterium prausnitzii A2-165" in SMGDB00000004 and "Faecalibacterium
+    # duncaniae A2-165" in others. Matching the entered name against the study's name dropped every edge
+    # (#73); the taxon id is what holds across the renaming.
+    index = {"faecalibacterium duncaniae": {853: "Faecalibacterium duncaniae A2-165"},
+             "blautia hydrogenotrophica": {53443: B}}
+    r = run_query(FakeClient(), ["Faecalibacterium duncaniae", "Blautia hydrogenotrophica"],
+                  {"only_entered": True}, index=index)
+    assert r["taxon_ids"] == [853, 53443]
+    assert len(r["network"].edges) == 2          # the study names the strain prausnitzii, the ids agree
