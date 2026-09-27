@@ -14,6 +14,11 @@ tagged version is never reused for changed content.
   require an entry for every setting, command line option and model field, so it cannot fall behind (#78).
 - `derive --live --species NAME ...` runs the local page's search from the command line, with
   `--all-partners` for the page's "only the species entered" box unticked (#78).
+- The result appears on the same page, under the settings that produced it (#74); a search in progress
+  shows a progress bar and the page updates by itself, without JavaScript (#75); three outputs sit above
+  the table: Download network with a JSON or GraphML menu, Send to Cytoscape, and Report, the detailed
+  comments of the search with every setting and the tool version, shown on the page and downloadable as
+  a text file (#76). `tests/test_interface.py` checks each of Karoline's requirements for these.
 - The local page is drawn in the grownet style Karoline approved: a header with the mark, the name and
   the version, Legend and Help; one green primary action; quiet table headers, directions in the legend's
   two colors (inhibition the orange-red #C2410C) and flags as pills. The legend opens inside the same

@@ -173,7 +173,8 @@ def test_settings_fall_back_to_defaults(form, expected):
 def test_result_page_lists_arcs_and_download_links():
     page = render_result("tok", _query())
     assert "<table>" in page and "Faecalibacterium prausnitzii" in page
-    assert "/download.json?token=tok" in page and "/download.graphml?token=tok" in page
+    # one download button with a format menu (#76)
+    assert 'action="/download"' in page and '<option value="json">' in page and '<option value="graphml">' in page
 
 
 def test_result_page_cites_every_study_with_its_license():

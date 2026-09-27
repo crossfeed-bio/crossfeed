@@ -243,6 +243,17 @@ the page CSS. The style is the one Karoline approved on 2026-09-27 ("The interfa
 inhibition color she chose later (#C2410C). Every page goes through `gui._page(body, token)`, which adds
 the header; the legend is served inside it (`render_legend`), not through `legend.legend_page`.
 
+## The one page, progress and outputs
+
+A search is a job (#75): `_Handler._start` runs `run_query` in a thread with a `progress(done, total,
+message)` callback, and the POST redirects (303) to `/?job=ID`, which shows `render_progress` (a native
+`<progress>` and a one-second meta refresh) until the job is done, then `render_result`. The POST first
+waits `_Handler.wait` (1 s) so a quick search skips the progress page; tests set it to 0.05. Every page
+with a result is `render_form(..., below=...)`, so the result sits under the settings (#74). The outputs
+(#76) are `_outputs`: a GET form to `/download?format=json|graphml`, the POST to `/cytoscape`, and a
+`details` holding `report.report_text`, also served at `/report.txt`. `tests/test_interface.py` quotes
+Karoline's words for these and checks each through the running server; see AGENTS.md before changing it.
+
 ## Help page
 
 `src/crossfeed/help.py` holds the help page as data keyed by the code's own names (#78):

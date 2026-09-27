@@ -269,6 +269,13 @@ mean log2 difference with its standard deviation. An interaction counts as prese
 least k standard deviations of its own spread, with k the absence threshold. The adjusted p-value is
 shown as support and decides nothing. Results are provisional: with two or three replicates, more
 experiments can change any of them.</p>
+<p>While a search runs, a progress bar shows which study is being read, and the page updates by itself.
+The result then appears under the settings that produced it, so you can change a setting and search
+again. Three buttons sit above the table: <strong>Download network</strong>, with the format (JSON or
+GraphML) in the menu next to it; <strong>Send to Cytoscape</strong>, into a Cytoscape running on this
+machine, in the legend's style; and <strong>Report</strong>, which opens the detailed comments of the
+search (every setting, every interaction, every pair the data did not support, the sources) and
+downloads them as a text file, with the tool version.</p>
 <p><a href="/legend?token={t}">The legend</a> explains every line, arrowhead and flag.</p>
 
 <h2 id="settings">Advanced settings</h2>

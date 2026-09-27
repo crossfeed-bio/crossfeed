@@ -15,6 +15,7 @@ import html
 import http.server
 import secrets
 import socketserver
+import threading
 import urllib.parse
 import webbrowser
 from collections import Counter
@@ -28,6 +29,7 @@ from .export import to_graphml
 from .growth import SPIKE_FACTOR
 from .legend import legend_svg
 from .mgrowthdb import MGrowthDBError, records_to_network
+from .report import report_text
 from .taxonomy import resolve_species, species_index
 
 TITLE = brand.NAME
@@ -55,7 +57,7 @@ EMPTY_HELP = ("grownet derives interactions from pairwise (two-member) co-cultur
 
 
 
-def _page(body: str, token: str = "") -> str:
+def _page(body: str, token: str = "", refresh: str = "") -> str:
     """A page in the grownet style: a header with the mark, the name, the version, Legend and Help."""
     t = html.escape(token, quote=True)
     icon = urllib.parse.quote(brand.logo_svg(64))
@@ -63,9 +65,11 @@ def _page(body: str, token: str = "") -> str:
               f"{brand.WORDMARK}</h1></a>{HEADING}"
               f"<nav><a class=\"btn quiet\" href=\"/legend?token={t}\">Legend</a>"
               f"<a class=\"btn quiet\" href=\"/help?token={t}\">Help</a></nav></header>")
+    # a running search reloads its page every second (#75): a meta refresh, so no JavaScript is needed
+    reload = f"<meta http-equiv=\"refresh\" content=\"1; url={html.escape(refresh, quote=True)}\">" if refresh else ""
     return ("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
             f"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{TITLE}</title>"
-            f"<link rel=\"icon\" href=\"data:image/svg+xml;utf8,{icon}\">"
+            f"{reload}<link rel=\"icon\" href=\"data:image/svg+xml;utf8,{icon}\">"
             f"<style>{brand.CSS}</style></head><body><div class=\"app\">{header}<main>{body}</main></div>"
             "</body></html>\n")
 
@@ -132,7 +136,13 @@ def _settings_block(settings: dict) -> str:
 </details>"""
 
 
-def render_form(token: str, entries: str = "", settings: dict | None = None, message: str = "") -> str:
+def render_form(token: str, entries: str = "", settings: dict | None = None, message: str = "",
+                below: str = "", refresh: str = "") -> str:
+    """The one page (#74): the species box, the settings, and under them whatever the search produced.
+
+    `below` is the progress of a running search or its result, so the settings that produced a result stay
+    on the page above it and can be changed and run again.
+    """
     note = f"<p class=\"note\">{_esc(message)}</p>" if message else ""
     return _page(f"""{note}<form method="post" action="/run?token={_esc(token)}">
 <label class="field" for="species">Species</label>
@@ -143,7 +153,20 @@ this machine; nothing is uploaded.</p>
 <div class="bar"><button class="primary" type="submit">Find interactions</button>
 <button type="submit" name="example" value="1">Example</button></div>
 {_settings_block(settings or {})}
-</form>""", token)
+</form>{below}""", token, refresh)
+
+
+def render_progress(token: str, job: dict) -> str:
+    """A search still running (#75): a progress bar, and a page that reloads itself until the result is
+    ready. No JavaScript: the refresh is a meta element, the bar the native progress element."""
+    done, total = job.get("done", 0), job.get("total")
+    bar = (f"<progress max=\"{total}\" value=\"{done}\"></progress>" if total
+           else "<progress></progress>")                      # no value: the browser shows it as busy
+    below = (f"<section class=\"result\" id=\"result\"><h2>Searching</h2>{bar}"
+             f"<p class=\"hint\">{_esc(job.get('message', ''))}</p>"
+             "<p class=\"hint\">This page updates by itself until the result is ready.</p></section>")
+    return render_form(token, "\n".join(job["entries"]), job["settings"], below=below,
+                       refresh=f"/?token={token}&job={job['id']}")
 
 
 def render_legend(token: str) -> str:
@@ -235,7 +258,26 @@ def _sources(net) -> str:
             f"are respected.</p><ul class=\"sources\">{items}</ul>")
 
 
-def render_result(token: str, result: dict, message: str = "") -> str:
+def _outputs(token: str, result: dict, has_edges: bool) -> str:
+    """The three outputs Karoline asked for (#76): the network with a format menu, Cytoscape, the report."""
+    t = _esc(token)
+    download = (f"<form class=\"inline\" method=\"get\" action=\"/download\">"
+                f"<input type=\"hidden\" name=\"token\" value=\"{t}\">"
+                "<button class=\"primary\" type=\"submit\">Download network</button> "
+                "<select name=\"format\" aria-label=\"Network format\">"
+                "<option value=\"json\">JSON</option><option value=\"graphml\">GraphML</option></select></form>")
+    cytoscape = (f"<form class=\"inline\" method=\"post\" action=\"/cytoscape?token={t}\">"
+                 "<button type=\"submit\">Send to Cytoscape</button></form>")
+    report = (f"<details class=\"report\"><summary class=\"btn\">Report</summary>"
+              f"<pre>{_esc(report_text(result))}</pre>"
+              f"<p><a class=\"btn\" href=\"/report.txt?token={t}\">Download the report (.txt)</a></p></details>")
+    hint = ("<p class=\"hint\">Send to Cytoscape needs Cytoscape running on this machine; the network arrives in "
+            "the legend's style. The report holds every setting and every reason a pair gave no edge.</p>")
+    return (f"<div class=\"bar outputs\">{download if has_edges else ''}{cytoscape if has_edges else ''}"
+            f"{report}</div>{hint if has_edges else ''}")
+
+
+def _result_section(token: str, result: dict, message: str = "") -> str:
     resolved = "".join(
         f"<li>{_esc(entry)}: {_esc(', '.join(f'{name} ({tid})' for tid, name in sorted(matches.items())))}</li>"
         for entry, matches in result["resolved"])
@@ -246,26 +288,20 @@ def render_result(token: str, result: dict, message: str = "") -> str:
     hidden = _hidden_note(result.get("hidden", {}))
     shown = [e for e in net.edges if e.status != "absent"]
     note = f"<p class=\"note\">{_esc(message)}</p>" if message else ""
-    cytoscape = (f"<form method=\"post\" action=\"/cytoscape?token={_esc(token)}\">"
-                 "<button type=\"submit\">Send to Cytoscape</button>"
-                 "<span class=\"muted\"> into a running Cytoscape on this machine (CyREST port 1234), "
-                 "styled as in the legend</span></form>")
-    downloads = (f"<div class=\"bar\"><a class=\"btn primary\" href=\"/download.json?token={_esc(token)}\">"
-                 f"Download JSON</a><a class=\"btn\" href=\"/download.graphml?token={_esc(token)}\">"
-                 "Download GraphML</a></div>")
+    outputs = _outputs(token, result, bool(net.edges))
     if shown:
-        table = (f"<h2>{len(shown)} interaction(s)</h2>"
+        table = (f"<h2>{len(shown)} interaction(s)</h2>{outputs}"
                  f"<p class=\"note\">{PROVISIONAL}" + (f" {MISMATCH}" if mismatch else "") + "</p>"
-                 f"{hidden}<div class=\"scroll\"><table>{HEADER}{_arc_rows(net, shown)}</table></div>"
-                 f"{downloads}{cytoscape}")
+                 f"{hidden}<div class=\"scroll\"><table>{HEADER}{_arc_rows(net, shown)}</table></div>")
     elif net.edges:
-        table = ("<h2>No interactions above the absence threshold</h2>"
-                 f"<p class=\"note\">{PROVISIONAL}</p>{hidden}{downloads}{cytoscape}")
+        table = (f"<h2>No interactions above the absence threshold</h2>{outputs}"
+                 f"<p class=\"note\">{PROVISIONAL}</p>{hidden}")
     else:
         top = Counter(r.split(";")[0].strip() for _, r in result["skipped"]).most_common(1)
         why = f" Most common reason: {_esc(top[0][0])}." if top else ""
         table = ("<h2>No interactions</h2><p class=\"note\">Nothing was derived for these species."
-                 f"{why} {EMPTY_HELP}</p>{hidden}")
+                 f"{why} {EMPTY_HELP} <a href=\"/help?token={_esc(token)}#empty\">What to try</a>.</p>"
+                 f"{hidden}{outputs}")
     studies = ", ".join(result["studies"]) or "none"
     skipped = ""
     if result["skipped"]:
@@ -273,10 +309,15 @@ def render_result(token: str, result: dict, message: str = "") -> str:
         skipped = (f"<details><summary>{len(result['skipped'])} pair(s) the data did not support</summary>"
                    f"<ul>{items}</ul></details>")
     errors = "".join(f"<p class=\"note\">{_esc(e)}</p>" for e in result["errors"])
-    return _page(f"""{note}<h2 class="page">Species</h2><ul>{resolved}</ul>{unresolved}
-<p class="muted">Studies searched: {_esc(studies)}</p>
-{errors}<div class="result">{table}{_absent_section(net, result.get("absence", {}))}</div>{_sources(net)}{skipped}
-<div class="bar"><a class="btn" href="/?token={_esc(token)}">New search</a></div>""", token)
+    return (f"<section class=\"result\" id=\"result\">{note}<h2>Species</h2><ul>{resolved}</ul>{unresolved}"
+            f"<p class=\"muted\">Studies searched: {_esc(studies)}</p>{errors}{table}"
+            f"{_absent_section(net, result.get('absence', {}))}{_sources(net)}{skipped}</section>")
+
+
+def render_result(token: str, result: dict, message: str = "") -> str:
+    """The page with the result under the settings that produced it (#74)."""
+    return render_form(token, "\n".join(result.get("entries", [])), result.get("settings"),
+                       below=_result_section(token, result, message))
 
 
 def _no_growth(s: dict, which: str) -> float:
@@ -315,15 +356,21 @@ def parse_settings(form: dict) -> dict:
     return settings
 
 
-def run_query(client, entries, settings: dict | None = None, index: dict | None = None) -> dict:
+def run_query(client, entries, settings: dict | None = None, index: dict | None = None, progress=None) -> dict:
     """Species names or taxon ids to an interaction network, through mGrowthDB and the existing derivation.
 
     Returns {"resolved", "unresolved", "taxon_ids", "studies", "network", "skipped", "errors"}. Failures
     that concern one study are collected in "errors" instead of raising, so a single bad study does not
-    lose the rest.
+    lose the rest. `progress(done, total, message)`, when given, is told where the search is: `total` is
+    None until the studies are known (#75).
     """
+    def say(done, total, message):
+        if progress:
+            progress(done, total, message)
+
     s = {**DEFAULTS, **(settings or {})}
     names = [line.strip() for line in entries if line and line.strip()]
+    say(0, None, "Looking up the species in mGrowthDB")
     index = species_index(client) if index is None else index
     resolved = resolve_species(names, index)
     errors, skipped, records = [], [], []
@@ -342,7 +389,8 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # alone dropped every edge for a name the study does not use (#73).
     wanted = {genus_species(name) for _, matches in resolved["resolved"] for name in matches.values()}
     wanted_ids = {str(taxon) for taxon in resolved["taxon_ids"]}
-    for study_id in studies:
+    for i, study_id in enumerate(studies):
+        say(i, len(studies), f"Reading {study_id} ({i + 1} of {len(studies)})")
         try:
             recs, skips = derive_interactions(client, study_id, metric=s["metric"],
                                               spike_factor=s["spike_factor"], dropout=s["include_dropout"],
@@ -366,17 +414,22 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # every setting the search ran with, so a downloaded network says how it was made (#78, #76)
     net = records_to_network(records, meta={
         "source_db": "mGrowthDB (live)", "species": names, "studies": studies, "settings": dict(s), **extra})
-    return {"resolved": resolved["resolved"], "unresolved": resolved["unresolved"],
-            "taxon_ids": resolved["taxon_ids"], "studies": studies, "network": net,
+    say(len(studies), len(studies), "Preparing the result")
+    return {"entries": names, "settings": dict(s), "resolved": resolved["resolved"],
+            "unresolved": resolved["unresolved"], "taxon_ids": resolved["taxon_ids"], "studies": studies,
+            "network": net,
             "skipped": skipped, "errors": errors, "hidden": extra["hidden"], "absence": extra["absence"]}
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
-    """Routes: the form, a run, and the two downloads. Every request carries the session token."""
+    """Routes: the page, a search and its progress, the downloads, the report and Cytoscape. Every request
+    carries the session token."""
 
     token = ""
     client_factory = None
     state: dict = {}
+    # a search that finishes within this many seconds shows its result at once, without the progress page
+    wait = 1.0
 
     def log_message(self, *_args):
         pass                      # the browser is right there; no access log
@@ -391,6 +444,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _redirect(self, location: str):
+        self.send_response(303)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def _authorized(self, query: dict) -> bool:
         given = query.get("token", [""])[0]
         if secrets.compare_digest(given, self.token):
@@ -398,26 +457,48 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.send_error(403, "missing or wrong token; open the URL grownet printed")
         return False
 
+    def _job_page(self, job_id: str) -> str:
+        job = self.state.setdefault("jobs", {}).get(job_id)
+        if job is None:
+            return render_form(self.token, message="That search is no longer here; run it again.")
+        if job["status"] == "running":
+            return render_progress(self.token, job)
+        if job["status"] == "failed":
+            return render_form(self.token, "\n".join(job["entries"]), job["settings"], job["error"])
+        self.state["result"] = job["result"]
+        return render_result(self.token, job["result"])
+
+    def _download(self, fmt: str):
+        result = self.state.get("result")
+        if not result:
+            self._send(render_form(self.token, message="Nothing to download yet."))
+        elif fmt == "graphml":
+            self._send(to_graphml(result["network"]), "application/xml", f"{TITLE}_network.graphml")
+        else:
+            self._send(result["network"].to_json(), "application/json", f"{TITLE}_network.json")
+
     def do_GET(self):             # noqa: N802 - the name http.server requires
         parsed = urllib.parse.urlparse(self.path)
         query = urllib.parse.parse_qs(parsed.query)
         if not self._authorized(query):
             return
         if parsed.path == "/":
-            self._send(render_form(self.token))
+            job = query.get("job", [""])[0]
+            self._send(self._job_page(job) if job else render_form(self.token))
         elif parsed.path == "/help":
             self._send(render_help(self.token))
         elif parsed.path == "/legend":
             self._send(render_legend(self.token))
+        elif parsed.path == "/download":
+            self._download(query.get("format", ["json"])[0])
         elif parsed.path in ("/download.json", "/download.graphml"):
+            self._download(parsed.path.rsplit(".", 1)[1])
+        elif parsed.path == "/report.txt":
             result = self.state.get("result")
             if not result:
-                self._send(render_form(self.token, message="Nothing to download yet."))
-                return
-            if parsed.path.endswith(".json"):
-                self._send(result["network"].to_json(), "application/json", f"{TITLE}_network.json")
+                self._send(render_form(self.token, message="No report yet: run a search first."))
             else:
-                self._send(to_graphml(result["network"]), "application/xml", f"{TITLE}_network.graphml")
+                self._send(report_text(result), "text/plain; charset=utf-8", f"{TITLE}_report.txt")
         else:
             self.send_error(404, "no such page")
 
@@ -427,11 +508,35 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if not result:
             return render_form(self.token, message="Nothing to send yet.")
         try:
-            sent = send(result["network"], name="crossfeed")
+            sent = send(result["network"], name=TITLE)
         except CytoscapeError as e:
             return render_result(self.token, result, message=str(e))
         return render_result(self.token, result,
                              message=f"Sent to Cytoscape: network {sent['suid']}, styled.")
+
+    def _start(self, entries: list, settings: dict) -> dict:
+        """Run a search in a thread, so the page can show its progress while it runs (#75)."""
+        job = {"id": secrets.token_hex(4), "status": "running", "done": 0, "total": None,
+               "message": "Starting", "entries": [e.strip() for e in entries if e.strip()],
+               "settings": settings, "result": None, "error": ""}
+
+        def progress(done, total, message):
+            job.update(done=done, total=total, message=message)
+
+        def work():
+            try:
+                job["result"] = run_query(self.client_factory(), entries, settings, self.state.get("index"),
+                                          progress=progress)
+                job["status"] = "done"
+            except MGrowthDBError as e:
+                job.update(status="failed", error=f"mGrowthDB is not reachable: {e}")
+            except Exception as e:             # a bug must reach the page, not only a dead thread
+                job.update(status="failed", error=f"The search failed: {type(e).__name__}: {e}")
+
+        self.state.setdefault("jobs", {})[job["id"]] = job
+        job["thread"] = threading.Thread(target=work, daemon=True)
+        job["thread"].start()
+        return job
 
     def do_POST(self):            # noqa: N802 - the name http.server requires
         parsed = urllib.parse.urlparse(self.path)
@@ -450,13 +555,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if not [e for e in entries if e.strip()]:
             self._send(render_form(self.token, settings=settings, message="Type at least one species."))
             return
-        try:
-            result = run_query(self.client_factory(), entries, settings, self.state.get("index"))
-        except MGrowthDBError as e:
-            self._send(render_form(self.token, "\n".join(entries), settings, f"mGrowthDB is not reachable: {e}"))
-            return
-        self.state["result"] = result
-        self._send(render_result(self.token, result))
+        job = self._start(entries, settings)
+        job["thread"].join(self.wait)
+        self._redirect(f"/?token={self.token}&job={job['id']}#result")
 
 
 class _Server(socketserver.ThreadingMixIn, http.server.HTTPServer):

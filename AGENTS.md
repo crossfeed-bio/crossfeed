@@ -151,6 +151,13 @@ them as a dated bullet with who gave them. Keep one-off requests out.
   docs/METHOD_NOTES.md, so they can be settled several at a time.
 - 2026-09-21 (Karoline's agent): A pull request being reworked is marked a draft until the rework is in
   (see step 7), so the merge button always means the latest decisions are in it.
+- 2026-09-27 (Karoline): "make sure we don't have to do any of this again", after her interface
+  requirements (#72) were split into tasks and only some were built, while the built parts sat on open
+  pull requests she could not see together. So: a requirement a human states is pinned by a test that
+  quotes it (the interface ones are in `tests/test_interface.py`; change such a test only with that
+  human). Before calling a feature done, check every acceptance criterion of its feature issue against
+  the running tool and say which are still open. When a human is to test, give them one branch that
+  holds all the work they asked for, not several open pull requests.
 - 2026-09-21 (Craig): The reviewer approves and the author merges (see step 8). Proposed after Craig's
   agent merged two of Karoline's agent's pull requests while it was still committing to them, reading a
   green check as readiness to merge. Nothing was lost either time, and the rule exists so that it cannot

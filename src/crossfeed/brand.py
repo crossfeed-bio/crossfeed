@@ -93,4 +93,12 @@ code {{ font-size: .9em; }} dd code {{ overflow-wrap: anywhere; }}
 dt {{ font-weight: 600; margin-top: .8rem; }} dd {{ margin-left: 1rem; }}
 .decisions li, .toc li {{ margin-bottom: .3rem; }}
 a {{ color: var(--grow); }}
+form.inline {{ display: inline-flex; gap: .4rem; align-items: center; margin: 0; }}
+.outputs {{ margin: .6rem 0 1rem; }}
+.outputs details.report {{ margin: 0; border: 0; padding: 0; }}
+.outputs details.report[open] {{ flex-basis: 100%; }}
+summary.btn {{ list-style: none; display: inline-block; font-weight: normal; }}
+summary.btn::-webkit-details-marker {{ display: none; }}
+.report pre {{ max-height: 26rem; overflow: auto; font-size: .82rem; margin-top: .6rem; }}
+progress {{ width: 100%; height: 10px; accent-color: var(--grow); }}
 """
