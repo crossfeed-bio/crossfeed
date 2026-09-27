@@ -243,5 +243,6 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             outcome=r.get("outcome"), metric=r.get("metric", ""),
             quality=tuple(r.get("quality", ())), notes=tuple(r.get("notes", ())),
             cautions=tuple(r.get("cautions", ())), experiments=tuple(r.get("experiments", ())),
+            cultivation_mode=r.get("cultivation_mode", ""),
         ))
     return net

@@ -162,6 +162,19 @@ STATISTICS = {"test": "Welch's two-sided t-test on the per-replicate log2 values
 SINGLE_REPLICATE = "single_replicate"
 STRAINS_POOLED = "strains_pooled"
 REMOVED_MEMBER_DETECTED = "removed_member_detected"
+NON_BATCH = "non_batch"
+BATCH = "batch"           # the only cultivation mode derived by default (Karoline, #42)
+
+
+def cultivation(exp: dict) -> str:
+    """The experiment's cultivation mode, lowercased, or "unspecified".
+
+    A growth curve from a chemostat or a serial dilution does not mean what a batch curve means: an area
+    under the curve or a maximum is meaningless under dilution, and a continuous-culture growth rate is a
+    different quantity. So only batch experiments are derived by default (Karoline, #42), and a mode that
+    is missing or unrecognized counts as not batch rather than being assumed to be batch.
+    """
+    return (exp.get("cultivationMode") or "unspecified").strip().lower()
 # Cautions are shown without making an edge low quality (Karoline, on #47): the edge keeps its status.
 TWO_REPLICATES = "two_replicates"
 
@@ -174,6 +187,22 @@ def conditions(exp: dict) -> str:
     separate edges. Filtering by environment is a separate question (#61).
     """
     return json.dumps([exp.get("cultivationMode"), exp.get("compartments", [])], sort_keys=True)
+
+
+def _batch_only(exps, include_non_batch: bool, skipped) -> list:
+    """The experiments a derivation may use, reporting each one left out with its mode."""
+    if include_non_batch:
+        return list(exps)
+    kept = []
+    for exp in exps:
+        mode = cultivation(exp)
+        if mode == BATCH:
+            kept.append(exp)
+        else:
+            skipped.append((exp.get("name", "") or _exp_id(exp),
+                            f"{mode}, excluded by default; a non-batch curve is not comparable with a batch "
+                            "one (include it with the advanced setting)"))
+    return kept
 
 
 def _replicate_flags(n_with: int, n_without: int) -> tuple:
@@ -336,7 +365,8 @@ def absence(mean, sd, outcome: str, k: float = ABSENCE_THRESHOLD):
 
 
 def _record(source: str, target: str, c: dict, method: str, quality: list, cautions: list, notes: list,
-            cond: str, evidence: str, community, experiments, study_id, study_meta, identities=None) -> dict:
+            cond: str, evidence: str, community, experiments, study_id, study_meta, identities=None,
+            mode: str = BATCH) -> dict:
     """One edge record from a comparison `c` (mean, sd, se, n_with, n_without, outcome, with_log2,
     without_log2), the shape `records_to_network` reads."""
     mean, sd = c["mean"], c["sd"]
@@ -360,7 +390,7 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
         "se": None if c["se"] is None else round(c["se"], 4),
         "n_with": c["n_with"], "n_without": c["n_without"],
         "outcome": c["outcome"], "metric": method,
-        "quality": quality, "cautions": cautions, "notes": notes,
+        "quality": quality, "cautions": cautions, "notes": notes, "cultivation_mode": mode,
         "condition": cond, "method": REPLICATE_METHOD.format(metric=method),
         "evidence": evidence, "community": sorted(_identity(identities, m)["id"] for m in community),
         "experiments": list(experiments),
@@ -415,9 +445,12 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
         quality, cautions = _replicate_flags(c["n_with"], c["n_without"])
         if pooled[target]:
             quality.append(STRAINS_POOLED)
+        mode = cultivation(exp)
+        if mode != BATCH:
+            quality.append(NON_BATCH)
         records.append(_record(source, target, c, method, quality, cautions,
                                _spike_notes(result["flagged"], target), cond, "biculture", (a, b),
-                               [_exp_id(exp), *origin[target]], study_id, study_meta, identities))
+                               [_exp_id(exp), *origin[target]], study_id, study_meta, identities, mode))
 
 
 def run_group(exp: dict) -> str:
@@ -569,15 +602,18 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
                 notes.append(_detected_note("full community", full_detected))
             if detected[removed]:
                 notes.append(_detected_note(f"community without {removed}", detected[removed]))
+        mode = cultivation(full_exps[0])
+        if mode != BATCH:
+            quality.append(NON_BATCH)
         cond = ", ".join(e.get("name", "") for e in drops[removed])
         experiments = [_exp_id(e) for e in [*full_exps, *drops[removed]]]
         records.append(_record(removed, target, arc, method, quality, cautions, notes, cond, arc["evidence"],
-                               members, experiments, study_id, study_meta, identities))
+                               members, experiments, study_id, study_meta, identities, mode))
 
 
 def interactions_from_replicates(client, study: dict, exps: list, study_id: str = None,
                                  method: str = "auc", spike_factor: float = SPIKE_FACTOR,
-                                 dropout: bool = True):
+                                 dropout: bool = True, include_non_batch: bool = False):
     """The specified comparison, run on a study: (records, skipped).
 
     Two designs give edges. Each two-member co-culture is compared with the monoculture replicates of
@@ -591,7 +627,9 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
     that make it low quality, `cautions` that do not (two replicates on a side), `notes` (an excluded
     outlier), and the ids of the `experiments` it compares, so edges that share replicates can be told
     apart. One edge per experiment; merging edges is a separate decision. Filtering low-quality edges
-    happens at output (`select_edges`), so nothing computed is lost.
+    happens at output (`select_edges`), so nothing computed is lost. Only batch experiments are derived
+    unless `include_non_batch` is set; every edge records its `cultivation_mode`, and a non-batch edge is
+    flagged `non_batch` (Karoline, #42).
     """
     study_id = study_id or study.get("id")
     study_meta = {
@@ -600,6 +638,7 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
         "study_license": "",
     }
     records, skipped = [], []
+    exps = _batch_only(exps, include_non_batch, skipped)
     identities = strain_identities(exps, skipped)
     monos = _mono_index(client, exps, skipped, spike_factor, identities)
     for exp in exps:
@@ -717,17 +756,19 @@ class ReplicateDeriver(Deriver):
     needs_client = True
 
     def __init__(self, method: str = "auc", spike_factor: float = SPIKE_FACTOR, client=None,
-                 dropout: bool = True):
+                 dropout: bool = True, include_non_batch: bool = False):
         self.method = method
         self.spike_factor = spike_factor
         self.client = client
         self.dropout = dropout
+        self.include_non_batch = include_non_batch
 
     def derive(self, study: dict, exps: list):
         if self.client is None:
             raise ValueError("ReplicateDeriver needs a client: it reads each replicate's measured series")
         return interactions_from_replicates(self.client, study, exps, study.get("id"),
-                                            self.method, self.spike_factor, self.dropout)
+                                            self.method, self.spike_factor, self.dropout,
+                                            self.include_non_batch)
 
 
 class BaselineDeriver(Deriver):
@@ -747,11 +788,13 @@ class BaselineDeriver(Deriver):
 
 
 def derive_interactions(client: MGrowthDBClient, study_id: str, deriver: Deriver = None,
-                        metric: str = "auc", spike_factor: float = SPIKE_FACTOR, dropout: bool = True):
+                        metric: str = "auc", spike_factor: float = SPIKE_FACTOR, dropout: bool = True,
+                        include_non_batch: bool = False):
     """Fetch a study and its experiments from the API, then derive interactions with `deriver`
     (default: ReplicateDeriver, the specified comparison). `metric`, `spike_factor` and `dropout` configure
     the default deriver only. A deriver that reads measured series says so with `needs_client`."""
-    deriver = deriver or ReplicateDeriver(method=metric, spike_factor=spike_factor, dropout=dropout)
+    deriver = deriver or ReplicateDeriver(method=metric, spike_factor=spike_factor, dropout=dropout,
+                                         include_non_batch=include_non_batch)
     if getattr(deriver, "needs_client", False) and getattr(deriver, "client", None) is None:
         deriver.client = client
     study = dict(client.get_study(study_id))

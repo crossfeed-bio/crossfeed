@@ -224,6 +224,9 @@
           "items": {
             "type": "string"
           }
+        },
+        "cultivation_mode": {
+          "type": "string"
         }
       }
     },
