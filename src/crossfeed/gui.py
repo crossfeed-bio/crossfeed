@@ -798,7 +798,7 @@ def serve(port: int = 0, open_browser: bool = True, client_factory=None) -> None
                          "or leave it out to use a free one.") from None
     with server as httpd:
         url = f"http://127.0.0.1:{httpd.server_address[1]}/?token={handler.token}"
-        print(f"{TITLE} is at {url}\nPress Ctrl+C to stop.")
+        print(f"{TITLE} is at {url}\nPress Ctrl+C to stop.", flush=True)
         if open_browser:
             webbrowser.open(url)
         try:
