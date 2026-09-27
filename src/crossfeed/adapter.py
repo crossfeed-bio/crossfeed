@@ -69,7 +69,7 @@ def _alternatives_note(client, bioreplicate: dict, species: str, own_id, single_
             parts.append(f"{technique} not comparable")
             continue
         found = spike(other, spike_factor)
-        parts.append(f"{technique} also spiked ({found['ratio']:.0f} times its neighbours)" if found
+        parts.append(f"{technique} also spiked ({found['ratio']:.0f} times its neighbors)" if found
                      else f"{technique} clean")
     if parts:
         return "other measurements of this strain in this replicate, not substituted: " + ", ".join(parts)

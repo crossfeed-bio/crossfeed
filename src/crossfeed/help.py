@@ -49,7 +49,7 @@ SETTINGS = {
                           "species do not affect each other: its effect is small against its own spread, "
                           "|log2 mean| < k times the standard deviation. The default 1 means the mean plus "
                           "or minus its sd crosses zero. Raise k for a stricter network, where fewer "
-                          "interactions count as present; 0 marks no interaction absent. Absent "
+                          "interactions count as present; 0 marks only a mean of exactly zero absent. Absent "
                           "interactions stay in the downloads with status absent."),
     "correction": ("Multiple testing correction", "--correction bh|by",
                    "How the reported p-values are adjusted for the number of comparisons in one search: "
@@ -109,8 +109,8 @@ CLI_ONLY = {
 EDGE_ATTRIBUTES = {
     "source": "the organism whose presence is varied (node id)",
     "target": "the organism whose growth is measured (node id)",
-    "effect": "facilitation (the target grows more with the source) or inhibition (less); neutral only "
-              "in networks from the retired baseline",
+    "effect": "facilitation (the target grows more with the source) or inhibition (less); neutral for a mean "
+              "of exactly zero, which has no direction",
     "strength": "log2 of the target's growth with the source over without it, as the mean over replicates; "
                 "empty for obligate and abolished",
     "sd": "standard deviation of the strength, the spread of the comparison",
@@ -126,7 +126,8 @@ EDGE_ATTRIBUTES = {
     "significance": "the p-value adjusted for multiple testing (see the correction setting)",
     "outcome": "quantified (a ratio was computed), obligate (the target grows only with the source), "
                "abolished (only without it), or no_growth",
-    "metric": "the growth property compared: auc or max",
+    "metric": "the growth property compared: auc, max, or a growth rate with its rule "
+              "(growth_rate:easylinear:5, growth_rate:baranyi)",
     "method": "how the edge was computed, in words",
     "quality": "flags that make the edge low quality: single_replicate, strains_pooled, non_batch, "
                "removed_member_detected; empty means no issue found",
@@ -136,7 +137,8 @@ EDGE_ATTRIBUTES = {
     "notes": "other remarks, for example a replicate left out for a spike",
     "evidence": "biculture (monoculture against a two-member co-culture: a direct interaction) or dropout "
                 "(a community against the same community without the source: direct or indirect)",
-    "community": "the members of the community a drop-out arc comes from",
+    "community": "the members of the culture the arc comes from: the pair for a co-culture, the full "
+                 "community for a drop-out arc",
     "condition": "the experiment the edge comes from; interactions are condition-specific",
     "cultivation_mode": "batch, chemostat, and so on, as mGrowthDB records it",
     "experiments": "the mGrowthDB experiments whose replicates the edge compares",
@@ -357,7 +359,7 @@ lists them all. Besides those:</p>
 
 <h2 id="empty">No network came back</h2>
 <ol>
-<li>Look at the Species list at the top of the result. A name under "Not in mGrowthDB" was not found:
+<li>Look at the Species list at the top of the result. An entry under "Not used" gave nothing, and says why:
 see <a href="#qa">the first question</a>.</li>
 <li>"Studies searched: none" means no study in mGrowthDB holds those strains.</li>
 <li>Open "pair(s) the data did not support": each line says why a pair gave no edge.</li>

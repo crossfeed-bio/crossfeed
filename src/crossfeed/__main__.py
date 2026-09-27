@@ -211,7 +211,7 @@ def _emit(a, net, skipped, extra, label, result):
         top = Counter(r.split(";")[0].strip() for _, r in skipped).most_common(1)
         why = f" Most common reason: {top[0][0]}." if top else ""
         print(f"\nNO interactions were derived for {label}: the network is empty.{why}\n"
-              "crossfeed derives interactions from pairwise (two-member) co-cultures and from drop-out "
+              "grownet derives interactions from pairwise (two-member) co-cultures and from drop-out "
               "designs (a community plus the same community without one member); other larger communities "
               "yield nothing until a method suited to their design is chosen (see docs/METHOD_NOTES.md).",
               file=sys.stderr)
@@ -317,7 +317,7 @@ def build_parser() -> argparse.ArgumentParser:
     settings.add_argument("--absence-threshold", type=float, default=1.0, metavar="K",
                           help="an interaction counts as absent (the species do not affect each other) when "
                                "its effect is small against its spread, |log2 mean| < K * sd; default 1, the "
-                               "mean plus or minus sd crossing zero; 0 marks no interaction absent")
+                               "mean plus or minus sd crossing zero; 0 marks only a mean of exactly zero absent")
     settings.add_argument("--correction", choices=["bh", "by"], default="bh",
                           help="multiple testing correction of the reported p-values: bh (Benjamini-Hochberg, "
                                "default) or by (Benjamini-Yekutieli)")

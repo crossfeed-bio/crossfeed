@@ -280,8 +280,9 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
       {source, target, source_name?, target_name?, source_taxon_id?, source_species?, source_identity?
        (and the same for target), strength, significance, condition, method?, effect?,
        evidence?, community?, p_value?, weight?, effect_over_sd?, status?, sd?, se?, n_with?,
-       n_without?, outcome?, metric?, quality?, notes?, cautions?, experiments?,
-       study_id, study_citation?, study_license?, study_url?}
+       n_without?, outcome?, metric?, quality?, notes?, cautions?, experiments?, cultivation_mode?,
+       merged_arcs?, strength_range?, study_id, study_citation?, study_license?, study_url?,
+       studies? (a merged arc: [{id, citation, license, url}], one per study it rests on)}
 
     `meta` starts from `provenance()` (tool, version, derivation date); keys given in `meta` win.
     """

@@ -5,11 +5,13 @@ comparing a strain's growth ALONE vs WITH a partner, under one condition. The CO
 scientific choice owned by the collaboration (K. Faust): which growth metric, how to read a per-strain
 signal inside a community, and the significance test.
 
-That choice plugs in through the `Deriver` interface. `BaselineDeriver` is ONE transparent, provisional
-implementation so the seam runs end to end on real data today; the agreed method arrives as another
-`Deriver` and drops in without touching the network model or the pipeline.
+That choice plugs in through the `Deriver` interface. The default is `ReplicateDeriver`, the method the
+collaboration specified and settled (docs/METHOD_NOTES.md): replicate growth curves compared on the log2
+scale, with the rules recorded there. `BaselineDeriver` remains only as the retired placeholder that first
+ran the seam end to end, reachable with `--deriver`; another method drops in the same way, without touching
+the network model or the pipeline.
 
-Baseline v0 (documented and conservative):
+The retired baseline v0, for the record:
   * metric: per-strain `growthRate` (1/h), a RATE that travels better across techniques than an absolute
     AUC. The mono and co techniques are recorded per edge; a technique mismatch is FLAGGED, not hidden.
   * mono growth: the strain's growthRate in its single-strain experiment (community-level context).
@@ -417,8 +419,8 @@ def absence(mean, sd, outcome: str, k: float = ABSENCE_THRESHOLD):
     of its own spread. k = 1 is the mean plus or minus sd rule; k = 0 marks nothing absent (except a mean
     of exactly zero), so everything can be exported and the cut tuned later on `effect_over_sd`. Obligate
     and abolished comparisons are present. With no spread estimate (a single replicate) the status is
-    None: undetermined, and such an edge is flagged low quality anyway. With zero spread and a non-zero
-    mean the comparison is present.
+    None: undetermined; such an edge is flagged single_replicate and shown. With zero spread and a
+    non-zero mean the comparison is present.
     """
     if outcome in (OBLIGATE, ABOLISHED):
         return PRESENT
@@ -465,7 +467,7 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
 
 def _spike_notes(flagged, target: str) -> list:
     return [f"{f['role']} replicate {f['replicate']} left out: implausible spike, maximum "
-            f"{f['ratio']:.0f} times its neighbours at {', '.join(f'{t:g}' for t in f['times'])}"
+            f"{f['ratio']:.0f} times its neighbors at {', '.join(f'{t:g}' for t in f['times'])}"
             for f in flagged if f["species"] == target]
 
 
@@ -977,8 +979,8 @@ class ReplicateDeriver(Deriver):
     """The comparison the collaboration specified, over replicate growth curves.
 
     Reads each replicate's measured series through `crossfeed.adapter`, compares the replicate sets with
-    `crossfeed.interaction.interaction_strength` (area under the curve by default, maximal abundance
-    selectable), and emits edges carrying the standard error and the replicate counts. This is the default
+    `crossfeed.interaction.interaction_strength` (area under the curve by default; maximal abundance or a
+    growth rate selectable), and emits edges carrying the standard error and the replicate counts. This is the default
     for a live derivation; `BaselineDeriver` remains only as the retired placeholder it always was.
     """
 

@@ -165,7 +165,7 @@ Rules for this file:
   edges must not be hidden "just because they don't have the measurements on one side by definition":
   the side without growth counts its replicates without growth.
 - 2026-09-21 (Karoline, on #62): "Yes to the spike guard": a spike is one or two consecutive interior points
-  above both neighbours by the factor, replacing the maximum over the median, which flagged die-offs and
+  above both neighbors by the factor, replacing the maximum over the median, which flagged die-offs and
   late growth in SMGDB00000013 and SMGDB00000014. The first and last points are never a spike. Edge case
   she named: "perturbations may explain spikes, but right now only occur in chemostats"
   (SMGDB00000005). On line styles: "Cytoscape supports different dash styles", so single-replicate and

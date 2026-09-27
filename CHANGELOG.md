@@ -27,6 +27,13 @@ tagged version is never reused for changed content.
   (the species do not affect each other), and the no-growth settings say they test the replicate growth
   curves of one species in one culture condition. A new setting, Exclude these studies
   (`--exclude-studies` with `--species`), leaves the listed studies out of a search; empty by default.
+- Documentation made to agree with the code, after an audit (21 conflicts): the README's Cytoscape style,
+  output example and field descriptions, technique rule, metric options and correction; the help page's
+  effect, community and empty-result wording; "k = 0 marks only a mean of exactly zero absent" everywhere;
+  METHOD_NOTES' defaults at a glance, rewritten from the running code; the viewer's derivation panel,
+  which described the retired baseline, replaced by a plain statement. The viewer's GraphML now writes all
+  of export.py's keys (it wrote 9 of 34), and a test runs it with Node against the CLI's. Page and CLI
+  defaults are checked equal by a test.
 - Merge parallel arcs (register item 14, Karoline's choices): an advanced setting, off by default
   (`--merge-arcs`), making the arcs of each source and target, across conditions, studies and evidence, one
   arc with the median log2 mean and its range; arcs whose signs disagree are not merged, absent arcs stay

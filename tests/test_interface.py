@@ -229,3 +229,19 @@ def test_each_search_keeps_its_own_outputs(server):
     _, report2, _ = _open(f"{base}/report.txt?token={token}&job={job2}")
     assert "Only interactions between the species entered (--all-partners): on" in report1
     assert "Only interactions between the species entered (--all-partners): off" in report2
+
+
+def test_the_page_and_the_command_line_start_from_the_same_defaults():
+    # a setting whose default differs between the page and the command line gives two tools; each page
+    # setting is mapped to its option here, so a new setting without a mapping fails too
+    from crossfeed.__main__ import build_parser
+    a = build_parser().parse_args(["derive", "--live", "--species", "x"])
+    cli = {"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
+           "spike_factor": a.spike_factor, "absence_threshold": a.absence_threshold,
+           "include_low_quality": a.include_low_quality, "correction": a.correction,
+           "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch, "studies": a.study,
+           "exclude_studies": a.exclude_studies, "only_entered": not a.all_partners, "merge_arcs": a.merge_arcs,
+           "min_studies": a.min_studies, "no_growth_alpha": a.no_growth_alpha,
+           "no_growth_factor": a.no_growth_factor}
+    assert set(cli) == set(gui.DEFAULTS)
+    assert {k: v for k, v in cli.items() if v != gui.DEFAULTS[k]} == {}

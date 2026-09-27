@@ -127,8 +127,8 @@ def _settings_block(settings: dict) -> str:
   <span class="muted">with easylinear: the points in each fitted window (default 5, as mGrowthDB)</span></div>
 <div class="row"><label><input type="checkbox" name="include_low_quality" value="1"{low}>
   Show low-quality edges</label>
-  <span class="muted">pooled strains or an unclean drop-out; single-replicate edges are always shown,
-  flagged</span></div>
+  <span class="muted">pooled strains, a chemostat curve, or a drop-out whose removed member was still detected;
+  single-replicate edges are always shown, flagged</span></div>
 <div class="row"><label><input type="checkbox" name="include_dropout" value="1"{dropout}>
   Include drop-out communities</label>
   <span class="muted">arcs from a community compared with the same community without one member; possibly
@@ -141,7 +141,7 @@ def _settings_block(settings: dict) -> str:
   <input name="absence_threshold" type="text" size="6" value="{_esc(s['absence_threshold'])}"></label>
   <span class="muted">an interaction counts as absent (the species do not affect each other) when its
   effect is small against its spread: |log2 mean| &lt; k &times; sd. 1 means the mean &plusmn; sd crosses
-  zero; 0 marks no interaction absent</span></div>
+  zero; 0 marks only a mean of exactly zero absent</span></div>
 <div class="row"><label>Multiple testing correction
   <select name="correction">{corrections}</select></label>
   <span class="muted">Benjamini-Hochberg (default) or the more conservative Benjamini-Yekutieli</span></div>
