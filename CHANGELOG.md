@@ -13,6 +13,11 @@ tagged version is never reused for changed content.
   require an entry for every setting, command line option and model field, so it cannot fall behind (#78).
 - `derive --live --species NAME ...` runs the local page's search from the command line, with
   `--all-partners` for the page's "only the species entered" box unticked (#78).
+- The local page is drawn in the grownet style Karoline approved: a header with the mark, the name and
+  the version, Legend and Help; one green primary action; quiet table headers, directions in the legend's
+  two colors (inhibition the orange-red #C2410C) and flags as pills. The legend opens inside the same
+  frame. The page, the help and every network's `meta` name the tool grownet; the command stays
+  `crossfeed` until the package is renamed (#71).
 - The tool version shows next to the name on the local page. Every network's `meta` records the tool,
   `tool_version`, `derived_on` and every setting used; GraphML carries the first three as graph
   attributes (#78).

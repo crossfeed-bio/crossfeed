@@ -284,7 +284,7 @@ def test_the_help_button_opens_a_help_page_behind_the_token(server):
     base, token = server
     assert f'href="/help?token={token}"' in _get(f"{base}/?token={token}")
     page = _get(f"{base}/help?token={token}")
-    assert "<h1>Help " in page and "Advanced settings" in page
+    assert '<h2 class="page">Help ' in page and "Advanced settings" in page
     assert f'href="/legend?token={token}"' in page                   # the legend is reachable from help
     for name in gui.EXAMPLE:
         assert name in page

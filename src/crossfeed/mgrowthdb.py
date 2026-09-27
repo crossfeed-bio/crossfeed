@@ -29,6 +29,7 @@ import urllib.request
 from collections.abc import Iterable
 
 from . import __version__
+from .brand import NAME
 from .model import Edge, InteractionNetwork, Node, Study
 
 MGROWTHDB_API = "https://mgrowthdb.gbiomed.kuleuven.be/api/v1"
@@ -212,7 +213,7 @@ def effect_from_logratio(strength, significance, alpha: float = 0.05) -> str:
 def provenance(today: datetime.date | None = None) -> dict:
     """What made a network and when: the tool, its version, and the derivation date. mGrowthDB changes over
     time, so the same version can derive a different network later; the date says which data it saw."""
-    return {"tool": "crossfeed", "tool_version": __version__,
+    return {"tool": NAME, "tool_version": __version__,
             "derived_on": (today or datetime.date.today()).isoformat()}
 
 

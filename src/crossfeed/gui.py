@@ -19,17 +19,17 @@ import urllib.parse
 import webbrowser
 from collections import Counter
 
-from . import __version__
+from . import __version__, brand
 from . import help as help_page
 from .attribution import studies_with_edges
 from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, output_meta
 from .export import to_graphml
 from .growth import SPIKE_FACTOR
-from .legend import legend_page
+from .legend import legend_svg
 from .mgrowthdb import MGrowthDBError, records_to_network
 from .taxonomy import resolve_species, species_index
 
-TITLE = "crossfeed"
+TITLE = brand.NAME
 # species that derive a non-empty network, for the Example button (Karoline's proposal, #73). The first is
 # taxon 411483, which mGrowthDB holds under both its names after the 2022 reclassification.
 EXAMPLE = ("Faecalibacterium duncaniae", "Blautia hydrogenotrophica")
@@ -45,41 +45,33 @@ PROVISIONAL = ("Each interaction compares a species' growth with and without its
 MISMATCH = ("Monoculture and co-culture growth were measured by different techniques in some of these "
             "studies, so neither the magnitude nor, near zero, the direction of those interactions is fully "
             "dependable.")
-EMPTY_HELP = ("crossfeed derives interactions from pairwise (two-member) co-cultures and from drop-out "
+EMPTY_HELP = ("grownet derives interactions from pairwise (two-member) co-cultures and from drop-out "
               "designs (a community plus the same community without one member). Other larger communities "
               "yield nothing until a method suited to their design is chosen (see docs/METHOD_NOTES.md).")
 
-CSS = """
-body { font: 16px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 52rem; padding: 2rem 1rem; }
-h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 2rem; }
-textarea, input, select { font: inherit; } textarea { width: 100%; }
-button, .button { font: inherit; padding: 0.4rem 1.2rem; margin-top: 0.8rem; display: inline-block; }
-.button { text-decoration: none; border: 1px solid #999; border-radius: 4px; color: inherit; }
-table { border-collapse: collapse; width: 100%; margin-top: 0.5rem; }
-th, td { border-bottom: 1px solid #ddd; padding: 0.3rem 0.5rem; text-align: left; vertical-align: top; }
-details { margin-top: 1rem; } summary { cursor: pointer; }
-.row { margin: 0.4rem 0; } .muted { color: #555; font-size: 0.9rem; }
-.note { background: #f4f4f4; padding: 0.8rem 1rem; border-radius: 4px; }
-.sources { font-size: 0.9rem; } .sources li { margin-bottom: 0.3rem; }
-.version { font-size: 0.9rem; font-weight: normal; color: #555; margin-left: 0.4rem; }
-dd code { overflow-wrap: anywhere; }
-pre { background: #f4f4f4; padding: 0.6rem 0.8rem; overflow-x: auto; white-space: pre-wrap; }
-dt { font-weight: 600; margin-top: 0.8rem; } dd { margin-left: 1rem; }
-.decisions li, .toc li { margin-bottom: 0.3rem; }
-"""
 
 
-def _page(body: str) -> str:
+
+def _page(body: str, token: str = "") -> str:
+    """A page in the grownet style: a header with the mark, the name, the version, Legend and Help."""
+    t = html.escape(token, quote=True)
+    icon = urllib.parse.quote(brand.logo_svg(64))
+    header = (f"<header><a class=\"brand\" href=\"/?token={t}\"><h1 class=\"brand\">{brand.logo_svg(28)}"
+              f"{brand.WORDMARK}</h1></a>{HEADING}"
+              f"<nav><a class=\"btn quiet\" href=\"/legend?token={t}\">Legend</a>"
+              f"<a class=\"btn quiet\" href=\"/help?token={t}\">Help</a></nav></header>")
     return ("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
             f"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{TITLE}</title>"
-            f"<style>{CSS}</style></head><body>{body}</body></html>\n")
+            f"<link rel=\"icon\" href=\"data:image/svg+xml;utf8,{icon}\">"
+            f"<style>{brand.CSS}</style></head><body><div class=\"app\">{header}<main>{body}</main></div>"
+            "</body></html>\n")
 
 
 def _esc(x) -> str:
     return html.escape(str(x), quote=True)
 
 
-HEADING = f"<h1>{TITLE} <span class=\"version\">{html.escape(__version__)}</span></h1>"
+HEADING = f"<span class=\"version\">{html.escape(__version__)}</span>"
 
 
 def _settings_block(settings: dict) -> str:
@@ -131,23 +123,27 @@ def _settings_block(settings: dict) -> str:
 
 def render_form(token: str, entries: str = "", settings: dict | None = None, message: str = "") -> str:
     note = f"<p class=\"note\">{_esc(message)}</p>" if message else ""
-    return _page(f"""{HEADING}
-<p>Type species names, one per line. NCBI taxon ids work too.</p>{note}
-<form method="post" action="/run?token={_esc(token)}">
-<textarea name="species" rows="6" placeholder="Faecalibacterium prausnitzii&#10;Blautia hydrogenotrophica"
->{_esc(entries)}</textarea>
+    return _page(f"""{note}<form method="post" action="/run?token={_esc(token)}">
+<label class="field" for="species">Species</label>
+<textarea id="species" name="species" rows="5"
+ placeholder="Faecalibacterium prausnitzii&#10;Blautia hydrogenotrophica">{_esc(entries)}</textarea>
+<p class="hint">One per line. NCBI taxon ids work too. Interactions are derived from mGrowthDB growth data on
+this machine; nothing is uploaded.</p>
+<div class="bar"><button class="primary" type="submit">Find interactions</button>
+<button type="submit" name="example" value="1">Example</button></div>
 {_settings_block(settings or {})}
-<button type="submit">Find interactions</button>
-<button type="submit" name="example" value="1">Example</button>
-<a class="button" href="/help?token={_esc(token)}">Help</a>
-</form>
-<p class="muted">Interactions are derived from mGrowthDB growth data on this machine. Nothing is uploaded.</p>
-<p><a href="/legend?token={_esc(token)}">What the arcs mean</a></p>""")
+</form>""", token)
+
+
+def render_legend(token: str) -> str:
+    """The legend inside the page frame, so every page carries the same header."""
+    return _page(f"<div class=\"legend\">{legend_svg()}</div>"
+                 f"<p class=\"bar\"><a class=\"btn\" href=\"/?token={_esc(token)}\">Back</a></p>", token)
 
 
 def render_help(token: str) -> str:
     return _page(help_page.render_help(token, DEFAULTS, EXAMPLE)
-                 + f"<p><a href=\"/?token={_esc(token)}\">Back</a></p>")
+                 + f"<p class=\"bar\"><a class=\"btn\" href=\"/?token={_esc(token)}\">Back</a></p>", token)
 
 
 HEADER = ("<tr><th>source</th><th>affects</th><th>direction</th><th>log2 mean &plusmn; sd</th>"
@@ -171,16 +167,20 @@ def _number(x, fmt: str) -> str:
 def _arc_rows(net, edges) -> str:
     rows = []
     for e in edges:
-        remarks = "; ".join([*(["drop-out community, possibly indirect"] if e.evidence == "dropout" else []),
-                             *(f"low quality: {q.replace('_', ' ')}" for q in e.quality),
-                             *(f"caution: {c.replace('_', ' ')}" for c in e.cautions), *e.notes])
+        # flags and cautions as quiet pills; free-text notes as plain text after them
+        pills = [*(["drop-out community, possibly indirect"] if e.evidence == "dropout" else []),
+                 *(f"low quality: {q.replace('_', ' ')}" for q in e.quality),
+                 *(f"caution: {c.replace('_', ' ')}" for c in e.cautions)]
+        remarks = "".join(f"<span class=\"pill\">{_esc(p)}</span>" for p in pills) + _esc("; ".join(e.notes))
+        sign = "up" if e.effect == "facilitation" else "down" if e.effect == "inhibition" else ""
         rows.append(f"<tr><td>{_esc(net.nodes[e.source].name or e.source)}</td>"
                     f"<td>{_esc(net.nodes[e.target].name or e.target)}</td>"
-                    f"<td>{_esc(_direction(e))}</td><td>{_mean_sd(e.strength, e.sd)}</td>"
+                    f"<td class=\"{sign}\">{_esc(_direction(e))}</td>"
+                    f"<td class=\"nowrap\">{_mean_sd(e.strength, e.sd)}</td>"
                     f"<td>{_number(e.effect_over_sd, '.2f')}</td>"
                     f"<td>{_esc(_number(e.n_with, 'd'))} / {_esc(_number(e.n_without, 'd'))}</td>"
                     f"<td>{_number(e.significance, '.3g')}</td><td>{_esc(e.condition)}</td>"
-                    f"<td>{_esc(remarks)}</td><td>{_esc(' '.join(e.study_ids))}</td></tr>")
+                    f"<td>{remarks}</td><td>{_esc(' '.join(e.study_ids))}</td></tr>")
     return "".join(rows)
 
 
@@ -207,7 +207,7 @@ def _absent_section(net, absence: dict) -> str:
     return (f"<details><summary>{len(absent)} edge(s) below the absence threshold (k = {k:g})</summary>"
             f"<p class=\"muted\">|log2 mean| &lt; {k:g} &times; sd: no interaction at this threshold. Kept in the "
             "downloads with status absent; the Cytoscape style hides them by default.</p>"
-            f"<table>{HEADER}{_arc_rows(net, absent)}</table></details>")
+            f"<div class=\"scroll\"><table>{HEADER}{_arc_rows(net, absent)}</table></div></details>")
 
 
 def _sources(net) -> str:
@@ -234,12 +234,13 @@ def render_result(token: str, result: dict) -> str:
     mismatch = any("MISMATCH" in (e.method or "") for e in net.edges)
     hidden = _hidden_note(result.get("hidden", {}))
     shown = [e for e in net.edges if e.status != "absent"]
-    downloads = (f"<p><a href=\"/download.json?token={_esc(token)}\">Download JSON</a> &middot; "
-                 f"<a href=\"/download.graphml?token={_esc(token)}\">Download GraphML</a></p>")
+    downloads = (f"<div class=\"bar\"><a class=\"btn primary\" href=\"/download.json?token={_esc(token)}\">"
+                 f"Download JSON</a><a class=\"btn\" href=\"/download.graphml?token={_esc(token)}\">"
+                 "Download GraphML</a></div>")
     if shown:
         table = (f"<h2>{len(shown)} interaction(s)</h2>"
                  f"<p class=\"note\">{PROVISIONAL}" + (f" {MISMATCH}" if mismatch else "") + "</p>"
-                 f"{hidden}<table>{HEADER}{_arc_rows(net, shown)}</table>{downloads}")
+                 f"{hidden}<div class=\"scroll\"><table>{HEADER}{_arc_rows(net, shown)}</table></div>{downloads}")
     elif net.edges:
         table = ("<h2>No interactions above the absence threshold</h2>"
                  f"<p class=\"note\">{PROVISIONAL}</p>{hidden}{downloads}")
@@ -255,13 +256,10 @@ def render_result(token: str, result: dict) -> str:
         skipped = (f"<details><summary>{len(result['skipped'])} pair(s) the data did not support</summary>"
                    f"<ul>{items}</ul></details>")
     errors = "".join(f"<p class=\"note\">{_esc(e)}</p>" for e in result["errors"])
-    return _page(f"""{HEADING}
-<h2>Species</h2><ul>{resolved}</ul>{unresolved}
+    return _page(f"""<h2 class="page">Species</h2><ul>{resolved}</ul>{unresolved}
 <p class="muted">Studies searched: {_esc(studies)}</p>
-{errors}{table}{_absent_section(net, result.get("absence", {}))}{_sources(net)}{skipped}
-<p><a href="/?token={_esc(token)}">New search</a> &middot;
-<a href="/legend?token={_esc(token)}">What the arcs mean</a> &middot;
-<a href="/help?token={_esc(token)}">Help</a></p>""")
+{errors}<div class="result">{table}{_absent_section(net, result.get("absence", {}))}</div>{_sources(net)}{skipped}
+<div class="bar"><a class="btn" href="/?token={_esc(token)}">New search</a></div>""", token)
 
 
 def parse_settings(form: dict) -> dict:
@@ -366,7 +364,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         given = query.get("token", [""])[0]
         if secrets.compare_digest(given, self.token):
             return True
-        self.send_error(403, "missing or wrong token; open the URL crossfeed printed")
+        self.send_error(403, "missing or wrong token; open the URL grownet printed")
         return False
 
     def do_GET(self):             # noqa: N802 - the name http.server requires
@@ -379,16 +377,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif parsed.path == "/help":
             self._send(render_help(self.token))
         elif parsed.path == "/legend":
-            self._send(legend_page(self.token))
+            self._send(render_legend(self.token))
         elif parsed.path in ("/download.json", "/download.graphml"):
             result = self.state.get("result")
             if not result:
                 self._send(render_form(self.token, message="Nothing to download yet."))
                 return
             if parsed.path.endswith(".json"):
-                self._send(result["network"].to_json(), "application/json", "crossfeed_network.json")
+                self._send(result["network"].to_json(), "application/json", f"{TITLE}_network.json")
             else:
-                self._send(to_graphml(result["network"]), "application/xml", "crossfeed_network.graphml")
+                self._send(to_graphml(result["network"]), "application/xml", f"{TITLE}_network.graphml")
         else:
             self.send_error(404, "no such page")
 
@@ -435,7 +433,7 @@ def serve(port: int = 0, open_browser: bool = True, client_factory=None) -> None
                          "or leave it out to use a free one.") from None
     with server as httpd:
         url = f"http://127.0.0.1:{httpd.server_address[1]}/?token={handler.token}"
-        print(f"crossfeed is at {url}\nPress Ctrl+C to stop.")
+        print(f"{TITLE} is at {url}\nPress Ctrl+C to stop.")
         if open_browser:
             webbrowser.open(url)
         try:

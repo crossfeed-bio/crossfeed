@@ -9,6 +9,7 @@ from __future__ import annotations
 import html
 
 from . import __version__
+from .brand import COMMAND, NAME
 
 REPOSITORY = "https://github.com/crossfeed-bio/crossfeed"
 ISSUES = f"{REPOSITORY}/issues"
@@ -115,7 +116,7 @@ NODE_ATTRIBUTES = {
 # (decision, why), with the issue that settled it
 DECISIONS = (
     ("Interactions are derived, not looked up.",
-     "mGrowthDB stores growth curves. crossfeed compares each species' growth with and without a partner "
+     "mGrowthDB stores growth curves. grownet compares each species' growth with and without a partner "
      "across replicates, on your machine, each time you search (#34)."),
     ("One number per comparison: the mean log2 ratio of the replicate sets.",
      "log2(with) minus log2(without) per species, averaged over replicates, with the spread of both sets "
@@ -146,7 +147,7 @@ DECISIONS = (
     ("Suspect curves are flagged, never silently dropped or replaced.",
      "A replicate with an implausible spike is left out and reported, with the other techniques measured "
      "on it named (#39)."),
-    ("crossfeed never corrects source data.",
+    ("grownet never corrects source data.",
      "Errors in mGrowthDB records are fixed in mGrowthDB, so every user sees the same data."),
     ("Everything runs on your machine.",
      "The page is served from 127.0.0.1 with a token, has no JavaScript, and the tool needs nothing beyond "
@@ -165,8 +166,8 @@ QA = (
      "The machine cannot reach mGrowthDB. Check the internet connection, or open "
      f"<a href=\"{MGROWTHDB}\">mGrowthDB</a> in the browser to see whether it is up, then try again."),
     ("The browser did not open, or a page says \"missing or wrong token\".",
-     "Open the address crossfeed printed in the terminal, including its ?token= part. "
-     "<code>crossfeed gui --no-browser</code> only prints it."),
+     "Open the address grownet printed in the terminal, including its ?token= part. "
+     f"<code>{COMMAND} gui --no-browser</code> only prints it."),
     ("\"cannot use port\".",
      "Another program holds that port. Leave out <code>--port</code> to use a free one, or pick another."),
     ("An edge has no number.",
@@ -184,11 +185,11 @@ QA = (
     ("How do I open the network in Cytoscape?",
      "Download GraphML, then in Cytoscape choose File, Import, Network from File. The legend shows what "
      "each line style means."),
-    ("How do I stop crossfeed?",
+    ("How do I stop grownet?",
      "Press Ctrl+C in the terminal where it runs."),
 )
 
-EXAMPLE_CLI = ('crossfeed derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica" '
+EXAMPLE_CLI = (f'{COMMAND} derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica" '
                '--out example.json')
 
 
@@ -206,7 +207,7 @@ def _table(head, rows) -> str:
     return f"<table><tr>{th}</tr>" + "".join(rows) + "</table>"
 
 
-SECTIONS = (("what", "What crossfeed does"), ("example", "Try the example"), ("reading", "Reading the result"),
+SECTIONS = (("what", "What grownet does"), ("example", "Try the example"), ("reading", "Reading the result"),
             ("settings", "Advanced settings"), ("attributes", "Arc and node attributes"),
             ("decisions", "Why it works this way"), ("cli", "The command line"),
             ("empty", "No network came back"), ("qa", "Questions and problems"), ("cite", "How to cite"),
@@ -231,11 +232,11 @@ def render_help(token: str, defaults: dict, example: tuple) -> str:
     qa = "".join(f"<dt>{_e(q)}</dt><dd>{a}</dd>" for q, a in QA)
     cli_only = "".join(f"<li><code>{_e(k)}</code>: {_e(v)}</li>" for k, v in CLI_ONLY.items())
     pair = " and ".join(example)
-    return f"""<h1>Help <span class="version">crossfeed {_e(__version__)}</span></h1>
+    return f"""<h2 class="page">Help <span class="version">{NAME} {_e(__version__)}</span></h2>
 <ol class="toc">{toc}</ol>
 
-<h2 id="what">What crossfeed does</h2>
-<p>Type species names, one per line, or NCBI taxon ids. crossfeed looks them up in mGrowthDB, reads the
+<h2 id="what">What grownet does</h2>
+<p>Type species names, one per line, or NCBI taxon ids. grownet looks them up in mGrowthDB, reads the
 growth curves of every study that holds them, and derives the interactions between them on this machine.
 Nothing is uploaded, and nothing is written outside the file you download.</p>
 
@@ -270,13 +271,14 @@ itself records the tool, <code>tool_version</code>, <code>derived_on</code> and 
 <h2 id="cli">The command line</h2>
 <p>The same search as the Example button, written to a file:</p>
 <pre>{_e(EXAMPLE_CLI)}</pre>
-<p>Without installing anything, <code>uvx --from git+{REPOSITORY} crossfeed ...</code> runs the same
-command. Other uses:</p>
-<pre>crossfeed derive SMGDB00000004 --live --format graphml --out study4.graphml
-crossfeed gui
-crossfeed validate example.json</pre>
+<p>Without installing anything, <code>uvx --from git+{REPOSITORY} {COMMAND} ...</code> runs the same
+command. The command is still called <code>{COMMAND}</code>: it becomes <code>{NAME}</code> when the package
+is renamed (#71). Other uses:</p>
+<pre>{COMMAND} derive SMGDB00000004 --live --format graphml --out study4.graphml
+{COMMAND} gui
+{COMMAND} validate example.json</pre>
 <p>The first derives one whole study, the second opens this page, the third checks a file against the
-format. Every advanced setting has its flag (see the table above), and <code>crossfeed derive --help</code>
+format. Every advanced setting has its flag (see the list above), and <code>{COMMAND} derive --help</code>
 lists them all. Besides those:</p>
 <ul>{cli_only}</ul>
 
@@ -289,7 +291,7 @@ see <a href="#qa">the first question</a>.</li>
 <li>The usual reasons, and what to change:
 <ul>
 <li>the study grows the species only in a community that is neither a two-member co-culture nor a
-drop-out design: crossfeed has no method for it yet;</li>
+drop-out design: grownet has no method for it yet;</li>
 <li>no monoculture was grown under the same conditions: nothing to compare with;</li>
 <li>the experiments are chemostats: tick "Include chemostat and serial dilution experiments";</li>
 <li>every edge is low quality: tick "Show low-quality edges";</li>
@@ -304,14 +306,14 @@ entered".</li>
 
 <h2 id="cite">How to cite</h2>
 <p>Cite the studies behind the edges you use: the Sources list under each result names every study with
-its license, and each edge's <code>study_ids</code> say which ones it rests on. Cite crossfeed from its
+its license, and each edge's <code>study_ids</code> say which ones it rests on. Cite grownet from its
 <a href="{REPOSITORY}/blob/main/CITATION.cff">CITATION.cff</a>, with the version and date from the
 network's <code>meta</code>.</p>
 
 <h2 id="issues">Report a problem or ask for a feature</h2>
 <p>Open an issue in the <a href="{ISSUES}">issue tracker</a> (<a href="{NEW_ISSUE}">new issue</a>).
 Say what you searched, the settings, and the tool version shown next to the name. Problems with the data
-itself are for mGrowthDB, since crossfeed shows the data as mGrowthDB holds it.</p>"""
+itself are for mGrowthDB, since grownet shows the data as mGrowthDB holds it.</p>"""
 
 
 def _default(value) -> str:

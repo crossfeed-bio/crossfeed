@@ -197,6 +197,15 @@ QUALITY_FLAGS, CAUTIONS, EVIDENCE and STATUSES, and the shipped file to equal wh
 flag therefore means adding a line to the legend, the same way Craig's viewer guard works (#57). The dash
 patterns are the ones the Cytoscape style will use (#25): long dashes for drop-out evidence, dots for a
 single replicate.
+## Page style and name
+
+`src/crossfeed/brand.py` holds the tool's name (`NAME` = grownet), the command users type today
+(`COMMAND` = crossfeed, until the package rename of #71 flips it), the mark (the same SVG as `legend.LOGO`
+on the Cytoscape branch, #70; the legend should take it from brand once both are merged), the palette and
+the page CSS. The style is the one Karoline approved on 2026-09-27 ("The interface looks good"), with the
+inhibition color she chose later (#C2410C). Every page goes through `gui._page(body, token)`, which adds
+the header; the legend is served inside it (`render_legend`), not through `legend.legend_page`.
+
 ## Help page
 
 `src/crossfeed/help.py` holds the help page as data keyed by the code's own names (#78):

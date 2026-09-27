@@ -55,7 +55,7 @@ def test_the_page_has_every_section_its_contents_list_names():
 def test_the_command_line_example_is_the_pages_example():
     for name in gui.EXAMPLE:
         assert f'"{name}"' in help.EXAMPLE_CLI
-    assert help.EXAMPLE_CLI.startswith("crossfeed derive --live --species ")
+    assert help.EXAMPLE_CLI.startswith("crossfeed derive --live --species ")      # the command until #71
     assert gui.html.escape(help.EXAMPLE_CLI) in PAGE
 
 
@@ -64,20 +64,21 @@ def test_the_issue_tracker_is_linked():
 
 
 def test_the_version_is_shown_next_to_the_name():
-    heading = f'crossfeed <span class="version">{__version__}</span>'
-    assert heading in gui.render_form("tok")
-    assert heading in gui.render_result("tok", _query())
-    assert f"crossfeed {__version__}" in PAGE
+    # the header of every page: the mark, the wordmark grow<b>net</b>, then the version (#78)
+    heading = f'<span class="word">grow<b>net</b></span></h1></a><span class="version">{__version__}</span>'
+    for page in (gui.render_form("tok"), gui.render_result("tok", _query()), PAGE):
+        assert heading in page and "<svg" in page.split(heading)[0]
+    assert f"grownet {__version__}" in PAGE
 
 
 def test_every_network_records_the_tool_its_version_and_the_date():
     net = records_to_network([], meta={"source_db": "x"})
     today = datetime.date.today().isoformat()
-    assert (net.meta["tool"], net.meta["tool_version"], net.meta["derived_on"]) == ("crossfeed", __version__, today)
+    assert (net.meta["tool"], net.meta["tool_version"], net.meta["derived_on"]) == ("grownet", __version__, today)
     assert provenance(datetime.date(2026, 9, 27))["derived_on"] == "2026-09-27"
     graph = ET.fromstring(to_graphml(net)).find("{http://graphml.graphdrawing.org/xmlns}graph")
     data = {d.get("key"): d.text for d in graph.findall("{http://graphml.graphdrawing.org/xmlns}data")}
-    assert data == {"g_tool": "crossfeed", "g_tool_version": __version__, "g_derived_on": today}
+    assert data == {"g_tool": "grownet", "g_tool_version": __version__, "g_derived_on": today}
 
 
 def test_a_search_records_every_setting_it_ran_with():
@@ -107,3 +108,18 @@ def test_species_search_needs_live_and_rejects_a_deriver(capsys, tmp_path):
     assert main(["derive", "--live"]) == 2                     # neither a study nor species
     err = capsys.readouterr().err
     assert "needs --live" in err and "--deriver applies to one study" in err and "needs a study id" in err
+
+
+def test_the_page_uses_the_two_signal_colors_and_no_other_red():
+    # Karoline's palette (2026-09-27): growth green and the orange-red, never the plain red it replaced
+    from crossfeed import brand
+    assert (brand.GROWTH, brand.INHIBITION) == ("#1A7F5A", "#C2410C")
+    page = gui.render_form("tok")
+    assert brand.GROWTH in page and brand.INHIBITION in page and "#B3352E" not in page.upper()
+
+
+def test_directions_carry_their_color_and_the_legend_opens_in_the_frame():
+    result = gui.render_result("tok", _query())
+    assert '<td class="up">facilitation</td>' in result
+    legend = gui.render_legend("tok")
+    assert '<div class="app"><header>' in legend and "Interaction network legend" in legend
