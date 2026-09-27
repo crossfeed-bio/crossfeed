@@ -71,6 +71,14 @@ SETTINGS = {
                          "The rise that counts as growth whatever the test says: the geometric mean, over "
                          "the replicate growth curves, of maximum / first time point. 1.5 is a medium "
                          "default; 2 (one doubling) is more stringent. 0 leaves the test alone."),
+    "merge_arcs": ("Merge parallel arcs", "--merge-arcs",
+                   "Off by default, since interactions are condition-specific. On, the arcs from one strain to "
+                   "another, across conditions, studies and evidence, become one arc: its strength is the median "
+                   "of their log2 means, with the range, and it lists every study, experiment and condition it "
+                   "rests on. Arcs whose signs disagree are not merged; absent arcs stay separate."),
+    "min_studies": ("Minimum supporting studies", "--min-studies N",
+                    "Keeps arcs resting on at least this many studies. Above 1 it needs merged arcs, since an "
+                    "arc as derived rests on one study."),
     "studies": ("Only these studies", "STUDY",
                 "Comma separated mGrowthDB study ids to search, instead of every study holding the species; "
                 "on the command line, the study argument given with --species. "
@@ -133,6 +141,10 @@ EDGE_ATTRIBUTES = {
     "cultivation_mode": "batch, chemostat, and so on, as mGrowthDB records it",
     "experiments": "the mGrowthDB experiments whose replicates the edge compares",
     "study_ids": "the studies supporting this edge; cite them (see Sources)",
+    "merged_arcs": "with Merge parallel arcs: how many arcs of this source and target were merged into this one; "
+                   "empty for an arc as derived",
+    "strength_range": "with Merge parallel arcs: the lowest and highest log2 mean of the merged arcs; the "
+                      "strength is their median",
 }
 
 # Node field -> meaning

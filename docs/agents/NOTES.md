@@ -245,6 +245,14 @@ QUALITY_FLAGS, CAUTIONS, EVIDENCE and STATUSES, and the shipped file to equal wh
 flag therefore means adding a line to the legend, the same way Craig's viewer guard works (#57). The dash
 patterns are the ones the Cytoscape style will use (#25): long dashes for drop-out evidence, dots for a
 single replicate.
+## Merging parallel arcs (register item 14, 2026-09-27)
+
+`derive.merge_parallel` runs at the output stage, after status and filters (`output_meta(...,
+merge_arcs, min_studies)`), so no single arc's numbers change. Off by default. `_merged` builds the arc; a
+merged record lists `studies` (dicts), which `records_to_network` turns into several `study_ids`. With
+merging off and `min_studies` 1 the edges pass through untouched (records need no source or target then).
+On 2026-09-27 no pair in mGrowthDB had arcs from two studies, so `min_studies` 2 gives an empty network.
+
 ## Reading only what a search needs (2026-09-27)
 
 `derive.relevant_experiments(exps, keep)` is the one rule for what a search with "only the species

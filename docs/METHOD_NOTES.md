@@ -460,6 +460,15 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    or drop the threshold until merging exists. Proposed default: build the merge, after which a
    replication floor becomes meaningful. Setting 10.
    DEFERRED by Karoline 2026-09-19 until the settled items have landed.
+   SETTLED 2026-09-27 (Karoline, choosing among her agent's options): arcs with the same source and target
+   merge, across conditions, studies and evidence; the merged strength is the median of their log2 means,
+   with the range; arcs whose signs disagree are not merged ("No merge on conflict": only agreeing arcs
+   merge); merging is an advanced setting, off by default, with a minimum-supporting-studies filter. Her
+   earlier words on #47: "could be condensed into an arc with a number-of-studies-supporting-the-arc
+   attribute". Consequences stated by her agent: absent arcs have no direction and stay separate; obligate
+   and abolished arcs join their direction and count without entering the median; a merged arc carries no
+   sd, se or combined test, lists every study, experiment and condition, and is drop-out evidence if any
+   of its arcs is. Edges gain `merged_arcs` and `strength_range` (optional, backward compatible).
 
 15. **The repository holds two implementations of the comparison, and the pipeline reaches the weaker one**
    (raised by the Syntropa-side review, 2026-09-18). `interaction.py` with `growth.py` is the comparison

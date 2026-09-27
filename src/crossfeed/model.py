@@ -85,6 +85,8 @@ class Edge:
     cautions: tuple = ()          # CAUTIONS: shown to the reader, without making the edge low quality
     experiments: tuple = ()       # ids of the experiments whose replicates the edge compares (its origin)
     cultivation_mode: str = ""    # batch, chemostat, and so on, as mGrowthDB records it
+    merged_arcs: int | None = None  # arcs merged into this one (register item 14), None when not merged
+    strength_range: tuple = ()    # (lowest, highest) log2 mean of the merged arcs
 
     def validate(self) -> list:
         problems = []
@@ -170,5 +172,6 @@ class InteractionNetwork:
             e["notes"] = tuple(e.get("notes", ()))
             e["cautions"] = tuple(e.get("cautions", ()))
             e["experiments"] = tuple(e.get("experiments", ()))
+            e["strength_range"] = tuple(e.get("strength_range", ()))
             net.add_edge(Edge(**e))
         return net

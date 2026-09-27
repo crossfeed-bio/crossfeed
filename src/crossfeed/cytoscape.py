@@ -114,6 +114,7 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
                 "quality": " ".join(edge.quality), "cautions": " ".join(edge.cautions),
                 "notes": "; ".join(edge.notes), "community": " ".join(edge.community),
                 "experiments": " ".join(edge.experiments), "study_ids": " ".join(edge.study_ids),
+                "merged_arcs": edge.merged_arcs, "strength_range": " ".join(f"{x:g}" for x in edge.strength_range),
                 "line_style": line_style(edge), "display_weight": display_weight(edge)}
         edges.append({"data": data})
     return {"data": {"name": name, "shared_name": name}, "elements": {"nodes": nodes, "edges": edges}}

@@ -732,3 +732,69 @@ def test_a_study_of_monocultures_only_says_so():
     curves = {("A", A): [(1, 1), (1, 1.4)], ("B", B): [(1, 1), (1, 1.4)]}
     records, skipped = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S15"}, exps)
     assert records == [] and skipped[0][1].startswith("only monocultures (2 experiments of one strain each)")
+
+
+# ---- merging parallel arcs (register item 14, Karoline 2026-09-27) --------------------------------
+
+from crossfeed.derive import merge_parallel  # noqa: E402
+
+
+def _arc(strength, study="S1", effect=None, status="present", outcome="quantified", evidence="biculture",
+         condition="c", source="ncbi:1", target="ncbi:2"):
+    effect = effect or ("facilitation" if (strength or 1) > 0 else "inhibition")
+    return {"source": source, "target": target, "source_name": "A", "target_name": "B", "effect": effect,
+            "strength": strength, "weight": None if strength is None else abs(strength), "sd": 0.1, "se": 0.05,
+            "status": status, "outcome": outcome, "evidence": evidence, "condition": condition,
+            "experiments": [f"E_{study}_{condition}"], "quality": [], "cautions": [], "notes": [],
+            "community": [], "method": "m", "study_id": study, "study_citation": f"study {study}"}
+
+
+def test_agreeing_arcs_merge_into_their_median_with_the_range_and_every_study():
+    # 1.0, 2.0 and 4.0 from two studies: median 2.0, range 1.0 to 4.0, three arcs, both studies
+    edges, meta = merge_parallel([_arc(1.0, "S1", condition="a"), _arc(2.0, "S1", condition="b"),
+                                  _arc(4.0, "S2", condition="c")])
+    assert len(edges) == 1 and meta["merged"] == 1
+    arc = edges[0]
+    assert (arc["strength"], arc["strength_range"], arc["merged_arcs"]) == (2.0, [1.0, 4.0], 3)
+    assert [s["id"] for s in arc["studies"]] == ["S1", "S2"] and arc["condition"] == "a; b; c"
+    assert arc["sd"] is None and arc["significance"] is None          # a median has no sd or combined test
+
+
+def test_arcs_whose_signs_disagree_are_not_merged():
+    edges, meta = merge_parallel([_arc(1.0), _arc(-0.5)])
+    assert len(edges) == 2 and meta["merged"] == 0 and meta["left_apart_for_disagreeing_signs"] == 1
+
+
+def test_an_absent_arc_stays_separate_and_a_drop_out_makes_the_merge_possibly_indirect():
+    edges, _ = merge_parallel([_arc(1.0), _arc(2.0, evidence="dropout"), _arc(0.1, status="absent")])
+    merged = [e for e in edges if e.get("merged_arcs")]
+    assert len(edges) == 2 and merged[0]["strength"] == 1.5 and merged[0]["evidence"] == "dropout"
+    assert any(e["status"] == "absent" and not e.get("merged_arcs") for e in edges)
+
+
+def test_obligate_arcs_count_without_entering_the_median():
+    edges, _ = merge_parallel([_arc(None, outcome="obligate", effect="facilitation"), _arc(1.5), _arc(2.5)])
+    assert (edges[0]["strength"], edges[0]["merged_arcs"], edges[0]["outcome"]) == (2.0, 3, "quantified")
+    only, _ = merge_parallel([_arc(None, outcome="obligate", effect="facilitation", study=s) for s in ("S1", "S2")])
+    assert only[0]["strength"] is None and only[0]["outcome"] == "obligate"
+
+
+def test_the_minimum_of_supporting_studies_keeps_well_replicated_arcs():
+    arcs = [_arc(1.0, "S1"), _arc(2.0, "S2"), _arc(1.0, "S1", source="ncbi:3")]   # two pairs
+    edges, meta = merge_parallel(arcs, merge=True, min_studies=2)
+    assert [e["source"] for e in edges] == ["ncbi:1"] and meta["below_min_studies"] == 1
+
+
+def test_merging_off_leaves_every_arc_as_derived():
+    arcs = [_arc(1.0), _arc(2.0)]
+    edges, meta = merge_parallel(arcs, merge=False)
+    assert edges is arcs and meta["merged"] == 0
+
+
+def test_a_merged_arc_makes_a_valid_network_citing_every_study():
+    from crossfeed.export import to_graphml
+    edges, _ = merge_parallel([_arc(1.0, "S1"), _arc(3.0, "S2")])
+    net = records_to_network(edges)
+    assert net.validate() == [] and net.edges[0].study_ids == ("S1", "S2") and set(net.studies) == {"S1", "S2"}
+    assert net.edges[0].merged_arcs == 2 and net.edges[0].strength_range == (1.0, 3.0)
+    assert 'key="e_merged_arcs">2<' in to_graphml(net) and 'key="e_strength_range">1 3<' in to_graphml(net)

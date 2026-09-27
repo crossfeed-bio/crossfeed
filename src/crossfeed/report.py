@@ -31,9 +31,13 @@ def _mean_sd(e) -> str:
 def _edge_line(net, e) -> str:
     name = {nid: node.name or nid for nid, node in net.nodes.items()}
     direction = e.effect if e.outcome in (None, "quantified") else f"{e.effect} ({e.outcome})"
-    parts = [f"{name[e.source]} -> {name[e.target]}: {direction}", _mean_sd(e),
-             f"replicates {e.n_with if e.n_with is not None else '?'} with / "
-             f"{e.n_without if e.n_without is not None else '?'} without"]
+    parts = [f"{name[e.source]} -> {name[e.target]}: {direction}", _mean_sd(e)]
+    if e.merged_arcs:
+        low_high = f", range {e.strength_range[0]:+.2f} to {e.strength_range[1]:+.2f}" if e.strength_range else ""
+        parts.append(f"median of {e.merged_arcs} merged arcs{low_high}")
+    else:
+        parts.append(f"replicates {e.n_with if e.n_with is not None else '?'} with / "
+                     f"{e.n_without if e.n_without is not None else '?'} without")
     if e.significance is not None:
         parts.append(f"adjusted p {e.significance:.3g}")
     parts.append(f"condition {e.condition}")
@@ -92,6 +96,11 @@ def report_text(result: dict) -> str:
     if rule:
         lines.append(f"no-growth rule: {rule.get('test', '')}; alpha {rule.get('alpha')}, factor "
                      f"{rule.get('factor')}; {rule.get('obligate', 0)} obligate, {rule.get('abolished', 0)} abolished")
+    merge = meta.get("merge", {})
+    if merge.get("merge_arcs") or merge.get("min_studies", 1) > 1:
+        lines.append(f"merged arcs: {merge.get('rule', '')}; {merge.get('merged', 0)} merged, "
+                     f"{merge.get('left_apart_for_disagreeing_signs', 0)} pair(s) left apart for disagreeing signs, "
+                     f"{merge.get('below_min_studies', 0)} arc(s) below {merge.get('min_studies', 1)} studies")
     stats = meta.get("statistics", {})
     if stats:
         lines.append(f"statistics: {stats.get('test', '')}; {stats.get('correction', '')}; "

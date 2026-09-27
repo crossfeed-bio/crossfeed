@@ -55,6 +55,7 @@ DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window":
             "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
             "include_low_quality": False, "correction": "bh", "include_dropout": True,
             "include_non_batch": False, "studies": "", "exclude_studies": "", "only_entered": True,
+            "merge_arcs": False, "min_studies": 1,
             # None: the no-growth rule's own defaults, read when used (crossfeed.interaction.grew)
             "no_growth_alpha": None, "no_growth_factor": None}
 PROVISIONAL = ("Each interaction compares a species' growth with and without its partner across replicates "
@@ -159,6 +160,15 @@ def _settings_block(settings: dict) -> str:
   <span class="muted">replicate growth curves that rose at least this many times (geometric mean over the
   replicates) count as growth whatever the test says; 1.5 by default, 2 is stricter, 0 leaves the test
   alone</span></div>
+<div class="row"><label><input type="checkbox" name="merge_arcs" value="1"{" checked" if s["merge_arcs"] else ""}>
+  Merge parallel arcs</label>
+  <span class="muted">one arc per source and target, across conditions and studies, with the median log2 mean
+  and its range; arcs whose signs disagree are not merged. Off by default: interactions are
+  condition-specific</span></div>
+<div class="row"><label>Minimum supporting studies
+  <input name="min_studies" type="text" size="6" value="{_esc(s['min_studies'])}"></label>
+  <span class="muted">keep arcs resting on at least this many studies; above 1 it needs merged arcs, since an
+  unmerged arc rests on one study</span></div>
 <div class="row"><label>Only these studies
   <input name="studies" type="text" size="40" value="{_esc(s['studies'])}"></label>
   <span class="muted">comma separated study ids; empty means every study holding the species</span></div>
@@ -430,6 +440,11 @@ def parse_settings(form: dict) -> dict:
     settings["include_low_quality"] = bool(form.get("include_low_quality"))
     settings["include_dropout"] = bool(form.get("include_dropout"))
     settings["include_non_batch"] = bool(form.get("include_non_batch"))
+    settings["merge_arcs"] = bool(form.get("merge_arcs"))
+    try:
+        settings["min_studies"] = max(1, int(form.get("min_studies", [""])[0]))
+    except ValueError:
+        pass
     try:
         settings["absence_threshold"] = abs(float(form.get("absence_threshold", [""])[0]))
     except ValueError:
@@ -538,7 +553,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         partners_only += sum("the partner is not among the species entered" in r for _, r in skips)
 
     records, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"],
-                                 s["no_growth_alpha"], s["no_growth_factor"])
+                                 s["no_growth_alpha"], s["no_growth_factor"], s["merge_arcs"], s["min_studies"])
     # every setting the search ran with, so a downloaded network says how it was made (#78, #76)
     net = records_to_network(records, meta={
         "source_db": "mGrowthDB (live)", "species": names, "studies": studies, "settings": dict(s), **extra})

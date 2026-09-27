@@ -88,8 +88,9 @@ def _derive(a):
                                                    no_growth_alpha=a.no_growth_alpha,
                                                    no_growth_factor=a.no_growth_factor)
             records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold,
-                                         a.no_growth_alpha, a.no_growth_factor)
+                                         a.no_growth_alpha, a.no_growth_factor, a.merge_arcs, a.min_studies)
             extra["settings"] = {"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
+                                 "merge_arcs": a.merge_arcs, "min_studies": a.min_studies,
                                  "spike_factor": a.spike_factor,
                                  "absence_threshold": a.absence_threshold,
                                  "include_low_quality": a.include_low_quality, "correction": a.correction,
@@ -130,6 +131,7 @@ def _derive_species(a):
                 "correction": a.correction, "include_dropout": not a.no_dropout,
                 "include_non_batch": a.include_non_batch, "studies": a.study or "",
                 "only_entered": not a.all_partners, "exclude_studies": a.exclude_studies,
+                "merge_arcs": a.merge_arcs, "min_studies": a.min_studies,
                 "no_growth_alpha": a.no_growth_alpha,
                 "no_growth_factor": a.no_growth_factor}
     try:
@@ -331,6 +333,13 @@ def build_parser() -> argparse.ArgumentParser:
                           help="replicate growth curves that rose at least F times (geometric mean over the "
                                "replicates) count as growth whatever the test says (default 1.5; 2 is "
                                "stricter; 0 leaves the test alone)")
+
+    settings.add_argument("--merge-arcs", action="store_true",
+                          help="merge the arcs of each source and target, across conditions and studies, into "
+                               "one with the median log2 mean and its range; arcs whose signs disagree are not "
+                               "merged (off by default: interactions are condition-specific)")
+    settings.add_argument("--min-studies", type=int, default=1, metavar="N",
+                          help="keep arcs resting on at least N studies (default 1; above 1 it needs merged arcs)")
 
     outputs = d.add_argument_group("outputs (the local page's three buttons)")
     outputs.add_argument("--format", choices=["json", "graphml"], default="json",

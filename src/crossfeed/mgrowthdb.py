@@ -292,17 +292,20 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             if nid not in net.nodes:
                 net.add_node(Node(id=nid, name=r.get(f"{side}_name", ""), taxon_id=r.get(f"{side}_taxon_id", ""),
                                   species=r.get(f"{side}_species", ""), identity=r.get(f"{side}_identity", "")))
-        sid = r["study_id"]
-        if sid not in net.studies:
-            net.add_study(Study(
-                id=sid, citation=r.get("study_citation", ""),
-                license=r.get("study_license", ""), url=r.get("study_url", ""),
-            ))
+        # a merged arc (register item 14) rests on several studies and lists them; any other on one
+        studies = r.get("studies") or [{"id": r["study_id"], "citation": r.get("study_citation", ""),
+                                        "license": r.get("study_license", ""), "url": r.get("study_url", "")}]
+        for st in studies:
+            if st["id"] not in net.studies:
+                net.add_study(Study(id=st["id"], citation=st.get("citation", ""),
+                                    license=st.get("license", ""), url=st.get("url", "")))
+        sid = r.get("study_id", studies[0]["id"])
         effect = r.get("effect") or effect_from_logratio(r.get("strength"), r.get("significance"))
         net.add_edge(Edge(
             source=r["source"], target=r["target"], effect=effect,
             strength=r.get("strength"), significance=r.get("significance"),
-            condition=r.get("condition", ""), method=r.get("method", ""), study_ids=(sid,),
+            condition=r.get("condition", ""), method=r.get("method", ""),
+            study_ids=tuple(st["id"] for st in studies) if r.get("studies") else (sid,),
             evidence=r.get("evidence"), community=tuple(r.get("community", ())),
             p_value=r.get("p_value"), weight=r.get("weight"), effect_over_sd=r.get("effect_over_sd"),
             status=r.get("status"), sd=r.get("sd"), se=r.get("se"),
@@ -311,5 +314,6 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             quality=tuple(r.get("quality", ())), notes=tuple(r.get("notes", ())),
             cautions=tuple(r.get("cautions", ())), experiments=tuple(r.get("experiments", ())),
             cultivation_mode=r.get("cultivation_mode", ""),
+            merged_arcs=r.get("merged_arcs"), strength_range=tuple(r.get("strength_range", ())),
         ))
     return net

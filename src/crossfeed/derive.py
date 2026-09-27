@@ -25,6 +25,7 @@ import json
 import math
 import re
 from collections import Counter
+from statistics import median
 
 from .adapter import replicates_for_experiment
 from .growth import SPIKE_FACTOR, GrowthCurve, Replicate
@@ -32,11 +33,13 @@ from .interaction import (
     ABOLISHED,
     NO_GROWTH,
     OBLIGATE,
+    QUANTIFIED,
     UNUSABLE,
     dropout_interaction_strengths,
     interaction_strength,
     rule_meta,
 )
+from .interaction import DROPOUT as DROPOUT_EVIDENCE
 from .mgrowthdb import MGrowthDBClient
 from .stats import CORRECTIONS, welch
 
@@ -840,9 +843,86 @@ def select_edges(records, include_low_quality: bool = False) -> tuple:
     return edges, hidden
 
 
+def _merged(arcs: list) -> dict:
+    """One arc for several arcs of one source, target and sign (register item 14, Karoline 2026-09-27).
+
+    The strength is the median of the arcs' log2 means, with their range; obligate and abolished arcs,
+    which have no ratio, count toward the arc without entering the median, and an arc made only of them
+    keeps that outcome. A median has no sd, se or combined test, so those stay empty rather than invented.
+    It lists every study, experiment and condition it rests on, and is drop-out evidence if any of its arcs
+    is, since it may then be indirect.
+    """
+    numeric = [a["strength"] for a in arcs if a.get("strength") is not None]
+    strength = round(median(numeric), 4) if numeric else None
+    outcomes = {a.get("outcome") for a in arcs}
+    outcome = QUANTIFIED if numeric else (outcomes.pop() if len(outcomes) == 1 else arcs[0].get("outcome"))
+
+    def union(key):
+        seen = []
+        for a in arcs:
+            for x in a.get(key) or []:
+                if x not in seen:
+                    seen.append(x)
+        return seen
+
+    studies = []
+    for a in arcs:
+        st = {"id": a["study_id"], "citation": a.get("study_citation", ""), "license": a.get("study_license", ""),
+              "url": a.get("study_url", "")}
+        if st["id"] not in {s["id"] for s in studies}:
+            studies.append(st)
+    conditions = list(dict.fromkeys(a.get("condition", "") for a in arcs))
+    return {**arcs[0], "strength": strength, "weight": None if strength is None else round(abs(strength), 4),
+            "sd": None, "se": None, "effect_over_sd": None, "p_value": None, "significance": None,
+            "n_with": None, "n_without": None, "outcome": outcome,
+            "status": PRESENT if any(a.get("status") == PRESENT for a in arcs) else None,
+            "quality": union("quality"), "cautions": union("cautions"), "notes": union("notes"),
+            "experiments": union("experiments"), "community": sorted(set(union("community"))),
+            "evidence": (DROPOUT_EVIDENCE if any(a.get("evidence") == DROPOUT_EVIDENCE for a in arcs)
+                         else arcs[0].get("evidence")),
+            "condition": "; ".join(c for c in conditions if c),
+            "cultivation_mode": "; ".join(dict.fromkeys(a.get("cultivation_mode", "") for a in arcs)),
+            "method": f"{arcs[0].get('method', '')}; merged: the median of {len(arcs)} arcs",
+            "merged_arcs": len(arcs),
+            "strength_range": [min(numeric), max(numeric)] if numeric else [],
+            "studies": studies, "study_id": studies[0]["id"]}
+
+
+def merge_parallel(edges: list, merge: bool = True, min_studies: int = 1) -> tuple:
+    """(edges, meta) with the parallel arcs of each source and target merged (register item 14).
+
+    Karoline's choices (2026-09-27): arcs with the same source and target merge, across conditions, studies
+    and evidence; the strength is their median; arcs whose signs disagree are not merged, only arcs that
+    agree; merging is an advanced setting, off by default. Absent arcs (no interaction found) have no
+    direction and stay separate. `min_studies` then keeps arcs resting on at least that many studies.
+    """
+    info = {"merge_arcs": merge, "merged": 0, "left_apart_for_disagreeing_signs": 0, "min_studies": min_studies,
+            "below_min_studies": 0, "rule": "same source and target; median of the log2 means; signs must agree"}
+    if not merge and min_studies <= 1:
+        return edges, info                    # off, as by default: every arc exactly as derived
+    groups = {}
+    for e in edges:
+        groups.setdefault((e["source"], e["target"]), []).append(e)
+    out, merged, conflicts = [], 0, 0
+    for arcs in groups.values():
+        signed = [a for a in arcs if a.get("status") != ABSENT and a.get("effect") in ("facilitation", "inhibition")]
+        rest = [a for a in arcs if a not in signed]
+        signs = {a["effect"] for a in signed}
+        if merge and len(signed) >= 2 and len(signs) == 1:
+            out.append(_merged(signed))
+            merged += 1
+        else:
+            conflicts += merge and len(signs) > 1
+            out.extend(signed)
+        out.extend(rest)
+    kept = [e for e in out if len(e.get("studies") or [e]) >= min_studies]
+    return kept, {**info, "merged": merged, "left_apart_for_disagreeing_signs": conflicts,
+                  "below_min_studies": len(out) - len(kept)}
+
+
 def output_meta(records, include_low_quality: bool = False, correction: str = "bh",
                 absence_threshold: float = ABSENCE_THRESHOLD, no_growth_alpha: float = None,
-                no_growth_factor: float = None) -> tuple:
+                no_growth_factor: float = None, merge_arcs: bool = False, min_studies: int = 1) -> tuple:
     """(edges, meta) for writing a network.
 
     Sets each record's `status` from the absence threshold k (None, undetermined, for a low-quality
@@ -858,6 +938,7 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
             record.get("strength"), record.get("sd"), record.get("outcome"), absence_threshold)
     tests = adjust_significance(records, correction)
     edges, hidden = select_edges(records, include_low_quality)
+    edges, merge = merge_parallel(edges, merge_arcs, min_studies)
     statistics = {**STATISTICS, "correction": STATISTICS["correction"].format(name=CORRECTIONS[correction][0]),
                   "tests": tests}
     absent = sum(1 for e in edges if e.get("status") == ABSENT)
@@ -866,7 +947,7 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
             "no_growth": {**rule_meta(no_growth_alpha, no_growth_factor),
                           "obligate": sum(1 for e in edges if e.get("outcome") == OBLIGATE),
                           "abolished": sum(1 for e in edges if e.get("outcome") == ABOLISHED)},
-            "filters": {"include_low_quality": include_low_quality}, "hidden": hidden}
+            "filters": {"include_low_quality": include_low_quality}, "hidden": hidden, "merge": merge}
     return edges, meta
 
 

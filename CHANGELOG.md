@@ -27,6 +27,11 @@ tagged version is never reused for changed content.
   (the species do not affect each other), and the no-growth settings say they test the replicate growth
   curves of one species in one culture condition. A new setting, Exclude these studies
   (`--exclude-studies` with `--species`), leaves the listed studies out of a search; empty by default.
+- Merge parallel arcs (register item 14, Karoline's choices): an advanced setting, off by default
+  (`--merge-arcs`), making the arcs of each source and target, across conditions, studies and evidence, one
+  arc with the median log2 mean and its range; arcs whose signs disagree are not merged, absent arcs stay
+  separate. Minimum supporting studies (`--min-studies`) keeps arcs resting on that many studies. Edges
+  gain `merged_arcs` and `strength_range`.
 - A species is compared only when its monocultures and co-cultures (or full community and drop-out) were
   measured by the same technique, not only in the same unit (Karoline, METHOD_NOTES item 23). No edge in
   mGrowthDB changed; it guards future data.
