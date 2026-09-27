@@ -7,7 +7,6 @@ tagged version is never reused for changed content.
 ## [0.0.2] (unreleased)
 
 ### Added
-<<<<<<< HEAD
 - The help page now explains every advanced setting (with its command line flag and default), every arc
   and node attribute, the main design decisions and why, the command line with the page's own example,
   what to do when no network comes back, a short Q&A, how to cite, and links the issue tracker. Tests
@@ -27,6 +26,8 @@ tagged version is never reused for changed content.
   (the species do not affect each other), and the no-growth settings say they test the replicate growth
   curves of one species in one culture condition. A new setting, Exclude these studies
   (`--exclude-studies` with `--species`), leaves the listed studies out of a search; empty by default.
+- The gate gained a merge-marker check, after conflict markers from a merge reached this changelog
+  unseen (now removed, both sides kept).
 - Documentation made to agree with the code, after an audit (21 conflicts): the README's Cytoscape style,
   output example and field descriptions, technique rule, metric options and correction; the help page's
   effect, community and empty-result wording; "k = 0 marks only a mean of exactly zero absent" everywhere;
@@ -97,10 +98,8 @@ tagged version is never reused for changed content.
 - The local page gained an Example button, which fills the species box with a pair that derives a network
   (Faecalibacterium duncaniae and Blautia hydrogenotrophica), and a Help button opening a help page that
   explains what the tool does, how to read a result, and links the legend (#73).
-=======
 - The mark (`docs/logo.svg`): three nodes joined by directed edges, green for facilitation and red for
   inhibition, both with the same arrowhead. It is the page's favicon and sits beside its title.
->>>>>>> origin/cytoscape
 - A legend (`docs/legend.svg`, `make legend`, and "What the arcs mean" on the local page): one picture of
   what each arc, head, dash and flag means. It is drawn from the code, and a test requires it to name every
   value in the model's vocabulary, so it cannot drift from what the network shows.
@@ -108,13 +107,11 @@ tagged version is never reused for changed content.
   their mode, and derived with `--include-non-batch` or the matching advanced setting, where their edges
   are flagged `non_batch`. An experiment with no recorded mode counts as not batch. Edges gained
   `cultivation_mode`. SMGDB00000001, SMGDB00000005 and SMGDB00000011 now say why they derive nothing.
-<<<<<<< HEAD
 - Send a network into a running Cytoscape (#25): `crossfeed derive ... --to-cytoscape` and a
   "Send to Cytoscape" button on the local page post it through CyREST on localhost, with the style the
   legend describes (direction by color and arrowhead, width by weight, absent edges hidden, drop-out arcs
   long-dashed and single-replicate arcs dotted). `crossfeed style` writes the style as a file instead.
   Cytoscape not running is reported with the port, never as a traceback. No new dependency.
-=======
 - The no-growth rule (#37): before any ratio, a species counts as grown in a replicate set only when its
   rise from the first time point, log2(maximum / start) per replicate with each maximum at its own time,
   is significant (paired t-test, alpha 0.05) or reaches 1.5 times as a geometric mean. A set that did not
@@ -122,7 +119,6 @@ tagged version is never reused for changed content.
   near-zero quantities. Both numbers are settings (`--no-growth-alpha`, `--no-growth-factor`, and the
   advanced settings on the local page), and `meta.no_growth` records them with the obligate and abolished
   counts. In SMGDB00000013 this makes Comamonas to Ochrobactrum obligate.
->>>>>>> origin/no-growth-rule
 - A pluggable derivation seam (`crossfeed.derive.Deriver`): the comparison method is a drop-in strategy,
   with the provisional `BaselineDeriver` as one implementation. The agreed method arrives as another
   `Deriver` without touching the model or the pipeline.

@@ -12,6 +12,7 @@ Checks:
   6. schema-contract  the shipped JSON Schema matches the code, and emitted networks validate against it
   7. claims          the docs a stranger reads name the deriver the code actually defaults to, and do not
                      restate a claim that has been corrected (see checks/claims_check.py)
+  8. merge-markers    no leftover conflict markers from a merge (one once reached the changelog unseen)
 
 Tests run separately (pytest), in CI and from the pre-commit hook.
 """
@@ -42,6 +43,9 @@ BRITISH = re.compile(
 )
 # em/en dash anywhere; a spaced hyphen used as a dash BETWEEN tokens (not a markdown list marker)
 DASH = re.compile(r"[–—]|(?<=\S) -- (?=\S)|(?<=\S) - (?=\S)")
+
+# a conflict's opening or closing line; a bare ======= alone is left alone (a Markdown heading underline)
+MERGE_MARKER = re.compile(r"^(?:<{7}|>{7})(?: |$)", re.M)
 
 STDLIB = set(getattr(sys, "stdlib_module_names", set())) | {"__future__"}
 
@@ -222,6 +226,15 @@ def check_claims(_rels):
     return problems
 
 
+def check_merge_markers(rels):
+    bad = []
+    for rel in rels:
+        text = _read(rel) if rel.endswith(TEXT_EXT) or "." not in os.path.basename(rel) else None
+        for m in MERGE_MARKER.finditer(text or ""):
+            bad.append(f"conflict marker left from a merge in {rel}, line {text.count(chr(10), 0, m.start()) + 1}")
+    return bad
+
+
 CHECKS = [
     ("secrets", check_secrets),
     ("no-raw-data", check_no_raw_data),
@@ -230,6 +243,7 @@ CHECKS = [
     ("house-style", check_house_style),
     ("schema-contract", check_schema_contract),
     ("claims", check_claims),
+    ("merge-markers", check_merge_markers),
 ]
 
 
