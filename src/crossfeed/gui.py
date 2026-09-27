@@ -28,6 +28,9 @@ from .mgrowthdb import MGrowthDBError, records_to_network
 from .taxonomy import resolve_species, species_index
 
 TITLE = "crossfeed"
+# species that derive a non-empty network, for the Example button (Karoline's proposal, #73). The first is
+# taxon 411483, which mGrowthDB holds under both its names after the 2022 reclassification.
+EXAMPLE = ("Faecalibacterium duncaniae", "Blautia hydrogenotrophica")
 DEFAULTS = {"metric": "auc", "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
             "include_low_quality": False, "correction": "bh", "include_dropout": True, "studies": "",
             "only_entered": True}
@@ -48,7 +51,8 @@ CSS = """
 body { font: 16px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 52rem; padding: 2rem 1rem; }
 h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 2rem; }
 textarea, input, select { font: inherit; } textarea { width: 100%; }
-button { font: inherit; padding: 0.4rem 1.2rem; margin-top: 0.8rem; }
+button, .button { font: inherit; padding: 0.4rem 1.2rem; margin-top: 0.8rem; display: inline-block; }
+.button { text-decoration: none; border: 1px solid #999; border-radius: 4px; color: inherit; }
 table { border-collapse: collapse; width: 100%; margin-top: 0.5rem; }
 th, td { border-bottom: 1px solid #ddd; padding: 0.3rem 0.5rem; text-align: left; vertical-align: top; }
 details { margin-top: 1rem; } summary { cursor: pointer; }
@@ -119,9 +123,36 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
 >{_esc(entries)}</textarea>
 {_settings_block(settings or {})}
 <button type="submit">Find interactions</button>
+<button type="submit" name="example" value="1">Example</button>
+<a class="button" href="/help?token={_esc(token)}">Help</a>
 </form>
 <p class="muted">Interactions are derived from mGrowthDB growth data on this machine. Nothing is uploaded.</p>
 <p><a href="/legend?token={_esc(token)}">What the arcs mean</a></p>""")
+
+
+HELP = f"""<h1>Help</h1>
+<h2>What this does</h2>
+<p>Type species names, one per line, or NCBI taxon ids. crossfeed looks them up in mGrowthDB, reads the
+growth curves of every study that holds them, and derives the interactions between them on this machine.
+Nothing is uploaded, and nothing is written outside the file you download.</p>
+<h2>Try it</h2>
+<p>The Example button fills the box with {" and ".join(EXAMPLE)}, a pair with enough data to show a
+result.</p>
+<h2>Reading the result</h2>
+<p>Each row is one directed interaction: a source species, the species it affects, the direction, and the
+mean log2 difference with its standard deviation. An interaction counts as present when the effect is at
+least k standard deviations of its own spread, with k the absence threshold in Advanced settings. The
+adjusted p-value is shown as support and decides nothing.</p>
+<p><a href="/legend?token={{token}}">The legend</a> explains every line, arrowhead and flag, and is the
+same vocabulary the Cytoscape style draws.</p>
+<h2>Settings</h2>
+<p>Everything behind "Advanced settings" has a sensible default; each one says what it does next to it.
+The README in the repository documents them in full, together with the method.</p>"""
+
+
+def render_help(token: str) -> str:
+    return _page(HELP.replace("{token}", _esc(token))
+                 + f"<p><a href=\"/?token={_esc(token)}\">Back</a></p>")
 
 
 HEADER = ("<tr><th>source</th><th>affects</th><th>direction</th><th>log2 mean &plusmn; sd</th>"
@@ -282,8 +313,12 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         except MGrowthDBError as e:
             errors.append(f"search failed: {e}")
 
-    # a species name resolves to every strain of that species, so edges are kept by the species key
+    # A species name resolves to every strain of that species, and a strain keeps its taxon id across the
+    # renamings mGrowthDB records (411483 is Faecalibacterium prausnitzii A2-165 in one study and
+    # Faecalibacterium duncaniae A2-165 in others), so an edge is kept when either matches. Matching names
+    # alone dropped every edge for a name the study does not use (#73).
     wanted = {genus_species(name) for _, matches in resolved["resolved"] for name in matches.values()}
+    wanted_ids = {str(taxon) for taxon in resolved["taxon_ids"]}
     for study_id in studies:
         try:
             recs, skips = derive_interactions(client, study_id, metric=s["metric"],
@@ -292,8 +327,11 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
             errors.append(f"{study_id}: {e}")
             continue
         if s["only_entered"]:
-            recs = [r for r in recs if r.get("source_species", r["source"]) in wanted
-                    and r.get("target_species", r["target"]) in wanted]
+            def entered(record, side):
+                return (record.get(f"{side}_taxon_id") in wanted_ids
+                        or record.get(f"{side}_species", record[side]) in wanted)
+
+            recs = [r for r in recs if entered(r, "source") and entered(r, "target")]
         records += recs
         skipped += skips
 
@@ -339,6 +377,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         if parsed.path == "/":
             self._send(render_form(self.token))
+        elif parsed.path == "/help":
+            self._send(render_help(self.token))
         elif parsed.path == "/legend":
             self._send(legend_page(self.token))
         elif parsed.path in ("/download.json", "/download.graphml"):
@@ -361,6 +401,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         form = urllib.parse.parse_qs(self.rfile.read(length).decode("utf-8"))
         entries = form.get("species", [""])[0].splitlines()
         settings = parse_settings(form)
+        if form.get("example"):
+            self._send(render_form(self.token, "\n".join(EXAMPLE), settings))
+            return
         if not [e for e in entries if e.strip()]:
             self._send(render_form(self.token, settings=settings, message="Type at least one species."))
             return

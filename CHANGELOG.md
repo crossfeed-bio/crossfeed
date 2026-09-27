@@ -7,6 +7,9 @@ tagged version is never reused for changed content.
 ## [0.0.2] (unreleased)
 
 ### Added
+- The local page gained an Example button, which fills the species box with a pair that derives a network
+  (Faecalibacterium duncaniae and Blautia hydrogenotrophica), and a Help button opening a help page that
+  explains what the tool does, how to read a result, and links the legend (#73).
 - A legend (`docs/legend.svg`, `make legend`, and "What the arcs mean" on the local page): one picture of
   what each arc, head, dash and flag means. It is drawn from the code, and a test requires it to name every
   value in the model's vocabulary, so it cannot drift from what the network shows.
@@ -98,6 +101,9 @@ tagged version is never reused for changed content.
   unused `requests` dependency was dropped.
 
 ### Fixed
+- "Only interactions between the species entered" no longer drops every edge when a study records a strain
+  under another name: a species entered as Faecalibacterium duncaniae now matches the same taxon recorded
+  as Faecalibacterium prausnitzii, because the filter matches taxon ids as well as names (#73).
 - The spike guard no longer mistakes a die-off or late growth for a spike (#62). It compared a curve's
   maximum with its median, which flagged curves spanning several orders of magnitude (22 curves in
   SMGDB00000013, 7 in SMGDB00000014, 2 in SMGDB00000004) and emptied whole replicate sets. A spike is now
