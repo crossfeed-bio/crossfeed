@@ -56,7 +56,8 @@ def _derive(a):
         try:
             records, skipped = derive_interactions(MGrowthDBClient(), a.study, deriver=deriver,
                                                    metric=a.metric, spike_factor=a.spike_factor,
-                                                   dropout=not a.no_dropout)
+                                                   dropout=not a.no_dropout,
+                                                   include_non_batch=a.include_non_batch)
             records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold)
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
@@ -153,6 +154,9 @@ def main(argv=None):
     d.add_argument("--no-dropout", action="store_true",
                    help="leave out arcs from drop-out designs (a community against the same community without "
                         "one member); included by default, labeled evidence dropout")
+    d.add_argument("--include-non-batch", action="store_true",
+                   help="also derive from chemostat and serial dilution experiments (excluded by default: "
+                        "a continuous-culture curve is not comparable with a batch one)")
     d.add_argument("--absence-threshold", type=float, default=1.0, metavar="K",
                    help="an edge is absent when |log2 mean| < K * sd (default 1, the mean plus or minus sd rule; "
                         "0 marks nothing absent)")

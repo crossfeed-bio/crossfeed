@@ -239,6 +239,11 @@ Continuous culture and serial dilution are different growth regimes from a batch
 **Proposed default (Craig): flag and keep separate from batch.** The regimes are not obviously comparable,
 so pooling them is a decision to make on purpose.
 
+BUILT 2026-09-27 (#42, Karoline): only batch is derived by default; other modes, and a missing mode, are
+reported with the mode and left out. `--include-non-batch` derives them with the edges flagged
+`non_batch`, which is hidden by default like the other quality flags. Every edge carries
+`cultivation_mode`.
+
 ## 13. Output format
 
 - **JSON** [baseline]: the canonical neutral network, what the whole pipeline reads and writes.

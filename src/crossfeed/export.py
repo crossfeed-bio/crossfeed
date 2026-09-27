@@ -47,6 +47,7 @@ _KEYS = [
     ("e_community", "edge", "community", "string"),
     ("e_cautions", "edge", "cautions", "string"),
     ("e_experiments", "edge", "experiments", "string"),
+    ("e_cultivation_mode", "edge", "cultivation_mode", "string"),
 ]
 
 
@@ -112,6 +113,7 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(ed, "e_community", " ".join(e.community))
         _data(ed, "e_cautions", " ".join(e.cautions))
         _data(ed, "e_experiments", " ".join(e.experiments))
+        _data(ed, "e_cultivation_mode", e.cultivation_mode)
 
     if pretty:
         ET.indent(root)
