@@ -18,10 +18,19 @@ MGROWTHDB = "https://mgrowthdb.gbiomed.kuleuven.be"
 
 # key in gui.DEFAULTS -> (label on the page, command line flag, what it does and when to change it)
 SETTINGS = {
-    "metric": ("Growth measure", "--metric auc|max",
+    "metric": ("Growth measure", "--metric auc|max|growth_rate",
                "The growth property compared with and without the partner. The area under the curve (auc, "
                "the default) combines lag, rate and yield in one number; the maximal abundance (max) keeps "
-               "yield only."),
+               "yield only; growth_rate is the maximum specific growth rate, set by the two settings below."),
+    "rate_method": ("Growth rate method", "--rate-method easylinear|baranyi",
+                    "Used with growth_rate. easylinear (the default) fits straight lines to log abundance over "
+                    "sliding windows and takes the steepest part, as mGrowthDB computes the rates it reports "
+                    "(it matched them on 190 of 192 curves within 10%). baranyi fits the Baranyi-Roberts growth "
+                    "model to the whole curve; a curve it does not describe (for example one that declines "
+                    "after its peak) is left out and reported, never given another number."),
+    "rate_window": ("Growth rate window", "--rate-window N",
+                    "Used with easylinear: how many consecutive points each fitted line spans. 5, the default, "
+                    "is what mGrowthDB uses; fewer points follow noise, more flatten the steepest part."),
     "include_low_quality": ("Show low-quality edges", "--include-low-quality",
                             "Low-quality edges carry a quality flag (pooled strains, a chemostat curve, a "
                             "drop-out whose removed member was still detected). They are computed but not "

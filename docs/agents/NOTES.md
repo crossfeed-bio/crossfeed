@@ -241,6 +241,19 @@ QUALITY_FLAGS, CAUTIONS, EVIDENCE and STATUSES, and the shipped file to equal wh
 flag therefore means adding a line to the legend, the same way Craig's viewer guard works (#57). The dash
 patterns are the ones the Cytoscape style will use (#25): long dashes for drop-out evidence, dots for a
 single replicate.
+## Growth rate metric (#41, built 2026-09-27)
+
+`crossfeed.rates`: `easylinear` reimplements growthrates' fit_easylinear (windows of h points starting at
+points 1 to N minus h, steepest slope, widened to every window within quota 0.95 of it, refit), and matched mGrowthDB's
+reported growthRate on 190 of 192 curves within 10% (SMGDB00000002, 4, 7, 13; median ratio 1.00 each);
+keeping growthrates' loop, which skips the last possible window, matched better on study 13. `baranyi` is the prototype's
+guarded Levenberg-Marquardt fit (multi-start, mu within 5x the steepest slope, R2 >= 0.9); a rejected fit
+raises `RateUnavailable`, and `interaction._log_values` leaves that replicate out with the reason, never
+as no growth. Metric names carry the rule: "growth_rate:easylinear:5", "growth_rate:baranyi"
+(`gui.metric_name`, `rates.method_name`). Karoline decided the implementations on #41 (2026-09-19) and
+asked for the implementation as its own option (2026-09-27); easylinear is the default because it
+reproduces mGrowthDB's numbers.
+
 ## Speed: parallel prefetch (2026-09-27)
 
 Nearly all of a search's time was waiting on requests made one after another (about 100 ms each; 839 for

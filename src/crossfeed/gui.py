@@ -20,7 +20,7 @@ import urllib.parse
 import webbrowser
 from collections import Counter
 
-from . import __version__, brand, interaction
+from . import __version__, brand, interaction, rates
 from . import help as help_page
 from .attribution import studies_with_edges
 from .cytoscape import CytoscapeError, send
@@ -36,9 +36,22 @@ TITLE = brand.NAME
 # species that derive a non-empty network, for the Example button (Karoline's proposal, #73). The first is
 # taxon 411483, which mGrowthDB holds under both its names after the 2022 reclassification.
 EXAMPLE = ("Faecalibacterium duncaniae", "Blautia hydrogenotrophica")
+METRICS = ("auc", "max", "growth_rate")
+
+
+def metric_name(s: dict) -> str:
+    """The metric a derivation runs on: auc, max, or the growth rate with its rule
+    ("growth_rate:easylinear:5"), which is also what each edge records (#41)."""
+    if s.get("metric") == "growth_rate":
+        return rates.method_name(s.get("rate_method", rates.DEFAULT_METHOD),
+                                 s.get("rate_window", rates.DEFAULT_WINDOW))
+    return s.get("metric", "auc")
+
+
 # one of each kind the box takes, shown above it (the box itself starts empty; Karoline, 2026-09-27)
 INPUT_EXAMPLES = ("Blautia hydrogenotrophica", "Faecalibacterium duncaniae A2-165", "411483")
-DEFAULTS = {"metric": "auc", "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
+DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window": rates.DEFAULT_WINDOW,
+            "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
             "include_low_quality": False, "correction": "bh", "include_dropout": True,
             "include_non_batch": False, "studies": "", "exclude_studies": "", "only_entered": True,
             # None: the no-growth rule's own defaults, read when used (crossfeed.interaction.grew)
@@ -93,12 +106,23 @@ def _settings_block(settings: dict) -> str:
     corrections = "".join(f"<option value=\"{c}\"{' selected' if s['correction'] == c else ''}>{label}</option>"
                           for c, label in (("bh", "Benjamini-Hochberg"), ("by", "Benjamini-Yekutieli")))
     options = "".join(f"<option value=\"{m}\"{' selected' if s['metric'] == m else ''}>{m}</option>"
-                      for m in ("auc", "max"))
+                      for m in METRICS)
+    rate_methods = "".join(f"<option value=\"{m}\"{' selected' if s['rate_method'] == m else ''}>{m}</option>"
+                           for m in rates.METHODS)
     return f"""<details>
 <summary>Advanced settings</summary>
 <div class="row"><label>Growth measure
   <select name="metric">{options}</select></label>
-  <span class="muted">the growth property compared: area under the curve (default) or maximal abundance</span></div>
+  <span class="muted">the growth property compared: auc, the area under the curve (default); max, the maximal
+  abundance; or growth_rate, the maximum specific growth rate</span></div>
+<div class="row"><label>Growth rate method
+  <select name="rate_method">{rate_methods}</select></label>
+  <span class="muted">with growth_rate: easylinear (default), the steepest part of the log curve, as mGrowthDB
+  computes the rates it reports; or baranyi, a fitted growth model, where a curve the model does not describe
+  is left out and reported</span></div>
+<div class="row"><label>Growth rate window
+  <input name="rate_window" type="text" size="6" value="{_esc(s['rate_window'])}"></label>
+  <span class="muted">with easylinear: the points in each fitted window (default 5, as mGrowthDB)</span></div>
 <div class="row"><label><input type="checkbox" name="include_low_quality" value="1"{low}>
   Show low-quality edges</label>
   <span class="muted">pooled strains or an unclean drop-out; single-replicate edges are always shown,
@@ -380,8 +404,15 @@ def parse_settings(form: dict) -> dict:
     """Settings from the posted form, falling back to the defaults for anything missing or unreadable."""
     settings = dict(DEFAULTS)
     metric = form.get("metric", [""])[0]
-    if metric in ("auc", "max"):
+    if metric in METRICS:
         settings["metric"] = metric
+    rate_method = form.get("rate_method", [""])[0]
+    if rate_method in rates.METHODS:
+        settings["rate_method"] = rate_method
+    try:
+        settings["rate_window"] = max(2, int(form.get("rate_window", [""])[0]))
+    except ValueError:
+        pass
     try:
         settings["spike_factor"] = abs(float(form.get("spike_factor", [""])[0]))
     except ValueError:
@@ -453,7 +484,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     for i, study_id in enumerate(studies):
         say(i, len(studies), f"Reading {study_id} ({i + 1} of {len(studies)})")
         try:
-            recs, skips = derive_interactions(client, study_id, metric=s["metric"],
+            recs, skips = derive_interactions(client, study_id, metric=metric_name(s),
                                               spike_factor=s["spike_factor"], dropout=s["include_dropout"],
                                               include_non_batch=s["include_non_batch"],
                                               no_growth_alpha=s["no_growth_alpha"],

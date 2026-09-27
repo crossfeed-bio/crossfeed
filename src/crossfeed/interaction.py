@@ -44,12 +44,12 @@ from __future__ import annotations
 import math
 import statistics
 
+from . import rates
 from .growth import (
     FEATURES,
     SPIKE_FACTOR,
     check_replicate_sets,
     check_sets,
-    curve_features,
     cut,
     shared_window,
     spike,
@@ -80,14 +80,27 @@ NO_GROWTH_TEST = ("paired two-sided t-test of log2(maximum / first time point) p
                   "each replicate's maximum is taken at its own time")
 
 
+def _feature(method: str):
+    """The (times, values) -> number function behind a metric name: auc, max, or a growth rate
+    ("growth_rate:easylinear:5", "growth_rate:baranyi"; crossfeed.rates)."""
+    if method in FEATURES:
+        return FEATURES[method]
+    rate = rates.feature(method)
+    if rate is None:
+        raise ValueError(f"unknown method {method!r}; choose one of {sorted(FEATURES)} or a growth rate")
+    return rate
+
+
 def _check_method(method: str) -> None:
-    if method not in FEATURES:
-        raise ValueError(f"unknown method {method!r}; choose one of {sorted(FEATURES)}")
+    _feature(method)
 
 
 def _property(end: float, method: str):
+    fn = _feature(method)
+
     def prop(rep, species):
-        return curve_features(rep.curve(species), end)[method]
+        # only the metric asked for is computed: a Baranyi fit costs milliseconds per curve
+        return fn(*cut(rep.curve(species), end))
     return prop
 
 
@@ -118,7 +131,13 @@ def _log_values(reps, species, role, prop, method, skipped, spike_factor=SPIKE_F
                 flagged.append({"species": species, "role": role, "replicate": rep.name or str(i),
                                 "ratio": found["ratio"], "times": found["times"]})
             continue
-        value = prop(rep, species)
+        try:
+            value = prop(rep, species)
+        except rates.RateUnavailable as e:
+            # no growth rate for this curve (too few points, a rejected fit): left out and reported, never
+            # replaced by another number, and not read as no growth (#41)
+            skipped.append((label, f"no growth rate: {e}"))
+            continue
         if value <= 0:
             skipped.append((label, f"non-positive {method} ({value:g})"))
             if no_growth is not None:

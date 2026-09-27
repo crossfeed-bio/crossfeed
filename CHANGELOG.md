@@ -27,6 +27,11 @@ tagged version is never reused for changed content.
   (the species do not affect each other), and the no-growth settings say they test the replicate growth
   curves of one species in one culture condition. A new setting, Exclude these studies
   (`--exclude-studies` with `--species`), leaves the listed studies out of a search; empty by default.
+- Growth rate as a metric (#41): `--metric growth_rate` and the Growth measure setting, with the
+  implementation as its own setting (`--rate-method`): easylinear by default, as mGrowthDB computes its
+  reported rates (it matched them on 190 of 192 curves within 10%), window 5 (`--rate-window`); or a
+  guarded Baranyi fit, where a curve the model does not describe is left out and reported. The edge's
+  metric names the rule (`growth_rate:easylinear:5`). The default for interactions stays auc.
 - Faster: the Example search takes about 10 s from a cold start instead of 84 s, and about 4.5 s for a
   later search in the same session instead of 25 s. Nearly all the time was requests made one after
   another; they are now made six at a time over kept-open connections (`crossfeed.fetch`), and the

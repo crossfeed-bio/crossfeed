@@ -59,6 +59,11 @@ def _load_deriver(spec):
     return obj() if isinstance(obj, type) else obj
 
 
+def _metric(a) -> str:
+    from .gui import metric_name
+    return metric_name({"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window})
+
+
 def _derive(a):
     if a.species:
         return _derive_species(a)
@@ -77,14 +82,15 @@ def _derive(a):
         client = MGrowthDBClient()
         try:
             records, skipped = derive_interactions(client, a.study, deriver=deriver,
-                                                   metric=a.metric, spike_factor=a.spike_factor,
+                                                   metric=_metric(a), spike_factor=a.spike_factor,
                                                    dropout=not a.no_dropout,
                                                    include_non_batch=a.include_non_batch,
                                                    no_growth_alpha=a.no_growth_alpha,
                                                    no_growth_factor=a.no_growth_factor)
             records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold,
                                          a.no_growth_alpha, a.no_growth_factor)
-            extra["settings"] = {"metric": a.metric, "spike_factor": a.spike_factor,
+            extra["settings"] = {"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
+                                 "spike_factor": a.spike_factor,
                                  "absence_threshold": a.absence_threshold,
                                  "include_low_quality": a.include_low_quality, "correction": a.correction,
                                  "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
@@ -118,7 +124,8 @@ def _derive_species(a):
         return 2
     from .gui import DEFAULTS, run_query
     from .mgrowthdb import MGrowthDBClient
-    settings = {**DEFAULTS, "metric": a.metric, "spike_factor": a.spike_factor,
+    settings = {**DEFAULTS, "metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
+                "spike_factor": a.spike_factor,
                 "absence_threshold": a.absence_threshold, "include_low_quality": a.include_low_quality,
                 "correction": a.correction, "include_dropout": not a.no_dropout,
                 "include_non_batch": a.include_non_batch, "studies": a.study or "",
@@ -285,9 +292,15 @@ def build_parser() -> argparse.ArgumentParser:
                            "--live)")
 
     settings = d.add_argument_group("settings (the local page's Advanced settings)")
-    settings.add_argument("--metric", choices=["auc", "max"], default="auc",
-                          help="the growth property compared: auc, the area under the curve (default), or max, "
-                               "the maximal abundance")
+    settings.add_argument("--rate-method", choices=["easylinear", "baranyi"], default="easylinear",
+                          help="with --metric growth_rate: easylinear (default), the steepest part of the log "
+                               "curve as mGrowthDB computes its reported rates, or baranyi, a fitted growth "
+                               "model; a curve the model does not describe is left out and reported")
+    settings.add_argument("--rate-window", type=int, default=5, metavar="N",
+                          help="with easylinear: the points in each fitted window (default 5, as mGrowthDB)")
+    settings.add_argument("--metric", choices=["auc", "max", "growth_rate"], default="auc",
+                          help="the growth property compared: auc, the area under the curve (default); max, the "
+                               "maximal abundance; or growth_rate, the maximum specific growth rate")
     settings.add_argument("--include-low-quality", action="store_true",
                           help="also show low-quality interactions (pooled strains, a chemostat curve, a "
                                "drop-out whose removed member was still detected); single-replicate ones are "

@@ -159,10 +159,12 @@ def test_form_hides_every_setting_behind_one_button():
 @pytest.mark.parametrize("form, expected", [
     # an unticked checkbox is simply absent from a post
     ({}, {**DEFAULTS, "only_entered": False, "include_dropout": False}),
-    ({"metric": ["max"], "spike_factor": ["50"], "studies": [" S1 "], "only_entered": ["1"],
+    ({"metric": ["growth_rate"], "rate_method": ["baranyi"], "rate_window": ["7"], "spike_factor": ["50"],
+      "studies": [" S1 "], "only_entered": ["1"],
       "include_low_quality": ["1"], "include_dropout": ["1"], "no_growth_alpha": ["0.01"],
       "no_growth_factor": ["4"], "exclude_studies": [" SMGDB00000008 "]},
-     {"metric": "max", "spike_factor": 50.0, "studies": "S1", "only_entered": True, "include_low_quality": True,
+     {"metric": "growth_rate", "rate_method": "baranyi", "rate_window": 7, "spike_factor": 50.0, "studies": "S1",
+      "only_entered": True, "include_low_quality": True,
       "correction": "bh", "absence_threshold": 1.0, "include_dropout": True, "include_non_batch": False,
       "no_growth_alpha": 0.01, "no_growth_factor": 4.0, "exclude_studies": "SMGDB00000008"}),
     ({"metric": ["nonsense"], "spike_factor": ["not a number"]},
