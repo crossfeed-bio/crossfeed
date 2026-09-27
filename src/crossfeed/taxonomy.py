@@ -31,12 +31,35 @@ def _strain_entries(exp: dict):
             yield name, int(taxon)
 
 
-def species_index(client, max_studies: int = MAX_STUDIES) -> dict:
+def species_index(client, max_studies: int = MAX_STUDIES, progress=None) -> dict:
     """Map a genus and species key to {taxon id: a name seen for it}, crawled from mGrowthDB.
 
-    Study ids are consecutive, so the crawl walks them and stops after MISS_RUN absent ids in a row. A
-    study or experiment that cannot be read is skipped: a partial index is more useful than no index.
+    Study ids are consecutive, so the crawl walks them and stops after MISS_RUN absent ids in a row. The
+    studies and their experiments are read in parallel (`crossfeed.fetch`), then walked in id order, so the
+    first name seen for a taxon is the same as a one-by-one crawl would keep. A study or experiment that
+    cannot be read is skipped: a partial index is more useful than no index.
     """
+    from .fetch import _each, study_ids_in_order
+
+    if not (hasattr(client, "get_study") and hasattr(client, "get_experiment")):
+        return _species_index_one_by_one(client, max_studies)
+    ids = study_ids_in_order(client, STUDY_ID, max_studies, MISS_RUN)
+    experiment_ids = [e["id"] for sid in ids for e in (client.get_study(sid) or {}).get("experiments", [])]
+    _each(client.get_experiment, experiment_ids, progress, "Reading the species list of mGrowthDB")
+    index = {}
+    for sid in ids:
+        try:
+            experiments = client.study_experiments(sid)       # from the cache the parallel reads filled
+        except Exception:      # noqa: BLE001 - one unreadable study is skipped, the rest still count
+            continue
+        for exp in experiments:
+            for name, taxon in _strain_entries(exp):
+                index.setdefault(genus_species(name), {}).setdefault(taxon, name)
+    return index
+
+
+def _species_index_one_by_one(client, max_studies: int) -> dict:
+    """The crawl for a client that only lists a study's experiments (as test doubles do)."""
     index, misses = {}, 0
     for n in range(1, max_studies + 1):
         if misses >= MISS_RUN:

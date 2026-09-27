@@ -444,6 +444,10 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # renamings mGrowthDB records (411483 is Faecalibacterium prausnitzii A2-165 in one study and
     # Faecalibacterium duncaniae A2-165 in others), so an edge is kept when either matches. Matching names
     # alone dropped every edge for a name the study does not use (#73).
+    # read everything the derivation will read, a few requests at a time, before deriving (crossfeed.fetch)
+    from .fetch import prefetch_studies
+    prefetch_studies(client, studies, s["include_non_batch"], progress=lambda d, t, m: say(d, t, m))
+
     wanted = {genus_species(name) for _, matches in resolved["resolved"] for name in matches.values()}
     wanted_ids = {str(taxon) for taxon in resolved["taxon_ids"]}
     for i, study_id in enumerate(studies):
@@ -594,7 +598,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 if self.state.get("index") is None:
                     # the species list of all of mGrowthDB: slow to build, so built once per session
                     progress(0, None, "Reading the species list of mGrowthDB (the first search only)")
-                    self.state["index"] = species_index(client)
+                    self.state["index"] = species_index(client, progress=progress)
                 job["result"] = run_query(client, entries, settings, self.state["index"], progress=progress)
                 job["status"] = "done"
             except MGrowthDBError as e:

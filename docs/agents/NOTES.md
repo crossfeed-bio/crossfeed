@@ -241,6 +241,19 @@ QUALITY_FLAGS, CAUTIONS, EVIDENCE and STATUSES, and the shipped file to equal wh
 flag therefore means adding a line to the legend, the same way Craig's viewer guard works (#57). The dash
 patterns are the ones the Cytoscape style will use (#25): long dashes for drop-out evidence, dots for a
 single replicate.
+## Speed: parallel prefetch (2026-09-27)
+
+Nearly all of a search's time was waiting on requests made one after another (about 100 ms each; 839 for
+a cold Example). `crossfeed.fetch.prefetch_studies` reads, WORKERS (6) at a time, exactly what the
+derivation will read (study, experiments, batch-only bioreplicates, one series per strain context) into
+the client's in-memory cache; the derivation then runs unchanged. `species_index` crawls the same way and
+walks the results in id order, so the first name seen per taxon is unchanged. The client keeps one
+connection open per thread (`_connection`, `_send`) and retries JSON and CSV through one path
+(`_request`). Verified against the sequential version on all studies: identical records, skip reasons and
+index. A cache across sessions was ruled out: mGrowthDB shows only a study's latest version, and its change
+history is not in the API, so a stored copy cannot tell it is stale (Karoline). A test double without
+`get_study` and friends gets the one-by-one path (`fetch.can_prefetch`).
+
 ## Cytoscape (CyREST) quirks
 
 - Applying a style or a layout is a GET (`/v1/apply/styles/{name}/{suid}`, `/v1/apply/layouts/...`); a

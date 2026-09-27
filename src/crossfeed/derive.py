@@ -911,6 +911,10 @@ def derive_interactions(client: MGrowthDBClient, study_id: str, deriver: Deriver
                                          no_growth_factor=no_growth_factor)
     if getattr(deriver, "needs_client", False) and getattr(deriver, "client", None) is None:
         deriver.client = client
+    if getattr(deriver, "needs_client", False):
+        # read the study's growth curves in parallel first; the derivation then finds them cached
+        from .fetch import prefetch_studies
+        prefetch_studies(deriver.client, [study_id], include_non_batch)
     study = dict(client.get_study(study_id))
     study.setdefault("id", study_id)
     exps = [client.get_experiment(e["id"]) for e in study.get("experiments", [])]

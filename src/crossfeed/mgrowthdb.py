@@ -19,9 +19,11 @@ from __future__ import annotations
 import csv
 import datetime
 import hashlib
+import http.client
 import io
 import json
 import os
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -38,6 +40,18 @@ API_DOCS = "https://mgrowthdb.readthedocs.io/en/latest/api.html"
 
 class MGrowthDBError(RuntimeError):
     """A failed mGrowthDB request: a bad id, a network error, or the API being unreachable."""
+
+
+class _Status(Exception):
+    """An HTTP error status from mGrowthDB, raised by `_send` for the retry logic to judge."""
+
+    def __init__(self, code: int, reason: str = ""):
+        super().__init__(f"{code} {reason}".strip())
+        self.code = code
+
+
+# what a dropped or refused connection raises below urllib: retried like a network error
+_NETWORK = (OSError, http.client.HTTPException)
 
 
 class MGrowthDBClient:
@@ -60,6 +74,11 @@ class MGrowthDBClient:
         self.backoff = max(0.0, float(backoff))
         self._mem = {} if cache else None
         self.cache_dir = cache_dir
+        # one kept-open connection per thread: a new HTTPS connection per request cost about 120 ms against
+        # 55 ms on an open one, and the parallel prefetch (crossfeed.fetch) gives each worker its own
+        self._local = threading.local()
+        parsed = urllib.parse.urlsplit(self.base_url)
+        self._scheme, self._host, self._prefix = parsed.scheme, parsed.netloc, parsed.path
         if cache_dir:
             os.makedirs(cache_dir, exist_ok=True)
 
@@ -93,24 +112,63 @@ class MGrowthDBClient:
             except OSError:
                 pass
 
+    def _connection(self, fresh: bool = False):
+        conn = getattr(self._local, "conn", None)
+        if fresh or conn is None:
+            if conn is not None:
+                conn.close()
+            kind = http.client.HTTPSConnection if self._scheme == "https" else http.client.HTTPConnection
+            conn = self._local.conn = kind(self._host, timeout=self.timeout)
+        return conn
+
+    def _send(self, url: str, accept: str) -> bytes:
+        """One request over this thread's open connection, reopened once if the server dropped it."""
+        path = url[len(f"{self._scheme}://{self._host}"):] if url.startswith(f"{self._scheme}://") else url
+        headers = {"Accept": accept, "User-Agent": f"crossfeed/{__version__}", "Connection": "keep-alive"}
+        for attempt in (0, 1):
+            conn = self._connection(fresh=attempt == 1)
+            try:
+                conn.request("GET", path, headers=headers)
+                response = conn.getresponse()
+                body = response.read()
+            except _NETWORK:
+                if attempt == 1:
+                    raise
+                continue                          # a kept-open connection the server had closed: reopen
+            if response.status >= 400:
+                raise _Status(response.status, response.reason)
+            return body
+        raise OSError("unreachable")               # not reached
+
+    def _request(self, url: str, accept: str) -> bytes:
+        """`_send` with the retry rule: a 4xx is a real error (a bad id) and is not retried; a 5xx or a
+        network failure may be transient and is retried with a growing pause. JSON and CSV alike."""
+        last = None
+        for attempt in range(self.retries):
+            try:
+                return self._send(url, accept)
+            except _Status as e:
+                if e.code < 500:
+                    raise MGrowthDBError(
+                        f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})"
+                    ) from None
+                last = MGrowthDBError(f"mGrowthDB returned HTTP {e.code} for {url} (server error)")
+            except _NETWORK as e:
+                last = MGrowthDBError(
+                    f"could not reach mGrowthDB at {url}: {getattr(e, 'reason', e) or type(e).__name__} "
+                    "(check your network; the API may be temporarily down)"
+                )
+            if attempt < self.retries - 1:
+                time.sleep(self.backoff * (attempt + 1))
+        raise last
+
     def _get_text(self, path: str) -> str:
         """Fetch a non-JSON representation (the CSV of a measurement context), cached like the rest."""
         url = f"{self.base_url}/{path.lstrip('/')}"
         cached = self._cache_get(url)
         if cached is not None:
             return cached
-        req = urllib.request.Request(
-            url, headers={"Accept": "text/csv", "User-Agent": f"crossfeed/{__version__}"}
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                text = r.read().decode("utf-8")
-        except urllib.error.HTTPError as e:
-            raise MGrowthDBError(
-                f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})"
-            ) from e
-        except urllib.error.URLError as e:
-            raise MGrowthDBError(f"could not reach mGrowthDB at {url}: {e.reason}") from e
+        text = self._request(url, "text/csv").decode("utf-8")
         self._cache_put(url, text)
         return text
 
@@ -120,36 +178,12 @@ class MGrowthDBClient:
             clean = {k: v for k, v in params.items() if v is not None}
             if clean:
                 url += "?" + urllib.parse.urlencode(clean, doseq=True)
-
         cached = self._cache_get(url)
         if cached is not None:
             return cached
-
-        req = urllib.request.Request(
-            url, headers={"Accept": "application/json", "User-Agent": f"crossfeed/{__version__}"}
-        )
-        last = None
-        for attempt in range(self.retries):
-            try:
-                with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                    data = json.load(r)
-                self._cache_put(url, data)
-                return data
-            except urllib.error.HTTPError as e:
-                # 4xx are real errors (a bad id): do not retry. 5xx may be transient: retry.
-                if e.code < 500:
-                    raise MGrowthDBError(
-                        f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})"
-                    ) from e
-                last = MGrowthDBError(f"mGrowthDB returned HTTP {e.code} for {url} (server error)")
-            except urllib.error.URLError as e:
-                last = MGrowthDBError(
-                    f"could not reach mGrowthDB at {url}: {e.reason} "
-                    "(check your network; the API may be temporarily down)"
-                )
-            if attempt < self.retries - 1:
-                time.sleep(self.backoff * (attempt + 1))
-        raise last
+        data = json.loads(self._request(url, "application/json").decode("utf-8"))
+        self._cache_put(url, data)
+        return data
 
     def get_study(self, study_id: str) -> dict:
         """Study metadata: id, name, projectId, description, publishedAt, experiments[{id, name}]."""

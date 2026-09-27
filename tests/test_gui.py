@@ -363,7 +363,7 @@ def test_the_species_list_is_built_once_per_session(server, monkeypatch):
     # building the index reads every study in mGrowthDB (about 40 s live); a second search reuses it
     calls = []
     original = gui.species_index
-    monkeypatch.setattr(gui, "species_index", lambda client: calls.append(1) or original(client))
+    monkeypatch.setattr(gui, "species_index", lambda client, **kw: calls.append(1) or original(client, **kw))
     base, token = server
     for _ in range(2):
         data = urllib.parse.urlencode({"species": f"{A}\n{B}", "only_entered": "1"}).encode()

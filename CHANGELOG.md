@@ -27,6 +27,12 @@ tagged version is never reused for changed content.
   (the species do not affect each other), and the no-growth settings say they test the replicate growth
   curves of one species in one culture condition. A new setting, Exclude these studies
   (`--exclude-studies` with `--species`), leaves the listed studies out of a search; empty by default.
+- Faster: the Example search takes about 10 s from a cold start instead of 84 s, and about 4.5 s for a
+  later search in the same session instead of 25 s. Nearly all the time was requests made one after
+  another; they are now made six at a time over kept-open connections (`crossfeed.fetch`), and the
+  derivation reads them from the cache it always used. Checked on every study: records, skip reasons
+  and the species list are identical to the one-by-one version. A growth curve download is now retried
+  like every other request.
 - Conditions recorded only in descriptions (Karoline, METHOD_NOTES item 22): monocultures are pooled only
   when their descriptions agree; a co-culture uses the monoculture set whose description names it, or is
   skipped with the reason when several fit; edges from description-only variants carry the new caution
