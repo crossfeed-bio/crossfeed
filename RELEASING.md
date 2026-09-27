@@ -15,7 +15,9 @@ repeats what CI has already shown to work.
    choice. It proposes whether `crossfeed` stays as a second command for a while; the schema id is Craig's
    call. The release workflow's `install` job then starts `grownet` instead of `crossfeed`.
 3. The one-time setup below.
-4. The release pull request, then the tag (below).
+4. The release pull request, then the tag (below). For 0.1.0 it also renames the changelog's unreleased
+   `[0.0.2]` section to `[0.1.0]` (0.0.2 was never published) and replaces the changelog's opening
+   sentence about staying in the 0.0.x range.
 
 ## One-time setup (a maintainer, in a browser)
 
@@ -41,7 +43,7 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
 
 1. **A release pull request** that:
    - sets the version in `pyproject.toml` and in `src/crossfeed/__init__.py` (`__version__`);
-   - turns `## [x.y.z] (unreleased)` in `CHANGELOG.md` into `## [x.y.z] - YYYY-MM-DD`, and starts a new
+   - turns `## [x.y.z] (unreleased)` in `CHANGELOG.md` into `## [x.y.z] (YYYY-MM-DD)`, and starts a new
      unreleased section above it if work continues.
    `python packaging/check_release.py vX.Y.Z` must say the tag is ready.
 2. **Merge it, then tag `main`:**
