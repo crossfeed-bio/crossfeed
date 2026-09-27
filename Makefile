@@ -1,5 +1,5 @@
 # Reproducible commands. `make check` runs everything CI runs.
-.PHONY: install test gate lint check demo schema
+.PHONY: install test gate lint check demo schema legend
 
 install:
 	pip install -e ".[dev]"
@@ -20,3 +20,6 @@ demo:
 
 schema:
 	python -m crossfeed schema
+
+legend:
+	python -c "from crossfeed.legend import legend_svg; open('docs/legend.svg', 'w').write(legend_svg())"

@@ -21,6 +21,7 @@ own derivation method. Nothing here needs another document to follow.
 - [Quickstart](#quickstart)
 - [What it does](#what-it-does)
 - [The command line](#the-command-line)
+- [The legend](#the-legend)
 - [The local page](#the-local-page)
 - [The output format](#the-output-format)
 - [Plug in your own method](#plug-in-your-own-method)
@@ -126,6 +127,15 @@ python -m crossfeed schema [--out FILE]
 - `schema` prints the JSON Schema (or writes it with `--out`).
 
 A `crossfeed` console command is installed too, so `crossfeed derive ...` works after `pip install`.
+
+## The legend
+
+One picture of what every arc, head, dash and flag means: [docs/legend.svg](docs/legend.svg). The local
+page links to it ("What the arcs mean"), and the same vocabulary is what the Cytoscape style draws (#25).
+It is generated from the code (`make legend`), and a test requires it to name every effect, outcome,
+quality flag, caution, evidence and status the model defines, so it cannot fall behind them.
+
+[![the legend](docs/legend.svg)](docs/legend.svg)
 
 ## The local page
 

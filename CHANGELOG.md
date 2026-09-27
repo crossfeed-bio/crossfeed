@@ -7,6 +7,9 @@ tagged version is never reused for changed content.
 ## [0.0.2] (unreleased)
 
 ### Added
+- A legend (`docs/legend.svg`, `make legend`, and "What the arcs mean" on the local page): one picture of
+  what each arc, head, dash and flag means. It is drawn from the code, and a test requires it to name every
+  value in the model's vocabulary, so it cannot drift from what the network shows.
 - A pluggable derivation seam (`crossfeed.derive.Deriver`): the comparison method is a drop-in strategy,
   with the provisional `BaselineDeriver` as one implementation. The agreed method arrives as another
   `Deriver` without touching the model or the pipeline.
