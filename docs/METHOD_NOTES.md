@@ -332,8 +332,12 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    and test with a paired test. `crossfeed.interaction.grew` takes one rise per replicate,
    log2(maximum / abundance at the first time point), each maximum at that replicate's own time, and
    applies it before any ratio. The set has grown when a paired two-sided t-test finds the mean rise above
-   zero at `NO_GROWTH_ALPHA` (0.05), or when the mean rise reaches log2(`NO_GROWTH_FACTOR`) (2, one
-   doubling as a geometric mean). Pairing each maximum with its own start removes the spread between
+   zero at `NO_GROWTH_ALPHA` (0.05), or when the mean rise reaches log2(`NO_GROWTH_FACTOR`) (a geometric
+   mean of the ratios reaching the factor). The default factor is 1.5 (Karoline, later the same day, her
+   words: "I'd put the factor (which defines growth) as an advanced option. the default can be medium
+   (1.5) and it can be made more stringent by the user (e.g. set to 2)."). At 2, two near-twofold rises
+   became strong claims (SMGDB00000013 Ochrobactrum to Comamonas abolished, SMGDB00000008 B. finegoldii
+   to B. thetaiotaomicron obligate); at 1.5 both stay quantified. Pairing each maximum with its own start removes the spread between
    inocula, which the earlier Welch test on unrelated samples counted as noise. Below two replicates the
    test cannot run and the set counts as grown when its maximum exceeds its start. Why the factor: with
    two or three replicates a real rise often misses significance, and the test alone made 10 of

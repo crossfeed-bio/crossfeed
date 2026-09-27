@@ -256,7 +256,8 @@ its `cultivation_mode`.
 one rise, log2(maximum / abundance at the first time point), with the maximum taken wherever that
 replicate peaks, since the time of maximum abundance varies across replicates. The set has grown when a
 paired t-test finds the rises above zero (alpha 0.05, `--no-growth-alpha`) or when their mean reaches
-log2(2), a twofold rise as a geometric mean (`--no-growth-factor`). A set that did not grow yields
+log2(1.5), a rise of 1.5 times as a geometric mean. The factor defines growth: 1.5 is a medium default,
+and `--no-growth-factor 2` (one doubling) is more stringent. A set that did not grow yields
 `obligate`, `abolished` or `no_growth` rather than a log ratio between two near-zero quantities. With one
 replicate the test cannot run, so the set counts as grown when its maximum exceeds its start. The obligate
 and abolished counts depend on these two numbers, so `meta.no_growth` records them in every network.

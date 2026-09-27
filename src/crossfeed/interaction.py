@@ -73,7 +73,9 @@ NO_GROWTH_ALPHA = 0.05
 # With two or three replicates a real rise often fails significance, and reading that as "no growth" turns
 # an ordinary comparison into an obligate or abolished claim (measured on live studies, #37). So a set also
 # counts as grown when the geometric mean of its rises, max / start per replicate, reaches this factor.
-NO_GROWTH_FACTOR = 2.0
+# The factor defines growth. Karoline set a medium default of 1.5, which a user can make more stringent
+# (for example 2, one doubling) as an advanced setting (on #68).
+NO_GROWTH_FACTOR = 1.5
 NO_GROWTH_TEST = ("paired two-sided t-test of log2(maximum / first time point) per replicate against 0; "
                   "each replicate's maximum is taken at its own time")
 

@@ -174,7 +174,7 @@ def main(argv=None):
                         "rule off)")
     d.add_argument("--no-growth-factor", type=float, default=None, metavar="F",
                    help="a set that rose at least F times (geometric mean over replicates) has grown whatever "
-                        "the test says (default 2, one doubling; 0 leaves the test alone)")
+                        "the test says (default 1.5; 2, one doubling, is more stringent; 0 leaves the test alone)")
     d.add_argument("--format", choices=["json", "graphml"], default="json",
                    help="output format: json (the neutral format, default) or graphml (for network tools)")
     d.add_argument("--out", help="write the network here (default: stdout)")

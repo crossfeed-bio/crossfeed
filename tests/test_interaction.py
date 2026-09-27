@@ -350,7 +350,7 @@ class TestNoGrowthRule:
     @pytest.fixture(autouse=True)
     def _rule_on(self, monkeypatch):
         monkeypatch.setattr(interaction, "NO_GROWTH_ALPHA", 0.05)
-        monkeypatch.setattr(interaction, "NO_GROWTH_FACTOR", 2.0)
+        monkeypatch.setattr(interaction, "NO_GROWTH_FACTOR", 1.5)
 
     @staticmethod
     def _set(species, series):
@@ -365,15 +365,15 @@ class TestNoGrowthRule:
         reps = self._set(A, [(1, 1), (1, 1.05), (1, 0.95)])
         verdict = grew(reps, A, 10.0)
         assert not verdict["grew"] and verdict["n"] == 3
-        assert "not significantly above" in verdict["reason"] and "2 times" in verdict["reason"]
+        assert "not significantly above" in verdict["reason"] and "1.5 times" in verdict["reason"]
 
     def test_a_declining_set_has_not_grown(self):
         # the maximum is the inoculum, as in the SMGDB00000013 monocultures
         assert not grew(self._set(A, [(100, 1), (120, 2), (90, 1)]), A, 10.0)["grew"]
 
-    def test_a_rise_that_misses_significance_but_doubles_counts_as_growth(self):
-        # rises log2(1/1) = 0 and log2(8/1) = 3: mean 1.5, at least log2(2) = 1 (geometric mean of the
-        # ratios sqrt(8) = 2.83, above 2). The paired test on 0, 3 has t = 1.5 / (2.12 / sqrt(2)) = 1 with
+    def test_a_rise_that_misses_significance_but_reaches_the_factor_counts_as_growth(self):
+        # rises log2(1/1) = 0 and log2(8/1) = 3: mean 1.5, at least log2(1.5) = 0.585 (geometric mean of the
+        # ratios sqrt(8) = 2.83, above 1.5). The paired test on 0, 3 has t = 1.5 / (2.12 / sqrt(2)) = 1 with
         # df 1, p = 0.5. Without the factor, an ordinary comparison would be called obligate (#37)
         reps = self._set(A, [(1, 1), (1, 8)])
         verdict = grew(reps, A, 10.0)
@@ -399,11 +399,21 @@ class TestNoGrowthRule:
         assert welch([1.5, 15, 150], [1, 10, 100])["p"] == pytest.approx(0.764, abs=0.005)
 
     def test_one_replicate_cannot_carry_the_factor_for_the_set(self):
-        # ratios 1, 1, 7: their arithmetic mean is 3, but the geometric mean is 7 ** (1/3) = 1.91, below 2
-        # (mean log2 rise 2.807 / 3 = 0.936 < 1). The paired test on 0, 0, 2.807 gives t = 1, p = 0.42.
-        verdict = grew(self._set(A, [(1, 1), (1, 1), (1, 7)]), A, 10.0)
-        assert not verdict["grew"] and verdict["log2_rise"] == pytest.approx(math.log2(7) / 3)
+        # ratios 1, 1, 3: their arithmetic mean is 1.67, but the geometric mean is 3 ** (1/3) = 1.44, below
+        # 1.5 (mean log2 rise 1.585 / 3 = 0.528 < 0.585). The paired test on 0, 0, 1.585 gives t = 1, p = 0.42.
+        verdict = grew(self._set(A, [(1, 1), (1, 1), (1, 3)]), A, 10.0)
+        assert not verdict["grew"] and verdict["log2_rise"] == pytest.approx(math.log2(3) / 3)
         assert verdict["p"] == pytest.approx(1 - 1 / math.sqrt(3), abs=1e-3)
+
+    def test_the_default_factor_is_medium_and_a_user_can_make_it_stringent(self):
+        # the SMGDB00000013 shape (Comamonas in co-culture): ratios 1.35, 2.50, 2.25, geometric mean
+        # 7.594 ** (1/3) = 1.97, which the paired test cannot resolve at three replicates. It has grown at the
+        # default 1.5 and not at a factor of 2 (Karoline chose 1.5 on #68 so that this edge stays quantified)
+        reps = self._set(A, [(1, 1.35), (1, 2.5), (1, 2.25)])
+        default = grew(reps, A, 10.0)
+        assert default["grew"] and default["p"] > 0.05
+        assert 2 ** default["log2_rise"] == pytest.approx(1.966, abs=1e-3)
+        assert not grew(reps, A, 10.0, factor=2.0)["grew"]
 
     def test_factor_zero_leaves_the_test_alone(self):
         # the rise of 0 and 3 from before, which only the factor called growth

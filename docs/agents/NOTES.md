@@ -186,6 +186,10 @@ Rules for this file:
   vary across replicates)." The three were her agent's proposals: keep the twofold half at a factor of 2;
   make alpha and the factor settings and record them in the network (Craig's agent's request); test with
   a paired test on each replicate's log2(maximum / start) instead of Welch on unrelated samples.
+  Revised the same day, her words: "I'd put the factor (which defines growth) as an advanced option. the
+  default can be medium (1.5) and it can be made more stringent by the user (e.g. set to 2)." So
+  `NO_GROWTH_FACTOR` is 1.5. Measured on six live studies, 1.5 admits three sets more than 2 does, all
+  sustained rises of 1.7 to 2 times, none a single noisy point.
 
 ## Open questions (need a human)
 
@@ -214,7 +218,7 @@ nothing, which is the point of the rule.
 `crossfeed.interaction.grew` decides whether a species grew in a replicate set, before any ratio is
 computed (#37, register item 5, settled on #68). One rise per replicate, log2(maximum / first time
 point), each maximum at its own time; grown when a paired t-test finds the rises above zero
-(`NO_GROWTH_ALPHA` = 0.05) or their mean reaches log2(`NO_GROWTH_FACTOR`) (2). Both are settings; `None`
+(`NO_GROWTH_ALPHA` = 0.05) or their mean reaches log2(`NO_GROWTH_FACTOR`) (1.5). Both are settings; `None`
 in the plumbing means "read the module constant when used", so tests can switch the rule off by
 monkeypatching the constants. Tests that predate the rule do that through an autouse fixture and say so;
 `TestNoGrowthRule` covers the rule itself. Pass the same two values to `output_meta` as to the derivation,
