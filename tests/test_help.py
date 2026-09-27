@@ -5,14 +5,23 @@ import datetime
 import json
 from xml.etree import ElementTree as ET
 
+import pytest
 from test_gui import FakeClient, _query
 
-from crossfeed import __version__, gui, help, model
+from crossfeed import __version__, gui, help, interaction, model
 from crossfeed.__main__ import build_parser, main
 from crossfeed.export import to_graphml
 from crossfeed.mgrowthdb import provenance, records_to_network
 
 PAGE = gui.render_help("tok")
+
+
+@pytest.fixture(autouse=True)
+def _no_growth_rule_off(monkeypatch):
+    """The fake study's monocultures barely rise, so the no-growth rule (#37) would make every edge obligate.
+    These tests are about the page, not the rule, which tests/test_interaction.py covers."""
+    monkeypatch.setattr(interaction, "NO_GROWTH_ALPHA", 0.0)
+    monkeypatch.setattr(interaction, "NO_GROWTH_FACTOR", 0.0)
 
 
 def _derive_options() -> set:

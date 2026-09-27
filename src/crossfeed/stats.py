@@ -75,6 +75,26 @@ def welch(x, y) -> dict | None:
     return {"t": t, "df": df, "p": min(1.0, 2.0 * (1.0 - t_cdf(abs(t), df)))}
 
 
+def paired(x, y) -> dict | None:
+    """The paired two-sided t-test of x against y, or None with fewer than two pairs.
+
+    Tests whether the mean of the differences x[i] - y[i] is zero, with n - 1 degrees of freedom. Returns
+    {"t", "df", "p"}. When the differences do not vary, the p-value is 0 if their mean is not zero and 1
+    if it is, as in `welch`.
+    """
+    if len(x) != len(y):
+        raise ValueError(f"paired test needs pairs: {len(x)} values against {len(y)}")
+    if len(x) < 2:
+        return None
+    d = [a - b for a, b in zip(x, y, strict=True)]
+    n, mean = len(d), statistics.mean(d)
+    sd = statistics.stdev(d)
+    if sd == 0:
+        return {"t": math.inf if mean else 0.0, "df": n - 1, "p": 0.0 if mean else 1.0}
+    t = mean / (sd / math.sqrt(n))
+    return {"t": t, "df": n - 1, "p": min(1.0, 2.0 * (1.0 - t_cdf(abs(t), n - 1)))}
+
+
 def benjamini_hochberg(p_values) -> list:
     """Benjamini-Hochberg adjusted p-values, in the input order; None entries stay None and do not count."""
     indexed = [(p, i) for i, p in enumerate(p_values) if p is not None]

@@ -63,12 +63,16 @@ def _derive(a):
             records, skipped = derive_interactions(MGrowthDBClient(), a.study, deriver=deriver,
                                                    metric=a.metric, spike_factor=a.spike_factor,
                                                    dropout=not a.no_dropout,
-                                                   include_non_batch=a.include_non_batch)
-            records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold)
+                                                   include_non_batch=a.include_non_batch,
+                                                   no_growth_alpha=a.no_growth_alpha,
+                                                   no_growth_factor=a.no_growth_factor)
+            records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold,
+                                         a.no_growth_alpha, a.no_growth_factor)
             extra["settings"] = {"metric": a.metric, "spike_factor": a.spike_factor,
                                  "absence_threshold": a.absence_threshold,
                                  "include_low_quality": a.include_low_quality, "correction": a.correction,
                                  "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
+                                 "no_growth_alpha": a.no_growth_alpha, "no_growth_factor": a.no_growth_factor,
                                  "deriver": a.deriver or ""}
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
@@ -97,7 +101,8 @@ def _derive_species(a):
                 "absence_threshold": a.absence_threshold, "include_low_quality": a.include_low_quality,
                 "correction": a.correction, "include_dropout": not a.no_dropout,
                 "include_non_batch": a.include_non_batch, "studies": a.study or "",
-                "only_entered": not a.all_partners}
+                "only_entered": not a.all_partners, "no_growth_alpha": a.no_growth_alpha,
+                "no_growth_factor": a.no_growth_factor}
     try:
         result = run_query(MGrowthDBClient(), a.species, settings)
     except MGrowthDBError as e:
@@ -253,6 +258,13 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--spike-factor", type=float, default=100.0,
                    help="leave out a curve with one or two points this many times above both neighbours "
                         "(0 keeps all)")
+    d.add_argument("--no-growth-alpha", type=float, default=None, metavar="ALPHA",
+                   help="a set has not grown when its rise from the first time point is not significant at "
+                        "ALPHA (paired t-test on log2 max / start per replicate; default 0.05, 0 switches the "
+                        "rule off)")
+    d.add_argument("--no-growth-factor", type=float, default=None, metavar="F",
+                   help="a set that rose at least F times (geometric mean over replicates) has grown whatever "
+                        "the test says (default 1.5; 2, one doubling, is more stringent; 0 leaves the test alone)")
     d.add_argument("--format", choices=["json", "graphml"], default="json",
                    help="output format: json (the neutral format, default) or graphml (for network tools)")
     d.add_argument("--out", help="write the network here (default: stdout)")

@@ -47,6 +47,16 @@ SETTINGS = {
                      "A replicate curve with one or two interior points more than F times above both "
                      "neighbors (default 100) is left out and reported, with the other measurements of the "
                      "same replicate named. 0 keeps every curve."),
+    "no_growth_alpha": ("No-growth alpha", "--no-growth-alpha ALPHA",
+                        "Before any ratio, each replicate set is checked for growth: a paired t-test on each "
+                        "replicate's log2(maximum / first time point), the maximum taken at whatever time "
+                        "that replicate peaks. A set that grew neither significantly at this level nor by the "
+                        "factor below has not grown, which makes an edge obligate or abolished. 0 switches the "
+                        "rule off."),
+    "no_growth_factor": ("No-growth factor", "--no-growth-factor F",
+                         "The rise that defines growth whatever the test says, as a geometric mean over "
+                         "replicates. 1.5 is a medium default; 2 (one doubling) is more stringent. 0 leaves "
+                         "the test alone."),
     "studies": ("Only these studies", "STUDY",
                 "Comma separated mGrowthDB study ids to search, instead of every study holding the species; "
                 "on the command line, the study argument given with --species. "
@@ -132,6 +142,10 @@ DECISIONS = (
     ("Low quality is not absence.",
      "An edge with a quality flag keeps the sign of its mean and is hidden by default; it is never called "
      "absent, because a weak measurement says nothing about whether the interaction exists (#40)."),
+    ("Growth is checked before any ratio.",
+     "With two or three replicates a real rise rarely reaches significance, so a set counts as grown when "
+     "the paired test finds a rise or when it rose by the factor (1.5 by default). The strong claims, "
+     "obligate and abolished, then need two reasons rather than one underpowered test (#37, #68)."),
     ("No growth is a result.",
      "A target that grows only with its partner is obligate; one that grows only without it is abolished. "
      "Both are the extremes of their direction and are always shown (#16)."),
@@ -227,7 +241,7 @@ def render_help(token: str, defaults: dict, example: tuple) -> str:
     # a list, not a four-column table, so it reads at phone width too
     settings = "<dl class=\"settings\">" + "".join(
         f"<dt>{_e(label)}</dt><dd><span class=\"muted\">Command line <code>{_e(flag)}</code>, default "
-        f"{_e(_default(defaults[key]))}</span><br>{_e(text)}</dd>"
+        f"{_e(_default(defaults[key], key))}</span><br>{_e(text)}</dd>"
         for key, (label, flag, text) in SETTINGS.items()) + "</dl>"
     edges = _table(("Arc attribute", "Meaning"), (
         f"<tr><td>{_name(k)}</td><td>{_e(v)}</td></tr>" for k, v in EDGE_ATTRIBUTES.items()))
@@ -321,7 +335,10 @@ Say what you searched, the settings, and the tool version shown next to the name
 itself are for mGrowthDB, since grownet shows the data as mGrowthDB holds it.</p>"""
 
 
-def _default(value) -> str:
+def _default(value, key: str = "") -> str:
+    if value is None and key.startswith("no_growth_"):
+        from . import interaction  # None means the rule's own default, read when used
+        value = getattr(interaction, key.upper())
     if value is True:
         return "on"
     if value is False:
