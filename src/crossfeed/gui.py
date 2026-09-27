@@ -344,8 +344,9 @@ def _empty_reason(result: dict) -> str:
             return "None of the studies under Only these studies holds these species; empty that setting."
         return "mGrowthDB holds these strains, but no study grows them, so there is nothing to compare."
     if result.get("partners_only"):
-        return (f"The studies hold {result['partners_only']} interaction(s), but each involves a species you did "
-                "not enter. Add the partners, or untick Only interactions between the species entered.")
+        return (f"Everything these studies hold for your species involves a species you did not enter "
+                f"({result['partners_only']} co-culture(s) or interaction(s)). Add the partners, or untick Only "
+                "interactions between the species entered.")
     if result.get("hidden", {}).get("low_quality"):
         return (f"{result['hidden']['low_quality']} low-quality interaction(s) were found and are hidden; tick "
                 "Show low-quality edges to see them.")
@@ -457,7 +458,8 @@ def _current_names(net, current: dict) -> None:
             net.nodes[nid] = dataclasses.replace(node, name=name, species=genus_species(name))
 
 
-def run_query(client, entries, settings: dict | None = None, index: dict | None = None, progress=None) -> dict:
+def run_query(client, entries, settings: dict | None = None, index: dict | None = None, progress=None,
+              narrow: bool = True) -> dict:
     """Species names or taxon ids to an interaction network, through mGrowthDB and the existing derivation.
 
     Returns {"resolved", "unresolved", "taxon_ids", "studies", "network", "skipped", "errors"}. Failures
@@ -498,12 +500,19 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # renamings mGrowthDB records (411483 is Faecalibacterium prausnitzii A2-165 in one study and
     # Faecalibacterium duncaniae A2-165 in others), so an edge is kept when either matches. Matching names
     # alone dropped every edge for a name the study does not use (#73).
-    # read everything the derivation will read, a few requests at a time, before deriving (crossfeed.fetch)
-    from .fetch import prefetch_studies
-    prefetch_studies(client, studies, s["include_non_batch"], progress=lambda d, t, m: say(d, t, m))
-
     wanted = {genus_species(name) for _, matches in resolved["resolved"] for name in matches.values()}
     wanted_ids = {str(taxon) for taxon in resolved["taxon_ids"]}
+
+    def keep(name, taxon):
+        # a strain the search asked for: by taxon id, or by genus and species as the edge filter below
+        return str(taxon) in wanted_ids or genus_species(name) in wanted
+
+    # with "only the species entered", only what can give an interaction between them is read (identical
+    # networks, checked against reading everything); read it all first, a few requests at a time
+    narrowed = keep if (s["only_entered"] and narrow) else None
+    from .fetch import prefetch_studies
+    prefetch_studies(client, studies, s["include_non_batch"], progress=lambda d, t, m: say(d, t, m),
+                     keep=narrowed, dropout=s["include_dropout"])
     for i, study_id in enumerate(studies):
         say(i, len(studies), f"Reading {study_id} ({i + 1} of {len(studies)})")
         try:
@@ -511,7 +520,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
                                               spike_factor=s["spike_factor"], dropout=s["include_dropout"],
                                               include_non_batch=s["include_non_batch"],
                                               no_growth_alpha=s["no_growth_alpha"],
-                                              no_growth_factor=s["no_growth_factor"])
+                                              no_growth_factor=s["no_growth_factor"], keep=narrowed)
         except MGrowthDBError as e:
             errors.append(f"{study_id}: {e}")
             continue
@@ -525,6 +534,8 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
             recs = kept
         records += recs
         skipped += skips
+        # co-cultures left underived because their partner was not entered count like dropped interactions
+        partners_only += sum("the partner is not among the species entered" in r for _, r in skips)
 
     records, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"],
                                  s["no_growth_alpha"], s["no_growth_factor"])

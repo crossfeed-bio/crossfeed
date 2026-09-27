@@ -241,6 +241,15 @@ QUALITY_FLAGS, CAUTIONS, EVIDENCE and STATUSES, and the shipped file to equal wh
 flag therefore means adding a line to the legend, the same way Craig's viewer guard works (#57). The dash
 patterns are the ones the Cytoscape style will use (#25): long dashes for drop-out evidence, dots for a
 single replicate.
+## Reading only what a search needs (2026-09-27)
+
+`derive.relevant_experiments(exps, keep)` is the one rule for what a search with "only the species
+entered" reads: monocultures and two-member co-cultures of kept strains, and every experiment of a drop-out
+design with at least two kept members. Designs are kept whole because `_common_start` takes the most common
+first time point over the full community and all its drop-outs, so leaving one out could change which
+replicates are compared. Strain identities and description variants still come from every experiment.
+`gui.run_query(..., narrow=False)` reads everything; eight live searches gave identical networks both ways.
+
 ## Growth rate metric (#41, built 2026-09-27)
 
 `crossfeed.rates`: `easylinear` reimplements growthrates' fit_easylinear (windows of h points starting at

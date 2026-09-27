@@ -50,7 +50,8 @@ def can_prefetch(client) -> bool:
                ("get_study", "get_experiment", "get_bioreplicate", "get_measurement_series"))
 
 
-def prefetch_studies(client, study_ids, include_non_batch: bool = False, progress=None) -> None:
+def prefetch_studies(client, study_ids, include_non_batch: bool = False, progress=None, keep=None,
+                     dropout: bool = True) -> None:
     """Load what deriving these studies reads: the studies, their experiments, the bioreplicates of the
     experiments that are derived (batch only unless `include_non_batch`, as `derive._batch_only`), and
     the series of each strain's measurement context that `adapter.replicates_for_experiment` reads."""
@@ -60,6 +61,13 @@ def prefetch_studies(client, study_ids, include_non_batch: bool = False, progres
     experiment_ids = [e["id"] for s in studies for e in s.get("experiments", [])]
     experiments = [e for e in _each(client.get_experiment, experiment_ids, progress, "Reading experiments") if e]
     derived = [e for e in experiments if include_non_batch or cultivation(e) == BATCH]
+    if keep is not None:
+        # only what a derivation limited to `keep` reads (derive.relevant_experiments), per study
+        from .derive import relevant_experiments
+        by_study = {}
+        for e in derived:
+            by_study.setdefault(e.get("studyId"), []).append(e)
+        derived = [e for group in by_study.values() for e in relevant_experiments(group, keep, dropout)]
     stubs = [b["id"] for e in derived for b in e.get("bioreplicates", [])]
     bioreplicates = [b for b in _each(client.get_bioreplicate, stubs, progress, "Reading replicates") if b]
     contexts = []

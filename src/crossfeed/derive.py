@@ -708,10 +708,36 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
                                members, experiments, study_id, study_meta, identities, mode))
 
 
+def _wanted(exps, keep) -> set:
+    """The member names `keep(name, taxon id)` accepts, over a study's experiments."""
+    return {s.get("name") for exp in exps for s in exp.get("communityStrains", [])
+            if s.get("name") and keep(s.get("name"), s.get("NCBId"))}
+
+
+def relevant_experiments(exps, keep, dropout: bool = True) -> list:
+    """The experiments a derivation limited to `keep` reads: monocultures of kept strains, two-member
+    co-cultures of two kept strains, and every experiment of a drop-out design holding at least two kept
+    members. A design is kept whole, since its common start is taken over all its drop-outs, so leaving
+    one out could change which replicates are compared. With `keep` None: every experiment."""
+    if keep is None:
+        return list(exps)
+    wanted = _wanted(exps, keep)
+    ids = set()
+    for exp in exps:
+        members = set(_members(exp))
+        if (len(members) == 1 and members <= wanted) or (len(members) == 2 and members <= wanted):
+            ids.add(id(exp))
+    if dropout:
+        for members, full, drops in dropout_designs(exps, []):
+            if len(members & wanted) >= 2:
+                ids.update(id(e) for e in [*full, *(e for group in drops.values() for e in group)])
+    return [exp for exp in exps if id(exp) in ids]
+
+
 def interactions_from_replicates(client, study: dict, exps: list, study_id: str = None,
                                  method: str = "auc", spike_factor: float = SPIKE_FACTOR,
                                  dropout: bool = True, include_non_batch: bool = False,
-                                 no_growth_alpha: float = None, no_growth_factor: float = None):
+                                 no_growth_alpha: float = None, no_growth_factor: float = None, keep=None):
     """The specified comparison, run on a study: (records, skipped).
 
     Two designs give edges. Each two-member co-culture is compared with the monoculture replicates of
@@ -744,14 +770,25 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
                         "an interaction needs a co-culture or a community to compare with"))
     exps = _batch_only(exps, include_non_batch, skipped)
     identities = strain_identities(exps, skipped)
-    monos = _mono_index(client, exps, skipped, spike_factor, identities)
+    # with `keep`, only what can give an interaction between kept strains is read (a search with "only the
+    # species entered"); identities and variants still come from every experiment, so matching is unchanged
+    relevant = {id(e) for e in relevant_experiments(exps, keep, dropout)}
+    wanted = _wanted(exps, keep) if keep is not None else None
+    monos = _mono_index(client, [e for e in exps if id(e) in relevant], skipped, spike_factor, identities)
     variants = _variants(exps)
     for exp in exps:
         if len(_members(exp)) == 2:
+            if id(exp) not in relevant:
+                if wanted is not None and set(_members(exp)) & wanted:
+                    skipped.append((" with ".join(_members(exp)) + f" [{exp.get('name', '')}]",
+                                    "not derived: the partner is not among the species entered"))
+                continue
             _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, records, skipped,
                       identities, no_growth, variants[(frozenset(_members(exp)), conditions(exp))])
     if dropout:
         for design in dropout_designs(exps, skipped):
+            if wanted is not None and len(design[0] & wanted) < 2:
+                continue
             _dropout(client, design, method, spike_factor, study_id, study_meta, records, skipped, identities,
                      no_growth, variants)
     elif any(len(_members(exp)) > 2 for exp in exps):
@@ -869,7 +906,8 @@ class ReplicateDeriver(Deriver):
 
     def __init__(self, method: str = "auc", spike_factor: float = SPIKE_FACTOR, client=None,
                  dropout: bool = True, include_non_batch: bool = False, no_growth_alpha: float = None,
-                 no_growth_factor: float = None):
+                 no_growth_factor: float = None, keep=None):
+        self.keep = keep
         self.method = method
         self.spike_factor = spike_factor
         self.client = client
@@ -884,7 +922,7 @@ class ReplicateDeriver(Deriver):
         return interactions_from_replicates(self.client, study, exps, study.get("id"),
                                             self.method, self.spike_factor, self.dropout,
                                             self.include_non_batch, self.no_growth_alpha,
-                                            self.no_growth_factor)
+                                            self.no_growth_factor, self.keep)
 
 
 class BaselineDeriver(Deriver):
@@ -906,19 +944,20 @@ class BaselineDeriver(Deriver):
 def derive_interactions(client: MGrowthDBClient, study_id: str, deriver: Deriver = None,
                         metric: str = "auc", spike_factor: float = SPIKE_FACTOR, dropout: bool = True,
                         include_non_batch: bool = False, no_growth_alpha: float = None,
-                        no_growth_factor: float = None):
+                        no_growth_factor: float = None, keep=None):
     """Fetch a study and its experiments from the API, then derive interactions with `deriver`
     (default: ReplicateDeriver, the specified comparison). `metric`, `spike_factor` and `dropout` configure
     the default deriver only. A deriver that reads measured series says so with `needs_client`."""
     deriver = deriver or ReplicateDeriver(method=metric, spike_factor=spike_factor, dropout=dropout,
                                          include_non_batch=include_non_batch, no_growth_alpha=no_growth_alpha,
-                                         no_growth_factor=no_growth_factor)
+                                         no_growth_factor=no_growth_factor, keep=keep)
     if getattr(deriver, "needs_client", False) and getattr(deriver, "client", None) is None:
         deriver.client = client
     if getattr(deriver, "needs_client", False):
         # read the study's growth curves in parallel first; the derivation then finds them cached
         from .fetch import prefetch_studies
-        prefetch_studies(deriver.client, [study_id], include_non_batch)
+        prefetch_studies(deriver.client, [study_id], include_non_batch, keep=getattr(deriver, "keep", None),
+                         dropout=getattr(deriver, "dropout", True))
     study = dict(client.get_study(study_id))
     study.setdefault("id", study_id)
     exps = [client.get_experiment(e["id"]) for e in study.get("experiments", [])]

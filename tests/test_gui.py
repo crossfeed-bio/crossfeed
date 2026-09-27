@@ -406,7 +406,7 @@ def test_an_empty_result_caused_by_a_setting_names_the_setting():
     excluded = render_result("tok", _query(exclude_studies="SMGDB00000001"))
     assert "The only studies holding these species are in Exclude these studies (SMGDB00000001)" in excluded
     partners = render_result("tok", _query(entries=("Faecalibacterium prausnitzii",)))
-    assert "each involves a species you did not enter" in partners and "untick Only interactions" in partners
+    assert "involves a species you did not enter" in partners and "untick Only interactions" in partners
     typo = render_result("tok", _query(entries=("Blautia hydrogenotrophca",)))
     assert "Did you mean: Blautia hydrogenotrophica?" in typo
 

@@ -27,6 +27,14 @@ tagged version is never reused for changed content.
   (the species do not affect each other), and the no-growth settings say they test the replicate growth
   curves of one species in one culture condition. A new setting, Exclude these studies
   (`--exclude-studies` with `--species`), leaves the listed studies out of a search; empty by default.
+- With "only interactions between the species entered" (the default), a search reads only what can give
+  such an interaction: monocultures and co-cultures of the entered strains, and whole drop-out designs
+  holding two of them. Searches take about half as long (the Example about 2 s once the species list is
+  in); checked on eight searches, the networks are identical to reading everything.
+- The standalone viewer (`gui/index.html`) draws the legend's colors, one arrowhead, dashes for evidence
+  and quality, and genus colors. CI also runs on Windows and macOS. The species list looks 25 missing
+  study ids ahead instead of 5. Download, Report and Send to Cytoscape answer for the search on screen. A
+  study of monocultures only says so.
 - A strain is shown by its current name (#24, Karoline's rule of 2026-09-18): the name used by the most
   recently published study holding its taxon id, in the network's nodes and the resolved list; old names
   still find it. Taxon 411483 now reads Faecalibacterium duncaniae throughout.
