@@ -36,9 +36,12 @@ SETTINGS = {
                           "else, so these curves are not comparable with batch curves. When included, their "
                           "edges carry the non_batch flag."),
     "absence_threshold": ("Absence threshold k", "--absence-threshold K",
-                          "An edge is absent (no interaction found) when |log2 mean| < k times its standard "
-                          "deviation. The default 1 means the mean plus or minus its sd stays on one side of "
-                          "zero. Raise k for a stricter network; 0 marks nothing absent."),
+                          "Decides when an interaction counts as absent, that is, when the data show the "
+                          "species do not affect each other: its effect is small against its own spread, "
+                          "|log2 mean| < k times the standard deviation. The default 1 means the mean plus "
+                          "or minus its sd crosses zero. Raise k for a stricter network, where fewer "
+                          "interactions count as present; 0 marks no interaction absent. Absent "
+                          "interactions stay in the downloads with status absent."),
     "correction": ("Multiple testing correction", "--correction bh|by",
                    "How the reported p-values are adjusted for the number of comparisons in one search: "
                    "Benjamini-Hochberg (default) or the more conservative Benjamini-Yekutieli, which holds "
@@ -48,19 +51,25 @@ SETTINGS = {
                      "neighbors (default 100) is left out and reported, with the other measurements of the "
                      "same replicate named. 0 keeps every curve."),
     "no_growth_alpha": ("No-growth alpha", "--no-growth-alpha ALPHA",
-                        "Before any ratio, each replicate set is checked for growth: a paired t-test on each "
-                        "replicate's log2(maximum / first time point), the maximum taken at whatever time "
-                        "that replicate peaks. A set that grew neither significantly at this level nor by the "
-                        "factor below has not grown, which makes an edge obligate or abolished. 0 switches the "
-                        "rule off."),
+                        "Before any comparison, grownet checks that a species grew. It takes the replicate "
+                        "growth curves of that species in one culture condition (alone, or with its "
+                        "partner) and tests their rise, log2(maximum / first time point) per replicate, "
+                        "with a paired t-test; each curve's maximum is taken at whatever time that curve "
+                        "peaks. Curves that rose neither significantly at this level nor by the factor "
+                        "below did not grow, which makes an interaction obligate or abolished. 0 switches "
+                        "the check off."),
     "no_growth_factor": ("No-growth factor", "--no-growth-factor F",
-                         "The rise that defines growth whatever the test says, as a geometric mean over "
-                         "replicates. 1.5 is a medium default; 2 (one doubling) is more stringent. 0 leaves "
-                         "the test alone."),
+                         "The rise that counts as growth whatever the test says: the geometric mean, over "
+                         "the replicate growth curves, of maximum / first time point. 1.5 is a medium "
+                         "default; 2 (one doubling) is more stringent. 0 leaves the test alone."),
     "studies": ("Only these studies", "STUDY",
                 "Comma separated mGrowthDB study ids to search, instead of every study holding the species; "
                 "on the command line, the study argument given with --species. "
                 "Use it to speed up a search or to reproduce one study's network."),
+    "exclude_studies": ("Exclude these studies", "--exclude-studies IDS",
+                        "Comma separated mGrowthDB study ids that are never searched, for example a study "
+                        "you know to be unsuitable. Empty by default. It applies after Only these studies, "
+                        "so a study named in both is left out."),
     "only_entered": ("Only interactions between the species entered", "--all-partners",
                      "On by default: an edge is kept when both ends are species you typed. Untick it, or give "
                      "--all-partners, to see every partner of your species in the studies found."),

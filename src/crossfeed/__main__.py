@@ -101,7 +101,8 @@ def _derive_species(a):
                 "absence_threshold": a.absence_threshold, "include_low_quality": a.include_low_quality,
                 "correction": a.correction, "include_dropout": not a.no_dropout,
                 "include_non_batch": a.include_non_batch, "studies": a.study or "",
-                "only_entered": not a.all_partners, "no_growth_alpha": a.no_growth_alpha,
+                "only_entered": not a.all_partners, "exclude_studies": a.exclude_studies,
+                "no_growth_alpha": a.no_growth_alpha,
                 "no_growth_factor": a.no_growth_factor}
     try:
         result = run_query(MGrowthDBClient(), a.species, settings)
@@ -228,6 +229,8 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--species", nargs="+", metavar="NAME",
                    help="species or strain names, or NCBI taxon ids, as on the local page: every study holding "
                         "them is searched and one network returned (needs --live)")
+    d.add_argument("--exclude-studies", default="", metavar="IDS",
+                   help="with --species, comma separated study ids never to search (default: none)")
     d.add_argument("--all-partners", action="store_true",
                    help="with --species, keep interactions with species not entered too (the page's "
                         "'Only interactions between the species entered', unticked)")

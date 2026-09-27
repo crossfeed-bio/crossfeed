@@ -40,7 +40,7 @@ EXAMPLE = ("Faecalibacterium duncaniae", "Blautia hydrogenotrophica")
 INPUT_EXAMPLES = ("Blautia hydrogenotrophica", "Faecalibacterium duncaniae A2-165", "411483")
 DEFAULTS = {"metric": "auc", "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
             "include_low_quality": False, "correction": "bh", "include_dropout": True,
-            "include_non_batch": False, "studies": "", "only_entered": True,
+            "include_non_batch": False, "studies": "", "exclude_studies": "", "only_entered": True,
             # None: the no-growth rule's own defaults, read when used (crossfeed.interaction.grew)
             "no_growth_alpha": None, "no_growth_factor": None}
 PROVISIONAL = ("Each interaction compares a species' growth with and without its partner across replicates "
@@ -113,26 +113,34 @@ def _settings_block(settings: dict) -> str:
   one</span></div>
 <div class="row"><label>Absence threshold k
   <input name="absence_threshold" type="text" size="6" value="{_esc(s['absence_threshold'])}"></label>
-  <span class="muted">absent when |log2 mean| &lt; k &times; sd; 1 is mean &plusmn; sd, 0 marks none
-  absent</span></div>
+  <span class="muted">an interaction counts as absent (the species do not affect each other) when its
+  effect is small against its spread: |log2 mean| &lt; k &times; sd. 1 means the mean &plusmn; sd crosses
+  zero; 0 marks no interaction absent</span></div>
 <div class="row"><label>Multiple testing correction
   <select name="correction">{corrections}</select></label>
   <span class="muted">Benjamini-Hochberg (default) or the more conservative Benjamini-Yekutieli</span></div>
 <div class="row"><label>Spike limit
   <input name="spike_factor" type="text" size="6" value="{_esc(s['spike_factor'])}"></label>
-  <span class="muted">leave out a curve with one or two points this many times above both neighbours;
+  <span class="muted">leave out a curve with one or two points this many times above both neighbors;
   0 keeps all</span></div>
 <div class="row"><label>No-growth alpha
   <input name="no_growth_alpha" type="text" size="6" value="{_esc(_no_growth(s, 'alpha'))}"></label>
-  <span class="muted">a set has not grown when its rise from the first time point is not significant at
-  this level (paired t-test); 0 switches the rule off</span></div>
+  <span class="muted">before any comparison, grownet checks that a species grew: across the replicate
+  growth curves of that species in one culture condition, the rise from the first time point to the
+  maximum is tested (paired t-test). Not significant at this level, and below the factor: no growth. 0
+  switches the check off</span></div>
 <div class="row"><label>No-growth factor
   <input name="no_growth_factor" type="text" size="6" value="{_esc(_no_growth(s, 'factor'))}"></label>
-  <span class="muted">a set that rose at least this many times (geometric mean over replicates) has
-  grown whatever the test says; 0 leaves the test alone</span></div>
+  <span class="muted">replicate growth curves that rose at least this many times (geometric mean over the
+  replicates) count as growth whatever the test says; 1.5 by default, 2 is stricter, 0 leaves the test
+  alone</span></div>
 <div class="row"><label>Only these studies
   <input name="studies" type="text" size="40" value="{_esc(s['studies'])}"></label>
   <span class="muted">comma separated study ids; empty means every study holding the species</span></div>
+<div class="row"><label>Exclude these studies
+  <input name="exclude_studies" type="text" size="40" value="{_esc(s['exclude_studies'])}"></label>
+  <span class="muted">comma separated study ids never searched, for example a study you know to be
+  unsuitable; empty by default</span></div>
 <div class="row"><label><input type="checkbox" name="only_entered" value="1"{checked}>
   Only interactions between the species entered</label></div>
 </details>"""
@@ -366,6 +374,7 @@ def parse_settings(form: dict) -> dict:
     if correction in ("bh", "by"):
         settings["correction"] = correction
     settings["studies"] = form.get("studies", [""])[0].strip()
+    settings["exclude_studies"] = form.get("exclude_studies", [""])[0].strip()
     settings["only_entered"] = bool(form.get("only_entered"))
     return settings
 
@@ -396,6 +405,10 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
             studies = list(found.get("studies", []))
         except MGrowthDBError as e:
             errors.append(f"search failed: {e}")
+
+    # studies the user excluded are never searched, whether found or named (Karoline, 2026-09-27)
+    excluded = {sid.strip().upper() for sid in s["exclude_studies"].split(",") if sid.strip()}
+    studies = [sid for sid in studies if sid.upper() not in excluded]
 
     # A species name resolves to every strain of that species, and a strain keeps its taxon id across the
     # renamings mGrowthDB records (411483 is Faecalibacterium prausnitzii A2-165 in one study and

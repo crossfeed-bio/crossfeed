@@ -14,6 +14,10 @@ tagged version is never reused for changed content.
   require an entry for every setting, command line option and model field, so it cannot fall behind (#78).
 - `derive --live --species NAME ...` runs the local page's search from the command line, with
   `--all-partners` for the page's "only the species entered" box unticked (#78).
+- Clearer advanced settings: the absence threshold says it decides when an interaction counts as absent
+  (the species do not affect each other), and the no-growth settings say they test the replicate growth
+  curves of one species in one culture condition. A new setting, Exclude these studies
+  (`--exclude-studies` with `--species`), leaves the listed studies out of a search; empty by default.
 - Fixed: Send to Cytoscape delivered the network without its style. CyREST applies styles and layouts
   by GET and refused the POST (405), and the error was swallowed. The style is now called grownet,
   brought up to date in place when Cytoscape already has it, and a failure is reported on the page.

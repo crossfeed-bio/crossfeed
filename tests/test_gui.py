@@ -159,10 +159,10 @@ def test_form_hides_every_setting_behind_one_button():
     ({}, {**DEFAULTS, "only_entered": False, "include_dropout": False}),
     ({"metric": ["max"], "spike_factor": ["50"], "studies": [" S1 "], "only_entered": ["1"],
       "include_low_quality": ["1"], "include_dropout": ["1"], "no_growth_alpha": ["0.01"],
-      "no_growth_factor": ["4"]},
+      "no_growth_factor": ["4"], "exclude_studies": [" SMGDB00000008 "]},
      {"metric": "max", "spike_factor": 50.0, "studies": "S1", "only_entered": True, "include_low_quality": True,
       "correction": "bh", "absence_threshold": 1.0, "include_dropout": True, "include_non_batch": False,
-      "no_growth_alpha": 0.01, "no_growth_factor": 4.0}),
+      "no_growth_alpha": 0.01, "no_growth_factor": 4.0, "exclude_studies": "SMGDB00000008"}),
     ({"metric": ["nonsense"], "spike_factor": ["not a number"]},
      {**DEFAULTS, "only_entered": False, "include_dropout": False}),
 ])
@@ -379,3 +379,20 @@ def test_an_empty_result_names_the_step_that_found_nothing():
     r = _query()
     r["studies"], r["network"].edges = [], []
     assert "no study grows them" in render_result("tok", r)
+
+
+def test_an_excluded_study_is_never_searched():
+    # the fake search finds SMGDB00000001; excluding it leaves nothing to derive, found or named
+    assert _query()["studies"] == ["SMGDB00000001"]
+    assert _query(exclude_studies="smgdb00000001")["studies"] == []
+    named = _query(studies="SMGDB00000001", exclude_studies="SMGDB00000001, SMGDB00000009")
+    assert named["studies"] == [] and named["network"].edges == []
+    assert 'name="exclude_studies"' in render_form("tok") and 'value=""' in render_form("tok")
+
+
+def test_the_settings_say_what_is_absent_and_what_the_replicates_are():
+    # Karoline, 2026-09-27: "absence of what?", and "a set" was not explained
+    page = render_form("tok")
+    assert "an interaction counts as absent (the species do not affect each other)" in page
+    assert "the replicate\n  growth curves of that species in one culture condition" in page
+    assert "a set " not in page
