@@ -127,7 +127,7 @@ def shared_window(curves) -> tuple:
     return start, min(c.times[-1] for c in curves)
 
 
-def _cut(curve: GrowthCurve, end: float | None) -> tuple:
+def cut(curve: GrowthCurve, end: float | None) -> tuple:
     """The curve's points up to `end`, with a linearly interpolated point at `end` when it falls between
     two measurements."""
     times, values = curve.times, curve.values
@@ -158,7 +158,7 @@ FEATURES = {
 def curve_features(curve: GrowthCurve, end: float | None = None) -> dict:
     """Basic features of one growth curve, up to `end` (the whole curve by default): each name in FEATURES
     ("auc" in time unit times abundance unit, "max" in abundance unit) mapped to its value."""
-    times, values = _cut(curve, end)
+    times, values = cut(curve, end)
     return {name: fn(times, values) for name, fn in FEATURES.items()}
 
 

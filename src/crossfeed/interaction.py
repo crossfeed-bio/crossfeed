@@ -24,7 +24,9 @@ Two designs share this comparison:
     necessarily direct (evidence "dropout"); strictly it is a hyper-arc, kept as an arc with the community
     recorded. A two-member community is the bi-culture design.
 
-Zero growth is a result, not an error. When the target has a positive property only with the source present
+A set that did not grow is decided by the no-growth rule before any ratio: `grew` tests each replicate's
+maximum against its abundance at the first time point (Karoline, register item 5). Zero growth is a
+result, not an error. When the target has a positive property only with the source present
 (for example it grows in bi-culture but not in monoculture), the source is required for its growth: an
 obligate commensal or mutualist relationship, outcome "obligate". When it has a positive property only
 without the source, the source abolishes its growth, outcome "abolished". A log2 ratio is undefined in both
@@ -42,7 +44,17 @@ from __future__ import annotations
 import math
 import statistics
 
-from .growth import FEATURES, SPIKE_FACTOR, check_replicate_sets, check_sets, curve_features, shared_window, spike
+from .growth import (
+    FEATURES,
+    SPIKE_FACTOR,
+    check_replicate_sets,
+    check_sets,
+    curve_features,
+    cut,
+    shared_window,
+    spike,
+)
+from .stats import welch
 
 LOG = "log2"
 BICULTURE = "biculture"
@@ -50,6 +62,17 @@ DROPOUT = "dropout"
 QUANTIFIED, OBLIGATE, ABOLISHED, NO_GROWTH = "quantified", "obligate", "abolished", "no_growth"
 # a set left empty by exclusions (for example every replicate spiked): not a growth result, never exported
 UNUSABLE = "unusable"
+
+# The no-growth rule (Karoline, register item 5): a species has not grown in a set when its maximum is not
+# significantly above its abundance at the first time point, across the replicates of that set. It is
+# applied before any ratio, so a set that only drifts never produces a log ratio of two near-zero
+# quantities (register item 11). The test and its alpha are register item 10's business; this is the one
+# place they are named.
+NO_GROWTH_ALPHA = 0.05
+# A set also counts as grown when it rose by at least this factor, whatever the test says: with two or
+# three replicates a real rise often fails significance, and reading that as "no growth" turns an ordinary
+# comparison into an obligate or abolished claim (measured on live studies, #37).
+NO_GROWTH_FACTOR = 2.0
 
 
 def _check_method(method: str) -> None:
@@ -100,6 +123,60 @@ def _log_values(reps, species, role, prop, method, skipped, spike_factor=SPIKE_F
     return values
 
 
+def grew(reps, species: str, end: float, alpha: float = None, factor: float = None) -> dict:
+    """Whether `species` grew in a replicate set: {"grew", "n", "p", "reason"}.
+
+    Welch's two-sided t-test compares each replicate's maximum with its abundance at the first time point
+    of the shared window. Growth means the maxima are above the starts and the difference reaches `alpha`.
+    Below two replicates the test cannot run, so the set counts as grown when its maximum exceeds its
+    start: one replicate cannot establish an absence of growth, and such an edge is flagged
+    `single_replicate` anyway. `alpha` of 0 switches the rule off, leaving a positive property as the only
+    requirement, as before this rule existed.
+    """
+    alpha = NO_GROWTH_ALPHA if alpha is None else alpha
+    factor = NO_GROWTH_FACTOR if factor is None else factor
+    starts, maxima = [], []
+    for rep_ in reps:
+        curve = rep_.curve(species)
+        if curve is None:
+            continue
+        times, values = cut(curve, end)
+        if not values:
+            continue
+        starts.append(values[0])
+        maxima.append(max(values))
+    if not starts:
+        return {"grew": False, "n": 0, "p": None, "reason": "no usable curve for this species"}
+    rose = statistics.mean(maxima) > statistics.mean(starts)
+    if not alpha:
+        return {"grew": True, "n": len(starts), "p": None, "reason": ""}
+    test = welch(maxima, starts)
+    if test is None:
+        grew_ = max(maxima) > max(starts)
+        reason = "" if grew_ else "the maximum does not exceed the abundance at the first time point"
+        return {"grew": grew_, "n": len(starts), "p": None, "reason": reason}
+    if rose and test["p"] < alpha:
+        return {"grew": True, "n": len(starts), "p": test["p"], "reason": ""}
+    if factor and statistics.mean(maxima) >= factor * statistics.mean(starts):
+        return {"grew": True, "n": len(starts), "p": test["p"], "reason": ""}
+    return {"grew": False, "n": len(starts), "p": test["p"],
+            "reason": f"the maximum is not significantly above the abundance at the first time point "
+                      f"and did not reach {factor:g} times it (Welch p = {test['p']:.3g}, "
+                      f"alpha {alpha:g}, {len(starts)} replicates)"}
+
+
+def _grown_values(reps, species, role, prop, method, skipped, spike_factor, flagged, no_growth, end,
+                  alpha, factor) -> list:
+    """The log2 values of a set, or none when the set did not grow (the no-growth rule, #37)."""
+    verdict = grew(reps, species, end, alpha, factor)
+    if not verdict["grew"]:
+        skipped.append((f"{species}: {role}", verdict["reason"] or "no growth"))
+        if no_growth is not None:
+            no_growth.extend(f"{species}: {role} replicate {r.name or i}" for i, r in enumerate(reps))
+        return []
+    return _log_values(reps, species, role, prop, method, skipped, spike_factor, flagged, no_growth)
+
+
 def _compare(with_log2: list, without_log2: list, zero_with: int = 0, zero_without: int = 0) -> dict:
     """The log2 set comparison shared by both designs, including the outcomes where one set has no growth.
 
@@ -131,7 +208,8 @@ def _compare(with_log2: list, without_log2: list, zero_with: int = 0, zero_witho
 
 
 def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, method: str = "auc",
-                         spike_factor: float = SPIKE_FACTOR) -> dict:
+                         spike_factor: float = SPIKE_FACTOR, no_growth_alpha: float = None,
+                         no_growth_factor: float = None) -> dict:
     """Interaction strength of a species pair from mono versus bi-culture replicate sets.
 
     mono_a, mono_b: Replicates of species_a and species_b grown alone. co: Replicates of the co-culture,
@@ -155,10 +233,12 @@ def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, met
     result = {"method": method, "log": LOG, "window": (start, end), "skipped": [], "flagged": []}
     for key, species, monos in (("species_a", species_a, mono_a), ("species_b", species_b, mono_b)):
         zero_co, zero_mono = [], []
-        co_log2 = _log_values(co, species, "co-culture", prop, method, result["skipped"],
-                              spike_factor, result["flagged"], zero_co)
-        mono_log2 = _log_values(monos, species, "monoculture", prop, method, result["skipped"],
-                                spike_factor, result["flagged"], zero_mono)
+        co_log2 = _grown_values(co, species, "co-culture", prop, method, result["skipped"],
+                                spike_factor, result["flagged"], zero_co, end, no_growth_alpha,
+                                no_growth_factor)
+        mono_log2 = _grown_values(monos, species, "monoculture", prop, method, result["skipped"],
+                                  spike_factor, result["flagged"], zero_mono, end, no_growth_alpha,
+                                  no_growth_factor)
         c = _compare(co_log2, mono_log2, len(zero_co), len(zero_mono))
         result[key] = {"species": species, "outcome": c["outcome"], "mean": c["mean"], "sd": c["sd"], "se": c["se"],
                        "n_co": c["n_with"], "n_mono": c["n_without"],
@@ -167,7 +247,8 @@ def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, met
 
 
 def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc",
-                                  spike_factor: float = SPIKE_FACTOR) -> dict:
+                                  spike_factor: float = SPIKE_FACTOR,
+                                  no_growth_alpha: float = None, no_growth_factor: float = None) -> dict:
     """Interaction strengths from a full community and drop-out communities.
 
     full: Replicates of the full community, each with a curve for every member (the same members in every
@@ -222,10 +303,11 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc",
             window = shared_window(rep.curve(target) for rep in [*full, *reps])
             prop = _property(window[1], method)
             skips, flags, zero_full, zero_without = [], [], [], []
-            full_log2 = _log_values(full, target, "full community", prop, method, skips, spike_factor,
-                                    flags, zero_full)
-            without_log2 = _log_values(reps, target, without_role, prop, method, skips, spike_factor,
-                                       flags, zero_without)
+            full_log2 = _grown_values(full, target, "full community", prop, method, skips, spike_factor,
+                                      flags, zero_full, window[1], no_growth_alpha, no_growth_factor)
+            without_log2 = _grown_values(reps, target, without_role, prop, method, skips, spike_factor,
+                                         flags, zero_without, window[1], no_growth_alpha,
+                                         no_growth_factor)
             once(skips, result["skipped"])
             once(flags, result["flagged"])
             c = _compare(full_log2, without_log2, len(zero_full), len(zero_without))

@@ -10,8 +10,16 @@ from xml.etree import ElementTree as ET
 import pytest
 
 from crossfeed import gui
+from crossfeed import interaction
 from crossfeed.gui import DEFAULTS, parse_settings, render_form, render_result, run_query, serve
 from crossfeed.mgrowthdb import MGrowthDBError
+
+
+@pytest.fixture(autouse=True)
+def _no_growth_rule_off(monkeypatch):
+    """The fake study here predates the no-growth rule (#37): its curves check the page, not the rule."""
+    monkeypatch.setattr(interaction, "NO_GROWTH_ALPHA", 0.0)
+    monkeypatch.setattr(interaction, "NO_GROWTH_FACTOR", 0.0)
 
 A = "Faecalibacterium prausnitzii A2-165"
 B = "Blautia hydrogenotrophica DSM 10507"

@@ -252,6 +252,12 @@ experiment with no mode recorded, is reported with its mode and left out. `--inc
 matching advanced setting) derives them anyway, with their edges flagged `non_batch`. Every edge records
 its `cultivation_mode`.
 
+**Growth comes first.** Before any ratio, each replicate set is checked for growth: its maxima must be
+significantly above its abundances at the first time point (Welch's t-test, alpha 0.05) or it must have
+risen at least twofold. A set that did not grow yields `obligate`, `abolished` or `no_growth` rather than
+a log ratio between two near-zero quantities. With one replicate the test cannot run, so the set counts
+as grown when its maximum exceeds its start.
+
 **How presence and absence are decided.** Every tested comparison is exported as an edge, and its
 `status` says whether it counts as an interaction under the **absence threshold k**:
 

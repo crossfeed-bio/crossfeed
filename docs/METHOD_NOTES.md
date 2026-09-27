@@ -326,6 +326,16 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    growth is a test across replicates comparing start abundance to maximum abundance, not a
    detection limit. Still ours to pick: which test and its alpha (the same choice as item 10), and what
    to do when a set has no replicates to test with.
+   BUILT 2026-09-27 (#37): `crossfeed.interaction.grew` runs Welch's two-sided t-test on each replicate's
+   maximum against its abundance at the first time point, alpha `NO_GROWTH_ALPHA` = 0.05, applied before
+   any ratio. Below two replicates the test cannot run and the set counts as grown when its maximum
+   exceeds its start, since one replicate cannot establish an absence of growth. OPEN, needs Karoline:
+   with two or three replicates a real rise often misses significance, and reading that as no growth turns
+   an ordinary comparison into an obligate or abolished claim. Measured on live studies, the test alone
+   made 11 of SMGDB00000004's 16 edges obligate or abolished, and 7 of SMGDB00000013's 8. So a set also
+   counts as grown when it rose by at least `NO_GROWTH_FACTOR` (2, one doubling), which leaves those
+   studies as they were and still calls the flat and declining sets no growth. Karoline decides whether to
+   keep that second half, and at what factor.
 6. **Whether crossfeed ships a user interface at all** (#18). Karoline asked for a local page where a
    person types species names and gets their interactions, with settings hidden behind an "Advanced
    settings" button. Built as a standard-library server on 127.0.0.1 with no JavaScript, so the promise

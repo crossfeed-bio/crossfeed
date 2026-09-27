@@ -204,6 +204,16 @@ single replicate.
 so a design never mixes modes. Test fixtures must declare `"cultivationMode": "batch"` or they derive
 nothing, which is the point of the rule.
 
+## The no-growth rule
+
+`crossfeed.interaction.grew` decides whether a species grew in a replicate set, before any ratio is
+computed (#37, register item 5). A set has grown when its maxima are significantly above its first time
+points (Welch, `NO_GROWTH_ALPHA` = 0.05) or when it rose by at least `NO_GROWTH_FACTOR` (2). The second
+half is not Karoline's wording; it exists because the test alone is underpowered at two or three
+replicates, which inflates obligate and abolished claims (numbers in register item 5). It is open for her
+decision. Tests that predate the rule switch it off through an autouse fixture and say so, so each keeps
+checking what it claims; `TestNoGrowthRule` covers the rule itself.
+
 ## Gotchas
 
 - mGrowthDB serves growth curves, not interactions; interactions are derived.

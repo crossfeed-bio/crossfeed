@@ -3,8 +3,18 @@ import math
 
 import pytest
 
+from crossfeed import interaction
 from crossfeed.growth import GrowthCurve, Replicate
-from crossfeed.interaction import dropout_interaction_strengths, interaction_strength
+from crossfeed.interaction import dropout_interaction_strengths, grew, interaction_strength
+
+
+@pytest.fixture(autouse=True)
+def _no_growth_rule_off(monkeypatch):
+    """These examples predate the no-growth rule (#37) and check the ratio math, the windows, the spike
+    guard and the outcomes on hand-computed curves. The rule is switched off here so each test keeps
+    checking what it says it checks; `TestNoGrowthRule` covers the rule itself."""
+    monkeypatch.setattr(interaction, "NO_GROWTH_ALPHA", 0.0)
+    monkeypatch.setattr(interaction, "NO_GROWTH_FACTOR", 0.0)
 
 A = "Faecalibacterium prausnitzii"
 B = "Blautia hydrogenotrophica"
@@ -329,3 +339,67 @@ def test_a_set_emptied_by_exclusions_is_not_read_as_no_growth():
     mono_a4 = [Replicate([_curve(A, (1, 1, 1, 1, 1), times=(0, 1, 2, 3, 4))], "a1")]
     b = interaction_strength(mono_a4, spiked, co4, A, B)["species_b"]
     assert b["outcome"] == "unusable" and b["mean"] is None
+
+
+# ---- the no-growth rule (#37, Karoline's register item 5) ----------------------------------------
+
+class TestNoGrowthRule:
+    """The rule itself, with the autouse switch-off lifted."""
+
+    @pytest.fixture(autouse=True)
+    def _rule_on(self, monkeypatch):
+        monkeypatch.setattr(interaction, "NO_GROWTH_ALPHA", 0.05)
+        monkeypatch.setattr(interaction, "NO_GROWTH_FACTOR", 2.0)
+
+    @staticmethod
+    def _set(species, series):
+        return [Replicate([_curve(species, values)], f"r{i}") for i, values in enumerate(series)]
+
+    def test_a_clearly_growing_set_has_grown(self):
+        # every replicate rises a hundredfold: the maxima are far above the starts
+        reps = self._set(A, [(1, 100), (1, 120), (1, 90)])
+        assert grew(reps, A, 10.0)["grew"]
+
+    def test_a_flat_set_has_not_grown_and_the_reason_says_why(self):
+        reps = self._set(A, [(1, 1), (1, 1.05), (1, 0.95)])
+        verdict = grew(reps, A, 10.0)
+        assert not verdict["grew"] and verdict["n"] == 3
+        assert "not significantly above" in verdict["reason"] and "2 times" in verdict["reason"]
+
+    def test_a_declining_set_has_not_grown(self):
+        # the maximum is the inoculum, as in the SMGDB00000013 monocultures
+        assert not grew(self._set(A, [(100, 1), (120, 2), (90, 1)]), A, 10.0)["grew"]
+
+    def test_a_rise_that_misses_significance_but_doubles_counts_as_growth(self):
+        # starts 1, 1; maxima 1, 8: mean 4.5 is above 2 times 1, while Welch on two values per side is
+        # nowhere near p < 0.05. Without this, an ordinary comparison would be called obligate (#37)
+        reps = self._set(A, [(1, 1), (1, 8)])
+        verdict = grew(reps, A, 10.0)
+        assert verdict["grew"] and verdict["p"] > 0.05
+
+    def test_one_replicate_cannot_establish_an_absence_of_growth(self):
+        # the test needs two per side, so the rule falls back to the values themselves
+        assert grew(self._set(A, [(1, 5)]), A, 10.0)["grew"]
+        assert not grew(self._set(A, [(5, 5)]), A, 10.0)["grew"]
+
+    def test_alpha_zero_switches_the_rule_off(self):
+        assert grew(self._set(A, [(1, 1), (1, 1)]), A, 10.0, alpha=0.0)["grew"]
+
+    def test_a_species_growing_only_in_co_culture_is_obligate(self):
+        mono = self._set(B, [(1, 1), (1, 1.02), (1, 0.98)])       # flat alone
+        mono_a = self._set(A, [(1, 40), (1, 45), (1, 50)])
+        co = [Replicate([_curve(A, (1, 40)), _curve(B, (1, 60))], "c1"),
+              Replicate([_curve(A, (1, 45)), _curve(B, (1, 70))], "c2"),
+              Replicate([_curve(A, (1, 50)), _curve(B, (1, 65))], "c3")]
+        side = interaction_strength(mono_a, mono, co, A, B)["species_b"]
+        assert side["outcome"] == "obligate" and side["mean"] is None
+        assert (side["n_co"], side["n_mono"]) == (3, 3)           # the flat replicates are counted
+
+    def test_a_set_that_only_drifts_never_reaches_a_ratio(self):
+        flat = self._set(A, [(1, 1), (1, 1.01), (1, 0.99)])
+        r = interaction_strength(flat, self._set(B, [(1, 1), (1, 1.01), (1, 0.99)]),
+                                 [Replicate([_curve(A, (1, 1)), _curve(B, (1, 1))], "c1"),
+                                  Replicate([_curve(A, (1, 1.01)), _curve(B, (1, 0.99))], "c2"),
+                                  Replicate([_curve(A, (1, 0.99)), _curve(B, (1, 1.01))], "c3")], A, B)
+        assert r["species_a"]["outcome"] == "no_growth" and r["species_b"]["outcome"] == "no_growth"
+        assert any("not significantly above" in reason for _, reason in r["skipped"])

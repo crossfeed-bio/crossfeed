@@ -3,6 +3,7 @@ import math
 
 import pytest
 
+from crossfeed import interaction
 from crossfeed.derive import (
     _gs,
     absence,
@@ -14,6 +15,15 @@ from crossfeed.derive import (
     output_meta,
 )
 from crossfeed.mgrowthdb import records_to_network
+
+
+@pytest.fixture(autouse=True)
+def _no_growth_rule_off(monkeypatch):
+    """These examples predate the no-growth rule (#37) and check the ratio math, the windows, the spike
+    guard and the outcomes on hand-computed curves. The rule is switched off here so each test keeps
+    checking what it says it checks; `TestNoGrowthRule` covers the rule itself."""
+    monkeypatch.setattr(interaction, "NO_GROWTH_ALPHA", 0.0)
+    monkeypatch.setattr(interaction, "NO_GROWTH_FACTOR", 0.0)
 
 STUDY = {"id": "SMGDB_TEST", "name": "synthetic test study", "url": "http://example/study"}
 A = "Faecalibacterium prausnitzii A2-165"
