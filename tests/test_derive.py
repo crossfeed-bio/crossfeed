@@ -724,3 +724,11 @@ def test_the_monoculture_set_with_the_co_cultures_qualifier_is_used():
     assert not any("none is guessed" in r for _, r in skipped)
     # matched by name, so no caution, although the pair has description-only variants
     assert not any("conditions_unverified" in r["cautions"] for r in records)
+
+
+def test_a_study_of_monocultures_only_says_so():
+    # SMGDB00000015's shape: nothing but monocultures, so nothing to compare, stated once up front
+    exps = [_described("A", [A], "A alone"), _described("B", [B], "B alone")]
+    curves = {("A", A): [(1, 1), (1, 1.4)], ("B", B): [(1, 1), (1, 1.4)]}
+    records, skipped = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S15"}, exps)
+    assert records == [] and skipped[0][1].startswith("only monocultures (2 experiments of one strain each)")

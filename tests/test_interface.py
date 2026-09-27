@@ -215,3 +215,17 @@ def test_the_report_gives_the_run_time_the_tool_version_and_the_data_version(ser
     assert f"tool: grownet {__version__}" in text
     assert "data version: mGrowthDB publishes no database version" in text
     assert "  SMGDB00000001: uploaded 2025-06-26, published 2025-06-29" in text     # each study's dates
+
+
+def test_each_search_keeps_its_own_outputs(server):
+    # two searches in two tabs: the first tab's download is still the first search's network
+    base, token = server
+    first = _finished(base, token)
+    second = _finished(base, token, only_entered="")          # every partner: a different search
+    job1 = re.search(r'name="job" value="([0-9a-f]+)"', first).group(1)
+    job2 = re.search(r'name="job" value="([0-9a-f]+)"', second).group(1)
+    assert job1 != job2 and f"/report.txt?token={token}&amp;job={job1}" in first
+    _, report1, _ = _open(f"{base}/report.txt?token={token}&job={job1}")
+    _, report2, _ = _open(f"{base}/report.txt?token={token}&job={job2}")
+    assert "Only interactions between the species entered (--all-partners): on" in report1
+    assert "Only interactions between the species entered (--all-partners): off" in report2

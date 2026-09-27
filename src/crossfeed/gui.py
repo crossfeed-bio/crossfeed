@@ -295,16 +295,20 @@ def _sources(net) -> str:
 def _outputs(token: str, result: dict, has_edges: bool) -> str:
     """The three outputs Karoline asked for (#76): the network with a format menu, Cytoscape, the report."""
     t = _esc(token)
+    # every output names the search it belongs to, so two tabs never mix their networks up
+    job = _esc(result.get("job", ""))
+    tail = f"&amp;job={job}" if job else ""
     download = (f"<form class=\"inline\" method=\"get\" action=\"/download\">"
                 f"<input type=\"hidden\" name=\"token\" value=\"{t}\">"
+                + (f"<input type=\"hidden\" name=\"job\" value=\"{job}\">" if job else "") +
                 "<button class=\"primary\" type=\"submit\">Download network</button> "
                 "<select name=\"format\" aria-label=\"Network format\">"
                 "<option value=\"json\">JSON</option><option value=\"graphml\">GraphML</option></select></form>")
-    cytoscape = (f"<form class=\"inline\" method=\"post\" action=\"/cytoscape?token={t}\">"
+    cytoscape = (f"<form class=\"inline\" method=\"post\" action=\"/cytoscape?token={t}{tail}\">"
                  "<button type=\"submit\">Send to Cytoscape</button></form>")
     report = (f"<details class=\"report\"><summary class=\"btn\">Report</summary>"
               f"<pre>{_esc(report_text(result))}</pre>"
-              f"<p><a class=\"btn\" href=\"/report.txt?token={t}\">Download the report (.txt)</a></p></details>")
+              f"<p><a class=\"btn\" href=\"/report.txt?token={t}{tail}\">Download the report (.txt)</a></p></details>")
     hint = ("<p class=\"hint\">Send to Cytoscape needs Cytoscape running on this machine; the network arrives in "
             "the legend's style. The report holds every setting and every reason a pair gave no edge.</p>")
     return (f"<div class=\"bar outputs\">{download if has_edges else ''}{cytoscape if has_edges else ''}"
@@ -345,6 +349,10 @@ def _empty_reason(result: dict) -> str:
         return (f"{result['hidden']['low_quality']} low-quality interaction(s) were found and are hidden; tick "
                 "Show low-quality edges to see them.")
     reasons = [reason for _, reason in result["skipped"]]
+    only_monocultures = [r for r in reasons if r.startswith("only monocultures")]
+    if only_monocultures and len(only_monocultures) == len(result["studies"]):
+        return ("The studies holding these species grew them only alone, in monocultures, so there is no "
+                "co-culture or community to compare with.")
     non_batch = [r for r in reasons if "a non-batch curve is not comparable" in r]
     if non_batch and len(non_batch) == len(reasons) and not s.get("include_non_batch"):
         return ("These studies are chemostat or serial dilution experiments, which are left out by default; "
@@ -562,11 +570,19 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return render_progress(self.token, job)
         if job["status"] == "failed":
             return render_form(self.token, "\n".join(job["entries"]), job["settings"], job["error"])
+        job["result"]["job"] = job["id"]
         self.state["result"] = job["result"]
         return render_result(self.token, job["result"])
 
-    def _download(self, fmt: str):
-        result = self.state.get("result")
+    def _result(self, query: dict):
+        """The search a request names with job=, or the latest one when it names none."""
+        job = self.state.get("jobs", {}).get(query.get("job", [""])[0])
+        if job and job.get("status") == "done":
+            return job["result"]
+        return self.state.get("result")
+
+    def _download(self, fmt: str, query: dict):
+        result = self._result(query)
         if not result:
             self._send(render_form(self.token, message="Nothing to download yet."))
         elif fmt == "graphml":
@@ -587,11 +603,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif parsed.path == "/legend":
             self._send(render_legend(self.token))
         elif parsed.path == "/download":
-            self._download(query.get("format", ["json"])[0])
+            self._download(query.get("format", ["json"])[0], query)
         elif parsed.path in ("/download.json", "/download.graphml"):
-            self._download(parsed.path.rsplit(".", 1)[1])
+            self._download(parsed.path.rsplit(".", 1)[1], query)
         elif parsed.path == "/report.txt":
-            result = self.state.get("result")
+            result = self._result(query)
             if not result:
                 self._send(render_form(self.token, message="No report yet: run a search first."))
             else:
@@ -599,9 +615,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         else:
             self.send_error(404, "no such page")
 
-    def _to_cytoscape(self) -> str:
+    def _to_cytoscape(self, query: dict) -> str:
         """Send the network already computed, without deriving it again (#25)."""
-        result = self.state.get("result")
+        result = self._result(query)
         if not result:
             return render_form(self.token, message="Nothing to send yet.")
         try:
@@ -647,7 +663,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if not self._authorized(urllib.parse.parse_qs(parsed.query)):
             return
         if parsed.path == "/cytoscape":
-            self._send(self._to_cytoscape())
+            self._send(self._to_cytoscape(urllib.parse.parse_qs(parsed.query)))
             return
         length = int(self.headers.get("Content-Length") or 0)
         form = urllib.parse.parse_qs(self.rfile.read(length).decode("utf-8"))

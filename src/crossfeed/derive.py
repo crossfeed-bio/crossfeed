@@ -738,6 +738,10 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
         "study_license": "",
     }
     records, skipped = [], []
+    if exps and all(len(_members(exp)) < 2 for exp in exps):
+        # SMGDB00000015 holds 91 monocultures and nothing else: say so first, not only per replicate
+        skipped.append((f"study {study_id}", f"only monocultures ({len(exps)} experiments of one strain each): "
+                        "an interaction needs a co-culture or a community to compare with"))
     exps = _batch_only(exps, include_non_batch, skipped)
     identities = strain_identities(exps, skipped)
     monos = _mono_index(client, exps, skipped, spike_factor, identities)
