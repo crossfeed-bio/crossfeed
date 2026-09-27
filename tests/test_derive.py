@@ -637,3 +637,70 @@ def test_a_dropout_design_in_a_chemostat_is_excluded_too():
     records, skipped = interactions_from_replicates(client, study, _mode(exps, "serial dilution"))
     assert records == []
     assert any("serial dilution, excluded by default" in reason for _, reason in skipped)
+
+
+# ---- conditions recorded only in descriptions (Karoline, 2026-09-27) -----------------------------
+
+def _described(name, species, description):
+    exp = _rep_experiment(name, species)
+    exp["description"] = description
+    return exp
+
+
+def test_monocultures_told_apart_only_by_their_descriptions_are_not_pooled():
+    # SMGDB00000014's shape: A grown alone with and without a supplement, under identical recorded
+    # conditions. Pooling them would compare the co-culture with a mix of conditions; neither names the
+    # co-culture, so none is guessed and the pair says why.
+    exps = [_described("A plain", [A], "A on minimal medium"), _described("A oleic", [A], "A with 1% oleic acid"),
+            _described("B alone", [B], "B on minimal medium"), _described("co", [A, B], "A and B")]
+    curves = {("A plain", A): [(1, 1), (1, 1.4)], ("A oleic", A): [(1, 6), (1, 7)],
+              ("B alone", B): [(1, 1), (1, 1.4)], ("co", A): [(1, 3), (1, 3.8)], ("co", B): [(1, 1), (1, 1.4)]}
+    records, skipped = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S"}, exps)
+    assert records == []
+    reason = next(r for label, r in skipped if label.startswith(f"{A} with {B}"))
+    assert "2 monoculture sets" in reason and "told apart only by their descriptions" in reason
+    assert "none is guessed" in reason
+
+
+def test_the_monoculture_set_whose_description_names_the_co_culture_is_used():
+    # SMGDB00000007's shape: each co-culture has its own controls, 'controls of the "co" experiment'. The
+    # named set (areas 10, 12) is used, not the other (areas 30, 30), so B -> A is the hand-computed +1.0.
+    exps = [_described("A1", [A], 'A controls of the "co" experiment'),
+            _described("A2", [A], 'A controls of the "other" experiment'),
+            _described("B1", [B], 'B controls of the "co" experiment'), _described("co", [A, B], "A and B")]
+    curves = {("A1", A): [(1, 1), (1, 1.4)], ("A2", A): [(3, 3), (3, 3)], ("B1", B): [(1, 1), (1, 1.4)],
+              ("co", A): [(1, 3), (1, 3.8)], ("co", B): [(1, 1), (1, 1.4)]}
+    records, _ = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S"}, exps)
+    arc = _by_arc(records)[(B, A)]
+    assert arc["strength"] == pytest.approx(1.0) and "E_A1" in arc["experiments"] and "E_A2" not in arc["experiments"]
+    assert "conditions_unverified" not in arc["cautions"]
+
+
+def test_co_cultures_differing_only_in_description_are_cautioned():
+    # SMGDB00000004's shape: RI_BH +Ac and -Ac under identical recorded conditions, one monoculture set per
+    # strain. At most one of them matches the monocultures, and nothing recorded says which.
+    exps = [_described("mono A", [A], "A"), _described("mono B", [B], "B"),
+            _described("co +Ac", [A, B], "A and B with initial acetate"),
+            _described("co -Ac", [A, B], "A and B without initial acetate")]
+    curves = {("mono A", A): [(1, 1), (1, 1.4)], ("mono B", B): [(1, 1), (1, 1.4)]}
+    for n in ("co +Ac", "co -Ac"):
+        curves.update({(n, A): [(1, 3), (1, 3.8)], (n, B): [(1, 1), (1, 1.4)]})
+    records, _ = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S"}, exps)
+    assert len(records) == 4 and all("conditions_unverified" in r["cautions"] for r in records)
+    edges, meta = output_meta(records)
+    assert meta["hidden"]["low_quality"] == 0                      # a caution: shown, not hidden
+
+
+def test_a_pair_with_one_co_culture_is_not_cautioned():
+    client, study, exps = _replicate_study()
+    records, _ = interactions_from_replicates(client, study, exps)
+    assert not any("conditions_unverified" in r["cautions"] for r in records)
+
+
+def test_dropout_arcs_are_cautioned_when_the_full_community_has_description_variants():
+    # two full communities told apart only by their descriptions: which drop-out goes with which is not recorded
+    client, study, exps = _dropout_study(full_names=("full +glc", "full -glc"))
+    records, _ = interactions_from_replicates(client, study, exps)
+    assert records and all("conditions_unverified" in r["cautions"] for r in records)
+    plain, _ = interactions_from_replicates(*_dropout_study()[:1], {"id": "S"}, _dropout_study()[2])
+    assert not any("conditions_unverified" in r["cautions"] for r in plain)

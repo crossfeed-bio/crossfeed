@@ -185,6 +185,9 @@ def cultivation(exp: dict) -> str:
     return (exp.get("cultivationMode") or "unspecified").strip().lower()
 # Cautions are shown without making an edge low quality (Karoline, on #47): the edge keeps its status.
 TWO_REPLICATES = "two_replicates"
+# experiments that differ only in their description (a supplement, a lineage) under identical recorded
+# conditions, where nothing recorded says which monoculture or drop-out matches which (Karoline, 2026-09-27)
+CONDITIONS_UNVERIFIED = "conditions_unverified"
 
 
 def conditions(exp: dict) -> str:
@@ -278,8 +281,15 @@ def _identity(identities: dict, name: str) -> dict:
 
 
 def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, identities=None) -> dict:
-    """(node id, conditions) -> (monoculture replicates, the distinct strain names pooled under it, the ids
-    of the experiments they come from). Only strains identified by name can pool different strains."""
+    """(node id, conditions) -> {run group: (monoculture replicates, the distinct strain names pooled under
+    it, the ids of the experiments they come from, their descriptions)}.
+
+    Monocultures are pooled only when they are replicates: identical recorded conditions AND the same
+    description apart from a run number (`run_group`), the rule communities already follow (Karoline, on
+    #47 and on 2026-09-27). mGrowthDB records supplements, concentrations, starting densities and lineages
+    in the description only, so monocultures that differ there were grown differently and stay apart.
+    Only strains identified by name can pool different strains.
+    """
     identities = identities if identities is not None else strain_identities(exps, [])
     index = {}
     for exp in exps:
@@ -289,15 +299,44 @@ def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, ident
         replicates, skips = replicates_for_experiment(client, exp, spike_factor)
         skipped += skips
         key = (_identity(identities, members[0])["id"], conditions(exp))
-        reps, strains, ids = index.setdefault(key, ([], set(), []))
+        reps, strains, ids, descriptions = index.setdefault(key, {}).setdefault(run_group(exp), ([], set(), [], []))
         reps.extend(replicates)
         strains.add(members[0])
         ids.append(_exp_id(exp))
-    for (key, _), (_, strains, _) in index.items():
-        if len(strains) > 1 and not key.startswith("ncbi:"):
-            skipped.append((f"monocultures of {key}", f"{len(strains)} strains pooled into one monoculture set "
-                            f"({', '.join(sorted(strains))}); edges using it are flagged {STRAINS_POOLED}"))
+        descriptions.append(exp.get("description") or exp.get("name") or "")
+    for (key, _), groups in index.items():
+        for _, (_, strains, _, _) in groups.items():
+            if len(strains) > 1 and not key.startswith("ncbi:"):
+                skipped.append((f"monocultures of {key}", f"{len(strains)} strains pooled into one monoculture set "
+                                f"({', '.join(sorted(strains))}); edges using it are flagged {STRAINS_POOLED}"))
     return index
+
+
+_QUOTED = re.compile(r'["\u201c\u201d\']([^"\u201c\u201d\']+)["\u201c\u201d\']')
+
+
+def _quoted(text: str) -> set:
+    """The names a description quotes, as 'controls of the "bhri" experiment' quotes bhri."""
+    return {q.strip().casefold() for q in _QUOTED.findall(text or "")}
+
+
+def _choose_monocultures(groups: dict, exp: dict):
+    """The monoculture set a co-culture is compared with, or (None, why) when that is not known.
+
+    One set under the co-culture's recorded conditions: that one. Several, told apart only by their
+    descriptions: the one whose description names the co-culture experiment, as study 7's controls do
+    ('controls of the "bhri" experiment'). Otherwise none is guessed (Karoline, 2026-09-27).
+    """
+    if len(groups) == 1:
+        return next(iter(groups.values())), ""
+    name = (exp.get("name") or "").strip().casefold()
+    named = [g for g in groups.values() if any(name in _quoted(d) for d in g[3])]
+    if len(named) == 1:
+        return named[0], ""
+    labels = "; ".join(sorted({g[3][0][:70] for g in groups.values()}))
+    return None, (f"{len(groups)} monoculture sets under this experiment's recorded conditions, told apart only by "
+                  f"their descriptions ({labels}); none names this co-culture, so which one matches it is not "
+                  "known and none is guessed")
 
 
 def _exp_id(exp: dict) -> str:
@@ -418,7 +457,7 @@ def _no_growth_kwargs(no_growth) -> dict:
 
 
 def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, records, skipped,
-              identities=None, no_growth=None) -> None:
+              identities=None, no_growth=None, variants=1) -> None:
     """The edges of one two-member co-culture against the monocultures of its members."""
     a, b = _members(exp)
     cond = exp.get("name", "")
@@ -427,10 +466,14 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
     sets, pooled, origin = {}, {}, {}
     for species in (a, b):
         key = (_identity(identities or {}, species)["id"], conditions(exp))
-        found, strains, ids = monos.get(key, ([], set(), []))
-        if not found:
+        groups = monos.get(key, {})
+        chosen, why = _choose_monocultures(groups, exp) if groups else (None, "")
+        found, strains, ids = (chosen[0], chosen[1], chosen[2]) if chosen else ([], set(), [])
+        if not groups:
             skipped.append((f"{a} with {b} [{cond}]",
                             f"no monoculture replicates for {species} under this experiment's conditions"))
+        elif not chosen:
+            skipped.append((f"{a} with {b} [{cond}]", f"{species}: {why}"))
         sets[species] = _renamed(found, species)
         pooled[species] = len(strains) > 1 and not key[0].startswith("ncbi:")
         origin[species] = ids
@@ -457,6 +500,10 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
              "n_with": side["n_co"], "n_without": side["n_mono"],
              "with_log2": side["co_log2"], "without_log2": side["mono_log2"]}
         quality, cautions = _replicate_flags(c["n_with"], c["n_without"])
+        if variants > 1:
+            # co-cultures of this pair under the same recorded conditions differ only in their description
+            # (study 4's +Ac and -Ac), and nothing recorded says which one the monocultures match
+            cautions.append(CONDITIONS_UNVERIFIED)
         if pooled[target]:
             quality.append(STRAINS_POOLED)
         mode = cultivation(exp)
@@ -580,8 +627,17 @@ def _common_start(full, dropouts, skipped) -> tuple:
     return keep("full community", full), {r: group for r, group in kept.items() if group}
 
 
+def _variants(exps) -> dict:
+    """(members, recorded conditions) -> how many description variants (`run_group`) of that community a
+    study holds: more than one means experiments that differ only in their description."""
+    groups = {}
+    for exp in exps:
+        groups.setdefault((frozenset(_members(exp)), conditions(exp)), set()).add(run_group(exp))
+    return {key: len(g) for key, g in groups.items()}
+
+
 def _dropout(client, design, method, spike_factor, study_id, study_meta, records, skipped,
-             identities=None, no_growth=None) -> None:
+             identities=None, no_growth=None, variants=None) -> None:
     """The arcs of one drop-out design, from `crossfeed.interaction.dropout_interaction_strengths`."""
     members, full_exps, drops = design
     label = f"drop-out design of {len(members)} members ({', '.join(e.get('name', '') for e in full_exps)})"
@@ -620,6 +676,12 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
         mode = cultivation(full_exps[0])
         if mode != BATCH:
             quality.append(NON_BATCH)
+        # the full community or this drop-out comes in variants told apart only by their descriptions, so
+        # which drop-out goes with which full community is not recorded (Karoline, 2026-09-27)
+        key = conditions(full_exps[0])
+        if (variants or {}).get((frozenset(members), key), 1) > 1 or \
+                (variants or {}).get((frozenset(members - {removed}), key), 1) > 1:
+            cautions.append(CONDITIONS_UNVERIFIED)
         cond = ", ".join(e.get("name", "") for e in drops[removed])
         experiments = [_exp_id(e) for e in [*full_exps, *drops[removed]]]
         records.append(_record(removed, target, arc, method, quality, cautions, notes, cond, arc["evidence"],
@@ -659,14 +721,15 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
     exps = _batch_only(exps, include_non_batch, skipped)
     identities = strain_identities(exps, skipped)
     monos = _mono_index(client, exps, skipped, spike_factor, identities)
+    variants = _variants(exps)
     for exp in exps:
         if len(_members(exp)) == 2:
             _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, records, skipped,
-                      identities, no_growth)
+                      identities, no_growth, variants[(frozenset(_members(exp)), conditions(exp))])
     if dropout:
         for design in dropout_designs(exps, skipped):
             _dropout(client, design, method, spike_factor, study_id, study_meta, records, skipped, identities,
-                     no_growth)
+                     no_growth, variants)
     elif any(len(_members(exp)) > 2 for exp in exps):
         skipped.append(("communities of more than two members", "drop-out designs switched off; no arcs derived"))
     return records, skipped

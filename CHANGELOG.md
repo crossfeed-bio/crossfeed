@@ -27,6 +27,10 @@ tagged version is never reused for changed content.
   (the species do not affect each other), and the no-growth settings say they test the replicate growth
   curves of one species in one culture condition. A new setting, Exclude these studies
   (`--exclude-studies` with `--species`), leaves the listed studies out of a search; empty by default.
+- Conditions recorded only in descriptions (Karoline, METHOD_NOTES item 22): monocultures are pooled only
+  when their descriptions agree; a co-culture uses the monoculture set whose description names it, or is
+  skipped with the reason when several fit; edges from description-only variants carry the new caution
+  `conditions_unverified`. SMGDB00000013 and SMGDB00000014 now derive nothing, each pair saying why.
 - Nodes in Cytoscape: each genus its own color (Karoline), from a list of 48 ordered by how distinct each
   stays. Fixed: a second send in one Cytoscape session arrived unstyled, because updating the existing
   style asked CyREST to delete all mappings at once, which it refuses; they are now deleted one by one.

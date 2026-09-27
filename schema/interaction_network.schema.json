@@ -215,7 +215,8 @@
           "type": "array",
           "items": {
             "enum": [
-              "two_replicates"
+              "two_replicates",
+              "conditions_unverified"
             ]
           }
         },
@@ -252,4 +253,3 @@
     }
   }
 }
-

@@ -190,6 +190,11 @@ Rules for this file:
   default can be medium (1.5) and it can be made more stringent by the user (e.g. set to 2)." So
   `NO_GROWTH_FACTOR` is 1.5. Measured on six live studies, 1.5 admits three sets more than 2 does, all
   sustained rises of 1.7 to 2 times, none a single noisy point.
+- 2026-09-27 (Karoline, conditions recorded only in descriptions, METHOD_NOTES item 22): "yes to 1-3,
+  and 4 is noted". Monocultures pool only when their descriptions agree (`_mono_index` keys on
+  `run_group`); several candidate sets: the one whose description quotes the co-culture's name
+  (`_choose_monocultures`), else the pair is skipped; description-only variants of a pair or a drop-out
+  design get the caution `conditions_unverified`.
 
 ## Open questions (need a human)
 

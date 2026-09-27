@@ -558,5 +558,28 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    ... show those edges but take care in the cytoscape style that they are marked somehow, e.g. dashed."
    They keep the flag and an undetermined `status`; the other low-quality flags stay hidden by default.
 
+22. **Conditions recorded only in descriptions** (Karoline, 2026-09-27). A co-culture was compared with
+   the monocultures that share its recorded conditions (cultivation mode and every compartment field:
+   medium, temperature, pH, volume, stirring, gases, pressure, dilution rate, inoculum), and a drop-out
+   with the full community under the same conditions. But mGrowthDB records supplements, concentrations,
+   starting densities and lineages only in the free-text description, so monocultures grown differently
+   were pooled: SMGDB00000013 pooled evolved and ancestral lines, SMGDB00000014 0% to 1% oleic and
+   linoleic acid, SMGDB00000015 glutamate and starting densities from about 10^2 to 10^7, SMGDB00000007
+   the controls of three experiments. Karoline's decision, her words: "yes to 1-3, and 4 is noted", for
+   these proposals of her agent:
+   1. monocultures are pooled only when their descriptions also agree (apart from a run number), as
+      communities already are;
+   2. when several monoculture sets fit a co-culture, the one whose description names that co-culture
+      experiment is used (SMGDB00000007: 'controls of the "bhri" experiment'); otherwise the pair is
+      skipped with the reason and the candidates, never guessed;
+   3. edges from co-cultures of a pair that differ only in their description (SMGDB00000004's +Ac and
+      -Ac), and drop-out arcs whose full community or drop-out has such variants, carry the caution
+      `conditions_unverified`: shown, and marked;
+   4. the lasting fix is in mGrowthDB: supplements, concentrations, starting density and lineage as
+      recorded fields (noted by Karoline for mGrowthDB).
+   Effect: SMGDB00000004 keeps its edges, 16 of 20 cautioned; SMGDB00000007 compares each co-culture
+   with its own controls; SMGDB00000008 is unchanged; SMGDB00000013 and SMGDB00000014 derive nothing,
+   every pair skipped as ambiguous.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.
