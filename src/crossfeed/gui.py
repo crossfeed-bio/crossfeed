@@ -29,8 +29,8 @@ from .taxonomy import resolve_species, species_index
 
 TITLE = "crossfeed"
 DEFAULTS = {"metric": "auc", "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
-            "include_low_quality": False, "correction": "bh", "include_dropout": True, "studies": "",
-            "only_entered": True}
+            "include_low_quality": False, "correction": "bh", "include_dropout": True,
+            "include_non_batch": False, "studies": "", "only_entered": True}
 PROVISIONAL = ("Each interaction compares a species' growth with and without its partner across replicates "
                "(mean log2 difference). An interaction is reported when |mean| is at least k standard "
                "deviations (the absence threshold, default 1: the mean plus or minus its standard deviation "
@@ -74,6 +74,7 @@ def _settings_block(settings: dict) -> str:
     checked = " checked" if s["only_entered"] else ""
     low = " checked" if s["include_low_quality"] else ""
     dropout = " checked" if s["include_dropout"] else ""
+    non_batch = " checked" if s["include_non_batch"] else ""
     corrections = "".join(f"<option value=\"{c}\"{' selected' if s['correction'] == c else ''}>{label}</option>"
                           for c, label in (("bh", "Benjamini-Hochberg"), ("by", "Benjamini-Yekutieli")))
     options = "".join(f"<option value=\"{m}\"{' selected' if s['metric'] == m else ''}>{m}</option>"
@@ -91,6 +92,10 @@ def _settings_block(settings: dict) -> str:
   Include drop-out communities</label>
   <span class="muted">arcs from a community compared with the same community without one member; possibly
   indirect, so labeled as such</span></div>
+<div class="row"><label><input type="checkbox" name="include_non_batch" value="1"{non_batch}>
+  Include chemostat and serial dilution experiments</label>
+  <span class="muted">excluded by default: a continuous-culture curve is not comparable with a batch
+  one</span></div>
 <div class="row"><label>Absence threshold k
   <input name="absence_threshold" type="text" size="6" value="{_esc(s['absence_threshold'])}"></label>
   <span class="muted">absent when |log2 mean| &lt; k &times; sd; 1 is mean &plusmn; sd, 0 marks none
@@ -249,6 +254,7 @@ def parse_settings(form: dict) -> dict:
         pass
     settings["include_low_quality"] = bool(form.get("include_low_quality"))
     settings["include_dropout"] = bool(form.get("include_dropout"))
+    settings["include_non_batch"] = bool(form.get("include_non_batch"))
     try:
         settings["absence_threshold"] = abs(float(form.get("absence_threshold", [""])[0]))
     except ValueError:
@@ -287,7 +293,8 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     for study_id in studies:
         try:
             recs, skips = derive_interactions(client, study_id, metric=s["metric"],
-                                              spike_factor=s["spike_factor"], dropout=s["include_dropout"])
+                                              spike_factor=s["spike_factor"], dropout=s["include_dropout"],
+                                              include_non_batch=s["include_non_batch"])
         except MGrowthDBError as e:
             errors.append(f"{study_id}: {e}")
             continue

@@ -12,7 +12,7 @@ B = "Blautia hydrogenotrophica DSM 10507"
 
 
 def _mono(name, gr):
-    return {"id": "E_" + name, "name": name, "communityStrains": [{"name": name}],
+    return {"id": "E_" + name, "name": name, "cultivationMode": "batch", "communityStrains": [{"name": name}],
             "bioreplicates": [{"name": "r1", "measurementContexts": [
                 {"techniqueType": "fc", "subject": {"type": "bioreplicate", "name": name}, "growthRate": gr}]}]}
 

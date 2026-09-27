@@ -10,6 +10,10 @@ tagged version is never reused for changed content.
 - A legend (`docs/legend.svg`, `make legend`, and "What the arcs mean" on the local page): one picture of
   what each arc, head, dash and flag means. It is drawn from the code, and a test requires it to name every
   value in the model's vocabulary, so it cannot drift from what the network shows.
+- Chemostat and serial dilution experiments are left out of a derivation by default (#42), reported with
+  their mode, and derived with `--include-non-batch` or the matching advanced setting, where their edges
+  are flagged `non_batch`. An experiment with no recorded mode counts as not batch. Edges gained
+  `cultivation_mode`. SMGDB00000001, SMGDB00000005 and SMGDB00000011 now say why they derive nothing.
 - A pluggable derivation seam (`crossfeed.derive.Deriver`): the comparison method is a drop-in strategy,
   with the provisional `BaselineDeriver` as one implementation. The agreed method arrives as another
   `Deriver` without touching the model or the pipeline.

@@ -84,6 +84,7 @@ class Edge:
     community: tuple = ()         # Node ids of the community the edge was derived from, when applicable
     cautions: tuple = ()          # CAUTIONS: shown to the reader, without making the edge low quality
     experiments: tuple = ()       # ids of the experiments whose replicates the edge compares (its origin)
+    cultivation_mode: str = ""    # batch, chemostat, and so on, as mGrowthDB records it
 
     def validate(self) -> list:
         problems = []

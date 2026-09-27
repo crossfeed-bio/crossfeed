@@ -574,3 +574,52 @@ def test_a_strain_without_a_taxon_id_is_identified_by_name_and_marked():
     net = records_to_network(records)
     assert set(net.nodes) == {_gs(A), _gs(B)}
     assert all(n.identity == "name" and n.taxon_id == "" for n in net.nodes.values())
+
+
+# ---- cultivation mode (#42) ----------------------------------------------------------------------
+
+def _mode(exps, mode):
+    for e in exps:
+        e["cultivationMode"] = mode
+    return exps
+
+
+def test_a_batch_study_derives_and_every_edge_records_the_mode():
+    client, study, exps = _replicate_study()
+    records, skipped = interactions_from_replicates(client, study, exps)
+    assert len(records) == 2 and all(r["cultivation_mode"] == "batch" for r in records)
+    assert all(r["quality"] == [] for r in records)
+    assert not any("excluded by default" in reason for _, reason in skipped)
+
+
+def test_a_chemostat_study_derives_nothing_and_the_reason_names_the_mode():
+    client, study, exps = _replicate_study()
+    records, skipped = interactions_from_replicates(client, study, _mode(exps, "chemostat"))
+    assert records == []
+    excluded = [(label, reason) for label, reason in skipped if "excluded by default" in reason]
+    assert len(excluded) == 3 and all("chemostat" in reason for _, reason in excluded)
+
+
+def test_chemostats_derive_when_asked_and_their_edges_are_flagged():
+    client, study, exps = _replicate_study()
+    records, _ = interactions_from_replicates(client, study, _mode(exps, "chemostat"), include_non_batch=True)
+    assert len(records) == 2
+    assert all(r["cultivation_mode"] == "chemostat" and r["quality"] == ["non_batch"] for r in records)
+    edges, meta = output_meta(records)          # non_batch is hidden by default, like the other flags
+    assert edges == [] and meta["hidden"]["low_quality"] == 2
+
+
+def test_an_experiment_without_a_mode_is_excluded_rather_than_assumed_to_be_batch():
+    client, study, exps = _replicate_study()
+    for e in exps:
+        del e["cultivationMode"]
+    records, skipped = interactions_from_replicates(client, study, exps)
+    assert records == []
+    assert any("unspecified, excluded by default" in reason for _, reason in skipped)
+
+
+def test_a_dropout_design_in_a_chemostat_is_excluded_too():
+    client, study, exps = _dropout_study()
+    records, skipped = interactions_from_replicates(client, study, _mode(exps, "serial dilution"))
+    assert records == []
+    assert any("serial dilution, excluded by default" in reason for _, reason in skipped)

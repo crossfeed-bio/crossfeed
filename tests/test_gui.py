@@ -29,7 +29,7 @@ TAXA = {A: 853, B: 53443}
 def _experiment(name, species):
     """One experiment with two bioreplicates, each carrying a per-strain context per species."""
     return {
-        "id": "E_" + name, "name": name,
+        "id": "E_" + name, "name": name, "cultivationMode": "batch",
         "communityStrains": [{"name": sp, "NCBId": TAXA[sp]} for sp in species],
         "bioreplicates": [{"id": f"{name}/{i}", "name": f"{name}_{i}"} for i in (0, 1)],
     }
@@ -150,7 +150,7 @@ def test_form_hides_every_setting_behind_one_button():
     ({"metric": ["max"], "spike_factor": ["50"], "studies": [" S1 "], "only_entered": ["1"],
       "include_low_quality": ["1"], "include_dropout": ["1"]},
      {"metric": "max", "spike_factor": 50.0, "studies": "S1", "only_entered": True, "include_low_quality": True,
-      "correction": "bh", "absence_threshold": 1.0, "include_dropout": True}),
+      "correction": "bh", "absence_threshold": 1.0, "include_dropout": True, "include_non_batch": False}),
     ({"metric": ["nonsense"], "spike_factor": ["not a number"]},
      {**DEFAULTS, "only_entered": False, "include_dropout": False}),
 ])
