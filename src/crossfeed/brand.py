@@ -16,9 +16,8 @@ COMMAND = "crossfeed"            # the installed command until the package is re
 INK, MUTED, LINE, PANEL, PAGE = "#1C1F1E", "#5B625F", "#D9DDDA", "#F6F8F7", "#EEF1EF"
 GROWTH, INHIBITION, NODE = "#1A7F5A", "#C2410C", "#7A8580"
 
-# The mark: three grey nodes joined by directed edges, green for facilitation and orange-red for
-# inhibition, the same arrowhead on both. The same drawing as `legend.LOGO` on the Cytoscape branch (#70);
-# once both are merged, the legend takes it from here.
+# The mark (docs/logo.svg): three grey nodes joined by directed edges, green for facilitation and
+# orange-red for inhibition, the same arrowhead on both. The legend and the page both take it from here.
 LOGO = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="{size}" height="{size}" '
         'role="img" aria-label="grownet">'
         '<g>'

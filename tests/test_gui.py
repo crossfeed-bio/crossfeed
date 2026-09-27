@@ -303,3 +303,43 @@ def test_a_species_entered_under_its_new_name_still_matches_the_study_that_uses_
                   {"only_entered": True}, index=index)
     assert r["taxon_ids"] == [853, 53443]
     assert len(r["network"].edges) == 2          # the study names the strain prausnitzii, the ids agree
+
+
+def test_the_send_to_cytoscape_button_uses_the_network_already_computed(server, monkeypatch):
+    base, token = server
+    data = urllib.parse.urlencode({"species": "Faecalibacterium prausnitzii\nBlautia hydrogenotrophica",
+                                   "only_entered": "1"}).encode()
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
+        assert "Send to Cytoscape" in r.read().decode("utf-8")
+
+    sent = {}
+
+    def fake_send(net, **kwargs):
+        sent["edges"] = len(net.edges)
+        return {"suid": 7, "style": "crossfeed", "url": "http://127.0.0.1:1234/v1/networks/7"}
+
+    monkeypatch.setattr(gui, "send", fake_send)
+    with urllib.request.urlopen(f"{base}/cytoscape?token={token}", data=b"", timeout=10) as r:
+        page = r.read().decode("utf-8")
+    assert "Sent to Cytoscape: network 7" in page and sent["edges"] == 2   # not recomputed, the same net
+
+
+def test_cytoscape_not_running_is_explained_on_the_page(server, monkeypatch):
+    base, token = server
+    data = urllib.parse.urlencode({"species": "Faecalibacterium prausnitzii", "only_entered": ""}).encode()
+    urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10).read()
+
+    def refuse(net, **kwargs):
+        raise gui.CytoscapeError("could not reach Cytoscape on port 1234 (Connection refused). Start it")
+
+    monkeypatch.setattr(gui, "send", refuse)
+    with urllib.request.urlopen(f"{base}/cytoscape?token={token}", data=b"", timeout=10) as r:
+        page = r.read().decode("utf-8")
+    assert "could not reach Cytoscape on port 1234" in page and "Traceback" not in page
+
+
+def test_the_page_carries_the_mark_and_a_favicon(server):
+    base, token = server
+    page = _get(f"{base}/?token={token}")
+    assert 'rel="icon" href="data:image/svg+xml;utf8,' in page      # no extra request, no packaged file
+    assert page.count("<svg") >= 1 and "aria-label=\"grownet\"" in page

@@ -189,6 +189,34 @@ Rules for this file:
 - Where each mGrowthDB study's license is published; the study endpoint does not expose it, so
   `study_license` is marked unresolved.
 
+## Color and readers with a color vision deficiency
+
+Facilitation is green #1A7F5A, inhibition orange-red #C2410C, an absent edge gray #8A8A8A, in the legend,
+the Cytoscape style and the mark. The orange replaced a plain red on 2026-09-27, when Karoline made the arc
+tips uniform: the color became the only cue for the sign, and green against red is the pair a reader with a
+color vision deficiency finds hardest. `tests/test_palette.py` simulates protanopia and deuteranopia
+(Vienot 1999) and requires the two to stay 70 sRGB units apart; they manage 87 and 97, where green and red
+managed 58. It also checks that both read as text on white and that the legend and the style use one
+palette. Gray is separated from both by lightness, not hue, and an absent edge is thinner and hidden by
+default, so color is never its only cue.
+
+## Showing the sign
+
+The Cytoscape style draws no edge labels (Karoline, 2026-09-27: the sign "should not be displayed by
+default but should of course be an edge attribute"). Every edge already carries `strength` (the signed
+log2 mean), `effect` (the word) and `weight` (its magnitude), so a user maps Label to `strength` in the
+Style tab when they want it drawn. Nothing in the tool has to change for that.
+
+## The mark
+
+`docs/logo.svg` and `legend.LOGO`: three gray nodes joined by directed edges, one green (facilitation) and
+one red (inhibition), both ending in the same arrowhead. Karoline chose it on 2026-09-27 from three
+variants, with the rule that follows from it: **arc tips are uniform everywhere, and the color alone
+distinguishes a positive from a negative effect**, in the legend and the Cytoscape style alike. Gray nodes
+keep the two signal colors meaning one thing each. The page embeds the mark as a data URI, so nothing has
+to be packaged or fetched. Open for her: green and red are the hardest pair for a reader with a color
+vision deficiency, and with the heads now identical the color is the only cue.
+
 ## Legend
 
 `src/crossfeed/legend.py` draws the legend; `docs/legend.svg` is its output (`make legend`) and the README
@@ -224,6 +252,21 @@ field names break only after underscores (`<wbr>`), so the page has no horizonta
 `include_non_batch` is set, and reports the rest with their mode (#42). The mode is part of `conditions`,
 so a design never mixes modes. Test fixtures must declare `"cultivationMode": "batch"` or they derive
 nothing, which is the point of the rule.
+## Cytoscape (#25)
+
+`crossfeed.cytoscape` posts Cytoscape.js JSON to CyREST. Verified 2026-09-27 against a real Cytoscape
+3.10.3 on macOS: SMGDB00000004 arrived with 3 nodes and 20 edges, every attribute as a column, and all
+seven style mappings live on the view (EDGE_VISIBLE, EDGE_TARGET_ARROW_SHAPE, EDGE_WIDTH, NODE_LABEL,
+EDGE_LINE_TYPE, EDGE_STROKE_UNSELECTED_PAINT, EDGE_TARGET_ARROW_UNSELECTED_PAINT).
+
+Two things learned there:
+
+  * Cytoscape does not refuse a style whose title it already holds: it renames the new one (`crossfeed_0`),
+    so a second run piles up copies. `send` asks for the style list first and leaves an existing style
+    alone, since the user may have adjusted it.
+  * One column maps to one visual property, so the two dash channels (drop-out evidence, single replicate)
+    and the missing width of obligate and abolished arcs are computed into the `line_style` and
+    `display_weight` columns instead of being layered as several mappings.
 
 ## Gotchas
 

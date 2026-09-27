@@ -64,6 +64,8 @@ CLI_ONLY = {
     "--deriver": "plug in your own derivation method, given as module:ClassName (one study at a time)",
     "--format": "json (the neutral format, default) or graphml (Cytoscape, igraph, networkx, Gephi)",
     "--out": "write the network to a file instead of the screen",
+    "--to-cytoscape": "also send the network into a running Cytoscape on this machine, with the legend's style",
+    "--cytoscape-port": "the port Cytoscape's CyREST listens on (default 1234)",
 }
 
 # Edge field -> meaning. The GraphML attribute has the same name.
@@ -183,8 +185,11 @@ QA = (
      "mGrowthDB gains and corrects data. Every network records the tool version and the date it was "
      "derived (tool_version, derived_on), so two files can be told apart."),
     ("How do I open the network in Cytoscape?",
-     "Download GraphML, then in Cytoscape choose File, Import, Network from File. The legend shows what "
-     "each line style means."),
+     "Start Cytoscape, then press Send to Cytoscape under the result: the network arrives with the legend's "
+     "style. Without the button, download GraphML and choose File, Import, Network from File in Cytoscape."),
+    ("\"could not reach Cytoscape\".",
+     "Cytoscape is not running, or its CyREST port is not 1234. Start Cytoscape and wait until it has "
+     "opened, then press the button again."),
     ("How do I stop grownet?",
      "Press Ctrl+C in the terminal where it runs."),
 )
