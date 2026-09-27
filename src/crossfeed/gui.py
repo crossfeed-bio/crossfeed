@@ -525,8 +525,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
         def work():
             try:
-                job["result"] = run_query(self.client_factory(), entries, settings, self.state.get("index"),
-                                          progress=progress)
+                client = self.client_factory()
+                if self.state.get("index") is None:
+                    # the species list of all of mGrowthDB: slow to build, so built once per session
+                    progress(0, None, "Reading the species list of mGrowthDB (the first search only)")
+                    self.state["index"] = species_index(client)
+                job["result"] = run_query(client, entries, settings, self.state["index"], progress=progress)
                 job["status"] = "done"
             except MGrowthDBError as e:
                 job.update(status="failed", error=f"mGrowthDB is not reachable: {e}")

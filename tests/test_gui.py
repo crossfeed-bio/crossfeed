@@ -355,3 +355,16 @@ def test_the_page_carries_the_mark_and_a_favicon(server):
     page = _get(f"{base}/?token={token}")
     assert 'rel="icon" href="data:image/svg+xml;utf8,' in page      # no extra request, no packaged file
     assert page.count("<svg") >= 1 and "aria-label=\"grownet\"" in page
+
+
+def test_the_species_list_is_built_once_per_session(server, monkeypatch):
+    # building the index reads every study in mGrowthDB (about 40 s live); a second search reuses it
+    calls = []
+    original = gui.species_index
+    monkeypatch.setattr(gui, "species_index", lambda client: calls.append(1) or original(client))
+    base, token = server
+    for _ in range(2):
+        data = urllib.parse.urlencode({"species": f"{A}\n{B}", "only_entered": "1"}).encode()
+        with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
+            assert "interaction(s)" in r.read().decode("utf-8")
+    assert len(calls) == 1
