@@ -146,3 +146,10 @@ def test_nothing_is_sent_off_this_machine():
 def test_line_style_covers_the_channels_in_both_orders():
     net = _net()
     assert line_style(net.edges[0]) == "SOLID"
+
+
+def test_the_sign_is_a_column_and_no_label_is_drawn():
+    # Karoline, 2026-09-27: the sign is not displayed by default, but it is there to map to Label
+    data = network_json(_net())["elements"]["edges"][1]["data"]
+    assert data["strength"] == -0.2 and data["effect"] == "inhibition" and data["weight"] == 0.2
+    assert not [m for m in style()["mappings"] if m["visualProperty"] == "EDGE_LABEL"]

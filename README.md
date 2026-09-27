@@ -164,6 +164,10 @@ local page has a "Send to Cytoscape" button that sends the network it already co
 node attribute becomes a column, so effect, weight, status, evidence, quality, the study ids and the
 experiments are all there for filtering.
 
+No edge labels are drawn, so a network stays readable. The sign is on every edge as a column instead:
+`strength` holds the signed log2 mean (`-2.66`), `effect` the word, and `weight` its magnitude. To show it,
+map Label to `strength` in Cytoscape's Style tab; to filter on direction, filter on `effect`.
+
 The style crossfeed applies is the one the legend describes: facilitation green with an arrow, inhibition
 red with a bar, width by `weight`, absent edges hidden, long dashes for drop-out arcs and dots for
 single-replicate ones. A style already called `crossfeed` in the session is left alone, since it may have

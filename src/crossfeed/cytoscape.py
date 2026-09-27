@@ -15,7 +15,9 @@ What the style draws, decided with Karoline (#25, #47, #62):
     drop-out evidence (possibly indirect) and dots for a single replicate ("Cytoscape supports different
     dash styles", Karoline), combined when an arc is both;
   * obligate and abolished arcs, which have no ratio, drawn at a fixed width rather than disappearing at
-    width zero.
+    width zero;
+  * no edge labels: a network stays readable, and the sign is a column instead, so a reader who wants it
+    in the picture maps Label to `strength` themselves (Karoline, 2026-09-27).
 
 Cytoscape maps one column to one visual property, so the two dash channels and the missing width are
 computed here into `line_style` and `display_weight` columns rather than layered as several mappings.

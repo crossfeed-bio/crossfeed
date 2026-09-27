@@ -200,6 +200,13 @@ managed 58. It also checks that both read as text on white and that the legend a
 palette. Gray is separated from both by lightness, not hue, and an absent edge is thinner and hidden by
 default, so color is never its only cue.
 
+## Showing the sign
+
+The Cytoscape style draws no edge labels (Karoline, 2026-09-27: the sign "should not be displayed by
+default but should of course be an edge attribute"). Every edge already carries `strength` (the signed
+log2 mean), `effect` (the word) and `weight` (its magnitude), so a user maps Label to `strength` in the
+Style tab when they want it drawn. Nothing in the tool has to change for that.
+
 ## The mark
 
 `docs/logo.svg` and `legend.LOGO`: three gray nodes joined by directed edges, one green (facilitation) and
