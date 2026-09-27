@@ -293,3 +293,10 @@ def test_cytoscape_not_running_is_explained_on_the_page(server, monkeypatch):
     with urllib.request.urlopen(f"{base}/cytoscape?token={token}", data=b"", timeout=10) as r:
         page = r.read().decode("utf-8")
     assert "could not reach Cytoscape on port 1234" in page and "Traceback" not in page
+
+
+def test_the_page_carries_the_mark_and_a_favicon(server):
+    base, token = server
+    page = _get(f"{base}/?token={token}")
+    assert 'rel="icon" href="data:image/svg+xml;utf8,' in page      # no extra request, no packaged file
+    assert page.count("<svg") >= 1 and "aria-label=\"grownet\"" in page

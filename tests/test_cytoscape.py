@@ -100,8 +100,9 @@ def test_the_style_maps_what_the_legend_shows():
     mappings = {(m["visualProperty"], m["mappingColumn"]): m for m in style()["mappings"]}
     colors = {p["key"]: p["value"] for p in mappings[("EDGE_STROKE_UNSELECTED_PAINT", "effect")]["map"]}
     assert colors["facilitation"] != colors["inhibition"]
+    # uniform tips: the color alone says facilitation or inhibition (Karoline, 2026-09-27)
     shapes = {p["key"]: p["value"] for p in mappings[("EDGE_TARGET_ARROW_SHAPE", "effect")]["map"]}
-    assert shapes["facilitation"] == "ARROW" and shapes["inhibition"] == "T"
+    assert shapes["facilitation"] == shapes["inhibition"] == "ARROW"
     visible = {p["key"]: p["value"] for p in mappings[("EDGE_VISIBLE", "status")]["map"]}
     assert visible["absent"] == "false" and visible["present"] == "true"
     width = mappings[("EDGE_WIDTH", "display_weight")]

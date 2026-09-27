@@ -5,7 +5,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from crossfeed.legend import LEFT, TEXT_X, WIDTH, legend_page, legend_svg
+from crossfeed.legend import ARCS, LEFT, TEXT_X, WIDTH, legend_page, legend_svg
 from crossfeed.model import CAUTIONS, EFFECTS, EVIDENCE, OUTCOMES, QUALITY_FLAGS, STATUSES
 
 SVG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "legend.svg")
@@ -51,3 +51,12 @@ def test_the_page_carries_the_drawing_and_a_way_back():
     page = legend_page("tok&1")
     assert "<svg" in page and 'href="/?token=tok&amp;1"' in page
     assert "<svg" in legend_page() and "Back to crossfeed" not in legend_page()
+
+
+def test_every_arc_ends_in_the_same_head():
+    # Karoline, 2026-09-27: uniform tips, the color carries the sign. A bar head would be a line, not a
+    # path, so counting the heads catches a row that goes its own way
+    svg = legend_svg()
+    heads = re.findall(r'<path d="M [\d.]+ [\d.]+ l -15 -7\.5 l 0 15 z" fill="(#[0-9A-Fa-f]{6})"/>', svg)
+    assert len(heads) == len(ARCS)
+    assert len(set(heads)) > 1                       # they differ in color, which is the whole point

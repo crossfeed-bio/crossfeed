@@ -24,7 +24,7 @@ from .cytoscape import CytoscapeError, send
 from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, output_meta
 from .export import to_graphml
 from .growth import SPIKE_FACTOR
-from .legend import legend_page
+from .legend import legend_page, logo_svg
 from .mgrowthdb import MGrowthDBError, records_to_network
 from .taxonomy import resolve_species, species_index
 
@@ -47,7 +47,7 @@ EMPTY_HELP = ("crossfeed derives interactions from pairwise (two-member) co-cult
 
 CSS = """
 body { font: 16px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 52rem; padding: 2rem 1rem; }
-h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 2rem; }
+h1 { font-size: 1.4rem; } h1 svg { vertical-align: -0.15em; } h2 { font-size: 1.1rem; margin-top: 2rem; }
 textarea, input, select { font: inherit; } textarea { width: 100%; }
 button { font: inherit; padding: 0.4rem 1.2rem; margin-top: 0.8rem; }
 table { border-collapse: collapse; width: 100%; margin-top: 0.5rem; }
@@ -62,6 +62,8 @@ details { margin-top: 1rem; } summary { cursor: pointer; }
 def _page(body: str) -> str:
     return ("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
             f"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{TITLE}</title>"
+            "<link rel=\"icon\" href=\"data:image/svg+xml;utf8,"
+            f"{urllib.parse.quote(logo_svg(64))}\">"
             f"<style>{CSS}</style></head><body>{body}</body></html>\n")
 
 
@@ -118,7 +120,7 @@ def _settings_block(settings: dict) -> str:
 
 def render_form(token: str, entries: str = "", settings: dict | None = None, message: str = "") -> str:
     note = f"<p class=\"note\">{_esc(message)}</p>" if message else ""
-    return _page(f"""<h1>crossfeed</h1>
+    return _page(f"""<h1>{logo_svg(28)} crossfeed</h1>
 <p>Type species names, one per line. NCBI taxon ids work too.</p>{note}
 <form method="post" action="/run?token={_esc(token)}">
 <textarea name="species" rows="6" placeholder="Faecalibacterium prausnitzii&#10;Blautia hydrogenotrophica"

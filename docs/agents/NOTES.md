@@ -189,6 +189,16 @@ Rules for this file:
 - Where each mGrowthDB study's license is published; the study endpoint does not expose it, so
   `study_license` is marked unresolved.
 
+## The mark
+
+`docs/logo.svg` and `legend.LOGO`: three gray nodes joined by directed edges, one green (facilitation) and
+one red (inhibition), both ending in the same arrowhead. Karoline chose it on 2026-09-27 from three
+variants, with the rule that follows from it: **arc tips are uniform everywhere, and the color alone
+distinguishes a positive from a negative effect**, in the legend and the Cytoscape style alike. Gray nodes
+keep the two signal colors meaning one thing each. The page embeds the mark as a data URI, so nothing has
+to be packaged or fetched. Open for her: green and red are the hardest pair for a reader with a color
+vision deficiency, and with the heads now identical the color is the only cue.
+
 ## Legend
 
 `src/crossfeed/legend.py` draws the legend; `docs/legend.svg` is its output (`make legend`) and the README

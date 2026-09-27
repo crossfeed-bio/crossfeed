@@ -6,7 +6,8 @@ canonical output; this is one route among JSON and GraphML, not a privileged one
 
 What the style draws, decided with Karoline (#25, #47, #62):
 
-  * direction by color and arrowhead: facilitation green with an arrow, inhibition red with a bar;
+  * direction by color: facilitation green, inhibition red, both ending in the same arrowhead, so the
+    tips stay uniform and the color alone carries the sign (Karoline, 2026-09-27);
   * width by `weight` (|log2 mean|), so a thicker arc is a larger effect;
   * absent edges hidden, since presence is the threshold k's business and absences are kept for the
     reader to switch on;
@@ -114,8 +115,10 @@ def style(name: str = STYLE_NAME) -> dict:
                       {"facilitation": FACILITATION, "inhibition": INHIBITION, "neutral": MUTED}),
             _discrete("effect", "EDGE_TARGET_ARROW_UNSELECTED_PAINT",
                       {"facilitation": FACILITATION, "inhibition": INHIBITION, "neutral": MUTED}),
+            # every arc ends in the same arrowhead; the color says facilitation or inhibition
+            # (Karoline, on the mark, 2026-09-27)
             _discrete("effect", "EDGE_TARGET_ARROW_SHAPE",
-                      {"facilitation": "ARROW", "inhibition": "T", "neutral": "NONE"}),
+                      {"facilitation": "ARROW", "inhibition": "ARROW", "neutral": "NONE"}),
             _discrete("line_style", "EDGE_LINE_TYPE",
                       {"SOLID": "SOLID", "LONG_DASH": "LONG_DASH", "DOT": "DOT", "DASH_DOT": "DASH_DOT"}),
             # absent edges stay in the file and out of the picture (Karoline, option B on #54)

@@ -27,11 +27,12 @@ FACILITATION, INHIBITION, MUTED, INK = "#1a7f5a", "#b3352e", "#8a8a8a", "#222222
 ARCS = [
     ("", 3, FACILITATION, "arrow", "facilitation",
      "the target grows more with the source present: log2 mean above zero, outcome quantified"),
-    ("", 3, INHIBITION, "bar", "inhibition",
-     "the target grows less with the source present: log2 mean below zero"),
+    ("", 3, INHIBITION, "arrow", "inhibition",
+     "the target grows less with the source present: log2 mean below zero. Every arc ends in the same "
+     "head, so the color alone carries the sign"),
     ("", 7, FACILITATION, "arrow", "obligate",
      "the target grows only with the source present, so there is no ratio to report. Always present"),
-    ("", 7, INHIBITION, "bar", "abolished",
+    ("", 7, INHIBITION, "arrow", "abolished",
      "the target grows only without the source. Always present, like obligate"),
     ("11 6", 3, FACILITATION, "arrow", "dropout evidence",
      "the source was removed from a community, so its effect can run through a third member. A solid arc "
@@ -45,8 +46,8 @@ ARCS = [
 ]
 
 NOTES = [
-    ("Line width", "the edge weight, |log2 mean|: a thicker arc is a larger effect. The sign stays in the "
-                   "color and the head, never in the width."),
+    ("Line width", "the edge weight, |log2 mean|: a thicker arc is a larger effect. The sign is the "
+                   "color, never the width and never the shape of the head."),
     ("Node", "one organism, labeled with its name."),
     ("Shown, with a caution", "two_replicates: the spread rests on two values per side. The edge keeps its "
                               "status and is drawn."),
@@ -62,8 +63,30 @@ NOTES = [
 ]
 
 
-SUBTITLE = ["An arc points from the source to the organism it affects. Color and head give the direction,",
-            "width the size, dashes the evidence."]
+SUBTITLE = ["An arc points from the source to the organism it affects. The color gives the direction,",
+            "the width the size, the dashes the evidence. Every arc ends in the same arrowhead."]
+
+
+# The mark (docs/logo.svg): three nodes joined by directed edges, green for facilitation and red for
+# inhibition, with the same arrowhead on both. Karoline chose it on 2026-09-27; the node grey keeps the two
+# signal colors meaning one thing each. Kept here so the local page can serve it without packaging docs/.
+LOGO = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="{size}" height="{size}" '
+        'role="img" aria-label="grownet">'
+        '<g>'
+        '<line x1="16.6" y1="42.5" x2="24.9" y2="27.8" stroke="#1A7F5A" stroke-width="5.0" stroke-linecap="round"/>'
+        '<path d="M 27.80 22.51 L 27.33 34.84 L 17.55 29.38 z" fill="#1A7F5A" '
+        'stroke="#1A7F5A" stroke-width="0.6" stroke-linejoin="round"/>'
+        '<line x1="36.2" y1="21.1" x2="43.7" y2="31.9" stroke="#B3352E" stroke-width="5.0" stroke-linecap="round"/>'
+        '<path d="M 47.12 36.92 L 36.26 31.04 L 45.48 24.69 z" fill="#B3352E" '
+        'stroke="#B3352E" stroke-width="0.6" stroke-linejoin="round"/>'
+        '<circle cx="13" cy="49" r="6.4" fill="#7A8580"/><circle cx="32" cy="15" r="6.4" fill="#7A8580"/>'
+        '<circle cx="52" cy="44" r="6.4" fill="#7A8580"/></g>'
+        '</svg>')
+
+
+def logo_svg(size: int = 64) -> str:
+    """The mark at `size` pixels."""
+    return LOGO.replace("{size}", str(size))
 
 
 def _wrap(text: str, width: int = WRAP) -> list:
@@ -78,11 +101,14 @@ def _wrap(text: str, width: int = WRAP) -> list:
 
 
 def _head(x: float, y: float, kind: str, color: str) -> str:
-    """The arrowhead (facilitation) or bar head (inhibition) that ends a sample arc."""
-    if kind == "arrow":
-        return f'<path d="M {x} {y} l -15 -7.5 l 0 15 z" fill="{color}"/>'
-    return (f'<line x1="{x - 4}" y1="{y - 10}" x2="{x - 4}" y2="{y + 10}" stroke="{color}" '
-            'stroke-width="5" stroke-linecap="round"/>')
+    """The head that ends a sample arc: the same arrowhead on every arc, whatever its direction.
+
+    Karoline, 2026-09-27, choosing the mark: the tips are uniform and the color distinguishes a positive
+    from a negative effect. The Cytoscape style maps both effects to ARROW for the same reason.
+    """
+    if kind != "arrow":
+        raise ValueError(f"unknown head {kind!r}: every arc ends in an arrow")
+    return f'<path d="M {x} {y} l -15 -7.5 l 0 15 z" fill="{color}"/>'
 
 
 def _text(x: float, y: float, lines, css: str) -> str:

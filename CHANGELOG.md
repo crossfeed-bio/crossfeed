@@ -7,6 +7,8 @@ tagged version is never reused for changed content.
 ## [0.0.2] (unreleased)
 
 ### Added
+- The mark (`docs/logo.svg`): three nodes joined by directed edges, green for facilitation and red for
+  inhibition, both with the same arrowhead. It is the page's favicon and sits beside its title.
 - A legend (`docs/legend.svg`, `make legend`, and "What the arcs mean" on the local page): one picture of
   what each arc, head, dash and flag means. It is drawn from the code, and a test requires it to name every
   value in the model's vocabulary, so it cannot drift from what the network shows.
@@ -94,6 +96,8 @@ tagged version is never reused for changed content.
   `removed_member_detected`.
 
 ### Changed
+- Arcs end in the same arrowhead whether they facilitate or inhibit: the color carries the sign, in the
+  legend and in the Cytoscape style (Karoline, 2026-09-27). The bar head is retired.
 - Nodes are strains keyed by NCBI taxon id (`ncbi:411483`) and named with the strain name, with `taxon_id`,
   `species` (genus and species from the name) and `identity` as node fields (#23). Monocultures are matched
   to co-cultures by taxon id, so another strain of the same species is never used: in SMGDB00000006,
