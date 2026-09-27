@@ -18,9 +18,9 @@ What the style draws, decided with Karoline (#25, #47, #62):
     width zero;
   * no edge labels: a network stays readable, and the sign is a column instead, so a reader who wants it
     in the picture maps Label to `strength` themselves (Karoline, 2026-09-27);
-  * nodes colored by genus, taken from the first word of the name, so no lineage is needed (Karoline,
-    2026-09-27). Four hues checked for color vision deficiency against the two arc colors
-    (`brand.GENUS_COLORS`); the most common genera get them, and any further genus the logo's node gray.
+  * nodes colored by genus, taken from the first word of the name, so no lineage is needed, each genus
+    its own color (Karoline, 2026-09-27). `brand.GENUS_COLORS` runs from most to least distinct; the most
+    common genera of a network take the first colors.
     The color is computed per network into `genus_color`, and the style passes it through, so sending a
     second network never recolors the first. The label sits below the node, in ink, readable on any fill.
 
@@ -83,12 +83,11 @@ def genus(node) -> str:
 
 
 def genus_colors(net: InteractionNetwork) -> dict:
-    """genus -> color: the most common genera of this network take the four checked hues, in order (ties
-    alphabetical), and any further genus the node gray, rather than a hue too close to tell apart."""
+    """genus -> color, each genus its own: the most common genera of this network take the first, most
+    distinct colors (ties alphabetical). Past the list's length, which mGrowthDB does not reach, it repeats."""
     counts = Counter(genus(node) for node in net.nodes.values())
     ranked = sorted(counts, key=lambda g: (-counts[g], g))
-    return {g: (brand.GENUS_COLORS[i] if i < len(brand.GENUS_COLORS) else brand.NODE)
-            for i, g in enumerate(ranked)}
+    return {g: brand.GENUS_COLORS[i % len(brand.GENUS_COLORS)] for i, g in enumerate(ranked)}
 
 
 def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
@@ -258,9 +257,11 @@ def _unreachable(port: int, reason) -> str:
 def _ensure_style(root: str, timeout: float) -> None:
     """Make the grownet style in Cytoscape the one this version draws.
 
-    A new style is posted. One that exists is updated in place (defaults replaced, mappings replaced), so
-    it always matches the legend: posting again would make Cytoscape keep the old one and add a renamed
-    copy (grownet_0), and leaving it alone kept an old red and bar heads in use.
+    A new style is posted. One that exists is updated in place, so it always matches the legend: posting
+    again would make Cytoscape keep the old one and add a renamed copy (grownet_0), and leaving it alone
+    kept an old red and bar heads in use. The defaults are replaced with PUT; the mappings are deleted one
+    visual property at a time and posted again, since CyREST refuses deleting them all at once (405, found
+    live on 3.10.3) and does not say whether a POST over an existing mapping replaces it.
     """
     wanted = style(STYLE_NAME)
     name = urllib.parse.quote(STYLE_NAME)
@@ -268,7 +269,9 @@ def _ensure_style(root: str, timeout: float) -> None:
         _post(f"{root}/styles", wanted, timeout)
         return
     _request("PUT", f"{root}/styles/{name}/defaults", wanted["defaults"], timeout)
-    _request("DELETE", f"{root}/styles/{name}/mappings", None, timeout)
+    for mapping in _get(f"{root}/styles/{name}/mappings", timeout) or []:
+        prop = urllib.parse.quote(mapping["visualProperty"])
+        _request("DELETE", f"{root}/styles/{name}/mappings/{prop}", None, timeout)
     _post(f"{root}/styles/{name}/mappings", wanted["mappings"], timeout)
 
 

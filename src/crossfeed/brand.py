@@ -15,11 +15,23 @@ COMMAND = "crossfeed"            # the installed command until the package is re
 
 INK, MUTED, LINE, PANEL, PAGE = "#1C1F1E", "#5B625F", "#D9DDDA", "#F6F8F7", "#EEF1EF"
 GROWTH, INHIBITION, NODE = "#1A7F5A", "#C2410C", "#7A8580"
-# node colors by genus in Cytoscape: blue, yellow, pink, violet. The green, orange, red and aqua slots of the
-# categorical palette are left out, since they would read as a sign next to the arcs. Checked with the
-# dataviz palette validator together with GROWTH and INHIBITION: every pair separates under deuteranopia,
-# protanopia and normal vision (worst normal-vision pair 16.3, worst color vision deficiency pair 10.1).
-GENUS_COLORS = ("#2A78D6", "#EDA100", "#E87BA4", "#4A3AA7")
+# Node colors by genus in Cytoscape, one per genus (Karoline, 2026-09-27: "each genus its own color").
+# The first four (blue, yellow, pink, violet) are the categorical palette's slots that do not read as a sign
+# next to the arcs, checked with the dataviz palette validator together with GROWTH and INHIBITION. The rest
+# were picked greedily from OKLCH, outside the hue bands of the two arc colors, each time the candidate
+# farthest from every color already chosen and from the arc colors, by the validator's own measure (OKLab
+# Delta E x100, the worst of normal vision and simulated deuteranopia, protanopia and tritanopia). So the
+# list runs from most to least distinct: the 10th color still keeps 8.6 from all before it (the validator's
+# target is 8), the 12th 6.9, the 20th 4.7, the 48th 2.2. The most common genera of a network take the
+# first colors; mGrowthDB held 44 genera when this was made, so 48 leaves room.
+GENUS_COLORS = (
+    "#2A78D6", "#EDA100", "#E87BA4", "#4A3AA7", "#A2C5FF", "#762E61", "#069CE4", "#C7CA85", "#B8892D",
+    "#635A93", "#F1ACCC", "#A3B472", "#A74FBB", "#8AACE4", "#583A84", "#D75EB4", "#854E73", "#B25977",
+    "#CC96C6", "#544EC5", "#9DDA4F", "#738242", "#8080FC", "#3C561C", "#92689C", "#4CDBE3", "#88194A",
+    "#878CC9", "#4C701A", "#84C030", "#E5598E", "#BA93FB", "#959754", "#6B2094", "#724AAB", "#984260",
+    "#9E658B", "#7B67CC", "#7E0F7A", "#7A5283", "#C8729C", "#E38AB5", "#B249AC", "#8E35A1", "#64B8D2",
+    "#6C4302", "#A76C12", "#623B6B"
+)
 
 # The mark (docs/logo.svg): three gray nodes joined by directed edges, green for facilitation and
 # orange-red for inhibition, the same arrowhead on both. The legend and the page both take it from here.

@@ -240,10 +240,14 @@ single replicate.
   POST gets 405. The first version posted, swallowed the error, and every network arrived unstyled
   (found by Karoline, 2026-09-27). The fake CyREST in `tests/test_cytoscape.py` now refuses that POST too.
 - Posting a style whose title exists makes Cytoscape add a renamed copy (grownet_0). So `_ensure_style`
-  updates an existing grownet style in place: PUT defaults, DELETE mappings, POST mappings.
+  updates an existing grownet style in place: PUT defaults, then DELETE each mapping by visual property
+  (`/styles/{name}/mappings/{vp}`), then POST the mappings. DELETE on `/styles/{name}/mappings` as a whole
+  is refused (405): that made every second send of a session arrive unstyled until it was found live.
+  Verify both paths live, a first send (style created) and a second (style updated).
 - Node colors are a per-network `genus_color` column with a passthrough mapping, so one shared style
   never recolors an earlier network. Colors: `brand.GENUS_COLORS`, validated with the dataviz palette
-  script together with the two arc colors; a fifth genus gets the node gray.
+  script together with the two arc colors; each genus its own color (Karoline, 2026-09-27), from a list of
+  48 picked greedily for separation (see the comment on `brand.GENUS_COLORS`).
 - Verify against the real app by reading back view properties: `GET /v1/networks/{suid}/views/{view}/
   nodes?visualProperty=NODE_FILL_COLOR` (and the same for edges).
 

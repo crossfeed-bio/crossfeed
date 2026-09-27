@@ -54,7 +54,7 @@ ARCS = [
 NOTES = [
     ("Line width", "the edge weight, |log2 mean|: a thicker arc is a larger effect. The sign is the "
                    "color, never the width and never the shape of the head."),
-    ("Node", "one organism, labeled with its name; in Cytoscape colored by genus (up to four, then gray)."),
+    ("Node", "one organism, labeled with its name; in Cytoscape colored by genus, each genus its own color."),
     ("Shown, with a caution", "two_replicates: the spread rests on two values per side. The edge keeps its "
                               "status and is drawn."),
     ("Not drawn by default", "the quality flags strains_pooled, removed_member_detected and non_batch. The "

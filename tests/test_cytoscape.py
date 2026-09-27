@@ -61,7 +61,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):             # noqa: N802 - the name http.server requires
         _Handler.seen.append(("GET", self.path, {}))
-        self._reply(_Handler.styles if self.path == "/v1/styles" else {"message": "done"})
+        if self.path == "/v1/styles":
+            self._reply(_Handler.styles)
+        elif self.path.endswith("/mappings"):        # an older style: two mappings, one no longer drawn
+            self._reply([{"visualProperty": "EDGE_TARGET_ARROW_SHAPE"}, {"visualProperty": "NODE_SIZE"}])
+        else:
+            self._reply({"message": "done"})
 
     def do_POST(self):            # noqa: N802 - the name http.server requires
         body = self._body()
@@ -80,6 +85,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def do_DELETE(self):          # noqa: N802 - the name http.server requires
         _Handler.seen.append(("DELETE", self.path, {}))
+        if self.path.endswith("/mappings"):          # the real CyREST refuses deleting all mappings at once
+            self.send_error(405, "Method Not Allowed")
+            return
         self._reply({})
 
 
@@ -153,10 +161,14 @@ def test_a_style_cytoscape_already_has_is_brought_up_to_date(cyrest):
     assert send(_net(), port=port)["style"] == "grownet"
     calls = [(method, path) for method, path, _ in seen]
     assert ("POST", "/v1/styles") not in calls
-    assert ("PUT", "/v1/styles/grownet/defaults") in calls and ("DELETE", "/v1/styles/grownet/mappings") in calls
+    assert ("PUT", "/v1/styles/grownet/defaults") in calls
+    # every old mapping deleted by its visual property (CyREST refuses deleting them all at once), then the
+    # current ones posted, and the style applied: the second send of a session must style too
+    deleted = [path for method, path in calls if method == "DELETE"]
+    assert deleted == ["/v1/styles/grownet/mappings/EDGE_TARGET_ARROW_SHAPE", "/v1/styles/grownet/mappings/NODE_SIZE"]
     mappings = next(body for method, path, body in seen if (method, path) == ("POST", "/v1/styles/grownet/mappings"))
     assert mappings == style()["mappings"]
-    assert calls.index(("DELETE", "/v1/styles/grownet/mappings")) < calls.index(("POST", "/v1/styles/grownet/mappings"))
+    assert ("GET", "/v1/apply/styles/grownet/52") in calls
 
 
 def test_a_style_that_cannot_be_applied_is_reported_not_swallowed(cyrest):
@@ -210,7 +222,7 @@ def test_the_genus_is_the_first_word_of_the_name():
     assert genus(Node("x")) == "unknown"
 
 
-def test_nodes_are_colored_by_genus_with_the_four_checked_hues_then_grey():
+def test_each_genus_gets_its_own_color_the_most_common_first():
     names = ["Bacteroides a", "Bacteroides b", "Bacteroides c", "Blautia a", "Blautia b", "Roseburia a",
              "Akkermansia a", "Dorea a", "Eubacterium a"]
     recs = [{"source": f"n{i}", "target": f"n{i + 1}", "source_name": names[i], "target_name": names[i + 1],
@@ -218,8 +230,11 @@ def test_nodes_are_colored_by_genus_with_the_four_checked_hues_then_grey():
     net = records_to_network(recs)
     colors = genus_colors(net)
     # most nodes first (Bacteroides 3, Blautia 2), then alphabetical among the ties
-    assert [colors[g] for g in ("Bacteroides", "Blautia", "Akkermansia", "Dorea")] == list(brand.GENUS_COLORS)
-    assert colors["Eubacterium"] == colors["Roseburia"] == brand.NODE           # a fifth genus: node gray
+    assert [colors[g] for g in ("Bacteroides", "Blautia", "Akkermansia", "Dorea")] == list(brand.GENUS_COLORS[:4])
+    # a fifth and sixth genus get their own colors too (Karoline: "each genus its own color")
+    assert (colors["Eubacterium"], colors["Roseburia"]) == brand.GENUS_COLORS[4:6]
+    assert len(set(colors.values())) == len(colors) == 6
+    assert len(set(brand.GENUS_COLORS)) == len(brand.GENUS_COLORS) >= 44     # every genus mGrowthDB held
     # the genus colors never reuse the two arc colors
     assert not {brand.GROWTH, brand.INHIBITION} & set(brand.GENUS_COLORS)
     node = network_json(net)["elements"]["nodes"][0]["data"]

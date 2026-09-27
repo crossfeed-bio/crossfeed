@@ -27,11 +27,15 @@ tagged version is never reused for changed content.
   (the species do not affect each other), and the no-growth settings say they test the replicate growth
   curves of one species in one culture condition. A new setting, Exclude these studies
   (`--exclude-studies` with `--species`), leaves the listed studies out of a search; empty by default.
+- Nodes in Cytoscape: each genus its own color (Karoline), from a list of 48 ordered by how distinct each
+  stays. Fixed: a second send in one Cytoscape session arrived unstyled, because updating the existing
+  style asked CyREST to delete all mappings at once, which it refuses; they are now deleted one by one.
 - Fixed: Send to Cytoscape delivered the network without its style. CyREST applies styles and layouts
   by GET and refused the POST (405), and the error was swallowed. The style is now called grownet,
   brought up to date in place when Cytoscape already has it, and a failure is reported on the page.
   Nodes are colored by genus (the first word of the name): four hues checked for color vision
-  deficiency against the arc colors, then gray; labels sit under the nodes.
+  deficiency against the arc colors, and further genera each their own color from a list ordered by
+  how distinct it stays; labels sit under the nodes.
 - The species box starts empty, under the header "Species, strains or NCBI taxon ids" and a smaller row
   of examples (a species, a strain, a taxon id). An empty result says which step found nothing. GraphML
   nodes carry a `label` (the strain name), which Gephi uses as the node label.
