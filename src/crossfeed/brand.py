@@ -59,7 +59,8 @@ body {{ font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; color:
 .app > main {{ padding: 1.2rem; }}
 h2 {{ font-size: 1.05rem; margin: 1.8rem 0 .5rem; }}
 h2.page {{ font-size: 1.3rem; margin-top: 0; }}
-label.field {{ display: block; font-weight: 600; margin-bottom: .35rem; }}
+label.field {{ display: block; font-weight: 600; margin-bottom: .1rem; }}
+.examples {{ color: var(--muted); font-size: .82rem; margin: 0 0 .4rem; }}
 textarea, input, select {{ font: inherit; }}
 textarea {{ width: 100%; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }}
 input[type=text] {{ padding: .25rem .45rem; border: 1px solid var(--line); border-radius: 6px; }}

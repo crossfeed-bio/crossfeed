@@ -201,6 +201,9 @@ QA = (
     ("How do I open the network in Cytoscape?",
      "Start Cytoscape, then press Send to Cytoscape under the result: the network arrives with the legend's "
      "style. Without the button, download GraphML and choose File, Import, Network from File in Cytoscape."),
+    ("Can Gephi or another tool read the network?",
+     "Yes: download GraphML and open it in Gephi (File, Open), igraph or networkx. Nodes carry their strain "
+     "name as label, and edges their weight (|log2 mean|) and every attribute listed above."),
     ("\"could not reach Cytoscape\".",
      "Cytoscape is not running, or its CyREST port is not 1234. Start Cytoscape and wait until it has "
      "opened, then press the button again."),

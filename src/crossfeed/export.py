@@ -24,6 +24,8 @@ _KEYS = [
     ("g_tool_version", "graph", "tool_version", "string"),
     ("g_derived_on", "graph", "derived_on", "string"),
     ("n_name", "node", "name", "string"),
+    # Gephi takes a node's label from an attribute called label (Cytoscape uses name): the same strain name
+    ("n_label", "node", "label", "string"),
     ("n_taxonomy", "node", "taxonomy", "string"),
     ("n_model_ref", "node", "model_ref", "string"),
     ("n_taxon_id", "node", "taxon_id", "string"),
@@ -83,6 +85,7 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         n = ET.SubElement(graph, f"{{{_NS}}}node")
         n.set("id", node.id)
         _data(n, "n_name", node.name)
+        _data(n, "n_label", node.name or node.id)
         _data(n, "n_taxonomy", node.taxonomy)
         _data(n, "n_model_ref", node.model_ref)
         _data(n, "n_taxon_id", node.taxon_id)

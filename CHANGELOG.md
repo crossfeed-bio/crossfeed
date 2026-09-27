@@ -14,6 +14,9 @@ tagged version is never reused for changed content.
   require an entry for every setting, command line option and model field, so it cannot fall behind (#78).
 - `derive --live --species NAME ...` runs the local page's search from the command line, with
   `--all-partners` for the page's "only the species entered" box unticked (#78).
+- The species box starts empty, under the header "Species, strains or NCBI taxon ids" and a smaller row
+  of examples (a species, a strain, a taxon id). An empty result says which step found nothing. GraphML
+  nodes carry a `label` (the strain name), which Gephi uses as the node label.
 - The result appears on the same page, under the settings that produced it (#74); a search in progress
   shows a progress bar and the page updates by itself, without JavaScript (#75); three outputs sit above
   the table: Download network with a JSON or GraphML menu, Send to Cytoscape, and Report, the detailed

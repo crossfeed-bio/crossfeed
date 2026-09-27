@@ -8,6 +8,10 @@ search, which can also be downloaded as a text file that will also include all t
 
 And on #78: "The tool version should be also mentioned in the report accompanying each network."
 
+And later the same day: "Now that we have an example button, please keep the input field empty. The header
+above the input field should list the options (Species, strains or NCBI identifiers) and, in a row below in
+smaller font size, give a few examples (but keep the input field empty)."
+
 A test here failing means one of those requirements broke. Change the requirement with Karoline, not the
 test.
 """
@@ -158,3 +162,15 @@ def test_the_report_holds_the_comments_every_setting_and_the_version_and_downloa
     assert "interactions:" in text and "pairs the data did not support" in text and "sources" in text
     # the page shows the same report inside the Report button
     assert gui.html.escape(text.splitlines()[1]) in page
+
+
+def test_the_input_field_starts_empty_under_a_header_naming_the_options_and_a_row_of_examples():
+    page = gui.render_form("tok")
+    assert re.search(r'<textarea id="species" name="species" rows="\d+"></textarea>', page)   # empty
+    assert "placeholder" not in page
+    header = page.index('<label class="field" for="species">Species, strains or NCBI taxon ids</label>')
+    examples = page.index('<p class="examples">For example: ')
+    assert header < examples < page.index("<textarea")            # a row below the header, above the box
+    for example in gui.INPUT_EXAMPLES:                              # one species, one strain, one taxon id
+        assert example in page[examples:page.index("<textarea")]
+    assert ".examples {" in page and "font-size: .82rem" in page   # in a smaller font

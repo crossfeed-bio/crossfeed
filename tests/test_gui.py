@@ -368,3 +368,14 @@ def test_the_species_list_is_built_once_per_session(server, monkeypatch):
         with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
             assert "interaction(s)" in r.read().decode("utf-8")
     assert len(calls) == 1
+
+
+def test_an_empty_result_names_the_step_that_found_nothing():
+    # a name mGrowthDB does not hold: the page says so, instead of the explanation about study designs
+    unknown = render_result("tok", _query(entries=("Escherichia coli",)))
+    assert "None of these names or ids is in mGrowthDB" in unknown and "drop-out designs" not in unknown
+    assert "Download network" not in unknown and "Send to Cytoscape" not in unknown   # nothing to send
+    assert ">Report</summary>" in unknown and "#empty" in unknown                     # but the why is there
+    r = _query()
+    r["studies"], r["network"].edges = [], []
+    assert "no study grows them" in render_result("tok", r)

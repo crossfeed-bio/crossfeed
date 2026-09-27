@@ -71,3 +71,16 @@ def test_graphml_nodes_carry_taxon_id_species_and_identity():
     assert data["n_name"] == "Faecalibacterium prausnitzii A2-165"      # the label Cytoscape shows
     assert (data["n_taxon_id"], data["n_species"], data["n_identity"]) == \
         ("853", "faecalibacterium prausnitzii", "ncbi")
+
+
+def test_graphml_nodes_carry_a_label_for_gephi():
+    # Gephi's GraphML importer reads node labels from "label" and edge weights from "weight" (checked in
+    # its ImporterGraphML); Cytoscape reads "name". A node carries both, and every edge its weight.
+    net = records_to_network([{"source": "ncbi:1", "target": "ncbi:2", "source_name": "Strain one",
+                               "target_name": "Strain two", "strength": -1.5, "weight": 1.5,
+                               "effect": "inhibition", "study_id": "S1"}])
+    root = ET.fromstring(to_graphml(net))
+    keys = {k.get("id"): k.get("attr.name") for k in root.findall("g:key", NS)}
+    assert keys["n_label"] == "label" and keys["e_weight"] == "weight"
+    labels = [d.text for d in root.findall(".//g:node/g:data", NS) if d.get("key") == "n_label"]
+    assert labels == ["Strain one", "Strain two"]

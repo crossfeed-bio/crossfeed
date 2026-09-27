@@ -36,6 +36,8 @@ TITLE = brand.NAME
 # species that derive a non-empty network, for the Example button (Karoline's proposal, #73). The first is
 # taxon 411483, which mGrowthDB holds under both its names after the 2022 reclassification.
 EXAMPLE = ("Faecalibacterium duncaniae", "Blautia hydrogenotrophica")
+# one of each kind the box takes, shown above it (the box itself starts empty; Karoline, 2026-09-27)
+INPUT_EXAMPLES = ("Blautia hydrogenotrophica", "Faecalibacterium duncaniae A2-165", "411483")
 DEFAULTS = {"metric": "auc", "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
             "include_low_quality": False, "correction": "bh", "include_dropout": True,
             "include_non_batch": False, "studies": "", "only_entered": True,
@@ -52,7 +54,7 @@ MISMATCH = ("Monoculture and co-culture growth were measured by different techni
             "dependable.")
 EMPTY_HELP = ("grownet derives interactions from pairwise (two-member) co-cultures and from drop-out "
               "designs (a community plus the same community without one member). Other larger communities "
-              "yield nothing until a method suited to their design is chosen (see docs/METHOD_NOTES.md).")
+              "yield nothing until a method suited to their design is chosen.")
 
 
 
@@ -145,11 +147,11 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
     """
     note = f"<p class=\"note\">{_esc(message)}</p>" if message else ""
     return _page(f"""{note}<form method="post" action="/run?token={_esc(token)}">
-<label class="field" for="species">Species</label>
-<textarea id="species" name="species" rows="5"
- placeholder="Faecalibacterium prausnitzii&#10;Blautia hydrogenotrophica">{_esc(entries)}</textarea>
-<p class="hint">One per line. NCBI taxon ids work too. Interactions are derived from mGrowthDB growth data on
-this machine; nothing is uploaded.</p>
+<label class="field" for="species">Species, strains or NCBI taxon ids</label>
+<p class="examples">For example: {" &middot; ".join(_esc(x) for x in INPUT_EXAMPLES)}</p>
+<textarea id="species" name="species" rows="5">{_esc(entries)}</textarea>
+<p class="hint">One per line, or press Example. Interactions are derived from mGrowthDB growth data on this
+machine; nothing is uploaded.</p>
 <div class="bar"><button class="primary" type="submit">Find interactions</button>
 <button type="submit" name="example" value="1">Example</button></div>
 {_settings_block(settings or {})}
@@ -277,6 +279,21 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
             f"{report}</div>{hint if has_edges else ''}")
 
 
+def _empty_reason(result: dict) -> str:
+    """Why a search came back empty, from the first step that found nothing."""
+    if not result["resolved"]:
+        return ("None of these names or ids is in mGrowthDB. Check the spelling, or try the strain name, "
+                "the other name of a renamed species, or the NCBI taxon id.")
+    if not result["studies"]:
+        return "mGrowthDB holds these strains, but no study grows them, so there is nothing to compare."
+    if result["errors"]:
+        return "The studies could not be read (see the messages above); try again when mGrowthDB is reachable."
+    top = Counter(r.split(";")[0].strip() for _, r in result["skipped"]).most_common(1)
+    why = f" The most common reason: {_esc(top[0][0])}." if top else ""
+    return (f"The studies holding these species gave no usable comparison.{why} {EMPTY_HELP} The report lists "
+            "the reason for every pair.")
+
+
 def _result_section(token: str, result: dict, message: str = "") -> str:
     resolved = "".join(
         f"<li>{_esc(entry)}: {_esc(', '.join(f'{name} ({tid})' for tid, name in sorted(matches.items())))}</li>"
@@ -297,11 +314,8 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
         table = (f"<h2>No interactions above the absence threshold</h2>{outputs}"
                  f"<p class=\"note\">{PROVISIONAL}</p>{hidden}")
     else:
-        top = Counter(r.split(";")[0].strip() for _, r in result["skipped"]).most_common(1)
-        why = f" Most common reason: {_esc(top[0][0])}." if top else ""
-        table = ("<h2>No interactions</h2><p class=\"note\">Nothing was derived for these species."
-                 f"{why} {EMPTY_HELP} <a href=\"/help?token={_esc(token)}#empty\">What to try</a>.</p>"
-                 f"{hidden}{outputs}")
+        table = (f"<h2>No interactions</h2><p class=\"note\">{_empty_reason(result)} "
+                 f"<a href=\"/help?token={_esc(token)}#empty\">What to try</a>.</p>{hidden}{outputs}")
     studies = ", ".join(result["studies"]) or "none"
     skipped = ""
     if result["skipped"]:
