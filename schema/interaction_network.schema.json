@@ -174,7 +174,8 @@
             "enum": [
               "single_replicate",
               "strains_pooled",
-              "non_batch"
+              "non_batch",
+              "removed_member_detected"
             ]
           }
         },
@@ -192,6 +193,20 @@
           ]
         },
         "community": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cautions": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "two_replicates"
+            ]
+          }
+        },
+        "experiments": {
           "type": "array",
           "items": {
             "type": "string"
@@ -221,3 +236,4 @@
     }
   }
 }
+

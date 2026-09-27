@@ -24,7 +24,9 @@ EVIDENCE = ("biculture", "dropout")
 # what the comparison could say about the target's growth (crossfeed.interaction)
 OUTCOMES = ("quantified", "obligate", "abolished", "no_growth")
 # why an edge is low quality: hidden by default and never read as the absence of an interaction
-QUALITY_FLAGS = ("single_replicate", "strains_pooled", "non_batch")
+QUALITY_FLAGS = ("single_replicate", "strains_pooled", "non_batch", "removed_member_detected")
+# cautions a reader should see that do not make an edge low quality: it keeps its status and is shown
+CAUTIONS = ("two_replicates",)
 # whether a comparison counts as an interaction under the absence threshold (crossfeed.derive.absence)
 STATUSES = ("present", "absent")
 
@@ -75,6 +77,8 @@ class Edge:
     notes: tuple = ()             # informative remarks that do not disqualify (an excluded outlier)
     evidence: str | None = None   # one of EVIDENCE, or None when unknown
     community: tuple = ()         # Node ids of the community the edge was derived from, when applicable
+    cautions: tuple = ()          # CAUTIONS: shown to the reader, without making the edge low quality
+    experiments: tuple = ()       # ids of the experiments whose replicates the edge compares (its origin)
 
     def validate(self) -> list:
         problems = []
@@ -87,6 +91,9 @@ class Edge:
         for flag in self.quality:
             if flag not in QUALITY_FLAGS:
                 problems.append(f"edge {self.source}->{self.target}: quality flag {flag!r} not in {QUALITY_FLAGS}")
+        for flag in self.cautions:
+            if flag not in CAUTIONS:
+                problems.append(f"edge {self.source}->{self.target}: caution {flag!r} not in {CAUTIONS}")
         if self.outcome is not None and self.outcome not in OUTCOMES:
             problems.append(f"edge {self.source}->{self.target}: outcome {self.outcome!r} not in {OUTCOMES}")
         if self.evidence is not None and self.evidence not in EVIDENCE:
@@ -155,5 +162,7 @@ class InteractionNetwork:
             e["community"] = tuple(e.get("community", ()))
             e["quality"] = tuple(e.get("quality", ()))
             e["notes"] = tuple(e.get("notes", ()))
+            e["cautions"] = tuple(e.get("cautions", ()))
+            e["experiments"] = tuple(e.get("experiments", ()))
             net.add_edge(Edge(**e))
         return net

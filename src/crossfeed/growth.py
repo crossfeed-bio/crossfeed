@@ -14,7 +14,6 @@ checks here only refuse comparisons that are meaningless by construction (mixed 
 from __future__ import annotations
 
 import math
-import statistics
 from dataclasses import dataclass, field
 
 
@@ -166,33 +165,44 @@ def curve_features(curve: GrowthCurve, end: float | None = None) -> dict:
 SPIKE_FACTOR = 100.0   # default for `spike`; an advanced setting (0 switches the check off)
 
 
+SPIKE_RUN = 2           # a spike is at most this many consecutive points
+
+
 def spike(curve: GrowthCurve, factor: float = SPIKE_FACTOR) -> dict | None:
     """An implausible spike in a curve, or None.
 
-    The statistic is the curve's maximum over its own median. Healthy per-strain curves in mGrowthDB
-    study SMGDB00000004 sit between 1.5 and 14.1; the BH_14 qPCR trace, whose two consecutive points of
-    5.264e13 cells/mL sit between neighbours near 1e8, reaches 38766. Two other statistics were tried and
-    fail: the maximum over the last value mistakes an honest decline after a peak for a spike, and the
-    maximum over its neighbours misses a spike that spans two identical points.
+    A spike is a run of one or two consecutive interior points that all exceed both of the run's
+    neighbours, the point before and the point after, by more than `factor`. In mGrowthDB study
+    SMGDB00000004 the BH_14 qPCR trace has two consecutive points of 5.264e13 cells/mL between neighbours of
+    1.06e8 and 4.8e8, a ratio near 1e5; healthy per-strain curves never jump like that from one point to
+    the next and back.
 
-    Two limits of the statistic, both checked rather than assumed, so neither reads as a bug later:
-    a two-point curve can never be flagged, because its median is the mean of the two values and so
-    max/median stays below 2 whatever they are; and a curve with more than half its points corrupted is
-    not flagged either, because the median has itself become extreme. The second is the ordinary
-    breakdown point of any median-based rule, and it is the right trade for the shape this exists to
-    catch, where a handful of points in an otherwise sound curve run away.
+    The first and last points are never a spike, because they have a neighbour on one side only: a
+    maximum at the start is the inoculum of a population that declines, and a maximum at the end is late
+    growth. Both occur in SMGDB00000013, where CFU counts span eight orders of magnitude over 288 h, and
+    the earlier statistic (the curve's maximum over its median) flagged them, which removed whole
+    replicate sets and hid real growth (Karoline, on #62). A run of two covers a spike measured twice. A
+    neighbour that is zero or negative gives no scale to compare against, so that run is not flagged.
 
-    Returns {"ratio": max/median, "times": [time points above factor * median]} when the ratio exceeds
-    `factor`; None when it does not, when `factor` is 0, or when the median is not positive (a curve
-    that does not grow is the no-growth rule's business, not this one's).
+    Perturbations (a pulse of substrate, a dilution) can explain a jump. mGrowthDB records them only for
+    chemostats so far (SMGDB00000005), which are excluded from the default network (#42), so they are not
+    considered here; a batch study with perturbations would need them taken into account.
+
+    Returns {"ratio": the smallest run value over the larger neighbour, "times": the run's time points}
+    for the most extreme run when it exceeds `factor`; None when none does, or when `factor` is 0.
     """
     if not factor:
         return None
-    median = statistics.median(curve.values)
-    if median <= 0:
-        return None
-    ratio = max(curve.values) / median
-    if ratio <= factor:
-        return None
-    limit = factor * median
-    return {"ratio": ratio, "times": [t for t, v in zip(curve.times, curve.values, strict=True) if v > limit]}
+    values, found = curve.values, None
+    for i in range(1, len(values) - 1):
+        for length in range(1, SPIKE_RUN + 1):
+            j = i + length                       # the neighbour after the run
+            if j > len(values) - 1:
+                break
+            reference = max(values[i - 1], values[j])
+            if reference <= 0:
+                continue
+            ratio = min(values[i:j]) / reference
+            if ratio > factor and (found is None or ratio > found["ratio"]):
+                found = {"ratio": ratio, "times": list(curve.times[i:j])}
+    return found

@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import os
 
-from .model import EFFECTS, EVIDENCE, OUTCOMES, QUALITY_FLAGS, SCHEMA, STATUSES, InteractionNetwork
+from .model import CAUTIONS, EFFECTS, EVIDENCE, OUTCOMES, QUALITY_FLAGS, SCHEMA, STATUSES, InteractionNetwork
 
 SCHEMA_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -74,6 +74,8 @@ SCHEMA_DOC = {
                 "notes": {"type": "array", "items": {"type": "string"}},
                 "evidence": {"enum": [*EVIDENCE, None]},
                 "community": {"type": "array", "items": {"type": "string"}},
+                "cautions": {"type": "array", "items": {"enum": list(CAUTIONS)}},
+                "experiments": {"type": "array", "items": {"type": "string"}},
             },
         },
         "study": {
@@ -140,6 +142,12 @@ def validate_document(doc) -> list:
         quality = e.get("quality", [])
         if not isinstance(quality, (list, tuple)) or any(q not in QUALITY_FLAGS for q in quality):
             problems.append(f"edges[{i}] quality must be a list of {QUALITY_FLAGS}")
+        cautions = e.get("cautions", [])
+        if not isinstance(cautions, (list, tuple)) or any(c not in CAUTIONS for c in cautions):
+            problems.append(f"edges[{i}] cautions must be a list of {CAUTIONS}")
+        experiments = e.get("experiments", [])
+        if not isinstance(experiments, (list, tuple)) or not all(isinstance(x, str) for x in experiments):
+            problems.append(f"edges[{i}] experiments must be a list of experiment ids")
         if e.get("outcome") is not None and e.get("outcome") not in OUTCOMES:
             problems.append(f"edges[{i}] outcome {e.get('outcome')!r} not in {OUTCOMES}")
         if e.get("evidence") is not None and e.get("evidence") not in EVIDENCE:

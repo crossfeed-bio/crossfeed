@@ -139,15 +139,19 @@ def test_form_hides_every_setting_behind_one_button():
     assert "<select" not in head and "<input name=" not in head    # nothing but the species box is visible
     assert 'name="metric"' in tail and 'name="spike_factor"' in tail
     assert 'name="include_low_quality"' in tail and 'name="include_neutral"' not in page
+    # drop-out communities are included by default, so the box starts ticked (#47)
+    assert 'name="include_dropout" value="1" checked' in tail
 
 
 @pytest.mark.parametrize("form, expected", [
-    ({}, {**DEFAULTS, "only_entered": False}),   # an unticked checkbox is simply absent from a post
+    # an unticked checkbox is simply absent from a post
+    ({}, {**DEFAULTS, "only_entered": False, "include_dropout": False}),
     ({"metric": ["max"], "spike_factor": ["50"], "studies": [" S1 "], "only_entered": ["1"],
-      "include_low_quality": ["1"]},
+      "include_low_quality": ["1"], "include_dropout": ["1"]},
      {"metric": "max", "spike_factor": 50.0, "studies": "S1", "only_entered": True, "include_low_quality": True,
-      "correction": "bh", "absence_threshold": 1.0}),
-    ({"metric": ["nonsense"], "spike_factor": ["not a number"]}, {**DEFAULTS, "only_entered": False}),
+      "correction": "bh", "absence_threshold": 1.0, "include_dropout": True}),
+    ({"metric": ["nonsense"], "spike_factor": ["not a number"]},
+     {**DEFAULTS, "only_entered": False, "include_dropout": False}),
 ])
 def test_settings_fall_back_to_defaults(form, expected):
     assert parse_settings(form) == expected
