@@ -42,9 +42,18 @@ def test_index_collects_names_and_ids_across_studies():
 def test_crawl_stops_after_consecutive_misses():
     client = _client()
     species_index(client)
-    # the two studies plus five misses in a row after the last one, then it stops
-    assert client.asked[-1] == "SMGDB00000008"
-    assert len(client.asked) == 8
+    # the two studies, then MISS_RUN misses in a row after the last one, then it stops
+    from crossfeed.taxonomy import MISS_RUN
+    assert client.asked[-1] == f"SMGDB{3 + MISS_RUN:08d}"
+    assert len(client.asked) == 3 + MISS_RUN
+
+
+def test_a_gap_of_missing_studies_does_not_hide_later_ones():
+    # twelve absent ids between two studies (2 to 13): the old limit of five stopped before the second
+    from crossfeed.taxonomy import species_index as index_of
+    later = _client()
+    later.studies = {"SMGDB00000001": later.studies["SMGDB00000001"], "SMGDB00000014": later.studies["SMGDB00000003"]}
+    assert len(index_of(later)) == len(species_index(_client()))
 
 
 def test_name_and_taxon_id_both_resolve():

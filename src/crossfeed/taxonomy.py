@@ -19,7 +19,10 @@ import re
 from .derive import genus_species
 
 STUDY_ID = "SMGDB{:08d}"
-MISS_RUN = 5          # stop crawling after this many consecutive study ids are absent
+# stop crawling after this many consecutive study ids are absent. Study 3 is already missing; a larger gap
+# (withdrawn or unpublished studies) would have hidden every later study from name lookups at 5, and now that
+# the crawl runs in parallel, looking 25 ids further costs well under a second
+MISS_RUN = 25
 MAX_STUDIES = 500     # a hard stop, so a crawl can never run away
 
 
