@@ -197,6 +197,12 @@ QUALITY_FLAGS, CAUTIONS, EVIDENCE and STATUSES, and the shipped file to equal wh
 flag therefore means adding a line to the legend, the same way Craig's viewer guard works (#57). The dash
 patterns are the ones the Cytoscape style will use (#25): long dashes for drop-out evidence, dots for a
 single replicate.
+## Cultivation mode
+
+`crossfeed.derive.cultivation` reads `cultivationMode` per experiment; `_batch_only` keeps batch unless
+`include_non_batch` is set, and reports the rest with their mode (#42). The mode is part of `conditions`,
+so a design never mixes modes. Test fixtures must declare `"cultivationMode": "batch"` or they derive
+nothing, which is the point of the rule.
 
 ## Gotchas
 

@@ -245,6 +245,13 @@ need every drop-out. mGrowthDB still measures the removed member in a drop-out e
 not used, and if it shows a positive signal the drop-out may not be clean, so its arcs are flagged
 `removed_member_detected`. A larger community with no drop-out experiment is skipped, with a reason.
 
+**Batch only, by default.** A chemostat or serial dilution curve does not mean what a batch curve means:
+an area under the curve is meaningless under dilution, and a continuous-culture growth rate is a different
+quantity. So only experiments whose `cultivationMode` is batch are derived. Anything else, including an
+experiment with no mode recorded, is reported with its mode and left out. `--include-non-batch` (or the
+matching advanced setting) derives them anyway, with their edges flagged `non_batch`. Every edge records
+its `cultivation_mode`.
+
 **How presence and absence are decided.** Every tested comparison is exported as an edge, and its
 `status` says whether it counts as an interaction under the **absence threshold k**:
 
