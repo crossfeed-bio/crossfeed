@@ -32,6 +32,7 @@ Everything is sent to the configured localhost port and nowhere else.
 """
 from __future__ import annotations
 
+import http.client
 import json
 import urllib.error
 import urllib.parse
@@ -173,14 +174,28 @@ class CytoscapeError(RuntimeError):
     """Cytoscape could not be reached or refused the request, with what to do about it."""
 
 
+# What can go wrong on the wire: urllib's own errors, and http.client's for a listener that answers with
+# something that is not HTTP (a database, a dev server on the wrong port), which is not a URLError and
+# escaped as a traceback before (found by Craig's agent, #70). TimeoutError and OSError cover a socket
+# that times out or resets outside urllib's wrapping.
+WIRE_ERRORS = (urllib.error.URLError, http.client.HTTPException, TimeoutError, OSError)
+
+
+def _local(url: str) -> str:
+    """Every request goes to this machine: checked here, where the request is made, not only by callers."""
+    if not url.startswith("http://127.0.0.1:"):
+        raise CytoscapeError(f"refusing to send to {url!r}: grownet only talks to a Cytoscape on this machine")
+    return url
+
+
 def _get(url: str, timeout: float = 30.0):
-    with urllib.request.urlopen(url, timeout=timeout) as response:       # noqa: S310 - localhost only
+    with urllib.request.urlopen(_local(url), timeout=timeout) as response:     # noqa: S310 - checked
         return json.loads(response.read().decode("utf-8") or "null")
 
 
 def _post(url: str, payload, timeout: float = 30.0):
     body = json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(url, data=body, method="POST",
+    request = urllib.request.Request(_local(url), data=body, method="POST",
                                      headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=timeout) as response:   # noqa: S310 - localhost only
         text = response.read().decode("utf-8")
@@ -201,7 +216,12 @@ def send(net: InteractionNetwork, port: int = PORT, name: str = "grownet",
     except urllib.error.HTTPError as e:
         raise CytoscapeError(f"Cytoscape refused the network ({e.code} {e.reason}). Update Cytoscape to 3.8 or "
                              "later, whose CyREST takes networks this way.") from None
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
+    except http.client.HTTPException as e:
+        raise CytoscapeError(
+            f"something is listening on port {port}, but it is not Cytoscape: it did not answer the way "
+            f"Cytoscape's CyREST does ({type(e).__name__}). Check which port Cytoscape uses (its cyrest.port "
+            "property, 1234 unless changed) and that no other program holds it.") from None
+    except WIRE_ERRORS as e:
         raise CytoscapeError(_unreachable(port, getattr(e, "reason", e))) from None
     suid = created.get("networkSUID", created.get("data", {}).get("networkSUID"))
     if suid is None:
@@ -219,7 +239,7 @@ def send(net: InteractionNetwork, port: int = PORT, name: str = "grownet",
                 _get(f"{root}/apply/layouts/{urllib.parse.quote(layout)}/{suid}", timeout)
         except urllib.error.HTTPError as e:
             warning = f"the network is in Cytoscape, but its style could not be applied ({e.code} {e.reason})"
-        except urllib.error.URLError as e:
+        except WIRE_ERRORS as e:
             warning = f"the network is in Cytoscape, but its style could not be applied ({getattr(e, 'reason', e)})"
     return {"suid": suid, "style": applied, "warning": warning, "url": f"{root}/networks/{suid}"}
 
@@ -254,6 +274,7 @@ def _ensure_style(root: str, timeout: float) -> None:
 
 def _request(method: str, url: str, payload, timeout: float = 30.0):
     body = None if payload is None else json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(url, data=body, method=method, headers={"Content-Type": "application/json"})
+    request = urllib.request.Request(_local(url), data=body, method=method,
+                                     headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=timeout) as response:   # noqa: S310 - localhost only
         return response.read()

@@ -167,12 +167,21 @@ def test_a_style_that_cannot_be_applied_is_reported_not_swallowed(cyrest):
     assert "style could not be applied" in sent["warning"] and "400" in sent["warning"]
 
 
-def test_cytoscape_not_running_says_what_to_do(cyrest):
-    port, _ = cyrest
+def _closed_port() -> int:
+    """A port nothing listens on: bound, read and closed. Not port + 1 of another socket, which on Windows
+    is where the next outgoing connection lands, so the request connected to itself (Craig's agent, #70)."""
+    import socket
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def test_cytoscape_not_running_says_what_to_do():
+    port = _closed_port()
     with pytest.raises(CytoscapeError) as e:
-        send(_net(), port=port + 1)              # nothing listens there
+        send(_net(), port=port)
     message = str(e.value)
-    assert "Cytoscape is not running on this machine" in message and f"port {port + 1}" in message
+    assert "Cytoscape is not running on this machine" in message and f"port {port}" in message
     assert "Start Cytoscape, wait until its window has fully opened, then try again" in message
 
 
@@ -223,3 +232,33 @@ def test_a_cytoscape_that_is_still_starting_is_told_apart():
     from crossfeed.cytoscape import _unreachable
     assert "may still be starting" in _unreachable(1234, TimeoutError("timed out"))
     assert "not running on this machine" in _unreachable(1234, "Connection refused")
+
+
+def test_another_program_on_the_port_is_named_not_a_traceback():
+    # a listener that answers with something that is not HTTP raises http.client.BadStatusLine, which is
+    # not a URLError: it reached the user as a traceback before (Craig's agent, #70)
+    import socket
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+
+    def answer():
+        conn, _ = server.accept()
+        conn.recv(65536)
+        conn.sendall(b"J\x00\x00\x00\n8.0.32 not http at all\r\n\r\n")    # like a database greeting
+        conn.close()
+
+    threading.Thread(target=answer, daemon=True).start()
+    try:
+        with pytest.raises(CytoscapeError) as e:
+            send(_net(), port=port)
+    finally:
+        server.close()
+    assert "something is listening on port" in str(e.value) and "it is not Cytoscape" in str(e.value)
+
+
+def test_requests_can_only_go_to_this_machine():
+    from crossfeed.cytoscape import _get
+    with pytest.raises(CytoscapeError):
+        _get("http://example.org:1234/v1/styles")

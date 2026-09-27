@@ -37,9 +37,9 @@ def test_every_advanced_setting_is_explained():
 
 
 def test_every_command_line_option_is_explained():
-    documented = " ".join(flag for _, flag, _ in help.SETTINGS.values()) + " " + " ".join(help.CLI_ONLY)
-    missing = {opt for opt in _derive_options() if opt not in documented}
-    assert missing == set()
+    # sets, not a substring search: an undocumented --all would hide inside --all-partners (Craig's agent, #79)
+    documented = {flag.split()[0] for _, flag, _ in help.SETTINGS.values()} | set(help.CLI_ONLY)
+    assert set(_derive_options()) - documented == set()
 
 
 def test_every_edge_and_node_field_is_explained():
