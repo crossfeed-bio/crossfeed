@@ -19,7 +19,10 @@ def _words(svg: str) -> str:
 def test_the_legend_is_well_formed_svg():
     root = ET.fromstring(legend_svg())
     assert root.tag.endswith("svg") and root.get("viewBox").startswith("0 0 ")
-    assert root.get("aria-label") == "crossfeed network legend"
+    assert root.get("aria-label") == "interaction network legend"
+    # the name of the tool is not in the picture: species interact for many reasons, not only cross-feeding
+    # (Karoline, 2026-09-27), and the tool is being renamed
+    assert "crossfeed" not in legend_svg()
 
 
 @pytest.mark.parametrize("value", [*EFFECTS, *OUTCOMES, *QUALITY_FLAGS, *CAUTIONS, *EVIDENCE, *STATUSES])

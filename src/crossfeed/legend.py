@@ -110,7 +110,7 @@ def legend_svg() -> str:
         y += 10 + LINE * len(lines)
     height = y + 14
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {WIDTH} {height}" width="{WIDTH}" '
-            f'height="{height}" role="img" aria-label="crossfeed network legend">'
+            f'height="{height}" role="img" aria-label="interaction network legend">'
             '<style>'
             f'text {{ font-family: system-ui, -apple-system, sans-serif; fill: {INK}; }}'
             '.title { font-size: 21px; font-weight: 600; }'
@@ -119,7 +119,7 @@ def legend_svg() -> str:
             '.meaning { font-size: 13px; fill: #444444; }'
             '</style>'
             f'<rect width="{WIDTH}" height="{height}" fill="#ffffff"/>'
-            '<text x="40" y="40" class="title">crossfeed network legend</text>'
+            '<text x="40" y="40" class="title">Interaction network legend</text>'
             + _text(40, 62, SUBTITLE, "subtitle")
             + "".join(rows) + '</svg>\n')
 
@@ -129,7 +129,7 @@ def legend_page(token: str = "") -> str:
     back = f'<p><a href="/?token={html.escape(token, quote=True)}">Back to crossfeed</a></p>' if token else ""
     return ('<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
-            '<title>crossfeed legend</title>'
+            '<title>Interaction network legend</title>'
             '<style>body { font: 16px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 52rem; '
             'padding: 2rem 1rem; } svg { max-width: 100%; height: auto; }</style></head><body>'
             f'{legend_svg()}{back}</body></html>\n')
