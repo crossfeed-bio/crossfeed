@@ -21,6 +21,9 @@ pip install -e ".[dev]"
 pre-commit install            # optional: run the checks on every commit (pip install pre-commit first)
 ```
 
+The page then opens with `python -m crossfeed gui`. How a version is released (PyPI and the Windows
+program) is in [RELEASING.md](RELEASING.md).
+
 ## Before you open a pull request
 
 Run the same checks CI runs, and make sure all pass. `make check` runs all three:

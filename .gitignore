@@ -7,6 +7,9 @@ venv/
 *.egg-info/
 build/
 dist/
+# the self-contained program's build outputs (packaging/windows/build.py)
+*.spec
+*.zip
 .coverage
 
 # Data governance: never commit raw or pulled experimental data (mGrowthDB pulls,
