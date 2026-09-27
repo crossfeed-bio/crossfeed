@@ -81,6 +81,16 @@ def _derive(a):
     else:
         print(payload)
 
+    if a.to_cytoscape:
+        from .cytoscape import CytoscapeError, send
+        try:
+            sent = send(net, port=a.cytoscape_port, name=a.study)
+        except CytoscapeError as e:
+            print(f"crossfeed: {e}", file=sys.stderr)
+            return 1
+        print(f"sent to Cytoscape: network {sent['suid']}"
+              + (f", style {sent['style']}" if sent["style"] else ""), file=sys.stderr)
+
     print(render_attribution(net), file=sys.stderr)
     if skipped:
         print(f"\nskipped {len(skipped)} pair(s) the data did not cleanly support:", file=sys.stderr)
@@ -102,6 +112,19 @@ def _derive(a):
               "designs (a community plus the same community without one member); other larger communities "
               "yield nothing until a method suited to their design is chosen (see docs/METHOD_NOTES.md).",
               file=sys.stderr)
+    return 0
+
+
+def _style(a):
+    """The style as a file, for a Cytoscape that is not running or a user who prefers to import it."""
+    from .cytoscape import style
+    payload = json.dumps([style()], indent=2)
+    if a.out:
+        with open(a.out, "w", encoding="utf-8") as f:
+            f.write(payload + "\n")
+        print(f"wrote {a.out}: import it with File, Import, Styles from File")
+    else:
+        print(payload)
     return 0
 
 
@@ -157,6 +180,10 @@ def main(argv=None):
     d.add_argument("--include-non-batch", action="store_true",
                    help="also derive from chemostat and serial dilution experiments (excluded by default: "
                         "a continuous-culture curve is not comparable with a batch one)")
+    d.add_argument("--to-cytoscape", action="store_true",
+                   help="also send the network into a running Cytoscape through CyREST on localhost")
+    d.add_argument("--cytoscape-port", type=int, default=1234, metavar="PORT",
+                   help="the CyREST port to send to (default 1234)")
     d.add_argument("--absence-threshold", type=float, default=1.0, metavar="K",
                    help="an edge is absent when |log2 mean| < K * sd (default 1, the mean plus or minus sd rule; "
                         "0 marks nothing absent)")
@@ -169,6 +196,10 @@ def main(argv=None):
                    help="output format: json (the neutral format, default) or graphml (for network tools)")
     d.add_argument("--out", help="write the network here (default: stdout)")
     d.set_defaults(fn=_derive)
+
+    y = sub.add_parser("style", help="write the Cytoscape style, for Import Styles from File")
+    y.add_argument("--out", help="write it here (default: stdout)")
+    y.set_defaults(fn=_style)
 
     v = sub.add_parser("validate", help="validate a network JSON against the neutral-format schema")
     v.add_argument("file", help="path to a network JSON document")

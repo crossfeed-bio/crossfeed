@@ -14,6 +14,11 @@ tagged version is never reused for changed content.
   their mode, and derived with `--include-non-batch` or the matching advanced setting, where their edges
   are flagged `non_batch`. An experiment with no recorded mode counts as not batch. Edges gained
   `cultivation_mode`. SMGDB00000001, SMGDB00000005 and SMGDB00000011 now say why they derive nothing.
+- Send a network into a running Cytoscape (#25): `crossfeed derive ... --to-cytoscape` and a
+  "Send to Cytoscape" button on the local page post it through CyREST on localhost, with the style the
+  legend describes (direction by color and arrowhead, width by weight, absent edges hidden, drop-out arcs
+  long-dashed and single-replicate arcs dotted). `crossfeed style` writes the style as a file instead.
+  Cytoscape not running is reported with the port, never as a traceback. No new dependency.
 - A pluggable derivation seam (`crossfeed.derive.Deriver`): the comparison method is a drop-in strategy,
   with the provisional `BaselineDeriver` as one implementation. The agreed method arrives as another
   `Deriver` without touching the model or the pipeline.

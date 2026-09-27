@@ -23,6 +23,7 @@ own derivation method. Nothing here needs another document to follow.
 - [The command line](#the-command-line)
 - [The legend](#the-legend)
 - [The local page](#the-local-page)
+- [Send it to Cytoscape](#send-it-to-cytoscape)
 - [The output format](#the-output-format)
 - [Plug in your own method](#plug-in-your-own-method)
 - [How the provisional baseline works](#how-the-provisional-baseline-works)
@@ -154,6 +155,20 @@ interactions, and shows them as a table with downloads for JSON and GraphML. Eve
 The page is served from the standard library on 127.0.0.1 with a token in its URL, renders in Python with
 no JavaScript, and uploads nothing: the data is pulled from mGrowthDB to your machine, and the results
 stay there.
+
+## Send it to Cytoscape
+
+With Cytoscape running, `crossfeed derive SMGDB00000004 --live --to-cytoscape` posts the network straight
+into the open session through CyREST on `127.0.0.1:1234` (`--cytoscape-port` changes the port), and the
+local page has a "Send to Cytoscape" button that sends the network it already computed. Every edge and
+node attribute becomes a column, so effect, weight, status, evidence, quality, the study ids and the
+experiments are all there for filtering.
+
+The style crossfeed applies is the one the legend describes: facilitation green with an arrow, inhibition
+red with a bar, width by `weight`, absent edges hidden, long dashes for drop-out arcs and dots for
+single-replicate ones. A style already called `crossfeed` in the session is left alone, since it may have
+been adjusted. `crossfeed style --out crossfeed_style.json` writes it as a file for File, Import, Styles
+from File. When Cytoscape is not running, the command says so and names the port instead of failing.
 
 ## The output format
 

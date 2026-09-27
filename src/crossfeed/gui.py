@@ -20,6 +20,7 @@ import webbrowser
 from collections import Counter
 
 from .attribution import studies_with_edges
+from .cytoscape import CytoscapeError, send
 from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, output_meta
 from .export import to_graphml
 from .growth import SPIKE_FACTOR
@@ -203,7 +204,7 @@ def _sources(net) -> str:
             f"are respected.</p><ul class=\"sources\">{items}</ul>")
 
 
-def render_result(token: str, result: dict) -> str:
+def render_result(token: str, result: dict, message: str = "") -> str:
     resolved = "".join(
         f"<li>{_esc(entry)}: {_esc(', '.join(f'{name} ({tid})' for tid, name in sorted(matches.items())))}</li>"
         for entry, matches in result["resolved"])
@@ -213,15 +214,20 @@ def render_result(token: str, result: dict) -> str:
     mismatch = any("MISMATCH" in (e.method or "") for e in net.edges)
     hidden = _hidden_note(result.get("hidden", {}))
     shown = [e for e in net.edges if e.status != "absent"]
+    note = f"<p class=\"note\">{_esc(message)}</p>" if message else ""
+    cytoscape = (f"<form method=\"post\" action=\"/cytoscape?token={_esc(token)}\">"
+                 "<button type=\"submit\">Send to Cytoscape</button>"
+                 "<span class=\"muted\"> into a running Cytoscape on this machine (CyREST port 1234), "
+                 "styled as in the legend</span></form>")
     downloads = (f"<p><a href=\"/download.json?token={_esc(token)}\">Download JSON</a> &middot; "
                  f"<a href=\"/download.graphml?token={_esc(token)}\">Download GraphML</a></p>")
     if shown:
         table = (f"<h2>{len(shown)} interaction(s)</h2>"
                  f"<p class=\"note\">{PROVISIONAL}" + (f" {MISMATCH}" if mismatch else "") + "</p>"
-                 f"{hidden}<table>{HEADER}{_arc_rows(net, shown)}</table>{downloads}")
+                 f"{hidden}<table>{HEADER}{_arc_rows(net, shown)}</table>{downloads}{cytoscape}")
     elif net.edges:
         table = ("<h2>No interactions above the absence threshold</h2>"
-                 f"<p class=\"note\">{PROVISIONAL}</p>{hidden}{downloads}")
+                 f"<p class=\"note\">{PROVISIONAL}</p>{hidden}{downloads}{cytoscape}")
     else:
         top = Counter(r.split(";")[0].strip() for _, r in result["skipped"]).most_common(1)
         why = f" Most common reason: {_esc(top[0][0])}." if top else ""
@@ -235,7 +241,7 @@ def render_result(token: str, result: dict) -> str:
                    f"<ul>{items}</ul></details>")
     errors = "".join(f"<p class=\"note\">{_esc(e)}</p>" for e in result["errors"])
     return _page(f"""<h1>crossfeed</h1>
-<h2>Species</h2><ul>{resolved}</ul>{unresolved}
+{note}<h2>Species</h2><ul>{resolved}</ul>{unresolved}
 <p class="muted">Studies searched: {_esc(studies)}</p>
 {errors}{table}{_absent_section(net, result.get("absence", {}))}{_sources(net)}{skipped}
 <p><a href="/?token={_esc(token)}">New search</a> &middot;
@@ -360,9 +366,24 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         else:
             self.send_error(404, "no such page")
 
+    def _to_cytoscape(self) -> str:
+        """Send the network already computed, without deriving it again (#25)."""
+        result = self.state.get("result")
+        if not result:
+            return render_form(self.token, message="Nothing to send yet.")
+        try:
+            sent = send(result["network"], name="crossfeed")
+        except CytoscapeError as e:
+            return render_result(self.token, result, message=str(e))
+        return render_result(self.token, result,
+                             message=f"Sent to Cytoscape: network {sent['suid']}, styled.")
+
     def do_POST(self):            # noqa: N802 - the name http.server requires
         parsed = urllib.parse.urlparse(self.path)
         if not self._authorized(urllib.parse.parse_qs(parsed.query)):
+            return
+        if parsed.path == "/cytoscape":
+            self._send(self._to_cytoscape())
             return
         length = int(self.headers.get("Content-Length") or 0)
         form = urllib.parse.parse_qs(self.rfile.read(length).decode("utf-8"))

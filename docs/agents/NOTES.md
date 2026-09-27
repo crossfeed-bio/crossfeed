@@ -203,6 +203,21 @@ single replicate.
 `include_non_batch` is set, and reports the rest with their mode (#42). The mode is part of `conditions`,
 so a design never mixes modes. Test fixtures must declare `"cultivationMode": "batch"` or they derive
 nothing, which is the point of the rule.
+## Cytoscape (#25)
+
+`crossfeed.cytoscape` posts Cytoscape.js JSON to CyREST. Verified 2026-09-27 against a real Cytoscape
+3.10.3 on macOS: SMGDB00000004 arrived with 3 nodes and 20 edges, every attribute as a column, and all
+seven style mappings live on the view (EDGE_VISIBLE, EDGE_TARGET_ARROW_SHAPE, EDGE_WIDTH, NODE_LABEL,
+EDGE_LINE_TYPE, EDGE_STROKE_UNSELECTED_PAINT, EDGE_TARGET_ARROW_UNSELECTED_PAINT).
+
+Two things learned there:
+
+  * Cytoscape does not refuse a style whose title it already holds: it renames the new one (`crossfeed_0`),
+    so a second run piles up copies. `send` asks for the style list first and leaves an existing style
+    alone, since the user may have adjusted it.
+  * One column maps to one visual property, so the two dash channels (drop-out evidence, single replicate)
+    and the missing width of obligate and abolished arcs are computed into the `line_style` and
+    `display_weight` columns instead of being layered as several mappings.
 
 ## Gotchas
 

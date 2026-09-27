@@ -9,6 +9,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
+from crossfeed import gui
 from crossfeed.gui import DEFAULTS, parse_settings, render_form, render_result, run_query, serve
 from crossfeed.mgrowthdb import MGrowthDBError
 
@@ -261,3 +262,34 @@ def test_the_legend_is_reachable_from_the_page_and_needs_the_token(server):
     with pytest.raises(urllib.error.HTTPError) as bad:
         _get(f"{base}/legend?token=wrong")
     assert bad.value.code == 403
+def test_the_send_to_cytoscape_button_uses_the_network_already_computed(server, monkeypatch):
+    base, token = server
+    data = urllib.parse.urlencode({"species": "Faecalibacterium prausnitzii\nBlautia hydrogenotrophica",
+                                   "only_entered": "1"}).encode()
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
+        assert "Send to Cytoscape" in r.read().decode("utf-8")
+
+    sent = {}
+
+    def fake_send(net, **kwargs):
+        sent["edges"] = len(net.edges)
+        return {"suid": 7, "style": "crossfeed", "url": "http://127.0.0.1:1234/v1/networks/7"}
+
+    monkeypatch.setattr(gui, "send", fake_send)
+    with urllib.request.urlopen(f"{base}/cytoscape?token={token}", data=b"", timeout=10) as r:
+        page = r.read().decode("utf-8")
+    assert "Sent to Cytoscape: network 7" in page and sent["edges"] == 2   # not recomputed, the same net
+
+
+def test_cytoscape_not_running_is_explained_on_the_page(server, monkeypatch):
+    base, token = server
+    data = urllib.parse.urlencode({"species": "Faecalibacterium prausnitzii", "only_entered": ""}).encode()
+    urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10).read()
+
+    def refuse(net, **kwargs):
+        raise gui.CytoscapeError("could not reach Cytoscape on port 1234 (Connection refused). Start it")
+
+    monkeypatch.setattr(gui, "send", refuse)
+    with urllib.request.urlopen(f"{base}/cytoscape?token={token}", data=b"", timeout=10) as r:
+        page = r.read().decode("utf-8")
+    assert "could not reach Cytoscape on port 1234" in page and "Traceback" not in page
