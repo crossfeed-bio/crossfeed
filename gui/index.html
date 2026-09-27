@@ -123,6 +123,13 @@
       <legend>Filter this view (live)</legend>
       <div class="fld"><label>Minimum |interaction strength|: <span id="thrv" class="badge">0.0</span></label><input id="s_thr" type="range" min="0" max="3" step="0.1" value="0"></div>
       <div class="fld"><label>Show effects</label><select id="s_eff"><option>all</option><option>facilitation only</option><option>inhibition only</option><option>hide neutral</option></select></div>
+      <div class="fld"><label>Absence threshold k: <span id="kv" class="badge">1.0</span></label>
+        <input id="s_k" type="range" min="0" max="3" step="0.1" value="1">
+        <div class="status" id="knote">A comparison reads absent when |log2 mean| is under k standard deviations of its own spread. Moving k retunes the view; it does not rederive.</div></div>
+      <div class="fld"><label><input type="checkbox" id="s_absent"> Show absent comparisons (tested, no interaction)</label>
+        <div class="status">Off by default, as the pipeline and the Cytoscape style do. An absence is a measured result, not missing data.</div></div>
+      <div class="fld"><label><input type="checkbox" id="s_lowq"> Show compromised edges (pooled strains, detected removed member, non-batch)</label>
+        <div class="status">Off by default, as the pipeline exports them. A single-replicate edge is not in this group: it is shown and marked, because the comparison is sound and only its spread is unknown.</div></div>
       <div class="fld"><label>Minimum supporting studies</label><input id="s_studies" type="number" min="1" value="1"><div class="status">Acts per edge today. A cross-study count needs edges for one interaction to be merged first (a planned step).</div></div>
     </fieldset>
   </div>
@@ -203,6 +210,9 @@ function visible(){
   const thr=num(document.getElementById("s_thr").value)||0;
   const minStudies=parseInt(document.getElementById("s_studies").value)||1;
   const eff=document.getElementById("s_eff").value;
+  const showLowQ=document.getElementById("s_lowq").checked;
+  const showAbsent=document.getElementById("s_absent").checked;
+  const k=viewK();
   const present=new Set((NET.nodes||[]).map(n=>n.id));
   const matches=n=>!terms.length||terms.some(t=>String(n.id).toLowerCase().includes(t)||String(n.name||"").toLowerCase().includes(t));
   const queried=new Set((NET.nodes||[]).filter(matches).map(n=>n.id));
@@ -211,6 +221,8 @@ function visible(){
     const s=num(e.strength);
     if(s!==null&&Math.abs(s)<thr)return false;
     if((e.study_ids?e.study_ids.length:0)<minStudies)return false;
+    if(isHiddenByDefault(e)&&!showLowQ)return false;
+    if(statusAt(e,k)==="absent"&&!showAbsent)return false;
     if(eff==="facilitation only"&&e.effect!=="facilitation")return false;
     if(eff==="inhibition only"&&e.effect!=="inhibition")return false;
     if(eff==="hide neutral"&&e.effect==="neutral")return false;
@@ -322,6 +334,7 @@ function render(){
     const g=edgeGeom(e); if(!g)return; const d=g.d;
     const path=el("path",{class:"edge",d,stroke:st.color(),"stroke-width":w,fill:"none","marker-end":"url(#arw-"+st.head+")"});
     if(st.dash)path.setAttribute("stroke-dasharray",st.dash);
+    if(isLowQuality(e))path.setAttribute("opacity","0.45");   // flagged: shown, but not fully trusted
     if(isIndirect(e)){   // open ring at the midpoint: the arc is routed through something else
       const ring=el("circle",{class:"via",cx:g.mx,cy:g.my,r:4.5,fill:getVar("--bg"),stroke:st.color(),"stroke-width":1.8});
       ring._edge=e; gEdges.appendChild(ring);
@@ -372,9 +385,69 @@ function highlight(id){
 
 // ---- details, with honest precision: one decimal, an explicit qualitative tag, condition on every line ----
 const band=s=>{const a=Math.abs(s);return a<0.25?"near zero":a<1?"weak":a<2?"moderate":"strong";};
+// Kept for networks with no spread: the retired baseline and files derived before sd existed. Where an
+// edge does carry a spread, showing a coarse band instead of the interval is strictly less honest.
 function strengthText(e){const s=num(e.strength);if(s===null)return"";return `${s>0?"+":""}${s.toFixed(1)} (${band(s)})`;}
 function provNote(e){const m=String(e.method||"");if(/MISMATCH/i.test(m))return"magnitude provisional: mono and co measured by different techniques";if(/PROVISIONAL/i.test(m))return"provisional baseline method";return"";}
-function qualTag(e){return e.significance==null?"qualitative (no significance test)":"significance "+esc(e.significance);}
+// An edge now carries its spread and a test result. Saying "no significance test" when one ran, or
+// showing a magnitude with no interval, is how a viewer quietly overstates its data.
+// Quality flags do not all mean the same thing. A single replicate is shown and marked, because the
+// edge is real and only its spread is unknown; the rest are hidden unless asked, because the comparison
+// itself is compromised. This mirrors derive.HIDDEN_BY_DEFAULT, and the gate checks the viewer knows
+// every flag the model defines, so a new one cannot be added without this file learning it.
+const HIDDEN_BY_DEFAULT=["strains_pooled","removed_member_detected","non_batch"];
+const SHOWN_FLAGGED=["single_replicate"];   // shown and marked: the comparison is sound, its spread is not known
+const flagsOf=e=>Array.isArray(e.quality)?e.quality:[];
+const isLowQuality=e=>flagsOf(e).length>0;
+const isHiddenByDefault=e=>flagsOf(e).some(f=>HIDDEN_BY_DEFAULT.includes(f));
+const cautionsOf=e=>Array.isArray(e.cautions)?e.cautions:[];  // "two_replicates": worth knowing, not disqualifying
+// An edge carries the status it was derived at, and `effect_over_sd` (|log2 mean| / sd), which is the
+// quantity the absence threshold k cuts. Because that number is on the edge, a reader can move k here
+// and see the answer change without rederiving. The file's own k is in meta.absence.
+function fileK(){const a=(NET.meta||{}).absence;return a&&a.k!=null?num(a.k):null;}
+function viewK(){const el=document.getElementById("s_k");return el?(num(el.value)||0):(fileK()??1);}
+function statusAt(e,k){
+  const r=num(e.effect_over_sd);
+  if(r===null)return e.status??null;          // no ratio to cut: keep what the file decided
+  return r<k?"absent":"present";
+}
+function retuned(){const f=fileK();return f!==null&&Math.abs(viewK()-f)>1e-9;}
+function syncK(){
+  const el=document.getElementById("s_k"); if(!el)return;
+  const f=fileK();
+  el.value=(f===null?1:f);
+  document.getElementById("kv").textContent=(num(el.value)||0).toFixed(1);
+  const note=document.getElementById("knote");
+  if(note)note.textContent=(f===null
+    ? "This network carries no absence threshold, so nothing is marked absent unless an edge says so."
+    : `Derived at k = ${f.toFixed(1)}. A comparison reads absent when |log2 mean| is under k standard deviations of its own spread. Moving k retunes the view; it does not rederive.`);
+}
+function spreadText(e){
+  const s=num(e.strength), sd=num(e.sd);
+  if(s===null)return "";
+  if(sd===null)return `${s>0?"+":""}${s.toFixed(2)} (no spread: one replicate)`;
+  return `${s>0?"+":""}${s.toFixed(2)} &plusmn; ${sd.toFixed(2)}`;
+}
+function qualTag(e){
+  const adj=num(e.significance), raw=num(e.p_value);
+  if(adj===null&&raw===null)return "no test reported";
+  const bits=[];
+  if(raw!==null)bits.push(`p ${raw.toFixed(3)}`);
+  if(adj!==null)bits.push(`adjusted ${adj.toFixed(3)}`);
+  return bits.join(", ")+" (support, not the decision)";
+}
+// `obligate` and `abolished` have no log ratio by construction: the target grew in only one of the two
+// sets, so there is no strength or spread to draw. They are a result, not a poor measurement, so they
+// are never faded. `no_growth` never reaches an edge: the pipeline reports it in `skipped` instead.
+const OUTCOME_TEXT={
+  obligate:"grows only when the source is present: an obligate commensal or mutualist, so there is no ratio to report",
+  abolished:"grows only when the source is absent: the source abolishes its growth, so there is no ratio to report"
+};
+function outcomeNote(e){return OUTCOME_TEXT[e.outcome]||"";}
+function countsText(e){
+  const a=e.n_with, b=e.n_without;
+  return (a==null&&b==null)?"":`${a} replicate(s) with, ${b} without`;
+}
 // Evidence is a separate axis from the sign: it says whether the arc is a direct comparison or a
 // drop-out, which may act through a third species. It never reuses the color, dash, or head.
 const isIndirect=e=>String(e.evidence||"")==="dropout";
@@ -403,7 +476,16 @@ function showEdge(e){
   const prov=provNote(e);
   document.getElementById("details").innerHTML=
     `<div class="row"><b>${esc(nodeName(e.source))} &rarr; ${esc(nodeName(e.target))}</b></div>`+
-    `<div class="row"><span class="k">effect</span> ${esc(e.effect)}${num(e.strength)!==null?`  <span class="k">strength</span> ${strengthText(e)}`:""}<br><span class="k">${qualTag(e)}</span></div>`+
+    `<div class="row"><span class="k">effect</span> ${esc(e.effect)}${num(e.strength)!==null?`  <span class="k">strength</span> ${spreadText(e)}`:""}`+
+      `${e.outcome&&e.outcome!=="quantified"?`  <span class="k">outcome</span> ${esc(e.outcome)}`:""}`+
+      `<br><span class="k">${qualTag(e)}</span>${countsText(e)?`<br><span class="k">${esc(countsText(e))}</span>`:""}`+
+      `${statusAt(e,viewK())?`<br><span class="k">status</span> ${esc(statusAt(e,viewK()))}${num(e.effect_over_sd)!==null?` <span class="k">(|effect| / sd = ${num(e.effect_over_sd).toFixed(2)}, k = ${viewK().toFixed(1)})</span>`:""}`:""}</div>`+
+    (retuned()?`<div class="prov">This view uses k = ${viewK().toFixed(1)}; the file was derived at k = ${fileK().toFixed(1)}. The numbers are unchanged, only the cut.</div>`:"")+
+    (isLowQuality(e)?`<div class="prov">${isHiddenByDefault(e)?"compromised":"flagged"}: ${flagsOf(e).map(esc).join(", ")}. ${isHiddenByDefault(e)?"The comparison itself is affected, so this edge is left out unless asked for.":"The comparison is sound; what is unknown is its spread."}</div>`:"")+
+    (outcomeNote(e)?`<div class="prov">${esc(outcomeNote(e))}</div>`:"")+
+    (cautionsOf(e).length?`<div class="method"><span class="k">caution:</span> ${cautionsOf(e).map(esc).join(", ")}</div>`:"")+
+    ((e.experiments||[]).length?`<div class="method"><span class="k">experiments:</span> ${(e.experiments||[]).map(esc).join(", ")} <span class="k">(arcs sharing these share replicates)</span></div>`:"")+
+    ((e.notes||[]).length?`<div class="method"><span class="k">notes:</span> ${(e.notes||[]).map(esc).join("; ")}</div>`:"")+
     (evidenceTag(e)?`<div class="row"><span class="k">evidence</span> ${esc(evidenceTag(e))}${(e.community||[]).length?`<br><span class="k">community</span> ${(e.community||[]).map(id=>esc(nodeName(id))).join(", ")}`:""}</div>`:"")+
     (e.condition?`<div class="row"><span class="k">condition</span> ${esc(e.condition)}</div>`:"")+
     `<div class="row"><span class="k">studies</span><br>${studies.map(esc).join("<br>")||"none recorded"}</div>`+
@@ -414,7 +496,7 @@ function showEdge(e){
 function showNode(id){
   const out=(NET.edges||[]).filter(e=>e.source===id&&nodeById[e.target]);
   const inc=(NET.edges||[]).filter(e=>e.target===id&&nodeById[e.source]);
-  const li=arr=>arr.map(e=>`&bull; ${esc(nodeName(e.source))} &rarr; ${esc(nodeName(e.target))} <span class="k">(${esc(e.effect)}${num(e.strength)!==null?" "+strengthText(e):""}${e.condition?", "+esc(e.condition):""})</span>${isIndirect(e)?` <span class="k" title="${esc(evidenceNote(e))}">indirect</span>`:""}`).join("<br>")||`<span class="empty">none</span>`;
+  const li=arr=>arr.map(e=>`&bull; ${esc(nodeName(e.source))} &rarr; ${esc(nodeName(e.target))} <span class="k">(${esc(e.effect)}${num(e.strength)!==null?" "+(num(e.sd)!==null?spreadText(e):strengthText(e)):""}${e.condition?", "+esc(e.condition):""})</span>${isIndirect(e)?` <span class="k" title="${esc(evidenceNote(e))}">indirect</span>`:""}${isLowQuality(e)?` <span class="k" title="${esc((e.quality||[]).join(", "))}">low quality</span>`:""}`).join("<br>")||`<span class="empty">none</span>`;
   document.getElementById("details").innerHTML=
     `<div class="row"><b>${esc(nodeName(id))}</b></div>`+
     `<div class="row"><span class="k">affects (${out.length})</span><br>${li(out)}</div>`+
@@ -509,6 +591,7 @@ function loadNetwork(d){
   const ids=new Set(d.nodes.map(n=>n&&n.id));
   const dangling=d.edges.filter(e=>!ids.has(e.source)||!ids.has(e.target)).length;
   NET=d; POS={}; selected=null; userAdjusted=false; reindex();
+  syncK();   // start the threshold where the file was derived, not at a number of our own
   document.getElementById("q").value="";
   updateBanner(); render();
   if(dangling)console.warn(`${dangling} edge(s) reference a missing node and are not shown or exported.`);
@@ -520,7 +603,8 @@ document.getElementById("advbtn").onclick=function(){const open=document.getElem
 document.getElementById("q").addEventListener("input",debounce(()=>{selected=null;userAdjusted=false;render();},160));
 document.getElementById("clearq").onclick=()=>{document.getElementById("q").value="";selected=null;userAdjusted=false;render();};
 document.getElementById("s_thr").addEventListener("input",e=>{document.getElementById("thrv").textContent=(num(e.target.value)||0).toFixed(1);render();});
-["s_studies","s_eff"].forEach(id=>document.getElementById(id).addEventListener("input",render));
+["s_studies","s_eff","s_lowq","s_absent"].forEach(id=>document.getElementById(id).addEventListener("input",render));
+document.getElementById("s_k").addEventListener("input",e=>{document.getElementById("kv").textContent=(num(e.target.value)||0).toFixed(1);render();});
 document.getElementById("dljson").onclick=()=>save("crossfeed_network.json",JSON.stringify(currentView(),null,2),"application/json");
 document.getElementById("dlgraphml").onclick=()=>save("crossfeed_network.graphml",toGraphML(currentView()),"application/xml");
 document.getElementById("file").addEventListener("change",ev=>{
