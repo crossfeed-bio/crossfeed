@@ -198,11 +198,11 @@ def send(net: InteractionNetwork, port: int = PORT, name: str = "grownet",
     try:
         created = _post(f"{root}/networks?title={urllib.parse.quote(name)}&collection={brand.NAME}",
                         network_json(net, name), timeout)
-    except urllib.error.URLError as e:
-        reason = getattr(e, "reason", e)
-        raise CytoscapeError(
-            f"could not reach Cytoscape on port {port} ({reason}). Start Cytoscape, check that its CyREST "
-            f"port is {port} (Edit, Preferences, cyrest.port), or pass another port.") from None
+    except urllib.error.HTTPError as e:
+        raise CytoscapeError(f"Cytoscape refused the network ({e.code} {e.reason}). Update Cytoscape to 3.8 or "
+                             "later, whose CyREST takes networks this way.") from None
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise CytoscapeError(_unreachable(port, getattr(e, "reason", e))) from None
     suid = created.get("networkSUID", created.get("data", {}).get("networkSUID"))
     if suid is None:
         raise CytoscapeError(f"Cytoscape accepted the network but reported no network id: {created!r}")
@@ -222,6 +222,17 @@ def send(net: InteractionNetwork, port: int = PORT, name: str = "grownet",
         except urllib.error.URLError as e:
             warning = f"the network is in Cytoscape, but its style could not be applied ({getattr(e, 'reason', e)})"
     return {"suid": suid, "style": applied, "warning": warning, "url": f"{root}/networks/{suid}"}
+
+
+def _unreachable(port: int, reason) -> str:
+    """What to do when nothing answers on the CyREST port, worded for the page and the command line."""
+    if "timed out" in str(reason).lower():
+        return (f"Cytoscape did not answer on port {port} in time: it may still be starting. Wait until its "
+                "window has fully opened, then try again.")
+    return (f"Cytoscape is not running on this machine, or not listening on port {port} ({reason}). Start "
+            "Cytoscape, wait until its window has fully opened, then try again. Cytoscape listens on port 1234 "
+            "unless its cyrest.port property (Edit, Preferences, Properties) says otherwise; the command line "
+            "takes another port with --cytoscape-port.")
 
 
 def _ensure_style(root: str, timeout: float) -> None:

@@ -171,7 +171,9 @@ def test_cytoscape_not_running_says_what_to_do(cyrest):
     port, _ = cyrest
     with pytest.raises(CytoscapeError) as e:
         send(_net(), port=port + 1)              # nothing listens there
-    assert f"port {port + 1}" in str(e.value) and "Start Cytoscape" in str(e.value)
+    message = str(e.value)
+    assert "Cytoscape is not running on this machine" in message and f"port {port + 1}" in message
+    assert "Start Cytoscape, wait until its window has fully opened, then try again" in message
 
 
 def test_nothing_is_sent_off_this_machine():
@@ -215,3 +217,9 @@ def test_nodes_are_colored_by_genus_with_the_four_checked_hues_then_grey():
     assert (node["genus"], node["genus_color"]) == ("Bacteroides", brand.GENUS_COLORS[0])
     fill = next(m for m in style()["mappings"] if m["visualProperty"] == "NODE_FILL_COLOR")
     assert (fill["mappingType"], fill["mappingColumn"]) == ("passthrough", "genus_color")
+
+
+def test_a_cytoscape_that_is_still_starting_is_told_apart():
+    from crossfeed.cytoscape import _unreachable
+    assert "may still be starting" in _unreachable(1234, TimeoutError("timed out"))
+    assert "not running on this machine" in _unreachable(1234, "Connection refused")

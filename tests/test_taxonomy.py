@@ -88,3 +88,20 @@ def test_repeated_entries_give_one_id():
 @pytest.mark.parametrize("bad", [{"communityStrains": [{"name": "No id"}]}, {"communityStrains": []}, {}])
 def test_strains_without_ids_are_ignored(bad):
     assert species_index(_FakeClient({"SMGDB00000001": [bad]})) == {}
+
+
+def test_common_ways_of_typing_are_understood_and_the_rest_say_why():
+    from crossfeed.taxonomy import split_entries
+    index = {"blautia hydrogenotrophica": {476272: "Blautia hydrogenotrophica DSM 10507"},
+             "blautia obeum": {40520: "Blautia obeum ATCC 29174"}}
+    entries = split_entries(["Blautia hydrogenotrophica, Blautia obeum", "- 476272", "NCBI:txid40520"])
+    assert entries == ["Blautia hydrogenotrophica", "Blautia obeum", "476272", "NCBI:txid40520"]
+    r = resolve_species(entries + ["Blautia", "B. obeum", "Blautia hydrogentrophica", "99999999", "%%%"], index)
+    assert [e for e, _ in r["resolved"]] == entries                          # commas, a dash, txid: all fine
+    why, hints = r["reasons"], r["suggestions"]
+    assert why["Blautia"].startswith("a genus alone") and hints["Blautia"] == ["Blautia hydrogenotrophica",
+                                                                               "Blautia obeum"]
+    assert hints["B. obeum"] == ["Blautia obeum"]                              # an abbreviated genus
+    assert hints["Blautia hydrogentrophica"] == ["Blautia hydrogenotrophica"]  # a close spelling
+    assert why["99999999"] == "no strain in mGrowthDB has NCBI taxon id 99999999"   # not taken as found
+    assert why["%%%"].startswith("not readable")

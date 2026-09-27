@@ -13,6 +13,9 @@ Nothing pulled here is written into the repository (see docs/DATA_GOVERNANCE.md)
 """
 from __future__ import annotations
 
+import difflib
+import re
+
 from .derive import genus_species
 
 STUDY_ID = "SMGDB{:08d}"
@@ -50,6 +53,44 @@ def species_index(client, max_studies: int = MAX_STUDIES) -> dict:
     return index
 
 
+# a list marker or numbering someone pasted along with a name: "- ", "* ", "1. ", "2) "
+_BULLET = re.compile(r"^\s*(?:[-*\u2022]+|\d+[.)])\s+")
+# an NCBI taxon id written the ways NCBI and papers write it: 476272, txid476272, NCBI:txid476272, taxid:476272
+_TAXON_ID = re.compile(r"(?i)^(?:ncbi\s*[:_-]?\s*)?(?:txid|taxid|taxon(?:\s*id)?)?\s*[:=]?\s*(\d+)$")
+# what a species or strain name can hold: it starts with a letter (or "[" as in "[Clostridium] scindens")
+_NAME = re.compile(r"^[\[A-Za-z][A-Za-z0-9 .,'\-\[\]()/:+]*$")
+
+
+def split_entries(lines) -> list:
+    """The entries in what someone typed or pasted: one per line, and also split at commas and semicolons,
+    which no species or strain name contains; list markers are dropped."""
+    out = []
+    for line in lines:
+        for part in re.split(r"[,;]", line or ""):
+            part = _BULLET.sub("", part).strip()
+            if part:
+                out.append(part)
+    return out
+
+
+def _display(key: str) -> str:
+    return key[:1].upper() + key[1:]
+
+
+def _suggestions(text: str, index: dict) -> list:
+    """Names mGrowthDB holds that the person may have meant: the species of a genus given alone, an
+    abbreviated genus ("B. hydrogenotrophica"), or a close spelling."""
+    key = genus_species(text)
+    words = key.split()
+    if len(words) == 1:
+        return [_display(k) for k in sorted(index) if k.split()[0] == words[0]][:8]
+    if len(words) >= 2 and (words[0].endswith(".") or len(words[0]) == 1):
+        initial, epithet = words[0].rstrip(".")[:1], words[1]
+        return [_display(k) for k in sorted(index)
+                if len(k.split()) > 1 and k.split()[0].startswith(initial) and k.split()[1] == epithet][:8]
+    return [_display(k) for k in difflib.get_close_matches(key, list(index), n=3, cutoff=0.8)]
+
+
 def resolve_species(entries, index: dict) -> dict:
     """Resolve typed species names and taxon ids against an index from `species_index`.
 
@@ -60,21 +101,45 @@ def resolve_species(entries, index: dict) -> dict:
     below it. They are the same species, so a name resolves to all of them and the caller shows which
     strains were used rather than asking the person to choose.
 
+    An entry may carry a list marker ("- ", "1. ") and an id may be written as NCBI writes it ("txid476272").
     Returns {"taxon_ids": [ids in the order first seen], "resolved": [(entry, {taxon id: name})],
-    "unresolved": [entries mGrowthDB does not hold]}.
+    "unresolved": [entries that gave nothing], "reasons": {entry: why}, "suggestions": {entry: [names]}}:
+    unreadable text, a taxon id no strain in mGrowthDB carries, a genus alone, or a name mGrowthDB does
+    not hold, with the names it does hold that the person may have meant.
     """
-    out = {"taxon_ids": [], "resolved": [], "unresolved": []}
+    out = {"taxon_ids": [], "resolved": [], "unresolved": [], "reasons": {}, "suggestions": {}}
+
+    def fail(text, reason, suggestions=()):
+        out["unresolved"].append(text)
+        out["reasons"][text] = reason
+        if suggestions:
+            out["suggestions"][text] = list(suggestions)
+
     for entry in entries:
-        text = (entry or "").strip()
+        text = _BULLET.sub("", (entry or "")).strip()
         if not text:
             continue
-        if text.isdigit():
-            taxon = int(text)
-            matches = {taxon: next((names[taxon] for names in index.values() if taxon in names), "")}
+        taxon_id = _TAXON_ID.match(text)
+        if taxon_id:
+            taxon = int(taxon_id.group(1))
+            name = next((names[taxon] for names in index.values() if taxon in names), None)
+            if name is None:
+                # an id no strain in mGrowthDB carries can give no result, so it is not taken as found
+                fail(text, f"no strain in mGrowthDB has NCBI taxon id {taxon}")
+                continue
+            matches = {taxon: name}
+        elif not _NAME.match(text):
+            fail(text, "not readable as a species or strain name, nor as an NCBI taxon id")
+            continue
         else:
             matches = index.get(genus_species(text))
             if not matches:
-                out["unresolved"].append(text)
+                hints = _suggestions(text, index)
+                if len(genus_species(text).split()) == 1:
+                    reason = "a genus alone: give the species" + ("" if hints else "; mGrowthDB holds no species of it")
+                else:
+                    reason = "no species or strain of this name in mGrowthDB"
+                fail(text, reason, hints)
                 continue
             matches = dict(matches)
         out["resolved"].append((text, matches))

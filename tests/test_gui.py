@@ -63,6 +63,7 @@ class FakeClient:
         if study_id != self.study_id:
             raise MGrowthDBError(f"mGrowthDB returned HTTP 404 for {study_id}")
         return {"id": study_id, "name": "fake study", "url": "http://example/study",
+                "uploadedAt": "2025-06-26T13:03:03+00:00", "publishedAt": "2025-06-29T10:25:52+00:00",
                 "experiments": [{"id": e["id"]} for e in EXPERIMENTS]}
 
     def get_experiment(self, experiment_id):
@@ -115,7 +116,8 @@ def test_unknown_species_is_reported_without_results():
     assert r["unresolved"] == ["Escherichia coli"]
     assert r["studies"] == [] and r["network"].edges == []
     page = render_result("tok", r)
-    assert "Not in mGrowthDB" in page and "No interactions" in page
+    assert "Not used:" in page and "no species or strain of this name in mGrowthDB" in page
+    assert "No interactions" in page
 
 
 def test_absent_edges_are_kept_and_shown_apart():
@@ -373,7 +375,7 @@ def test_the_species_list_is_built_once_per_session(server, monkeypatch):
 def test_an_empty_result_names_the_step_that_found_nothing():
     # a name mGrowthDB does not hold: the page says so, instead of the explanation about study designs
     unknown = render_result("tok", _query(entries=("Escherichia coli",)))
-    assert "None of these names or ids is in mGrowthDB" in unknown and "drop-out designs" not in unknown
+    assert "None of the entries could be used" in unknown and "drop-out designs" not in unknown
     assert "Download network" not in unknown and "Send to Cytoscape" not in unknown   # nothing to send
     assert ">Report</summary>" in unknown and "#empty" in unknown                     # but the why is there
     r = _query()
@@ -396,3 +398,12 @@ def test_the_settings_say_what_is_absent_and_what_the_replicates_are():
     assert "an interaction counts as absent (the species do not affect each other)" in page
     assert "the replicate\n  growth curves of that species in one culture condition" in page
     assert "a set " not in page
+
+
+def test_an_empty_result_caused_by_a_setting_names_the_setting():
+    excluded = render_result("tok", _query(exclude_studies="SMGDB00000001"))
+    assert "The only studies holding these species are in Exclude these studies (SMGDB00000001)" in excluded
+    partners = render_result("tok", _query(entries=("Faecalibacterium prausnitzii",)))
+    assert "each involves a species you did not enter" in partners and "untick Only interactions" in partners
+    typo = render_result("tok", _query(entries=("Blautia hydrogenotrophca",)))
+    assert "Did you mean: Blautia hydrogenotrophica?" in typo

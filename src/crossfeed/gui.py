@@ -28,9 +28,9 @@ from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, outpu
 from .export import to_graphml
 from .growth import SPIKE_FACTOR
 from .legend import legend_svg
-from .mgrowthdb import MGrowthDBError, records_to_network
+from .mgrowthdb import MGrowthDBError, data_versions, records_to_network
 from .report import report_text
-from .taxonomy import resolve_species, species_index
+from .taxonomy import resolve_species, species_index, split_entries
 
 TITLE = brand.NAME
 # species that derive a non-empty network, for the Example button (Karoline's proposal, #73). The first is
@@ -287,16 +287,45 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
             f"{report}</div>{hint if has_edges else ''}")
 
 
+def _unresolved_list(result: dict) -> str:
+    """Every entry that gave nothing, with why and what mGrowthDB holds that may have been meant."""
+    if not result["unresolved"]:
+        return ""
+    items = []
+    for entry in result["unresolved"]:
+        reason = result.get("reasons", {}).get(entry, "not in mGrowthDB")
+        hints = result.get("suggestions", {}).get(entry)
+        hint = f" Did you mean: {_esc(', '.join(hints))}?" if hints else ""
+        items.append(f"<li><strong>{_esc(entry)}</strong>: {_esc(reason)}.{hint}</li>")
+    return f"<p class=\"note\">Not used:</p><ul class=\"unresolved\">{''.join(items)}</ul>"
+
+
 def _empty_reason(result: dict) -> str:
-    """Why a search came back empty, from the first step that found nothing."""
+    """Why a search came back empty: the first step, or the setting, that left nothing."""
+    s = result.get("settings", {})
     if not result["resolved"]:
-        return ("None of these names or ids is in mGrowthDB. Check the spelling, or try the strain name, "
-                "the other name of a renamed species, or the NCBI taxon id.")
+        return "None of the entries could be used; each one says why above."
+    if result.get("errors"):
+        return "mGrowthDB could not be read (see the messages above); try again when it is reachable."
     if not result["studies"]:
+        if result.get("excluded"):
+            return ("The only studies holding these species are in Exclude these studies ("
+                    + _esc(", ".join(result["excluded"])) + "); remove them from that setting to search them.")
+        if s.get("studies"):
+            return "None of the studies under Only these studies holds these species; empty that setting."
         return "mGrowthDB holds these strains, but no study grows them, so there is nothing to compare."
-    if result["errors"]:
-        return "The studies could not be read (see the messages above); try again when mGrowthDB is reachable."
-    top = Counter(r.split(";")[0].strip() for _, r in result["skipped"]).most_common(1)
+    if result.get("partners_only"):
+        return (f"The studies hold {result['partners_only']} interaction(s), but each involves a species you did "
+                "not enter. Add the partners, or untick Only interactions between the species entered.")
+    if result.get("hidden", {}).get("low_quality"):
+        return (f"{result['hidden']['low_quality']} low-quality interaction(s) were found and are hidden; tick "
+                "Show low-quality edges to see them.")
+    reasons = [reason for _, reason in result["skipped"]]
+    non_batch = [r for r in reasons if "a non-batch curve is not comparable" in r]
+    if non_batch and len(non_batch) == len(reasons) and not s.get("include_non_batch"):
+        return ("These studies are chemostat or serial dilution experiments, which are left out by default; "
+                "tick Include chemostat and serial dilution experiments to derive from them.")
+    top = Counter(r.split(";")[0].strip() for r in reasons).most_common(1)
     why = f" The most common reason: {_esc(top[0][0])}." if top else ""
     return (f"The studies holding these species gave no usable comparison.{why} {EMPTY_HELP} The report lists "
             "the reason for every pair.")
@@ -306,8 +335,7 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
     resolved = "".join(
         f"<li>{_esc(entry)}: {_esc(', '.join(f'{name} ({tid})' for tid, name in sorted(matches.items())))}</li>"
         for entry, matches in result["resolved"])
-    unresolved = ("<p>Not in mGrowthDB: " + _esc(", ".join(result["unresolved"])) + "</p>"
-                  if result["unresolved"] else "")
+    unresolved = _unresolved_list(result)
     net = result["network"]
     mismatch = any("MISMATCH" in (e.method or "") for e in net.edges)
     hidden = _hidden_note(result.get("hidden", {}))
@@ -392,7 +420,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
             progress(done, total, message)
 
     s = {**DEFAULTS, **(settings or {})}
-    names = [line.strip() for line in entries if line and line.strip()]
+    names = split_entries(entries)          # one per line, and also at commas and semicolons
     say(0, None, "Looking up the species in mGrowthDB")
     index = species_index(client) if index is None else index
     resolved = resolve_species(names, index)
@@ -408,7 +436,9 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
 
     # studies the user excluded are never searched, whether found or named (Karoline, 2026-09-27)
     excluded = {sid.strip().upper() for sid in s["exclude_studies"].split(",") if sid.strip()}
+    left_out = [sid for sid in studies if sid.upper() in excluded]
     studies = [sid for sid in studies if sid.upper() not in excluded]
+    partners_only = 0                       # interactions dropped because a partner was not entered
 
     # A species name resolves to every strain of that species, and a strain keeps its taxon id across the
     # renamings mGrowthDB records (411483 is Faecalibacterium prausnitzii A2-165 in one study and
@@ -432,7 +462,9 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
                 return (record.get(f"{side}_taxon_id") in wanted_ids
                         or record.get(f"{side}_species", record[side]) in wanted)
 
-            recs = [r for r in recs if entered(r, "source") and entered(r, "target")]
+            kept = [r for r in recs if entered(r, "source") and entered(r, "target")]
+            partners_only += len(recs) - len(kept)
+            recs = kept
         records += recs
         skipped += skips
 
@@ -441,8 +473,11 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # every setting the search ran with, so a downloaded network says how it was made (#78, #76)
     net = records_to_network(records, meta={
         "source_db": "mGrowthDB (live)", "species": names, "studies": studies, "settings": dict(s), **extra})
+    net.meta["data"] = data_versions(client, studies, net.meta["derived_at"])
     say(len(studies), len(studies), "Preparing the result")
     return {"entries": names, "settings": dict(s), "resolved": resolved["resolved"],
+            "reasons": resolved["reasons"], "suggestions": resolved["suggestions"], "excluded": left_out,
+            "partners_only": partners_only,
             "unresolved": resolved["unresolved"], "taxon_ids": resolved["taxon_ids"], "studies": studies,
             "network": net,
             "skipped": skipped, "errors": errors, "hidden": extra["hidden"], "absence": extra["absence"]}

@@ -87,7 +87,9 @@ def test_every_network_records_the_tool_its_version_and_the_date():
     assert provenance(datetime.date(2026, 9, 27))["derived_on"] == "2026-09-27"
     graph = ET.fromstring(to_graphml(net)).find("{http://graphml.graphdrawing.org/xmlns}graph")
     data = {d.get("key"): d.text for d in graph.findall("{http://graphml.graphdrawing.org/xmlns}data")}
-    assert data == {"g_tool": "grownet", "g_tool_version": __version__, "g_derived_on": today}
+    assert data == {"g_tool": "grownet", "g_tool_version": __version__, "g_derived_on": today,
+                    "g_derived_at": net.meta["derived_at"]}
+    assert net.meta["derived_at"].startswith(today + "T")                    # date, time and offset
 
 
 def test_a_search_records_every_setting_it_ran_with():

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from . import interaction
 from .help import SETTINGS
-from .mgrowthdb import MGROWTHDB_API
+from .mgrowthdb import MGROWTHDB_API, NO_DATABASE_VERSION
 
 
 def _value(key: str, value) -> str:
@@ -50,10 +50,14 @@ def report_text(result: dict) -> str:
     net = result["network"]
     meta = net.meta
     settings = meta.get("settings", {})
+    data = meta.get("data", {})
+    when = meta.get("derived_at", meta.get("derived_on", "")).replace("T", " ")
     lines = [f"{meta.get('tool', 'grownet')} report",
+             f"run: {when}",
              f"tool: {meta.get('tool', 'grownet')} {meta.get('tool_version', '')}",
-             f"derived on: {meta.get('derived_on', '')}",
-             f"data: {meta.get('source_db', 'mGrowthDB')}, {MGROWTHDB_API}", ""]
+             f"data: {meta.get('source_db', 'mGrowthDB')}, {data.get('api', MGROWTHDB_API)}, read at "
+             f"{data.get('retrieved_at', when).replace('T', ' ')}",
+             f"data version: {data.get('database_version', NO_DATABASE_VERSION)}", ""]
 
     if result.get("study"):
         lines.append(f"study derived: {result['study']} (every species in it)")
@@ -61,9 +65,16 @@ def report_text(result: dict) -> str:
         lines.append("species entered: " + (", ".join(result.get("entries", [])) or "none"))
     for entry, matches in result["resolved"]:
         lines.append(f"  {entry}: " + ", ".join(f"{n} (taxon {t})" for t, n in sorted(matches.items())))
-    if result["unresolved"]:
-        lines.append("not in mGrowthDB: " + ", ".join(result["unresolved"]))
+    for entry in result["unresolved"]:
+        hints = result.get("suggestions", {}).get(entry)
+        lines.append(f"  not used: {entry}: {result.get('reasons', {}).get(entry, 'not in mGrowthDB')}"
+                     + (f" (did you mean: {', '.join(hints)}?)" if hints else ""))
     lines.append("studies searched: " + (", ".join(result["studies"]) or "none"))
+    for sid, dates in data.get("studies", {}).items():
+        lines.append(f"  {sid}: uploaded {dates.get('uploaded_at', '')[:10] or '?'}, published "
+                     f"{dates.get('published_at', '')[:10] or '?'}")
+    if result.get("excluded"):
+        lines.append("left out by Exclude these studies: " + ", ".join(result["excluded"]))
     lines.append("")
 
     lines.append("settings:")

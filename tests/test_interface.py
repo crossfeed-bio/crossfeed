@@ -201,4 +201,17 @@ def test_the_command_line_gives_everything_the_page_does(monkeypatch, tmp_path, 
     # the report is the page's own, for the same search
     page = gui.run_query(FakeClient(), [A, B], {"absence_threshold": 2.0})
     from crossfeed.report import report_text
-    assert text == report_text(page)
+    def without_times(t):                  # the two runs are seconds apart; the rest must be identical
+        return [line for line in t.splitlines() if not line.startswith(("run:", "data: "))]
+    assert without_times(text) == without_times(report_text(page))
+
+
+def test_the_report_gives_the_run_time_the_tool_version_and_the_data_version(server):
+    # Karoline, 2026-09-27: "Are the run date, tool version and data versions in the report?"
+    base, token = server
+    _finished(base, token)
+    _, text, _ = _open(f"{base}/report.txt?token={token}")
+    assert re.search(r"^run: \d{4}-\d\d-\d\d \d\d:\d\d:\d\d[+-]\d\d:\d\d$", text, re.M)
+    assert f"tool: grownet {__version__}" in text
+    assert "data version: mGrowthDB publishes no database version" in text
+    assert "  SMGDB00000001: uploaded 2025-06-26, published 2025-06-29" in text     # each study's dates

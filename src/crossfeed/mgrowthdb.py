@@ -210,11 +210,33 @@ def effect_from_logratio(strength, significance, alpha: float = 0.05) -> str:
     return "facilitation" if strength > 0 else "inhibition"
 
 
-def provenance(today: datetime.date | None = None) -> dict:
-    """What made a network and when: the tool, its version, and the derivation date. mGrowthDB changes over
-    time, so the same version can derive a different network later; the date says which data it saw."""
+def provenance(today: datetime.date | None = None, now: datetime.datetime | None = None) -> dict:
+    """What made a network and when: the tool, its version, and the derivation date and time (local, with
+    its offset). mGrowthDB changes over time, so the same version can derive a different network later;
+    the time says which data it saw."""
+    now = now or datetime.datetime.now().astimezone()
     return {"tool": NAME, "tool_version": __version__,
-            "derived_on": (today or datetime.date.today()).isoformat()}
+            "derived_on": (today or now.date()).isoformat(),
+            "derived_at": now.isoformat(timespec="seconds")}
+
+
+# mGrowthDB publishes no version of the database as a whole (its API has no version endpoint), so the
+# version of the data behind a network is when it was read plus each study's own upload and publication
+# dates, which change when a study is corrected.
+NO_DATABASE_VERSION = "mGrowthDB publishes no database version; each study's upload and publication dates are given"
+
+
+def data_versions(client, study_ids, retrieved_at: str) -> dict:
+    """The data a search read: the API, when, and for each study its uploadedAt and publishedAt."""
+    studies = {}
+    for sid in study_ids:
+        try:
+            study = client.get_study(sid)          # cached by the client, so no second request
+        except MGrowthDBError:
+            continue
+        studies[sid] = {"uploaded_at": study.get("uploadedAt", ""), "published_at": study.get("publishedAt", "")}
+    return {"api": MGROWTHDB_API, "retrieved_at": retrieved_at, "database_version": NO_DATABASE_VERSION,
+            "studies": studies}
 
 
 def records_to_network(records: Iterable[dict], meta: dict | None = None) -> InteractionNetwork:

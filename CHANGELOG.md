@@ -14,6 +14,12 @@ tagged version is never reused for changed content.
   require an entry for every setting, command line option and model field, so it cannot fall behind (#78).
 - `derive --live --species NAME ...` runs the local page's search from the command line, with
   `--all-partners` for the page's "only the species entered" box unticked (#78).
+- The report and every network record when the search ran (date, time and offset) and the version of
+  the data: mGrowthDB publishes none for the whole database, so each study's upload and publication
+  dates. Input that gives nothing now says why, per entry (unreadable, a taxon id mGrowthDB does not hold,
+  a genus alone, an unknown name, with suggestions), commas and `txid` ids are understood, an empty result
+  names the setting that caused it, and the Cytoscape messages say what to do on the page and the
+  command line alike.
 - `derive --report FILE` writes the page's report from the command line, and `crossfeed derive --help`
   groups its options as the page does (what to derive, the settings, the outputs), in the page's
   wording, with examples. A test requires an option for every setting and all three outputs.

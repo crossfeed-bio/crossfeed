@@ -183,8 +183,11 @@ DECISIONS = (
 # (question, answer as HTML)
 QA = (
     ("A name is not recognized.",
-     "Names are resolved through mGrowthDB's own strain records. Try the other name of a renamed species "
-     "(Faecalibacterium prausnitzii or duncaniae), the strain name, or the NCBI taxon id."),
+     "Under Not used, each entry says why: unreadable, a taxon id no strain in mGrowthDB carries, a genus "
+     "without its species, or a name mGrowthDB does not hold, with the names it does hold that you may have "
+     "meant. Names are resolved through mGrowthDB's own strain records, so also try the other name of a "
+     "renamed species (Faecalibacterium prausnitzii or duncaniae), the strain name, or the NCBI taxon id. "
+     "Several names on one line, separated by commas, and ids written as txid476272 work too."),
     ("The search is slow.",
      "Every study holding your species is fetched live from mGrowthDB. Name the studies you need under "
      "Only these studies."),
@@ -206,8 +209,9 @@ QA = (
      "Check its replicate counts, flags and notes, then the curves in mGrowthDB. A problem in the data "
      "belongs to mGrowthDB; a problem in the tool belongs in the issue tracker (below)."),
     ("Today's network differs from an earlier one.",
-     "mGrowthDB gains and corrects data. Every network records the tool version and the date it was "
-     "derived (tool_version, derived_on), so two files can be told apart."),
+     "mGrowthDB gains and corrects data. Every network and report records the tool version, when it was "
+     "derived, and each study's upload and publication dates, so two files can be told apart and a "
+     "corrected study shows up as a new date."),
     ("How do I open the network in Cytoscape?",
      "Start Cytoscape, then press Send to Cytoscape under the result: the network arrives with the legend's "
      "style. Without the button, download GraphML and choose File, Import, Network from File in Cytoscape."),
@@ -297,8 +301,10 @@ downloads them as a text file, with the tool version.</p>
 
 <h2 id="attributes">Arc and node attributes</h2>
 <p>Every downloaded network, JSON or GraphML, carries these for each arc (edge) and node. The network
-itself records the tool, <code>tool_version</code>, <code>derived_on</code> and every setting used, in
-<code>meta</code>.</p>
+itself records the tool, <code>tool_version</code>, the date and time it was derived (<code>derived_on</code>,
+<code>derived_at</code>), every setting used, and the version of the data: mGrowthDB publishes no version of
+the whole database, so <code>meta.data</code> holds when it was read and each study's upload and
+publication dates, which change when a study is corrected.</p>
 {edges}
 {nodes}
 

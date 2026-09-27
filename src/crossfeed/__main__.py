@@ -74,8 +74,9 @@ def _derive(a):
         from .derive import derive_interactions, output_meta
         from .mgrowthdb import MGrowthDBClient
         deriver = _load_deriver(a.deriver) if a.deriver else None
+        client = MGrowthDBClient()
         try:
-            records, skipped = derive_interactions(MGrowthDBClient(), a.study, deriver=deriver,
+            records, skipped = derive_interactions(client, a.study, deriver=deriver,
                                                    metric=a.metric, spike_factor=a.spike_factor,
                                                    dropout=not a.no_dropout,
                                                    include_non_batch=a.include_non_batch,
@@ -99,6 +100,9 @@ def _derive(a):
         source_db = "mGrowthDB (fixture)"
 
     net = _build(records, a.study, source_db, extra)
+    if a.live:
+        from .mgrowthdb import data_versions
+        net.meta["data"] = data_versions(client, [a.study], net.meta["derived_at"])
     result = {"study": a.study, "entries": [], "resolved": [], "unresolved": [], "studies": [a.study],
               "skipped": skipped, "errors": [], "network": net}
     return _emit(a, net, skipped, extra, a.study, result)
@@ -129,8 +133,10 @@ def _derive_species(a):
     for entry, matches in result["resolved"]:
         names = ", ".join(f"{name} ({tid})" for tid, name in sorted(matches.items()))
         print(f"{entry}: {names}", file=sys.stderr)
-    if result["unresolved"]:
-        print("not in mGrowthDB: " + ", ".join(result["unresolved"]), file=sys.stderr)
+    for entry in result["unresolved"]:
+        hints = result["suggestions"].get(entry)
+        print(f"not used: {entry}: {result['reasons'].get(entry, 'not in mGrowthDB')}"
+              + (f" (did you mean: {', '.join(hints)}?)" if hints else ""), file=sys.stderr)
     for error in result["errors"]:
         print(error, file=sys.stderr)
     print("studies searched: " + (", ".join(result["studies"]) or "none"), file=sys.stderr)
@@ -139,6 +145,11 @@ def _derive_species(a):
     if problems:
         raise SystemExit("network invalid:\n  " + "\n  ".join(problems))
     extra = {"absence": result["absence"], "hidden": result["hidden"]}
+    if not net.edges:
+        import html
+
+        from .gui import _empty_reason
+        print("\nno interactions: " + html.unescape(_empty_reason(result)), file=sys.stderr)
     return _emit(a, net, result["skipped"], extra, " and ".join(a.species), result)
 
 
@@ -187,7 +198,7 @@ def _emit(a, net, skipped, extra, label, result):
         if extra["hidden"]["low_quality"]:
             print(f"{extra['hidden']['low_quality']} low-quality edge(s) hidden; show them with "
                   "--include-low-quality.", file=sys.stderr)
-    if not net.edges:
+    if not net.edges and "reasons" not in result:        # a species search has said why already
         top = Counter(r.split(";")[0].strip() for _, r in skipped).most_common(1)
         why = f" Most common reason: {top[0][0]}." if top else ""
         print(f"\nNO interactions were derived for {label}: the network is empty.{why}\n"
