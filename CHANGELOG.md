@@ -7,6 +7,15 @@ tagged version is never reused for changed content.
 ## [0.0.2] (unreleased)
 
 ### Added
+- The help page now explains every advanced setting (with its command line flag and default), every arc
+  and node attribute, the main design decisions and why, the command line with the page's own example,
+  what to do when no network comes back, a short Q&A, how to cite, and links the issue tracker. Tests
+  require an entry for every setting, command line option and model field, so it cannot fall behind (#78).
+- `derive --live --species NAME ...` runs the local page's search from the command line, with
+  `--all-partners` for the page's "only the species entered" box unticked (#78).
+- The tool version shows next to the name on the local page. Every network's `meta` records the tool,
+  `tool_version`, `derived_on` and every setting used; GraphML carries the first three as graph
+  attributes (#78).
 - The local page gained an Example button, which fills the species box with a pair that derives a network
   (Faecalibacterium duncaniae and Blautia hydrogenotrophica), and a Help button opening a help page that
   explains what the tool does, how to read a result, and links the legend (#73).

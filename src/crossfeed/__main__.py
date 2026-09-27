@@ -1,6 +1,7 @@
 """crossfeed command line: derive a network for any mGrowthDB study, or validate the neutral format.
 
-  python -m crossfeed derive SMGDB00000004 --live                 # fetch + derive (provisional baseline)
+  python -m crossfeed derive SMGDB00000004 --live                 # fetch + derive one study
+  python -m crossfeed derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"
   python -m crossfeed derive SMGDB00000004 --fixture records.json  # offline, from interaction records
   python -m crossfeed validate network.json                       # check a network against the schema
   python -m crossfeed schema --out interaction_network.schema.json # emit the neutral-format schema
@@ -44,6 +45,11 @@ def _load_deriver(spec):
 
 
 def _derive(a):
+    if a.species:
+        return _derive_species(a)
+    if not a.study:
+        print("derive needs a study id, or --species with names (see crossfeed derive --help)", file=sys.stderr)
+        return 2
     if a.deriver and not a.live:
         print("--deriver applies to --live (it derives from raw growth data); "
               "--fixture already holds derived records.", file=sys.stderr)
@@ -59,6 +65,11 @@ def _derive(a):
                                                    dropout=not a.no_dropout,
                                                    include_non_batch=a.include_non_batch)
             records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold)
+            extra["settings"] = {"metric": a.metric, "spike_factor": a.spike_factor,
+                                 "absence_threshold": a.absence_threshold,
+                                 "include_low_quality": a.include_low_quality, "correction": a.correction,
+                                 "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
+                                 "deriver": a.deriver or ""}
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
             return 1
@@ -69,6 +80,47 @@ def _derive(a):
         source_db = "mGrowthDB (fixture)"
 
     net = _build(records, a.study, source_db, extra)
+    return _emit(a, net, skipped, extra, a.study)
+
+
+def _derive_species(a):
+    """What the local page does, from the command line: names to studies to one network (#78)."""
+    if not a.live:
+        print("--species searches mGrowthDB, so it needs --live", file=sys.stderr)
+        return 2
+    if a.deriver:
+        print("--species uses the default derivation; --deriver applies to one study", file=sys.stderr)
+        return 2
+    from .gui import DEFAULTS, run_query
+    from .mgrowthdb import MGrowthDBClient
+    settings = {**DEFAULTS, "metric": a.metric, "spike_factor": a.spike_factor,
+                "absence_threshold": a.absence_threshold, "include_low_quality": a.include_low_quality,
+                "correction": a.correction, "include_dropout": not a.no_dropout,
+                "include_non_batch": a.include_non_batch, "studies": a.study or "",
+                "only_entered": not a.all_partners}
+    try:
+        result = run_query(MGrowthDBClient(), a.species, settings)
+    except MGrowthDBError as e:
+        print(f"live fetch failed: {e}", file=sys.stderr)
+        return 1
+    for entry, matches in result["resolved"]:
+        names = ", ".join(f"{name} ({tid})" for tid, name in sorted(matches.items()))
+        print(f"{entry}: {names}", file=sys.stderr)
+    if result["unresolved"]:
+        print("not in mGrowthDB: " + ", ".join(result["unresolved"]), file=sys.stderr)
+    for error in result["errors"]:
+        print(error, file=sys.stderr)
+    print("studies searched: " + (", ".join(result["studies"]) or "none"), file=sys.stderr)
+    net = result["network"]
+    problems = net.validate()
+    if problems:
+        raise SystemExit("network invalid:\n  " + "\n  ".join(problems))
+    extra = {"absence": result["absence"], "hidden": result["hidden"]}
+    return _emit(a, net, result["skipped"], extra, " and ".join(a.species))
+
+
+def _emit(a, net, skipped, extra, label):
+    """Write the network and report what it holds, what was skipped, and what is hidden."""
     if a.format == "graphml":
         from .export import to_graphml
         payload = to_graphml(net)
@@ -97,7 +149,7 @@ def _derive(a):
     if not net.edges:
         top = Counter(r.split(";")[0].strip() for _, r in skipped).most_common(1)
         why = f" Most common reason: {top[0][0]}." if top else ""
-        print(f"\nNO interactions were derived for {a.study}: the network is empty.{why}\n"
+        print(f"\nNO interactions were derived for {label}: the network is empty.{why}\n"
               "crossfeed derives interactions from pairwise (two-member) co-cultures and from drop-out "
               "designs (a community plus the same community without one member); other larger communities "
               "yield nothing until a method suited to their design is chosen (see docs/METHOD_NOTES.md).",
@@ -135,12 +187,21 @@ def _gui(a):
     return 0
 
 
-def main(argv=None):
+def build_parser() -> argparse.ArgumentParser:
+    """The command line, apart from running it, so the help page can be checked against it (#78)."""
     ap = argparse.ArgumentParser(prog="crossfeed", description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    d = sub.add_parser("derive", help="derive an interaction network for a study")
-    d.add_argument("study", help="mGrowthDB study id, e.g. SMGDB00000004")
+    d = sub.add_parser("derive", help="derive an interaction network for a study, or for species")
+    d.add_argument("study", nargs="?", default="",
+                   help="mGrowthDB study id, e.g. SMGDB00000004; with --species, comma separated study ids "
+                        "to search instead of every study holding the species")
+    d.add_argument("--species", nargs="+", metavar="NAME",
+                   help="species or strain names, or NCBI taxon ids, as on the local page: every study holding "
+                        "them is searched and one network returned (needs --live)")
+    d.add_argument("--all-partners", action="store_true",
+                   help="with --species, keep interactions with species not entered too (the page's "
+                        "'Only interactions between the species entered', unticked)")
     g = d.add_mutually_exclusive_group(required=True)
     g.add_argument("--live", action="store_true", help="fetch the real study from the mGrowthDB API")
     g.add_argument("--fixture", help="path to a JSON list of interaction records (offline)")
@@ -183,7 +244,11 @@ def main(argv=None):
     s.add_argument("--out", help="write the schema here (default: stdout)")
     s.set_defaults(fn=_schema)
 
-    a = ap.parse_args(argv)
+    return ap
+
+
+def main(argv=None):
+    a = build_parser().parse_args(argv)
     return a.fn(a)
 
 

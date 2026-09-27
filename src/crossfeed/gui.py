@@ -19,6 +19,8 @@ import urllib.parse
 import webbrowser
 from collections import Counter
 
+from . import __version__
+from . import help as help_page
 from .attribution import studies_with_edges
 from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, output_meta
 from .export import to_graphml
@@ -59,6 +61,11 @@ details { margin-top: 1rem; } summary { cursor: pointer; }
 .row { margin: 0.4rem 0; } .muted { color: #555; font-size: 0.9rem; }
 .note { background: #f4f4f4; padding: 0.8rem 1rem; border-radius: 4px; }
 .sources { font-size: 0.9rem; } .sources li { margin-bottom: 0.3rem; }
+.version { font-size: 0.9rem; font-weight: normal; color: #555; margin-left: 0.4rem; }
+dd code { overflow-wrap: anywhere; }
+pre { background: #f4f4f4; padding: 0.6rem 0.8rem; overflow-x: auto; white-space: pre-wrap; }
+dt { font-weight: 600; margin-top: 0.8rem; } dd { margin-left: 1rem; }
+.decisions li, .toc li { margin-bottom: 0.3rem; }
 """
 
 
@@ -70,6 +77,9 @@ def _page(body: str) -> str:
 
 def _esc(x) -> str:
     return html.escape(str(x), quote=True)
+
+
+HEADING = f"<h1>{TITLE} <span class=\"version\">{html.escape(__version__)}</span></h1>"
 
 
 def _settings_block(settings: dict) -> str:
@@ -121,7 +131,7 @@ def _settings_block(settings: dict) -> str:
 
 def render_form(token: str, entries: str = "", settings: dict | None = None, message: str = "") -> str:
     note = f"<p class=\"note\">{_esc(message)}</p>" if message else ""
-    return _page(f"""<h1>crossfeed</h1>
+    return _page(f"""{HEADING}
 <p>Type species names, one per line. NCBI taxon ids work too.</p>{note}
 <form method="post" action="/run?token={_esc(token)}">
 <textarea name="species" rows="6" placeholder="Faecalibacterium prausnitzii&#10;Blautia hydrogenotrophica"
@@ -135,28 +145,8 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
 <p><a href="/legend?token={_esc(token)}">What the arcs mean</a></p>""")
 
 
-HELP = f"""<h1>Help</h1>
-<h2>What this does</h2>
-<p>Type species names, one per line, or NCBI taxon ids. crossfeed looks them up in mGrowthDB, reads the
-growth curves of every study that holds them, and derives the interactions between them on this machine.
-Nothing is uploaded, and nothing is written outside the file you download.</p>
-<h2>Try it</h2>
-<p>The Example button fills the box with {" and ".join(EXAMPLE)}, a pair with enough data to show a
-result.</p>
-<h2>Reading the result</h2>
-<p>Each row is one directed interaction: a source species, the species it affects, the direction, and the
-mean log2 difference with its standard deviation. An interaction counts as present when the effect is at
-least k standard deviations of its own spread, with k the absence threshold in Advanced settings. The
-adjusted p-value is shown as support and decides nothing.</p>
-<p><a href="/legend?token={{token}}">The legend</a> explains every line, arrowhead and flag, and is the
-same vocabulary the Cytoscape style draws.</p>
-<h2>Settings</h2>
-<p>Everything behind "Advanced settings" has a sensible default; each one says what it does next to it.
-The README in the repository documents them in full, together with the method.</p>"""
-
-
 def render_help(token: str) -> str:
-    return _page(HELP.replace("{token}", _esc(token))
+    return _page(help_page.render_help(token, DEFAULTS, EXAMPLE)
                  + f"<p><a href=\"/?token={_esc(token)}\">Back</a></p>")
 
 
@@ -265,12 +255,13 @@ def render_result(token: str, result: dict) -> str:
         skipped = (f"<details><summary>{len(result['skipped'])} pair(s) the data did not support</summary>"
                    f"<ul>{items}</ul></details>")
     errors = "".join(f"<p class=\"note\">{_esc(e)}</p>" for e in result["errors"])
-    return _page(f"""<h1>crossfeed</h1>
+    return _page(f"""{HEADING}
 <h2>Species</h2><ul>{resolved}</ul>{unresolved}
 <p class="muted">Studies searched: {_esc(studies)}</p>
 {errors}{table}{_absent_section(net, result.get("absence", {}))}{_sources(net)}{skipped}
 <p><a href="/?token={_esc(token)}">New search</a> &middot;
-<a href="/legend?token={_esc(token)}">What the arcs mean</a></p>""")
+<a href="/legend?token={_esc(token)}">What the arcs mean</a> &middot;
+<a href="/help?token={_esc(token)}">Help</a></p>""")
 
 
 def parse_settings(form: dict) -> dict:
@@ -343,8 +334,9 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         skipped += skips
 
     records, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"])
+    # every setting the search ran with, so a downloaded network says how it was made (#78, #76)
     net = records_to_network(records, meta={
-        "source_db": "mGrowthDB (live)", "species": names, "studies": studies, **extra})
+        "source_db": "mGrowthDB (live)", "species": names, "studies": studies, "settings": dict(s), **extra})
     return {"resolved": resolved["resolved"], "unresolved": resolved["unresolved"],
             "taxon_ids": resolved["taxon_ids"], "studies": studies, "network": net,
             "skipped": skipped, "errors": errors, "hidden": extra["hidden"], "absence": extra["absence"]}

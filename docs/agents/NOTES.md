@@ -197,6 +197,18 @@ QUALITY_FLAGS, CAUTIONS, EVIDENCE and STATUSES, and the shipped file to equal wh
 flag therefore means adding a line to the legend, the same way Craig's viewer guard works (#57). The dash
 patterns are the ones the Cytoscape style will use (#25): long dashes for drop-out evidence, dots for a
 single replicate.
+## Help page
+
+`src/crossfeed/help.py` holds the help page as data keyed by the code's own names (#78):
+`SETTINGS` by `gui.DEFAULTS` key, `EDGE_ATTRIBUTES` and `NODE_ATTRIBUTES` by model field, `CLI_ONLY` for
+`derive` options that are not page settings. `tests/test_help.py` requires an entry for every setting,
+every `derive` option (read from `__main__.build_parser`) and every model field, and requires the
+attribute text to name every value of the model vocabularies. So a new setting, flag or field needs its
+help line in the same change, the same way the legend works. The settings are a `dl`, not a table, and
+field names break only after underscores (`<wbr>`), so the page has no horizontal scroll at phone width.
+`records_to_network` starts `meta` from `mgrowthdb.provenance()` (tool, version, date); the report of
+#76 reads them from there.
+
 ## Cultivation mode
 
 `crossfeed.derive.cultivation` reads `cultivationMode` per experiment; `_batch_only` keeps batch unless

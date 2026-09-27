@@ -17,6 +17,7 @@ committed to the repository.
 from __future__ import annotations
 
 import csv
+import datetime
 import hashlib
 import io
 import json
@@ -208,6 +209,13 @@ def effect_from_logratio(strength, significance, alpha: float = 0.05) -> str:
     return "facilitation" if strength > 0 else "inhibition"
 
 
+def provenance(today: datetime.date | None = None) -> dict:
+    """What made a network and when: the tool, its version, and the derivation date. mGrowthDB changes over
+    time, so the same version can derive a different network later; the date says which data it saw."""
+    return {"tool": "crossfeed", "tool_version": __version__,
+            "derived_on": (today or datetime.date.today()).isoformat()}
+
+
 def records_to_network(records: Iterable[dict], meta: dict | None = None) -> InteractionNetwork:
     """Map interaction records into the neutral network. Real and testable.
 
@@ -217,8 +225,10 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
        evidence?, community?, p_value?, weight?, effect_over_sd?, status?, sd?, se?, n_with?,
        n_without?, outcome?, metric?, quality?, notes?, cautions?, experiments?,
        study_id, study_citation?, study_license?, study_url?}
+
+    `meta` starts from `provenance()` (tool, version, derivation date); keys given in `meta` win.
     """
-    net = InteractionNetwork(meta=dict(meta or {}))
+    net = InteractionNetwork(meta={**provenance(), **(meta or {})})
     for r in records:
         for side in ("source", "target"):
             nid = r[side]

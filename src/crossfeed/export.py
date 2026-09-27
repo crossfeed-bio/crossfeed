@@ -19,6 +19,10 @@ _NS = "http://graphml.graphdrawing.org/xmlns"
 
 # (key id, for, attribute name, attribute type)
 _KEYS = [
+    # what made the network and when (crossfeed.mgrowthdb.provenance), as graph attributes
+    ("g_tool", "graph", "tool", "string"),
+    ("g_tool_version", "graph", "tool_version", "string"),
+    ("g_derived_on", "graph", "derived_on", "string"),
     ("n_name", "node", "name", "string"),
     ("n_taxonomy", "node", "taxonomy", "string"),
     ("n_model_ref", "node", "model_ref", "string"),
@@ -72,6 +76,8 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
 
     graph = ET.SubElement(root, f"{{{_NS}}}graph")
     graph.set("edgedefault", "directed")
+    for key in ("tool", "tool_version", "derived_on"):
+        _data(graph, f"g_{key}", net.meta.get(key))
 
     for node in net.nodes.values():
         n = ET.SubElement(graph, f"{{{_NS}}}node")

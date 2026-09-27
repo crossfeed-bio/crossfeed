@@ -112,11 +112,16 @@ concrete demonstration of the seam.
 
 ```
 python -m crossfeed derive STUDY [--live | --fixture FILE] [--deriver MODULE:CLASS] [--format json|graphml] [--out FILE]
+python -m crossfeed derive --live --species NAME [NAME ...] [--all-partners] [STUDY,STUDY] [--out FILE]
 python -m crossfeed validate FILE
 python -m crossfeed schema [--out FILE]
 ```
 
 - `derive STUDY --live` fetches the study from the mGrowthDB API and derives interactions.
+- `derive --live --species NAME ...` does what the local page does: resolves species or strain names (or
+  NCBI taxon ids) through mGrowthDB, derives every study holding them, and keeps the interactions between
+  the species given (`--all-partners` keeps their other partners too). The page's Example, from the
+  command line: `crossfeed derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"`.
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the baseline (see below).
 - `--format graphml` emits GraphML (for Cytoscape, igraph, networkx, Gephi) instead of the neutral JSON.
@@ -146,7 +151,9 @@ opens it in the browser:
 python -m crossfeed gui
 ```
 
-Type species names (or NCBI taxon ids), one per line, and press "Find interactions". crossfeed resolves
+The tool version shows next to its name, and a Help page explains every advanced setting and arc
+attribute, the main design decisions, the command line, what to do when no network comes back, and where
+to report a problem. Type species names (or NCBI taxon ids), one per line, and press "Find interactions". crossfeed resolves
 the names to taxon ids from mGrowthDB's own strain records, finds the studies holding them, derives the
 interactions, and shows them as a table with downloads for JSON and GraphML. Every setting sits behind
 "Advanced settings" with the same defaults the command line uses.
@@ -159,12 +166,15 @@ stay there.
 
 `derive` emits one JSON document: the neutral interaction network. It is the contract downstream tools
 read, and it is pinned by a JSON Schema at
-[`schema/interaction_network.schema.json`](schema/interaction_network.schema.json).
+[`schema/interaction_network.schema.json`](schema/interaction_network.schema.json). Its `meta` records
+the tool, `tool_version` and `derived_on` (the date: mGrowthDB changes, so the same version can derive a
+different network later) and every setting used; GraphML carries the first three as graph attributes.
 
 ```json
 {
   "schema": "crossfeed.interaction_network/v0",
-  "meta": {"source_db": "mGrowthDB (live)", "study_id": "SMGDB00000004"},
+  "meta": {"tool": "crossfeed", "tool_version": "0.0.2", "derived_on": "2026-09-27",
+           "source_db": "mGrowthDB (live)", "study_id": "SMGDB00000004", "settings": {"metric": "auc", "...": "..."}},
   "nodes": [
     {"id": "ncbi:476272", "name": "Blautia hydrogenotrophica DSM 10507", "taxon_id": "476272",
      "species": "blautia hydrogenotrophica", "identity": "ncbi", "taxonomy": "", "model_ref": ""},
