@@ -4,10 +4,9 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("tomllib")                      # Python 3.11 and newer; the release runs on 3.12
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packaging"))
 from check_release import check  # noqa: E402
-
-tomllib = pytest.importorskip("tomllib")            # Python 3.11 and newer; the release runs on 3.12
 
 
 def _repo(tmp_path, version="0.1.0", code="0.1.0", heading="## [0.1.0] (2026-10-01)"):
