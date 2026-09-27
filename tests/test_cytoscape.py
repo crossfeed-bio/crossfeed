@@ -259,9 +259,23 @@ def test_another_program_on_the_port_is_named_not_a_traceback():
     port = server.getsockname()[1]
 
     def answer():
+        import socket as sockets
         conn, _ = server.accept()
-        conn.recv(65536)
+        # read the whole request first: on Windows, closing with unread data resets the connection
+        # (WinError 10053) before the client can read the reply, which is a different failure
+        conn.settimeout(0.5)
+        try:
+            while conn.recv(65536):
+                pass
+        except OSError:
+            pass
         conn.sendall(b"J\x00\x00\x00\n8.0.32 not http at all\r\n\r\n")    # like a database greeting
+        conn.shutdown(sockets.SHUT_WR)
+        conn.settimeout(5)
+        try:
+            conn.recv(1)                    # wait for the client to give up and close
+        except OSError:
+            pass
         conn.close()
 
     threading.Thread(target=answer, daemon=True).start()
