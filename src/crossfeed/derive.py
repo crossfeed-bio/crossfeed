@@ -282,7 +282,7 @@ def _identity(identities: dict, name: str) -> dict:
 
 def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, identities=None) -> dict:
     """(node id, conditions) -> {run group: (monoculture replicates, the distinct strain names pooled under
-    it, the ids of the experiments they come from, their descriptions)}.
+    it, the ids of the experiments they come from, their descriptions, their names)}.
 
     Monocultures are pooled only when they are replicates: identical recorded conditions AND the same
     description apart from a run number (`run_group`), the rule communities already follow (Karoline, on
@@ -299,13 +299,15 @@ def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, ident
         replicates, skips = replicates_for_experiment(client, exp, spike_factor)
         skipped += skips
         key = (_identity(identities, members[0])["id"], conditions(exp))
-        reps, strains, ids, descriptions = index.setdefault(key, {}).setdefault(run_group(exp), ([], set(), [], []))
+        reps, strains, ids, descriptions, names = index.setdefault(key, {}).setdefault(
+            run_group(exp), ([], set(), [], [], []))
         reps.extend(replicates)
         strains.add(members[0])
         ids.append(_exp_id(exp))
         descriptions.append(exp.get("description") or exp.get("name") or "")
+        names.append(exp.get("name") or "")
     for (key, _), groups in index.items():
-        for _, (_, strains, _, _) in groups.items():
+        for _, (_, strains, _, _, _) in groups.items():
             if len(strains) > 1 and not key.startswith("ncbi:"):
                 skipped.append((f"monocultures of {key}", f"{len(strains)} strains pooled into one monoculture set "
                                 f"({', '.join(sorted(strains))}); edges using it are flagged {STRAINS_POOLED}"))
@@ -320,19 +322,32 @@ def _quoted(text: str) -> set:
     return {q.strip().casefold() for q in _QUOTED.findall(text or "")}
 
 
+def _qualifier(name: str) -> str:
+    """The words of an experiment name before its last one, where studies put what sets a line apart:
+    "Evolved AtCt" -> "evolved", "Ancestral At" -> "ancestral", "At" or "CtOa" -> "" (SMGDB00000013)."""
+    return " ".join((name or "").casefold().split()[:-1])
+
+
 def _choose_monocultures(groups: dict, exp: dict):
-    """The monoculture set a co-culture is compared with, or (None, why) when that is not known.
+    """(the monoculture set a co-culture is compared with, how it was chosen), or (None, why) when that is
+    not known. How: "only" (the one set there is), "named" or "qualifier".
 
     One set under the co-culture's recorded conditions: that one. Several, told apart only by their
     descriptions: the one whose description names the co-culture experiment, as study 7's controls do
-    ('controls of the "bhri" experiment'). Otherwise none is guessed (Karoline, 2026-09-27).
+    ('controls of the "bhri" experiment'); failing that, the one whose name carries the same qualifier as the
+    co-culture's ("Evolved AtCt" with "Evolved At", "CtOa" with the plain "Ct", as in study 13). Otherwise
+    none is guessed (Karoline, 2026-09-27: "yes to 1-3", then "yes" to the qualifier rule).
     """
     if len(groups) == 1:
-        return next(iter(groups.values())), ""
+        return next(iter(groups.values())), "only"
     name = (exp.get("name") or "").strip().casefold()
     named = [g for g in groups.values() if any(name in _quoted(d) for d in g[3])]
     if len(named) == 1:
-        return named[0], ""
+        return named[0], "named"
+    qualifier = _qualifier(exp.get("name", ""))
+    same = [g for g in groups.values() if {_qualifier(n) for n in g[4]} == {qualifier}]
+    if not named and len(same) == 1:
+        return same[0], "qualifier"
     labels = "; ".join(sorted({g[3][0][:70] for g in groups.values()}))
     return None, (f"{len(groups)} monoculture sets under this experiment's recorded conditions, told apart only by "
                   f"their descriptions ({labels}); none names this co-culture, so which one matches it is not "
@@ -463,11 +478,14 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
     cond = exp.get("name", "")
     co_reps, skips = replicates_for_experiment(client, exp, spike_factor)
     skipped += skips
-    sets, pooled, origin = {}, {}, {}
+    sets, pooled, origin, matched = {}, {}, {}, set()
     for species in (a, b):
         key = (_identity(identities or {}, species)["id"], conditions(exp))
         groups = monos.get(key, {})
-        chosen, why = _choose_monocultures(groups, exp) if groups else (None, "")
+        chosen, how = _choose_monocultures(groups, exp) if groups else (None, "")
+        why = "" if chosen else how
+        if how in ("named", "qualifier"):
+            matched.add(species)          # the match with this co-culture is recorded, by name
         found, strains, ids = (chosen[0], chosen[1], chosen[2]) if chosen else ([], set(), [])
         if not groups:
             skipped.append((f"{a} with {b} [{cond}]",
@@ -500,9 +518,11 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
              "n_with": side["n_co"], "n_without": side["n_mono"],
              "with_log2": side["co_log2"], "without_log2": side["mono_log2"]}
         quality, cautions = _replicate_flags(c["n_with"], c["n_without"])
-        if variants > 1:
+        if variants > 1 and not matched:
             # co-cultures of this pair under the same recorded conditions differ only in their description
-            # (study 4's +Ac and -Ac), and nothing recorded says which one the monocultures match
+            # (study 4's +Ac and -Ac), and nothing recorded says which one the monocultures match. When a
+            # member's set was matched by name (study 7's controls, study 13's "Evolved" lines), the names
+            # account for the variants, and the pair needs no caution
             cautions.append(CONDITIONS_UNVERIFIED)
         if pooled[target]:
             quality.append(STRAINS_POOLED)

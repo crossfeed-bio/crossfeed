@@ -704,3 +704,23 @@ def test_dropout_arcs_are_cautioned_when_the_full_community_has_description_vari
     assert records and all("conditions_unverified" in r["cautions"] for r in records)
     plain, _ = interactions_from_replicates(*_dropout_study()[:1], {"id": "S"}, _dropout_study()[2])
     assert not any("conditions_unverified" in r["cautions"] for r in plain)
+
+
+def test_the_monoculture_set_with_the_co_cultures_qualifier_is_used():
+    # SMGDB00000013's shape: plain, "Ancestral" and "Evolved" lines of A, none naming a co-culture. The
+    # co-culture "Evolved AB" takes "Evolved A" (areas 10, 12: B -> A is +1.0), the plain "AB" takes "A"
+    exps = [_described("A", [A], "monoculture of A"), _described("Ancestral A", [A], "ancestral A, controls"),
+            _described("Evolved A", [A], "A evolved for 10 weeks"), _described("B", [B], "monoculture of B"),
+            _described("Evolved AB", [A, B], "evolved A with B"), _described("AB", [A, B], "A with B")]
+    curves = {("A", A): [(3, 3), (3, 3)], ("Ancestral A", A): [(2, 2), (2, 2)], ("Evolved A", A): [(1, 1), (1, 1.4)],
+              ("B", B): [(1, 1), (1, 1.4)]}
+    for n in ("Evolved AB", "AB"):
+        curves.update({(n, A): [(1, 3), (1, 3.8)], (n, B): [(1, 1), (1, 1.4)]})
+    records, skipped = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S"}, exps)
+    by_exp = {(r["source_name"], r["target_name"], r["condition"]): r for r in records}
+    evolved = by_exp[(B, A, "Evolved AB")]
+    assert evolved["strength"] == pytest.approx(1.0) and "E_Evolved A" in evolved["experiments"]
+    assert "E_A" in by_exp[(B, A, "AB")]["experiments"] and "E_Evolved A" not in by_exp[(B, A, "AB")]["experiments"]
+    assert not any("none is guessed" in r for _, r in skipped)
+    # matched by name, so no caution, although the pair has description-only variants
+    assert not any("conditions_unverified" in r["cautions"] for r in records)

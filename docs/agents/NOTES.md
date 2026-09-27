@@ -193,8 +193,10 @@ Rules for this file:
 - 2026-09-27 (Karoline, conditions recorded only in descriptions, METHOD_NOTES item 22): "yes to 1-3,
   and 4 is noted". Monocultures pool only when their descriptions agree (`_mono_index` keys on
   `run_group`); several candidate sets: the one whose description quotes the co-culture's name
-  (`_choose_monocultures`), else the pair is skipped; description-only variants of a pair or a drop-out
-  design get the caution `conditions_unverified`.
+  (`_choose_monocultures`), then the one whose name has the same qualifier (`_qualifier`: the words
+  before the last, "Evolved AtCt" -> "evolved"; Karoline: "yes"), else the pair is skipped; description-only
+  variants of a pair or a drop-out design get the caution `conditions_unverified`, unless a member's set
+  was matched by name or qualifier.
 
 ## Open questions (need a human)
 

@@ -30,7 +30,8 @@ tagged version is never reused for changed content.
 - Conditions recorded only in descriptions (Karoline, METHOD_NOTES item 22): monocultures are pooled only
   when their descriptions agree; a co-culture uses the monoculture set whose description names it, or is
   skipped with the reason when several fit; edges from description-only variants carry the new caution
-  `conditions_unverified`. SMGDB00000013 and SMGDB00000014 now derive nothing, each pair saying why.
+  `conditions_unverified`; failing a name, the set whose name has the same qualifier ("Evolved AtCt" with
+  "Evolved At"). SMGDB00000014 now derives nothing, each pair saying why.
 - Nodes in Cytoscape: each genus its own color (Karoline), from a list of 48 ordered by how distinct each
   stays. Fixed: a second send in one Cytoscape session arrived unstyled, because updating the existing
   style asked CyREST to delete all mappings at once, which it refuses; they are now deleted one by one.

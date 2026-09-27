@@ -577,9 +577,16 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
       `conditions_unverified`: shown, and marked;
    4. the lasting fix is in mGrowthDB: supplements, concentrations, starting density and lineage as
       recorded fields (noted by Karoline for mGrowthDB).
-   Effect: SMGDB00000004 keeps its edges, 16 of 20 cautioned; SMGDB00000007 compares each co-culture
-   with its own controls; SMGDB00000008 is unchanged; SMGDB00000013 and SMGDB00000014 derive nothing,
-   every pair skipped as ambiguous.
+   Then, for SMGDB00000013, whose names pair up ("Evolved AtCt" with "Evolved At", "CtOa" with the plain
+   "Ct"), a qualifier rule, used only when no description names the co-culture: the monoculture set whose
+   name carries the same words before its last one. Karoline: "yes". A pair matched by name or qualifier
+   carries no `conditions_unverified`, since the names account for the variants.
+   Effect: SMGDB00000004 keeps its 20 edges, 16 cautioned; SMGDB00000007 compares each co-culture with
+   its own controls; SMGDB00000008 is unchanged; SMGDB00000013 gives 9 edges, each compared with its own
+   line (Ochrobactrum to Comamonas is now obligate: the plain Comamonas monoculture did not grow, where
+   the pooled set of plain, ancestral and evolved lines did); SMGDB00000014 derives nothing, its 15
+   monoculture variants per strain differing in concentrations no name or description ties to a
+   co-culture.
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.
