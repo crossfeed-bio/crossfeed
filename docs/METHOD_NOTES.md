@@ -458,10 +458,18 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    **Timing: not yet, and not even for testing.** Her words: "it's even too early for testing purposes
    I'd say. I didn't even yet look at the tool here on Mac Tahoe." So no Windows build and no signing
    now.
-   DEFERRED 2026-09-21 (Karoline) on that timing. The comparison above stands for whenever it is taken
-   up, so the work does not have to be done twice; what is settled is the shape of the build and that no
-   certificate is ever bought. Note her remark separately: the tool has not yet been run by the person
-   who asked for it, which bears on item 6 more directly than on this item.
+   DEFERRED 2026-09-21 (Karoline) on that timing, so that the comparison above would not have to be
+   made twice whenever it was taken up.
+   SETTLED 2026-09-28 (Karoline), and every step this item proposed was adopted rather than merely
+   allowed. The unsigned one-folder zip is now built AND started on a Windows machine by
+   `.github/workflows/ci.yml` on every push, so each change proves the program still runs, and
+   `.github/workflows/release.yml` builds it on a version tag and attaches it to the GitHub release
+   (#83). Karoline chose Windows only for 0.1.0. `RELEASING.md` records the order in the same sequence
+   argued above: the SignPath Foundation once a release exists to be signed, the Microsoft Store later
+   if the method settles enough to list, and in its own words "a commercial certificate is never bought:
+   it would not remove the warning". The correction in (a) to (d) stands exactly as written; what has
+   changed is that it is no longer a proposal awaiting a ruling. Her separate remark from 09-21, that
+   the tool had not yet been run by the person who asked for it, bears on item 6 rather than here.
 10. **Significance testing** (setting 4). Still open: which test on the per-replicate log2 values (for
    example Welch's t-test), and whether to correct for multiple testing across arcs.
    DEFERRED by Karoline 2026-09-19 until the settled items have landed. Note that this and item 5's
