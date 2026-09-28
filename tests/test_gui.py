@@ -162,12 +162,13 @@ def test_form_hides_every_setting_behind_one_button():
     ({"metric": ["growth_rate"], "rate_method": ["baranyi"], "rate_window": ["7"], "spike_factor": ["50"],
       "studies": [" S1 "], "only_entered": ["1"],
       "include_low_quality": ["1"], "include_dropout": ["1"], "no_growth_alpha": ["0.01"],
-      "no_growth_factor": ["4"], "exclude_studies": [" SMGDB00000008 "], "merge_arcs": ["1"], "min_studies": ["2"]},
+      "no_growth_factor": ["4"], "exclude_studies": [" SMGDB00000008 "], "merge_arcs": ["1"], "min_studies": ["2"],
+      "merge_genera": ["1"]},
      {"metric": "growth_rate", "rate_method": "baranyi", "rate_window": 7, "spike_factor": 50.0, "studies": "S1",
       "only_entered": True, "include_low_quality": True,
       "correction": "bh", "absence_threshold": 1.0, "include_dropout": True, "include_non_batch": False,
       "no_growth_alpha": 0.01, "no_growth_factor": 4.0, "exclude_studies": "SMGDB00000008", "merge_arcs": True,
-      "min_studies": 2}),
+      "min_studies": 2, "merge_genera": True}),
     ({"metric": ["nonsense"], "spike_factor": ["not a number"]},
      {**DEFAULTS, "only_entered": False, "include_dropout": False}),
 ])
@@ -436,3 +437,49 @@ def test_a_strain_is_named_by_its_current_name():
     assert (node.name, node.species) == ("Faecalibacterium duncaniae A2-165", "faecalibacterium duncaniae")
     assert r["resolved"][0] == ("Faecalibacterium prausnitzii", {853: "Faecalibacterium duncaniae A2-165"})
     assert len(r["network"].edges) == 2
+
+
+# ---- All, a genus entered, and the level genus arcs count at (Karoline 2026-09-28) ------------------
+
+def test_all_ignores_the_box_and_derives_every_study_with_every_partner():
+    r = run_query(FakeClient(), ["whatever is typed"], {"only_entered": True}, all_studies=True)
+    assert r["all"] and r["studies"] == ["SMGDB00000001"] and r["resolved"] == [] and r["unresolved"] == []
+    assert r["network"].meta["query"] == "all" and r["network"].edges        # the study's arcs, every partner
+    page = render_result("tok", r)
+    assert "<h2>All of mGrowthDB</h2>" in page and "1 studies" in page
+
+
+def test_all_still_leaves_out_the_excluded_studies_and_says_so():
+    r = run_query(FakeClient(), [], {"exclude_studies": "SMGDB00000001"}, all_studies=True)
+    assert r["studies"] == [] and "Exclude these studies" in render_result("tok", r)
+
+
+def test_the_all_button_sits_next_to_example_with_its_explainer(server):
+    base, token = server
+    form = _get(f"{base}/?token={token}")
+    assert '<button type="submit" name="example" value="1">Example</button>\n<button type="submit" name="all"' in form
+    assert "All ignores the box and derives every study in mGrowthDB" in form
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=b"all=1&species=", timeout=10) as r:
+        page = r.read().decode("utf-8")
+    assert "All of mGrowthDB" in page or "Searching" in page             # a quick fake search, or its progress
+
+
+def test_a_genus_entered_brings_in_all_its_species_and_is_shown_as_a_genus():
+    r = _query(entries=("Faecalibacterium", "Blautia"))
+    assert r["genera"] == {"Faecalibacterium": ["Faecalibacterium prausnitzii"],
+                           "Blautia": ["Blautia hydrogenotrophica"]}
+    assert r["taxon_ids"] == [853, 53443] and r["network"].edges             # both genera entered: the arc stays
+    assert "Blautia (genus): Blautia hydrogenotrophica" in render_result("tok", r)
+
+
+def test_genus_arcs_count_strain_pairs_only_when_every_entry_is_a_taxon_id():
+    assert gui.support_level(["853", " txid53443 "]) == "strain"
+    assert gui.support_level(["853", "Blautia hydrogenotrophica"]) == "species"
+    assert gui.support_level(["Faecalibacterium prausnitzii A2-165"]) == "species"   # a name: the whole species
+    assert gui.support_level([]) == "species"                                        # All
+
+
+def test_merge_to_genus_from_the_page_gives_genus_nodes():
+    r = _query(merge_genera=True)
+    assert set(r["network"].nodes) == {"Faecalibacterium", "Blautia"}
+    assert all(e.supporting_pairs == 1 for e in r["network"].edges)

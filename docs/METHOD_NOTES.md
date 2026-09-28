@@ -623,5 +623,30 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    for monocultures either, as before (SMGDB00000010 and SMGDB00000015 measure their monocultures only that
    way). No edge derived from mGrowthDB on 2026-09-27 changed: every one already compared one technique.
 
+24. **Merging to genus, and a genus as a query** (Karoline, 2026-09-28). Her words: "another advanced option
+   that is by default deactivated and which returns the network with nodes merged at the genus level and
+   arcs merged by strain/species (depending on the query). Arc merge needs to be stratified by sign and a
+   new arc attribute should record the number of strains/species supporting an arc. Please note that this
+   option may be used together with the option to merge arcs across studies." Choosing among her agent's
+   options: the count is of distinct pairs "at entry level" (species pairs, or strain pairs when every
+   entry is an NCBI taxon id, since a name, even with a strain designation, resolves to its whole
+   species); interactions within one genus are kept "as a self-loop"; absent arcs: "record them as before
+   but do not display them" (one absent arc per genus pair, hidden like any absent arc); and a genus
+   entered alone resolves to every strain of it in mGrowthDB ("Yes"). Consequences stated by her agent:
+   the genus merge runs after the merge across studies, so with both on a pair measured in several studies
+   counts once; the strength is the median, as in item 14; the genus is the first word of the name
+   mGrowthDB records ([Clostridium] is not Clostridium), not NCBI's lineage, so a reclassified genus follows
+   its names. Edges gain `supporting_pairs` and `merged_pairs`, nodes the identity `genus` (optional,
+   backward compatible). After Craig's agent's review of #85 (qualifiers such as "unclassified" made a
+   genus of their own), Karoline chose: an organism named like "unclassified Bacteroides" is merged into
+   its genus ("Merge into its genus"; mGrowthDB holds none today), and "[Clostridium] scindens" is its own
+   genus, [Clostridium], apart from Clostridium ("Its own genus"), as the genus query already treated it.
+
+25. **All of mGrowthDB** (Karoline, 2026-09-28). Her words: "a button next to 'Example' that says: 'All'.
+   If this button is pushed, the input field is ignored and instead, the entire interaction network is
+   fetched from mGrowthDB (there can be a short explainer next to the button)." Every study the species
+   list is read from is derived, with every partner kept; Only these studies and Exclude these studies
+   still apply. `derive --live --all` does the same from the command line.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

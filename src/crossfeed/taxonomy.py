@@ -17,6 +17,7 @@ import difflib
 import re
 
 from .derive import genus_species
+from .model import genus_name
 
 STUDY_ID = "SMGDB{:08d}"
 # stop crawling after this many consecutive study ids are absent. Study 3 is already missing; a larger gap
@@ -37,11 +38,13 @@ def _strain_entries(exp: dict):
 class SpeciesIndex(dict):
     """The species list: genus and species key -> {taxon id: a name seen for it}, as a plain dict, plus
     `current`: taxon id -> its current name, the one used by the most recently published study holding it
-    (Karoline, #24, 2026-09-18). Old names stay in the list, so they still resolve."""
+    (Karoline, #24, 2026-09-18). Old names stay in the list, so they still resolve. `studies`: the ids of
+    every study the crawl found, in id order, which the page's All button derives."""
 
-    def __init__(self, *args, current=None, **kwargs):
+    def __init__(self, *args, current=None, studies=(), **kwargs):
         super().__init__(*args, **kwargs)
         self.current = dict(current or {})
+        self.studies = list(studies)
 
 
 def species_index(client, max_studies: int = MAX_STUDIES, progress=None) -> dict:
@@ -74,12 +77,12 @@ def species_index(client, max_studies: int = MAX_STUDIES, progress=None) -> dict
         for exp in experiments:
             for name, taxon in _strain_entries(exp):
                 current[taxon] = name
-    return SpeciesIndex(index, current=current)
+    return SpeciesIndex(index, current=current, studies=ids)
 
 
 def _species_index_one_by_one(client, max_studies: int) -> dict:
     """The crawl for a client that only lists a study's experiments (as test doubles do)."""
-    index, misses = {}, 0
+    index, misses, found = {}, 0, []
     for n in range(1, max_studies + 1):
         if misses >= MISS_RUN:
             break
@@ -89,16 +92,17 @@ def _species_index_one_by_one(client, max_studies: int) -> dict:
             misses += 1
             continue
         misses = 0
+        found.append(STUDY_ID.format(n))
         for exp in experiments:
             for name, taxon in _strain_entries(exp):
                 index.setdefault(genus_species(name), {}).setdefault(taxon, name)
-    return index
+    return SpeciesIndex(index, studies=found)
 
 
 # a list marker or numbering someone pasted along with a name: "- ", "* ", "1. ", "2) "
 _BULLET = re.compile(r"^\s*(?:[-*\u2022]+|\d+[.)])\s+")
 # an NCBI taxon id written the ways NCBI and papers write it: 476272, txid476272, NCBI:txid476272, taxid:476272
-_TAXON_ID = re.compile(r"(?i)^(?:ncbi\s*[:_-]?\s*)?(?:txid|taxid|taxon(?:\s*id)?)?\s*[:=]?\s*(\d+)$")
+TAXON_ID = re.compile(r"(?i)^(?:ncbi\s*[:_-]?\s*)?(?:txid|taxid|taxon(?:\s*id)?)?\s*[:=]?\s*(\d+)$")
 # what a species or strain name can hold: it starts with a letter (or "[" as in "[Clostridium] scindens")
 _NAME = re.compile(r"^[\[A-Za-z][A-Za-z0-9 .,'\-\[\]()/:+]*$")
 
@@ -120,12 +124,10 @@ def _display(key: str) -> str:
 
 
 def _suggestions(text: str, index: dict) -> list:
-    """Names mGrowthDB holds that the person may have meant: the species of a genus given alone, an
-    abbreviated genus ("B. hydrogenotrophica"), or a close spelling."""
+    """Names mGrowthDB holds that the person may have meant: an abbreviated genus ("B. hydrogenotrophica"),
+    or a close spelling."""
     key = genus_species(text)
     words = key.split()
-    if len(words) == 1:
-        return [_display(k) for k in sorted(index) if k.split()[0] == words[0]][:8]
     if len(words) >= 2 and (words[0].endswith(".") or len(words[0]) == 1):
         initial, epithet = words[0].rstrip(".")[:1], words[1]
         return [_display(k) for k in sorted(index)
@@ -133,11 +135,18 @@ def _suggestions(text: str, index: dict) -> list:
     return [_display(k) for k in difflib.get_close_matches(key, list(index), n=3, cutoff=0.8)]
 
 
+def _genus_suggestions(key: str, index: dict) -> list:
+    """Genera mGrowthDB holds that are spelled like the one typed."""
+    genera = sorted({k.split()[0] for k in index})
+    return [_display(g) for g in difflib.get_close_matches(key, genera, n=3, cutoff=0.8)]
+
+
 def resolve_species(entries, index: dict) -> dict:
     """Resolve typed species names and taxon ids against an index from `species_index`.
 
-    entries: strings, each either a species name ("Faecalibacterium prausnitzii", strain designations and
-    case ignored) or a numeric NCBI taxon id ("853"), which is taken as given.
+    entries: strings, each a species name ("Faecalibacterium prausnitzii", strain designations and case
+    ignored), a genus ("Blautia": every species of it that mGrowthDB holds, listed in "genera"), or a
+    numeric NCBI taxon id ("853"), which is taken as given.
 
     One species name often carries several taxon ids in mGrowthDB: a species-level id and strain-level ids
     below it. They are the same species, so a name resolves to all of them and the caller shows which
@@ -146,10 +155,11 @@ def resolve_species(entries, index: dict) -> dict:
     An entry may carry a list marker ("- ", "1. ") and an id may be written as NCBI writes it ("txid476272").
     Returns {"taxon_ids": [ids in the order first seen], "resolved": [(entry, {taxon id: name})],
     "unresolved": [entries that gave nothing], "reasons": {entry: why}, "suggestions": {entry: [names]}}:
-    unreadable text, a taxon id no strain in mGrowthDB carries, a genus alone, or a name mGrowthDB does
-    not hold, with the names it does hold that the person may have meant.
+    unreadable text, a taxon id no strain in mGrowthDB carries, or a genus or name mGrowthDB does not hold,
+    with the names it does hold that the person may have meant; "genera": {entry: [species]} for each
+    genus entered.
     """
-    out = {"taxon_ids": [], "resolved": [], "unresolved": [], "reasons": {}, "suggestions": {}}
+    out = {"taxon_ids": [], "resolved": [], "unresolved": [], "reasons": {}, "suggestions": {}, "genera": {}}
 
     def fail(text, reason, suggestions=()):
         out["unresolved"].append(text)
@@ -161,7 +171,7 @@ def resolve_species(entries, index: dict) -> dict:
         text = _BULLET.sub("", (entry or "")).strip()
         if not text:
             continue
-        taxon_id = _TAXON_ID.match(text)
+        taxon_id = TAXON_ID.match(text)
         if taxon_id:
             taxon = int(taxon_id.group(1))
             name = next((names[taxon] for names in index.values() if taxon in names), None)
@@ -174,14 +184,21 @@ def resolve_species(entries, index: dict) -> dict:
             fail(text, "not readable as a species or strain name, nor as an NCBI taxon id")
             continue
         else:
-            matches = index.get(genus_species(text))
+            key = genus_species(text)
+            matches = index.get(key)
+            if not matches and len(key.split()) == 1:
+                # a genus alone stands for every strain of it in mGrowthDB (Karoline, 2026-09-28), by the rule
+                # the genus merge uses: "unclassified Bacteroides" is Bacteroides, "[Clostridium]" is not
+                # Clostridium
+                species = sorted(k for k in index if genus_name(k).lower() == genus_name(key).lower())
+                if species:
+                    matches = {t: n for k in species for t, n in index[k].items()}
+                    out["genera"][text] = [_display(k) for k in species]
             if not matches:
-                hints = _suggestions(text, index)
-                if len(genus_species(text).split()) == 1:
-                    reason = "a genus alone: give the species" + ("" if hints else "; mGrowthDB holds no species of it")
-                else:
-                    reason = "no species or strain of this name in mGrowthDB"
-                fail(text, reason, hints)
+                genus = len(key.split()) == 1
+                fail(text, "no genus or species of this name in mGrowthDB" if genus
+                     else "no species or strain of this name in mGrowthDB",
+                     _genus_suggestions(key, index) if genus else _suggestions(text, index))
                 continue
             matches = dict(matches)
         out["resolved"].append((text, matches))

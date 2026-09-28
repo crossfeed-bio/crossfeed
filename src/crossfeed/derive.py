@@ -43,6 +43,7 @@ from .interaction import (
 )
 from .interaction import DROPOUT as DROPOUT_EVIDENCE
 from .mgrowthdb import MGrowthDBClient
+from .model import genus_name
 from .stats import CORRECTIONS, welch
 
 METHOD = ("crossfeed baseline v0 (PROVISIONAL): log2(growthRate co / mono), pairwise co-cultures only, "
@@ -922,9 +923,61 @@ def merge_parallel(edges: list, merge: bool = True, min_studies: int = 1) -> tup
                   "below_min_studies": len(out) - len(kept)}
 
 
+SUPPORT_LEVELS = ("species", "strain")
+
+
+def _organism(arc: dict, side: str) -> str:
+    return arc.get(f"{side}_name") or arc.get(f"{side}_species") or arc[side]
+
+
+def _pair(arc: dict, level: str) -> str:
+    """The pair of organisms an arc joins, at the level the search asked about: its species, or its strains."""
+    if level == "strain":
+        return f"{_organism(arc, 'source')} -> {_organism(arc, 'target')}"
+    return " -> ".join(genus_species(_organism(arc, side)).capitalize() for side in ("source", "target"))
+
+
+def merge_genus(edges: list, merge: bool = False, level: str = "species") -> tuple:
+    """(edges, meta) with every node merged into its genus and the arcs between two genera merged by sign.
+
+    Karoline's choices (2026-09-28): an advanced setting, off by default; nodes merge at the genus level
+    and arcs merge by sign, so two genera can be joined by a facilitation arc and an inhibition arc;
+    `supporting_pairs` counts the distinct pairs behind a genus arc, as species pairs or, when only strains
+    (taxon ids) were entered, strain pairs; interactions within one genus stay, as an arc from the genus to
+    itself; absent arcs are recorded as before, one per genus pair, and hidden like any absent arc. It runs
+    after `merge_parallel`, so with both settings on a pair measured in several studies counts once.
+    The genus is the first word of the name mGrowthDB gives (`model.genus_name`), not NCBI's lineage.
+    """
+    info = {"merge_genus": merge, "level": level, "genus_arcs": 0,
+            "rule": "nodes by genus; arcs by source genus, target genus and sign; median of the log2 means"}
+    if not merge:
+        return edges, info
+    groups = {}
+    for e in edges:
+        kind = ABSENT if e.get("status") == ABSENT else e.get("effect")
+        key = (genus_name(_organism(e, "source")), genus_name(_organism(e, "target")), kind)
+        groups.setdefault(key, []).append(e)
+    out = []
+    for (source, target, kind), arcs in groups.items():
+        arc = dict(arcs[0]) if len(arcs) == 1 else _merged(arcs)
+        if kind == ABSENT:
+            arc["status"] = ABSENT                       # every arc behind it found no interaction
+        pairs = sorted({_pair(a, level) for a in arcs})
+        arc.update({side: genus for side, genus in (("source", source), ("target", target))})
+        for side, genus in (("source", source), ("target", target)):
+            arc.update({f"{side}_name": genus, f"{side}_taxon_id": "", f"{side}_species": "",
+                        f"{side}_identity": "genus"})
+        arc.update(supporting_pairs=len(pairs), merged_pairs=pairs,
+                   method=f"{arc.get('method', '')}; merged to genus: {len(arcs)} arcs over {len(pairs)} "
+                          f"{level} pairs")
+        out.append(arc)
+    return out, {**info, "genus_arcs": len(out), "from_arcs": len(edges)}
+
+
 def output_meta(records, include_low_quality: bool = False, correction: str = "bh",
                 absence_threshold: float = ABSENCE_THRESHOLD, no_growth_alpha: float = None,
-                no_growth_factor: float = None, merge_arcs: bool = False, min_studies: int = 1) -> tuple:
+                no_growth_factor: float = None, merge_arcs: bool = False, min_studies: int = 1,
+                merge_genera: bool = False, support_level: str = "species") -> tuple:
     """(edges, meta) for writing a network.
 
     Sets each record's `status` from the absence threshold k (None, undetermined, for a low-quality
@@ -941,6 +994,7 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
     tests = adjust_significance(records, correction)
     edges, hidden = select_edges(records, include_low_quality)
     edges, merge = merge_parallel(edges, merge_arcs, min_studies)
+    edges, genus = merge_genus(edges, merge_genera, support_level)
     statistics = {**STATISTICS, "correction": STATISTICS["correction"].format(name=CORRECTIONS[correction][0]),
                   "tests": tests}
     absent = sum(1 for e in edges if e.get("status") == ABSENT)
@@ -949,7 +1003,8 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
             "no_growth": {**rule_meta(no_growth_alpha, no_growth_factor),
                           "obligate": sum(1 for e in edges if e.get("outcome") == OBLIGATE),
                           "abolished": sum(1 for e in edges if e.get("outcome") == ABOLISHED)},
-            "filters": {"include_low_quality": include_low_quality}, "hidden": hidden, "merge": merge}
+            "filters": {"include_low_quality": include_low_quality}, "hidden": hidden, "merge": merge,
+            "genus": genus}
     return edges, meta
 
 

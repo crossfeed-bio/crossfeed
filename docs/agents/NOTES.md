@@ -202,6 +202,14 @@ Rules for this file:
   `growth.check_sets` requires one `GrowthCurve.technique` per species across the sets compared; the
   adapter fills it from `techniqueType`. Whole-culture traces stay out of monoculture comparisons.
 
+## Genus merging, genus queries and All (2026-09-28)
+
+Karoline's requests and choices are in METHOD_NOTES items 24 and 25, in her words. For agents: the genus
+rule is `model.genus_name` (first word of the name, brackets and "Candidatus" dropped), shared by the genus
+colors and the merge, so the two cannot disagree. `derive.merge_genus` runs after `merge_parallel` in
+`output_meta`. `gui.support_level` decides species or strain pairs. `SpeciesIndex.studies` lists every study
+the crawl found, which All derives. Names decide the genus: Phocaeicola (former Bacteroides) stays apart.
+
 ## Open questions (need a human)
 
 - Method and format questions are collected in "Open decisions" in

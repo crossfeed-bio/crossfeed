@@ -82,6 +82,16 @@ SETTINGS = {
                    "another, across conditions, studies and evidence, become one arc: its strength is the median "
                    "of their log2 means, with the range, and it lists every study, experiment and condition it "
                    "rests on. Arcs whose signs disagree are not merged; absent arcs stay separate."),
+    "merge_genera": ("Merge to genus", "--merge-genera",
+                     "Off by default. On, every strain becomes its genus, and the arcs between two genera merge "
+                     "by sign, so two genera can be joined by a facilitation arc and an inhibition arc. The "
+                     "strength is the median of the merged arcs' log2 means, with the range, and "
+                     "supporting_pairs counts the distinct species pairs behind the arc, or strain pairs when "
+                     "only NCBI taxon ids were entered. Interactions within one genus stay, as an arc from the "
+                     "genus to itself; absent arcs become one absent arc per genus pair, hidden as before. With "
+                     "Merge parallel arcs on as well, the arcs of each pair are merged across studies first, so "
+                     "a pair measured in several studies counts once. The genus is the first word of the name "
+                     "mGrowthDB records, not NCBI's lineage, so a reclassified genus follows its names."),
     "min_studies": ("Minimum supporting studies", "--min-studies N",
                     "Keeps arcs resting on at least this many studies. Above 1 it needs merged arcs, since an "
                     "arc as derived rests on one study."),
@@ -100,7 +110,9 @@ SETTINGS = {
 
 # command line options of `derive` that are not advanced settings -> what they do
 CLI_ONLY = {
-    "--species": "species or strain names, or NCBI taxon ids: search every study holding them, as the page does",
+    "--species": "species, strain or genus names, or NCBI taxon ids: search every study holding them, as the page "
+                 "does",
+    "--all": "every study in mGrowthDB, with every partner, as the page's All button (with --live)",
     "--live": "fetch from the mGrowthDB API (the normal case)",
     "--fixture": "derive from a JSON list of interaction records instead (offline, for testing)",
     "--deriver": "plug in your own derivation method, given as module:ClassName (one study at a time)",
@@ -153,6 +165,9 @@ EDGE_ATTRIBUTES = {
                    "empty for an arc as derived",
     "strength_range": "with Merge parallel arcs: the lowest and highest log2 mean of the merged arcs; the "
                       "strength is their median",
+    "supporting_pairs": "with Merge to genus: how many distinct species pairs (strain pairs when only taxon ids "
+                        "were entered) this genus arc rests on",
+    "merged_pairs": "with Merge to genus: those pairs, as source -> target",
 }
 
 # Node field -> meaning
@@ -161,7 +176,8 @@ NODE_ATTRIBUTES = {
     "name": "the strain name, as the study records it",
     "taxon_id": "the NCBI taxon id of the strain, as mGrowthDB records it",
     "species": "genus and species from the name, to merge with species-level networks",
-    "identity": "what the id rests on: ncbi (the taxon id) or name",
+    "identity": "what the id rests on: ncbi (the taxon id), name, or genus (with Merge to genus: the node "
+                "stands for every strain of its genus)",
     "taxonomy": "a lineage, when known",
     "model_ref": "a link to a metabolic model, when known",
 }
@@ -208,6 +224,16 @@ DECISIONS = (
     ("Suspect curves are flagged, never silently dropped or replaced.",
      "A replicate with an implausible spike is left out and reported, with the other techniques measured "
      "on it named (#39)."),
+    ("Merging summarizes; it is off by default.",
+     "Interactions are condition-specific, so arcs are shown as derived. Merge parallel arcs and Merge to "
+     "genus condense them on request: by the median, never across signs, and with Merge to genus each arc "
+     "says how many species pairs it rests on. Merged across studies first, a pair measured in several "
+     "studies counts once (register items 14 and 24)."),
+    ("The genus comes from mGrowthDB's names.",
+     "It is the first word of the name mGrowthDB records, after qualifiers such as Candidatus or "
+     "unclassified, and not NCBI's lineage. NCBI's brackets stay: [Clostridium] scindens is placed outside "
+     "Clostridium, so its genus is [Clostridium]. A reclassified genus follows its names: Phocaeicola "
+     "(former Bacteroides) is its own genus."),
     ("grownet never corrects source data.",
      "Errors in mGrowthDB records are fixed in mGrowthDB, so every user sees the same data."),
     ("Everything runs on your machine.",
@@ -308,9 +334,11 @@ def render_help(token: str, defaults: dict, example: tuple) -> str:
 <ol class="toc">{toc}</ol>
 
 <h2 id="what">What grownet does</h2>
-<p>Type species names, one per line, or NCBI taxon ids. grownet looks them up in mGrowthDB, reads the
-growth curves of every study that holds them, and derives the interactions between them on this machine.
-Nothing is uploaded, and nothing is written outside the file you download.</p>
+<p>Type species names, one per line, strain names, a genus (it stands for every species of it in
+mGrowthDB), or NCBI taxon ids. grownet looks them up in mGrowthDB, reads the growth curves of every study
+that holds them, and derives the interactions between them on this machine. The All button ignores the
+box and derives every study in mGrowthDB, with every partner. Nothing is uploaded, and nothing is written
+outside the file you download.</p>
 
 <h2 id="idea">The idea behind it</h2>
 <p>How one species affects another can be read from growth alone: grow each species by itself, grow the
@@ -387,10 +415,14 @@ its report, and the network sent to Cytoscape:</p>
 command. The command is still called <code>{COMMAND}</code>: it becomes <code>{NAME}</code> when the package
 is renamed (#71). Other uses:</p>
 <pre>{COMMAND} derive SMGDB00000004 --live --format graphml --out study4.graphml
+{COMMAND} derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
+{COMMAND} derive --live --all --merge-arcs --merge-genera --out all_genera.json
 {COMMAND} gui
 {COMMAND} validate example.json</pre>
-<p>The first derives one whole study, the second opens this page, the third checks a file against the
-format. Every advanced setting has its flag (see the list above), and <code>{COMMAND} derive --help</code>
+<p>The first derives one whole study; the second a genus, every species of it with every partner, one
+node per genus; the third all of mGrowthDB, as the All button does, merged across studies and then to
+genus; the fourth opens this page, and the last checks a file against the format. Every advanced setting
+has its flag (see the list above), and <code>{COMMAND} derive --help</code>
 lists them all. Besides those:</p>
 <ul>{cli_only}</ul>
 

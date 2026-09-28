@@ -57,6 +57,8 @@ _KEYS = [
     ("e_cultivation_mode", "edge", "cultivation_mode", "string"),
     ("e_merged_arcs", "edge", "merged_arcs", "int"),
     ("e_strength_range", "edge", "strength_range", "string"),
+    ("e_supporting_pairs", "edge", "supporting_pairs", "int"),
+    ("e_merged_pairs", "edge", "merged_pairs", "string"),
 ]
 
 
@@ -128,6 +130,9 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         if e.merged_arcs is not None:
             _data(ed, "e_merged_arcs", e.merged_arcs)
         _data(ed, "e_strength_range", " ".join(f"{x:g}" for x in e.strength_range))
+        if e.supporting_pairs is not None:
+            _data(ed, "e_supporting_pairs", e.supporting_pairs)
+        _data(ed, "e_merged_pairs", "; ".join(e.merged_pairs))
         _data(ed, "e_cultivation_mode", e.cultivation_mode)
 
     if pretty:

@@ -35,6 +35,8 @@ def _edge_line(net, e) -> str:
     if e.merged_arcs:
         low_high = f", range {e.strength_range[0]:+.2f} to {e.strength_range[1]:+.2f}" if e.strength_range else ""
         parts.append(f"median of {e.merged_arcs} merged arcs{low_high}")
+    if e.supporting_pairs:
+        parts.append(f"{e.supporting_pairs} supporting pair(s): {'; '.join(e.merged_pairs)}")
     else:
         parts.append(f"replicates {e.n_with if e.n_with is not None else '?'} with / "
                      f"{e.n_without if e.n_without is not None else '?'} without")
@@ -65,9 +67,14 @@ def report_text(result: dict) -> str:
 
     if result.get("study"):
         lines.append(f"study derived: {result['study']} (every species in it)")
+    elif result.get("all"):
+        lines.append("query: all of mGrowthDB (every study, with every partner)")
     else:
         lines.append("species entered: " + (", ".join(result.get("entries", [])) or "none"))
+    genera = result.get("genera", {})
     for entry, matches in result["resolved"]:
+        if entry in genera:
+            lines.append(f"  {entry} (genus): {', '.join(genera[entry])}")
         lines.append(f"  {entry}: " + ", ".join(f"{n} (taxon {t})" for t, n in sorted(matches.items())))
     for entry in result["unresolved"]:
         hints = result.get("suggestions", {}).get(entry)
