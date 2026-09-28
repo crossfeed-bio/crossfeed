@@ -706,7 +706,11 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    (34 arcs), "End of the plateau": the fit uses the curve up to its maximum and on along the plateau after
    it, while the log abundance stays within 10% of the rise below the maximum (the tolerance of item 27),
    and stops at the first point below that. On mGrowthDB: 30 -> 40 Baranyi arcs (easylinear gives 49);
-   study 2 recovered, study 7 up from 0 to 10. Easylinear, the default, is unchanged.
+   study 2 recovered, study 7 up from 0 to 10. Easylinear, the default, is unchanged. This helps curves
+   that decline after their peak only: a curve with two growth phases has its maximum in the second, so
+   nothing is cut and the model still refuses it (Craig's agent, reviewing #88). Values moved too: of the
+   29 arcs present before and after, 23 changed strength and 8 sign or status, most on Roseburia targets,
+   whose declining curves had inflated the fitted rate.
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

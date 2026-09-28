@@ -271,3 +271,25 @@ def test_the_page_the_command_line_and_the_help_all_know_genera_and_all():
     assert "a genus (it stands for every species of it" in page and "The All button" in page
     form = gui.render_form("tok")
     assert 'name="merge_genera"' in form and 'name="all"' in form
+
+
+def test_the_help_weighs_each_growth_measure():
+    # Karoline (2026-09-28): "in the help, can you also describe briefly the advantages and disadvantages of
+    # each growth curve characteristic?"
+    from crossfeed import help as help_page
+    page = help_page.render_help("tok", gui.DEFAULTS, gui.EXAMPLE)
+    section = page[page.index('<h2 id="measures">'):page.index('<h2 id="example">')]
+    for measure in ("auc", "max", "growth_rate"):                    # every measure the tool offers
+        assert f"({measure}" in section
+    assert section.count("<dd>For:") == len(gui.METRICS) and section.count("Against:") == len(gui.METRICS)
+
+
+def test_the_readme_names_the_tool_grownet():
+    # Karoline (2026-09-28): "readme in the repo still talks about crossfeed instead of grownet"
+    from pathlib import Path
+    text = Path(__file__).resolve().parents[1].joinpath("README.md").read_text(encoding="utf-8")
+    assert text.startswith("# grownet\n") and "**grownet** turns" in text
+    prose = re.sub(r"`[^`]*`|\(https?://[^)]*\)|https?://\S+|```.*?```", "", text, flags=re.S)
+    # outside code and links, crossfeed appears only where the README explains the old name
+    leftover = [line for line in prose.splitlines() if "crossfeed" in line]
+    assert all("called crossfeed" in line or "crossfeed-bio" in line for line in leftover)

@@ -1,16 +1,16 @@
-# crossfeed
+# grownet
 
 [![ci](https://github.com/crossfeed-bio/crossfeed/actions/workflows/ci.yml/badge.svg)](https://github.com/crossfeed-bio/crossfeed/actions/workflows/ci.yml)
 [![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![python: 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
-The tool is now called **grownet** (#71): the local page, the Cytoscape style, the networks it writes and
-the Windows program already say grownet. The Python package, the `crossfeed` command, the module and this
-repository keep the old name until the rename, so the commands below still start with `crossfeed`.
-
-**crossfeed** turns experimentally grounded microbial co-growth data from
+**grownet** turns experimentally grounded microbial co-growth data from
 [mGrowthDB](https://mgrowthdb.gbiomed.kuleuven.be/) into directed interaction networks, in a neutral and
 openly citable format that downstream tools (such as Syntropa and microbetag) can consume.
+
+grownet was called crossfeed until 2026-09-27 (#71). The Python package, the `crossfeed` command, the
+module and this repository keep the old name until the rename is released, so the commands below still
+start with `crossfeed`.
 
 It is a thin client: it pulls from mGrowthDB and emits a network. Nothing to host, nothing to pay for on a
 shared server, no runtime dependencies (the client is pure Python standard library). A well-run
@@ -55,7 +55,7 @@ The zip's `README.txt` says the same, for whoever unzips it.
 ### With uv (macOS, Linux and Windows)
 
 The quickest route is [uv](https://docs.astral.sh/uv/), which fetches a suitable Python by itself. The
-Python that ships with macOS (3.9) is too old for crossfeed, and uv avoids that. Install uv once:
+Python that ships with macOS (3.9) is too old for grownet, and uv avoids that. Install uv once:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -118,7 +118,7 @@ python -m crossfeed validate network.json
 
 ## What it does
 
-Given a set of query organisms, crossfeed builds an interaction network on the fly from mGrowthDB
+Given a set of query organisms, grownet builds an interaction network on the fly from mGrowthDB
 co-growth measurements. Each edge is a directed, condition-specific interaction (facilitation, inhibition,
 or neutral) with its strength, its significance, and the experimental condition it holds in. Every edge
 carries its provenance: the study or studies it was derived from, so attribution resolves at the edge
@@ -184,7 +184,7 @@ python -m crossfeed gui
 The tool version shows next to its name, and a Help page introduces the idea (after Gause, with a figure), explains every advanced setting and arc
 attribute, the main design decisions, the command line, what to do when no network comes back, and where
 to report a problem; an About page says who built it and links this repository. Type species names (or NCBI taxon ids, or a genus for all its species), one per line, and press "Find
-interactions", or press All to derive every study in mGrowthDB. crossfeed resolves
+interactions", or press All to derive every study in mGrowthDB. grownet resolves
 the names to taxon ids from mGrowthDB's own strain records, finds the studies holding them, derives the
 interactions, and shows them as a table with downloads for JSON and GraphML. Every setting sits behind
 "Advanced settings" with the same defaults the command line uses.
@@ -504,7 +504,7 @@ choices, and who settled each, are in [docs/METHOD_NOTES.md](docs/METHOD_NOTES.m
 
 Discipline is a feature here. Every commit and every CI run passes the same self-contained gate
 (`checks/gate.py`): no committed secrets, no raw or pulled data (only the synthetic fixtures under
-`tests/fixtures/`), no local-machine paths, imports that resolve to the standard library or crossfeed
+`tests/fixtures/`), no local-machine paths, imports that resolve to the standard library or the package itself
 itself, a documented house style, and a schema contract that keeps the shipped schema in step with the
 code. The tests run on Python 3.10 to 3.12 on Linux, and on Windows and macOS. Get the same checks locally with `make check`, or run them on
 every commit with `pre-commit install`. See [CONTRIBUTING.md](CONTRIBUTING.md). Found a security issue?
@@ -512,7 +512,7 @@ Report it privately (see [SECURITY.md](SECURITY.md)), not in a public issue.
 
 ## Attribution and data governance
 
-mGrowthDB is open, so crossfeed pulls from it directly. Per-study licenses are respected by citing every
+mGrowthDB is open, so grownet pulls from it directly. Per-study licenses are respected by citing every
 study that supports a network at the edge level, rather than bundling. Unpublished collaborator data is
 used only for the agreed analysis and is never ingested into any downstream corpus. See
 [docs/DATA_GOVERNANCE.md](docs/DATA_GOVERNANCE.md).
