@@ -1,7 +1,7 @@
 """The tool's name, mark and page palette, in one place (Karoline's decisions of 2026-09-27).
 
-The tool is called grownet (#71). The package and the command are still `crossfeed` until the rename pull
-request, so `COMMAND` is what a user types today; flipping it is part of that rename.
+The tool is called grownet (#71): the package, the module and the command, since 2026-09-28. The
+repository and the schema id keep the old name, crossfeed, for now (Craig's call).
 
 The page style is the one Karoline approved in the grownet interface proposal: a header with the mark and
 the wordmark, one green primary action, quiet table headers, and directions colored with the legend's two
@@ -11,7 +11,7 @@ color is the only cue and green against red is the hardest pair for color vision
 from __future__ import annotations
 
 NAME = "grownet"
-COMMAND = "crossfeed"            # the installed command until the package is renamed (#71)
+COMMAND = "grownet"            # the installed command
 
 INK, MUTED, LINE, PANEL, PAGE = "#1C1F1E", "#5B625F", "#D9DDDA", "#F6F8F7", "#EEF1EF"
 GROWTH, INHIBITION, NODE = "#1A7F5A", "#C2410C", "#7A8580"
@@ -97,6 +97,9 @@ summary {{ cursor: pointer; font-weight: 600; }}
 .note {{ background: var(--panel); border: 1px solid var(--line); padding: .7rem .9rem; border-radius: 8px; }}
 .result {{ margin-top: 1.4rem; border-top: 1px solid var(--line); padding-top: .4rem; }}
 .scroll {{ overflow-x: auto; }} .legend svg {{ max-width: 100%; height: auto; }}
+.idea {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: .8rem 1.2rem;
+        margin: .8rem 0 .3rem; }}
+.idea figure {{ margin: 0; }} .idea svg {{ width: 100%; height: auto; display: block; }}
 table {{ border-collapse: collapse; width: 100%; font-size: .9rem; margin-top: .5rem; }}
 th, td {{ text-align: left; padding: .38rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }}
 th {{ color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }}

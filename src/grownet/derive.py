@@ -43,6 +43,7 @@ from .interaction import (
 )
 from .interaction import DROPOUT as DROPOUT_EVIDENCE
 from .mgrowthdb import MGrowthDBClient
+from .model import genus_name
 from .stats import CORRECTIONS, welch
 
 METHOD = ("crossfeed baseline v0 (PROVISIONAL): log2(growthRate co / mono), pairwise co-cultures only, "
@@ -92,7 +93,7 @@ def _members(exp: dict) -> list:
 def interactions_from_experiments(study: dict, exps: list, study_id: str = None,
                                   metric: str = "growthRate", deadband: float = DEADBAND):
     """Pure derivation, no network: return (records, skipped) from a study dict and its experiment dicts.
-    `records` feed crossfeed.mgrowthdb.records_to_network; `skipped` lists (label, reason) for everything
+    `records` feed grownet.mgrowthdb.records_to_network; `skipped` lists (label, reason) for everything
     the data did not cleanly support. This is the PROVISIONAL baseline; see the module docstring."""
     study_id = study_id or study.get("id")
 
@@ -193,6 +194,30 @@ TWO_REPLICATES = "two_replicates"
 # experiments that differ only in their description (a supplement, a lineage) under identical recorded
 # conditions, where nothing recorded says which monoculture or drop-out matches which (Karoline, 2026-09-27)
 CONDITIONS_UNVERIFIED = "conditions_unverified"
+# with max as the measure (Karoline, 2026-09-28): one set reached stationary phase and the other did not,
+# so the maximum of one may still be rising; or the curves are too sparse to tell
+STATIONARY_DIFFERS, STATIONARY_UNCHECKED = "stationary_phase_differs", "stationary_unchecked"
+# an obligate or abolished arc whose set without growth is zero from its first time point: no growth cannot
+# be told from no inoculum or counts below detection (Karoline, 2026-09-28: "Obligate, with a caution")
+ZERO_AT_START = "zero_at_start"
+
+
+def zero_start_cautions(zero_start, outcome: str) -> list:
+    """The zero-at-start caution of an obligate or abolished comparison."""
+    if not zero_start:
+        return []
+    side = "without" if outcome == OBLIGATE else "with" if outcome == ABOLISHED else None
+    return [ZERO_AT_START] if side and zero_start.get(side) else []
+
+
+def stationary_cautions(stationary, method: str, outcome: str) -> list:
+    """The stationary-phase caution of a quantified comparison on max, from its two set verdicts."""
+    if method != "max" or outcome != QUANTIFIED or not stationary:
+        return []
+    verdicts = (stationary.get("with"), stationary.get("without"))
+    if None in verdicts:
+        return [STATIONARY_UNCHECKED]
+    return [STATIONARY_DIFFERS] if verdicts[0] != verdicts[1] else []
 
 
 def conditions(exp: dict) -> str:
@@ -333,6 +358,18 @@ def _qualifier(name: str) -> str:
     return " ".join((name or "").casefold().split()[:-1])
 
 
+# the word a description uses for the kind of culture; what precedes it names the organisms
+_CULTURE_WORD = re.compile(r"\b(?:mono|co|bi)-?cultures?\b|\bcocultures?\b", re.I)
+
+
+def _setting(description: str) -> str:
+    """What a description says about how a culture was grown, with the organisms and the kind of culture
+    taken out: the text after its culture word ("At monoculture grown on a minimal medium with 0.1% linoleic
+    acid" -> "grown on a minimal medium with 0.1% linoleic acid"), or "" when it has none."""
+    m = _CULTURE_WORD.search(description or "")
+    return " ".join(description[m.end():].casefold().split()) if m else ""
+
+
 def _choose_monocultures(groups: dict, exp: dict):
     """(the monoculture set a co-culture is compared with, how it was chosen), or (None, why) when that is
     not known. How: "only" (the one set there is), "named" or "qualifier".
@@ -340,8 +377,12 @@ def _choose_monocultures(groups: dict, exp: dict):
     One set under the co-culture's recorded conditions: that one. Several, told apart only by their
     descriptions: the one whose description names the co-culture experiment, as study 7's controls do
     ('controls of the "bhri" experiment'); failing that, the one whose name carries the same qualifier as the
-    co-culture's ("Evolved AtCt" with "Evolved At", "CtOa" with the plain "Ct", as in study 13). Otherwise
-    none is guessed (Karoline, 2026-09-27: "yes to 1-3", then "yes" to the qualifier rule).
+    co-culture's ("Evolved AtCt" with "Evolved At", "CtOa" with the plain "Ct", as in study 13); failing
+    that, the one whose description words the growth the same way once the organisms and the kind of culture
+    are taken out (`_setting`: study 14's "At+Ct co-culture grown on a minimal medium with 0.1% linoleic
+    acid" with "At monoculture grown on a minimal medium with 0.1% linoleic acid"). Otherwise none is
+    guessed (Karoline, 2026-09-27: "yes to 1-3", then "yes" to the qualifier rule; 2026-09-28: "Match
+    identical wording").
     """
     if len(groups) == 1:
         return next(iter(groups.values())), "only"
@@ -353,6 +394,10 @@ def _choose_monocultures(groups: dict, exp: dict):
     same = [g for g in groups.values() if {_qualifier(n) for n in g[4]} == {qualifier}]
     if not named and len(same) == 1:
         return same[0], "qualifier"
+    setting = _setting(exp.get("description", ""))
+    worded = [g for g in groups.values() if setting and any(_setting(d) == setting for d in g[3])]
+    if not named and len(worded) == 1:
+        return worded[0], "wording"
     labels = "; ".join(sorted({g[3][0][:70] for g in groups.values()}))
     return None, (f"{len(groups)} monoculture sets under this experiment's recorded conditions, told apart only by "
                   f"their descriptions ({labels}); none names this co-culture, so which one matches it is not "
@@ -489,7 +534,7 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
         groups = monos.get(key, {})
         chosen, how = _choose_monocultures(groups, exp) if groups else (None, "")
         why = "" if chosen else how
-        if how in ("named", "qualifier"):
+        if how in ("named", "qualifier", "wording"):
             matched.add(species)          # the match with this co-culture is recorded, by name
         found, strains, ids = (chosen[0], chosen[1], chosen[2]) if chosen else ([], set(), [])
         if not groups:
@@ -517,12 +562,15 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
             skipped.append((f"{source} -> {target} [{cond}]", f"no growth ({method}) in either set"))
             continue
         if side["outcome"] == UNUSABLE:
-            skipped.append((f"{source} -> {target} [{cond}]", "every replicate of a set was left out (see above)"))
+            skipped.append((f"{source} -> {target} [{cond}]",
+                            side.get("reason") or "every replicate of a set was left out (see above)"))
             continue
         c = {"mean": side["mean"], "sd": side["sd"], "se": side["se"], "outcome": side["outcome"],
              "n_with": side["n_co"], "n_without": side["n_mono"],
              "with_log2": side["co_log2"], "without_log2": side["mono_log2"]}
         quality, cautions = _replicate_flags(c["n_with"], c["n_without"])
+        cautions += stationary_cautions(side.get("stationary"), method, c["outcome"])
+        cautions += zero_start_cautions(side.get("zero_start"), c["outcome"])
         if variants > 1 and not matched:
             # co-cultures of this pair under the same recorded conditions differ only in their description
             # (study 4's +Ac and -Ac), and nothing recorded says which one the monocultures match. When a
@@ -624,11 +672,12 @@ def _detected_note(role: str, detected) -> str:
 
 
 def _common_start(full, dropouts, skipped) -> tuple:
-    """(full, dropouts) without the replicates holding a curve that starts after the design's usual start.
+    """(full, dropouts) unchanged, with every curve that starts after the design's usual start reported.
 
-    Curves are compared only from a common start time (Karoline's specification, #1). In a community
-    replicate every member has a curve, so a member whose first measurement is missing takes its whole
-    replicate out; it is reported. The usual start is the most common first time point in the design.
+    Curves are compared only from a common start time (Karoline's specification, #1). A member whose first
+    measurement is missing leaves its replicate out of that member's own arcs only
+    (`interaction.dropout_interaction_strengths`); the replicate still serves every other member (Karoline,
+    2026-09-28: "Only for its own arcs"). The usual start is the most common first time point in the design.
     """
     reps = [*full, *(r for group in dropouts.values() for r in group)]
     firsts = Counter(c.times[0] for r in reps for c in r.curves)
@@ -636,20 +685,19 @@ def _common_start(full, dropouts, skipped) -> tuple:
         return full, dropouts
     start = firsts.most_common(1)[0][0]
 
-    def keep(role, replicates):
-        kept = []
+    def report(role, replicates):
         for rep in replicates:
             late = [c for c in rep.curves if not math.isclose(c.times[0], start, abs_tol=1e-9)]
             if late:
                 skipped.append((f"{role} replicate {rep.name}", "curve(s) starting after the common start "
                                 f"{start:g}: " + ", ".join(f"{c.species} at {c.times[0]:g}" for c in late)
-                                + "; left out, since curves are compared only from a common start"))
-            else:
-                kept.append(rep)
-        return kept
+                                + "; this replicate is left out of those species' own arcs only, since curves "
+                                "are compared only from a common start"))
 
-    kept = {r: keep(f"community without {r}", group) for r, group in dropouts.items()}
-    return keep("full community", full), {r: group for r, group in kept.items() if group}
+    for r, group in dropouts.items():
+        report(f"community without {r}", group)
+    report("full community", full)
+    return full, dropouts
 
 
 def _variants(exps) -> dict:
@@ -663,7 +711,7 @@ def _variants(exps) -> dict:
 
 def _dropout(client, design, method, spike_factor, study_id, study_meta, records, skipped,
              identities=None, no_growth=None, variants=None) -> None:
-    """The arcs of one drop-out design, from `crossfeed.interaction.dropout_interaction_strengths`."""
+    """The arcs of one drop-out design, from `grownet.interaction.dropout_interaction_strengths`."""
     members, full_exps, drops = design
     label = f"drop-out design of {len(members)} members ({', '.join(e.get('name', '') for e in full_exps)})"
     full, full_detected = _community_replicates(client, full_exps, members, "full community",
@@ -690,6 +738,8 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
     for arc in result["arcs"]:
         removed, target = arc["source"], arc["target"]
         quality, cautions = _replicate_flags(arc["n_with"], arc["n_without"])
+        cautions += stationary_cautions(arc.get("stationary"), method, arc["outcome"])
+        cautions += zero_start_cautions(arc.get("zero_start"), arc["outcome"])
         notes = _spike_notes([f for f in result["flagged"] if f["role"] in ("full community",
                               f"community without {removed}")], target)
         if full_detected or detected[removed]:
@@ -746,9 +796,9 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
     """The specified comparison, run on a study: (records, skipped).
 
     Two designs give edges. Each two-member co-culture is compared with the monoculture replicates of
-    its members under the same conditions (`crossfeed.interaction.interaction_strength`, evidence
+    its members under the same conditions (`grownet.interaction.interaction_strength`, evidence
     `biculture`). Each drop-out design (`dropout_designs`) compares the full community with the community
-    without one member (`crossfeed.interaction.dropout_interaction_strengths`, evidence `dropout`), unless
+    without one member (`grownet.interaction.dropout_interaction_strengths`, evidence `dropout`), unless
     `dropout` is False. Drop-out arcs are included by default, labeled by evidence (Craig and Karoline,
     register item 2).
 
@@ -759,7 +809,7 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
     happens at output (`select_edges`), so nothing computed is lost. Only batch experiments are derived
     unless `include_non_batch` is set; every edge records its `cultivation_mode`, and a non-batch edge is
     flagged `non_batch` (Karoline, #42). `no_growth_alpha` and `no_growth_factor` set the no-growth rule
-    (`crossfeed.interaction.grew`; None means the defaults there).
+    (`grownet.interaction.grew`; None means the defaults there).
     """
     no_growth = (no_growth_alpha, no_growth_factor)
     study_id = study_id or study.get("id")
@@ -922,9 +972,68 @@ def merge_parallel(edges: list, merge: bool = True, min_studies: int = 1) -> tup
                   "below_min_studies": len(out) - len(kept)}
 
 
+SUPPORT_LEVELS = ("species", "strain")
+
+
+def _organism(arc: dict, side: str) -> str:
+    return arc.get(f"{side}_name") or arc.get(f"{side}_species") or arc[side]
+
+
+def _pair(arc: dict, level: str, name_of: dict) -> str:
+    """The pair of organisms an arc joins, at the level the search asked about: its species, or its strains.
+    Each node is named once (`name_of`, the first name seen for its id), so a strain that two studies name
+    differently (411483 as F. prausnitzii and as F. duncaniae A2-165) counts once (code review of
+    2026-09-28)."""
+    names = [name_of.get(arc[side], _organism(arc, side)) for side in ("source", "target")]
+    if level == "strain":
+        return " -> ".join(names)
+    return " -> ".join(genus_species(n).capitalize() for n in names)
+
+
+def merge_genus(edges: list, merge: bool = False, level: str = "species") -> tuple:
+    """(edges, meta) with every node merged into its genus and the arcs between two genera merged by sign.
+
+    Karoline's choices (2026-09-28): an advanced setting, off by default; nodes merge at the genus level
+    and arcs merge by sign, so two genera can be joined by a facilitation arc and an inhibition arc;
+    `supporting_pairs` counts the distinct pairs behind a genus arc, as species pairs or, when only strains
+    (taxon ids) were entered, strain pairs; interactions within one genus stay, as an arc from the genus to
+    itself; absent arcs are recorded as before, one per genus pair, and hidden like any absent arc. It runs
+    after `merge_parallel`, so with both settings on a pair measured in several studies counts once.
+    The genus is the first word of the name mGrowthDB gives (`model.genus_name`), not NCBI's lineage.
+    """
+    info = {"merge_genus": merge, "level": level, "genus_arcs": 0,
+            "rule": "nodes by genus; arcs by source genus, target genus and sign; median of the log2 means"}
+    if not merge:
+        return edges, info
+    groups, name_of = {}, {}
+    for e in edges:
+        for side in ("source", "target"):
+            name_of.setdefault(e[side], _organism(e, side))
+    for e in edges:
+        kind = ABSENT if e.get("status") == ABSENT else e.get("effect")
+        key = (genus_name(_organism(e, "source")), genus_name(_organism(e, "target")), kind)
+        groups.setdefault(key, []).append(e)
+    out = []
+    for (source, target, kind), arcs in groups.items():
+        arc = dict(arcs[0]) if len(arcs) == 1 else _merged(arcs)
+        if kind == ABSENT:
+            arc["status"] = ABSENT                       # every arc behind it found no interaction
+        pairs = sorted({_pair(a, level, name_of) for a in arcs})
+        arc.update({side: genus for side, genus in (("source", source), ("target", target))})
+        for side, genus in (("source", source), ("target", target)):
+            arc.update({f"{side}_name": genus, f"{side}_taxon_id": "", f"{side}_species": "",
+                        f"{side}_identity": "genus"})
+        arc.update(supporting_pairs=len(pairs), merged_pairs=pairs,
+                   method=f"{arc.get('method', '')}; merged to genus: {len(arcs)} arcs over {len(pairs)} "
+                          f"{level} pairs")
+        out.append(arc)
+    return out, {**info, "genus_arcs": len(out), "from_arcs": len(edges)}
+
+
 def output_meta(records, include_low_quality: bool = False, correction: str = "bh",
                 absence_threshold: float = ABSENCE_THRESHOLD, no_growth_alpha: float = None,
-                no_growth_factor: float = None, merge_arcs: bool = False, min_studies: int = 1) -> tuple:
+                no_growth_factor: float = None, merge_arcs: bool = False, min_studies: int = 1,
+                merge_genera: bool = False, support_level: str = "species") -> tuple:
     """(edges, meta) for writing a network.
 
     Sets each record's `status` from the absence threshold k (None, undetermined, for a low-quality
@@ -941,6 +1050,7 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
     tests = adjust_significance(records, correction)
     edges, hidden = select_edges(records, include_low_quality)
     edges, merge = merge_parallel(edges, merge_arcs, min_studies)
+    edges, genus = merge_genus(edges, merge_genera, support_level)
     statistics = {**STATISTICS, "correction": STATISTICS["correction"].format(name=CORRECTIONS[correction][0]),
                   "tests": tests}
     absent = sum(1 for e in edges if e.get("status") == ABSENT)
@@ -949,7 +1059,8 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
             "no_growth": {**rule_meta(no_growth_alpha, no_growth_factor),
                           "obligate": sum(1 for e in edges if e.get("outcome") == OBLIGATE),
                           "abolished": sum(1 for e in edges if e.get("outcome") == ABOLISHED)},
-            "filters": {"include_low_quality": include_low_quality}, "hidden": hidden, "merge": merge}
+            "filters": {"include_low_quality": include_low_quality}, "hidden": hidden, "merge": merge,
+            "genus": genus}
     return edges, meta
 
 
@@ -962,7 +1073,7 @@ class Deriver:
     significance test) is the scientific choice owned by the collaboration. A Deriver is how a chosen
     method plugs in: subclass it, implement `derive`, and it slots into `derive_interactions` and the
     CLI without touching the neutral model or the pipeline. Keep the record shape that
-    `crossfeed.mgrowthdb.records_to_network` reads, and record what the data does not support in
+    `grownet.mgrowthdb.records_to_network` reads, and record what the data does not support in
     `skipped` rather than inventing a value.
     """
 
@@ -978,8 +1089,8 @@ class Deriver:
 class ReplicateDeriver(Deriver):
     """The comparison the collaboration specified, over replicate growth curves.
 
-    Reads each replicate's measured series through `crossfeed.adapter`, compares the replicate sets with
-    `crossfeed.interaction.interaction_strength` (area under the curve by default; maximal abundance or a
+    Reads each replicate's measured series through `grownet.adapter`, compares the replicate sets with
+    `grownet.interaction.interaction_strength` (area under the curve by default; maximal abundance or a
     growth rate selectable), and emits edges carrying the standard error and the replicate counts. This is the default
     for a live derivation; `BaselineDeriver` remains only as the retired placeholder it always was.
     """

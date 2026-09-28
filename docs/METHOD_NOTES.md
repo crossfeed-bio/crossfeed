@@ -660,5 +660,94 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    for monocultures either, as before (SMGDB00000010 and SMGDB00000015 measure their monocultures only that
    way). No edge derived from mGrowthDB on 2026-09-27 changed: every one already compared one technique.
 
+24. **Merging to genus, and a genus as a query** (Karoline, 2026-09-28). Her words: "another advanced option
+   that is by default deactivated and which returns the network with nodes merged at the genus level and
+   arcs merged by strain/species (depending on the query). Arc merge needs to be stratified by sign and a
+   new arc attribute should record the number of strains/species supporting an arc. Please note that this
+   option may be used together with the option to merge arcs across studies." Choosing among her agent's
+   options: the count is of distinct pairs "at entry level" (species pairs, or strain pairs when every
+   entry is an NCBI taxon id, since a name, even with a strain designation, resolves to its whole
+   species); interactions within one genus are kept "as a self-loop"; absent arcs: "record them as before
+   but do not display them" (one absent arc per genus pair, hidden like any absent arc); and a genus
+   entered alone resolves to every strain of it in mGrowthDB ("Yes"). Consequences stated by her agent:
+   the genus merge runs after the merge across studies, so with both on a pair measured in several studies
+   counts once; the strength is the median, as in item 14; the genus is the first word of the name
+   mGrowthDB records ([Clostridium] is not Clostridium), not NCBI's lineage, so a reclassified genus follows
+   its names. Edges gain `supporting_pairs` and `merged_pairs`, nodes the identity `genus` (optional,
+   backward compatible). After Craig's agent's review of #85 (qualifiers such as "unclassified" made a
+   genus of their own), Karoline chose: an organism named like "unclassified Bacteroides" is merged into
+   its genus ("Merge into its genus"; mGrowthDB holds none today), and "[Clostridium] scindens" is its own
+   genus, [Clostridium], apart from Clostridium ("Its own genus"), as the genus query already treated it.
+
+25. **All of mGrowthDB** (Karoline, 2026-09-28). Her words: "a button next to 'Example' that says: 'All'.
+   If this button is pushed, the input field is ignored and instead, the entire interaction network is
+   fetched from mGrowthDB (there can be a short explainer next to the button)." Every study the species
+   list is read from is derived, with every partner kept; Only these studies and Exclude these studies
+   still apply. `derive --live --all` does the same from the command line.
+
+26. **The time window of a bi-culture arc** (open; found by the audit of 2026-09-28). Curves are compared
+   over the window they share, so none is extrapolated. For a drop-out arc that window is the target's own
+   curves with and without the removed member ("so one short curve elsewhere in the design does not
+   shorten it"). For a bi-culture it is every curve of the design, including the source alone, whose
+   curve is not part of the comparison. Example, SMGDB00000006: Lactobacillus delbrueckii subsp.
+   bulgaricus -> Streptococcus thermophilus STpos compares S. thermophilus over 0 to 6 h, because L.
+   bulgaricus alone was followed for 6 h, while both S. thermophilus sets run to 7 h or longer (+0.088 over
+   6 h, +0.074 over 7 h; absent either way). The arc's `experiments` does not list the source's
+   monoculture that set the window. Options: (a) keep the design-wide window (both arcs of a pair then
+   cover the same time); (b) give each bi-culture arc its own window, the target's curves only, as for
+   drop-outs, and list nothing more; (c) keep it and add the source's monoculture to `experiments`.
+   Proposed by her agent: (b), for consistency with drop-outs and because it uses all the target's data.
+   SETTLED 2026-09-28 (Karoline): "Concerning different windows for growth in mono- vs bi-culture (or
+   drop-out vs full community): OK." So (b): each arc is compared over the target's own curves in the
+   two sets, and "AUC requires an equal time window", which it has: both sets are cut to the same end.
+
+27. **Stationary phase, with max as the measure** (Karoline, 2026-09-28). Her words: "max is problematic
+   when the growth curve hasn't reached stationary phase yet (especially if it did in the other case). We
+   should test for it (simple & quick) and add a warning on the arc in case stationary phase was reached
+   in one case but not the other." And on the first proposal, a flat end: "Roseburia is known to have 2
+   growth peaks in some cases. none of the cases above deal with diauxic shift. Please think about a method
+   that is not invalidated by diauxic shift. We'll have to pay in run time to avoid this, it's common, and
+   we do want to make sure that we are not comparing curves where one reached stat phase and the other
+   didn't". Adopted, choosing among her agent's options: a curve reached stationary phase by the window's
+   end when (1) over the last fifth of the window it rises by less than 10% of its rise (window maximum
+   minus start; a decline counts), and (2) wherever it was measured after the window it never exceeds its
+   window maximum by more than 10% of that rise, so a diauxic pause with a measured second rise is not
+   stationary; a set follows the "Majority of replicates"; a curve needs "At least 6" points in the window
+   to be judged; the warning is for "Max only". Arcs gain the cautions `stationary_phase_differs` and
+   `stationary_unchecked` ("A caution of its own"). Tried on mGrowthDB first: on the dense curves
+   (studies 2, 4, 6, 7, 13; 7 to 18 points) it calls Roseburia's peaks and second peak stationary and
+   flags the B. hydrogenotrophica monocultures still rising at 48 h in study 4; study 8, with 3 or 4 noisy
+   qPCR points per curve, is too sparse to judge. A second phase after the last measurement cannot be seen
+   by any rule.
+
+28. **Audit 2: what the skip list showed** (Karoline, 2026-09-28, choosing among her agent's options after
+   every skip reason over all of mGrowthDB was checked against the data):
+   - Matching monocultures (extends item 22): "Match identical wording". When several monoculture sets
+     remain after the "named" and "qualifier" rules, the one whose description words the growth like the
+     co-culture's, once the organisms and the kind of culture are taken out (the text after "monoculture"
+     or "co-culture"), is used, if it is the only one. SMGDB00000014's five At+Ct co-cultures (0.1% and
+     0.75% linoleic acid, ROS, TBHQ, DMSO) each match their own monocultures this way: 10 arcs.
+   - A set that is zero from its first time point: "Obligate, with a caution". SMGDB00000006's STneg
+     monoculture reads 0 throughout, so L. bulgaricus -> S. thermophilus LMG 18311 stays obligate and gains
+     the caution `zero_at_start`: no growth cannot be told from no inoculum or counts below detection.
+   - A curve starting after the design's common start: "Only for its own arcs". Its replicate is left out
+     of that member's arcs and still serves the others (with the per-arc windows of item 26). In
+     SMGDB00000008, 24 of the 26 arcs of two drop-outs regain their second replicate.
+   - The report: "One line per experiment" for the average bioreplicates mGrowthDB marks, which were a
+     quarter of the skip list; nothing changes in the networks.
+
+29. **Where the Baranyi fit stops** (Karoline, 2026-09-28, after the settings audit). Fitted to whole
+   curves, the Baranyi-Roberts model was rejected on 152 curves of mGrowthDB that decline after their peak
+   or grow in two phases, so studies 7 and 13 gave no Baranyi arcs. She chose "Fit up to the maximum", and
+   then, when her agent showed that cutting at the first maximum leaves early-peaking curves too few points
+   (34 arcs), "End of the plateau": the fit uses the curve up to its maximum and on along the plateau after
+   it, while the log abundance stays within 10% of the rise below the maximum (the tolerance of item 27),
+   and stops at the first point below that. On mGrowthDB: 30 -> 40 Baranyi arcs (easylinear gives 49);
+   study 2 recovered, study 7 up from 0 to 10. Easylinear, the default, is unchanged. This helps curves
+   that decline after their peak only: a curve with two growth phases has its maximum in the second, so
+   nothing is cut and the model still refuses it (Craig's agent, reviewing #88). Values moved too: of the
+   29 arcs present before and after, 23 changed strength and 8 sign or status, most on Roseburia targets,
+   whose declining curves had inflated the fitted rate.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

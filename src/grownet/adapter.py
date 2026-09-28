@@ -1,9 +1,9 @@
 """mGrowthDB experiments to replicate growth curves.
 
-`crossfeed.interaction` compares replicate sets of growth curves, which is the comparison the
+`grownet.interaction` compares replicate sets of growth curves, which is the comparison the
 collaboration specified. mGrowthDB serves its measurements as a time series per measurement context, one
 context per strain per bioreplicate, so this module is the join between the two: it reads an experiment
-and returns one `crossfeed.growth.Replicate` per bioreplicate, each holding a `GrowthCurve` per strain.
+and returns one `grownet.growth.Replicate` per bioreplicate, each holding a `GrowthCurve` per strain.
 
 Two rules worth stating, because both are choices:
 
@@ -14,7 +14,7 @@ Two rules worth stating, because both are choices:
     context's technique units, falling back to the technique name when no unit string is reported (an OD
     reading and a qPCR count then still refuse to be compared, which is the point of the check).
 
-When a strain's curve carries an implausible spike (`crossfeed.growth.spike`), the adapter looks for
+When a strain's curve carries an implausible spike (`grownet.growth.spike`), the adapter looks for
 other measurements of the same strain in the same replicate and says whether they are clean, because they
 are evidence about the flag (in BH_14 the qPCR trace spikes while the flow cytometry trace does not). A
 community-level trace counts as such an alternative only in a monoculture, where it measures that single
@@ -22,11 +22,41 @@ strain; in a co-culture it is the sum of the members. The alternative is named, 
 techniques between monoculture and co-culture is what register item 13 warns about.
 
 Anything that cannot be built is reported with a reason rather than guessed at, as everywhere else in
-crossfeed. Nothing pulled here is written into the repository.
+grownet. Nothing pulled here is written into the repository.
 """
 from __future__ import annotations
 
 from .growth import SPIKE_FACTOR, GrowthCurve, Replicate, spike
+
+AVERAGE = "average of the replicates, not an independent replicate"
+# how a replicate or series that mGrowthDB failed to deliver is reported: a gap in the data read, not a
+# property of the data (audit step 7)
+UNREAD = "could not read"
+
+
+def unread(skipped: list) -> list:
+    """The skipped entries that are failed reads from mGrowthDB, not data that was read and refused."""
+    return [(label, reason) for label, reason in skipped if reason.startswith(UNREAD)]
+
+
+def condensed(skipped: list) -> list:
+    """The skip list for reading: the average bioreplicates, left out as mGrowthDB marks them, become one
+    line per experiment ("3 average replicate(s) left out"), in place of the first; the rest is unchanged
+    (Karoline, 2026-09-28: a quarter of all of mGrowthDB's skip list was these lines)."""
+    averages = {}
+    for label, reason in skipped:
+        if reason == AVERAGE:
+            averages.setdefault(label.split(": ")[0], []).append(label)
+    out, done = [], set()
+    for label, reason in skipped:
+        if reason != AVERAGE:
+            out.append((label, reason))
+            continue
+        experiment = label.split(": ")[0]
+        if experiment not in done:
+            done.add(experiment)
+            out.append((experiment, f"{len(averages[experiment])} average replicate(s) left out ({AVERAGE})"))
+    return out
 
 MIN_POINTS = 2
 
@@ -96,11 +126,11 @@ def replicates_for_experiment(client, experiment: dict, spike_factor: float = SP
         try:
             bioreplicate = client.get_bioreplicate(stub["id"])
         except Exception as e:  # noqa: BLE001 - one unreadable bioreplicate must not lose the others
-            skipped.append((f"{label}: {stub.get('name', stub.get('id'))}", f"could not read it: {e}"))
+            skipped.append((f"{label}: {stub.get('name', stub.get('id'))}", f"{UNREAD} it: {e}"))
             continue
         name = bioreplicate.get("name") or str(bioreplicate.get("id"))
         if bioreplicate.get("isAverage"):
-            skipped.append((f"{label}: {name}", "average of the replicates, not an independent replicate"))
+            skipped.append((f"{label}: {name}", AVERAGE))
             continue
         time_unit = bioreplicate.get("measurementTimeUnits") or ""
         strain_contexts = list(_strain_contexts(bioreplicate))
@@ -119,7 +149,7 @@ def replicates_for_experiment(client, experiment: dict, spike_factor: float = SP
             try:
                 points = client.get_measurement_series(context["id"])
             except Exception as e:  # noqa: BLE001 - report the context, keep the others
-                skipped.append((f"{label}: {name}, {species}", f"could not read its series: {e}"))
+                skipped.append((f"{label}: {name}, {species}", f"{UNREAD} its series: {e}"))
                 continue
             if len(points) < MIN_POINTS:
                 skipped.append((f"{label}: {name}, {species}",

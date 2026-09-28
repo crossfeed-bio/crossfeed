@@ -3,8 +3,8 @@ import math
 
 import pytest
 
-from crossfeed import interaction
-from crossfeed.derive import (
+from grownet import interaction
+from grownet.derive import (
     _gs,
     absence,
     adjust_significance,
@@ -14,7 +14,7 @@ from crossfeed.derive import (
     interactions_from_replicates,
     output_meta,
 )
-from crossfeed.mgrowthdb import records_to_network
+from grownet.mgrowthdb import records_to_network
 
 
 @pytest.fixture(autouse=True)
@@ -479,8 +479,10 @@ def test_three_replicates_carry_no_caution_and_a_caution_does_not_hide_an_edge()
     assert {e["status"] for e in edges} == {"present", "absent"}   # cautioned edges keep their status
 
 
-def test_a_replicate_with_a_late_starting_curve_is_left_out_and_reported():
-    # SMGDB00000008 has two such curves: a member's first measurement (0 h) is missing
+def test_a_replicate_with_a_late_starting_curve_is_left_out_of_that_species_arcs_only():
+    # SMGDB00000008 has two such curves: a member's first measurement (0 h) is missing. Karoline
+    # (2026-09-28, "Only for its own arcs"): the replicate is left out of the late member's arcs, and still
+    # serves every other member, which once lost it too
     client, study, exps = _dropout_study()
 
     def late_series(context_id, original=client.get_measurement_series):
@@ -492,6 +494,8 @@ def test_a_replicate_with_a_late_starting_curve_is_left_out_and_reported():
     assert (arcs[(C, A)]["n_with"], arcs[(C, A)]["n_without"]) == (2, 1)   # without C keeps replicate 0 only
     assert arcs[(C, A)]["quality"] == ["single_replicate"]
     assert (arcs[(B, A)]["n_with"], arcs[(B, A)]["n_without"]) == (2, 2)   # the other drop-out is untouched
+    assert (arcs[(C, B)]["n_with"], arcs[(C, B)]["n_without"]) == (2, 2)   # B's curves there start on time
+    assert "single_replicate" not in arcs[(C, B)]["quality"]
     assert any(label == "community without " + C + " replicate without C_1" and "starting after" in reason
                for label, reason in skipped)
 
@@ -516,7 +520,9 @@ def test_an_obligate_edge_counts_its_replicates_without_growth_and_is_shown():
     records, _ = interactions_from_replicates(client, study, exps)
     ab = next(r for r in records if r["source_name"] == A and r["target_name"] == B)
     assert ab["outcome"] == "obligate" and (ab["n_with"], ab["n_without"]) == (2, 2)
-    assert ab["quality"] == [] and ab["cautions"] == ["two_replicates"]
+    # B's monoculture is zero from its first point, so the arc also says that no growth cannot be told from
+    # no inoculum (Karoline, 2026-09-28)
+    assert ab["quality"] == [] and ab["cautions"] == ["two_replicates", "zero_at_start"]
     edges, meta = output_meta(records)
     assert meta["hidden"]["low_quality"] == 0
     assert next(e for e in edges if e["source_name"] == A)["status"] == "present"
@@ -524,7 +530,7 @@ def test_an_obligate_edge_counts_its_replicates_without_growth_and_is_shown():
 
 # ---- strain identity by taxon id (#23) -----------------------------------------------------------
 
-from crossfeed.derive import strain_identities  # noqa: E402
+from grownet.derive import strain_identities  # noqa: E402
 
 A2 = "Faecalibacterium prausnitzii L2-6"
 
@@ -726,6 +732,27 @@ def test_the_monoculture_set_with_the_co_cultures_qualifier_is_used():
     assert not any("conditions_unverified" in r["cautions"] for r in records)
 
 
+
+def test_the_monoculture_set_worded_like_the_co_culture_is_used():
+    # SMGDB00000014's shape (Karoline, 2026-09-28: "Match identical wording"): two series of A on 0.1%
+    # linoleic acid, a dose response ("Growth of A on ...") and the controls of the co-culture ("A
+    # monoculture grown on ..."). Neither names the co-culture nor carries a qualifier, but only the second
+    # words the growth as the co-culture does once the organisms and the kind of culture are taken out.
+    # The co-culture takes it: A's areas 10 and 12 there against 20 and 24 together, so B -> A is +1.0.
+    exps = [_described("A_LA_0.1", [A], "Growth of A on minimal medium with 0.1% linoleic acid"),
+            _described("A_LA_0.1_mono", [A], "A monoculture grown on a minimal medium with 0.1% linoleic acid"),
+            _described("B_LA_0.1_mono", [B], "B monoculture grown on a minimal medium with 0.1% linoleic acid"),
+            _described("A_B_LA_0.1_co", [A, B], "A+B co-culture grown on a minimal medium with 0.1% linoleic acid")]
+    curves = {("A_LA_0.1", A): [(3, 3), (3, 3)], ("A_LA_0.1_mono", A): [(1, 1), (1, 1.4)],
+              ("B_LA_0.1_mono", B): [(1, 1), (1, 1.4)],
+              ("A_B_LA_0.1_co", A): [(1, 3), (1, 3.8)], ("A_B_LA_0.1_co", B): [(1, 1), (1, 1.4)]}
+    records, skipped = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S14"}, exps)
+    arc = next(r for r in records if (r["source_name"], r["target_name"]) == (B, A))
+    assert arc["strength"] == pytest.approx(1.0) and "E_A_LA_0.1_mono" in arc["experiments"]
+    assert "E_A_LA_0.1" not in arc["experiments"] and "conditions_unverified" not in arc["cautions"]
+    assert not any("none is guessed" in r for _, r in skipped)
+
+
 def test_a_study_of_monocultures_only_says_so():
     # SMGDB00000015's shape: nothing but monocultures, so nothing to compare, stated once up front
     exps = [_described("A", [A], "A alone"), _described("B", [B], "B alone")]
@@ -736,7 +763,7 @@ def test_a_study_of_monocultures_only_says_so():
 
 # ---- merging parallel arcs (register item 14, Karoline 2026-09-27) --------------------------------
 
-from crossfeed.derive import merge_parallel  # noqa: E402
+from grownet.derive import merge_parallel  # noqa: E402
 
 
 def _arc(strength, study="S1", effect=None, status="present", outcome="quantified", evidence="biculture",
@@ -792,9 +819,99 @@ def test_merging_off_leaves_every_arc_as_derived():
 
 
 def test_a_merged_arc_makes_a_valid_network_citing_every_study():
-    from crossfeed.export import to_graphml
+    from grownet.export import to_graphml
     edges, _ = merge_parallel([_arc(1.0, "S1"), _arc(3.0, "S2")])
     net = records_to_network(edges)
     assert net.validate() == [] and net.edges[0].study_ids == ("S1", "S2") and set(net.studies) == {"S1", "S2"}
     assert net.edges[0].merged_arcs == 2 and net.edges[0].strength_range == (1.0, 3.0)
     assert 'key="e_merged_arcs">2<' in to_graphml(net) and 'key="e_strength_range">1 3<' in to_graphml(net)
+
+
+# ---- merging to genus (Karoline 2026-09-28) ------------------------------------------------------
+
+from grownet.derive import merge_genus  # noqa: E402
+
+BH, BO, FP = "Blautia hydrogenotrophica DSM 10507", "Blautia obeum ATCC 29174", "Faecalibacterium prausnitzii A2-165"
+
+
+def _garc(strength, source_name, target_name, study="S1", status="present", source=None, target=None):
+    arc = _arc(strength, study, status=status, source=source or f"id:{source_name}",
+               target=target or f"id:{target_name}")
+    return {**arc, "source_name": source_name, "target_name": target_name}
+
+
+def test_arcs_between_two_genera_merge_by_sign_and_count_their_species_pairs():
+    arcs = [_garc(1.0, BH, FP), _garc(3.0, BO, FP), _garc(-2.0, BO, FP, study="S2")]
+    edges, meta = merge_genus(arcs, merge=True)
+    by_effect = {e["effect"]: e for e in edges}
+    assert set(by_effect) == {"facilitation", "inhibition"} and meta["genus_arcs"] == 2   # stratified by sign
+    up = by_effect["facilitation"]
+    assert (up["source"], up["target"], up["strength"], up["strength_range"]) == ("Blautia", "Faecalibacterium",
+                                                                                   2.0, [1.0, 3.0])
+    assert up["supporting_pairs"] == 2 and up["merged_pairs"] == [
+        "Blautia hydrogenotrophica -> Faecalibacterium prausnitzii", "Blautia obeum -> Faecalibacterium prausnitzii"]
+    down = by_effect["inhibition"]
+    assert (down["strength"], down["supporting_pairs"], down["sd"]) == (-2.0, 1, 0.1)   # one arc keeps its sd
+
+
+def test_the_pairs_are_strains_when_only_strains_were_entered():
+    two_strains = [_garc(1.0, "Blautia obeum ATCC 29174", FP), _garc(2.0, "Blautia obeum A2-235", FP)]
+    species, _ = merge_genus(two_strains, merge=True, level="species")
+    strains, _ = merge_genus(two_strains, merge=True, level="strain")
+    assert species[0]["supporting_pairs"] == 1 and strains[0]["supporting_pairs"] == 2
+
+
+def test_interactions_within_a_genus_stay_as_an_arc_to_itself_and_absent_arcs_as_one():
+    edges, _ = merge_genus([_garc(1.0, BH, BO), _garc(0.05, BH, FP, status="absent"),
+                            _garc(-0.02, BO, FP, status="absent")], merge=True)
+    loop = [e for e in edges if e["source"] == e["target"]]
+    assert [(e["source"], e["effect"]) for e in loop] == [("Blautia", "facilitation")]
+    absent = [e for e in edges if e["status"] == "absent"]
+    assert len(absent) == 1 and absent[0]["supporting_pairs"] == 2 and absent[0]["target"] == "Faecalibacterium"
+
+
+def test_with_arcs_merged_across_studies_a_pair_counts_once():
+    # BH -> FP measured in three studies (1, 1, 1) and BO -> FP once (5): the genus median is over the two
+    # pairs, 3.0, not over four arcs, which would give 1.0
+    arcs = [_garc(1.0, BH, FP, study=s) for s in ("S1", "S2", "S3")] + [_garc(5.0, BO, FP, study="S4")]
+    edges, meta = output_meta(arcs, include_low_quality=True, absence_threshold=0.0, merge_arcs=True,
+                              merge_genera=True)
+    assert len(edges) == 1 and edges[0]["strength"] == 3.0 and edges[0]["supporting_pairs"] == 2
+    assert meta["genus"]["merge_genus"] is True and meta["genus"]["from_arcs"] == 2
+    alone, _ = output_meta([dict(a) for a in arcs], include_low_quality=True, absence_threshold=0.0,
+                           merge_genera=True)
+    assert alone[0]["strength"] == 1.0                                # without it, each arc counts
+
+
+def test_merging_to_genus_is_off_by_default_and_gives_a_valid_network_with_genus_nodes():
+    arcs = [_garc(1.0, BH, FP), _garc(3.0, BO, FP)]
+    assert merge_genus(arcs)[0] is arcs
+    from grownet.export import to_graphml
+    net = records_to_network(merge_genus(arcs, merge=True)[0])
+    assert net.validate() == [] and set(net.nodes) == {"Blautia", "Faecalibacterium"}
+    assert net.nodes["Blautia"].identity == "genus" and net.nodes["Blautia"].taxon_id == ""
+    assert net.edges[0].supporting_pairs == 2 and 'key="e_supporting_pairs">2<' in to_graphml(net)
+
+
+def test_the_genus_rule_skips_qualifiers_and_keeps_ncbi_brackets():
+    # Craig's agent on #85: "unclassified" and "uncultured" collapsed into a genus called Unclassified;
+    # Karoline (2026-09-28): such an organism joins its genus, and "[Clostridium]" is not Clostridium
+    from grownet.model import genus_name
+    cases = {"Candidatus Arthromitus sp": "Arthromitus", "unclassified Bacteroides": "Bacteroides",
+             "uncultured Candidatus Saccharibacteria": "Saccharibacteria", "Blautia sp. SC05B48": "Blautia",
+             "[Clostridium] scindens VPI 13733": "[Clostridium]", "clostridium butyricum": "Clostridium",
+             "": "unknown", "unclassified": "unknown"}
+    assert {name: genus_name(name) for name in cases} == cases
+    edges, _ = merge_genus([_garc(1.0, "unclassified Bacteroides", FP), _garc(2.0, "unclassified Blautia", FP),
+                            _garc(3.0, "[Clostridium] scindens VPI 13733", FP)], merge=True)
+    assert sorted(e["source"] for e in edges) == ["Bacteroides", "Blautia", "[Clostridium]"]
+
+
+def test_a_strain_named_differently_by_two_studies_counts_as_one_genus_pair():
+    # code review of 2026-09-28: taxon 411483 is F. prausnitzii A2-165 in one study and F. duncaniae A2-165
+    # in another; its arcs to Blautia counted as two species pairs. Both carry one node id, so one pair.
+    old = _garc(1.0, "Faecalibacterium prausnitzii A2-165", BH, study="S1", source="ncbi:411483")
+    new = _garc(2.0, "Faecalibacterium duncaniae A2-165", BH, study="S2", source="ncbi:411483")
+    edges, _ = merge_genus([old, new], merge=True)
+    assert edges[0]["supporting_pairs"] == 1
+    assert edges[0]["merged_pairs"] == ["Faecalibacterium prausnitzii -> Blautia hydrogenotrophica"]

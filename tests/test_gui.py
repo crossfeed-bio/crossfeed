@@ -9,9 +9,9 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from crossfeed import gui, interaction
-from crossfeed.gui import DEFAULTS, parse_settings, render_form, render_result, run_query, serve
-from crossfeed.mgrowthdb import MGrowthDBError
+from grownet import __version__, gui, interaction
+from grownet.gui import DEFAULTS, parse_settings, render_form, render_result, run_query, serve
+from grownet.mgrowthdb import MGrowthDBError
 
 
 @pytest.fixture(autouse=True)
@@ -56,12 +56,12 @@ class FakeClient:
 
     def study_experiments(self, study_id):
         if study_id != self.study_id:
-            raise MGrowthDBError(f"mGrowthDB returned HTTP 404 for {study_id}")
+            raise MGrowthDBError(f"mGrowthDB returned HTTP 404 for {study_id}", status=404)
         return EXPERIMENTS
 
     def get_study(self, study_id):
         if study_id != self.study_id:
-            raise MGrowthDBError(f"mGrowthDB returned HTTP 404 for {study_id}")
+            raise MGrowthDBError(f"mGrowthDB returned HTTP 404 for {study_id}", status=404)
         return {"id": study_id, "name": "fake study", "url": "http://example/study",
                 "uploadedAt": "2025-06-26T13:03:03+00:00", "publishedAt": "2025-06-29T10:25:52+00:00",
                 "experiments": [{"id": e["id"]} for e in EXPERIMENTS]}
@@ -162,12 +162,13 @@ def test_form_hides_every_setting_behind_one_button():
     ({"metric": ["growth_rate"], "rate_method": ["baranyi"], "rate_window": ["7"], "spike_factor": ["50"],
       "studies": [" S1 "], "only_entered": ["1"],
       "include_low_quality": ["1"], "include_dropout": ["1"], "no_growth_alpha": ["0.01"],
-      "no_growth_factor": ["4"], "exclude_studies": [" SMGDB00000008 "], "merge_arcs": ["1"], "min_studies": ["2"]},
+      "no_growth_factor": ["4"], "exclude_studies": [" SMGDB00000008 "], "merge_arcs": ["1"], "min_studies": ["2"],
+      "merge_genera": ["1"]},
      {"metric": "growth_rate", "rate_method": "baranyi", "rate_window": 7, "spike_factor": 50.0, "studies": "S1",
       "only_entered": True, "include_low_quality": True,
       "correction": "bh", "absence_threshold": 1.0, "include_dropout": True, "include_non_batch": False,
       "no_growth_alpha": 0.01, "no_growth_factor": 4.0, "exclude_studies": "SMGDB00000008", "merge_arcs": True,
-      "min_studies": 2}),
+      "min_studies": 2, "merge_genera": True}),
     ({"metric": ["nonsense"], "spike_factor": ["not a number"]},
      {**DEFAULTS, "only_entered": False, "include_dropout": False}),
 ])
@@ -202,7 +203,7 @@ def server():
     """The real handler on a free port, with the fake client; yields (url, token)."""
     import http.server
 
-    import crossfeed.gui as gui
+    import grownet.gui as gui
 
     holder = {}
     original = gui._Server
@@ -297,6 +298,19 @@ def test_the_example_button_fills_the_box_with_species_that_work(server):
         assert "interaction(s)" in r.read().decode("utf-8")
 
 
+def test_the_about_button_names_the_builders_as_agreed_and_links_the_repository(server):
+    base, token = server
+    assert f'href="/about?token={token}"' in _get(f"{base}/help?token={token}")    # on every page
+    page = _get(f"{base}/about?token={token}")
+    # Craig's agreed wording on #80, word for word
+    assert ("grownet was built by Karoline Faust (KU Leuven) and Craig Heilmann (Syntropa), working through "
+            "their AI coding agents (Claude).") in page
+    assert '<a href="https://github.com/crossfeed-bio/crossfeed">' in page and f"Version {__version__}" in page
+    with pytest.raises(urllib.error.HTTPError) as bad:
+        _get(f"{base}/about?token=wrong")
+    assert bad.value.code == 403
+
+
 def test_the_help_button_opens_a_help_page_behind_the_token(server):
     base, token = server
     assert f'href="/help?token={token}"' in _get(f"{base}/?token={token}")
@@ -333,7 +347,7 @@ def test_the_send_to_cytoscape_button_uses_the_network_already_computed(server, 
 
     def fake_send(net, **kwargs):
         sent["edges"] = len(net.edges)
-        return {"suid": 7, "style": "crossfeed", "url": "http://127.0.0.1:1234/v1/networks/7"}
+        return {"suid": 7, "style": "grownet", "url": "http://127.0.0.1:1234/v1/networks/7"}
 
     monkeypatch.setattr(gui, "send", fake_send)
     with urllib.request.urlopen(f"{base}/cytoscape?token={token}", data=b"", timeout=10) as r:
@@ -415,7 +429,7 @@ def test_an_empty_result_caused_by_a_setting_names_the_setting():
 def test_a_strain_is_named_by_its_current_name():
     # taxon 853 is "Faecalibacterium prausnitzii A2-165" in the fake study; a later study calls it duncaniae,
     # so the node and the resolved list use that name, while the old name still finds it (#24)
-    from crossfeed.taxonomy import SpeciesIndex
+    from grownet.taxonomy import SpeciesIndex
     index = SpeciesIndex({"faecalibacterium prausnitzii": {853: A}, "blautia hydrogenotrophica": {53443: B}},
                          current={853: "Faecalibacterium duncaniae A2-165"})
     r = run_query(FakeClient(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"], {}, index=index)
@@ -423,3 +437,103 @@ def test_a_strain_is_named_by_its_current_name():
     assert (node.name, node.species) == ("Faecalibacterium duncaniae A2-165", "faecalibacterium duncaniae")
     assert r["resolved"][0] == ("Faecalibacterium prausnitzii", {853: "Faecalibacterium duncaniae A2-165"})
     assert len(r["network"].edges) == 2
+
+
+
+def test_a_node_keyed_by_name_keeps_its_own_name_when_its_taxon_id_is_shared():
+    # Audit 2026-09-28: SMGDB00000008 gives Lachnoclostridium clostridioforme 2_1_49FAA and L. symbiosum
+    # WAL-14673 the same taxon id, 1506553. The derivation keys both nodes by name; renaming by the id's
+    # latest name turned the symbiosum node into a second "clostridioforme", name and species key alike.
+    from grownet.gui import _current_names
+    from grownet.model import InteractionNetwork, Node
+    net = InteractionNetwork()
+    net.add_node(Node("lachnoclostridium symbiosum", name="Lachnoclostridium symbiosum WAL-14673",
+                      taxon_id="1506553", species="lachnoclostridium symbiosum", identity="name"))
+    net.add_node(Node("ncbi:853", name=A, taxon_id="853", species="faecalibacterium prausnitzii", identity="ncbi"))
+    _current_names(net, {1506553: "Lachnoclostridium clostridioforme 2_1_49FAA",
+                         853: "Faecalibacterium duncaniae A2-165"})
+    kept = net.nodes["lachnoclostridium symbiosum"]
+    assert (kept.name, kept.species) == ("Lachnoclostridium symbiosum WAL-14673", "lachnoclostridium symbiosum")
+    assert net.nodes["ncbi:853"].name == "Faecalibacterium duncaniae A2-165"      # a taxon-keyed node still is
+
+# ---- All, a genus entered, and the level genus arcs count at (Karoline 2026-09-28) ------------------
+
+def test_all_ignores_the_box_and_derives_every_study_with_every_partner():
+    r = run_query(FakeClient(), ["whatever is typed"], {"only_entered": True}, all_studies=True)
+    assert r["all"] and r["studies"] == ["SMGDB00000001"] and r["resolved"] == [] and r["unresolved"] == []
+    assert r["network"].meta["query"] == "all" and r["network"].edges        # the study's arcs, every partner
+    page = render_result("tok", r)
+    assert "<h2>All of mGrowthDB</h2>" in page and "1 studies" in page
+
+
+def test_all_still_leaves_out_the_excluded_studies_and_says_so():
+    r = run_query(FakeClient(), [], {"exclude_studies": "SMGDB00000001"}, all_studies=True)
+    assert r["studies"] == [] and "Exclude these studies" in render_result("tok", r)
+
+
+def test_the_all_button_sits_next_to_example_with_its_explainer(server):
+    base, token = server
+    form = _get(f"{base}/?token={token}")
+    assert '<button type="submit" name="example" value="1">Example</button>\n<button type="submit" name="all"' in form
+    assert "All ignores the box and derives every study in mGrowthDB" in form
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=b"all=1&species=", timeout=10) as r:
+        page = r.read().decode("utf-8")
+    assert "All of mGrowthDB" in page or "Searching" in page             # a quick fake search, or its progress
+
+
+def test_a_genus_entered_brings_in_all_its_species_and_is_shown_as_a_genus():
+    r = _query(entries=("Faecalibacterium", "Blautia"))
+    assert r["genera"] == {"Faecalibacterium": ["Faecalibacterium prausnitzii"],
+                           "Blautia": ["Blautia hydrogenotrophica"]}
+    assert r["taxon_ids"] == [853, 53443] and r["network"].edges             # both genera entered: the arc stays
+    assert "Blautia (genus): Blautia hydrogenotrophica" in render_result("tok", r)
+
+
+def test_genus_arcs_count_strain_pairs_only_when_every_entry_is_a_taxon_id():
+    assert gui.support_level(["853", " txid53443 "]) == "strain"
+    assert gui.support_level(["853", "Blautia hydrogenotrophica"]) == "species"
+    assert gui.support_level(["Faecalibacterium prausnitzii A2-165"]) == "species"   # a name: the whole species
+    assert gui.support_level([]) == "species"                                        # All
+
+
+def test_merge_to_genus_from_the_page_gives_genus_nodes():
+    r = _query(merge_genera=True)
+    assert set(r["network"].nodes) == {"Faecalibacterium", "Blautia"}
+    assert all(e.supporting_pairs == 1 for e in r["network"].edges)
+
+
+def test_average_replicates_are_one_line_per_experiment_in_what_a_reader_sees():
+    # Karoline (2026-09-28): 555 of all of mGrowthDB's 1972 skip lines were average replicates, one each
+    from grownet.adapter import AVERAGE, condensed
+    skipped = [("E1: Average(E1)", AVERAGE), ("E1: r1", "a spike"), ("E1: Average 2", AVERAGE), ("E2: avg", AVERAGE)]
+    assert condensed(skipped) == [("E1", f"2 average replicate(s) left out ({AVERAGE})"), ("E1: r1", "a spike"),
+                                  ("E2", f"1 average replicate(s) left out ({AVERAGE})")]
+
+
+def test_only_the_latest_searches_are_kept_and_a_running_one_never_goes():
+    # code review of 2026-09-28: every search stayed in memory for the life of the page
+    jobs = {f"j{i}": {"status": "done"} for i in range(25)}
+    jobs["j0"]["status"] = "running"
+    gui.prune_jobs(jobs, keep=20)
+    assert "j0" in jobs and "j1" not in jobs and "j24" in jobs and len(jobs) == 21
+def test_an_unreachable_mgrowthdb_is_reported_not_read_as_an_empty_database():
+    # audit step 7 (2026-09-28): with nothing listening, the species list came back empty and the page
+    # said "no species or strain of this name in mGrowthDB"; a missing study (404) still ends the crawl
+    from grownet.mgrowthdb import MGrowthDBClient
+    from grownet.taxonomy import species_index
+    down = MGrowthDBClient(base_url="http://127.0.0.1:9/api/v1", retries=1, timeout=2)
+    with pytest.raises(MGrowthDBError, match="mGrowthDB could not be read"):
+        species_index(down)
+    assert species_index(FakeClient()).studies == ["SMGDB00000001"]     # 404s after it end the crawl
+
+
+def test_a_growth_curve_that_fails_to_download_makes_the_result_incomplete():
+    # audit step 7: a series that mGrowthDB fails to deliver after the retries was only one line among the
+    # pairs the data did not support; the search now says at the top that its result is incomplete
+    class Flaky(FakeClient):
+        def get_measurement_series(self, context_id):
+            if context_id.startswith("co/0/"):
+                raise MGrowthDBError("mGrowthDB returned HTTP 500 for a series (server error)", status=500)
+            return super().get_measurement_series(context_id)
+    r = run_query(Flaky(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"], {})
+    assert any("could not be read from mGrowthDB" in e and "incomplete" in e for e in r["errors"])

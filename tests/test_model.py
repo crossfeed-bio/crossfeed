@@ -1,9 +1,9 @@
 import json
 import os
 
-from crossfeed.attribution import edge_citations, render_attribution, studies_with_edges
-from crossfeed.mgrowthdb import effect_from_logratio, records_to_network
-from crossfeed.model import Edge, InteractionNetwork, Node
+from grownet.attribution import edge_citations, render_attribution, studies_with_edges
+from grownet.mgrowthdb import effect_from_logratio, records_to_network
+from grownet.model import Edge, InteractionNetwork, Node
 
 FIX = os.path.join(os.path.dirname(__file__), "fixtures", "example_interactions.json")
 

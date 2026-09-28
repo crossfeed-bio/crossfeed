@@ -3,13 +3,13 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "crossfeed"
+name = "grownet"
 version = "0.0.2"
 description = "Build experimentally grounded microbial interaction networks from mGrowthDB data, in a neutral format that Syntropa, microbetag, and other tools can consume."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "NOTICE"]
 authors = [
     { name = "Syntropa" },
     { name = "KU Leuven, Lab of Molecular Bacteriology" },
@@ -25,7 +25,7 @@ Homepage = "https://github.com/crossfeed-bio/crossfeed"
 Repository = "https://github.com/crossfeed-bio/crossfeed"
 
 [project.scripts]
-crossfeed = "crossfeed.__main__:main"
+grownet = "grownet.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

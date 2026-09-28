@@ -1,7 +1,7 @@
 # Instructions for coding agents
 
 This file is the single source of project instructions for any coding agent (Claude Code, Codex, Copilot,
-and others) working on crossfeed. Humans are welcome to read it too. `CLAUDE.md` only imports this file,
+and others) working on grownet. Humans are welcome to read it too. `CLAUDE.md` only imports this file,
 so edit instructions here and nowhere else.
 
 ## Start of every session
@@ -100,10 +100,10 @@ derivation method). Labels are created by a maintainer; if one is missing, say s
 - **The derivation method is a scientific decision** owned by the collaboration. Do not change
   `BaselineDeriver` or implement a new method without an issue where a human has settled the choice. The
   menu of choices is in [docs/METHOD_NOTES.md](docs/METHOD_NOTES.md).
-- **The neutral format is a contract.** If `src/crossfeed/model.py` changes, regenerate the schema
-  (`python -m crossfeed schema --out schema/interaction_network.schema.json`) and keep it backward
+- **The neutral format is a contract.** If `src/grownet/model.py` changes, regenerate the schema
+  (`python -m grownet schema --out schema/interaction_network.schema.json`) and keep it backward
   compatible where possible.
-- **No runtime dependencies.** Code under `src/` imports only the standard library and crossfeed.
+- **No runtime dependencies.** Code under `src/` imports only the standard library and grownet.
 - **Nothing public bearing a collaborator's name or affiliation** without their sign-off.
 - **Security problems are reported privately** (see [SECURITY.md](SECURITY.md)), never in a public issue,
   pull request, or the notes file.

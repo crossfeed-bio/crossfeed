@@ -1,12 +1,15 @@
-# crossfeed
+# grownet: Growth-curve derived interaction networks
 
 [![ci](https://github.com/crossfeed-bio/crossfeed/actions/workflows/ci.yml/badge.svg)](https://github.com/crossfeed-bio/crossfeed/actions/workflows/ci.yml)
 [![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![python: 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
-**crossfeed** turns experimentally grounded microbial co-growth data from
+**grownet** turns experimentally grounded microbial co-growth data from
 [mGrowthDB](https://mgrowthdb.gbiomed.kuleuven.be/) into directed interaction networks, in a neutral and
 openly citable format that downstream tools (such as Syntropa and microbetag) can consume.
+
+grownet was called crossfeed until 2026-09-27 (#71). The package, the module and the command are
+`grownet`; the repository keeps the old name for now, so its address is still `crossfeed-bio/crossfeed`.
 
 It is a thin client: it pulls from mGrowthDB and emits a network. Nothing to host, nothing to pay for on a
 shared server, no runtime dependencies (the client is pure Python standard library). A well-run
@@ -33,57 +36,74 @@ own derivation method. Nothing here needs another document to follow.
 
 ## Install
 
-### To use it (macOS and Linux)
+Three ways, from the least to the most technical. All give the same program.
+
+### Windows, without installing anything
+
+From the first release on, each [release](https://github.com/crossfeed-bio/crossfeed/releases) carries
+`grownet-<version>-windows.zip`: the whole program in one folder, Python included. Unzip it (right-click,
+Extract All), open the folder and double-click `grownet.exe`. A black window opens and shows an address, and
+your browser opens the page there; closing the black window stops the program.
+
+Windows warns about any new program it has not seen many people run, so the first time it says "Windows
+protected your PC": click "More info", then "Run anyway". That is Windows being cautious about an unfamiliar
+program, not a finding about this one, which is built in public by this repository's automated build. On
+Windows 11 with Smart App Control on, Windows may block it instead; then use one of the two routes below.
+The zip's `README.txt` says the same, for whoever unzips it.
+
+### With uv (macOS, Linux and Windows)
 
 The quickest route is [uv](https://docs.astral.sh/uv/), which fetches a suitable Python by itself. The
-Python that ships with macOS (3.9) is too old for crossfeed, and uv avoids that. Install uv once:
+Python that ships with macOS (3.9) is too old for grownet, and uv avoids that. Install uv once:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Then open the local page (the first run installs crossfeed; later runs start at once):
+(On Windows, use the PowerShell command on [uv's site](https://docs.astral.sh/uv/getting-started/installation/).)
+Then open the local page (the first run installs it; later runs start at once):
 
 ```bash
-uvx --from git+https://github.com/crossfeed-bio/crossfeed crossfeed gui
+uvx --from git+https://github.com/crossfeed-bio/crossfeed grownet gui
 ```
 
-Any `crossfeed` command works the same way, for example
-`uvx --from git+https://github.com/crossfeed-bio/crossfeed crossfeed derive SMGDB00000004 --live`.
+Any `grownet` command works the same way, for example
+`uvx --from git+https://github.com/crossfeed-bio/crossfeed grownet derive SMGDB00000004 --live`.
+This always runs the latest version in the repository.
 
-With Python 3.10 or newer already installed (Homebrew, conda, python.org), plain pip works too:
+### From PyPI
+
+From the first release on (0.1.0), the program is on
+[PyPI](https://pypi.org), so it installs like any other Python tool, as a command of its own:
 
 ```bash
-python3 -m pip install --user "git+https://github.com/crossfeed-bio/crossfeed"
+uv tool install grownet        # or: pipx install grownet
+grownet gui
 ```
 
-Windows users: a double-click build is planned (#26). Until then, install uv with the PowerShell command
-on [its site](https://docs.astral.sh/uv/getting-started/installation/); the `uvx` command is the same.
+`uv tool upgrade grownet` (or `pipx upgrade grownet`) moves to a new release. With Python 3.10 or newer
+already installed and neither uv nor pipx, `python3 -m pip install --user grownet` works too (on Windows,
+`py -m pip install --user grownet`). Until that release, the same works from the repository:
+`python3 -m pip install --user "git+https://github.com/crossfeed-bio/crossfeed"`.
 
 ### To develop it
 
-Python 3.10 or newer.
-
-```
-git clone https://github.com/crossfeed-bio/crossfeed
-cd crossfeed
-python -m venv .venv
-. .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-```
+From a clone, with Python 3.10 or newer: the setup and the checks are in
+[CONTRIBUTING.md](CONTRIBUTING.md#development-setup), and how a release is made in
+[RELEASING.md](RELEASING.md).
 
 ## Quickstart
 
 Run the first slice offline, from the bundled synthetic fixture (no network), to see a network:
 
 ```
-python -m crossfeed derive SMGDB00000004 --fixture tests/fixtures/example_interactions.json
+python -m grownet derive SMGDB00000004 --fixture tests/fixtures/example_interactions.json
 ```
 
 Run it live against mGrowthDB:
 
 ```
-python -m crossfeed derive SMGDB00000004 --live
+python -m grownet derive SMGDB00000004 --live
 ```
 
 On the published study SMGDB00000004 the provisional baseline recovers Blautia hydrogenotrophica
@@ -91,43 +111,47 @@ facilitating Faecalibacterium prausnitzii, consistent with hydrogen and formate 
 result to a file and check it against the format:
 
 ```
-python -m crossfeed derive SMGDB00000004 --live --out network.json
-python -m crossfeed validate network.json
+python -m grownet derive SMGDB00000004 --live --out network.json
+python -m grownet validate network.json
 ```
 
 ## What it does
 
-Given a set of query organisms, crossfeed builds an interaction network on the fly from mGrowthDB
+Given a set of query organisms, grownet builds an interaction network on the fly from mGrowthDB
 co-growth measurements. Each edge is a directed, condition-specific interaction (facilitation, inhibition,
 or neutral) with its strength, its significance, and the experimental condition it holds in. Every edge
 carries its provenance: the study or studies it was derived from, so attribution resolves at the edge
 level.
 
-The pipeline has three seams: a client that pulls raw growth from mGrowthDB (`crossfeed.mgrowthdb`), a
-derivation step that turns growth into interaction records (`crossfeed.derive`, the part you will
-replace), and the neutral network model the records map into (`crossfeed.model`). A first slice targets
+The pipeline has three seams: a client that pulls raw growth from mGrowthDB (`grownet.mgrowthdb`), a
+derivation step that turns growth into interaction records (`grownet.derive`, the part you will
+replace), and the neutral network model the records map into (`grownet.model`). A first slice targets
 the Faecalibacterium prausnitzii and Blautia hydrogenotrophica pair, shown feeding Syntropa, as the
 concrete demonstration of the seam.
 
 ## The command line
 
 ```
-python -m crossfeed derive STUDY [--live | --fixture FILE] [--deriver MODULE:CLASS] [--format json|graphml] [--out FILE]
-python -m crossfeed derive --live --species NAME [NAME ...] [--all-partners] [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
-python -m crossfeed validate FILE
-python -m crossfeed schema [--out FILE]
+python -m grownet derive STUDY [--live | --fixture FILE] [--deriver MODULE:CLASS] [--format json|graphml] [--out FILE]
+python -m grownet derive --live --species NAME [NAME ...] [--all-partners] [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
+python -m grownet derive --live --all [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
+python -m grownet validate FILE
+python -m grownet schema [--out FILE]
 ```
 
 - `derive STUDY --live` fetches the study from the mGrowthDB API and derives interactions.
 - `derive --live --species NAME ...` does what the local page does: resolves species or strain names (or
   NCBI taxon ids) through mGrowthDB, derives every study holding them, and keeps the interactions between
-  the species given (`--all-partners` keeps their other partners too). The page's Example, from the
-  command line: `crossfeed derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"`.
+  the species given (`--all-partners` keeps their other partners too). A genus alone ("Blautia") stands
+  for every species of it that mGrowthDB holds. The page's Example, from the command line:
+  `grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"`.
+- `derive --live --all` does what the page's All button does: every study in mGrowthDB, with every
+  partner (a study argument limits it to those studies).
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the baseline (see below).
 - The command line does everything the local page does: every advanced setting has its option, and
   the page's three outputs are `--out FILE` (with `--format`), `--to-cytoscape` and `--report FILE`, the
-  same report the page shows. `crossfeed derive --help` lists every option in the page's words, with
+  same report the page shows. `grownet derive --help` lists every option in the page's words, with
   examples.
 - `--format graphml` emits GraphML (for Cytoscape, igraph, networkx, Gephi) instead of the neutral JSON.
 - `--out FILE` writes the network to a file instead of stdout; attribution and skipped pairs print to
@@ -136,7 +160,7 @@ python -m crossfeed schema [--out FILE]
   fails.
 - `schema` prints the JSON Schema (or writes it with `--out`).
 
-A `crossfeed` console command is installed too, so `crossfeed derive ...` works after `pip install`.
+A `grownet` console command is installed too, so `grownet derive ...` works after `pip install`.
 
 ## The legend
 
@@ -149,16 +173,17 @@ quality flag, caution, evidence and status the model defines, so it cannot fall 
 
 ## The local page
 
-Prefer clicking to typing commands? `python -m crossfeed gui` starts a small page on your own machine and
+Prefer clicking to typing commands? `python -m grownet gui` starts a small page on your own machine and
 opens it in the browser:
 
 ```
-python -m crossfeed gui
+python -m grownet gui
 ```
 
-The tool version shows next to its name, and a Help page explains every advanced setting and arc
+The tool version shows next to its name, and a Help page introduces the idea (after Gause, with a figure), explains every advanced setting and arc
 attribute, the main design decisions, the command line, what to do when no network comes back, and where
-to report a problem. Type species names (or NCBI taxon ids), one per line, and press "Find interactions". crossfeed resolves
+to report a problem; an About page says who built it and links this repository. Type species names (or NCBI taxon ids, or a genus for all its species), one per line, and press "Find
+interactions", or press All to derive every study in mGrowthDB. grownet resolves
 the names to taxon ids from mGrowthDB's own strain records, finds the studies holding them, derives the
 interactions, and shows them as a table with downloads for JSON and GraphML. Every setting sits behind
 "Advanced settings" with the same defaults the command line uses.
@@ -169,7 +194,7 @@ stay there.
 
 ## Send it to Cytoscape
 
-With Cytoscape running, `crossfeed derive SMGDB00000004 --live --to-cytoscape` posts the network straight
+With Cytoscape running, `grownet derive SMGDB00000004 --live --to-cytoscape` posts the network straight
 into the open session through CyREST on `127.0.0.1:1234` (`--cytoscape-port` changes the port), and the
 local page has a "Send to Cytoscape" button that sends the network it already computed. The edge and node
 attributes become columns, so effect, weight, status, quality, the study ids and the experiments are there
@@ -184,7 +209,7 @@ The style applied is the one the legend describes: the same arrowhead on every a
 and inhibition orange-red (the color alone carries the sign), width by `weight`, absent edges hidden, long
 dashes for drop-out arcs and dots for single-replicate ones, and nodes colored by genus. It is called
 `grownet`, and a style of that name already in the session is brought up to date, so it always matches the
-legend. `crossfeed style --out grownet_style.json` writes it as a file for File, Import, Styles from File.
+legend. `grownet style --out grownet_style.json` writes it as a file for File, Import, Styles from File.
 When Cytoscape is not running, the command says so and names the port instead of failing.
 
 ## The output format
@@ -237,7 +262,9 @@ date and time as graph attributes.
       "experiments": ["EMGDB000000031", "EMGDB000000027"],
       "cultivation_mode": "batch",
       "merged_arcs": null,
-      "strength_range": []
+      "strength_range": [],
+      "supporting_pairs": null,
+      "merged_pairs": []
     }
   ],
   "studies": [
@@ -265,7 +292,9 @@ least one study. `sd` and `se` are the standard deviation and standard error of 
 replicates, with `n_with` and `n_without` the replicate counts behind it, and `metric` the growth property
 compared (`auc` by default; `max`, or a growth rate recorded with its rule, `growth_rate:easylinear:5` or
 `growth_rate:baranyi`). `merged_arcs` and `strength_range` are set only with `--merge-arcs`: how many arcs
-of one source and target were merged, and the lowest and highest log2 mean among them. `outcome` says what the comparison could establish: `quantified`, `obligate` (the
+of one source and target were merged, and the lowest and highest log2 mean among them.
+`supporting_pairs` and `merged_pairs` are set only with `--merge-genera`: how many distinct species pairs
+(strain pairs when only taxon ids were entered) a genus arc rests on, and which. `outcome` says what the comparison could establish: `quantified`, `obligate` (the
 target grows only with the source present), `abolished` (only without it), or `no_growth`. For an
 obligate or abolished edge, the count on the side without growth is its replicates without growth. A
 comparison whose set was emptied by exclusions (every replicate spiked, for example) says nothing about
@@ -347,7 +376,15 @@ style marks them (for example dashed), since one replicate is often all a study 
 `cautions` are shown without making an edge low quality: `two_replicates` marks an edge with exactly two
 replicates on a side, whose sd rests on two values, and `conditions_unverified` an edge from co-cultures of
 a pair that differ only in their description (a supplement, say) when nothing recorded says which
-monocultures match. Such an edge keeps its `status` and is exported.
+monocultures match. With `--metric max`, `stationary_phase_differs` marks an edge where one set reached
+stationary phase within the compared window and the other did not, so the maximum of one may still be
+rising, and `stationary_unchecked` one whose curves have too few time points (under 6) to tell. A curve has
+reached stationary phase when, over the last fifth of the window, it rises by less than 10% of its total
+rise, and it does not rise again by more than that later in its measured curve, so a pause between two
+growth phases (a diauxic shift) followed by a measured second rise does not count; a set follows the
+majority of its replicates (register item 27). `zero_at_start` marks an obligate or abolished edge whose
+set without growth is zero from its first time point, so no growth cannot be told from no inoculum or
+counts below detection. Such an edge keeps its `status` and is exported.
 `notes` inform without disqualifying, for example a replicate left out for an implausible spike. Every
 comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2 values:
 `p_value` is the raw value and `significance` the adjusted one (Benjamini-Hochberg by default,
@@ -366,7 +403,7 @@ A `Deriver` is a class with one method, `derive(study, exps)`, that returns `(re
 a complete one, with the record shape spelled out:
 
 ```python
-from crossfeed.derive import Deriver
+from grownet.derive import Deriver
 
 class MyDeriver(Deriver):
     name = "my-method"
@@ -392,7 +429,7 @@ class MyDeriver(Deriver):
 Run your method live on any study, with no glue code:
 
 ```
-python -m crossfeed derive SMGDB00000004 --live --deriver mymodule:MyDeriver
+python -m grownet derive SMGDB00000004 --live --deriver mymodule:MyDeriver
 ```
 
 Test it offline before you touch the network. [`examples/custom_deriver.py`](examples/custom_deriver.py)
@@ -408,11 +445,18 @@ before you implement one.
 
 ## How the derivation works
 
-`ReplicateDeriver` (`src/crossfeed/derive.py`) is the default. It reads each replicate's measured growth
+`ReplicateDeriver` (`src/grownet/derive.py`) is the default. It reads each replicate's measured growth
 curve from mGrowthDB and compares replicate sets on the log2 scale, over the area under the curve by
 default (`--metric max` for maximal abundance, `--metric growth_rate` for the maximum specific growth
 rate). Every edge therefore carries a spread, not just a number:
 its mean, standard deviation, standard error, and the replicate counts behind each side.
+
+Curves are compared over a shared time window, so no curve is extrapolated: from the common first time
+point to the earliest last time point among the curves compared, with the value at that end interpolated
+between the two measurements around it. For a bi-culture the window spans every curve of the design (both
+species alone and together); for a drop-out arc, the target's curves with and without the removed member.
+A replicate that starts later than the others is left out and reported. So a 6-hour monoculture and a
+7-hour co-culture are compared over their first 6 hours.
 
 Whether a comparison counts as an interaction follows that spread rather than a fixed cutoff on the
 effect: it is `absent` when its effect is smaller than k standard deviations of its own spread
@@ -442,6 +486,16 @@ by qPCR, the pair is skipped with that reason, even when both give cells/mL, sin
 could be the change of instrument (Karoline). And an edge computed from a single replicate carries no sd
 or se at all, which is why it is flagged.
 
+Two advanced settings summarize a network, both off by default. Merge parallel arcs (`--merge-arcs`)
+makes one arc of the arcs from one strain to another across conditions and studies, with the median log2
+mean, when their signs agree. Merge to genus (`--merge-genera`) makes one node of each genus and merges the
+arcs between two genera by sign, so two genera can be joined by a facilitation and an inhibition arc, each
+with the median log2 mean and the number of species pairs behind it (strain pairs when only taxon ids were
+entered); interactions within a genus stay as an arc from the genus to itself, and absent arcs as one
+hidden absent arc per genus pair. With both on, the arcs of each pair are merged across studies first, so
+a pair measured in several studies counts once. The genus is the first word of the name mGrowthDB records,
+not NCBI's lineage (register item 24).
+
 `BaselineDeriver` remains only as the retired placeholder, reachable with `--deriver`. The open method
 choices, and who settled each, are in [docs/METHOD_NOTES.md](docs/METHOD_NOTES.md).
 
@@ -449,21 +503,21 @@ choices, and who settled each, are in [docs/METHOD_NOTES.md](docs/METHOD_NOTES.m
 
 Discipline is a feature here. Every commit and every CI run passes the same self-contained gate
 (`checks/gate.py`): no committed secrets, no raw or pulled data (only the synthetic fixtures under
-`tests/fixtures/`), no local-machine paths, imports that resolve to the standard library or crossfeed
+`tests/fixtures/`), no local-machine paths, imports that resolve to the standard library or the package itself
 itself, a documented house style, and a schema contract that keeps the shipped schema in step with the
-code. The tests run on Python 3.10 to 3.12. Get the same checks locally with `make check`, or run them on
+code. The tests run on Python 3.10 to 3.12 on Linux, and on Windows and macOS. Get the same checks locally with `make check`, or run them on
 every commit with `pre-commit install`. See [CONTRIBUTING.md](CONTRIBUTING.md). Found a security issue?
 Report it privately (see [SECURITY.md](SECURITY.md)), not in a public issue.
 
 ## Attribution and data governance
 
-mGrowthDB is open, so crossfeed pulls from it directly. Per-study licenses are respected by citing every
+mGrowthDB is open, so grownet pulls from it directly. Per-study licenses are respected by citing every
 study that supports a network at the edge level, rather than bundling. Unpublished collaborator data is
 used only for the agreed analysis and is never ingested into any downstream corpus. See
 [docs/DATA_GOVERNANCE.md](docs/DATA_GOVERNANCE.md).
 
 A joint open source project of Syntropa and the KU Leuven Laboratory of Molecular Bacteriology
-(K. Faust, H. Zafeiropoulos). Contributions welcome.
+(K. Faust, H. Zafeiropoulos). The local page's About says who built the tool. Contributions welcome.
 
 ## License
 

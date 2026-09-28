@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/crossfeed-bio/crossfeed/blob/main/schema/interaction_network.schema.json",
-  "title": "crossfeed interaction network",
-  "description": "The neutral, openly citable interaction-network format crossfeed emits from mGrowthDB co-growth data. Interactions are directed and condition-specific, and every edge carries the studies it was derived from (edge-level attribution).",
+  "title": "grownet interaction network",
+  "description": "The neutral, openly citable interaction-network format grownet emits from mGrowthDB co-growth data. Interactions are directed and condition-specific, and every edge carries the studies it was derived from (edge-level attribution).",
   "type": "object",
   "required": [
     "schema",
@@ -66,6 +66,7 @@
           "enum": [
             "ncbi",
             "name",
+            "genus",
             ""
           ]
         }
@@ -216,7 +217,10 @@
           "items": {
             "enum": [
               "two_replicates",
-              "conditions_unverified"
+              "conditions_unverified",
+              "stationary_phase_differs",
+              "stationary_unchecked",
+              "zero_at_start"
             ]
           }
         },

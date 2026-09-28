@@ -34,3 +34,43 @@ jobs:
         run: python checks/gate.py
       - name: tests
         run: pytest -q
+
+  package:
+    # the wheel and the source archive build, pass PyPI's checks, and a clean install serves the page (#27)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build==1.6.1 twine==7.0.0
+      - run: python -m build
+      - run: twine check --strict dist/*
+      - name: install into a clean environment and open the page
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/pip install dist/*.whl
+          /tmp/clean/bin/grownet --help
+          python packaging/smoke.py /tmp/clean/bin/grownet gui --no-browser
+
+  windows-app:
+    # the self-contained Windows program: a one-folder build in a zip (Karoline, on #63), built and started
+    # on a Windows machine, so every change proves it still works (#26)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pyinstaller==6.22.3 .
+      - name: build the one-folder program and zip it
+        run: python packaging/windows/build.py grownet-windows.zip
+      - name: start it and open the page
+        run: python packaging/smoke.py dist/grownet/grownet.exe --no-browser
+      - name: run the command line from it, offline
+        run: dist/grownet/grownet.exe derive SMGDB00000004 --fixture tests/fixtures/example_interactions.json --out example.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: grownet-windows
+          path: grownet-windows.zip
+          retention-days: 14

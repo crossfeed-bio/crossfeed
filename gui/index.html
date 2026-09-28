@@ -8,7 +8,7 @@
   /* Self-contained: no external scripts, styles, or fonts, so this file opens offline by double-click and
      stays as portable as the neutral format it reads. It is the separate presentation layer; the Python
      core stays dependency-free (see ../AGENTS.md). The GraphML it writes carries the keys and values of
-     src/crossfeed/export.py, so a network exported here and one exported by the CLI hold the same graph
+     src/grownet/export.py, so a network exported here and one exported by the CLI hold the same graph
      (tests/test_legend.py runs both on one network). */
   :root{
     --bg:#f5f7f7; --panel:#ffffff; --ink:#16302f; --muted:#566a69; --line:#d7e0df;
@@ -84,7 +84,7 @@
 <body>
 <header>
   <div class="row1">
-    <h1>crossfeed &middot; network viewer</h1>
+    <h1>grownet &middot; network viewer</h1>
     <span class="tag">Read a grownet interaction network: focus by species, inspect the evidence behind each edge, download for Cytoscape or the pipeline.</span>
   </div>
   <div id="srcbanner"></div>
@@ -106,8 +106,8 @@
     <fieldset>
       <legend>How a network is derived</legend>
       <div class="status">This viewer reads a network that is already derived; it does not derive. The settings live
-      on the local page (<code>crossfeed gui</code>, Advanced settings) and on the command line
-      (<code>crossfeed derive --help</code>), with the same defaults, and every network records the ones it was
+      on the local page (<code>grownet gui</code>, Advanced settings) and on the command line
+      (<code>grownet derive --help</code>), with the same defaults, and every network records the ones it was
       made with in <code>meta.settings</code>. By default: the area under the curve, compared as the mean log2
       over replicate sets, after a no-growth check; strains keyed by NCBI taxon id; two-member co-cultures and
       drop-out communities; the same species-identifying technique on both sides; batch cultures only; an
@@ -201,7 +201,7 @@ const STYLE={
 };
 const dashOf=e=>{const drop=isIndirect(e), one=flagsOf(e).includes("single_replicate");
   return drop&&one?"11 4 2 4":drop?"11 6":one?"2 5":"";};
-// nodes by genus, the first word of the name, each genus its own color (crossfeed.brand.GENUS_COLORS)
+// nodes by genus, the first word of the name, each genus its own color (grownet.brand.GENUS_COLORS)
 const GENUS_COLORS=["#2A78D6", "#EDA100", "#E87BA4", "#4A3AA7", "#A2C5FF", "#762E61", "#069CE4", "#C7CA85", "#B8892D", "#635A93", "#F1ACCC", "#A3B472", "#A74FBB", "#8AACE4", "#583A84", "#D75EB4", "#854E73", "#B25977", "#CC96C6", "#544EC5", "#9DDA4F", "#738242", "#8080FC", "#3C561C", "#92689C", "#4CDBE3", "#88194A", "#878CC9", "#4C701A", "#84C030", "#E5598E", "#BA93FB", "#959754", "#6B2094", "#724AAB", "#984260", "#9E658B", "#7B67CC", "#7E0F7A", "#7A5283", "#C8729C", "#E38AB5", "#B249AC", "#8E35A1", "#64B8D2", "#6C4302", "#A76C12", "#623B6B"];
 const genusOf=name=>{const w=String(name||"").replace(/[\[\]]/g,"").split(/\s+/).filter(Boolean);
   const g=w[0]&&w[0].toLowerCase()==="candidatus"?w[1]:w[0];return g?g[0].toUpperCase()+g.slice(1).toLowerCase():"unknown";};
@@ -406,8 +406,11 @@ const SHOWN_FLAGGED=["single_replicate"];   // shown and marked: the comparison 
 const flagsOf=e=>Array.isArray(e.quality)?e.quality:[];
 const isLowQuality=e=>flagsOf(e).length>0;
 const isHiddenByDefault=e=>flagsOf(e).some(f=>HIDDEN_BY_DEFAULT.includes(f));
-// "two_replicates" and "conditions_unverified" (experiments told apart only by their descriptions): both are
-// worth knowing and neither disqualifies, so every caution is listed with the edge and none hides it
+// "two_replicates", "conditions_unverified" (experiments told apart only by their descriptions),
+// "stationary_phase_differs" and "stationary_unchecked" (with max: one set reached stationary phase and the
+// other did not, or too few points to tell) and "zero_at_start" (a set without growth that is zero from its
+// first point): all are worth knowing and none disqualifies, so every caution
+// is listed with the edge and none hides it
 const cautionsOf=e=>Array.isArray(e.cautions)?e.cautions:[];
 // An edge carries the status it was derived at, and `effect_over_sd` (|log2 mean| / sd), which is the
 // quantity the absence threshold k cuts. Because that number is on the edge, a reader can move k here
@@ -567,7 +570,7 @@ function updateBanner(){
   else if(src){b.classList.add("live");b.textContent="Source: "+src;}
 }
 
-// ---- download. GraphML carries the keys and values of src/crossfeed/export.py, so a file from here and one
+// ---- download. GraphML carries the keys and values of src/grownet/export.py, so a file from here and one
 // from the CLI hold the same graph and both import into Cytoscape via File > Import > Network. ----
 function currentView(){const {nodes,edges}=visible();const q=document.getElementById("q").value.trim();
   const meta=Object.assign({},NET.meta,{viewer_filtered:(q||num(document.getElementById("s_thr").value)>0||document.getElementById("s_eff").value!=="all")||undefined,viewer_query:q||undefined});
@@ -576,12 +579,12 @@ function currentView(){const {nodes,edges}=visible();const q=document.getElement
   return Object.assign({schema:NET.schema,meta,nodes,edges,studies:NET.studies||[]},extra);}
 function save(name,text,type){const b=new Blob([text],{type}),u=URL.createObjectURL(b),a=document.createElement("a");
   a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1500);}
-// the keys of src/crossfeed/export.py, copied by tests/test_legend.py's check, which also runs this writer
+// the keys of src/grownet/export.py, copied by tests/test_legend.py's check, which also runs this writer
 // against the CLI's on the same network and requires the same graph, keys and values
-const GRAPHML_KEYS=[["g_tool", "graph", "tool", "string"], ["g_tool_version", "graph", "tool_version", "string"], ["g_derived_on", "graph", "derived_on", "string"], ["g_derived_at", "graph", "derived_at", "string"], ["n_name", "node", "name", "string"], ["n_label", "node", "label", "string"], ["n_taxonomy", "node", "taxonomy", "string"], ["n_model_ref", "node", "model_ref", "string"], ["n_taxon_id", "node", "taxon_id", "string"], ["n_species", "node", "species", "string"], ["n_identity", "node", "identity", "string"], ["e_effect", "edge", "effect", "string"], ["e_strength", "edge", "strength", "double"], ["e_significance", "edge", "significance", "double"], ["e_condition", "edge", "condition", "string"], ["e_method", "edge", "method", "string"], ["e_study_ids", "edge", "study_ids", "string"], ["e_p_value", "edge", "p_value", "double"], ["e_weight", "edge", "weight", "double"], ["e_effect_over_sd", "edge", "effect_over_sd", "double"], ["e_status", "edge", "status", "string"], ["e_sd", "edge", "sd", "double"], ["e_se", "edge", "se", "double"], ["e_n_with", "edge", "n_with", "int"], ["e_n_without", "edge", "n_without", "int"], ["e_outcome", "edge", "outcome", "string"], ["e_metric", "edge", "metric", "string"], ["e_quality", "edge", "quality", "string"], ["e_notes", "edge", "notes", "string"], ["e_evidence", "edge", "evidence", "string"], ["e_community", "edge", "community", "string"], ["e_cautions", "edge", "cautions", "string"], ["e_experiments", "edge", "experiments", "string"], ["e_cultivation_mode", "edge", "cultivation_mode", "string"], ["e_merged_arcs", "edge", "merged_arcs", "int"], ["e_strength_range", "edge", "strength_range", "string"]];
+const GRAPHML_KEYS=[["g_tool", "graph", "tool", "string"], ["g_tool_version", "graph", "tool_version", "string"], ["g_derived_on", "graph", "derived_on", "string"], ["g_derived_at", "graph", "derived_at", "string"], ["n_name", "node", "name", "string"], ["n_label", "node", "label", "string"], ["n_taxonomy", "node", "taxonomy", "string"], ["n_model_ref", "node", "model_ref", "string"], ["n_taxon_id", "node", "taxon_id", "string"], ["n_species", "node", "species", "string"], ["n_identity", "node", "identity", "string"], ["e_effect", "edge", "effect", "string"], ["e_strength", "edge", "strength", "double"], ["e_significance", "edge", "significance", "double"], ["e_condition", "edge", "condition", "string"], ["e_method", "edge", "method", "string"], ["e_study_ids", "edge", "study_ids", "string"], ["e_p_value", "edge", "p_value", "double"], ["e_weight", "edge", "weight", "double"], ["e_effect_over_sd", "edge", "effect_over_sd", "double"], ["e_status", "edge", "status", "string"], ["e_sd", "edge", "sd", "double"], ["e_se", "edge", "se", "double"], ["e_n_with", "edge", "n_with", "int"], ["e_n_without", "edge", "n_without", "int"], ["e_outcome", "edge", "outcome", "string"], ["e_metric", "edge", "metric", "string"], ["e_quality", "edge", "quality", "string"], ["e_notes", "edge", "notes", "string"], ["e_evidence", "edge", "evidence", "string"], ["e_community", "edge", "community", "string"], ["e_cautions", "edge", "cautions", "string"], ["e_experiments", "edge", "experiments", "string"], ["e_cultivation_mode", "edge", "cultivation_mode", "string"], ["e_merged_arcs", "edge", "merged_arcs", "int"], ["e_strength_range", "edge", "strength_range", "string"], ["e_supporting_pairs", "edge", "supporting_pairs", "int"], ["e_merged_pairs", "edge", "merged_pairs", "string"]];
 function graphmlValue(attr,v){
   if(v===null||v===undefined)return "";
-  if(Array.isArray(v))return v.join(attr==="notes"?"; ":" ");
+  if(Array.isArray(v))return v.join(attr==="notes"||attr==="merged_pairs"?"; ":" ");
   return v;
 }
 function toGraphML(net){
@@ -604,7 +607,7 @@ function toGraphML(net){
 // ---- loader: validate before adopting, fail loudly, keep the current network on failure ----
 function loadNetwork(d){
   if(!d||typeof d!=="object")throw new Error("not a JSON object");
-  if(!Array.isArray(d.nodes)||!Array.isArray(d.edges))throw new Error("a crossfeed network needs a nodes array and an edges array");
+  if(!Array.isArray(d.nodes)||!Array.isArray(d.edges))throw new Error("a grownet network needs a nodes array and an edges array");
   if(d.schema&&!/crossfeed\.interaction_network/.test(d.schema))throw new Error("unexpected schema "+d.schema);
   const ids=new Set(d.nodes.map(n=>n&&n.id));
   const dangling=d.edges.filter(e=>!ids.has(e.source)||!ids.has(e.target)).length;
@@ -623,8 +626,8 @@ document.getElementById("clearq").onclick=()=>{document.getElementById("q").valu
 document.getElementById("s_thr").addEventListener("input",e=>{document.getElementById("thrv").textContent=(num(e.target.value)||0).toFixed(1);render();});
 ["s_studies","s_eff","s_lowq","s_absent"].forEach(id=>document.getElementById(id).addEventListener("input",render));
 document.getElementById("s_k").addEventListener("input",e=>{document.getElementById("kv").textContent=(num(e.target.value)||0).toFixed(1);render();});
-document.getElementById("dljson").onclick=()=>save("crossfeed_network.json",JSON.stringify(currentView(),null,2),"application/json");
-document.getElementById("dlgraphml").onclick=()=>save("crossfeed_network.graphml",toGraphML(currentView()),"application/xml");
+document.getElementById("dljson").onclick=()=>save("grownet_network.json",JSON.stringify(currentView(),null,2),"application/json");
+document.getElementById("dlgraphml").onclick=()=>save("grownet_network.graphml",toGraphML(currentView()),"application/xml");
 document.getElementById("file").addEventListener("change",ev=>{
   const f=ev.target.files[0]; if(!f)return;
   const r=new FileReader();

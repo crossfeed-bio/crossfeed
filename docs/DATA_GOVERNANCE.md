@@ -1,10 +1,10 @@
 # Data governance
 
-crossfeed is built under a collaboration governance agreement between Syntropa and KU Leuven.
+grownet is built under a collaboration governance agreement between Syntropa and KU Leuven.
 
 ## Sources
 
-mGrowthDB is open. crossfeed reads growth curves (monocultures, co-cultures and communities) from mGrowthDB
+mGrowthDB is open. grownet reads growth curves (monocultures, co-cultures and communities) from mGrowthDB
 through its public API and derives the interactions itself; mGrowthDB holds no interactions.
 See https://mgrowthdb.readthedocs.io/en/latest/api.html .
 

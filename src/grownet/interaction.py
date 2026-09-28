@@ -2,7 +2,7 @@
 
 An interaction strength compares a target species' growth with a source species present against its
 growth with the source absent. The growth property is a growth curve feature chosen by the caller
-(`method`, default "auc", the area under the curve; see crossfeed.growth.FEATURES).
+(`method`, default "auc", the area under the curve; see grownet.growth.FEATURES).
 
 Each replicate set is summarized on the log2 scale first, so no replicate is used twice:
 
@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import math
 import statistics
+from collections import Counter
 
 from . import rates
 from .growth import (
@@ -51,6 +52,7 @@ from .growth import (
     check_replicate_sets,
     check_sets,
     cut,
+    reached_stationary,
     shared_window,
     spike,
 )
@@ -82,7 +84,7 @@ NO_GROWTH_TEST = ("paired two-sided t-test of log2(maximum / first time point) p
 
 def _feature(method: str):
     """The (times, values) -> number function behind a metric name: auc, max, or a growth rate
-    ("growth_rate:easylinear:5", "growth_rate:baranyi"; crossfeed.rates)."""
+    ("growth_rate:easylinear:5", "growth_rate:baranyi"; grownet.rates)."""
     if method in FEATURES:
         return FEATURES[method]
     rate = rates.feature(method)
@@ -117,7 +119,7 @@ def _log_values(reps, species, role, prop, method, skipped, spike_factor=SPIKE_F
                 no_growth=None) -> list:
     """log2 of the property for each replicate in a set.
 
-    A replicate whose curve for `species` carries an implausible spike (`crossfeed.growth.spike`) is left
+    A replicate whose curve for `species` carries an implausible spike (`grownet.growth.spike`) is left
     out for that species and reported, never dropped silently; its other species still take part. A
     non-positive property is left out and reported as before.
     """
@@ -207,10 +209,21 @@ def rule_meta(alpha: float = None, factor: float = None) -> dict:
             "test": NO_GROWTH_TEST, "alpha": alpha, "factor": factor, "applied": bool(alpha)}
 
 
+def _unspiked(reps, species, spike_factor) -> list:
+    """The replicates whose curve of `species` carries no implausible spike: the ones a comparison uses."""
+    return [r for r in reps if not spike(r.curve(species), spike_factor)]
+
+
 def _grown_values(reps, species, role, prop, method, skipped, spike_factor, flagged, no_growth, end,
                   alpha, factor) -> list:
-    """The log2 values of a set, or none when the set did not grow (the no-growth rule, #37)."""
-    verdict = grew(reps, species, end, alpha, factor)
+    """The log2 values of a set, or none when the set did not grow (the no-growth rule, #37). The rule is
+    judged on the replicates that are compared, without those left out for a spike, so an artifact cannot
+    make a set count as grown (code review of 2026-09-28)."""
+    used = _unspiked(reps, species, spike_factor)
+    if not used:
+        # every replicate is left out for a spike: missing data, not a growth result (see _compare)
+        return _log_values(reps, species, role, prop, method, skipped, spike_factor, flagged, no_growth)
+    verdict = grew(used, species, end, alpha, factor)
     if not verdict["grew"]:
         skipped.append((f"{species}: {role}", verdict["reason"] or "no growth"))
         if no_growth is not None:
@@ -249,31 +262,69 @@ def _compare(with_log2: list, without_log2: list, zero_with: int = 0, zero_witho
     return result
 
 
+def starts_at_zero(reps, species: str) -> bool:
+    """Whether most of a set's curves of `species` are zero at their first time point: such a set cannot
+    show whether the species grows, since no growth, no inoculum and counts below detection look the same
+    (Karoline, 2026-09-28; SMGDB00000006's STneg monoculture is 0 throughout)."""
+    firsts = [c.values[0] for c in (rep.curve(species) for rep in reps) if c is not None]
+    return bool(firsts) and sum(v <= 0 for v in firsts) * 2 > len(firsts)
+
+
+def stationary_verdict(reps, species: str, end: float):
+    """Whether a replicate set reached stationary phase by `end`: True or False by the majority of its
+    replicates (Karoline, 2026-09-28), or None when most of them cannot be judged (too few points)."""
+    calls = [reached_stationary(c, end) for c in (rep.curve(species) for rep in reps) if c is not None]
+    judged = [c for c in calls if c is not None]
+    if not calls or len(judged) * 2 <= len(calls):
+        return None
+    return sum(judged) * 2 > len(judged)
+
+
 def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, method: str = "auc",
                          spike_factor: float = SPIKE_FACTOR, no_growth_alpha: float = None,
                          no_growth_factor: float = None) -> dict:
     """Interaction strength of a species pair from mono versus bi-culture replicate sets.
 
     mono_a, mono_b: Replicates of species_a and species_b grown alone. co: Replicates of the co-culture,
-    each with a curve for species_a and species_b. method: a name in crossfeed.growth.FEATURES.
+    each with a curve for species_a and species_b. method: a name in grownet.growth.FEATURES.
 
     Raises ValueError when the sets are not comparable (mixed units, missing species, different start
     times) or for an unknown method. Replicates with a zero or negative property are left out of that
     species' set and reported; a set left without growth gives the outcome "obligate", "abolished", or
     "no_growth" (see the module docstring).
 
-    Returns a dict with "method", "log", "window" (start, end), "species_a" and "species_b" (each with
-    "species", "outcome", "mean", "sd", "se", "n_co", "n_mono", "co_log2", "mono_log2"; "mean", "sd", and
+    Each species is compared over its own window: from the common start to the earliest last time point
+    of its own curves in the co-culture and alone, so the partner's monoculture, which is not part of the
+    comparison, does not shorten it (Karoline, 2026-09-28, register item 26: as for drop-outs; the area
+    needs an equal window on both sides, which this is).
+
+    Returns a dict with "method", "log", "window" (start, end) over the whole design, "species_a" and
+    "species_b" (each with "species", "window", "outcome", "mean", "sd", "se", "n_co", "n_mono", "co_log2",
+    "mono_log2"; "mean", "sd", and
     "se" are None unless the outcome is "quantified", and "sd" and "se" are None when a set has a single
     replicate), and "skipped" as a list of (label, reason).
     """
     _check_method(method)
-    check_replicate_sets(mono_a, mono_b, co, species_a, species_b)
-    start, end = shared_window(c for rep in [*mono_a, *mono_b, *co] for c in rep.curves)
-    prop = _property(end, method)
+    problems = check_replicate_sets(mono_a, mono_b, co, species_a, species_b, strict=False)
+    every = [c for rep in [*mono_a, *mono_b, *co] for c in rep.curves]
+    # the design as a whole, for the record only: each species is compared over its own window below
+    design = (Counter(c.times[0] for c in every).most_common(1)[0][0], min(c.times[-1] for c in every))
 
-    result = {"method": method, "log": LOG, "window": (start, end), "skipped": [], "flagged": []}
+    result = {"method": method, "log": LOG, "window": design, "skipped": [], "flagged": []}
     for key, species, monos in (("species_a", species_a, mono_a), ("species_b", species_b, mono_b)):
+        # a problem with one species (its technique, units or start times) leaves out its own arc only
+        # (code review of 2026-09-28: it refused both arcs of the pair)
+        reason = problems.get(species)
+        if not reason:
+            try:
+                window = shared_window(rep.curve(species) for rep in [*co, *monos])
+            except ValueError as e:
+                reason = f"{species}: {e}"
+        if reason:
+            result[key] = {"species": species, "outcome": UNUSABLE, "reason": reason}
+            continue
+        end = window[1]
+        prop = _property(end, method)
         zero_co, zero_mono = [], []
         co_log2 = _grown_values(co, species, "co-culture", prop, method, result["skipped"],
                                 spike_factor, result["flagged"], zero_co, end, no_growth_alpha,
@@ -282,7 +333,14 @@ def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, met
                                   spike_factor, result["flagged"], zero_mono, end, no_growth_alpha,
                                   no_growth_factor)
         c = _compare(co_log2, mono_log2, len(zero_co), len(zero_mono))
-        result[key] = {"species": species, "outcome": c["outcome"], "mean": c["mean"], "sd": c["sd"], "se": c["se"],
+        co_used, monos_used = _unspiked(co, species, spike_factor), _unspiked(monos, species, spike_factor)
+        stationary = {"with": stationary_verdict(co_used, species, end),
+                      "without": stationary_verdict(monos_used, species, end)}
+        result[key] = {"species": species, "window": window, "stationary": stationary,
+                       "zero_start": {"with": starts_at_zero(co_used, species),
+                                      "without": starts_at_zero(monos_used, species)},
+                       "outcome": c["outcome"], "mean": c["mean"],
+                       "sd": c["sd"], "se": c["se"],
                        "n_co": c["n_with"], "n_mono": c["n_without"],
                        "co_log2": c["with_log2"], "mono_log2": c["without_log2"]}
     return result
@@ -325,10 +383,19 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc",
     outside = [r for r in dropouts if r not in members]
     if outside:
         raise ValueError(f"drop-out species {outside} not a member of the full community {sorted(members)}")
-    check_sets([("full community", full, members)]
-               + [(f"community without {r}", reps, [m for m in members if m != r]) for r, reps in dropouts.items()])
-    start, end = shared_window(c for rep in [*full, *(r for reps in dropouts.values() for r in reps)]
-                               for c in rep.curves)
+    # a problem with one member (its technique or units) leaves out the arcs to that member only (code
+    # review of 2026-09-28: it refused the whole community)
+    problems = check_sets([("full community", full, members)]
+                          + [(f"community without {r}", reps, [m for m in members if m != r])
+                             for r, reps in dropouts.items()], strict=False)
+    every = [c for rep in [*full, *(r for reps in dropouts.values() for r in reps)] for c in rep.curves]
+    # the design's usual first time point; a curve that starts later leaves its replicate out of its own arcs
+    # only, not out of the arcs of the other members (Karoline, 2026-09-28, with the per-arc windows)
+    start = Counter(c.times[0] for c in every).most_common(1)[0][0]
+    end = min(c.times[-1] for c in every)
+
+    def on_time(replicates, species):
+        return [r for r in replicates if math.isclose(r.curve(species).times[0], start, abs_tol=1e-9)]
 
     evidence = BICULTURE if len(members) == 2 else DROPOUT
     community = sorted(members)
@@ -341,13 +408,22 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc",
     for removed, reps in dropouts.items():
         without_role = f"community without {removed}"
         for target in (m for m in members if m != removed):
+            if target in problems:
+                result["skipped"].append((f"arc {removed} -> {target}", problems[target]))
+                continue
+            full_t, reps_t = on_time(full, target), on_time(reps, target)
+            if not full_t or not reps_t:
+                result["skipped"].append((f"arc {removed} -> {target}", f"every curve of {target} in the "
+                                          f"{'full community' if not full_t else without_role} starts after "
+                                          f"{start:g}; curves are compared only from a common start"))
+                continue
             # each arc has its own window: the target's curves in the two sets (Karoline, on #47)
-            window = shared_window(rep.curve(target) for rep in [*full, *reps])
+            window = shared_window(rep.curve(target) for rep in [*full_t, *reps_t])
             prop = _property(window[1], method)
             skips, flags, zero_full, zero_without = [], [], [], []
-            full_log2 = _grown_values(full, target, "full community", prop, method, skips, spike_factor,
+            full_log2 = _grown_values(full_t, target, "full community", prop, method, skips, spike_factor,
                                       flags, zero_full, window[1], no_growth_alpha, no_growth_factor)
-            without_log2 = _grown_values(reps, target, without_role, prop, method, skips, spike_factor,
+            without_log2 = _grown_values(reps_t, target, without_role, prop, method, skips, spike_factor,
                                          flags, zero_without, window[1], no_growth_alpha,
                                          no_growth_factor)
             once(skips, result["skipped"])
@@ -361,5 +437,15 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc",
                 result["skipped"].append((f"arc {removed} -> {target}", "every replicate of a set was left out"))
                 continue
             result["arcs"].append({"source": removed, "target": target, "evidence": evidence,
-                                   "community": community, "window": window, **c})
+                                   "community": community, "window": window,
+                                   "stationary": {
+                                       "with": stationary_verdict(_unspiked(full_t, target, spike_factor), target,
+                                                                  window[1]),
+                                       "without": stationary_verdict(_unspiked(reps_t, target, spike_factor),
+                                                                     target, window[1])},
+                                   "zero_start": {"with": starts_at_zero(_unspiked(full_t, target, spike_factor),
+                                                                         target),
+                                                  "without": starts_at_zero(_unspiked(reps_t, target, spike_factor),
+                                                                            target)},
+                                   **c})
     return result

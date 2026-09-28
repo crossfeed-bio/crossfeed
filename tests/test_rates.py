@@ -4,10 +4,10 @@ import math
 
 import pytest
 
-from crossfeed import rates
-from crossfeed.growth import GrowthCurve, Replicate
-from crossfeed.interaction import interaction_strength
-from crossfeed.rates import RateUnavailable, baranyi, easylinear, method_name
+from grownet import rates
+from grownet.growth import GrowthCurve, Replicate
+from grownet.interaction import interaction_strength
+from grownet.rates import RateUnavailable, baranyi, easylinear, method_name
 
 T = [float(t) for t in range(13)]
 
@@ -38,9 +38,19 @@ def test_baranyi_recovers_the_rate_of_a_baranyi_curve():
     assert baranyi(T, [math.exp(y) for y in logs]) == pytest.approx(0.6, rel=0.02)
 
 
-def test_baranyi_rejects_a_curve_the_model_does_not_describe():
-    # a rise then a fall back to the start: no sigmoid fits it, so no rate is given, and the reason says why
-    logs = [0, 1, 2, 3, 4, 4, 3, 2, 1, 0, 0, 0, 0]
+def test_baranyi_fits_the_rise_of_a_curve_that_falls_after_its_peak():
+    # Karoline (2026-09-28, "Fit up to the maximum", then "End of the plateau"): a sigmoid rise to 4 (log) by
+    # 7 h, then a fall back to
+    # the start. Fitted to the whole curve the model was rejected; up to the maximum it describes the rise,
+    # and its rate lies just above the steepest observed step (1.0 per h, from 0.5 to 1.5 and 1.5 to 2.5)
+    logs = [0, 0.1, 0.5, 1.5, 2.5, 3.3, 3.8, 4, 3, 2, 1, 0, 0]
+    assert 1.0 < baranyi(T, [math.exp(y) for y in logs]) < 1.6
+
+
+def test_baranyi_rejects_a_curve_the_model_does_not_describe_up_to_its_maximum():
+    # a zigzag up to its peak at 9 h: no sigmoid fits it (R2 about 0.3), so no rate is given, and the reason
+    # says why
+    logs = [0, 2, 0.2, 2.2, 0.4, 2.4, 0.6, 2.6, 0.8, 4, 1, 1, 1]
     with pytest.raises(RateUnavailable, match="Baranyi fit rejected"):
         baranyi(T, [math.exp(y) for y in logs])
 
@@ -70,13 +80,32 @@ def test_an_interaction_on_growth_rate_is_the_log2_ratio_of_the_rates():
 
 
 def test_a_curve_without_a_rate_is_left_out_and_reported_not_read_as_no_growth():
-    # one monoculture replicate falls after its peak: Baranyi gives it no rate, so the set keeps the other,
-    # and the reason is reported; nothing is called obligate or abolished
-    fall = GrowthCurve("A", tuple(T), tuple(math.exp(y) for y in [0, 1, 2, 3, 4, 4, 3, 2, 1, 0, 0, 0, 0]),
+    # one monoculture replicate peaks at its third point and falls at once: up to the end of its plateau it
+    # has three points, too few for Baranyi, so it gets no rate; the set keeps the other replicate, and the
+    # reason is reported. Nothing is called obligate or abolished
+    fall = GrowthCurve("A", tuple(T), tuple(math.exp(y) for y in [0, 2, 4, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0]),
                        "h", "CFU/mL")
     mono_a = [Replicate([fall], "a0"), Replicate([_curve("A", 0.25)], "a1")]
     mono_b = [Replicate([_curve("B", 0.3)], f"b{i}") for i in range(2)]
     co = [Replicate([_curve("A", 0.5), _curve("B", 0.3)], f"c{i}") for i in range(2)]
     r = interaction_strength(mono_a, mono_b, co, "A", "B", method="growth_rate:baranyi")
     assert r["species_a"]["outcome"] == "quantified" and r["species_a"]["n_mono"] == 1
-    assert any("no growth rate: Baranyi fit rejected" in reason for _, reason in r["skipped"])
+    assert any("no growth rate: 3 positive time point(s) up to the end of the plateau" in reason
+               for _, reason in r["skipped"])
+
+
+def test_the_fit_keeps_the_plateau_and_stops_where_the_decline_begins():
+    # rise 0 -> 4 (log), then 3.8 and 3.7 (within 10% of the rise, 0.4, below the maximum): the plateau;
+    # 3.0 is below 3.6, so the decline begins there and the fit uses the first 8 points
+    xs = [float(t) for t in range(11)]
+    ys = [0, 0.5, 1.5, 2.5, 3.5, 4, 3.8, 3.7, 3.0, 2.0, 1.0]
+    assert rates._until_decline(xs, ys) == (xs[:8], ys[:8])
+
+
+
+def test_a_curve_that_only_declines_has_a_non_positive_rate_not_a_crash():
+    # code review of 2026-09-28: every window slope is -0.3, so 0.95 of the steepest (-0.285) lies above all
+    # of them, no window qualified, and min() of nothing raised a bare ValueError that dropped the whole
+    # comparison (SMGDB00000014's 0.75% linoleic acid co-cultures). The steepest slope is returned instead
+    declining = [math.exp(-0.3 * t) for t in T]
+    assert easylinear(T, declining) == pytest.approx(-0.3)

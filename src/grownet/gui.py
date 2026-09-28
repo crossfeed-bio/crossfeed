@@ -1,12 +1,12 @@
 """A local page: type species names, get their interaction network.
 
-`crossfeed gui` starts a small server from the standard library on 127.0.0.1, with a random token in the
+`grownet gui` starts a small server from the standard library on 127.0.0.1, with a random token in the
 URL, and opens the browser. Nothing is hosted, nothing is uploaded, and the page has no JavaScript: the
 form posts back and the server returns HTML rendered in Python. Settings live in an HTML `details` block
 ("Advanced settings"), so the plain page is a box for species and a button.
 
 The work is in `run_query`, which is pure apart from the client it is given: names to taxon ids
-(crossfeed.taxonomy), taxon ids to studies (mGrowthDB search), then the existing derivation per study.
+(grownet.taxonomy), taxon ids to studies (mGrowthDB search), then the existing derivation per study.
 Rendering is in `render_form` and `render_result`, so both are testable without a socket.
 """
 from __future__ import annotations
@@ -17,12 +17,14 @@ import http.server
 import secrets
 import socketserver
 import threading
+import time
 import urllib.parse
 import webbrowser
 from collections import Counter
 
 from . import __version__, brand, interaction, rates
 from . import help as help_page
+from .adapter import condensed, unread
 from .attribution import studies_with_edges
 from .cytoscape import CytoscapeError, send
 from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, output_meta
@@ -31,7 +33,7 @@ from .growth import SPIKE_FACTOR
 from .legend import legend_svg
 from .mgrowthdb import MGrowthDBError, data_versions, records_to_network
 from .report import report_text
-from .taxonomy import resolve_species, species_index, split_entries
+from .taxonomy import TAXON_ID, resolve_species, species_index, split_entries
 
 TITLE = brand.NAME
 # species that derive a non-empty network, for the Example button (Karoline's proposal, #73). The first is
@@ -49,14 +51,15 @@ def metric_name(s: dict) -> str:
     return s.get("metric", "auc")
 
 
-# one of each kind the box takes, shown above it (the box itself starts empty; Karoline, 2026-09-27)
-INPUT_EXAMPLES = ("Blautia hydrogenotrophica", "Faecalibacterium duncaniae A2-165", "411483")
+# one of each kind the box takes, shown above it (the box itself starts empty; Karoline, 2026-09-27),
+# a genus among them (Karoline, 2026-09-28)
+INPUT_EXAMPLES = ("Blautia hydrogenotrophica", "Faecalibacterium duncaniae A2-165", "Bacteroides", "411483")
 DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window": rates.DEFAULT_WINDOW,
             "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
             "include_low_quality": False, "correction": "bh", "include_dropout": True,
             "include_non_batch": False, "studies": "", "exclude_studies": "", "only_entered": True,
-            "merge_arcs": False, "min_studies": 1,
-            # None: the no-growth rule's own defaults, read when used (crossfeed.interaction.grew)
+            "merge_arcs": False, "min_studies": 1, "merge_genera": False,
+            # None: the no-growth rule's own defaults, read when used (grownet.interaction.grew)
             "no_growth_alpha": None, "no_growth_factor": None}
 PROVISIONAL = ("Each interaction compares a species' growth with and without its partner across replicates "
                "(mean log2 difference). An interaction is reported when |mean| is at least k standard "
@@ -75,13 +78,14 @@ EMPTY_HELP = ("grownet derives interactions from pairwise (two-member) co-cultur
 
 
 def _page(body: str, token: str = "", refresh: str = "") -> str:
-    """A page in the grownet style: a header with the mark, the name, the version, Legend and Help."""
+    """A page in the grownet style: a header with the mark, the name, the version, Legend, Help and About."""
     t = html.escape(token, quote=True)
     icon = urllib.parse.quote(brand.logo_svg(64))
     header = (f"<header><a class=\"brand\" href=\"/?token={t}\"><h1 class=\"brand\">{brand.logo_svg(28)}"
               f"{brand.WORDMARK}</h1></a>{HEADING}"
               f"<nav><a class=\"btn quiet\" href=\"/legend?token={t}\">Legend</a>"
-              f"<a class=\"btn quiet\" href=\"/help?token={t}\">Help</a></nav></header>")
+              f"<a class=\"btn quiet\" href=\"/help?token={t}\">Help</a>"
+              f"<a class=\"btn quiet\" href=\"/about?token={t}\">About</a></nav></header>")
     # a running search reloads its page every second (#75): a meta refresh, so no JavaScript is needed
     reload = f"<meta http-equiv=\"refresh\" content=\"1; url={html.escape(refresh, quote=True)}\">" if refresh else ""
     return ("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
@@ -165,6 +169,12 @@ def _settings_block(settings: dict) -> str:
   <span class="muted">one arc per source and target, across conditions and studies, with the median log2 mean
   and its range; arcs whose signs disagree are not merged. Off by default: interactions are
   condition-specific</span></div>
+<div class="row"><label><input type="checkbox" name="merge_genera" value="1"{" checked" if s["merge_genera"] else ""}>
+  Merge to genus</label>
+  <span class="muted">one node per genus, and the arcs between two genera merged by sign, with the median log2
+  mean and the number of species pairs behind each arc (strain pairs when only taxon ids were entered).
+  Works with Merge parallel arcs, which then counts a pair measured in several studies once. Off by
+  default</span></div>
 <div class="row"><label>Minimum supporting studies
   <input name="min_studies" type="text" size="6" value="{_esc(s['min_studies'])}"></label>
   <span class="muted">keep arcs resting on at least this many studies; above 1 it needs merged arcs, since an
@@ -190,13 +200,16 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
     """
     note = f"<p class=\"note\">{_esc(message)}</p>" if message else ""
     return _page(f"""{note}<form method="post" action="/run?token={_esc(token)}">
-<label class="field" for="species">Species, strains or NCBI taxon ids</label>
+<label class="field" for="species">Species, strains, genera or NCBI taxon ids</label>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in INPUT_EXAMPLES)}</p>
 <textarea id="species" name="species" rows="5">{_esc(entries)}</textarea>
-<p class="hint">One per line, or press Example. Interactions are derived from mGrowthDB growth data on this
-machine; nothing is uploaded.</p>
+<p class="hint">One per line (a genus alone stands for all its species), or press Example. Interactions are
+derived from mGrowthDB growth data on this machine; nothing is uploaded.</p>
 <div class="bar"><button class="primary" type="submit">Find interactions</button>
-<button type="submit" name="example" value="1">Example</button></div>
+<button type="submit" name="example" value="1">Example</button>
+<button type="submit" name="all" value="1">All</button>
+<span class="muted">All ignores the box and derives every study in mGrowthDB, with every partner; it reads
+every study, so it takes longer (half a minute or so).</span></div>
 {_settings_block(settings or {})}
 </form>{below}""", token, refresh)
 
@@ -222,6 +235,11 @@ def render_legend(token: str) -> str:
 
 def render_help(token: str) -> str:
     return _page(help_page.render_help(token, DEFAULTS, EXAMPLE)
+                 + f"<p class=\"bar\"><a class=\"btn\" href=\"/?token={_esc(token)}\">Back</a></p>", token)
+
+
+def render_about(token: str) -> str:
+    return _page(help_page.render_about()
                  + f"<p class=\"bar\"><a class=\"btn\" href=\"/?token={_esc(token)}\">Back</a></p>", token)
 
 
@@ -342,7 +360,9 @@ def _unresolved_list(result: dict) -> str:
 def _empty_reason(result: dict) -> str:
     """Why a search came back empty: the first step, or the setting, that left nothing."""
     s = result.get("settings", {})
-    if not result["resolved"]:
+    if result.get("all") and not result["studies"]:
+        return "Every study is in Exclude these studies, or mGrowthDB returned no study; empty that setting."
+    if not result["resolved"] and not result.get("all"):
         return "None of the entries could be used; each one says why above."
     if result.get("errors"):
         return "mGrowthDB could not be read (see the messages above); try again when it is reachable."
@@ -376,9 +396,20 @@ def _empty_reason(result: dict) -> str:
 
 
 def _result_section(token: str, result: dict, message: str = "") -> str:
-    resolved = "".join(
-        f"<li>{_esc(entry)}: {_esc(', '.join(f'{name} ({tid})' for tid, name in sorted(matches.items())))}</li>"
-        for entry, matches in result["resolved"])
+    genera = result.get("genera", {})
+
+    def entry_line(entry, matches):
+        strains = ", ".join(f"{name} ({tid})" for tid, name in sorted(matches.items()))
+        if entry in genera:                      # a genus entered alone: its species, then its strains
+            return (f"<li>{_esc(entry)} (genus): {_esc(', '.join(genera[entry]))}"
+                    f"<br><span class=\"muted\">{len(matches)} strain(s): {_esc(strains)}</span></li>")
+        return f"<li>{_esc(entry)}: {_esc(strains)}</li>"
+
+    resolved = "".join(entry_line(entry, matches) for entry, matches in result["resolved"])
+    species_heading = "<h2>Species</h2>"
+    if result.get("all"):
+        species_heading, resolved = "<h2>All of mGrowthDB</h2>", (
+            f"<li>every study, with every partner: {len(result['studies'])} studies</li>")
     unresolved = _unresolved_list(result)
     net = result["network"]
     mismatch = any("MISMATCH" in (e.method or "") for e in net.edges)
@@ -398,12 +429,13 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
                  f"<a href=\"/help?token={_esc(token)}#empty\">What to try</a>.</p>{hidden}{outputs}")
     studies = ", ".join(result["studies"]) or "none"
     skipped = ""
-    if result["skipped"]:
-        items = "".join(f"<li>{_esc(label)}: {_esc(reason)}</li>" for label, reason in result["skipped"][:50])
-        skipped = (f"<details><summary>{len(result['skipped'])} pair(s) the data did not support</summary>"
+    skips = condensed(result["skipped"])
+    if skips:
+        items = "".join(f"<li>{_esc(label)}: {_esc(reason)}</li>" for label, reason in skips[:50])
+        skipped = (f"<details><summary>{len(skips)} pair(s) the data did not support</summary>"
                    f"<ul>{items}</ul></details>")
     errors = "".join(f"<p class=\"note\">{_esc(e)}</p>" for e in result["errors"])
-    return (f"<section class=\"result\" id=\"result\">{note}<h2>Species</h2><ul>{resolved}</ul>{unresolved}"
+    return (f"<section class=\"result\" id=\"result\">{note}{species_heading}<ul>{resolved}</ul>{unresolved}"
             f"<p class=\"muted\">Studies searched: {_esc(studies)}</p>{errors}{table}"
             f"{_absent_section(net, result.get('absence', {}))}{_sources(net)}{skipped}</section>")
 
@@ -441,6 +473,7 @@ def parse_settings(form: dict) -> dict:
     settings["include_dropout"] = bool(form.get("include_dropout"))
     settings["include_non_batch"] = bool(form.get("include_non_batch"))
     settings["merge_arcs"] = bool(form.get("merge_arcs"))
+    settings["merge_genera"] = bool(form.get("merge_genera"))
     try:
         settings["min_studies"] = max(1, int(form.get("min_studies", [""])[0]))
     except ValueError:
@@ -466,28 +499,47 @@ def parse_settings(form: dict) -> dict:
 def _current_names(net, current: dict) -> None:
     """Name each strain node by its current name (#24): a study from before a reclassification may call
     taxon 411483 Faecalibacterium prausnitzii A2-165, the most recent one Faecalibacterium duncaniae
-    A2-165. The genus and species key follows the name; the taxon id, which is the node's identity, stays."""
+    A2-165. The genus and species key follows the name; the taxon id, which is the node's identity, stays.
+
+    Only a node whose identity is its taxon id is renamed. A node keyed by name carries a taxon id that
+    mGrowthDB gives to more than one species (SMGDB00000008: Lachnoclostridium clostridioforme and L.
+    symbiosum both carry 1506553), so the id's latest name would be another species' name (found in the
+    audit of 2026-09-28)."""
     for nid, node in list(net.nodes.items()):
+        if node.identity != "ncbi":
+            continue
         name = current.get(int(node.taxon_id)) if str(node.taxon_id or "").isdigit() else None
         if name and name != node.name:
             net.nodes[nid] = dataclasses.replace(node, name=name, species=genus_species(name))
 
 
+def support_level(entries) -> str:
+    """The pairs a genus arc counts (Karoline, 2026-09-28: at the level of the query): strain pairs when every
+    entry is an NCBI taxon id, the only entry that picks one strain, and species pairs otherwise, since a
+    name, even with a strain designation, resolves to every strain of its species."""
+    ids = [e for e in entries if e.strip()]
+    return "strain" if ids and all(TAXON_ID.match(e.strip()) for e in ids) else "species"
+
+
 def run_query(client, entries, settings: dict | None = None, index: dict | None = None, progress=None,
-              narrow: bool = True) -> dict:
+              narrow: bool = True, all_studies: bool = False) -> dict:
     """Species names or taxon ids to an interaction network, through mGrowthDB and the existing derivation.
 
     Returns {"resolved", "unresolved", "taxon_ids", "studies", "network", "skipped", "errors"}. Failures
     that concern one study are collected in "errors" instead of raising, so a single bad study does not
     lose the rest. `progress(done, total, message)`, when given, is told where the search is: `total` is
     None until the studies are known (#75).
+
+    `all_studies` is the page's All button (Karoline, 2026-09-28): the entries are ignored and every study
+    mGrowthDB holds is derived, with every partner kept, still under Only these studies and Exclude these
+    studies.
     """
     def say(done, total, message):
         if progress:
             progress(done, total, message)
 
     s = {**DEFAULTS, **(settings or {})}
-    names = split_entries(entries)          # one per line, and also at commas and semicolons
+    names = [] if all_studies else split_entries(entries)    # one per line, and at commas and semicolons
     say(0, None, "Looking up the species in mGrowthDB")
     index = species_index(client) if index is None else index
     resolved = resolve_species(names, index)
@@ -498,6 +550,9 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     errors, skipped, records = [], [], []
 
     studies = [sid.strip() for sid in s["studies"].split(",") if sid.strip()]
+    if all_studies and not studies:
+        studies = list(getattr(index, "studies", []))       # every study the species list was read from
+    only_entered = s["only_entered"] and not all_studies
     if resolved["taxon_ids"] and not studies:
         try:
             found = client.search(strain_ncbi_ids=",".join(str(t) for t in resolved["taxon_ids"]))
@@ -524,7 +579,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
 
     # with "only the species entered", only what can give an interaction between them is read (identical
     # networks, checked against reading everything); read it all first, a few requests at a time
-    narrowed = keep if (s["only_entered"] and narrow) else None
+    narrowed = keep if (only_entered and narrow) else None
     from .fetch import prefetch_studies
     prefetch_studies(client, studies, s["include_non_batch"], progress=lambda d, t, m: say(d, t, m),
                      keep=narrowed, dropout=s["include_dropout"])
@@ -539,7 +594,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         except MGrowthDBError as e:
             errors.append(f"{study_id}: {e}")
             continue
-        if s["only_entered"]:
+        if only_entered:
             def entered(record, side):
                 return (record.get(f"{side}_taxon_id") in wanted_ids
                         or record.get(f"{side}_species", record[side]) in wanted)
@@ -552,20 +607,46 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         # co-cultures left underived because their partner was not entered count like dropped interactions
         partners_only += sum("the partner is not among the species entered" in r for _, r in skips)
 
+    # a request that failed after its retries leaves a gap in what was read, so the result is incomplete:
+    # said at the top, not only among the pairs the data did not support (audit step 7, 2026-09-28)
+    failed = unread(skipped)
+    if failed:
+        errors.append(f"{len(failed)} replicate(s) or growth curve(s) could not be read from mGrowthDB "
+                      f"(for example {failed[0][0]}: {failed[0][1]}); the result is incomplete, so run the "
+                      "search again")
     records, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"],
-                                 s["no_growth_alpha"], s["no_growth_factor"], s["merge_arcs"], s["min_studies"])
+                                 s["no_growth_alpha"], s["no_growth_factor"], s["merge_arcs"], s["min_studies"],
+                                 s["merge_genera"], support_level(names))
     # every setting the search ran with, so a downloaded network says how it was made (#78, #76)
     net = records_to_network(records, meta={
-        "source_db": "mGrowthDB (live)", "species": names, "studies": studies, "settings": dict(s), **extra})
+        "source_db": "mGrowthDB (live)", "query": "all" if all_studies else "species", "species": names,
+        "studies": studies, "settings": dict(s), **extra})
     net.meta["data"] = data_versions(client, studies, net.meta["derived_at"])
     _current_names(net, current)
     say(len(studies), len(studies), "Preparing the result")
     return {"entries": names, "settings": dict(s), "resolved": resolved["resolved"],
             "reasons": resolved["reasons"], "suggestions": resolved["suggestions"], "excluded": left_out,
+            "all": all_studies, "genera": resolved["genera"],
             "partners_only": partners_only,
             "unresolved": resolved["unresolved"], "taxon_ids": resolved["taxon_ids"], "studies": studies,
             "network": net,
             "skipped": skipped, "errors": errors, "hidden": extra["hidden"], "absence": extra["absence"]}
+
+
+# searches kept for their pages, downloads and reports: the latest ones only, so a page left open all day
+# does not keep every result in memory (code review of 2026-09-28)
+KEPT_JOBS = 20
+# the species list (and All's list of studies) is read again after this many seconds, so a study published
+# while the page runs is found without a restart (code review of 2026-09-28)
+INDEX_MAX_AGE = 3600
+_INDEX_LOCK = threading.Lock()
+
+
+def prune_jobs(jobs: dict, keep: int = KEPT_JOBS) -> None:
+    """Drop all but the latest `keep` searches, never one still running (dicts keep insertion order)."""
+    for old in list(jobs)[:-keep]:
+        if jobs[old]["status"] != "running":
+            del jobs[old]
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
@@ -642,6 +723,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(self._job_page(job) if job else render_form(self.token))
         elif parsed.path == "/help":
             self._send(render_help(self.token))
+        elif parsed.path == "/about":
+            self._send(render_about(self.token))
         elif parsed.path == "/legend":
             self._send(render_legend(self.token))
         elif parsed.path == "/download":
@@ -672,10 +755,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         return render_result(self.token, result, message=f"Sent to Cytoscape: network {sent['suid']}, in the "
                              "grownet style (arcs as in the legend, nodes colored by genus).")
 
-    def _start(self, entries: list, settings: dict) -> dict:
+    def _start(self, entries: list, settings: dict, all_studies: bool = False) -> dict:
         """Run a search in a thread, so the page can show its progress while it runs (#75)."""
         job = {"id": secrets.token_hex(4), "status": "running", "done": 0, "total": None,
-               "message": "Starting", "entries": [e.strip() for e in entries if e.strip()],
+               "message": "Starting", "entries": [e.strip() for e in entries if e.strip()], "all": all_studies,
                "settings": settings, "result": None, "error": ""}
 
         def progress(done, total, message):
@@ -684,18 +767,24 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         def work():
             try:
                 client = self.client_factory()
-                if self.state.get("index") is None:
-                    # the species list of all of mGrowthDB: slow to build, so built once per session
-                    progress(0, None, "Reading the species list of mGrowthDB (the first search only)")
-                    self.state["index"] = species_index(client, progress=progress)
-                job["result"] = run_query(client, entries, settings, self.state["index"], progress=progress)
+                with _INDEX_LOCK:          # two first searches build it once, not twice
+                    built = self.state.get("index_built", 0)
+                    if self.state.get("index") is None or time.monotonic() - built > INDEX_MAX_AGE:
+                        # the species list of all of mGrowthDB: slow to build, so built once an hour at most
+                        progress(0, None, "Reading the species list of mGrowthDB (the first search in an hour)")
+                        self.state["index"] = species_index(client, progress=progress)
+                        self.state["index_built"] = time.monotonic()
+                job["result"] = run_query(client, entries, settings, self.state["index"], progress=progress,
+                                          all_studies=all_studies)
                 job["status"] = "done"
             except MGrowthDBError as e:
                 job.update(status="failed", error=f"mGrowthDB is not reachable: {e}")
             except Exception as e:             # a bug must reach the page, not only a dead thread
                 job.update(status="failed", error=f"The search failed: {type(e).__name__}: {e}")
 
-        self.state.setdefault("jobs", {})[job["id"]] = job
+        jobs = self.state.setdefault("jobs", {})
+        jobs[job["id"]] = job
+        prune_jobs(jobs)
         job["thread"] = threading.Thread(target=work, daemon=True)
         job["thread"].start()
         return job
@@ -713,6 +802,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         settings = parse_settings(form)
         if form.get("example"):
             self._send(render_form(self.token, "\n".join(EXAMPLE), settings))
+            return
+        if form.get("all"):
+            job = self._start([], settings, all_studies=True)
+            job["thread"].join(self.wait)
+            self._redirect(f"/?token={self.token}&job={job['id']}#result")
             return
         if not [e for e in entries if e.strip()]:
             self._send(render_form(self.token, settings=settings, message="Type at least one species."))
@@ -738,11 +832,11 @@ def serve(port: int = 0, open_browser: bool = True, client_factory=None) -> None
     try:
         server = _Server(("127.0.0.1", port), handler)
     except OSError as e:
-        raise SystemExit(f"crossfeed gui: cannot use port {port} ({e.strerror}). Pick another with --port, "
+        raise SystemExit(f"grownet gui: cannot use port {port} ({e.strerror}). Pick another with --port, "
                          "or leave it out to use a free one.") from None
     with server as httpd:
         url = f"http://127.0.0.1:{httpd.server_address[1]}/?token={handler.token}"
-        print(f"{TITLE} is at {url}\nPress Ctrl+C to stop.")
+        print(f"{TITLE} is at {url}\nPress Ctrl+C to stop.", flush=True)
         if open_browser:
             webbrowser.open(url)
         try:

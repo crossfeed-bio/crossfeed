@@ -23,17 +23,19 @@ from .mgrowthdb import MGrowthDBError
 WORKERS = 6
 
 
-def _each(fn, items, progress=None, message=""):
+def _each(fn, items, progress=None, message="", failures=None):
     """fn over items, WORKERS at a time; a failed item gives None (the derivation will meet and report the
-    same failure when it asks for that item itself)."""
+    same failure when it asks for that item itself). `failures`, when given, collects (item, error)."""
     items = list(items)
     results = [None] * len(items)
 
     def run(i):
         try:
             results[i] = fn(items[i])
-        except (MGrowthDBError, OSError, ValueError, KeyError):
+        except (MGrowthDBError, OSError, ValueError, KeyError) as e:
             results[i] = None
+            if failures is not None:
+                failures.append((items[i], e))
         return i
 
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
@@ -89,7 +91,15 @@ def study_ids_in_order(client, study_id_format: str, max_studies: int, miss_run:
     found, misses, n = [], 0, 1
     while n <= max_studies and misses < miss_run:
         batch = list(range(n, min(n + WORKERS, max_studies + 1)))
-        studies = _each(client.get_study, [study_id_format.format(i) for i in batch])
+        failures = []
+        studies = _each(client.get_study, [study_id_format.format(i) for i in batch], failures=failures)
+        # only "no such study" (HTTP 404) ends the crawl; anything else (unreachable, a timeout, a server
+        # error after its retries) is reported, never read as mGrowthDB holding fewer studies
+        down = [(sid, e) for sid, e in failures if getattr(e, "status", None) != 404]
+        if down:
+            sid, e = down[0]
+            raise MGrowthDBError(f"mGrowthDB could not be read (asking for {sid}): {e}",
+                                 status=getattr(e, "status", None))
         for i, study in zip(batch, studies, strict=True):
             if misses >= miss_run:
                 break

@@ -10,11 +10,17 @@ import html
 
 from . import __version__
 from .brand import COMMAND, NAME
+from .idea import idea_figure
 
 REPOSITORY = "https://github.com/crossfeed-bio/crossfeed"
 ISSUES = f"{REPOSITORY}/issues"
 NEW_ISSUE = f"{ISSUES}/new/choose"
 MGROWTHDB = "https://mgrowthdb.gbiomed.kuleuven.be"
+
+# The About page (#80): the wording Craig agreed to on #80, naming both builders; change it only with
+# their agreement.
+ABOUT = (f"{NAME} was built by Karoline Faust (KU Leuven) and Craig Heilmann (Syntropa), working through "
+         "their AI coding agents (Claude).")
 
 # key in gui.DEFAULTS -> (label on the page, command line flag, what it does and when to change it)
 SETTINGS = {
@@ -26,8 +32,10 @@ SETTINGS = {
                     "Used with growth_rate. easylinear (the default) fits straight lines to log abundance over "
                     "sliding windows and takes the steepest part, as mGrowthDB computes the rates it reports "
                     "(it matched them on 190 of 192 curves within 10%). baranyi fits the Baranyi-Roberts growth "
-                    "model to the whole curve; a curve it does not describe (for example one that declines "
-                    "after its peak) is left out and reported, never given another number."),
+                    "model to the curve up to the end of the plateau after its maximum, so a decline after the peak "
+                    "does not matter; a curve "
+                    "it still does not describe (for example two growth phases) is left out and reported, never "
+                    "given another number."),
     "rate_window": ("Growth rate window", "--rate-window N",
                     "Used with easylinear: how many consecutive points each fitted line spans. 5, the default, "
                     "is what mGrowthDB uses; fewer points follow noise, more flatten the steepest part."),
@@ -76,6 +84,16 @@ SETTINGS = {
                    "another, across conditions, studies and evidence, become one arc: its strength is the median "
                    "of their log2 means, with the range, and it lists every study, experiment and condition it "
                    "rests on. Arcs whose signs disagree are not merged; absent arcs stay separate."),
+    "merge_genera": ("Merge to genus", "--merge-genera",
+                     "Off by default. On, every strain becomes its genus, and the arcs between two genera merge "
+                     "by sign, so two genera can be joined by a facilitation arc and an inhibition arc. The "
+                     "strength is the median of the merged arcs' log2 means, with the range, and "
+                     "supporting_pairs counts the distinct species pairs behind the arc, or strain pairs when "
+                     "only NCBI taxon ids were entered. Interactions within one genus stay, as an arc from the "
+                     "genus to itself; absent arcs become one absent arc per genus pair, hidden as before. With "
+                     "Merge parallel arcs on as well, the arcs of each pair are merged across studies first, so "
+                     "a pair measured in several studies counts once. The genus is the first word of the name "
+                     "mGrowthDB records, not NCBI's lineage, so a reclassified genus follows its names."),
     "min_studies": ("Minimum supporting studies", "--min-studies N",
                     "Keeps arcs resting on at least this many studies. Above 1 it needs merged arcs, since an "
                     "arc as derived rests on one study."),
@@ -94,7 +112,9 @@ SETTINGS = {
 
 # command line options of `derive` that are not advanced settings -> what they do
 CLI_ONLY = {
-    "--species": "species or strain names, or NCBI taxon ids: search every study holding them, as the page does",
+    "--species": "species, strain or genus names, or NCBI taxon ids: search every study holding them, as the page "
+                 "does",
+    "--all": "every study in mGrowthDB, with every partner, as the page's All button (with --live)",
     "--live": "fetch from the mGrowthDB API (the normal case)",
     "--fixture": "derive from a JSON list of interaction records instead (offline, for testing)",
     "--deriver": "plug in your own derivation method, given as module:ClassName (one study at a time)",
@@ -133,7 +153,12 @@ EDGE_ATTRIBUTES = {
                "removed_member_detected; empty means no issue found",
     "cautions": "remarks that do not lower quality: two_replicates (exactly two replicates on a side), "
                 "conditions_unverified (experiments of this pair differ only in their description, such as a "
-                "supplement, and nothing recorded says which monocultures or drop-outs match which)",
+                "supplement, and nothing recorded says which monocultures or drop-outs match which), "
+                "stationary_phase_differs (with max as the measure: one set reached stationary phase and the "
+                "other did not, so its maximum may still be rising), stationary_unchecked (with max: too few "
+                "time points, under 6, to tell), zero_at_start (an obligate or abolished arc whose set without "
+                "growth is zero from its first time point, so no growth cannot be told from no inoculum or "
+                "counts below detection)",
     "notes": "other remarks, for example a replicate left out for a spike",
     "evidence": "biculture (monoculture against a two-member co-culture: a direct interaction) or dropout "
                 "(a community against the same community without the source: direct or indirect)",
@@ -147,6 +172,9 @@ EDGE_ATTRIBUTES = {
                    "empty for an arc as derived",
     "strength_range": "with Merge parallel arcs: the lowest and highest log2 mean of the merged arcs; the "
                       "strength is their median",
+    "supporting_pairs": "with Merge to genus: how many distinct species pairs (strain pairs when only taxon ids "
+                        "were entered) this genus arc rests on",
+    "merged_pairs": "with Merge to genus: those pairs, as source -> target",
 }
 
 # Node field -> meaning
@@ -155,7 +183,8 @@ NODE_ATTRIBUTES = {
     "name": "the strain name, as the study records it",
     "taxon_id": "the NCBI taxon id of the strain, as mGrowthDB records it",
     "species": "genus and species from the name, to merge with species-level networks",
-    "identity": "what the id rests on: ncbi (the taxon id) or name",
+    "identity": "what the id rests on: ncbi (the taxon id), name, or genus (with Merge to genus: the node "
+                "stands for every strain of its genus)",
     "taxonomy": "a lineage, when known",
     "model_ref": "a link to a metabolic model, when known",
 }
@@ -168,6 +197,10 @@ DECISIONS = (
     ("One number per comparison: the mean log2 ratio of the replicate sets.",
      "log2(with) minus log2(without) per species, averaged over replicates, with the spread of both sets "
      "combined in the sd. A log ratio is symmetric: a doubling is +1 and a halving is -1 (#3)."),
+    ("Curves are compared over the time they share.",
+     "Areas and maxima are taken from the common first time point to the earliest last time point of the "
+     "curves compared (for a bi-culture, every curve of the design; for a drop-out arc, the target's curves "
+     "with and without the removed member), interpolating at that end, so no curve is extrapolated (#1)."),
     ("An edge is present by its size against its spread, not by a p-value.",
      "With two or three replicates a real effect rarely reaches significance, so the test is reported as "
      "support and does not decide. The absence threshold k does: |mean| of at least k sd (#40, #54)."),
@@ -202,6 +235,16 @@ DECISIONS = (
     ("Suspect curves are flagged, never silently dropped or replaced.",
      "A replicate with an implausible spike is left out and reported, with the other techniques measured "
      "on it named (#39)."),
+    ("Merging summarizes; it is off by default.",
+     "Interactions are condition-specific, so arcs are shown as derived. Merge parallel arcs and Merge to "
+     "genus condense them on request: by the median, never across signs, and with Merge to genus each arc "
+     "says how many species pairs it rests on. Merged across studies first, a pair measured in several "
+     "studies counts once (register items 14 and 24)."),
+    ("The genus comes from mGrowthDB's names.",
+     "It is the first word of the name mGrowthDB records, after qualifiers such as Candidatus or "
+     "unclassified, and not NCBI's lineage. NCBI's brackets stay: [Clostridium] scindens is placed outside "
+     "Clostridium, so its genus is [Clostridium]. A reclassified genus follows its names: Phocaeicola "
+     "(former Bacteroides) is its own genus."),
     ("grownet never corrects source data.",
      "Errors in mGrowthDB records are fixed in mGrowthDB, so every user sees the same data."),
     ("Everything runs on your machine.",
@@ -272,7 +315,8 @@ def _table(head, rows) -> str:
     return f"<table><tr>{th}</tr>" + "".join(rows) + "</table>"
 
 
-SECTIONS = (("what", "What grownet does"), ("example", "Try the example"), ("reading", "Reading the result"),
+SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"), ("measures", "Which growth measure"),
+            ("example", "Try the example"), ("reading", "Reading the result"),
             ("settings", "Advanced settings"), ("attributes", "Arc and node attributes"),
             ("decisions", "Why it works this way"), ("cli", "The command line"),
             ("empty", "No network came back"), ("qa", "Questions and problems"), ("cite", "How to cite"),
@@ -301,9 +345,66 @@ def render_help(token: str, defaults: dict, example: tuple) -> str:
 <ol class="toc">{toc}</ol>
 
 <h2 id="what">What grownet does</h2>
-<p>Type species names, one per line, or NCBI taxon ids. grownet looks them up in mGrowthDB, reads the
-growth curves of every study that holds them, and derives the interactions between them on this machine.
-Nothing is uploaded, and nothing is written outside the file you download.</p>
+<p>Type species names, one per line, strain names, a genus (it stands for every species of it in
+mGrowthDB), or NCBI taxon ids. grownet looks them up in mGrowthDB, reads the growth curves of every study
+that holds them, and derives the interactions between them on this machine. The All button ignores the
+box and derives every study in mGrowthDB, with every partner. Nothing is uploaded, and nothing is written
+outside the file you download.</p>
+
+<h2 id="idea">The idea behind it</h2>
+<p>How one species affects another can be read from growth alone: grow each species by itself, grow the
+two together, and compare. Gause showed this with two ciliates feeding on the same bacteria,
+<i>Paramecium caudatum</i> and <i>P. aurelia</i> (Gause 1934). Grown separately, each species reached a
+stable population. Grown together, both grew at first, then <i>P. caudatum</i> declined until
+<i>P. aurelia</i> had displaced it entirely. Set against growth alone, the mixed culture showed how each
+species affected the other. grownet makes the same comparison on the growth curves in mGrowthDB.</p>
+{idea_figure()}
+<p class="muted">An illustration, not data: the curves are drawn with the Baranyi-Roberts model the tool
+fits.</p>
+<p>A partner that raises a species' growth facilitates it, drawn as a green arc from the partner to the
+species; one that lowers it inhibits it, an orange-red arc. The change, as the log2 ratio of growth together
+to growth alone over the replicates, is the arc's strength, and a change too small beside its spread
+(below the absence threshold) counts as no interaction. Three properties of a curve can be compared,
+marked in the figure: the area under the curve (auc, the default), which combines lag, rate and
+yield; the maximal abundance (max); and the growth rate, the steepest slope of log abundance (Growth
+measure, in the <a href="#settings">advanced settings</a>).</p>
+<p>The comparison holds only when both species are counted separately in the co-culture, by a technique
+that tells them apart and is the same one used alone, and when alone and together were grown under the same
+conditions; grownet checks both (<a href="#decisions">why it works this way</a>). The same comparison runs
+on drop-out experiments, a community with and without one member. A change says that the partner affects
+the species, not how: cross-feeding, competition for a nutrient, a toxin or a change of pH look the same
+here. Gause's yeasts are a case in point (Gause 1932, 1934): in mixed culture without oxygen, a yeast he
+named <i>Schizosaccharomyces kephir</i> inhibited <i>Saccharomyces cerevisiae</i> strongly, and only a
+separate measurement traced the inhibition to the ethyl alcohol it produced, about twice as much per unit
+of yeast volume as <i>S. cerevisiae</i>.</p>
+<p class="muted">Gause GF (1932) Experimental studies on the struggle for existence. I. Mixed population of
+two species of yeast. Journal of Experimental Biology 9: 389-402.<br>
+Gause GF (1934) The Struggle for Existence. Williams and Wilkins, Baltimore.</p>
+
+<h2 id="measures">Which growth measure</h2>
+<p>Each measure answers a different question, so an arc can differ between them: on all of mGrowthDB (September 2026)
+the area and the maximum agree on the sign of every arc both find, while the area and the growth rate agree on
+18 of 23, since a partner can, for example, lower a species' final yield while speeding up its early growth.
+Choose it under Growth measure in the <a href="#settings">advanced settings</a>.</p>
+<dl class="settings">
+<dt>Area under the curve (auc, the default)</dt>
+<dd>For: it combines lag, rate and yield in one number and uses every point of the curve, so it is robust
+to noise in any one of them, and it is defined for any curve with two points. Against: it cannot say which
+of lag, rate or yield changed; it needs the same time window on both sides, which grownet ensures; and it
+counts the starting abundance too, so a larger inoculum raises it.</dd>
+<dt>Maximal abundance (max)</dt>
+<dd>For: the simplest to read, the yield a species reaches, and unaffected by a decline after the peak.
+Against: it rests on one point, so one noisy measurement moves it, and it ignores timing, so a slow and a
+fast grower reaching the same level look alike. It is misleading when one curve reached stationary phase
+and the other did not; grownet then marks the arc <code>stationary_phase_differs</code>.</dd>
+<dt>Growth rate (growth_rate)</dt>
+<dd>For: the speed of growth, independent of yield and of the unit of abundance, and with easylinear the
+same method mGrowthDB uses for the rates it reports. Against: it ignores yield and lag; it needs densely
+sampled curves (at least 6 points), so a sparsely sampled study gives no rates at all; and it is
+sensitive to noise in the steepest part of the curve. easylinear takes the steepest straight stretch of
+log abundance and depends on its window; baranyi fits a growth model up to the end of the plateau, and
+refuses curves the model does not describe, such as two growth phases.</dd>
+</dl>
 
 <h2 id="example">Try the example</h2>
 <p>The Example button fills the box with {_e(pair)}, a pair with enough data to show a result: the
@@ -347,13 +448,16 @@ publication dates, which change when a study is corrected.</p>
 its report, and the network sent to Cytoscape:</p>
 <pre>{_e(EXAMPLE_CLI)}</pre>
 <p>Without installing anything, <code>uvx --from git+{REPOSITORY} {COMMAND} ...</code> runs the same
-command. The command is still called <code>{COMMAND}</code>: it becomes <code>{NAME}</code> when the package
-is renamed (#71). Other uses:</p>
+command. Other uses:</p>
 <pre>{COMMAND} derive SMGDB00000004 --live --format graphml --out study4.graphml
+{COMMAND} derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
+{COMMAND} derive --live --all --merge-arcs --merge-genera --out all_genera.json
 {COMMAND} gui
 {COMMAND} validate example.json</pre>
-<p>The first derives one whole study, the second opens this page, the third checks a file against the
-format. Every advanced setting has its flag (see the list above), and <code>{COMMAND} derive --help</code>
+<p>The first derives one whole study; the second a genus, every species of it with every partner, one
+node per genus; the third all of mGrowthDB, as the All button does, merged across studies and then to
+genus; the fourth opens this page, and the last checks a file against the format. Every advanced setting
+has its flag (see the list above), and <code>{COMMAND} derive --help</code>
 lists them all. Besides those:</p>
 <ul>{cli_only}</ul>
 
@@ -402,3 +506,10 @@ def _default(value, key: str = "") -> str:
     if value == "":
         return "none"
     return str(value)
+
+
+def render_about() -> str:
+    """Who built the tool, and where its source, issues and license are (#80)."""
+    return (f"<h2 class=\"page\">About {_e(NAME)}</h2><p>{_e(ABOUT)}</p>"
+            f"<p>Source code, issues and license: <a href=\"{REPOSITORY}\">{REPOSITORY}</a></p>"
+            f"<p>Version {_e(__version__)}.</p>")

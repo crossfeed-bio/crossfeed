@@ -1,4 +1,4 @@
-"""The legend: what every line, arrowhead and flag on a crossfeed network means.
+"""The legend: what every line, arrowhead and flag on a grownet network means.
 
 A reader meets the network in Cytoscape or on the local page, where an arc carries several channels at
 once (direction, width, dash pattern) and an edge carries flags that decide whether it is drawn at all.
@@ -57,7 +57,11 @@ NOTES = [
     ("Node", "one organism, labeled with its name; in Cytoscape colored by genus, each genus its own color."),
     ("Shown, with a caution", "two_replicates: the spread rests on two values per side. conditions_unverified: "
                               "experiments differ only in their description (a supplement), so which "
-                              "monocultures match is not recorded. The edge keeps its status and is drawn."),
+                              "monocultures match is not recorded. stationary_phase_differs and "
+                              "stationary_unchecked (max only): one set reached stationary phase and the "
+                              "other did not, or too few points to tell. zero_at_start: an obligate or "
+                              "abolished arc whose set without growth is zero from its first point. The edge "
+                              "keeps its status and is drawn."),
     ("Not drawn by default", "the quality flags strains_pooled, removed_member_detected and non_batch. The "
                              "comparison itself is in doubt, so such an edge is never read as an absence of "
                              "an interaction."),
@@ -74,7 +78,7 @@ SUBTITLE = ["An arc points from the source to the organism it affects. The color
             "the width the size, the dashes the evidence. Every arc ends in the same arrowhead."]
 
 
-# The mark (docs/logo.svg) lives in crossfeed.brand with the page palette; imported here for `make logo`.
+# The mark (docs/logo.svg) lives in grownet.brand with the page palette; imported here for `make logo`.
 
 
 def _wrap(text: str, width: int = WRAP) -> list:
@@ -140,7 +144,7 @@ def legend_svg() -> str:
 
 def legend_page(token: str = "") -> str:
     """The legend as a page of the local server, with a link back to the form."""
-    back = f'<p><a href="/?token={html.escape(token, quote=True)}">Back to crossfeed</a></p>' if token else ""
+    back = f'<p><a href="/?token={html.escape(token, quote=True)}">Back to grownet</a></p>' if token else ""
     return ('<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
             '<title>Interaction network legend</title>'

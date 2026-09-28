@@ -1,11 +1,11 @@
-"""grownet command line (the command is still crossfeed): derive interaction networks from mGrowthDB.
+"""grownet command line: derive interaction networks from mGrowthDB.
 
-  python -m crossfeed derive SMGDB00000004 --live                 # every species in one study
-  python -m crossfeed derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"
-  python -m crossfeed derive SMGDB00000004 --fixture records.json  # offline, from interaction records
-  python -m crossfeed validate network.json                       # check a network against the schema
-  python -m crossfeed schema --out interaction_network.schema.json # emit the neutral-format schema
-  python -m crossfeed gui                                          # a local page for species names
+  python -m grownet derive SMGDB00000004 --live                 # every species in one study
+  python -m grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"
+  python -m grownet derive SMGDB00000004 --fixture records.json  # offline, from interaction records
+  python -m grownet validate network.json                       # check a network against the schema
+  python -m grownet schema --out interaction_network.schema.json # emit the neutral-format schema
+  python -m grownet gui                                          # a local page for species names
 """
 from __future__ import annotations
 
@@ -14,23 +14,29 @@ import json
 import sys
 from collections import Counter
 
+from .adapter import condensed, unread
 from .attribution import render_attribution
 from .mgrowthdb import MGrowthDBError, records_to_network
 from .schema import schema_json, validate_document
 
 DERIVE_EXAMPLES = """examples:
   the local page's Example, written to a file, with its report, and sent to Cytoscape:
-    crossfeed derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica" \\
+    grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica" \\
         --out example.json --report example_report.txt --to-cytoscape
 
   a strain and a taxon id, every partner, as GraphML:
-    crossfeed derive --live --species "Faecalibacterium duncaniae A2-165" 476272 --all-partners \\
+    grownet derive --live --species "Faecalibacterium duncaniae A2-165" 476272 --all-partners \\
         --format graphml --out example.graphml
 
-  every species in one study, stricter about what counts as an interaction:
-    crossfeed derive SMGDB00000004 --live --absence-threshold 2 --out study4.json
+  a genus (all its species in mGrowthDB) with every partner, one node per genus:
+    grownet derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
 
-The command becomes grownet when the package is renamed.
+  all of mGrowthDB (the page's All), arcs merged across studies and then to genus:
+    grownet derive --live --all --merge-arcs --merge-genera --out all_genera.json
+
+  every species in one study, stricter about what counts as an interaction:
+    grownet derive SMGDB00000004 --live --absence-threshold 2 --out study4.json
+
 """
 
 
@@ -65,10 +71,10 @@ def _metric(a) -> str:
 
 
 def _derive(a):
-    if a.species:
+    if a.species or a.all_studies:
         return _derive_species(a)
     if not a.study:
-        print("derive needs a study id, or --species with names (see crossfeed derive --help)", file=sys.stderr)
+        print("derive needs a study id, or --species with names (see grownet derive --help)", file=sys.stderr)
         return 2
     if a.deriver and not a.live:
         print("--deriver applies to --live (it derives from raw growth data); "
@@ -88,9 +94,11 @@ def _derive(a):
                                                    no_growth_alpha=a.no_growth_alpha,
                                                    no_growth_factor=a.no_growth_factor)
             records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold,
-                                         a.no_growth_alpha, a.no_growth_factor, a.merge_arcs, a.min_studies)
+                                         a.no_growth_alpha, a.no_growth_factor, a.merge_arcs, a.min_studies,
+                                         a.merge_genera)
             extra["settings"] = {"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
                                  "merge_arcs": a.merge_arcs, "min_studies": a.min_studies,
+                                 "merge_genera": a.merge_genera,
                                  "spike_factor": a.spike_factor,
                                  "absence_threshold": a.absence_threshold,
                                  "include_low_quality": a.include_low_quality, "correction": a.correction,
@@ -110,18 +118,29 @@ def _derive(a):
     if a.live:
         from .mgrowthdb import data_versions
         net.meta["data"] = data_versions(client, [a.study], net.meta["derived_at"])
+    errors = []
+    failed = unread(skipped)
+    if failed:
+        # a request that failed after its retries: the network is incomplete (audit step 7)
+        errors.append(f"{len(failed)} replicate(s) or growth curve(s) could not be read from mGrowthDB (for "
+                      f"example {failed[0][0]}: {failed[0][1]}); the result is incomplete, so run it again")
+        print(f"warning: {errors[0]}", file=sys.stderr)
     result = {"study": a.study, "entries": [], "resolved": [], "unresolved": [], "studies": [a.study],
-              "skipped": skipped, "errors": [], "network": net}
+              "skipped": skipped, "errors": errors, "network": net}
     return _emit(a, net, skipped, extra, a.study, result)
 
 
 def _derive_species(a):
     """What the local page does, from the command line: names to studies to one network (#78)."""
+    flag = "--all" if a.all_studies else "--species"
+    if a.all_studies and a.species:
+        print("--all derives every study; leave out --species", file=sys.stderr)
+        return 2
     if not a.live:
-        print("--species searches mGrowthDB, so it needs --live", file=sys.stderr)
+        print(f"{flag} searches mGrowthDB, so it needs --live", file=sys.stderr)
         return 2
     if a.deriver:
-        print("--species uses the default derivation; --deriver applies to one study", file=sys.stderr)
+        print(f"{flag} uses the default derivation; --deriver applies to one study", file=sys.stderr)
         return 2
     from .gui import DEFAULTS, run_query
     from .mgrowthdb import MGrowthDBClient
@@ -131,11 +150,11 @@ def _derive_species(a):
                 "correction": a.correction, "include_dropout": not a.no_dropout,
                 "include_non_batch": a.include_non_batch, "studies": a.study or "",
                 "only_entered": not a.all_partners, "exclude_studies": a.exclude_studies,
-                "merge_arcs": a.merge_arcs, "min_studies": a.min_studies,
+                "merge_arcs": a.merge_arcs, "min_studies": a.min_studies, "merge_genera": a.merge_genera,
                 "no_growth_alpha": a.no_growth_alpha,
                 "no_growth_factor": a.no_growth_factor}
     try:
-        result = run_query(MGrowthDBClient(), a.species, settings)
+        result = run_query(MGrowthDBClient(), a.species or [], settings, all_studies=a.all_studies)
     except MGrowthDBError as e:
         print(f"live fetch failed: {e}", file=sys.stderr)
         return 1
@@ -159,7 +178,8 @@ def _derive_species(a):
 
         from .gui import _empty_reason
         print("\nno interactions: " + html.unescape(_empty_reason(result)), file=sys.stderr)
-    return _emit(a, net, result["skipped"], extra, " and ".join(a.species), result)
+    label = "all of mGrowthDB" if a.all_studies else " and ".join(a.species)
+    return _emit(a, net, result["skipped"], extra, label, result)
 
 
 def _emit(a, net, skipped, extra, label, result):
@@ -195,6 +215,7 @@ def _emit(a, net, skipped, extra, label, result):
               + (f"; {sent['warning']}" if sent.get("warning") else ""), file=sys.stderr)
 
     print(render_attribution(net), file=sys.stderr)
+    skipped = condensed(skipped)
     if skipped:
         print(f"\nskipped {len(skipped)} pair(s) the data did not cleanly support:", file=sys.stderr)
         for label, reason in skipped:
@@ -263,14 +284,15 @@ def _gui(a):
 
 def build_parser() -> argparse.ArgumentParser:
     """The command line, apart from running it, so the help page can be checked against it (#78)."""
-    ap = argparse.ArgumentParser(prog="crossfeed", description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(prog="grownet", description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     d = sub.add_parser(
         "derive", help="derive an interaction network for species, or for one study",
-        description="Derive an interaction network from mGrowthDB growth curves: for species, strains or\n"
-                    "NCBI taxon ids (as the local page does), or for every species in one study. The\n"
-                    "settings are the local page's Advanced settings, with the same defaults.",
+        description="Derive an interaction network from mGrowthDB growth curves: for species, strains,\n"
+                    "genera or NCBI taxon ids (as the local page does), for all of mGrowthDB (--all, the\n"
+                    "page's All button), or for every species in one study. The settings are the local\n"
+                    "page's Advanced settings, with the same defaults.",
         epilog=DERIVE_EXAMPLES, formatter_class=argparse.RawDescriptionHelpFormatter)
     what = d.add_argument_group("what to derive")
     what.add_argument("study", nargs="?", default="",
@@ -278,10 +300,14 @@ def build_parser() -> argparse.ArgumentParser:
                            "--species, comma separated study ids to search instead of every study holding "
                            "them (the page's Only these studies)")
     what.add_argument("--species", nargs="+", metavar="NAME",
-                      help="species or strain names, or NCBI taxon ids: every study holding them is searched "
-                           "and one network returned, as on the local page (needs --live)")
+                      help="species or strain names, NCBI taxon ids, or a genus (all its species): every study "
+                           "holding them is searched and one network returned, as on the local page (needs "
+                           "--live)")
+    what.add_argument("--all", action="store_true", dest="all_studies",
+                      help="every study in mGrowthDB, with every partner, as the page's All button (needs "
+                           "--live; the study argument then limits it to those studies)")
     what.add_argument("--exclude-studies", default="", metavar="IDS",
-                      help="with --species, comma separated study ids never to search (default: none)")
+                      help="with --species or --all, comma separated study ids never to search (default: none)")
     what.add_argument("--all-partners", action="store_true",
                       help="with --species, also keep interactions with species not entered (the page's "
                            "'Only interactions between the species entered', unticked)")
@@ -338,6 +364,11 @@ def build_parser() -> argparse.ArgumentParser:
                           help="merge the arcs of each source and target, across conditions and studies, into "
                                "one with the median log2 mean and its range; arcs whose signs disagree are not "
                                "merged (off by default: interactions are condition-specific)")
+    settings.add_argument("--merge-genera", action="store_true",
+                          help="one node per genus, and the arcs between two genera merged by sign, with the "
+                               "median log2 mean and the number of species pairs behind each (strain pairs when "
+                               "only taxon ids were entered); with --merge-arcs a pair measured in several "
+                               "studies counts once (off by default)")
     settings.add_argument("--min-studies", type=int, default=1, metavar="N",
                           help="keep arcs resting on at least N studies (default 1; above 1 it needs merged arcs)")
 

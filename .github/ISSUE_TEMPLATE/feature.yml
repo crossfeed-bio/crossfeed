@@ -11,7 +11,7 @@ body:
     id: goal
     attributes:
       label: Goal
-      description: What should crossfeed be able to do when this is done, and for whom?
+      description: What should grownet be able to do when this is done, and for whom?
     validations:
       required: true
   - type: textarea
@@ -25,7 +25,7 @@ body:
       label: Acceptance criteria
       description: Checkable statements a verifier can test, ideally with a command. One per line.
       placeholder: |
-        - [ ] `python -m crossfeed derive SMGDB00000007 --live` emits a network with at least one edge
+        - [ ] `python -m grownet derive SMGDB00000007 --live` emits a network with at least one edge
         - [ ] the README documents the new flag
     validations:
       required: true

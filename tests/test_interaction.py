@@ -3,10 +3,10 @@ import math
 
 import pytest
 
-from crossfeed import interaction
-from crossfeed.growth import GrowthCurve, Replicate
-from crossfeed.interaction import dropout_interaction_strengths, grew, interaction_strength, rule_meta
-from crossfeed.stats import welch
+from grownet import interaction
+from grownet.growth import GrowthCurve, Replicate
+from grownet.interaction import dropout_interaction_strengths, grew, interaction_strength, rule_meta
+from grownet.stats import welch
 
 
 @pytest.fixture(autouse=True)
@@ -130,9 +130,12 @@ def test_errors_for_method_start_time_and_units():
     mono_a, mono_b, co = _example()
     with pytest.raises(ValueError, match="unknown method 'rate'"):
         interaction_strength(mono_a, mono_b, co, A, B, method="rate")
+    # B's monoculture starting later leaves out B's own arc only (code review of 2026-09-28: it refused
+    # the pair); A is still compared
     late = [Replicate([_curve(B, (1, 1), times=(2, 10))], "b1")]
-    with pytest.raises(ValueError, match="start at different time points"):
-        interaction_strength(mono_a, late, co, A, B)
+    r = interaction_strength(mono_a, late, co, A, B)
+    assert r["species_b"]["outcome"] == "unusable" and "start at different time points" in r["species_b"]["reason"]
+    assert r["species_a"]["outcome"] == "quantified"
     days = [Replicate([GrowthCurve(B, (0, 10), (1, 1), "d", "16S copies/mL")], "b1")]
     with pytest.raises(ValueError, match="mixed time units"):
         interaction_strength(mono_a, days, co, A, B)
@@ -470,9 +473,13 @@ def test_a_monoculture_is_compared_only_with_a_co_culture_measured_the_same_way(
     mono_a = [Replicate([_measured(A, (1, 1.4), "fc")], f"a{i}") for i in range(2)]
     mono_b = [Replicate([_measured(B, (1, 1.4), "qpcr")], f"b{i}") for i in range(2)]
     co = [Replicate([_measured(A, (1, 3), "qpcr"), _measured(B, (1, 1.4), "qpcr")], f"c{i}") for i in range(2)]
-    with pytest.raises(ValueError, match="measured by different techniques") as e:
-        interaction_strength(mono_a, mono_b, co, A, B)
-    assert "fc: " in str(e.value) and "qpcr: " in str(e.value) and A in str(e.value)
+    # only A's arc is refused, with the reason; B is measured by qPCR on both sides and still compared
+    # (code review of 2026-09-28: the mismatch of one species refused the whole pair)
+    r = interaction_strength(mono_a, mono_b, co, A, B)
+    reason = r["species_a"]["reason"]
+    assert r["species_a"]["outcome"] == "unusable" and "measured by different techniques" in reason
+    assert "fc: " in reason and "qpcr: " in reason and A in reason
+    assert r["species_b"]["outcome"] == "quantified"
 
 
 def test_different_species_may_be_measured_by_different_techniques():
@@ -482,3 +489,121 @@ def test_different_species_may_be_measured_by_different_techniques():
     co = [Replicate([_measured(A, (1, 3), "qpcr"), _measured(B, (1, 1.4), "plates")], f"c{i}") for i in range(2)]
     r = interaction_strength(mono_a, mono_b, co, A, B)
     assert r["species_a"]["outcome"] == "quantified"
+
+
+def test_each_species_of_a_pair_is_compared_over_its_own_window():
+    # Karoline (2026-09-28, register item 26): the partner's monoculture is not part of the comparison, so
+    # it does not shorten the window. B alone is followed to 5 h only; A (alone and together) to 10 h.
+    # A: co areas 5*(1+3)=20 and 5*(3+5)=40, mono 10 and 20 over 0-10 h -> +1, as over the full curves.
+    # Under the old design-wide window (0-5 h) A's co areas were 2.5*(1+2)=7.5 and 2.5*(3+4)=17.5 against
+    # mono 5 and 2.5*(1+2)=7.5, giving (log2(7.5/5) + log2(17.5/7.5)) / 2 = +0.90 instead.
+    mono_a, _, co = _example()
+    short_b = [Replicate([_curve(B, (1, 2), times=(0, 5))], "b1"), Replicate([_curve(B, (2, 3), times=(0, 5))], "b2")]
+    r = interaction_strength(mono_a, short_b, co, A, B)
+    assert r["species_a"]["window"] == (0.0, 10.0) and r["species_b"]["window"] == (0.0, 5.0)
+    assert r["species_a"]["mean"] == pytest.approx(1.0)
+
+
+# ---- stationary phase, with max as the measure (Karoline 2026-09-28, register item 27) ----------------
+
+from grownet.derive import stationary_cautions  # noqa: E402
+from grownet.growth import reached_stationary  # noqa: E402
+from grownet.interaction import stationary_verdict  # noqa: E402
+
+T = (0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20)                 # 11 points over 20 h; the last fifth is 16 to 20 h
+
+
+def test_a_plateau_is_stationary_and_a_curve_still_rising_is_not():
+    plateau = _curve(A, (1, 2, 5, 9, 10, 10, 10, 10, 10, 10.2, 10.3), T)   # rise 9.3; 16 to 20 h adds 0.3
+    rising = _curve(A, (1, 1.5, 2, 3, 4, 5, 6, 7, 8, 9, 10), T)             # 16 to 20 h adds 2 of a rise of 9
+    declining = _curve(A, (1, 4, 9, 10, 9, 8, 7, 6, 5, 4, 3), T)           # a decline has stopped growing
+    assert reached_stationary(plateau, 20) is True and reached_stationary(declining, 20) is True
+    assert reached_stationary(rising, 20) is False
+
+
+def test_a_diauxic_pause_is_not_stationary_when_a_second_rise_follows():
+    # growth to 5 by 4 h, a pause from 4 to 10 h, a second rise to 10 by 14 h, then flat to 20 h
+    diauxic = _curve(A, (1, 3, 5, 5, 5, 5, 8, 10, 10, 10, 10), T)
+    # judged at 10 h, inside the pause (six points, 0 to 10 h): the last fifth, 8 to 10 h, is flat, but the
+    # curve later reaches 10, above 5 + 10% of its rise of 4, so the pause is not stationary
+    assert reached_stationary(diauxic, 10) is False
+    # judged at 20 h, both phases inside the window: 16 to 20 h is flat and nothing follows, so stationary
+    assert reached_stationary(diauxic, 20) is True
+
+
+def test_a_sparse_curve_is_not_judged():
+    four_points = _curve(A, (1, 100, 120, 118), (0, 10, 20, 30))  # study 8's shape: 0, 10, 20 and 30 h
+    assert reached_stationary(four_points, 30) is None
+
+
+def test_a_set_follows_the_majority_and_the_caution_needs_max_and_a_disagreement():
+    flat, rising = (1, 2, 5, 9, 10, 10, 10, 10, 10, 10, 10), (1, 1.5, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    two_of_three = [Replicate([_curve(A, flat, T)], "r1"), Replicate([_curve(A, flat, T)], "r2"),
+                    Replicate([_curve(A, rising, T)], "r3")]
+    assert stationary_verdict(two_of_three, A, 20) is True
+    assert stationary_cautions({"with": True, "without": False}, "max", "quantified") == ["stationary_phase_differs"]
+    assert stationary_cautions({"with": True, "without": None}, "max", "quantified") == ["stationary_unchecked"]
+    assert stationary_cautions({"with": True, "without": True}, "max", "quantified") == []
+    assert stationary_cautions({"with": True, "without": False}, "auc", "quantified") == []      # max only
+
+
+def test_an_obligate_arc_whose_monoculture_is_zero_from_the_start_is_cautioned():
+    # SMGDB00000006's STneg (Karoline, 2026-09-28: "Obligate, with a caution"): the monoculture reads 0 at
+    # every point, the first included, so no growth cannot be told from no inoculum or counts below detection
+    from grownet.derive import zero_start_cautions
+    from grownet.interaction import starts_at_zero
+    zero = [Replicate([_curve(A, (0, 0))], "m1"), Replicate([_curve(A, (0, 0))], "m2")]
+    grown = [Replicate([_curve(A, (0.1, 0.3))], "c1"), Replicate([_curve(A, (0.1, 0.4))], "c2")]
+    assert starts_at_zero(zero, A) is True and starts_at_zero(grown, A) is False
+    assert zero_start_cautions({"with": False, "without": True}, "obligate") == ["zero_at_start"]
+    assert zero_start_cautions({"with": True, "without": False}, "abolished") == ["zero_at_start"]
+    assert zero_start_cautions({"with": False, "without": True}, "quantified") == []      # a ratio was taken
+    # a monoculture that starts above zero and does not grow is an ordinary obligate arc, without the caution
+    assert zero_start_cautions({"with": False, "without": False}, "obligate") == []
+
+
+def test_units_are_checked_per_species_not_across_them():
+    # code review of 2026-09-28: A counted as 16S copies/mL on both sides and B as CFU/mL on both sides
+    # was refused as "mixed abundance units", though each species is compared only with itself
+    def c(species, values, unit):
+        return GrowthCurve(species, (0, 10), values, "h", unit)
+    mono_a = [Replicate([c(A, (1, 1), "16S copies/mL")], "a1"), Replicate([c(A, (1, 3), "16S copies/mL")], "a2")]
+    mono_b = [Replicate([c(B, (1, 1), "CFU/mL")], "b1"), Replicate([c(B, (3, 5), "CFU/mL")], "b2")]
+    co = [Replicate([c(A, (1, 3), "16S copies/mL"), c(B, (1, 1), "CFU/mL")], "c1"),
+          Replicate([c(A, (3, 5), "16S copies/mL"), c(B, (1, 0), "CFU/mL")], "c2")]
+    r = interaction_strength(mono_a, mono_b, co, A, B)
+    assert r["species_a"]["mean"] == pytest.approx(1.0)       # as in the hand-computed example above
+    # a species whose own curves mix units is still refused, alone
+    mixed = [Replicate([c(A, (1, 1), "CFU/mL")], "a1"), Replicate([c(A, (1, 3), "16S copies/mL")], "a2")]
+    r = interaction_strength(mixed, mono_b, co, A, B)
+    assert r["species_a"]["outcome"] == "unusable" and "mixed abundance units" in r["species_a"]["reason"]
+
+
+def test_a_spiked_replicate_cannot_make_a_set_count_as_grown():
+    # code review of 2026-09-28: two replicates stay flat and a third carries a spike; the no-growth rule
+    # once saw the spike's rise and called the set grown, then the spike was left out and a ratio was taken
+    # between replicates that did not grow. Judged without the spiked replicate, the set did not grow.
+    from grownet.interaction import _grown_values
+    flat = (1, 1, 1, 1, 1)
+    reps = [Replicate([_curve(A, flat, times=(0, 1, 2, 3, 4))], "r1"),
+            Replicate([_curve(A, flat, times=(0, 1, 2, 3, 4))], "r2"),
+            Replicate([_curve(A, (1, 1, 1e5, 1, 1), times=(0, 1, 2, 3, 4))], "spiked")]
+    skipped, zero = [], []
+    values = _grown_values(reps, A, "monoculture", lambda rep, sp: 1.0, "auc", skipped, 100.0, [], zero, 4.0,
+                           0.05, 1.5)
+    assert values == [] and any("did not reach" in r or "does not exceed" in r for _, r in skipped)
+
+
+
+def test_one_members_technique_mismatch_leaves_out_its_own_arcs_only():
+    # code review of 2026-09-28: B measured by qPCR in the full community and by plating without C refused
+    # the whole community. Now only the arcs to B are left out, with the reason; C -> A is +1 as above.
+    full, dropouts = _dropout_example()
+    dropouts[C] = [Replicate([c if c.species != B else GrowthCurve(B, c.times, c.values, "h", "16S copies/mL",
+                                                                  "plates") for c in rep.curves], rep.name)
+                   for rep in dropouts[C]]
+    r = dropout_interaction_strengths(full, dropouts)
+    assert _arc(r, C, A)["mean"] == pytest.approx(1.0)
+    assert not any(a["target"] == B for a in r["arcs"])
+    assert any(label.endswith(f"-> {B}") and "measured by different techniques" in reason
+               for label, reason in r["skipped"])

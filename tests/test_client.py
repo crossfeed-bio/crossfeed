@@ -5,8 +5,8 @@ import threading
 
 import pytest
 
-import crossfeed.mgrowthdb as m
-from crossfeed.mgrowthdb import MGrowthDBClient, MGrowthDBError
+import grownet.mgrowthdb as m
+from grownet.mgrowthdb import MGrowthDBClient, MGrowthDBError
 
 
 def _sending(monkeypatch, answers, calls=None):

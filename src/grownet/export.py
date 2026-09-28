@@ -1,8 +1,8 @@
-"""Export a crossfeed interaction network to standard graph formats for network tools.
+"""Export a grownet interaction network to standard graph formats for network tools.
 
-The neutral JSON (`crossfeed.model.InteractionNetwork.to_dict`) is the canonical, openly citable output.
+The neutral JSON (`grownet.model.InteractionNetwork.to_dict`) is the canonical, openly citable output.
 This module additionally serializes a network as GraphML, the XML format that Cytoscape, igraph,
-networkx, and Gephi read, so a crossfeed network drops straight into an existing network workflow.
+networkx, and Gephi read, so a grownet network drops straight into an existing network workflow.
 
 Dependency-free (standard library xml only). The graph is directed, and every edge keeps its effect,
 strength, significance, condition, method, the space-joined study_ids (the edge-level attribution), and
@@ -19,7 +19,7 @@ _NS = "http://graphml.graphdrawing.org/xmlns"
 
 # (key id, for, attribute name, attribute type)
 _KEYS = [
-    # what made the network and when (crossfeed.mgrowthdb.provenance), as graph attributes
+    # what made the network and when (grownet.mgrowthdb.provenance), as graph attributes
     ("g_tool", "graph", "tool", "string"),
     ("g_tool_version", "graph", "tool_version", "string"),
     ("g_derived_on", "graph", "derived_on", "string"),
@@ -57,6 +57,8 @@ _KEYS = [
     ("e_cultivation_mode", "edge", "cultivation_mode", "string"),
     ("e_merged_arcs", "edge", "merged_arcs", "int"),
     ("e_strength_range", "edge", "strength_range", "string"),
+    ("e_supporting_pairs", "edge", "supporting_pairs", "int"),
+    ("e_merged_pairs", "edge", "merged_pairs", "string"),
 ]
 
 
@@ -128,6 +130,9 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         if e.merged_arcs is not None:
             _data(ed, "e_merged_arcs", e.merged_arcs)
         _data(ed, "e_strength_range", " ".join(f"{x:g}" for x in e.strength_range))
+        if e.supporting_pairs is not None:
+            _data(ed, "e_supporting_pairs", e.supporting_pairs)
+        _data(ed, "e_merged_pairs", "; ".join(e.merged_pairs))
         _data(ed, "e_cultivation_mode", e.cultivation_mode)
 
     if pretty:

@@ -1,7 +1,7 @@
 """The runnable example and the CLI's custom-Deriver loading stay working (so the docs cannot rot)."""
 import pytest
 
-from crossfeed.__main__ import _load_deriver
+from grownet.__main__ import _load_deriver
 
 
 def test_example_builds_valid_network():

@@ -5,8 +5,8 @@ import threading
 
 import pytest
 
-from crossfeed import brand
-from crossfeed.cytoscape import (
+from grownet import brand
+from grownet.cytoscape import (
     OBLIGATE_WIDTH,
     CytoscapeError,
     genus,
@@ -16,8 +16,8 @@ from crossfeed.cytoscape import (
     send,
     style,
 )
-from crossfeed.mgrowthdb import records_to_network
-from crossfeed.model import Node
+from grownet.mgrowthdb import records_to_network
+from grownet.model import Node
 
 
 def _net():
@@ -198,7 +198,7 @@ def test_cytoscape_not_running_says_what_to_do():
 
 
 def test_nothing_is_sent_off_this_machine():
-    from crossfeed.cytoscape import base_url
+    from grownet.cytoscape import base_url
     assert base_url(1234).startswith("http://127.0.0.1:1234/")
 
 
@@ -216,7 +216,8 @@ def test_the_sign_is_a_column_and_no_label_is_drawn():
 
 def test_the_genus_is_the_first_word_of_the_name():
     assert genus(Node("ncbi:1", name="Faecalibacterium duncaniae A2-165")) == "Faecalibacterium"
-    assert genus(Node("ncbi:2", name="[Clostridium] scindens ATCC 35704")) == "Clostridium"
+    # NCBI's brackets place it outside Clostridium, so it is its own genus (Karoline, 2026-09-28)
+    assert genus(Node("ncbi:2", name="[Clostridium] scindens ATCC 35704")) == "[Clostridium]"
     assert genus(Node("ncbi:3", name="Candidatus Arthromitus sp.")) == "Arthromitus"
     assert genus(Node("x", species="blautia hydrogenotrophica")) == "Blautia"      # the species key, no name
     assert genus(Node("x")) == "unknown"
@@ -244,7 +245,7 @@ def test_each_genus_gets_its_own_color_the_most_common_first():
 
 
 def test_a_cytoscape_that_is_still_starting_is_told_apart():
-    from crossfeed.cytoscape import _unreachable
+    from grownet.cytoscape import _unreachable
     assert "may still be starting" in _unreachable(1234, TimeoutError("timed out"))
     assert "not running on this machine" in _unreachable(1234, "Connection refused")
 
@@ -288,6 +289,6 @@ def test_another_program_on_the_port_is_named_not_a_traceback():
 
 
 def test_requests_can_only_go_to_this_machine():
-    from crossfeed.cytoscape import _get
+    from grownet.cytoscape import _get
     with pytest.raises(CytoscapeError):
         _get("http://example.org:1234/v1/styles")

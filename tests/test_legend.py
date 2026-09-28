@@ -5,8 +5,8 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from crossfeed.legend import ARCS, LEFT, TEXT_X, WIDTH, legend_page, legend_svg
-from crossfeed.model import CAUTIONS, EFFECTS, EVIDENCE, OUTCOMES, QUALITY_FLAGS, STATUSES
+from grownet.legend import ARCS, LEFT, TEXT_X, WIDTH, legend_page, legend_svg
+from grownet.model import CAUTIONS, EFFECTS, EVIDENCE, OUTCOMES, QUALITY_FLAGS, STATUSES
 
 SVG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "legend.svg")
 CHAR = 0.56 * 13        # a generous width per character at the 13px meaning size
@@ -22,7 +22,7 @@ def test_the_legend_is_well_formed_svg():
     assert root.get("aria-label") == "interaction network legend"
     # the name of the tool is not in the picture: species interact for many reasons, not only cross-feeding
     # (Karoline, 2026-09-27), and the tool is being renamed
-    assert "crossfeed" not in legend_svg()
+    assert "grownet" not in legend_svg()
 
 
 @pytest.mark.parametrize("value", [*EFFECTS, *OUTCOMES, *QUALITY_FLAGS, *CAUTIONS, *EVIDENCE, *STATUSES])
@@ -50,7 +50,7 @@ def test_the_shipped_file_is_what_the_code_draws():
 def test_the_page_carries_the_drawing_and_a_way_back():
     page = legend_page("tok&1")
     assert "<svg" in page and 'href="/?token=tok&amp;1"' in page
-    assert "<svg" in legend_page() and "Back to crossfeed" not in legend_page()
+    assert "<svg" in legend_page() and "Back to grownet" not in legend_page()
 
 
 def test_every_arc_ends_in_the_same_head():
@@ -64,12 +64,12 @@ def test_every_arc_ends_in_the_same_head():
 
 def test_the_viewer_draws_the_same_vocabulary():
     # gui/index.html, the standalone viewer, uses the legend's colors, one arrowhead for every arc (no
-    # T-bar), dashes only for evidence and quality, and the genus colors of crossfeed.brand (2026-09-27)
+    # T-bar), dashes only for evidence and quality, and the genus colors of grownet.brand (2026-09-27)
     import json
     import re
     from pathlib import Path
 
-    from crossfeed import brand
+    from grownet import brand
     page = (Path(__file__).resolve().parents[1] / "gui" / "index.html").read_text(encoding="utf-8")
     assert f"--fac:{brand.GROWTH};" in page and f"--inh:{brand.INHIBITION};" in page
     assert "M10,1 L10,11" not in page                                   # the T-bar head is gone
@@ -80,7 +80,7 @@ def test_the_viewer_draws_the_same_vocabulary():
 
 def test_the_viewer_writes_the_same_graphml_as_the_command_line(tmp_path):
     # gui/index.html's toGraphML, run with Node on a real-shaped network, gives the same graph, keys and
-    # values as crossfeed.export.to_graphml (the viewer once wrote 9 of the 34 keys)
+    # values as grownet.export.to_graphml (the viewer once wrote 9 of the 34 keys)
     import json
     import re
     import shutil
@@ -90,8 +90,8 @@ def test_the_viewer_writes_the_same_graphml_as_the_command_line(tmp_path):
 
     import pytest
 
-    from crossfeed.export import _KEYS, to_graphml
-    from crossfeed.mgrowthdb import records_to_network
+    from grownet.export import _KEYS, to_graphml
+    from grownet.mgrowthdb import records_to_network
     if not shutil.which("node"):
         pytest.skip("node is not installed")
     page = (Path(__file__).resolve().parents[1] / "gui" / "index.html").read_text(encoding="utf-8")

@@ -1,8 +1,8 @@
 """GraphML export: well-formed, directed, and it keeps effect, attribution, and null handling right."""
 from xml.etree import ElementTree as ET
 
-from crossfeed.export import to_graphml
-from crossfeed.mgrowthdb import records_to_network
+from grownet.export import to_graphml
+from grownet.mgrowthdb import records_to_network
 
 NS = {"g": "http://graphml.graphdrawing.org/xmlns"}
 

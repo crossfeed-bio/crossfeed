@@ -7,6 +7,36 @@ tagged version is never reused for changed content.
 ## [0.0.2] (unreleased)
 
 ### Added
+- The help page compares the three growth measures (area, maximum, growth rate): what each captures, and
+  its strengths and weaknesses. The README calls the tool grownet, keeping crossfeed only for the command,
+  the module, the repository and the schema id until the rename is released.
+- A monoculture set is also matched to a co-culture by identical wording of how it was grown, once the
+  organisms and the kind of culture are set aside (register item 28): SMGDB00000014's five co-cultures
+  now give 10 arcs. An obligate or abolished arc whose set without growth is zero from its first time point
+  carries the caution `zero_at_start`.
+- With max as the growth measure, arcs are checked for stationary phase (register item 27): the caution
+  `stationary_phase_differs` marks an arc where one set reached stationary phase within the compared window
+  and the other did not, and `stationary_unchecked` one whose curves have under 6 time points. The rule is
+  not fooled by a diauxic shift: a pause followed by a measured second rise is not stationary.
+- An All button beside Example (`derive --live --all`): the box is ignored and every study in mGrowthDB is
+  derived, with every partner; Only these studies and Exclude these studies still apply (register item 25).
+- Merge to genus (`--merge-genera`), an advanced setting off by default: one node per genus, and the arcs
+  between two genera merged by sign, with the median log2 mean and new arc fields `supporting_pairs` and
+  `merged_pairs` (species pairs, or strain pairs when only taxon ids were entered). Interactions within a
+  genus stay as a self-loop; absent arcs as one hidden absent arc per genus pair. With Merge parallel arcs
+  on too, a pair measured in several studies counts once. Nodes gain the identity `genus` (item 24). The
+  genus skips qualifiers (Candidatus, unclassified, uncultured) and keeps NCBI's brackets, so [Clostridium]
+  is not Clostridium, in the merge, the genus query and the genus colors alike.
+- A genus entered alone ("Blautia") stands for every species of it in mGrowthDB, listed on the page and
+  in the report, instead of being refused as "a genus alone".
+- The README says the tool is now called grownet and what keeps the crossfeed name until the rename, that
+  the tests also run on Windows and macOS, and that the local page's About says who built the tool.
+- An About button beside Help (#80): who built grownet, in the wording Craig agreed to on #80, with the
+  repository link and the version.
+- The help page opens with the idea behind the tool, after Gause (1932, 1934): grow two species alone
+  and together and compare. A figure, drawn from code with the Baranyi-Roberts model the tool fits, shows
+  each species alone, both together, and the arcs the change gives, and marks the three growth measures
+  the tool can compare (area, maximum, growth rate). Tests keep the figure in step with the measures.
 - The help page now explains every advanced setting (with its command line flag and default), every arc
   and node attribute, the main design decisions and why, the command line with the page's own example,
   what to do when no network comes back, a short Q&A, how to cite, and links the issue tracker. Tests
@@ -26,6 +56,13 @@ tagged version is never reused for changed content.
   (the species do not affect each other), and the no-growth settings say they test the replicate growth
   curves of one species in one culture condition. A new setting, Exclude these studies
   (`--exclude-studies` with `--species`), leaves the listed studies out of a search; empty by default.
+- Release automation (#26, #27): a version tag runs `.github/workflows/release.yml`, which checks the tag
+  against the version and this changelog, tests the wheel in a clean environment on Linux, Windows and
+  macOS, builds and starts the Windows program, publishes to PyPI through trusted publishing once a
+  maintainer approves, and creates the GitHub release with the notes from this changelog and
+  `grownet-<version>-windows.zip` attached. CI builds and starts both on every push. A double-clicked
+  `grownet.exe` opens the page, and on an error waits for Enter instead of closing. RELEASING.md gives the
+  setup and the steps; the README's install section offers the Windows zip, uv and PyPI.
 - The gate gained a merge-marker check, after conflict markers from a merge reached this changelog
   unseen (now removed, both sides kept).
 - Documentation made to agree with the code, after an audit (21 conflicts): the README's Cytoscape style,
@@ -194,6 +231,21 @@ tagged version is never reused for changed content.
   `removed_member_detected`.
 
 ### Changed
+- The rename (#71): the package, the module and the command are `grownet` (`grownet derive ...`, `python -m
+  grownet`, `uvx --from git+https://github.com/crossfeed-bio/crossfeed grownet gui`), with no `crossfeed`
+  alias, since nothing had been released. The repository address, the schema id
+  (`crossfeed.interaction_network/v0`) and the method label stored in each network (`crossfeed replicate
+  v1`) are unchanged, so networks already written stay valid. The README is titled "grownet: Growth-curve
+  derived interaction networks".
+- The Baranyi growth-rate fit uses the curve up to the end of the plateau after its maximum, not the whole
+  curve, so a decline after the peak no longer rejects it (register item 29): 30 -> 40 arcs on mGrowthDB.
+- A curve that starts after its design's common start leaves its replicate out of that member's own arcs
+  only; the replicate still serves the other members (SMGDB00000008: 24 arcs regain a second replicate).
+  The page, the report and the command line list average replicates as one line per experiment.
+- Each bi-culture arc is compared over its own window, the target's curves alone and together, as drop-out
+  arcs already were, so the partner's shorter monoculture no longer shortens it (register item 26). On
+  mGrowthDB one arc changes (SMGDB00000006, L. bulgaricus -> S. thermophilus STpos: +0.088 to +0.074,
+  absent either way).
 - Inhibition is drawn in orange-red (#C2410C) rather than red (Karoline, 2026-09-27). With uniform arc
   tips the color is the only cue for the sign, and green against red is the hardest pair for a reader with
   a color vision deficiency: simulated, the new pair stays about 90 sRGB units apart under protanopia and
@@ -213,6 +265,24 @@ tagged version is never reused for changed content.
   unused `requests` dependency was dropped.
 
 ### Fixed
+- From a code review of the whole package (2026-09-28): with the growth rate (easylinear), a curve that only
+  declines crashed the comparison and dropped the whole pair or community (SMGDB00000014 lost three
+  co-cultures); its rate is now its steepest, non-positive slope. A problem with one species (mixed
+  abundance units, a technique mismatch, a later start) now leaves out that species' arcs only, not the
+  pair or the community, and units are checked per species, since each is compared only with itself. The
+  no-growth rule, the stationary check and the zero-at-start check leave out replicates excluded for a
+  spike. Merge to genus counts a strain that studies name differently once. The local page keeps its 20
+  latest searches, reads the species list again after an hour, and builds it once when two searches start
+  together.
+- When mGrowthDB could not be reached (a network failure, a timeout, server errors), the species list came
+  back empty and a search said the species were not in mGrowthDB. Only "no such study" (HTTP 404) now ends
+  the crawl; anything else stops the search with "mGrowthDB could not be read". A replicate or growth curve
+  that fails to download partway through a search now marks the result incomplete at the top of the page,
+  in the report and on the command line, instead of only among the pairs the data did not support.
+- A node keyed by name, because mGrowthDB gives its taxon id to more than one species, keeps its own name:
+  the current-name step renamed it by the id's latest name, so in SMGDB00000008 Lachnoclostridium
+  symbiosum WAL-14673 appeared as a second L. clostridioforme (found by the audit of 2026-09-28).
+- The README and the help page now say that curves are compared over the time window they share.
 - "Only interactions between the species entered" no longer drops every edge when a study records a strain
   under another name: a species entered as Faecalibacterium duncaniae now matches the same taxon recorded
   as Faecalibacterium prausnitzii, because the filter matches taxon ids as well as names (#73).

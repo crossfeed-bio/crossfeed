@@ -1,12 +1,12 @@
-"""mGrowthDB API client and the mapping into the crossfeed neutral network.
+"""mGrowthDB API client and the mapping into the grownet neutral network.
 
 Wired against the live REST API, base `https://mgrowthdb.gbiomed.kuleuven.be/api/v1/`, documented at
 https://mgrowthdb.readthedocs.io/en/latest/api.html .
 
 Important: the API serves RAW growth data (study -> experiments -> bioreplicates -> measurement
 contexts). It does NOT serve pre-computed interactions. Interactions are DERIVED by comparing a
-strain's growth alone vs with a partner (see crossfeed.derive). Public data needs no auth. mGrowthDB is
-open (see docs/DATA_GOVERNANCE.md); crossfeed pulls from it but never commits raw or pulled data.
+strain's growth alone vs with a partner (see grownet.derive). Public data needs no auth. mGrowthDB is
+open (see docs/DATA_GOVERNANCE.md); grownet pulls from it but never commits raw or pulled data.
 
 The client works for ANY study id (get_study, get_experiment, study_experiments). It caches responses
 in memory for the life of the client (and optionally on disk via `cache_dir`) so repeated pulls of the
@@ -39,7 +39,15 @@ API_DOCS = "https://mgrowthdb.readthedocs.io/en/latest/api.html"
 
 
 class MGrowthDBError(RuntimeError):
-    """A failed mGrowthDB request: a bad id, a network error, or the API being unreachable."""
+    """A failed mGrowthDB request: a bad id, a network error, or the API being unreachable.
+
+    `status` is the HTTP status when mGrowthDB answered (404 for an id it does not hold), and None when it
+    could not be reached, so a caller can tell "no such study" from "mGrowthDB is down" (step 7 of the
+    audit, 2026-09-28: an unreachable mGrowthDB read as an empty database)."""
+
+    def __init__(self, message: str, status: int | None = None):
+        super().__init__(message)
+        self.status = status
 
 
 class _Status(Exception):
@@ -75,7 +83,7 @@ class MGrowthDBClient:
         self._mem = {} if cache else None
         self.cache_dir = cache_dir
         # one kept-open connection per thread: a new HTTPS connection per request cost about 120 ms against
-        # 55 ms on an open one, and the parallel prefetch (crossfeed.fetch) gives each worker its own
+        # 55 ms on an open one, and the parallel prefetch (grownet.fetch) gives each worker its own
         self._local = threading.local()
         parsed = urllib.parse.urlsplit(self.base_url)
         self._scheme, self._host, self._prefix = parsed.scheme, parsed.netloc, parsed.path
@@ -124,7 +132,7 @@ class MGrowthDBClient:
     def _send(self, url: str, accept: str) -> bytes:
         """One request over this thread's open connection, reopened once if the server dropped it."""
         path = url[len(f"{self._scheme}://{self._host}"):] if url.startswith(f"{self._scheme}://") else url
-        headers = {"Accept": accept, "User-Agent": f"crossfeed/{__version__}", "Connection": "keep-alive"}
+        headers = {"Accept": accept, "User-Agent": f"grownet/{__version__}", "Connection": "keep-alive"}
         for attempt in (0, 1):
             conn = self._connection(fresh=attempt == 1)
             try:
@@ -150,9 +158,9 @@ class MGrowthDBClient:
             except _Status as e:
                 if e.code < 500:
                     raise MGrowthDBError(
-                        f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})"
-                    ) from None
-                last = MGrowthDBError(f"mGrowthDB returned HTTP {e.code} for {url} (server error)")
+                        f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})",
+                        status=e.code) from None
+                last = MGrowthDBError(f"mGrowthDB returned HTTP {e.code} for {url} (server error)", status=e.code)
             except _NETWORK as e:
                 last = MGrowthDBError(
                     f"could not reach mGrowthDB at {url}: {getattr(e, 'reason', e) or type(e).__name__} "
@@ -281,7 +289,8 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
        (and the same for target), strength, significance, condition, method?, effect?,
        evidence?, community?, p_value?, weight?, effect_over_sd?, status?, sd?, se?, n_with?,
        n_without?, outcome?, metric?, quality?, notes?, cautions?, experiments?, cultivation_mode?,
-       merged_arcs?, strength_range?, study_id, study_citation?, study_license?, study_url?,
+       merged_arcs?, strength_range?, supporting_pairs?, merged_pairs?,
+       study_id, study_citation?, study_license?, study_url?,
        studies? (a merged arc: [{id, citation, license, url}], one per study it rests on)}
 
     `meta` starts from `provenance()` (tool, version, derivation date); keys given in `meta` win.
@@ -316,5 +325,6 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             cautions=tuple(r.get("cautions", ())), experiments=tuple(r.get("experiments", ())),
             cultivation_mode=r.get("cultivation_mode", ""),
             merged_arcs=r.get("merged_arcs"), strength_range=tuple(r.get("strength_range", ())),
+            supporting_pairs=r.get("supporting_pairs"), merged_pairs=tuple(r.get("merged_pairs", ())),
         ))
     return net
