@@ -15,6 +15,13 @@ Rules for this file:
 
 ## Current state
 
+- 2026-09-28 (Karoline): the command line "should be called grownet". Renamed: package, module and command
+  are `grownet` (src/grownet), with no `crossfeed` alias. Unchanged, on purpose: the repository address
+  (crossfeed-bio/crossfeed, Craig's call), the schema id `crossfeed.interaction_network/v0` (Craig's), the
+  method labels stored in networks ("crossfeed replicate v1", "crossfeed baseline v0"), LICENSE and NOTICE
+  ("The crossfeed authors", a legal line for Karoline and Craig to change), and the history in
+  CHANGELOG, METHOD_NOTES and this file. After pulling, reinstall (`pip install -e ".[dev]"`) and remove a
+  stale install (`pip uninstall crossfeed`).
 - 2026-09-28 (Karoline): "for me, project implementation is now complete and so focus can be on
   auditing/testing." New features are not proposed unprompted; the work is auditing, testing against
   mGrowthDB, and fixing what that finds. Still to come: the rename (#71) and the 0.1.0 release

@@ -1,7 +1,7 @@
 """Tests for growth curves and the replicate set checks (synthetic curves, no network)."""
 import pytest
 
-from crossfeed.growth import GrowthCurve, Replicate, check_replicate_sets, curve_features, shared_window
+from grownet.growth import GrowthCurve, Replicate, check_replicate_sets, curve_features, shared_window
 
 A = "Faecalibacterium prausnitzii"
 B = "Blautia hydrogenotrophica"
@@ -106,7 +106,7 @@ def test_shared_window_different_starts_raise():
 
 # ---- implausible spikes (#39) --------------------------------------------------------------------
 
-from crossfeed.growth import spike  # noqa: E402
+from grownet.growth import spike  # noqa: E402
 
 BH14 = (8.5e6, 2.4e7, 5.1e7, 7.1e7, 1.06e8, 5.264e13, 5.264e13, 4.8e8, 1.1e9, 1.4e9, 2.1e9, 2.9e9, 2.8e9)
 

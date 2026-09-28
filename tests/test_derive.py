@@ -3,8 +3,8 @@ import math
 
 import pytest
 
-from crossfeed import interaction
-from crossfeed.derive import (
+from grownet import interaction
+from grownet.derive import (
     _gs,
     absence,
     adjust_significance,
@@ -14,7 +14,7 @@ from crossfeed.derive import (
     interactions_from_replicates,
     output_meta,
 )
-from crossfeed.mgrowthdb import records_to_network
+from grownet.mgrowthdb import records_to_network
 
 
 @pytest.fixture(autouse=True)
@@ -530,7 +530,7 @@ def test_an_obligate_edge_counts_its_replicates_without_growth_and_is_shown():
 
 # ---- strain identity by taxon id (#23) -----------------------------------------------------------
 
-from crossfeed.derive import strain_identities  # noqa: E402
+from grownet.derive import strain_identities  # noqa: E402
 
 A2 = "Faecalibacterium prausnitzii L2-6"
 
@@ -763,7 +763,7 @@ def test_a_study_of_monocultures_only_says_so():
 
 # ---- merging parallel arcs (register item 14, Karoline 2026-09-27) --------------------------------
 
-from crossfeed.derive import merge_parallel  # noqa: E402
+from grownet.derive import merge_parallel  # noqa: E402
 
 
 def _arc(strength, study="S1", effect=None, status="present", outcome="quantified", evidence="biculture",
@@ -819,7 +819,7 @@ def test_merging_off_leaves_every_arc_as_derived():
 
 
 def test_a_merged_arc_makes_a_valid_network_citing_every_study():
-    from crossfeed.export import to_graphml
+    from grownet.export import to_graphml
     edges, _ = merge_parallel([_arc(1.0, "S1"), _arc(3.0, "S2")])
     net = records_to_network(edges)
     assert net.validate() == [] and net.edges[0].study_ids == ("S1", "S2") and set(net.studies) == {"S1", "S2"}
@@ -829,7 +829,7 @@ def test_a_merged_arc_makes_a_valid_network_citing_every_study():
 
 # ---- merging to genus (Karoline 2026-09-28) ------------------------------------------------------
 
-from crossfeed.derive import merge_genus  # noqa: E402
+from grownet.derive import merge_genus  # noqa: E402
 
 BH, BO, FP = "Blautia hydrogenotrophica DSM 10507", "Blautia obeum ATCC 29174", "Faecalibacterium prausnitzii A2-165"
 
@@ -886,7 +886,7 @@ def test_with_arcs_merged_across_studies_a_pair_counts_once():
 def test_merging_to_genus_is_off_by_default_and_gives_a_valid_network_with_genus_nodes():
     arcs = [_garc(1.0, BH, FP), _garc(3.0, BO, FP)]
     assert merge_genus(arcs)[0] is arcs
-    from crossfeed.export import to_graphml
+    from grownet.export import to_graphml
     net = records_to_network(merge_genus(arcs, merge=True)[0])
     assert net.validate() == [] and set(net.nodes) == {"Blautia", "Faecalibacterium"}
     assert net.nodes["Blautia"].identity == "genus" and net.nodes["Blautia"].taxon_id == ""
@@ -896,7 +896,7 @@ def test_merging_to_genus_is_off_by_default_and_gives_a_valid_network_with_genus
 def test_the_genus_rule_skips_qualifiers_and_keeps_ncbi_brackets():
     # Craig's agent on #85: "unclassified" and "uncultured" collapsed into a genus called Unclassified;
     # Karoline (2026-09-28): such an organism joins its genus, and "[Clostridium]" is not Clostridium
-    from crossfeed.model import genus_name
+    from grownet.model import genus_name
     cases = {"Candidatus Arthromitus sp": "Arthromitus", "unclassified Bacteroides": "Bacteroides",
              "uncultured Candidatus Saccharibacteria": "Saccharibacteria", "Blautia sp. SC05B48": "Blautia",
              "[Clostridium] scindens VPI 13733": "[Clostridium]", "clostridium butyricum": "Clostridium",

@@ -8,10 +8,10 @@ from xml.etree import ElementTree as ET
 import pytest
 from test_gui import FakeClient, _query
 
-from crossfeed import __version__, gui, help, interaction, model
-from crossfeed.__main__ import build_parser, main
-from crossfeed.export import to_graphml
-from crossfeed.mgrowthdb import provenance, records_to_network
+from grownet import __version__, gui, help, interaction, model
+from grownet.__main__ import build_parser, main
+from grownet.export import to_graphml
+from grownet.mgrowthdb import provenance, records_to_network
 
 PAGE = gui.render_help("tok")
 
@@ -64,7 +64,7 @@ def test_the_page_has_every_section_its_contents_list_names():
 def test_the_command_line_example_is_the_pages_example():
     for name in gui.EXAMPLE:
         assert f'"{name}"' in help.EXAMPLE_CLI
-    assert help.EXAMPLE_CLI.startswith("crossfeed derive --live --species ")      # the command until #71
+    assert help.EXAMPLE_CLI.startswith("grownet derive --live --species ")      # the command until #71
     assert gui.html.escape(help.EXAMPLE_CLI) in PAGE
 
 
@@ -100,7 +100,7 @@ def test_a_search_records_every_setting_it_ran_with():
 
 def test_the_command_line_species_search_gives_the_pages_network(monkeypatch, capsys, tmp_path):
     # the same two names through `derive --species` and through the page's run_query: the same edges
-    monkeypatch.setattr("crossfeed.mgrowthdb.MGrowthDBClient", FakeClient)
+    monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", FakeClient)
     out = tmp_path / "net.json"
     names = ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"]
     assert main(["derive", "--live", "--species", *names, "--out", str(out)]) == 0
@@ -113,7 +113,7 @@ def test_the_command_line_species_search_gives_the_pages_network(monkeypatch, ca
 
 def test_the_command_line_all_gives_the_pages_all_network(monkeypatch, capsys, tmp_path):
     # `derive --live --all` and the page's All button: the same edges, and the report says what was asked
-    monkeypatch.setattr("crossfeed.mgrowthdb.MGrowthDBClient", FakeClient)
+    monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", FakeClient)
     out, report = tmp_path / "all.json", tmp_path / "all.txt"
     assert main(["derive", "--live", "--all", "--merge-genera", "--out", str(out), "--report", str(report)]) == 0
     cli = json.loads(out.read_text(encoding="utf-8"))
@@ -135,7 +135,7 @@ def test_species_search_needs_live_and_rejects_a_deriver(capsys, tmp_path):
 
 def test_the_page_uses_the_two_signal_colors_and_no_other_red():
     # Karoline's palette (2026-09-27): growth green and the orange-red, never the plain red it replaced
-    from crossfeed import brand
+    from grownet import brand
     assert (brand.GROWTH, brand.INHIBITION) == ("#1A7F5A", "#C2410C")
     page = gui.render_form("tok")
     assert brand.GROWTH in page and brand.INHIBITION in page and "#B3352E" not in page.upper()
@@ -156,7 +156,7 @@ def test_the_introduction_cites_gause_and_shows_the_idea():
 
 
 def test_the_figure_marks_every_growth_measure_the_tool_can_compare():
-    from crossfeed.idea import idea_figure
+    from grownet.idea import idea_figure
     figure = idea_figure()
     marks = {"auc": "area (auc)", "max": "maximum (max)", "growth_rate": "growth rate"}
     assert set(gui.METRICS) == set(marks)                   # a new measure needs a mark in the figure
@@ -164,7 +164,7 @@ def test_the_figure_marks_every_growth_measure_the_tool_can_compare():
 
 
 def test_the_figure_shows_what_its_arcs_say():
-    from crossfeed import brand, idea
+    from grownet import brand, idea
     final = {name: {w: idea._curve(params[name])[-1][1] for w, params in
                     (("alone", idea.ALONE), ("together", idea.TOGETHER))} for name in "AB"}
     assert final["A"]["together"] < final["A"]["alone"]      # B inhibits A: the orange-red arc
@@ -176,7 +176,7 @@ def test_the_figure_shows_what_its_arcs_say():
 def test_the_marked_stretch_holds_the_steepest_rise_of_log_abundance():
     import math
 
-    from crossfeed import idea
+    from grownet import idea
     points = idea._curve(idea.ALONE["A"])
     slopes = [(math.log(b[1]) - math.log(a[1])) / (b[0] - a[0]) for a, b in zip(points[:-1], points[1:], strict=True)]
     steepest = points[slopes.index(max(slopes))]

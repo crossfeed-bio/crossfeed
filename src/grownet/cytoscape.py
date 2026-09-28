@@ -44,7 +44,7 @@ from .model import InteractionNetwork, genus_name
 
 PORT = 1234
 STYLE_NAME = brand.NAME
-# the legend's colors, and the same reason for the orange (see crossfeed.legend)
+# the legend's colors, and the same reason for the orange (see grownet.legend)
 FACILITATION, INHIBITION, MUTED = brand.GROWTH, brand.INHIBITION, "#8A8A8A"
 OBLIGATE_WIDTH = 8.0          # obligate and abolished arcs have no |log2 mean| to scale with
 

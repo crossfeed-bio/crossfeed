@@ -1,7 +1,7 @@
 """mGrowthDB experiments to replicate curves (a fake client, no live calls)."""
 import pytest
 
-from crossfeed.adapter import replicate_sets, replicates_for_experiment
+from grownet.adapter import replicate_sets, replicates_for_experiment
 
 A = "Faecalibacterium prausnitzii A2-165"
 B = "Blautia hydrogenotrophica DSM 10507"

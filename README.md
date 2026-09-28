@@ -1,4 +1,4 @@
-# grownet
+# grownet: Growth-curve derived interaction networks
 
 [![ci](https://github.com/crossfeed-bio/crossfeed/actions/workflows/ci.yml/badge.svg)](https://github.com/crossfeed-bio/crossfeed/actions/workflows/ci.yml)
 [![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -8,9 +8,8 @@
 [mGrowthDB](https://mgrowthdb.gbiomed.kuleuven.be/) into directed interaction networks, in a neutral and
 openly citable format that downstream tools (such as Syntropa and microbetag) can consume.
 
-grownet was called crossfeed until 2026-09-27 (#71). The Python package, the `crossfeed` command, the
-module and this repository keep the old name until the rename is released, so the commands below still
-start with `crossfeed`.
+grownet was called crossfeed until 2026-09-27 (#71). The package, the module and the command are
+`grownet`; the repository keeps the old name for now, so its address is still `crossfeed-bio/crossfeed`.
 
 It is a thin client: it pulls from mGrowthDB and emits a network. Nothing to host, nothing to pay for on a
 shared server, no runtime dependencies (the client is pure Python standard library). A well-run
@@ -65,16 +64,16 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 Then open the local page (the first run installs it; later runs start at once):
 
 ```bash
-uvx --from git+https://github.com/crossfeed-bio/crossfeed crossfeed gui
+uvx --from git+https://github.com/crossfeed-bio/crossfeed grownet gui
 ```
 
-Any `crossfeed` command works the same way, for example
-`uvx --from git+https://github.com/crossfeed-bio/crossfeed crossfeed derive SMGDB00000004 --live`.
+Any `grownet` command works the same way, for example
+`uvx --from git+https://github.com/crossfeed-bio/crossfeed grownet derive SMGDB00000004 --live`.
 This always runs the latest version in the repository.
 
 ### From PyPI
 
-From the first release on (0.1.0, published after the rename to grownet), the program is on
+From the first release on (0.1.0), the program is on
 [PyPI](https://pypi.org), so it installs like any other Python tool, as a command of its own:
 
 ```bash
@@ -98,13 +97,13 @@ From a clone, with Python 3.10 or newer: the setup and the checks are in
 Run the first slice offline, from the bundled synthetic fixture (no network), to see a network:
 
 ```
-python -m crossfeed derive SMGDB00000004 --fixture tests/fixtures/example_interactions.json
+python -m grownet derive SMGDB00000004 --fixture tests/fixtures/example_interactions.json
 ```
 
 Run it live against mGrowthDB:
 
 ```
-python -m crossfeed derive SMGDB00000004 --live
+python -m grownet derive SMGDB00000004 --live
 ```
 
 On the published study SMGDB00000004 the provisional baseline recovers Blautia hydrogenotrophica
@@ -112,8 +111,8 @@ facilitating Faecalibacterium prausnitzii, consistent with hydrogen and formate 
 result to a file and check it against the format:
 
 ```
-python -m crossfeed derive SMGDB00000004 --live --out network.json
-python -m crossfeed validate network.json
+python -m grownet derive SMGDB00000004 --live --out network.json
+python -m grownet validate network.json
 ```
 
 ## What it does
@@ -124,20 +123,20 @@ or neutral) with its strength, its significance, and the experimental condition 
 carries its provenance: the study or studies it was derived from, so attribution resolves at the edge
 level.
 
-The pipeline has three seams: a client that pulls raw growth from mGrowthDB (`crossfeed.mgrowthdb`), a
-derivation step that turns growth into interaction records (`crossfeed.derive`, the part you will
-replace), and the neutral network model the records map into (`crossfeed.model`). A first slice targets
+The pipeline has three seams: a client that pulls raw growth from mGrowthDB (`grownet.mgrowthdb`), a
+derivation step that turns growth into interaction records (`grownet.derive`, the part you will
+replace), and the neutral network model the records map into (`grownet.model`). A first slice targets
 the Faecalibacterium prausnitzii and Blautia hydrogenotrophica pair, shown feeding Syntropa, as the
 concrete demonstration of the seam.
 
 ## The command line
 
 ```
-python -m crossfeed derive STUDY [--live | --fixture FILE] [--deriver MODULE:CLASS] [--format json|graphml] [--out FILE]
-python -m crossfeed derive --live --species NAME [NAME ...] [--all-partners] [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
-python -m crossfeed derive --live --all [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
-python -m crossfeed validate FILE
-python -m crossfeed schema [--out FILE]
+python -m grownet derive STUDY [--live | --fixture FILE] [--deriver MODULE:CLASS] [--format json|graphml] [--out FILE]
+python -m grownet derive --live --species NAME [NAME ...] [--all-partners] [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
+python -m grownet derive --live --all [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
+python -m grownet validate FILE
+python -m grownet schema [--out FILE]
 ```
 
 - `derive STUDY --live` fetches the study from the mGrowthDB API and derives interactions.
@@ -145,14 +144,14 @@ python -m crossfeed schema [--out FILE]
   NCBI taxon ids) through mGrowthDB, derives every study holding them, and keeps the interactions between
   the species given (`--all-partners` keeps their other partners too). A genus alone ("Blautia") stands
   for every species of it that mGrowthDB holds. The page's Example, from the command line:
-  `crossfeed derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"`.
+  `grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"`.
 - `derive --live --all` does what the page's All button does: every study in mGrowthDB, with every
   partner (a study argument limits it to those studies).
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the baseline (see below).
 - The command line does everything the local page does: every advanced setting has its option, and
   the page's three outputs are `--out FILE` (with `--format`), `--to-cytoscape` and `--report FILE`, the
-  same report the page shows. `crossfeed derive --help` lists every option in the page's words, with
+  same report the page shows. `grownet derive --help` lists every option in the page's words, with
   examples.
 - `--format graphml` emits GraphML (for Cytoscape, igraph, networkx, Gephi) instead of the neutral JSON.
 - `--out FILE` writes the network to a file instead of stdout; attribution and skipped pairs print to
@@ -161,7 +160,7 @@ python -m crossfeed schema [--out FILE]
   fails.
 - `schema` prints the JSON Schema (or writes it with `--out`).
 
-A `crossfeed` console command is installed too, so `crossfeed derive ...` works after `pip install`.
+A `grownet` console command is installed too, so `grownet derive ...` works after `pip install`.
 
 ## The legend
 
@@ -174,11 +173,11 @@ quality flag, caution, evidence and status the model defines, so it cannot fall 
 
 ## The local page
 
-Prefer clicking to typing commands? `python -m crossfeed gui` starts a small page on your own machine and
+Prefer clicking to typing commands? `python -m grownet gui` starts a small page on your own machine and
 opens it in the browser:
 
 ```
-python -m crossfeed gui
+python -m grownet gui
 ```
 
 The tool version shows next to its name, and a Help page introduces the idea (after Gause, with a figure), explains every advanced setting and arc
@@ -195,7 +194,7 @@ stay there.
 
 ## Send it to Cytoscape
 
-With Cytoscape running, `crossfeed derive SMGDB00000004 --live --to-cytoscape` posts the network straight
+With Cytoscape running, `grownet derive SMGDB00000004 --live --to-cytoscape` posts the network straight
 into the open session through CyREST on `127.0.0.1:1234` (`--cytoscape-port` changes the port), and the
 local page has a "Send to Cytoscape" button that sends the network it already computed. The edge and node
 attributes become columns, so effect, weight, status, quality, the study ids and the experiments are there
@@ -210,7 +209,7 @@ The style applied is the one the legend describes: the same arrowhead on every a
 and inhibition orange-red (the color alone carries the sign), width by `weight`, absent edges hidden, long
 dashes for drop-out arcs and dots for single-replicate ones, and nodes colored by genus. It is called
 `grownet`, and a style of that name already in the session is brought up to date, so it always matches the
-legend. `crossfeed style --out grownet_style.json` writes it as a file for File, Import, Styles from File.
+legend. `grownet style --out grownet_style.json` writes it as a file for File, Import, Styles from File.
 When Cytoscape is not running, the command says so and names the port instead of failing.
 
 ## The output format
@@ -404,7 +403,7 @@ A `Deriver` is a class with one method, `derive(study, exps)`, that returns `(re
 a complete one, with the record shape spelled out:
 
 ```python
-from crossfeed.derive import Deriver
+from grownet.derive import Deriver
 
 class MyDeriver(Deriver):
     name = "my-method"
@@ -430,7 +429,7 @@ class MyDeriver(Deriver):
 Run your method live on any study, with no glue code:
 
 ```
-python -m crossfeed derive SMGDB00000004 --live --deriver mymodule:MyDeriver
+python -m grownet derive SMGDB00000004 --live --deriver mymodule:MyDeriver
 ```
 
 Test it offline before you touch the network. [`examples/custom_deriver.py`](examples/custom_deriver.py)
@@ -446,7 +445,7 @@ before you implement one.
 
 ## How the derivation works
 
-`ReplicateDeriver` (`src/crossfeed/derive.py`) is the default. It reads each replicate's measured growth
+`ReplicateDeriver` (`src/grownet/derive.py`) is the default. It reads each replicate's measured growth
 curve from mGrowthDB and compares replicate sets on the log2 scale, over the area under the curve by
 default (`--metric max` for maximal abundance, `--metric growth_rate` for the maximum specific growth
 rate). Every edge therefore carries a spread, not just a number:

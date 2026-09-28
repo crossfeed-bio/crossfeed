@@ -1,6 +1,6 @@
 """The entry point of the self-contained program (the Windows build, #26).
 
-Double-clicked, with no arguments, it opens the local page in the browser, as `crossfeed gui` does, and the
+Double-clicked, with no arguments, it opens the local page in the browser, as `grownet gui` does, and the
 console window it runs in shows the address and stops the tool when it is closed. Given arguments it is
 the command line: `grownet.exe derive ...`, `grownet.exe gui --port 8765`, and options alone go to the page
 (`grownet.exe --no-browser`). A message that stops it, such as a port already in use, stays on screen until

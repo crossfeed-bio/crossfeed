@@ -16,10 +16,10 @@ lint:
 check: lint gate test
 
 demo:
-	python -m crossfeed derive SMGDB00000004 --fixture tests/fixtures/example_interactions.json
+	python -m grownet derive SMGDB00000004 --fixture tests/fixtures/example_interactions.json
 
 schema:
-	python -m crossfeed schema
+	python -m grownet schema
 
 legend:
-	python -c "from crossfeed.legend import legend_svg; open('docs/legend.svg', 'w').write(legend_svg())"
+	python -c "from grownet.legend import legend_svg; open('docs/legend.svg', 'w').write(legend_svg())"

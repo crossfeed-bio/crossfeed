@@ -3,10 +3,10 @@ import math
 
 import pytest
 
-from crossfeed import interaction
-from crossfeed.growth import GrowthCurve, Replicate
-from crossfeed.interaction import dropout_interaction_strengths, grew, interaction_strength, rule_meta
-from crossfeed.stats import welch
+from grownet import interaction
+from grownet.growth import GrowthCurve, Replicate
+from grownet.interaction import dropout_interaction_strengths, grew, interaction_strength, rule_meta
+from grownet.stats import welch
 
 
 @pytest.fixture(autouse=True)
@@ -506,9 +506,9 @@ def test_each_species_of_a_pair_is_compared_over_its_own_window():
 
 # ---- stationary phase, with max as the measure (Karoline 2026-09-28, register item 27) ----------------
 
-from crossfeed.derive import stationary_cautions  # noqa: E402
-from crossfeed.growth import reached_stationary  # noqa: E402
-from crossfeed.interaction import stationary_verdict  # noqa: E402
+from grownet.derive import stationary_cautions  # noqa: E402
+from grownet.growth import reached_stationary  # noqa: E402
+from grownet.interaction import stationary_verdict  # noqa: E402
 
 T = (0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20)                 # 11 points over 20 h; the last fifth is 16 to 20 h
 
@@ -550,8 +550,8 @@ def test_a_set_follows_the_majority_and_the_caution_needs_max_and_a_disagreement
 def test_an_obligate_arc_whose_monoculture_is_zero_from_the_start_is_cautioned():
     # SMGDB00000006's STneg (Karoline, 2026-09-28: "Obligate, with a caution"): the monoculture reads 0 at
     # every point, the first included, so no growth cannot be told from no inoculum or counts below detection
-    from crossfeed.derive import zero_start_cautions
-    from crossfeed.interaction import starts_at_zero
+    from grownet.derive import zero_start_cautions
+    from grownet.interaction import starts_at_zero
     zero = [Replicate([_curve(A, (0, 0))], "m1"), Replicate([_curve(A, (0, 0))], "m2")]
     grown = [Replicate([_curve(A, (0.1, 0.3))], "c1"), Replicate([_curve(A, (0.1, 0.4))], "c2")]
     assert starts_at_zero(zero, A) is True and starts_at_zero(grown, A) is False
@@ -583,7 +583,7 @@ def test_a_spiked_replicate_cannot_make_a_set_count_as_grown():
     # code review of 2026-09-28: two replicates stay flat and a third carries a spike; the no-growth rule
     # once saw the spike's rise and called the set grown, then the spike was left out and a ratio was taken
     # between replicates that did not grow. Judged without the spiked replicate, the set did not grow.
-    from crossfeed.interaction import _grown_values
+    from grownet.interaction import _grown_values
     flat = (1, 1, 1, 1, 1)
     reps = [Replicate([_curve(A, flat, times=(0, 1, 2, 3, 4))], "r1"),
             Replicate([_curve(A, flat, times=(0, 1, 2, 3, 4))], "r2"),

@@ -1,8 +1,8 @@
-"""Export a crossfeed interaction network to standard graph formats for network tools.
+"""Export a grownet interaction network to standard graph formats for network tools.
 
-The neutral JSON (`crossfeed.model.InteractionNetwork.to_dict`) is the canonical, openly citable output.
+The neutral JSON (`grownet.model.InteractionNetwork.to_dict`) is the canonical, openly citable output.
 This module additionally serializes a network as GraphML, the XML format that Cytoscape, igraph,
-networkx, and Gephi read, so a crossfeed network drops straight into an existing network workflow.
+networkx, and Gephi read, so a grownet network drops straight into an existing network workflow.
 
 Dependency-free (standard library xml only). The graph is directed, and every edge keeps its effect,
 strength, significance, condition, method, the space-joined study_ids (the edge-level attribution), and
@@ -19,7 +19,7 @@ _NS = "http://graphml.graphdrawing.org/xmlns"
 
 # (key id, for, attribute name, attribute type)
 _KEYS = [
-    # what made the network and when (crossfeed.mgrowthdb.provenance), as graph attributes
+    # what made the network and when (grownet.mgrowthdb.provenance), as graph attributes
     ("g_tool", "graph", "tool", "string"),
     ("g_tool_version", "graph", "tool_version", "string"),
     ("g_derived_on", "graph", "derived_on", "string"),

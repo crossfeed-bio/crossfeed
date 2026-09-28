@@ -18,7 +18,7 @@ NAME = "grownet"
 
 def main(zip_name: str) -> int:
     subprocess.run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--onedir", "--console", "--name", NAME,
-                    "--collect-submodules", "crossfeed", str(ROOT / "packaging" / "windows" / "grownet.py")],
+                    "--collect-submodules", "grownet", str(ROOT / "packaging" / "windows" / "grownet.py")],
                    check=True, cwd=ROOT)
     folder = ROOT / "dist" / NAME
     for extra in (ROOT / "packaging" / "windows" / "README.txt", ROOT / "LICENSE", ROOT / "NOTICE"):

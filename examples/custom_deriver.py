@@ -1,4 +1,4 @@
-"""A complete, runnable example of plugging a custom derivation method into crossfeed.
+"""A complete, runnable example of plugging a custom derivation method into grownet.
 
 The derivation method is the scientific choice the collaboration makes (see docs/METHOD_NOTES.md). It
 plugs in through the `Deriver` interface: one class, one method `derive(study, exps)` that returns
@@ -11,12 +11,12 @@ Run it offline (no network):
 
 Run YOUR Deriver live on a real study, with no glue code:
 
-    python -m crossfeed derive SMGDB00000004 --live --deriver examples.custom_deriver:RelativeChangeDeriver
+    python -m grownet derive SMGDB00000004 --live --deriver examples.custom_deriver:RelativeChangeDeriver
 """
 from __future__ import annotations
 
-from crossfeed.derive import Deriver
-from crossfeed.mgrowthdb import records_to_network
+from grownet.derive import Deriver
+from grownet.mgrowthdb import records_to_network
 
 
 def _growth(exp, strain=None, metric="growthRate"):

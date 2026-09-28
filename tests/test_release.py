@@ -10,9 +10,9 @@ from check_release import check  # noqa: E402
 
 
 def _repo(tmp_path, version="0.1.0", code="0.1.0", heading="## [0.1.0] (2026-10-01)"):
-    (tmp_path / "src" / "crossfeed").mkdir(parents=True)
+    (tmp_path / "src" / "grownet").mkdir(parents=True)
     (tmp_path / "pyproject.toml").write_text(f'[project]\nname = "grownet"\nversion = "{version}"\n')
-    (tmp_path / "src" / "crossfeed" / "__init__.py").write_text(f'__version__ = "{code}"\n')
+    (tmp_path / "src" / "grownet" / "__init__.py").write_text(f'__version__ = "{code}"\n')
     (tmp_path / "CHANGELOG.md").write_text(f"# Changelog\n\n{heading}\n\n### Added\n- the first release\n\n"
                                            "## [0.0.2] (2026-09-01)\n\n- older\n")
     return tmp_path

@@ -1,6 +1,6 @@
-"""The crossfeed neutral interaction-network model.
+"""The grownet neutral interaction-network model.
 
-An InteractionNetwork is the neutral format crossfeed emits from experimentally grounded
+An InteractionNetwork is the neutral format grownet emits from experimentally grounded
 co-growth data (mGrowthDB). Downstream tools (Syntropa, microbetag) read it.
 
 Design notes (from the KU Leuven collaboration, 2026-09):
@@ -21,7 +21,7 @@ EFFECTS = ("facilitation", "inhibition", "neutral")
 # what an edge was derived from: a mono versus bi-culture comparison (a direct interaction), or a full
 # versus drop-out community comparison (not necessarily direct: strictly a hyper-arc, kept as an arc)
 EVIDENCE = ("biculture", "dropout")
-# what the comparison could say about the target's growth (crossfeed.interaction)
+# what the comparison could say about the target's growth (grownet.interaction)
 OUTCOMES = ("quantified", "obligate", "abolished", "no_growth")
 # why an edge is low quality: hidden by default and never read as the absence of an interaction
 QUALITY_FLAGS = ("single_replicate", "strains_pooled", "non_batch", "removed_member_detected")
@@ -30,7 +30,7 @@ CAUTIONS = ("two_replicates", "conditions_unverified", "stationary_phase_differs
             "zero_at_start")
 # what a node's id rests on: the NCBI taxon id of the strain, or genus and species of its name (#23)
 IDENTITIES = ("ncbi", "name", "genus")
-# whether a comparison counts as an interaction under the absence threshold (crossfeed.derive.absence)
+# whether a comparison counts as an interaction under the absence threshold (grownet.derive.absence)
 STATUSES = ("present", "absent")
 
 

@@ -93,7 +93,7 @@ def _members(exp: dict) -> list:
 def interactions_from_experiments(study: dict, exps: list, study_id: str = None,
                                   metric: str = "growthRate", deadband: float = DEADBAND):
     """Pure derivation, no network: return (records, skipped) from a study dict and its experiment dicts.
-    `records` feed crossfeed.mgrowthdb.records_to_network; `skipped` lists (label, reason) for everything
+    `records` feed grownet.mgrowthdb.records_to_network; `skipped` lists (label, reason) for everything
     the data did not cleanly support. This is the PROVISIONAL baseline; see the module docstring."""
     study_id = study_id or study.get("id")
 
@@ -711,7 +711,7 @@ def _variants(exps) -> dict:
 
 def _dropout(client, design, method, spike_factor, study_id, study_meta, records, skipped,
              identities=None, no_growth=None, variants=None) -> None:
-    """The arcs of one drop-out design, from `crossfeed.interaction.dropout_interaction_strengths`."""
+    """The arcs of one drop-out design, from `grownet.interaction.dropout_interaction_strengths`."""
     members, full_exps, drops = design
     label = f"drop-out design of {len(members)} members ({', '.join(e.get('name', '') for e in full_exps)})"
     full, full_detected = _community_replicates(client, full_exps, members, "full community",
@@ -796,9 +796,9 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
     """The specified comparison, run on a study: (records, skipped).
 
     Two designs give edges. Each two-member co-culture is compared with the monoculture replicates of
-    its members under the same conditions (`crossfeed.interaction.interaction_strength`, evidence
+    its members under the same conditions (`grownet.interaction.interaction_strength`, evidence
     `biculture`). Each drop-out design (`dropout_designs`) compares the full community with the community
-    without one member (`crossfeed.interaction.dropout_interaction_strengths`, evidence `dropout`), unless
+    without one member (`grownet.interaction.dropout_interaction_strengths`, evidence `dropout`), unless
     `dropout` is False. Drop-out arcs are included by default, labeled by evidence (Craig and Karoline,
     register item 2).
 
@@ -809,7 +809,7 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
     happens at output (`select_edges`), so nothing computed is lost. Only batch experiments are derived
     unless `include_non_batch` is set; every edge records its `cultivation_mode`, and a non-batch edge is
     flagged `non_batch` (Karoline, #42). `no_growth_alpha` and `no_growth_factor` set the no-growth rule
-    (`crossfeed.interaction.grew`; None means the defaults there).
+    (`grownet.interaction.grew`; None means the defaults there).
     """
     no_growth = (no_growth_alpha, no_growth_factor)
     study_id = study_id or study.get("id")
@@ -1073,7 +1073,7 @@ class Deriver:
     significance test) is the scientific choice owned by the collaboration. A Deriver is how a chosen
     method plugs in: subclass it, implement `derive`, and it slots into `derive_interactions` and the
     CLI without touching the neutral model or the pipeline. Keep the record shape that
-    `crossfeed.mgrowthdb.records_to_network` reads, and record what the data does not support in
+    `grownet.mgrowthdb.records_to_network` reads, and record what the data does not support in
     `skipped` rather than inventing a value.
     """
 
@@ -1089,8 +1089,8 @@ class Deriver:
 class ReplicateDeriver(Deriver):
     """The comparison the collaboration specified, over replicate growth curves.
 
-    Reads each replicate's measured series through `crossfeed.adapter`, compares the replicate sets with
-    `crossfeed.interaction.interaction_strength` (area under the curve by default; maximal abundance or a
+    Reads each replicate's measured series through `grownet.adapter`, compares the replicate sets with
+    `grownet.interaction.interaction_strength` (area under the curve by default; maximal abundance or a
     growth rate selectable), and emits edges carrying the standard error and the replicate counts. This is the default
     for a live derivation; `BaselineDeriver` remains only as the retired placeholder it always was.
     """

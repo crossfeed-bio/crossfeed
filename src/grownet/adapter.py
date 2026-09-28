@@ -1,9 +1,9 @@
 """mGrowthDB experiments to replicate growth curves.
 
-`crossfeed.interaction` compares replicate sets of growth curves, which is the comparison the
+`grownet.interaction` compares replicate sets of growth curves, which is the comparison the
 collaboration specified. mGrowthDB serves its measurements as a time series per measurement context, one
 context per strain per bioreplicate, so this module is the join between the two: it reads an experiment
-and returns one `crossfeed.growth.Replicate` per bioreplicate, each holding a `GrowthCurve` per strain.
+and returns one `grownet.growth.Replicate` per bioreplicate, each holding a `GrowthCurve` per strain.
 
 Two rules worth stating, because both are choices:
 
@@ -14,7 +14,7 @@ Two rules worth stating, because both are choices:
     context's technique units, falling back to the technique name when no unit string is reported (an OD
     reading and a qPCR count then still refuse to be compared, which is the point of the check).
 
-When a strain's curve carries an implausible spike (`crossfeed.growth.spike`), the adapter looks for
+When a strain's curve carries an implausible spike (`grownet.growth.spike`), the adapter looks for
 other measurements of the same strain in the same replicate and says whether they are clean, because they
 are evidence about the flag (in BH_14 the qPCR trace spikes while the flow cytometry trace does not). A
 community-level trace counts as such an alternative only in a monoculture, where it measures that single
@@ -22,7 +22,7 @@ strain; in a co-culture it is the sum of the members. The alternative is named, 
 techniques between monoculture and co-culture is what register item 13 warns about.
 
 Anything that cannot be built is reported with a reason rather than guessed at, as everywhere else in
-crossfeed. Nothing pulled here is written into the repository.
+grownet. Nothing pulled here is written into the repository.
 """
 from __future__ import annotations
 

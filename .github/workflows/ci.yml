@@ -50,8 +50,8 @@ jobs:
         run: |
           python -m venv /tmp/clean
           /tmp/clean/bin/pip install dist/*.whl
-          /tmp/clean/bin/crossfeed --help
-          python packaging/smoke.py /tmp/clean/bin/crossfeed gui --no-browser
+          /tmp/clean/bin/grownet --help
+          python packaging/smoke.py /tmp/clean/bin/grownet gui --no-browser
 
   windows-app:
     # the self-contained Windows program: a one-folder build in a zip (Karoline, on #63), built and started

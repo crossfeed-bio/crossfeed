@@ -1,11 +1,11 @@
 """First slice: the FP/BH study, end to end.
 
-The first concrete demonstration of the crossfeed seam per the KU Leuven collaboration: take one
+The first concrete demonstration of the grownet seam per the KU Leuven collaboration: take one
 mGrowthDB study, turn it into a single interaction network in the neutral format, attribute it at the
 edge level, and emit it for Syntropa to consume.
 
   --live      fetch the real study (SMGDB00000004, published/open) from the mGrowthDB API and derive the
-              interactions with the PROVISIONAL baseline (crossfeed.derive). Needs network.
+              interactions with the PROVISIONAL baseline (grownet.derive). Needs network.
   --fixture   run the downstream seam offline on a small SYNTHETIC example (no network, used by CI).
 """
 from __future__ import annotations

@@ -9,9 +9,9 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from crossfeed import __version__, gui, interaction
-from crossfeed.gui import DEFAULTS, parse_settings, render_form, render_result, run_query, serve
-from crossfeed.mgrowthdb import MGrowthDBError
+from grownet import __version__, gui, interaction
+from grownet.gui import DEFAULTS, parse_settings, render_form, render_result, run_query, serve
+from grownet.mgrowthdb import MGrowthDBError
 
 
 @pytest.fixture(autouse=True)
@@ -203,7 +203,7 @@ def server():
     """The real handler on a free port, with the fake client; yields (url, token)."""
     import http.server
 
-    import crossfeed.gui as gui
+    import grownet.gui as gui
 
     holder = {}
     original = gui._Server
@@ -347,7 +347,7 @@ def test_the_send_to_cytoscape_button_uses_the_network_already_computed(server, 
 
     def fake_send(net, **kwargs):
         sent["edges"] = len(net.edges)
-        return {"suid": 7, "style": "crossfeed", "url": "http://127.0.0.1:1234/v1/networks/7"}
+        return {"suid": 7, "style": "grownet", "url": "http://127.0.0.1:1234/v1/networks/7"}
 
     monkeypatch.setattr(gui, "send", fake_send)
     with urllib.request.urlopen(f"{base}/cytoscape?token={token}", data=b"", timeout=10) as r:
@@ -429,7 +429,7 @@ def test_an_empty_result_caused_by_a_setting_names_the_setting():
 def test_a_strain_is_named_by_its_current_name():
     # taxon 853 is "Faecalibacterium prausnitzii A2-165" in the fake study; a later study calls it duncaniae,
     # so the node and the resolved list use that name, while the old name still finds it (#24)
-    from crossfeed.taxonomy import SpeciesIndex
+    from grownet.taxonomy import SpeciesIndex
     index = SpeciesIndex({"faecalibacterium prausnitzii": {853: A}, "blautia hydrogenotrophica": {53443: B}},
                          current={853: "Faecalibacterium duncaniae A2-165"})
     r = run_query(FakeClient(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"], {}, index=index)
@@ -444,8 +444,8 @@ def test_a_node_keyed_by_name_keeps_its_own_name_when_its_taxon_id_is_shared():
     # Audit 2026-09-28: SMGDB00000008 gives Lachnoclostridium clostridioforme 2_1_49FAA and L. symbiosum
     # WAL-14673 the same taxon id, 1506553. The derivation keys both nodes by name; renaming by the id's
     # latest name turned the symbiosum node into a second "clostridioforme", name and species key alike.
-    from crossfeed.gui import _current_names
-    from crossfeed.model import InteractionNetwork, Node
+    from grownet.gui import _current_names
+    from grownet.model import InteractionNetwork, Node
     net = InteractionNetwork()
     net.add_node(Node("lachnoclostridium symbiosum", name="Lachnoclostridium symbiosum WAL-14673",
                       taxon_id="1506553", species="lachnoclostridium symbiosum", identity="name"))
@@ -504,7 +504,7 @@ def test_merge_to_genus_from_the_page_gives_genus_nodes():
 
 def test_average_replicates_are_one_line_per_experiment_in_what_a_reader_sees():
     # Karoline (2026-09-28): 555 of all of mGrowthDB's 1972 skip lines were average replicates, one each
-    from crossfeed.adapter import AVERAGE, condensed
+    from grownet.adapter import AVERAGE, condensed
     skipped = [("E1: Average(E1)", AVERAGE), ("E1: r1", "a spike"), ("E1: Average 2", AVERAGE), ("E2: avg", AVERAGE)]
     assert condensed(skipped) == [("E1", f"2 average replicate(s) left out ({AVERAGE})"), ("E1: r1", "a spike"),
                                   ("E2", f"1 average replicate(s) left out ({AVERAGE})")]
@@ -519,8 +519,8 @@ def test_only_the_latest_searches_are_kept_and_a_running_one_never_goes():
 def test_an_unreachable_mgrowthdb_is_reported_not_read_as_an_empty_database():
     # audit step 7 (2026-09-28): with nothing listening, the species list came back empty and the page
     # said "no species or strain of this name in mGrowthDB"; a missing study (404) still ends the crawl
-    from crossfeed.mgrowthdb import MGrowthDBClient
-    from crossfeed.taxonomy import species_index
+    from grownet.mgrowthdb import MGrowthDBClient
+    from grownet.taxonomy import species_index
     down = MGrowthDBClient(base_url="http://127.0.0.1:9/api/v1", retries=1, timeout=2)
     with pytest.raises(MGrowthDBError, match="mGrowthDB could not be read"):
         species_index(down)

@@ -1,9 +1,9 @@
-"""The statistics crossfeed reports, in the standard library only.
+"""The statistics grownet reports, in the standard library only.
 
 Welch's t-test compares the per-replicate log2 values with and without a partner, and Benjamini-Hochberg
 corrects the resulting p-values for the number of comparisons tested in one derivation. Neither decides
 whether an edge exists (that is the mean plus or minus its standard deviation, see
-`crossfeed.derive.classify`): a significant result supports an edge, and a non-significant one is not
+`grownet.derive.classify`): a significant result supports an edge, and a non-significant one is not
 informative (Karoline, on #40). They are reported on each edge so a reader can weigh the evidence.
 
 The t distribution comes from the regularized incomplete beta function (continued fraction, as in

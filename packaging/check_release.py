@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def check(tag: str, root: Path = ROOT) -> tuple:
     version = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-    init = (root / "src" / "crossfeed" / "__init__.py").read_text(encoding="utf-8")
+    init = (root / "src" / "grownet" / "__init__.py").read_text(encoding="utf-8")
     code_version = re.search(r'__version__ = "([^"]+)"', init).group(1)
     problems = []
     if tag != f"v{version}":
