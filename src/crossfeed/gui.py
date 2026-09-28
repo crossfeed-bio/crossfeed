@@ -75,13 +75,14 @@ EMPTY_HELP = ("grownet derives interactions from pairwise (two-member) co-cultur
 
 
 def _page(body: str, token: str = "", refresh: str = "") -> str:
-    """A page in the grownet style: a header with the mark, the name, the version, Legend and Help."""
+    """A page in the grownet style: a header with the mark, the name, the version, Legend, Help and About."""
     t = html.escape(token, quote=True)
     icon = urllib.parse.quote(brand.logo_svg(64))
     header = (f"<header><a class=\"brand\" href=\"/?token={t}\"><h1 class=\"brand\">{brand.logo_svg(28)}"
               f"{brand.WORDMARK}</h1></a>{HEADING}"
               f"<nav><a class=\"btn quiet\" href=\"/legend?token={t}\">Legend</a>"
-              f"<a class=\"btn quiet\" href=\"/help?token={t}\">Help</a></nav></header>")
+              f"<a class=\"btn quiet\" href=\"/help?token={t}\">Help</a>"
+              f"<a class=\"btn quiet\" href=\"/about?token={t}\">About</a></nav></header>")
     # a running search reloads its page every second (#75): a meta refresh, so no JavaScript is needed
     reload = f"<meta http-equiv=\"refresh\" content=\"1; url={html.escape(refresh, quote=True)}\">" if refresh else ""
     return ("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
@@ -222,6 +223,11 @@ def render_legend(token: str) -> str:
 
 def render_help(token: str) -> str:
     return _page(help_page.render_help(token, DEFAULTS, EXAMPLE)
+                 + f"<p class=\"bar\"><a class=\"btn\" href=\"/?token={_esc(token)}\">Back</a></p>", token)
+
+
+def render_about(token: str) -> str:
+    return _page(help_page.render_about()
                  + f"<p class=\"bar\"><a class=\"btn\" href=\"/?token={_esc(token)}\">Back</a></p>", token)
 
 
@@ -642,6 +648,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(self._job_page(job) if job else render_form(self.token))
         elif parsed.path == "/help":
             self._send(render_help(self.token))
+        elif parsed.path == "/about":
+            self._send(render_about(self.token))
         elif parsed.path == "/legend":
             self._send(render_legend(self.token))
         elif parsed.path == "/download":

@@ -7,6 +7,8 @@ tagged version is never reused for changed content.
 ## [0.0.2] (unreleased)
 
 ### Added
+- An About button beside Help (#80): who built grownet, in the wording Craig agreed to on #80, with the
+  repository link and the version.
 - The help page now explains every advanced setting (with its command line flag and default), every arc
   and node attribute, the main design decisions and why, the command line with the page's own example,
   what to do when no network comes back, a short Q&A, how to cite, and links the issue tracker. Tests

@@ -9,7 +9,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from crossfeed import gui, interaction
+from crossfeed import __version__, gui, interaction
 from crossfeed.gui import DEFAULTS, parse_settings, render_form, render_result, run_query, serve
 from crossfeed.mgrowthdb import MGrowthDBError
 
@@ -295,6 +295,19 @@ def test_the_example_button_fills_the_box_with_species_that_work(server):
     filled = urllib.parse.urlencode({"species": f"{A}\n{B}", "only_entered": "1"}).encode()
     with urllib.request.urlopen(f"{base}/run?token={token}", data=filled, timeout=10) as r:
         assert "interaction(s)" in r.read().decode("utf-8")
+
+
+def test_the_about_button_names_the_builders_as_agreed_and_links_the_repository(server):
+    base, token = server
+    assert f'href="/about?token={token}"' in _get(f"{base}/help?token={token}")    # on every page
+    page = _get(f"{base}/about?token={token}")
+    # Craig's agreed wording on #80, word for word
+    assert ("grownet was built by Karoline Faust (KU Leuven) and Craig Heilmann (Syntropa), working through "
+            "their AI coding agents (Claude).") in page
+    assert '<a href="https://github.com/crossfeed-bio/crossfeed">' in page and f"Version {__version__}" in page
+    with pytest.raises(urllib.error.HTTPError) as bad:
+        _get(f"{base}/about?token=wrong")
+    assert bad.value.code == 403
 
 
 def test_the_help_button_opens_a_help_page_behind_the_token(server):
