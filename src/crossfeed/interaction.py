@@ -51,6 +51,7 @@ from .growth import (
     check_replicate_sets,
     check_sets,
     cut,
+    reached_stationary,
     shared_window,
     spike,
 )
@@ -249,6 +250,16 @@ def _compare(with_log2: list, without_log2: list, zero_with: int = 0, zero_witho
     return result
 
 
+def stationary_verdict(reps, species: str, end: float):
+    """Whether a replicate set reached stationary phase by `end`: True or False by the majority of its
+    replicates (Karoline, 2026-09-28), or None when most of them cannot be judged (too few points)."""
+    calls = [reached_stationary(c, end) for c in (rep.curve(species) for rep in reps) if c is not None]
+    judged = [c for c in calls if c is not None]
+    if not calls or len(judged) * 2 <= len(calls):
+        return None
+    return sum(judged) * 2 > len(judged)
+
+
 def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, method: str = "auc",
                          spike_factor: float = SPIKE_FACTOR, no_growth_alpha: float = None,
                          no_growth_factor: float = None) -> dict:
@@ -262,18 +273,26 @@ def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, met
     species' set and reported; a set left without growth gives the outcome "obligate", "abolished", or
     "no_growth" (see the module docstring).
 
-    Returns a dict with "method", "log", "window" (start, end), "species_a" and "species_b" (each with
-    "species", "outcome", "mean", "sd", "se", "n_co", "n_mono", "co_log2", "mono_log2"; "mean", "sd", and
+    Each species is compared over its own window: from the common start to the earliest last time point
+    of its own curves in the co-culture and alone, so the partner's monoculture, which is not part of the
+    comparison, does not shorten it (Karoline, 2026-09-28, register item 26: as for drop-outs; the area
+    needs an equal window on both sides, which this is).
+
+    Returns a dict with "method", "log", "window" (start, end) over the whole design, "species_a" and
+    "species_b" (each with "species", "window", "outcome", "mean", "sd", "se", "n_co", "n_mono", "co_log2",
+    "mono_log2"; "mean", "sd", and
     "se" are None unless the outcome is "quantified", and "sd" and "se" are None when a set has a single
     replicate), and "skipped" as a list of (label, reason).
     """
     _check_method(method)
     check_replicate_sets(mono_a, mono_b, co, species_a, species_b)
     start, end = shared_window(c for rep in [*mono_a, *mono_b, *co] for c in rep.curves)
-    prop = _property(end, method)
 
     result = {"method": method, "log": LOG, "window": (start, end), "skipped": [], "flagged": []}
     for key, species, monos in (("species_a", species_a, mono_a), ("species_b", species_b, mono_b)):
+        window = shared_window(rep.curve(species) for rep in [*co, *monos])
+        end = window[1]
+        prop = _property(end, method)
         zero_co, zero_mono = [], []
         co_log2 = _grown_values(co, species, "co-culture", prop, method, result["skipped"],
                                 spike_factor, result["flagged"], zero_co, end, no_growth_alpha,
@@ -282,7 +301,11 @@ def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, met
                                   spike_factor, result["flagged"], zero_mono, end, no_growth_alpha,
                                   no_growth_factor)
         c = _compare(co_log2, mono_log2, len(zero_co), len(zero_mono))
-        result[key] = {"species": species, "outcome": c["outcome"], "mean": c["mean"], "sd": c["sd"], "se": c["se"],
+        stationary = {"with": stationary_verdict(co, species, end),
+                      "without": stationary_verdict(monos, species, end)}
+        result[key] = {"species": species, "window": window, "stationary": stationary,
+                       "outcome": c["outcome"], "mean": c["mean"],
+                       "sd": c["sd"], "se": c["se"],
                        "n_co": c["n_with"], "n_mono": c["n_without"],
                        "co_log2": c["with_log2"], "mono_log2": c["without_log2"]}
     return result
@@ -361,5 +384,8 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc",
                 result["skipped"].append((f"arc {removed} -> {target}", "every replicate of a set was left out"))
                 continue
             result["arcs"].append({"source": removed, "target": target, "evidence": evidence,
-                                   "community": community, "window": window, **c})
+                                   "community": community, "window": window,
+                                   "stationary": {"with": stationary_verdict(full, target, window[1]),
+                                                  "without": stationary_verdict(reps, target, window[1])},
+                                   **c})
     return result

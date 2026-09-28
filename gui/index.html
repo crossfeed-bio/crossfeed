@@ -406,8 +406,10 @@ const SHOWN_FLAGGED=["single_replicate"];   // shown and marked: the comparison 
 const flagsOf=e=>Array.isArray(e.quality)?e.quality:[];
 const isLowQuality=e=>flagsOf(e).length>0;
 const isHiddenByDefault=e=>flagsOf(e).some(f=>HIDDEN_BY_DEFAULT.includes(f));
-// "two_replicates" and "conditions_unverified" (experiments told apart only by their descriptions): both are
-// worth knowing and neither disqualifies, so every caution is listed with the edge and none hides it
+// "two_replicates", "conditions_unverified" (experiments told apart only by their descriptions),
+// "stationary_phase_differs" and "stationary_unchecked" (with max: one set reached stationary phase and the
+// other did not, or too few points to tell): all are worth knowing and none disqualifies, so every caution
+// is listed with the edge and none hides it
 const cautionsOf=e=>Array.isArray(e.cautions)?e.cautions:[];
 // An edge carries the status it was derived at, and `effect_over_sd` (|log2 mean| / sd), which is the
 // quantity the absence threshold k cuts. Because that number is on the edge, a reader can move k here

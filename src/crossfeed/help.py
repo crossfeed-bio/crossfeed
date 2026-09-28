@@ -151,7 +151,10 @@ EDGE_ATTRIBUTES = {
                "removed_member_detected; empty means no issue found",
     "cautions": "remarks that do not lower quality: two_replicates (exactly two replicates on a side), "
                 "conditions_unverified (experiments of this pair differ only in their description, such as a "
-                "supplement, and nothing recorded says which monocultures or drop-outs match which)",
+                "supplement, and nothing recorded says which monocultures or drop-outs match which), "
+                "stationary_phase_differs (with max as the measure: one set reached stationary phase and the "
+                "other did not, so its maximum may still be rising), stationary_unchecked (with max: too few "
+                "time points, under 6, to tell)",
     "notes": "other remarks, for example a replicate left out for a spike",
     "evidence": "biculture (monoculture against a two-member co-culture: a direct interaction) or dropout "
                 "(a community against the same community without the source: direct or indirect)",

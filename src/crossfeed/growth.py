@@ -157,6 +157,39 @@ def cut(curve: GrowthCurve, end: float | None) -> tuple:
     return times[:i] + (end,), values[:i] + (v_end,)
 
 
+# Stationary phase (Karoline, 2026-09-28): with max as the measure, a curve that has stopped growing must
+# not be compared with one still growing. Two tolerances of 10% of the curve's rise, and a curve needs this
+# many points in the window to be judged at all (study 8 measures four).
+STATIONARY_FLAT = 0.10
+STATIONARY_MIN_POINTS = 6
+
+
+def reached_stationary(curve: GrowthCurve, end: float, flat: float = STATIONARY_FLAT,
+                       min_points: int = STATIONARY_MIN_POINTS):
+    """Whether the curve has reached stationary phase by `end`: True, False, or None when it cannot be
+    judged (fewer than `min_points` measured points up to `end`, or no rise at all).
+
+    A diauxic shift pauses growth between two phases, so a flat end alone would call the pause stationary.
+    Two conditions, each within `flat` times the curve's rise (window maximum minus start):
+      1. stopped: over the last fifth of the window the curve rises by less than that (a decline counts);
+      2. not growing again: wherever the curve was measured after `end`, it stays below its window maximum
+         plus that much, so a measured second phase makes the pause not stationary.
+    A second phase after the last measurement cannot be seen by any rule.
+    """
+    if sum(1 for t in curve.times if t <= end + 1e-9) < min_points:
+        return None
+    times, values = cut(curve, end)
+    top = max(values)
+    rise = top - values[0]
+    if rise <= 0:
+        return None
+    fifth = times[-1] - (times[-1] - times[0]) / 5
+    at_fifth = cut(curve, fifth)[1][-1] if times[0] < fifth < times[-1] else values[-1]
+    stopped = values[-1] - at_fifth < flat * rise
+    later = [v for t, v in zip(curve.times, curve.values, strict=True) if t > end + 1e-9]
+    return stopped and not (later and max(later) > top + flat * rise)
+
+
 def _auc(times, values) -> float:
     """Area under the curve by the trapezoidal rule, with no baseline subtraction."""
     return sum((t1 - t0) * (v0 + v1) / 2

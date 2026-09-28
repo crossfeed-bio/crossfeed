@@ -7,6 +7,10 @@ tagged version is never reused for changed content.
 ## [0.0.2] (unreleased)
 
 ### Added
+- With max as the growth measure, arcs are checked for stationary phase (register item 27): the caution
+  `stationary_phase_differs` marks an arc where one set reached stationary phase within the compared window
+  and the other did not, and `stationary_unchecked` one whose curves have under 6 time points. The rule is
+  not fooled by a diauxic shift: a pause followed by a measured second rise is not stationary.
 - An All button beside Example (`derive --live --all`): the box is ignored and every study in mGrowthDB is
   derived, with every partner; Only these studies and Exclude these studies still apply (register item 25).
 - Merge to genus (`--merge-genera`), an advanced setting off by default: one node per genus, and the arcs
@@ -220,6 +224,10 @@ tagged version is never reused for changed content.
   `removed_member_detected`.
 
 ### Changed
+- Each bi-culture arc is compared over its own window, the target's curves alone and together, as drop-out
+  arcs already were, so the partner's shorter monoculture no longer shortens it (register item 26). On
+  mGrowthDB one arc changes (SMGDB00000006, L. bulgaricus -> S. thermophilus STpos: +0.088 to +0.074,
+  absent either way).
 - Inhibition is drawn in orange-red (#C2410C) rather than red (Karoline, 2026-09-27). With uniform arc
   tips the color is the only cue for the sign, and green against red is the hardest pair for a reader with
   a color vision deficiency: simulated, the new pair stays about 90 sRGB units apart under protanopia and

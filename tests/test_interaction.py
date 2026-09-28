@@ -482,3 +482,59 @@ def test_different_species_may_be_measured_by_different_techniques():
     co = [Replicate([_measured(A, (1, 3), "qpcr"), _measured(B, (1, 1.4), "plates")], f"c{i}") for i in range(2)]
     r = interaction_strength(mono_a, mono_b, co, A, B)
     assert r["species_a"]["outcome"] == "quantified"
+
+
+def test_each_species_of_a_pair_is_compared_over_its_own_window():
+    # Karoline (2026-09-28, register item 26): the partner's monoculture is not part of the comparison, so
+    # it does not shorten the window. B alone is followed to 5 h only; A (alone and together) to 10 h.
+    # A: co areas 5*(1+3)=20 and 5*(3+5)=40, mono 10 and 20 over 0-10 h -> +1, as over the full curves.
+    # Under the old design-wide window (0-5 h) A's co areas were 2.5*(1+2)=7.5 and 2.5*(3+4)=17.5 against
+    # mono 5 and 2.5*(1+2)=7.5, giving (log2(7.5/5) + log2(17.5/7.5)) / 2 = +0.90 instead.
+    mono_a, _, co = _example()
+    short_b = [Replicate([_curve(B, (1, 2), times=(0, 5))], "b1"), Replicate([_curve(B, (2, 3), times=(0, 5))], "b2")]
+    r = interaction_strength(mono_a, short_b, co, A, B)
+    assert r["species_a"]["window"] == (0.0, 10.0) and r["species_b"]["window"] == (0.0, 5.0)
+    assert r["species_a"]["mean"] == pytest.approx(1.0)
+
+
+# ---- stationary phase, with max as the measure (Karoline 2026-09-28, register item 27) ----------------
+
+from crossfeed.derive import stationary_cautions  # noqa: E402
+from crossfeed.growth import reached_stationary  # noqa: E402
+from crossfeed.interaction import stationary_verdict  # noqa: E402
+
+T = (0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20)                 # 11 points over 20 h; the last fifth is 16 to 20 h
+
+
+def test_a_plateau_is_stationary_and_a_curve_still_rising_is_not():
+    plateau = _curve(A, (1, 2, 5, 9, 10, 10, 10, 10, 10, 10.2, 10.3), T)   # rise 9.3; 16 to 20 h adds 0.3
+    rising = _curve(A, (1, 1.5, 2, 3, 4, 5, 6, 7, 8, 9, 10), T)             # 16 to 20 h adds 2 of a rise of 9
+    declining = _curve(A, (1, 4, 9, 10, 9, 8, 7, 6, 5, 4, 3), T)           # a decline has stopped growing
+    assert reached_stationary(plateau, 20) is True and reached_stationary(declining, 20) is True
+    assert reached_stationary(rising, 20) is False
+
+
+def test_a_diauxic_pause_is_not_stationary_when_a_second_rise_follows():
+    # growth to 5 by 4 h, a pause from 4 to 10 h, a second rise to 10 by 14 h, then flat to 20 h
+    diauxic = _curve(A, (1, 3, 5, 5, 5, 5, 8, 10, 10, 10, 10), T)
+    # judged at 10 h, inside the pause (six points, 0 to 10 h): the last fifth, 8 to 10 h, is flat, but the
+    # curve later reaches 10, above 5 + 10% of its rise of 4, so the pause is not stationary
+    assert reached_stationary(diauxic, 10) is False
+    # judged at 20 h, both phases inside the window: 16 to 20 h is flat and nothing follows, so stationary
+    assert reached_stationary(diauxic, 20) is True
+
+
+def test_a_sparse_curve_is_not_judged():
+    four_points = _curve(A, (1, 100, 120, 118), (0, 10, 20, 30))  # study 8's shape: 0, 10, 20 and 30 h
+    assert reached_stationary(four_points, 30) is None
+
+
+def test_a_set_follows_the_majority_and_the_caution_needs_max_and_a_disagreement():
+    flat, rising = (1, 2, 5, 9, 10, 10, 10, 10, 10, 10, 10), (1, 1.5, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    two_of_three = [Replicate([_curve(A, flat, T)], "r1"), Replicate([_curve(A, flat, T)], "r2"),
+                    Replicate([_curve(A, rising, T)], "r3")]
+    assert stationary_verdict(two_of_three, A, 20) is True
+    assert stationary_cautions({"with": True, "without": False}, "max", "quantified") == ["stationary_phase_differs"]
+    assert stationary_cautions({"with": True, "without": None}, "max", "quantified") == ["stationary_unchecked"]
+    assert stationary_cautions({"with": True, "without": True}, "max", "quantified") == []
+    assert stationary_cautions({"with": True, "without": False}, "auc", "quantified") == []      # max only
