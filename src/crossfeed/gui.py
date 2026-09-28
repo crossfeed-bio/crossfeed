@@ -496,8 +496,15 @@ def parse_settings(form: dict) -> dict:
 def _current_names(net, current: dict) -> None:
     """Name each strain node by its current name (#24): a study from before a reclassification may call
     taxon 411483 Faecalibacterium prausnitzii A2-165, the most recent one Faecalibacterium duncaniae
-    A2-165. The genus and species key follows the name; the taxon id, which is the node's identity, stays."""
+    A2-165. The genus and species key follows the name; the taxon id, which is the node's identity, stays.
+
+    Only a node whose identity is its taxon id is renamed. A node keyed by name carries a taxon id that
+    mGrowthDB gives to more than one species (SMGDB00000008: Lachnoclostridium clostridioforme and L.
+    symbiosum both carry 1506553), so the id's latest name would be another species' name (found in the
+    audit of 2026-09-28)."""
     for nid, node in list(net.nodes.items()):
+        if node.identity != "ncbi":
+            continue
         name = current.get(int(node.taxon_id)) if str(node.taxon_id or "").isdigit() else None
         if name and name != node.name:
             net.nodes[nid] = dataclasses.replace(node, name=name, species=genus_species(name))

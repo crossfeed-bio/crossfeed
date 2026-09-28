@@ -444,6 +444,13 @@ default (`--metric max` for maximal abundance, `--metric growth_rate` for the ma
 rate). Every edge therefore carries a spread, not just a number:
 its mean, standard deviation, standard error, and the replicate counts behind each side.
 
+Curves are compared over a shared time window, so no curve is extrapolated: from the common first time
+point to the earliest last time point among the curves compared, with the value at that end interpolated
+between the two measurements around it. For a bi-culture the window spans every curve of the design (both
+species alone and together); for a drop-out arc, the target's curves with and without the removed member.
+A replicate that starts later than the others is left out and reported. So a 6-hour monoculture and a
+7-hour co-culture are compared over their first 6 hours.
+
 Whether a comparison counts as an interaction follows that spread rather than a fixed cutoff on the
 effect: it is `absent` when its effect is smaller than k standard deviations of its own spread
 (|log2 mean| < k × sd, default k = 1, the mean ± sd rule), and `present` otherwise. There is no

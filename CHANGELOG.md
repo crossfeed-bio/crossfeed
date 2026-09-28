@@ -239,6 +239,10 @@ tagged version is never reused for changed content.
   unused `requests` dependency was dropped.
 
 ### Fixed
+- A node keyed by name, because mGrowthDB gives its taxon id to more than one species, keeps its own name:
+  the current-name step renamed it by the id's latest name, so in SMGDB00000008 Lachnoclostridium
+  symbiosum WAL-14673 appeared as a second L. clostridioforme (found by the audit of 2026-09-28).
+- The README and the help page now say that curves are compared over the time window they share.
 - "Only interactions between the species entered" no longer drops every edge when a study records a strain
   under another name: a species entered as Faecalibacterium duncaniae now matches the same taxon recorded
   as Faecalibacterium prausnitzii, because the filter matches taxon ids as well as names (#73).

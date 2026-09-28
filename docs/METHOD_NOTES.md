@@ -648,5 +648,18 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    list is read from is derived, with every partner kept; Only these studies and Exclude these studies
    still apply. `derive --live --all` does the same from the command line.
 
+26. **The time window of a bi-culture arc** (open; found by the audit of 2026-09-28). Curves are compared
+   over the window they share, so none is extrapolated. For a drop-out arc that window is the target's own
+   curves with and without the removed member ("so one short curve elsewhere in the design does not
+   shorten it"). For a bi-culture it is every curve of the design, including the source alone, whose
+   curve is not part of the comparison. Example, SMGDB00000006: Lactobacillus delbrueckii subsp.
+   bulgaricus -> Streptococcus thermophilus STpos compares S. thermophilus over 0 to 6 h, because L.
+   bulgaricus alone was followed for 6 h, while both S. thermophilus sets run to 7 h or longer (+0.088 over
+   6 h, +0.074 over 7 h; absent either way). The arc's `experiments` does not list the source's
+   monoculture that set the window. Options: (a) keep the design-wide window (both arcs of a pair then
+   cover the same time); (b) give each bi-culture arc its own window, the target's curves only, as for
+   drop-outs, and list nothing more; (c) keep it and add the source's monoculture to `experiments`.
+   Proposed by her agent: (b), for consistency with drop-outs and because it uses all the target's data.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

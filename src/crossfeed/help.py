@@ -190,6 +190,10 @@ DECISIONS = (
     ("One number per comparison: the mean log2 ratio of the replicate sets.",
      "log2(with) minus log2(without) per species, averaged over replicates, with the spread of both sets "
      "combined in the sd. A log ratio is symmetric: a doubling is +1 and a halving is -1 (#3)."),
+    ("Curves are compared over the time they share.",
+     "Areas and maxima are taken from the common first time point to the earliest last time point of the "
+     "curves compared (for a bi-culture, every curve of the design; for a drop-out arc, the target's curves "
+     "with and without the removed member), interpolating at that end, so no curve is extrapolated (#1)."),
     ("An edge is present by its size against its spread, not by a p-value.",
      "With two or three replicates a real effect rarely reaches significance, so the test is reported as "
      "support and does not decide. The absence threshold k does: |mean| of at least k sd (#40, #54)."),
