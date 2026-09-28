@@ -7,6 +7,10 @@ tagged version is never reused for changed content.
 ## [0.0.2] (unreleased)
 
 ### Added
+- The local page offers the Cytoscape style as a download (`/grownet_style.json`, the file `grownet style`
+  writes), linked from the help page's Cytoscape answers, so styling a GraphML file needs no command line.
+  Help, Legend and About have a Back at the upper right as well as at the end, and the grownet mark leads
+  back to the search being worked on instead of an empty page.
 - The help page compares the three growth measures (area, maximum, growth rate): what each captures, and
   its strengths and weaknesses. The README calls the tool grownet, keeping crossfeed only for the command,
   the module, the repository and the schema id until the rename is released.
