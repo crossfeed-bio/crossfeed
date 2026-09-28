@@ -203,8 +203,14 @@ const dashOf=e=>{const drop=isIndirect(e), one=flagsOf(e).includes("single_repli
   return drop&&one?"11 4 2 4":drop?"11 6":one?"2 5":"";};
 // nodes by genus, the first word of the name, each genus its own color (grownet.brand.GENUS_COLORS)
 const GENUS_COLORS=["#2A78D6", "#EDA100", "#E87BA4", "#4A3AA7", "#A2C5FF", "#762E61", "#069CE4", "#C7CA85", "#B8892D", "#635A93", "#F1ACCC", "#A3B472", "#A74FBB", "#8AACE4", "#583A84", "#D75EB4", "#854E73", "#B25977", "#CC96C6", "#544EC5", "#9DDA4F", "#738242", "#8080FC", "#3C561C", "#92689C", "#4CDBE3", "#88194A", "#878CC9", "#4C701A", "#84C030", "#E5598E", "#BA93FB", "#959754", "#6B2094", "#724AAB", "#984260", "#9E658B", "#7B67CC", "#7E0F7A", "#7A5283", "#C8729C", "#E38AB5", "#B249AC", "#8E35A1", "#64B8D2", "#6C4302", "#A76C12", "#623B6B"];
-const genusOf=name=>{const w=String(name||"").replace(/[\[\]]/g,"").split(/\s+/).filter(Boolean);
-  const g=w[0]&&w[0].toLowerCase()==="candidatus"?w[1]:w[0];return g?g[0].toUpperCase()+g.slice(1).toLowerCase():"unknown";};
+// the rule of grownet.model.genus_name: the first word after the qualifiers Candidatus, unclassified and
+// uncultured; NCBI's brackets stay, so [Clostridium] is its own genus (Karoline, 2026-09-28)
+const GENUS_QUALIFIERS=["candidatus","unclassified","uncultured"];
+const cap=w=>w?w[0].toUpperCase()+w.slice(1).toLowerCase():w;
+const genusOf=name=>{const w=String(name||"").split(/\s+/).filter(Boolean);
+  while(w.length&&GENUS_QUALIFIERS.includes(w[0].toLowerCase()))w.shift();
+  if(!w.length)return "unknown";
+  const g=w[0];return g.startsWith("[")&&g.endsWith("]")?"["+cap(g.slice(1,-1))+"]":cap(g);};
 function genusColors(list){const n={};list.forEach(nd=>{const g=genusOf(nodeName(nd.id));n[g]=(n[g]||0)+1;});
   const ranked=Object.keys(n).sort((a,b)=>n[b]-n[a]||(a<b?-1:a>b?1:0));const c={};
   ranked.forEach((g,i)=>c[g]=GENUS_COLORS[i%GENUS_COLORS.length]);return c;}
@@ -581,7 +587,13 @@ function save(name,text,type){const b=new Blob([text],{type}),u=URL.createObject
   a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1500);}
 // the keys of src/grownet/export.py, copied by tests/test_legend.py's check, which also runs this writer
 // against the CLI's on the same network and requires the same graph, keys and values
-const GRAPHML_KEYS=[["g_tool", "graph", "tool", "string"], ["g_tool_version", "graph", "tool_version", "string"], ["g_derived_on", "graph", "derived_on", "string"], ["g_derived_at", "graph", "derived_at", "string"], ["n_name", "node", "name", "string"], ["n_label", "node", "label", "string"], ["n_taxonomy", "node", "taxonomy", "string"], ["n_model_ref", "node", "model_ref", "string"], ["n_taxon_id", "node", "taxon_id", "string"], ["n_species", "node", "species", "string"], ["n_identity", "node", "identity", "string"], ["e_effect", "edge", "effect", "string"], ["e_strength", "edge", "strength", "double"], ["e_significance", "edge", "significance", "double"], ["e_condition", "edge", "condition", "string"], ["e_method", "edge", "method", "string"], ["e_study_ids", "edge", "study_ids", "string"], ["e_p_value", "edge", "p_value", "double"], ["e_weight", "edge", "weight", "double"], ["e_effect_over_sd", "edge", "effect_over_sd", "double"], ["e_status", "edge", "status", "string"], ["e_sd", "edge", "sd", "double"], ["e_se", "edge", "se", "double"], ["e_n_with", "edge", "n_with", "int"], ["e_n_without", "edge", "n_without", "int"], ["e_outcome", "edge", "outcome", "string"], ["e_metric", "edge", "metric", "string"], ["e_quality", "edge", "quality", "string"], ["e_notes", "edge", "notes", "string"], ["e_evidence", "edge", "evidence", "string"], ["e_community", "edge", "community", "string"], ["e_cautions", "edge", "cautions", "string"], ["e_experiments", "edge", "experiments", "string"], ["e_cultivation_mode", "edge", "cultivation_mode", "string"], ["e_merged_arcs", "edge", "merged_arcs", "int"], ["e_strength_range", "edge", "strength_range", "string"], ["e_supporting_pairs", "edge", "supporting_pairs", "int"], ["e_merged_pairs", "edge", "merged_pairs", "string"]];
+const GRAPHML_KEYS=[["g_tool", "graph", "tool", "string"], ["g_tool_version", "graph", "tool_version", "string"], ["g_derived_on", "graph", "derived_on", "string"], ["g_derived_at", "graph", "derived_at", "string"], ["n_name", "node", "name", "string"], ["n_label", "node", "label", "string"], ["n_taxonomy", "node", "taxonomy", "string"], ["n_model_ref", "node", "model_ref", "string"], ["n_taxon_id", "node", "taxon_id", "string"], ["n_species", "node", "species", "string"], ["n_identity", "node", "identity", "string"], ["n_genus", "node", "genus", "string"], ["n_genus_color", "node", "genus_color", "string"], ["e_effect", "edge", "effect", "string"], ["e_strength", "edge", "strength", "double"], ["e_significance", "edge", "significance", "double"], ["e_condition", "edge", "condition", "string"], ["e_method", "edge", "method", "string"], ["e_study_ids", "edge", "study_ids", "string"], ["e_p_value", "edge", "p_value", "double"], ["e_weight", "edge", "weight", "double"], ["e_effect_over_sd", "edge", "effect_over_sd", "double"], ["e_status", "edge", "status", "string"], ["e_sd", "edge", "sd", "double"], ["e_se", "edge", "se", "double"], ["e_n_with", "edge", "n_with", "int"], ["e_n_without", "edge", "n_without", "int"], ["e_outcome", "edge", "outcome", "string"], ["e_metric", "edge", "metric", "string"], ["e_quality", "edge", "quality", "string"], ["e_notes", "edge", "notes", "string"], ["e_evidence", "edge", "evidence", "string"], ["e_community", "edge", "community", "string"], ["e_cautions", "edge", "cautions", "string"], ["e_experiments", "edge", "experiments", "string"], ["e_cultivation_mode", "edge", "cultivation_mode", "string"], ["e_merged_arcs", "edge", "merged_arcs", "int"], ["e_strength_range", "edge", "strength_range", "string"], ["e_supporting_pairs", "edge", "supporting_pairs", "int"], ["e_merged_pairs", "edge", "merged_pairs", "string"], ["e_line_style", "edge", "line_style", "string"], ["e_display_weight", "edge", "display_weight", "double"]];
+// the columns the grownet Cytoscape style maps, as grownet.cytoscape computes them (line_style,
+// display_weight, genus_color), so a GraphML file from here takes the style as one from the tool does
+const lineStyleOf=e=>{const drop=e.evidence==="dropout", one=flagsOf(e).includes("single_replicate");
+  return drop&&one?"DASH_DOT":drop?"LONG_DASH":one?"DOT":"SOLID";};
+const displayWeightOf=e=>e.outcome==="obligate"||e.outcome==="abolished"?8.0:Number(e.weight||0);
+const pyFloat=x=>Number.isInteger(x)?x.toFixed(1):String(x);     // as Python's str() writes a float
 function graphmlValue(attr,v){
   if(v===null||v===undefined)return "";
   if(Array.isArray(v))return v.join(attr==="notes"||attr==="merged_pairs"?"; ":" ");
@@ -594,12 +606,17 @@ function toGraphML(net){
   GRAPHML_KEYS.forEach(([id,f,nm,ty])=>{g+=`  <key id="${id}" for="${f}" attr.name="${nm}" attr.type="${ty}"/>\n`;});
   g+='  <graph edgedefault="directed">\n';
   of("graph").forEach(([id,,nm])=>{g+=data(id,(net.meta||{})[nm]).replace(/^      /,"    ");});
+  const counts={};(net.nodes||[]).forEach(n=>{const k=genusOf(n.name||n.species);counts[k]=(counts[k]||0)+1;});
+  const colors={};Object.keys(counts).sort((a,b)=>counts[b]-counts[a]||(a<b?-1:a>b?1:0))
+    .forEach((k,i)=>colors[k]=GENUS_COLORS[i%GENUS_COLORS.length]);
   (net.nodes||[]).forEach(n=>{g+=`    <node id="${esc(xmlClean(n.id))}">\n`;
-    of("node").forEach(([id,,nm])=>{g+=data(id,nm==="label"?(n.name||n.id):graphmlValue(nm,n[nm]));});
+    const k=genusOf(n.name||n.species), derived={genus:k,genus_color:colors[k]};
+    of("node").forEach(([id,,nm])=>{g+=data(id,nm==="label"?(n.name||n.id):nm in derived?derived[nm]:graphmlValue(nm,n[nm]));});
     g+=`    </node>\n`;});
   (net.edges||[]).forEach((e,i)=>{
     g+=`    <edge id="e${i}" source="${esc(xmlClean(e.source))}" target="${esc(xmlClean(e.target))}">\n`;
-    of("edge").forEach(([id,,nm])=>{g+=data(id,graphmlValue(nm,e[nm]));});
+    const derived={line_style:lineStyleOf(e),display_weight:pyFloat(displayWeightOf(e))};
+    of("edge").forEach(([id,,nm])=>{g+=data(id,nm in derived?derived[nm]:graphmlValue(nm,e[nm]));});
     g+=`    </edge>\n`;});
   return g+"  </graph>\n</graphml>\n";
 }

@@ -84,3 +84,25 @@ def test_graphml_nodes_carry_a_label_for_gephi():
     assert keys["n_label"] == "label" and keys["e_weight"] == "weight"
     labels = [d.text for d in root.findall(".//g:node/g:data", NS) if d.get("key") == "n_label"]
     assert labels == ["Strain one", "Strain two"]
+
+
+def test_graphml_carries_the_columns_the_cytoscape_style_maps():
+    # Karoline (2026-09-28, audit step 8): "Cytoscape load of graphml works, but cytoscape style is not fully
+    # applied": the style maps line_style, display_weight and genus_color, which only Send to Cytoscape wrote
+    from grownet.model import Edge, InteractionNetwork, Node
+    net = InteractionNetwork()
+    net.add_node(Node("a", name="Blautia obeum"))
+    net.add_node(Node("b", name="[Clostridium] scindens"))
+    net.add_edge(Edge("a", "b", "facilitation", strength=1.5, weight=1.5, evidence="dropout",
+                      quality=("single_replicate",)))
+    net.add_edge(Edge("b", "a", "facilitation", outcome="obligate"))
+    root = ET.fromstring(to_graphml(net))                               # well formed, parallel arcs allowed
+    ns = {"g": "http://graphml.graphdrawing.org/xmlns"}
+    names = {k.get("id"): k.get("attr.name") for k in root.findall("g:key", ns)}
+    values = [{names[d.get("key")]: d.text for d in el.findall("g:data", ns)}
+              for el in root.findall("g:graph/g:edge", ns) + root.findall("g:graph/g:node", ns)]
+    first, obligate, a, b = values
+    assert (first["line_style"], first["display_weight"]) == ("DASH_DOT", "1.5")   # drop-out and one replicate
+    assert (obligate["line_style"], obligate["display_weight"]) == ("SOLID", "8.0")  # no ratio: the fixed width
+    assert (a["genus"], b["genus"]) == ("Blautia", "[Clostridium]")                   # brackets kept
+    assert a["genus_color"] != b["genus_color"]
