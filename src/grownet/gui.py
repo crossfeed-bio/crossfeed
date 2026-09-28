@@ -14,6 +14,7 @@ from __future__ import annotations
 import dataclasses
 import html
 import http.server
+import json
 import secrets
 import socketserver
 import threading
@@ -26,7 +27,7 @@ from . import __version__, brand, interaction, rates
 from . import help as help_page
 from .adapter import condensed, unread
 from .attribution import studies_with_edges
-from .cytoscape import CytoscapeError, send
+from .cytoscape import CytoscapeError, send, style
 from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, output_meta
 from .export import to_graphml
 from .growth import SPIKE_FACTOR
@@ -82,21 +83,26 @@ def _job_suffix(job: str) -> str:
     return f"&job={urllib.parse.quote(job)}" if job else ""
 
 
-def _back(token: str, job: str = "") -> str:
+def _back(token: str, job: str = "", top: bool = False) -> str:
     """The Back button of Legend, Help and About: to the search they were opened from, when there is one, so
-    its result is still there (Karoline, audit step 8, 2026-09-28: Help and back lost the result)."""
+    its result is still there (Karoline, audit step 8, 2026-09-28: Help and back lost the result). With
+    `top`, the one at the page's upper right, so a long page need not be scrolled to its end (Karoline,
+    2026-09-28: "a top button Back would help in the right upper corner of the help page")."""
     href = f"/?token={token}{_job_suffix(job)}" + ("#result" if job else "")
-    return f"<p class=\"bar\"><a class=\"btn\" href=\"{html.escape(href, quote=True)}\">Back</a></p>"
+    kind = "bar backtop" if top else "bar"
+    return f"<p class=\"{kind}\"><a class=\"btn\" href=\"{html.escape(href, quote=True)}\">Back</a></p>"
 
 
 def _page(body: str, token: str = "", refresh: str = "", job: str = "") -> str:
     """A page in the grownet style: a header with the mark, the name, the version, Legend, Help and About.
-    `job` is the search the page shows, which Legend, Help and About carry so their Back returns to it; the
-    mark starts a new search."""
+    `job` is the search the page shows, which Legend, Help, About and the mark carry, so each of them leads
+    back to it (Karoline, 2026-09-28: the mark once led to an empty page); a new search is run from the form
+    that is always on the page."""
     t = html.escape(token, quote=True)
     j = html.escape(_job_suffix(job), quote=True)
     icon = urllib.parse.quote(brand.logo_svg(64))
-    header = (f"<header><a class=\"brand\" href=\"/?token={t}\"><h1 class=\"brand\">{brand.logo_svg(28)}"
+    mark = f"/?token={t}{j}"          # the top of the page: the settings, and the result under them
+    header = (f"<header><a class=\"brand\" href=\"{mark}\"><h1 class=\"brand\">{brand.logo_svg(28)}"
               f"{brand.WORDMARK}</h1></a>{HEADING}"
               f"<nav><a class=\"btn quiet\" href=\"/legend?token={t}{j}\">Legend</a>"
               f"<a class=\"btn quiet\" href=\"/help?token={t}{j}\">Help</a>"
@@ -244,15 +250,17 @@ def render_progress(token: str, job: dict) -> str:
 
 def render_legend(token: str, job: str = "") -> str:
     """The legend inside the page frame, so every page carries the same header."""
-    return _page(f"<div class=\"legend\">{legend_svg()}</div>" + _back(token, job), token, job=job)
+    return _page(_back(token, job, top=True) + f"<div class=\"legend\">{legend_svg()}</div>" + _back(token, job),
+                 token, job=job)
 
 
 def render_help(token: str, job: str = "") -> str:
-    return _page(help_page.render_help(token, DEFAULTS, EXAMPLE, job=job) + _back(token, job), token, job=job)
+    return _page(_back(token, job, top=True) + help_page.render_help(token, DEFAULTS, EXAMPLE, job=job)
+                 + _back(token, job), token, job=job)
 
 
 def render_about(token: str, job: str = "") -> str:
-    return _page(help_page.render_about() + _back(token, job), token, job=job)
+    return _page(_back(token, job, top=True) + help_page.render_about() + _back(token, job), token, job=job)
 
 
 HEADER = ("<tr><th>source</th><th>affects</th><th>direction</th><th>log2 mean &plusmn; sd</th>"
@@ -745,6 +753,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._download(query.get("format", ["json"])[0], query)
         elif parsed.path in ("/download.json", "/download.graphml"):
             self._download(parsed.path.rsplit(".", 1)[1], query)
+        elif parsed.path == "/grownet_style.json":
+            # the Cytoscape style as a file, the same as `grownet style` writes, so a downloaded GraphML can
+            # take it without the command line (Karoline, 2026-09-28)
+            self._send(json.dumps([style()], indent=2) + "\n", "application/json", "grownet_style.json")
         elif parsed.path == "/report.txt":
             result = self._result(query)
             if not result:

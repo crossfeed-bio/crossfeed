@@ -324,7 +324,39 @@ def test_help_and_back_after_a_search_keeps_the_result(monkeypatch):
                 page = r.read().decode("utf-8")
             back = re.search(r'href="(/\?token=tok&amp;job=[0-9a-f]+#result)">Back', page)
             assert back, f"{name}'s Back does not return to the search"
+            # Karoline (2026-09-28): "a top button Back would help in the right upper corner of the help
+            # page": a Back before the page's content (and one at its end), on Help, Legend and About alike
+            top = page.index('<p class="bar backtop">')
+            assert top < page.index("<main>") + 40 and page.count(">Back</a>") == 2
+            # "When we click the grownet logo, we come back again to an empty page": the mark keeps the search
+            mark = re.search(r'<a class="brand" href="([^"]+)"', page).group(1)
+            assert "job=" in mark
             with urllib.request.urlopen(base + html_lib.unescape(back.group(1)), timeout=10) as r:
                 assert "interaction(s)" in r.read().decode("utf-8")      # the result is still there
+    finally:
+        server.shutdown()
+
+
+def test_the_help_page_offers_the_cytoscape_style_as_a_download():
+    # Karoline (2026-09-28): "in the help, allow users to download the cytoscape style, so they don't have to
+    # run cmdline to get it"
+    import json as json_lib
+    import threading
+    import urllib.request
+
+    from test_gui import FakeClient
+    handler = type("H", (gui._Handler,), {"token": "tok", "client_factory": staticmethod(FakeClient), "state": {}})
+    server = gui._Server(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        with urllib.request.urlopen(f"{base}/help?token=tok", timeout=10) as r:
+            page = r.read().decode("utf-8")
+        assert page.count('href="/grownet_style.json?token=tok"') == 2           # both Cytoscape answers
+        with urllib.request.urlopen(f"{base}/grownet_style.json?token=tok", timeout=10) as r:
+            assert r.headers["Content-Disposition"] == 'attachment; filename="grownet_style.json"'
+            styles = json_lib.loads(r.read().decode("utf-8"))
+        from grownet.cytoscape import style
+        assert styles == [style()]                                    # the same file `grownet style` writes
     finally:
         server.shutdown()
