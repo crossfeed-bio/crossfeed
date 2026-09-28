@@ -235,6 +235,11 @@ tagged version is never reused for changed content.
   `removed_member_detected`.
 
 ### Changed
+- Fewer requests to mGrowthDB, with identical networks (checked on all of mGrowthDB): a monoculture no
+  co-culture of its study is compared with is no longer read (All: 3709 -> 1313 requests, 26 s -> 9 s), and
+  the local page keeps what it has read for an hour, renewed with the species list, so a second search
+  reads only what is new (the Example after All: 141 -> 4 requests). The skip list no longer lists the
+  replicates of monocultures that were never compared (All: 1961 -> 191 entries).
 - The rename (#71): the package, the module and the command are `grownet` (`grownet derive ...`, `python -m
   grownet`, `uvx --from git+https://github.com/crossfeed-bio/crossfeed grownet gui`), with no `crossfeed`
   alias, since nothing had been released. The repository address, the schema id
