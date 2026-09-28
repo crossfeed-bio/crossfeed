@@ -334,10 +334,10 @@ that tells them apart and is the same one used alone, and when alone and togethe
 conditions; grownet checks both (<a href="#decisions">why it works this way</a>). The same comparison runs
 on drop-out experiments, a community with and without one member. A change says that the partner affects
 the species, not how: cross-feeding, competition for a nutrient, a toxin or a change of pH look the same
-here. Gause's yeasts are a case in point (Gause 1932, 1934): in mixed culture a yeast he named
-<i>Schizosaccharomyces kephir</i> inhibited <i>Saccharomyces cerevisiae</i> strongly, and only a separate
-measurement traced the inhibition to the ethyl alcohol it produced, about twice as much per unit of yeast
-as <i>S. cerevisiae</i>.</p>
+here. Gause's yeasts are a case in point (Gause 1932, 1934): in mixed culture without oxygen, a yeast he
+named <i>Schizosaccharomyces kephir</i> inhibited <i>Saccharomyces cerevisiae</i> strongly, and only a
+separate measurement traced the inhibition to the ethyl alcohol it produced, about twice as much per unit
+of yeast volume as <i>S. cerevisiae</i>.</p>
 <p class="muted">Gause GF (1932) Experimental studies on the struggle for existence. I. Mixed population of
 two species of yeast. Journal of Experimental Biology 9: 389-402.<br>
 Gause GF (1934) The Struggle for Existence. Williams and Wilkins, Baltimore.</p>
