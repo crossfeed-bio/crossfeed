@@ -15,9 +15,17 @@ Rules for this file:
 
 ## Current state
 
+- 2026-09-28 (Craig, #71): the schema id is `grownet.interaction_network/v0`. A new namespace at the SAME
+  version, because the format is not changing and a version is a promise about content, not about naming.
+  Done before 0.1.0 deliberately: the id is written into every network grownet saves, so this is the last
+  moment it costs nothing. Nothing has been released, so no published file carries the old id, and
+  `validate_document` is left strict rather than accepting both. Two ids for one format would be the same
+  defect the corpus side spent this week guarding against, and a reader who does hold an older test file
+  gets an exact message naming both ids. The repository address and the method labels are separate and
+  still Craig's.
 - 2026-09-28 (Karoline): the command line "should be called grownet". Renamed: package, module and command
   are `grownet` (src/grownet), with no `crossfeed` alias. Unchanged, on purpose: the repository address
-  (crossfeed-bio/crossfeed, Craig's call), the schema id `crossfeed.interaction_network/v0` (Craig's), the
+  (crossfeed-bio/crossfeed, Craig's call), the
   method labels stored in networks ("crossfeed replicate v1", "crossfeed baseline v0"), LICENSE and NOTICE
   ("The crossfeed authors", a legal line for Karoline and Craig to change), and the history in
   CHANGELOG, METHOD_NOTES and this file. After pulling, reinstall (`pip install -e ".[dev]"`) and remove a
