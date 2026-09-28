@@ -46,6 +46,8 @@ def _until_decline(xs, ys):
     while end + 1 < len(ys) and ys[end + 1] >= band:
         end += 1
     return xs[:end + 1], ys[:end + 1]
+
+
 _MAX_EXP = 700.0
 
 
@@ -86,6 +88,12 @@ def easylinear(times, values, window: int = DEFAULT_WINDOW, quota: float = QUOTA
     best = max(slopes)
     if best == float("-inf"):
         raise RateUnavailable("no window with varying times")
+    if best <= 0:
+        # no window rises: the steepest slope is itself not positive, and the quota below would select no
+        # window at all (0.95 of a negative slope lies above it). Returned as it is, so the caller treats it
+        # as any non-positive property (code review of 2026-09-28: it raised a bare ValueError that dropped
+        # the whole comparison, SMGDB00000014)
+        return best
     candidates = [i for i, s in enumerate(slopes) if s >= quota * best]
     first, last = min(candidates), max(candidates) + window
     fit = _line(xs[first:last], ys[first:last])

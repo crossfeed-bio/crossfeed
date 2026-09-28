@@ -101,3 +101,11 @@ def test_the_fit_keeps_the_plateau_and_stops_where_the_decline_begins():
     ys = [0, 0.5, 1.5, 2.5, 3.5, 4, 3.8, 3.7, 3.0, 2.0, 1.0]
     assert rates._until_decline(xs, ys) == (xs[:8], ys[:8])
 
+
+
+def test_a_curve_that_only_declines_has_a_non_positive_rate_not_a_crash():
+    # code review of 2026-09-28: every window slope is -0.3, so 0.95 of the steepest (-0.285) lies above all
+    # of them, no window qualified, and min() of nothing raised a bare ValueError that dropped the whole
+    # comparison (SMGDB00000014's 0.75% linoleic acid co-cultures). The steepest slope is returned instead
+    declining = [math.exp(-0.3 * t) for t in T]
+    assert easylinear(T, declining) == pytest.approx(-0.3)

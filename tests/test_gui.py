@@ -508,3 +508,11 @@ def test_average_replicates_are_one_line_per_experiment_in_what_a_reader_sees():
     skipped = [("E1: Average(E1)", AVERAGE), ("E1: r1", "a spike"), ("E1: Average 2", AVERAGE), ("E2: avg", AVERAGE)]
     assert condensed(skipped) == [("E1", f"2 average replicate(s) left out ({AVERAGE})"), ("E1: r1", "a spike"),
                                   ("E2", f"1 average replicate(s) left out ({AVERAGE})")]
+
+
+def test_only_the_latest_searches_are_kept_and_a_running_one_never_goes():
+    # code review of 2026-09-28: every search stayed in memory for the life of the page
+    jobs = {f"j{i}": {"status": "done"} for i in range(25)}
+    jobs["j0"]["status"] = "running"
+    gui.prune_jobs(jobs, keep=20)
+    assert "j0" in jobs and "j1" not in jobs and "j24" in jobs and len(jobs) == 21

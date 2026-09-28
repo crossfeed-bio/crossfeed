@@ -130,9 +130,12 @@ def test_errors_for_method_start_time_and_units():
     mono_a, mono_b, co = _example()
     with pytest.raises(ValueError, match="unknown method 'rate'"):
         interaction_strength(mono_a, mono_b, co, A, B, method="rate")
+    # B's monoculture starting later leaves out B's own arc only (code review of 2026-09-28: it refused
+    # the pair); A is still compared
     late = [Replicate([_curve(B, (1, 1), times=(2, 10))], "b1")]
-    with pytest.raises(ValueError, match="start at different time points"):
-        interaction_strength(mono_a, late, co, A, B)
+    r = interaction_strength(mono_a, late, co, A, B)
+    assert r["species_b"]["outcome"] == "unusable" and "start at different time points" in r["species_b"]["reason"]
+    assert r["species_a"]["outcome"] == "quantified"
     days = [Replicate([GrowthCurve(B, (0, 10), (1, 1), "d", "16S copies/mL")], "b1")]
     with pytest.raises(ValueError, match="mixed time units"):
         interaction_strength(mono_a, days, co, A, B)
@@ -470,9 +473,13 @@ def test_a_monoculture_is_compared_only_with_a_co_culture_measured_the_same_way(
     mono_a = [Replicate([_measured(A, (1, 1.4), "fc")], f"a{i}") for i in range(2)]
     mono_b = [Replicate([_measured(B, (1, 1.4), "qpcr")], f"b{i}") for i in range(2)]
     co = [Replicate([_measured(A, (1, 3), "qpcr"), _measured(B, (1, 1.4), "qpcr")], f"c{i}") for i in range(2)]
-    with pytest.raises(ValueError, match="measured by different techniques") as e:
-        interaction_strength(mono_a, mono_b, co, A, B)
-    assert "fc: " in str(e.value) and "qpcr: " in str(e.value) and A in str(e.value)
+    # only A's arc is refused, with the reason; B is measured by qPCR on both sides and still compared
+    # (code review of 2026-09-28: the mismatch of one species refused the whole pair)
+    r = interaction_strength(mono_a, mono_b, co, A, B)
+    reason = r["species_a"]["reason"]
+    assert r["species_a"]["outcome"] == "unusable" and "measured by different techniques" in reason
+    assert "fc: " in reason and "qpcr: " in reason and A in reason
+    assert r["species_b"]["outcome"] == "quantified"
 
 
 def test_different_species_may_be_measured_by_different_techniques():
@@ -553,3 +560,50 @@ def test_an_obligate_arc_whose_monoculture_is_zero_from_the_start_is_cautioned()
     assert zero_start_cautions({"with": False, "without": True}, "quantified") == []      # a ratio was taken
     # a monoculture that starts above zero and does not grow is an ordinary obligate arc, without the caution
     assert zero_start_cautions({"with": False, "without": False}, "obligate") == []
+
+
+def test_units_are_checked_per_species_not_across_them():
+    # code review of 2026-09-28: A counted as 16S copies/mL on both sides and B as CFU/mL on both sides
+    # was refused as "mixed abundance units", though each species is compared only with itself
+    def c(species, values, unit):
+        return GrowthCurve(species, (0, 10), values, "h", unit)
+    mono_a = [Replicate([c(A, (1, 1), "16S copies/mL")], "a1"), Replicate([c(A, (1, 3), "16S copies/mL")], "a2")]
+    mono_b = [Replicate([c(B, (1, 1), "CFU/mL")], "b1"), Replicate([c(B, (3, 5), "CFU/mL")], "b2")]
+    co = [Replicate([c(A, (1, 3), "16S copies/mL"), c(B, (1, 1), "CFU/mL")], "c1"),
+          Replicate([c(A, (3, 5), "16S copies/mL"), c(B, (1, 0), "CFU/mL")], "c2")]
+    r = interaction_strength(mono_a, mono_b, co, A, B)
+    assert r["species_a"]["mean"] == pytest.approx(1.0)       # as in the hand-computed example above
+    # a species whose own curves mix units is still refused, alone
+    mixed = [Replicate([c(A, (1, 1), "CFU/mL")], "a1"), Replicate([c(A, (1, 3), "16S copies/mL")], "a2")]
+    r = interaction_strength(mixed, mono_b, co, A, B)
+    assert r["species_a"]["outcome"] == "unusable" and "mixed abundance units" in r["species_a"]["reason"]
+
+
+def test_a_spiked_replicate_cannot_make_a_set_count_as_grown():
+    # code review of 2026-09-28: two replicates stay flat and a third carries a spike; the no-growth rule
+    # once saw the spike's rise and called the set grown, then the spike was left out and a ratio was taken
+    # between replicates that did not grow. Judged without the spiked replicate, the set did not grow.
+    from crossfeed.interaction import _grown_values
+    flat = (1, 1, 1, 1, 1)
+    reps = [Replicate([_curve(A, flat, times=(0, 1, 2, 3, 4))], "r1"),
+            Replicate([_curve(A, flat, times=(0, 1, 2, 3, 4))], "r2"),
+            Replicate([_curve(A, (1, 1, 1e5, 1, 1), times=(0, 1, 2, 3, 4))], "spiked")]
+    skipped, zero = [], []
+    values = _grown_values(reps, A, "monoculture", lambda rep, sp: 1.0, "auc", skipped, 100.0, [], zero, 4.0,
+                           0.05, 1.5)
+    assert values == [] and any("did not reach" in r or "does not exceed" in r for _, r in skipped)
+
+
+
+def test_one_members_technique_mismatch_leaves_out_its_own_arcs_only():
+    # code review of 2026-09-28: B measured by qPCR in the full community and by plating without C refused
+    # the whole community. Now only the arcs to B are left out, with the reason; C -> A is +1 as above.
+    full, dropouts = _dropout_example()
+    dropouts[C] = [Replicate([c if c.species != B else GrowthCurve(B, c.times, c.values, "h", "16S copies/mL",
+                                                                  "plates") for c in rep.curves], rep.name)
+                   for rep in dropouts[C]]
+    r = dropout_interaction_strengths(full, dropouts)
+    assert _arc(r, C, A)["mean"] == pytest.approx(1.0)
+    assert not any(a["target"] == B for a in r["arcs"])
+    assert any(label.endswith(f"-> {B}") and "measured by different techniques" in reason
+               for label, reason in r["skipped"])

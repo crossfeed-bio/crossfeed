@@ -905,3 +905,13 @@ def test_the_genus_rule_skips_qualifiers_and_keeps_ncbi_brackets():
     edges, _ = merge_genus([_garc(1.0, "unclassified Bacteroides", FP), _garc(2.0, "unclassified Blautia", FP),
                             _garc(3.0, "[Clostridium] scindens VPI 13733", FP)], merge=True)
     assert sorted(e["source"] for e in edges) == ["Bacteroides", "Blautia", "[Clostridium]"]
+
+
+def test_a_strain_named_differently_by_two_studies_counts_as_one_genus_pair():
+    # code review of 2026-09-28: taxon 411483 is F. prausnitzii A2-165 in one study and F. duncaniae A2-165
+    # in another; its arcs to Blautia counted as two species pairs. Both carry one node id, so one pair.
+    old = _garc(1.0, "Faecalibacterium prausnitzii A2-165", BH, study="S1", source="ncbi:411483")
+    new = _garc(2.0, "Faecalibacterium duncaniae A2-165", BH, study="S2", source="ncbi:411483")
+    edges, _ = merge_genus([old, new], merge=True)
+    assert edges[0]["supporting_pairs"] == 1
+    assert edges[0]["merged_pairs"] == ["Faecalibacterium prausnitzii -> Blautia hydrogenotrophica"]
