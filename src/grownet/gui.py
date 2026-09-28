@@ -25,6 +25,7 @@ from collections import Counter
 
 from . import __version__, brand, interaction, rates
 from . import help as help_page
+from . import published as daily
 from .adapter import condensed, unread
 from .attribution import studies_with_edges
 from .cytoscape import CytoscapeError, send, style
@@ -428,8 +429,10 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
     resolved = "".join(entry_line(entry, matches) for entry, matches in result["resolved"])
     species_heading = "<h2>Species</h2>"
     if result.get("all"):
+        daily_note = (f" (the network derived once a day, on {_esc(result['published'][:16].replace('T', ' '))}; "
+                      "any other setting derives it live)" if result.get("published") else "")
         species_heading, resolved = "<h2>All of mGrowthDB</h2>", (
-            f"<li>every study, with every partner: {len(result['studies'])} studies</li>")
+            f"<li>every study, with every partner: {len(result['studies'])} studies{daily_note}</li>")
     unresolved = _unresolved_list(result)
     net = result["network"]
     mismatch = any("MISMATCH" in (e.method or "") for e in net.edges)
@@ -543,7 +546,7 @@ def support_level(entries) -> str:
 
 
 def run_query(client, entries, settings: dict | None = None, index: dict | None = None, progress=None,
-              narrow: bool = True, all_studies: bool = False) -> dict:
+              narrow: bool = True, all_studies: bool = False, published: bool = True) -> dict:
     """Species names or taxon ids to an interaction network, through mGrowthDB and the existing derivation.
 
     Returns {"resolved", "unresolved", "taxon_ids", "studies", "network", "skipped", "errors"}. Failures
@@ -553,13 +556,20 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
 
     `all_studies` is the page's All button (Karoline, 2026-09-28): the entries are ignored and every study
     mGrowthDB holds is derived, with every partner kept, still under Only these studies and Exclude these
-    studies.
+    studies. With the default settings it is read from the network derived once a day in the grownet
+    repository when that is less than a day old (`grownet.published`, #96); `published` False, or any other
+    setting, derives it live.
     """
     def say(done, total, message):
         if progress:
             progress(done, total, message)
 
     s = {**DEFAULTS, **(settings or {})}
+    if all_studies and published and daily.usable(s, DEFAULTS):
+        say(0, None, "Reading today's All network from the grownet repository")
+        found = daily.fetch()
+        if found:
+            return found
     names = [] if all_studies else split_entries(entries)    # one per line, and at commas and semicolons
     say(0, None, "Looking up the species in mGrowthDB")
     index = species_index(client) if index is None else index

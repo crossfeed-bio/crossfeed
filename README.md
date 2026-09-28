@@ -146,7 +146,9 @@ python -m grownet schema [--out FILE]
   for every species of it that mGrowthDB holds. The page's Example, from the command line:
   `grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"`.
 - `derive --live --all` does what the page's All button does: every study in mGrowthDB, with every
-  partner (a study argument limits it to those studies).
+  partner (a study argument limits it to those studies). With the default settings it reads the network
+  derived once a day by `.github/workflows/all-network.yml` (the `all-network` release), when that is
+  less than a day old, and derives live otherwise; `--no-published` always derives live.
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the baseline (see below).
 - The command line does everything the local page does: every advanced setting has its option, and

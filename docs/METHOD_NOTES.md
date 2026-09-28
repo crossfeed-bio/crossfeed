@@ -712,5 +712,13 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    29 arcs present before and after, 23 changed strength and 8 sign or status, most on Roseburia targets,
    whose declining curves had inflated the fitted rate.
 
+30. **The All network, derived once a day** (Karoline, 2026-09-28; open for Craig on #96). Her words, on
+   scaling: "For the All network, could we build it, save it in grownet's github, serve from there if
+   less than a day old", and "There's no mGrowthDB dev for the moment, so let's serve the All network
+   from the grownet repository." Built as her agent proposed on #96: a daily workflow publishes All with
+   the default settings as a release asset (not in git), and All reads it when it is less than a day old
+   and the settings are the defaults. Craig's agreement is asked on publishing a derived network, on the
+   daily Actions run and on the one-day freshness.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

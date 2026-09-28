@@ -319,6 +319,19 @@ index. A cache across sessions was ruled out: mGrowthDB shows only a study's lat
 history is not in the API, so a stored copy cannot tell it is stale (Karoline). A test double without
 `get_study` and friends gets the one-by-one path (`fetch.can_prefetch`).
 
+## The All network, derived once a day (2026-09-28, #96)
+
+All is the one query whose cost grows with the whole of mGrowthDB (1,313 requests today, after #95), so
+`.github/workflows/all-network.yml` derives it once a day with `DEFAULTS` (`packaging/publish_all.py`,
+which refuses to publish a derivation with errors) and uploads `all_result.json` to the `all-network`
+release. `grownet.published` reads it back: `usable` (the settings are the defaults), `fresh` (its format
+and schema are this version's, and it is less than `MAX_AGE`, one day, old) and `fetch` (None on any
+failure, so the caller derives live). `run_query(..., published=True)` tries it first; the publishing
+script passes `published=False`, and so does `--no-published`. `tests/conftest.py` stubs `fetch` so no
+test reaches GitHub; `fetch_from` takes the opener and the clock. This is a cache across sessions, which
+was ruled out above for species searches; for All, Karoline asked for it with a bound: "serve from there
+if less than a day old". Users' copies only read: writing would need a credential in every copy.
+
 ## Cytoscape (CyREST) quirks
 
 - Applying a style or a layout is a GET (`/v1/apply/styles/{name}/{suid}`, `/v1/apply/layouts/...`); a

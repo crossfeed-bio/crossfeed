@@ -1,0 +1,41 @@
+name: all-network
+
+# Derives the All network of mGrowthDB once a day with the default settings and publishes it as the assets of
+# one fixed release, `all-network`, replacing the previous day's (#96). The page's All button and
+# `grownet derive --all` read it when it is less than a day old and the settings are the defaults, and derive
+# live otherwise. Release assets are not in git, so no data enters the repository. Scheduled runs use the
+# default branch only; "Run workflow" on the Actions tab starts one by hand.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: all-network
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install .
+      - name: derive All
+        run: python packaging/publish_all.py out
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view all-network >/dev/null 2>&1 || gh release create all-network --prerelease \
+            --latest=false --title "All network, derived once a day" \
+            --notes "The All network of mGrowthDB, derived with the default settings by .github/workflows/all-network.yml and replaced once a day. grownet reads all_result.json when it is less than a day old; all_network.json and all_report.txt are the same network and its report. Every arc cites the studies it comes from."
+          gh release upload all-network out/* --clobber

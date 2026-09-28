@@ -7,6 +7,11 @@ tagged version is never reused for changed content.
 ## [0.0.2] (unreleased)
 
 ### Added
+- All reads the network the repository derives once a day (#96): `.github/workflows/all-network.yml`
+  derives All with the default settings and publishes it as the assets of the `all-network` release. The
+  page's All button and `derive --all` use it when it is less than a day old and the settings are the
+  defaults, and derive live otherwise, or with `--no-published`; the page and the report say when it was
+  derived. One derivation a day instead of about 1,300 requests to mGrowthDB per All.
 - The local page offers the Cytoscape style as a download (`/grownet_style.json`, the file `grownet style`
   writes), linked from the help page's Cytoscape answers, so styling a GraphML file needs no command line.
   Help, Legend and About have a Back at the upper right as well as at the end, and the grownet mark leads
