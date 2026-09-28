@@ -16,6 +16,8 @@ REPOSITORY = "https://github.com/crossfeed-bio/crossfeed"
 ISSUES = f"{REPOSITORY}/issues"
 NEW_ISSUE = f"{ISSUES}/new/choose"
 MGROWTHDB = "https://mgrowthdb.gbiomed.kuleuven.be"
+# the local page's download of the Cytoscape style; the token is filled in when the page is written
+STYLE_LINK = "/grownet_style.xml?token=__TOKEN__"
 
 # The About page (#80): the wording Craig agreed to on #80, naming both builders; change it only with
 # their agreement.
@@ -260,6 +262,16 @@ QA = (
      "meant. Names are resolved through mGrowthDB's own strain records, so also try the other name of a "
      "renamed species (Faecalibacterium prausnitzii or duncaniae), the strain name, or the NCBI taxon id. "
      "Several names on one line, separated by commas, and ids written as txid476272 work too."),
+    ("A GraphML file opened in Cytoscape does not look like the legend.",
+     "A file carries no style. Send to Cytoscape applies it; for a downloaded file, "
+     f"<a href=\"{STYLE_LINK}\">download the grownet style</a> (or write it with "
+     f"<code>{COMMAND} style --out grownet_style.xml</code>), import it in Cytoscape (File, Import, Styles "
+     "from File) and choose grownet in the Style panel. The file holds every column the style maps (the "
+     "line style, the width and the genus color)."),
+    ("Gephi shows fewer arcs than the network has.",
+     "A pair can have several arcs (one per condition or study). Gephi may merge parallel edges of one pair "
+     "when it imports a file; the GraphML keeps every arc, and each carries its condition and study. Use "
+     "Merge parallel arcs or Merge to genus to condense them on purpose, or read the arcs in the JSON."),
     ("The search is slow.",
      "Every study holding your species is fetched live from mGrowthDB. Name the studies you need under "
      "Only these studies."),
@@ -286,7 +298,9 @@ QA = (
      "corrected study shows up as a new date."),
     ("How do I open the network in Cytoscape?",
      "Start Cytoscape, then press Send to Cytoscape under the result: the network arrives with the legend's "
-     "style. Without the button, download GraphML and choose File, Import, Network from File in Cytoscape."),
+     "style. Without the button, download GraphML and choose File, Import, Network from File in Cytoscape, "
+     f"then give it the style: <a href=\"{STYLE_LINK}\">download the grownet style</a> and import it with "
+     "File, Import, Styles from File."),
     ("Can Gephi or another tool read the network?",
      "Yes: download GraphML and open it in Gephi (File, Open), igraph or networkx. Nodes carry their strain "
      "name as label, and edges their weight (|log2 mean|) and every attribute listed above."),
@@ -323,10 +337,11 @@ SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"), ("mea
             ("issues", "Report a problem or ask for a feature"))
 
 
-def render_help(token: str, defaults: dict, example: tuple) -> str:
+def render_help(token: str, defaults: dict, example: tuple, job: str = "") -> str:
     """The help page body. `defaults` is gui.DEFAULTS and `example` gui.EXAMPLE, passed in to keep this
     module free of the server."""
     t = _e(token)
+    legend_job = _e(f"&job={job}") if job else ""      # so the legend's Back returns to the search
     toc = "".join(f"<li><a href=\"#{key}\">{_e(title)}</a></li>" for key, title in SECTIONS)
     # a list, not a four-column table, so it reads at phone width too
     settings = "<dl class=\"settings\">" + "".join(
@@ -338,7 +353,7 @@ def render_help(token: str, defaults: dict, example: tuple) -> str:
     nodes = _table(("Node attribute", "Meaning"), (
         f"<tr><td>{_name(k)}</td><td>{_e(v)}</td></tr>" for k, v in NODE_ATTRIBUTES.items()))
     decisions = "".join(f"<li><strong>{_e(d)}</strong> {_e(why)}</li>" for d, why in DECISIONS)
-    qa = "".join(f"<dt>{_e(q)}</dt><dd>{a}</dd>" for q, a in QA)
+    qa = "".join(f"<dt>{_e(q)}</dt><dd>{a.replace('__TOKEN__', t)}</dd>" for q, a in QA)
     cli_only = "".join(f"<li><code>{_e(k)}</code>: {_e(v)}</li>" for k, v in CLI_ONLY.items())
     pair = " and ".join(example)
     return f"""<h2 class="page">Help <span class="version">{NAME} {_e(__version__)}</span></h2>
@@ -423,7 +438,7 @@ GraphML) in the menu next to it; <strong>Send to Cytoscape</strong>, into a Cyto
 machine, in the legend's style; and <strong>Report</strong>, which opens the detailed comments of the
 search (every setting, every interaction, every pair the data did not support, the sources) and
 downloads them as a text file, with the tool version.</p>
-<p><a href="/legend?token={t}">The legend</a> explains every line, arrowhead and flag.</p>
+<p><a href="/legend?token={t}{legend_job}">The legend</a> explains every line, arrowhead and flag.</p>
 
 <h2 id="settings">Advanced settings</h2>
 <p>Every setting has a default that suits most searches. The command line takes the same settings.</p>

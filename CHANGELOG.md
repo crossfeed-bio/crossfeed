@@ -7,6 +7,10 @@ tagged version is never reused for changed content.
 ## [0.0.2] (unreleased)
 
 ### Added
+- The local page offers the Cytoscape style as a download (`/grownet_style.xml`, the file `grownet style`
+  writes), linked from the help page's Cytoscape answers, so styling a GraphML file needs no command line.
+  Help, Legend and About have a Back at the upper right as well as at the end, and the grownet mark leads
+  back to the search being worked on instead of an empty page.
 - The help page compares the three growth measures (area, maximum, growth rate): what each captures, and
   its strengths and weaknesses. The README calls the tool grownet, keeping crossfeed only for the command,
   the module, the repository and the schema id until the rename is released.
@@ -230,7 +234,18 @@ tagged version is never reused for changed content.
   `experiments` (the ids of the experiments an edge compares), plus the quality flag
   `removed_member_detected`.
 
+### Fixed
+- The style file imports in Cytoscape: `grownet style` and the help page's download now write Cytoscape's
+  XML style format (`grownet_style.xml`). File, Import, Styles from File refused the JSON file with "Don't
+  know how to read file" (found by Karoline in Cytoscape 3.10.4); Cytoscape reads no JSON style file, its
+  own exports included. Send to Cytoscape was not affected.
+
 ### Changed
+- Fewer requests to mGrowthDB, with identical networks (checked on all of mGrowthDB): a monoculture no
+  co-culture of its study is compared with is no longer read (All: 3709 -> 1313 requests, 26 s -> 9 s), and
+  the local page keeps what it has read for an hour, renewed with the species list, so a second search
+  reads only what is new (the Example after All: 141 -> 4 requests). The skip list no longer lists the
+  replicates of monocultures that were never compared (All: 1961 -> 191 entries).
 - The rename (#71): the package, the module and the command are `grownet` (`grownet derive ...`, `python -m
   grownet`, `uvx --from git+https://github.com/crossfeed-bio/crossfeed grownet gui`), with no `crossfeed`
   alias, since nothing had been released. The repository address, the schema id
@@ -265,6 +280,13 @@ tagged version is never reused for changed content.
   unused `requests` dependency was dropped.
 
 ### Fixed
+- From Karoline's checks (audit step 8): Help, Legend or About opened from a result, then Back, returned to
+  an empty page and the result was lost; their links and Back now carry the search, so Back returns to it.
+  A GraphML file imported into Cytoscape did not take the whole grownet style, because the file lacked the
+  columns the style maps; GraphML now carries genus, genus_color, line_style and display_weight, from the
+  tool and the viewer alike, and the viewer's genus rule matches the tool's (qualifiers skipped, NCBI's
+  brackets kept). The help page says how to style a GraphML file in Cytoscape, and that Gephi may merge
+  parallel arcs on import.
 - From a code review of the whole package (2026-09-28): with the growth rate (easylinear), a curve that only
   declines crashed the comparison and dropped the whole pair or community (SMGDB00000014 lost three
   co-cultures); its rate is now its steepest, non-positive slope. A problem with one species (mixed

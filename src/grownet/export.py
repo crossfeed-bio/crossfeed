@@ -8,6 +8,11 @@ Dependency-free (standard library xml only). The graph is directed, and every ed
 strength, significance, condition, method, the space-joined study_ids (the edge-level attribution), and
 when known the evidence (biculture or dropout), the space-joined community, the space-joined cautions,
 and the space-joined ids of the experiments the edge compares.
+
+It also carries the columns the grownet Cytoscape style maps, which "Send to Cytoscape" computes: the
+node's genus and genus color, and the edge's line style and display width. Without them a GraphML file
+imported into Cytoscape and given the grownet style drew no dashes, no widths and no genus colors
+(Karoline, step 8 of the audit, 2026-09-28).
 """
 from __future__ import annotations
 
@@ -32,6 +37,8 @@ _KEYS = [
     ("n_taxon_id", "node", "taxon_id", "string"),
     ("n_species", "node", "species", "string"),
     ("n_identity", "node", "identity", "string"),
+    ("n_genus", "node", "genus", "string"),
+    ("n_genus_color", "node", "genus_color", "string"),
     ("e_effect", "edge", "effect", "string"),
     ("e_strength", "edge", "strength", "double"),
     ("e_significance", "edge", "significance", "double"),
@@ -59,6 +66,8 @@ _KEYS = [
     ("e_strength_range", "edge", "strength_range", "string"),
     ("e_supporting_pairs", "edge", "supporting_pairs", "int"),
     ("e_merged_pairs", "edge", "merged_pairs", "string"),
+    ("e_line_style", "edge", "line_style", "string"),
+    ("e_display_weight", "edge", "display_weight", "double"),
 ]
 
 
@@ -86,6 +95,8 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
     for key in ("tool", "tool_version", "derived_on", "derived_at"):
         _data(graph, f"g_{key}", net.meta.get(key))
 
+    from .cytoscape import display_weight, genus, genus_colors, line_style  # the style's own columns
+    colors = genus_colors(net)
     for node in net.nodes.values():
         n = ET.SubElement(graph, f"{{{_NS}}}node")
         n.set("id", node.id)
@@ -96,6 +107,8 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(n, "n_taxon_id", node.taxon_id)
         _data(n, "n_species", node.species)
         _data(n, "n_identity", node.identity)
+        _data(n, "n_genus", genus(node))
+        _data(n, "n_genus_color", colors[genus(node)])
 
     for i, e in enumerate(net.edges):
         ed = ET.SubElement(graph, f"{{{_NS}}}edge")
@@ -133,6 +146,8 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         if e.supporting_pairs is not None:
             _data(ed, "e_supporting_pairs", e.supporting_pairs)
         _data(ed, "e_merged_pairs", "; ".join(e.merged_pairs))
+        _data(ed, "e_line_style", line_style(e))
+        _data(ed, "e_display_weight", display_weight(e))
         _data(ed, "e_cultivation_mode", e.cultivation_mode)
 
     if pretty:

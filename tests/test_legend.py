@@ -98,6 +98,10 @@ def test_the_viewer_writes_the_same_graphml_as_the_command_line(tmp_path):
     assert json.loads(re.search(r"const GRAPHML_KEYS=(\[.*?\]);", page).group(1)) == [list(k) for k in _KEYS]
     js = "\n".join(re.search(pattern, page, re.S).group(0) for pattern in (
         r"function esc\(s\)\{.*?\}\n", r"function xmlClean\(s\)\{.*?\}\n", r"const GRAPHML_KEYS=\[.*?\];\n",
+        # the style's columns (genus, genus_color, line_style, display_weight) and what they are computed from
+        r"const flagsOf=[^\n]*\n", r"const GENUS_COLORS=[^\n]*\n", r"const GENUS_QUALIFIERS=[^\n]*\n",
+        r"const cap=[^\n]*\n", r"const genusOf=.*?\};\n", r"const lineStyleOf=.*?\};\n",
+        r"const displayWeightOf=[^\n]*\n", r"const pyFloat=[^\n]*\n",
         r"function graphmlValue\(attr,v\)\{.*?\n\}\n", r"function toGraphML\(net\)\{.*?\n\}\n"))
     record = {"source": "ncbi:1", "target": "ncbi:2", "source_name": "Blautia a", "target_name": "Roseburia b",
               "source_taxon_id": "1", "effect": "inhibition", "strength": -1.25, "weight": 1.25, "sd": 0.5,

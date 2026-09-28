@@ -773,9 +773,17 @@ def relevant_experiments(exps, keep, dropout: bool = True) -> list:
     """The experiments a derivation limited to `keep` reads: monocultures of kept strains, two-member
     co-cultures of two kept strains, and every experiment of a drop-out design holding at least two kept
     members. A design is kept whole, since its common start is taken over all its drop-outs, so leaving
-    one out could change which replicates are compared. With `keep` None: every experiment."""
+    one out could change which replicates are compared. With `keep` None: every experiment that can take
+    part in a comparison, so every one with two or more members, and the monocultures of strains that
+    appear in a two-member co-culture of the study, by the strain identity `_mono_index` keys them with (so
+    renamed and pooled strains match as there); a monoculture no co-culture is compared with is not read
+    (audit of 2026-09-28: All read 2195 replicates, many of studies with only monocultures)."""
     if keep is None:
-        return list(exps)
+        identities = strain_identities(exps, [])
+        partners = {_identity(identities, m)["id"] for exp in exps if len(_members(exp)) == 2
+                    for m in _members(exp)}
+        return [exp for exp in exps if len(_members(exp)) != 1
+                or _identity(identities, _members(exp)[0])["id"] in partners]
     wanted = _wanted(exps, keep)
     ids = set()
     for exp in exps:

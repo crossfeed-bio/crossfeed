@@ -26,7 +26,7 @@ from . import __version__, brand, interaction, rates
 from . import help as help_page
 from .adapter import condensed, unread
 from .attribution import studies_with_edges
-from .cytoscape import CytoscapeError, send
+from .cytoscape import CytoscapeError, send, style_xml
 from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, output_meta
 from .export import to_graphml
 from .growth import SPIKE_FACTOR
@@ -77,15 +77,35 @@ EMPTY_HELP = ("grownet derives interactions from pairwise (two-member) co-cultur
 
 
 
-def _page(body: str, token: str = "", refresh: str = "") -> str:
-    """A page in the grownet style: a header with the mark, the name, the version, Legend, Help and About."""
+def _job_suffix(job: str) -> str:
+    """The query part that keeps a search with a link: "&job=<id>", or "" when no search is shown."""
+    return f"&job={urllib.parse.quote(job)}" if job else ""
+
+
+def _back(token: str, job: str = "", top: bool = False) -> str:
+    """The Back button of Legend, Help and About: to the search they were opened from, when there is one, so
+    its result is still there (Karoline, audit step 8, 2026-09-28: Help and back lost the result). With
+    `top`, the one at the page's upper right, so a long page need not be scrolled to its end (Karoline,
+    2026-09-28: "a top button Back would help in the right upper corner of the help page")."""
+    href = f"/?token={token}{_job_suffix(job)}" + ("#result" if job else "")
+    kind = "bar backtop" if top else "bar"
+    return f"<p class=\"{kind}\"><a class=\"btn\" href=\"{html.escape(href, quote=True)}\">Back</a></p>"
+
+
+def _page(body: str, token: str = "", refresh: str = "", job: str = "") -> str:
+    """A page in the grownet style: a header with the mark, the name, the version, Legend, Help and About.
+    `job` is the search the page shows, which Legend, Help, About and the mark carry, so each of them leads
+    back to it (Karoline, 2026-09-28: the mark once led to an empty page); a new search is run from the form
+    that is always on the page."""
     t = html.escape(token, quote=True)
+    j = html.escape(_job_suffix(job), quote=True)
     icon = urllib.parse.quote(brand.logo_svg(64))
-    header = (f"<header><a class=\"brand\" href=\"/?token={t}\"><h1 class=\"brand\">{brand.logo_svg(28)}"
+    mark = f"/?token={t}{j}"          # the top of the page: the settings, and the result under them
+    header = (f"<header><a class=\"brand\" href=\"{mark}\"><h1 class=\"brand\">{brand.logo_svg(28)}"
               f"{brand.WORDMARK}</h1></a>{HEADING}"
-              f"<nav><a class=\"btn quiet\" href=\"/legend?token={t}\">Legend</a>"
-              f"<a class=\"btn quiet\" href=\"/help?token={t}\">Help</a>"
-              f"<a class=\"btn quiet\" href=\"/about?token={t}\">About</a></nav></header>")
+              f"<nav><a class=\"btn quiet\" href=\"/legend?token={t}{j}\">Legend</a>"
+              f"<a class=\"btn quiet\" href=\"/help?token={t}{j}\">Help</a>"
+              f"<a class=\"btn quiet\" href=\"/about?token={t}{j}\">About</a></nav></header>")
     # a running search reloads its page every second (#75): a meta refresh, so no JavaScript is needed
     reload = f"<meta http-equiv=\"refresh\" content=\"1; url={html.escape(refresh, quote=True)}\">" if refresh else ""
     return ("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
@@ -192,7 +212,7 @@ def _settings_block(settings: dict) -> str:
 
 
 def render_form(token: str, entries: str = "", settings: dict | None = None, message: str = "",
-                below: str = "", refresh: str = "") -> str:
+                below: str = "", refresh: str = "", job: str = "") -> str:
     """The one page (#74): the species box, the settings, and under them whatever the search produced.
 
     `below` is the progress of a running search or its result, so the settings that produced a result stay
@@ -211,7 +231,7 @@ derived from mGrowthDB growth data on this machine; nothing is uploaded.</p>
 <span class="muted">All ignores the box and derives every study in mGrowthDB, with every partner; it reads
 every study, so it takes longer (half a minute or so).</span></div>
 {_settings_block(settings or {})}
-</form>{below}""", token, refresh)
+</form>{below}""", token, refresh, job)
 
 
 def render_progress(token: str, job: dict) -> str:
@@ -224,23 +244,22 @@ def render_progress(token: str, job: dict) -> str:
              f"<p class=\"hint\">{_esc(job.get('message', ''))}</p>"
              "<p class=\"hint\">This page updates by itself until the result is ready.</p></section>")
     return render_form(token, "\n".join(job["entries"]), job["settings"], below=below,
-                       refresh=f"/?token={token}&job={job['id']}")
+                       refresh=f"/?token={token}&job={job['id']}", job=job["id"])
 
 
-def render_legend(token: str) -> str:
+def render_legend(token: str, job: str = "") -> str:
     """The legend inside the page frame, so every page carries the same header."""
-    return _page(f"<div class=\"legend\">{legend_svg()}</div>"
-                 f"<p class=\"bar\"><a class=\"btn\" href=\"/?token={_esc(token)}\">Back</a></p>", token)
+    return _page(_back(token, job, top=True) + f"<div class=\"legend\">{legend_svg()}</div>" + _back(token, job),
+                 token, job=job)
 
 
-def render_help(token: str) -> str:
-    return _page(help_page.render_help(token, DEFAULTS, EXAMPLE)
-                 + f"<p class=\"bar\"><a class=\"btn\" href=\"/?token={_esc(token)}\">Back</a></p>", token)
+def render_help(token: str, job: str = "") -> str:
+    return _page(_back(token, job, top=True) + help_page.render_help(token, DEFAULTS, EXAMPLE, job=job)
+                 + _back(token, job), token, job=job)
 
 
-def render_about(token: str) -> str:
-    return _page(help_page.render_about()
-                 + f"<p class=\"bar\"><a class=\"btn\" href=\"/?token={_esc(token)}\">Back</a></p>", token)
+def render_about(token: str, job: str = "") -> str:
+    return _page(_back(token, job, top=True) + help_page.render_about() + _back(token, job), token, job=job)
 
 
 HEADER = ("<tr><th>source</th><th>affects</th><th>direction</th><th>log2 mean &plusmn; sd</th>"
@@ -426,7 +445,8 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
                  f"<p class=\"note\">{PROVISIONAL}</p>{hidden}")
     else:
         table = (f"<h2>No interactions</h2><p class=\"note\">{_empty_reason(result)} "
-                 f"<a href=\"/help?token={_esc(token)}#empty\">What to try</a>.</p>{hidden}{outputs}")
+                 f"<a href=\"/help?token={_esc(token)}{_esc(_job_suffix(result.get('job', '')))}#empty\">What to "
+                 f"try</a>.</p>{hidden}{outputs}")
     studies = ", ".join(result["studies"]) or "none"
     skipped = ""
     skips = condensed(result["skipped"])
@@ -443,7 +463,7 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
 def render_result(token: str, result: dict, message: str = "") -> str:
     """The page with the result under the settings that produced it (#74)."""
     return render_form(token, "\n".join(result.get("entries", [])), result.get("settings"),
-                       below=_result_section(token, result, message))
+                       below=_result_section(token, result, message), job=result.get("job", ""))
 
 
 def _no_growth(s: dict, which: str) -> float:
@@ -721,16 +741,21 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if parsed.path == "/":
             job = query.get("job", [""])[0]
             self._send(self._job_page(job) if job else render_form(self.token))
-        elif parsed.path == "/help":
-            self._send(render_help(self.token))
-        elif parsed.path == "/about":
-            self._send(render_about(self.token))
-        elif parsed.path == "/legend":
-            self._send(render_legend(self.token))
+        elif parsed.path in ("/help", "/about", "/legend"):
+            # the search these pages were opened from, so their Back returns to it; an id no longer kept
+            # (or never given) gives the plain Back to a new search
+            job = query.get("job", [""])[0]
+            job = job if job in self.state.get("jobs", {}) else ""
+            render = {"/help": render_help, "/about": render_about, "/legend": render_legend}[parsed.path]
+            self._send(render(self.token, job))
         elif parsed.path == "/download":
             self._download(query.get("format", ["json"])[0], query)
         elif parsed.path in ("/download.json", "/download.graphml"):
             self._download(parsed.path.rsplit(".", 1)[1], query)
+        elif parsed.path == "/grownet_style.xml":
+            # the Cytoscape style as a file, the same as `grownet style` writes, so a downloaded GraphML can
+            # take it without the command line (Karoline, 2026-09-28); XML, the one form Cytoscape imports
+            self._send(style_xml(), "application/xml; charset=utf-8", "grownet_style.xml")
         elif parsed.path == "/report.txt":
             result = self._result(query)
             if not result:
@@ -766,14 +791,19 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
         def work():
             try:
-                client = self.client_factory()
                 with _INDEX_LOCK:          # two first searches build it once, not twice
                     built = self.state.get("index_built", 0)
                     if self.state.get("index") is None or time.monotonic() - built > INDEX_MAX_AGE:
-                        # the species list of all of mGrowthDB: slow to build, so built once an hour at most
+                        # the species list of all of mGrowthDB, and the client whose cache keeps what the
+                        # searches read: both renewed once an hour, so a change in mGrowthDB is seen within
+                        # the hour, and a second search does not read the same records again (audit of
+                        # 2026-09-28: every search started with an empty cache)
+                        fresh = self.client_factory()
                         progress(0, None, "Reading the species list of mGrowthDB (the first search in an hour)")
-                        self.state["index"] = species_index(client, progress=progress)
+                        self.state["index"] = species_index(fresh, progress=progress)
+                        self.state["client"] = fresh
                         self.state["index_built"] = time.monotonic()
+                    client = self.state["client"]
                 job["result"] = run_query(client, entries, settings, self.state["index"], progress=progress,
                                           all_studies=all_studies)
                 job["status"] = "done"

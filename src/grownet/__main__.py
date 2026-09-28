@@ -241,15 +241,14 @@ def _emit(a, net, skipped, extra, label, result):
 
 def _style(a):
     """The style as a file, for a Cytoscape that is not running or a user who prefers to import it."""
-    from .cytoscape import style
-    payload = json.dumps([style()], indent=2)
+    from .cytoscape import style_xml
+    payload = style_xml()
     if a.out:
         with open(a.out, "w", encoding="utf-8") as f:
-            f.write(payload + "\n")
+            f.write(payload)
         print(f"wrote {a.out}: import it with File, Import, Styles from File")
     else:
-        print(payload)
-    return 0
+        print(payload, end="")
 
 
 def _validate(a):
@@ -387,7 +386,7 @@ def build_parser() -> argparse.ArgumentParser:
                               "interaction, every pair the data did not support, and the sources")
     d.set_defaults(fn=_derive)
 
-    y = sub.add_parser("style", help="write the Cytoscape style, for Import Styles from File")
+    y = sub.add_parser("style", help="write the Cytoscape style as XML, for File, Import, Styles from File")
     y.add_argument("--out", help="write it here (default: stdout)")
     y.set_defaults(fn=_style)
 
