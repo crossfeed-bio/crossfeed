@@ -39,7 +39,15 @@ API_DOCS = "https://mgrowthdb.readthedocs.io/en/latest/api.html"
 
 
 class MGrowthDBError(RuntimeError):
-    """A failed mGrowthDB request: a bad id, a network error, or the API being unreachable."""
+    """A failed mGrowthDB request: a bad id, a network error, or the API being unreachable.
+
+    `status` is the HTTP status when mGrowthDB answered (404 for an id it does not hold), and None when it
+    could not be reached, so a caller can tell "no such study" from "mGrowthDB is down" (step 7 of the
+    audit, 2026-09-28: an unreachable mGrowthDB read as an empty database)."""
+
+    def __init__(self, message: str, status: int | None = None):
+        super().__init__(message)
+        self.status = status
 
 
 class _Status(Exception):
@@ -150,9 +158,9 @@ class MGrowthDBClient:
             except _Status as e:
                 if e.code < 500:
                     raise MGrowthDBError(
-                        f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})"
-                    ) from None
-                last = MGrowthDBError(f"mGrowthDB returned HTTP {e.code} for {url} (server error)")
+                        f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})",
+                        status=e.code) from None
+                last = MGrowthDBError(f"mGrowthDB returned HTTP {e.code} for {url} (server error)", status=e.code)
             except _NETWORK as e:
                 last = MGrowthDBError(
                     f"could not reach mGrowthDB at {url}: {getattr(e, 'reason', e) or type(e).__name__} "

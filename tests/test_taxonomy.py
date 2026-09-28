@@ -124,7 +124,7 @@ def test_the_current_name_is_the_most_recently_published_one():
         def get_study(self, sid):
             if sid not in self.studies:
                 from crossfeed.mgrowthdb import MGrowthDBError
-                raise MGrowthDBError("mGrowthDB returned HTTP 404")        # as the real client does
+                raise MGrowthDBError("mGrowthDB returned HTTP 404", status=404)   # as the real client does
             return {"id": sid, "publishedAt": self.dates[sid], "experiments": [{"id": sid}]}
 
         def get_experiment(self, eid):
