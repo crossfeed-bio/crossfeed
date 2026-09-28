@@ -40,7 +40,7 @@ import urllib.request
 from collections import Counter
 
 from . import brand
-from .model import InteractionNetwork
+from .model import InteractionNetwork, genus_name
 
 PORT = 1234
 STYLE_NAME = brand.NAME
@@ -74,12 +74,8 @@ def display_weight(edge) -> float:
 
 
 def genus(node) -> str:
-    """The genus of a node, from the first word of its name ("[Clostridium] scindens" -> Clostridium,
-    "Candidatus Arthromitus" -> Arthromitus), or of its genus-and-species key."""
-    words = (node.name or node.species or "").replace("[", "").replace("]", "").split()
-    if words and words[0].lower() == "candidatus":
-        words = words[1:]
-    return words[0].capitalize() if words else "unknown"
+    """The genus of a node, from its name or its genus-and-species key (`model.genus_name`)."""
+    return genus_name(node.name or node.species)
 
 
 def genus_colors(net: InteractionNetwork) -> dict:
@@ -115,6 +111,7 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
                 "notes": "; ".join(edge.notes), "community": " ".join(edge.community),
                 "experiments": " ".join(edge.experiments), "study_ids": " ".join(edge.study_ids),
                 "merged_arcs": edge.merged_arcs, "strength_range": " ".join(f"{x:g}" for x in edge.strength_range),
+                "supporting_pairs": edge.supporting_pairs, "merged_pairs": "; ".join(edge.merged_pairs),
                 "line_style": line_style(edge), "display_weight": display_weight(edge)}
         edges.append({"data": data})
     return {"data": {"name": name, "shared_name": name}, "elements": {"nodes": nodes, "edges": edges}}

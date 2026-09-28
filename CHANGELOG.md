@@ -7,6 +7,15 @@ tagged version is never reused for changed content.
 ## [0.0.2] (unreleased)
 
 ### Added
+- An All button beside Example (`derive --live --all`): the box is ignored and every study in mGrowthDB is
+  derived, with every partner; Only these studies and Exclude these studies still apply (register item 25).
+- Merge to genus (`--merge-genera`), an advanced setting off by default: one node per genus, and the arcs
+  between two genera merged by sign, with the median log2 mean and new arc fields `supporting_pairs` and
+  `merged_pairs` (species pairs, or strain pairs when only taxon ids were entered). Interactions within a
+  genus stay as a self-loop; absent arcs as one hidden absent arc per genus pair. With Merge parallel arcs
+  on too, a pair measured in several studies counts once. Nodes gain the identity `genus` (item 24).
+- A genus entered alone ("Blautia") stands for every species of it in mGrowthDB, listed on the page and
+  in the report, instead of being refused as "a genus alone".
 - An About button beside Help (#80): who built grownet, in the wording Craig agreed to on #80, with the
   repository link and the version.
 - The help page opens with the idea behind the tool, after Gause (1932, 1934): grow two species alone

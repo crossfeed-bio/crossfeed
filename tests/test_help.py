@@ -111,6 +111,18 @@ def test_the_command_line_species_search_gives_the_pages_network(monkeypatch, ca
     assert "studies searched: SMGDB00000001" in capsys.readouterr().err
 
 
+def test_the_command_line_all_gives_the_pages_all_network(monkeypatch, capsys, tmp_path):
+    # `derive --live --all` and the page's All button: the same edges, and the report says what was asked
+    monkeypatch.setattr("crossfeed.mgrowthdb.MGrowthDBClient", FakeClient)
+    out, report = tmp_path / "all.json", tmp_path / "all.txt"
+    assert main(["derive", "--live", "--all", "--merge-genera", "--out", str(out), "--report", str(report)]) == 0
+    cli = json.loads(out.read_text(encoding="utf-8"))
+    page = json.loads(gui.run_query(FakeClient(), [], {"merge_genera": True}, all_studies=True)["network"].to_json())
+    assert cli["edges"] == page["edges"] and cli["edges"] and cli["meta"]["query"] == "all"
+    assert {n["identity"] for n in cli["nodes"]} == {"genus"}
+    assert "query: all of mGrowthDB" in report.read_text(encoding="utf-8")
+
+
 def test_species_search_needs_live_and_rejects_a_deriver(capsys, tmp_path):
     fixture = tmp_path / "records.json"
     fixture.write_text("[]", encoding="utf-8")

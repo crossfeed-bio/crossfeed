@@ -28,9 +28,18 @@ QUALITY_FLAGS = ("single_replicate", "strains_pooled", "non_batch", "removed_mem
 # cautions a reader should see that do not make an edge low quality: it keeps its status and is shown
 CAUTIONS = ("two_replicates", "conditions_unverified")
 # what a node's id rests on: the NCBI taxon id of the strain, or genus and species of its name (#23)
-IDENTITIES = ("ncbi", "name")
+IDENTITIES = ("ncbi", "name", "genus")
 # whether a comparison counts as an interaction under the absence threshold (crossfeed.derive.absence)
 STATUSES = ("present", "absent")
+
+
+def genus_name(name: str) -> str:
+    """The genus of an organism name, its first word ("[Clostridium] scindens" -> Clostridium,
+    "Candidatus Arthromitus" -> Arthromitus), as mGrowthDB writes the name: not from NCBI's lineage."""
+    words = (name or "").replace("[", "").replace("]", "").split()
+    if words and words[0].lower() == "candidatus":
+        words = words[1:]
+    return words[0].capitalize() if words else "unknown"
 
 
 @dataclass(frozen=True)
@@ -53,7 +62,8 @@ class Node:
     model_ref: str = ""           # optional link to a metabolic model (for Syntropa)
     taxon_id: str = ""            # NCBI taxon id of the strain, as mGrowthDB records it
     species: str = ""             # genus and species from the name: the key to merge with species-level networks
-    identity: str = ""            # what the id rests on: "ncbi" (the taxon id) or "name" (genus and species)
+    identity: str = ""            # what the id rests on: "ncbi" (the taxon id), "name" (genus and species),
+    #                               or "genus" (a node that merges every strain of a genus)
 
 
 @dataclass(frozen=True)
@@ -87,6 +97,8 @@ class Edge:
     cultivation_mode: str = ""    # batch, chemostat, and so on, as mGrowthDB records it
     merged_arcs: int | None = None  # arcs merged into this one (register item 14), None when not merged
     strength_range: tuple = ()    # (lowest, highest) log2 mean of the merged arcs
+    supporting_pairs: int | None = None  # with genus merging: the distinct species (or strain) pairs behind it
+    merged_pairs: tuple = ()      # with genus merging: those pairs, as "source -> target"
 
     def validate(self) -> list:
         problems = []
@@ -173,5 +185,6 @@ class InteractionNetwork:
             e["cautions"] = tuple(e.get("cautions", ()))
             e["experiments"] = tuple(e.get("experiments", ()))
             e["strength_range"] = tuple(e.get("strength_range", ()))
+            e["merged_pairs"] = tuple(e.get("merged_pairs", ()))
             net.add_edge(Edge(**e))
         return net

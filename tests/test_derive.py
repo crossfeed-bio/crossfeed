@@ -798,3 +798,69 @@ def test_a_merged_arc_makes_a_valid_network_citing_every_study():
     assert net.validate() == [] and net.edges[0].study_ids == ("S1", "S2") and set(net.studies) == {"S1", "S2"}
     assert net.edges[0].merged_arcs == 2 and net.edges[0].strength_range == (1.0, 3.0)
     assert 'key="e_merged_arcs">2<' in to_graphml(net) and 'key="e_strength_range">1 3<' in to_graphml(net)
+
+
+# ---- merging to genus (Karoline 2026-09-28) ------------------------------------------------------
+
+from crossfeed.derive import merge_genus  # noqa: E402
+
+BH, BO, FP = "Blautia hydrogenotrophica DSM 10507", "Blautia obeum ATCC 29174", "Faecalibacterium prausnitzii A2-165"
+
+
+def _garc(strength, source_name, target_name, study="S1", status="present", source=None, target=None):
+    arc = _arc(strength, study, status=status, source=source or f"id:{source_name}",
+               target=target or f"id:{target_name}")
+    return {**arc, "source_name": source_name, "target_name": target_name}
+
+
+def test_arcs_between_two_genera_merge_by_sign_and_count_their_species_pairs():
+    arcs = [_garc(1.0, BH, FP), _garc(3.0, BO, FP), _garc(-2.0, BO, FP, study="S2")]
+    edges, meta = merge_genus(arcs, merge=True)
+    by_effect = {e["effect"]: e for e in edges}
+    assert set(by_effect) == {"facilitation", "inhibition"} and meta["genus_arcs"] == 2   # stratified by sign
+    up = by_effect["facilitation"]
+    assert (up["source"], up["target"], up["strength"], up["strength_range"]) == ("Blautia", "Faecalibacterium",
+                                                                                   2.0, [1.0, 3.0])
+    assert up["supporting_pairs"] == 2 and up["merged_pairs"] == [
+        "Blautia hydrogenotrophica -> Faecalibacterium prausnitzii", "Blautia obeum -> Faecalibacterium prausnitzii"]
+    down = by_effect["inhibition"]
+    assert (down["strength"], down["supporting_pairs"], down["sd"]) == (-2.0, 1, 0.1)   # one arc keeps its sd
+
+
+def test_the_pairs_are_strains_when_only_strains_were_entered():
+    two_strains = [_garc(1.0, "Blautia obeum ATCC 29174", FP), _garc(2.0, "Blautia obeum A2-235", FP)]
+    species, _ = merge_genus(two_strains, merge=True, level="species")
+    strains, _ = merge_genus(two_strains, merge=True, level="strain")
+    assert species[0]["supporting_pairs"] == 1 and strains[0]["supporting_pairs"] == 2
+
+
+def test_interactions_within_a_genus_stay_as_an_arc_to_itself_and_absent_arcs_as_one():
+    edges, _ = merge_genus([_garc(1.0, BH, BO), _garc(0.05, BH, FP, status="absent"),
+                            _garc(-0.02, BO, FP, status="absent")], merge=True)
+    loop = [e for e in edges if e["source"] == e["target"]]
+    assert [(e["source"], e["effect"]) for e in loop] == [("Blautia", "facilitation")]
+    absent = [e for e in edges if e["status"] == "absent"]
+    assert len(absent) == 1 and absent[0]["supporting_pairs"] == 2 and absent[0]["target"] == "Faecalibacterium"
+
+
+def test_with_arcs_merged_across_studies_a_pair_counts_once():
+    # BH -> FP measured in three studies (1, 1, 1) and BO -> FP once (5): the genus median is over the two
+    # pairs, 3.0, not over four arcs, which would give 1.0
+    arcs = [_garc(1.0, BH, FP, study=s) for s in ("S1", "S2", "S3")] + [_garc(5.0, BO, FP, study="S4")]
+    edges, meta = output_meta(arcs, include_low_quality=True, absence_threshold=0.0, merge_arcs=True,
+                              merge_genera=True)
+    assert len(edges) == 1 and edges[0]["strength"] == 3.0 and edges[0]["supporting_pairs"] == 2
+    assert meta["genus"]["merge_genus"] is True and meta["genus"]["from_arcs"] == 2
+    alone, _ = output_meta([dict(a) for a in arcs], include_low_quality=True, absence_threshold=0.0,
+                           merge_genera=True)
+    assert alone[0]["strength"] == 1.0                                # without it, each arc counts
+
+
+def test_merging_to_genus_is_off_by_default_and_gives_a_valid_network_with_genus_nodes():
+    arcs = [_garc(1.0, BH, FP), _garc(3.0, BO, FP)]
+    assert merge_genus(arcs)[0] is arcs
+    from crossfeed.export import to_graphml
+    net = records_to_network(merge_genus(arcs, merge=True)[0])
+    assert net.validate() == [] and set(net.nodes) == {"Blautia", "Faecalibacterium"}
+    assert net.nodes["Blautia"].identity == "genus" and net.nodes["Blautia"].taxon_id == ""
+    assert net.edges[0].supporting_pairs == 2 and 'key="e_supporting_pairs">2<' in to_graphml(net)

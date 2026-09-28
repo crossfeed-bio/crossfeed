@@ -66,6 +66,7 @@
           "enum": [
             "ncbi",
             "name",
+            "genus",
             ""
           ]
         }

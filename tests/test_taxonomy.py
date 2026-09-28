@@ -105,11 +105,10 @@ def test_common_ways_of_typing_are_understood_and_the_rest_say_why():
              "blautia obeum": {40520: "Blautia obeum ATCC 29174"}}
     entries = split_entries(["Blautia hydrogenotrophica, Blautia obeum", "- 476272", "NCBI:txid40520"])
     assert entries == ["Blautia hydrogenotrophica", "Blautia obeum", "476272", "NCBI:txid40520"]
-    r = resolve_species(entries + ["Blautia", "B. obeum", "Blautia hydrogentrophica", "99999999", "%%%"], index)
+    r = resolve_species(entries + ["B. obeum", "Blautia hydrogentrophica", "99999999", "%%%", "Blauta"], index)
     assert [e for e, _ in r["resolved"]] == entries                          # commas, a dash, txid: all fine
     why, hints = r["reasons"], r["suggestions"]
-    assert why["Blautia"].startswith("a genus alone") and hints["Blautia"] == ["Blautia hydrogenotrophica",
-                                                                               "Blautia obeum"]
+    assert why["Blauta"] == "no genus or species of this name in mGrowthDB" and hints["Blauta"] == ["Blautia"]
     assert hints["B. obeum"] == ["Blautia obeum"]                              # an abbreviated genus
     assert hints["Blautia hydrogentrophica"] == ["Blautia hydrogenotrophica"]  # a close spelling
     assert why["99999999"] == "no strain in mGrowthDB has NCBI taxon id 99999999"   # not taken as found
@@ -139,3 +138,16 @@ def test_the_current_name_is_the_most_recently_published_one():
     index = build(client)
     assert index.current[FP] == "Faecalibacterium duncaniae A2-165"          # study 1 is the more recent
     assert "faecalibacterium prausnitzii" in index and "faecalibacterium duncaniae" in index   # both resolve
+
+
+def test_a_genus_alone_stands_for_every_strain_of_it():
+    # Karoline (2026-09-28): a genus entered resolves to all its strains in mGrowthDB, and the species it
+    # expanded to are listed; "[Clostridium]" is a different first word, so it is not Clostridium
+    index = {"blautia hydrogenotrophica": {476272: "Blautia hydrogenotrophica DSM 10507"},
+             "blautia obeum": {40520: "Blautia obeum ATCC 29174", 7: "Blautia obeum A2-235"},
+             "[clostridium] scindens": {29347: "[Clostridium] scindens ATCC 35704"},
+             "clostridium butyricum": {1492: "Clostridium butyricum"}}
+    r = resolve_species(["blautia", "Clostridium"], index)
+    assert r["taxon_ids"] == [476272, 40520, 7, 1492] and r["unresolved"] == []
+    assert r["genera"] == {"blautia": ["Blautia hydrogenotrophica", "Blautia obeum"],
+                           "Clostridium": ["Clostridium butyricum"]}

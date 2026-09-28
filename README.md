@@ -114,6 +114,7 @@ concrete demonstration of the seam.
 ```
 python -m crossfeed derive STUDY [--live | --fixture FILE] [--deriver MODULE:CLASS] [--format json|graphml] [--out FILE]
 python -m crossfeed derive --live --species NAME [NAME ...] [--all-partners] [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
+python -m crossfeed derive --live --all [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
 python -m crossfeed validate FILE
 python -m crossfeed schema [--out FILE]
 ```
@@ -121,8 +122,11 @@ python -m crossfeed schema [--out FILE]
 - `derive STUDY --live` fetches the study from the mGrowthDB API and derives interactions.
 - `derive --live --species NAME ...` does what the local page does: resolves species or strain names (or
   NCBI taxon ids) through mGrowthDB, derives every study holding them, and keeps the interactions between
-  the species given (`--all-partners` keeps their other partners too). The page's Example, from the
-  command line: `crossfeed derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"`.
+  the species given (`--all-partners` keeps their other partners too). A genus alone ("Blautia") stands
+  for every species of it that mGrowthDB holds. The page's Example, from the command line:
+  `crossfeed derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"`.
+- `derive --live --all` does what the page's All button does: every study in mGrowthDB, with every
+  partner (a study argument limits it to those studies).
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the baseline (see below).
 - The command line does everything the local page does: every advanced setting has its option, and
@@ -158,7 +162,8 @@ python -m crossfeed gui
 
 The tool version shows next to its name, and a Help page introduces the idea (after Gause, with a figure), explains every advanced setting and arc
 attribute, the main design decisions, the command line, what to do when no network comes back, and where
-to report a problem; an About page says who built it and links this repository. Type species names (or NCBI taxon ids), one per line, and press "Find interactions". crossfeed resolves
+to report a problem; an About page says who built it and links this repository. Type species names (or NCBI taxon ids, or a genus for all its species), one per line, and press "Find
+interactions", or press All to derive every study in mGrowthDB. crossfeed resolves
 the names to taxon ids from mGrowthDB's own strain records, finds the studies holding them, derives the
 interactions, and shows them as a table with downloads for JSON and GraphML. Every setting sits behind
 "Advanced settings" with the same defaults the command line uses.
@@ -237,7 +242,9 @@ date and time as graph attributes.
       "experiments": ["EMGDB000000031", "EMGDB000000027"],
       "cultivation_mode": "batch",
       "merged_arcs": null,
-      "strength_range": []
+      "strength_range": [],
+      "supporting_pairs": null,
+      "merged_pairs": []
     }
   ],
   "studies": [
@@ -265,7 +272,9 @@ least one study. `sd` and `se` are the standard deviation and standard error of 
 replicates, with `n_with` and `n_without` the replicate counts behind it, and `metric` the growth property
 compared (`auc` by default; `max`, or a growth rate recorded with its rule, `growth_rate:easylinear:5` or
 `growth_rate:baranyi`). `merged_arcs` and `strength_range` are set only with `--merge-arcs`: how many arcs
-of one source and target were merged, and the lowest and highest log2 mean among them. `outcome` says what the comparison could establish: `quantified`, `obligate` (the
+of one source and target were merged, and the lowest and highest log2 mean among them.
+`supporting_pairs` and `merged_pairs` are set only with `--merge-genera`: how many distinct species pairs
+(strain pairs when only taxon ids were entered) a genus arc rests on, and which. `outcome` says what the comparison could establish: `quantified`, `obligate` (the
 target grows only with the source present), `abolished` (only without it), or `no_growth`. For an
 obligate or abolished edge, the count on the side without growth is its replicates without growth. A
 comparison whose set was emptied by exclusions (every replicate spiked, for example) says nothing about
@@ -441,6 +450,16 @@ same species-identifying technique: where a study measures monocultures by flow 
 by qPCR, the pair is skipped with that reason, even when both give cells/mL, since otherwise an effect
 could be the change of instrument (Karoline). And an edge computed from a single replicate carries no sd
 or se at all, which is why it is flagged.
+
+Two advanced settings summarize a network, both off by default. Merge parallel arcs (`--merge-arcs`)
+makes one arc of the arcs from one strain to another across conditions and studies, with the median log2
+mean, when their signs agree. Merge to genus (`--merge-genera`) makes one node of each genus and merges the
+arcs between two genera by sign, so two genera can be joined by a facilitation and an inhibition arc, each
+with the median log2 mean and the number of species pairs behind it (strain pairs when only taxon ids were
+entered); interactions within a genus stay as an arc from the genus to itself, and absent arcs as one
+hidden absent arc per genus pair. With both on, the arcs of each pair are merged across studies first, so
+a pair measured in several studies counts once. The genus is the first word of the name mGrowthDB records,
+not NCBI's lineage (register item 24).
 
 `BaselineDeriver` remains only as the retired placeholder, reachable with `--deriver`. The open method
 choices, and who settled each, are in [docs/METHOD_NOTES.md](docs/METHOD_NOTES.md).

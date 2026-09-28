@@ -82,6 +82,16 @@ SETTINGS = {
                    "another, across conditions, studies and evidence, become one arc: its strength is the median "
                    "of their log2 means, with the range, and it lists every study, experiment and condition it "
                    "rests on. Arcs whose signs disagree are not merged; absent arcs stay separate."),
+    "merge_genera": ("Merge to genus", "--merge-genera",
+                     "Off by default. On, every strain becomes its genus, and the arcs between two genera merge "
+                     "by sign, so two genera can be joined by a facilitation arc and an inhibition arc. The "
+                     "strength is the median of the merged arcs' log2 means, with the range, and "
+                     "supporting_pairs counts the distinct species pairs behind the arc, or strain pairs when "
+                     "only NCBI taxon ids were entered. Interactions within one genus stay, as an arc from the "
+                     "genus to itself; absent arcs become one absent arc per genus pair, hidden as before. With "
+                     "Merge parallel arcs on as well, the arcs of each pair are merged across studies first, so "
+                     "a pair measured in several studies counts once. The genus is the first word of the name "
+                     "mGrowthDB records, not NCBI's lineage, so a reclassified genus follows its names."),
     "min_studies": ("Minimum supporting studies", "--min-studies N",
                     "Keeps arcs resting on at least this many studies. Above 1 it needs merged arcs, since an "
                     "arc as derived rests on one study."),
@@ -100,7 +110,9 @@ SETTINGS = {
 
 # command line options of `derive` that are not advanced settings -> what they do
 CLI_ONLY = {
-    "--species": "species or strain names, or NCBI taxon ids: search every study holding them, as the page does",
+    "--species": "species, strain or genus names, or NCBI taxon ids: search every study holding them, as the page "
+                 "does",
+    "--all": "every study in mGrowthDB, with every partner, as the page's All button (with --live)",
     "--live": "fetch from the mGrowthDB API (the normal case)",
     "--fixture": "derive from a JSON list of interaction records instead (offline, for testing)",
     "--deriver": "plug in your own derivation method, given as module:ClassName (one study at a time)",
@@ -153,6 +165,9 @@ EDGE_ATTRIBUTES = {
                    "empty for an arc as derived",
     "strength_range": "with Merge parallel arcs: the lowest and highest log2 mean of the merged arcs; the "
                       "strength is their median",
+    "supporting_pairs": "with Merge to genus: how many distinct species pairs (strain pairs when only taxon ids "
+                        "were entered) this genus arc rests on",
+    "merged_pairs": "with Merge to genus: those pairs, as source -> target",
 }
 
 # Node field -> meaning
@@ -161,7 +176,8 @@ NODE_ATTRIBUTES = {
     "name": "the strain name, as the study records it",
     "taxon_id": "the NCBI taxon id of the strain, as mGrowthDB records it",
     "species": "genus and species from the name, to merge with species-level networks",
-    "identity": "what the id rests on: ncbi (the taxon id) or name",
+    "identity": "what the id rests on: ncbi (the taxon id), name, or genus (with Merge to genus: the node "
+                "stands for every strain of its genus)",
     "taxonomy": "a lineage, when known",
     "model_ref": "a link to a metabolic model, when known",
 }
