@@ -314,10 +314,11 @@ Nothing is uploaded, and nothing is written outside the file you download.</p>
 
 <h2 id="idea">The idea behind it</h2>
 <p>How one species affects another can be read from growth alone: grow each species by itself, grow the
-two together, and compare. Gause did this with two yeasts (Gause 1932) and with two species of
-<i>Paramecium</i> (Gause 1934). He grew each alone and both in a mixed culture, and from the difference
-measured how strongly each species held the other back. grownet makes the same comparison on the growth
-curves in mGrowthDB.</p>
+two together, and compare. Gause showed this with two ciliates feeding on the same bacteria,
+<i>Paramecium caudatum</i> and <i>P. aurelia</i> (Gause 1934). Grown separately, each species reached a
+stable population. Grown together, both grew at first, then <i>P. caudatum</i> declined until
+<i>P. aurelia</i> had displaced it entirely. Set against growth alone, the mixed culture showed how each
+species affected the other. grownet makes the same comparison on the growth curves in mGrowthDB.</p>
 {idea_figure()}
 <p class="muted">An illustration, not data: the curves are drawn with the Baranyi-Roberts model the tool
 fits.</p>
@@ -333,7 +334,10 @@ that tells them apart and is the same one used alone, and when alone and togethe
 conditions; grownet checks both (<a href="#decisions">why it works this way</a>). The same comparison runs
 on drop-out experiments, a community with and without one member. A change says that the partner affects
 the species, not how: cross-feeding, competition for a nutrient, a toxin or a change of pH look the same
-here.</p>
+here. Gause's yeasts are a case in point (Gause 1932, 1934): in mixed culture a yeast he named
+<i>Schizosaccharomyces kephir</i> inhibited <i>Saccharomyces cerevisiae</i> strongly, and only a separate
+measurement traced the inhibition to the ethyl alcohol it produced, about twice as much per unit of yeast
+as <i>S. cerevisiae</i>.</p>
 <p class="muted">Gause GF (1932) Experimental studies on the struggle for existence. I. Mixed population of
 two species of yeast. Journal of Experimental Biology 9: 389-402.<br>
 Gause GF (1934) The Struggle for Existence. Williams and Wilkins, Baltimore.</p>
