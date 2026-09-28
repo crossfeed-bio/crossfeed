@@ -259,6 +259,15 @@ tagged version is never reused for changed content.
   unused `requests` dependency was dropped.
 
 ### Fixed
+- From a code review of the whole package (2026-09-28): with the growth rate (easylinear), a curve that only
+  declines crashed the comparison and dropped the whole pair or community (SMGDB00000014 lost three
+  co-cultures); its rate is now its steepest, non-positive slope. A problem with one species (mixed
+  abundance units, a technique mismatch, a later start) now leaves out that species' arcs only, not the
+  pair or the community, and units are checked per species, since each is compared only with itself. The
+  no-growth rule, the stationary check and the zero-at-start check leave out replicates excluded for a
+  spike. Merge to genus counts a strain that studies name differently once. The local page keeps its 20
+  latest searches, reads the species list again after an hour, and builds it once when two searches start
+  together.
 - A node keyed by name, because mGrowthDB gives its taxon id to more than one species, keeps its own name:
   the current-name step renamed it by the id's latest name, so in SMGDB00000008 Lachnoclostridium
   symbiosum WAL-14673 appeared as a second L. clostridioforme (found by the audit of 2026-09-28).

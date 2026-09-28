@@ -562,7 +562,8 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
             skipped.append((f"{source} -> {target} [{cond}]", f"no growth ({method}) in either set"))
             continue
         if side["outcome"] == UNUSABLE:
-            skipped.append((f"{source} -> {target} [{cond}]", "every replicate of a set was left out (see above)"))
+            skipped.append((f"{source} -> {target} [{cond}]",
+                            side.get("reason") or "every replicate of a set was left out (see above)"))
             continue
         c = {"mean": side["mean"], "sd": side["sd"], "se": side["se"], "outcome": side["outcome"],
              "n_with": side["n_co"], "n_without": side["n_mono"],
@@ -978,11 +979,15 @@ def _organism(arc: dict, side: str) -> str:
     return arc.get(f"{side}_name") or arc.get(f"{side}_species") or arc[side]
 
 
-def _pair(arc: dict, level: str) -> str:
-    """The pair of organisms an arc joins, at the level the search asked about: its species, or its strains."""
+def _pair(arc: dict, level: str, name_of: dict) -> str:
+    """The pair of organisms an arc joins, at the level the search asked about: its species, or its strains.
+    Each node is named once (`name_of`, the first name seen for its id), so a strain that two studies name
+    differently (411483 as F. prausnitzii and as F. duncaniae A2-165) counts once (code review of
+    2026-09-28)."""
+    names = [name_of.get(arc[side], _organism(arc, side)) for side in ("source", "target")]
     if level == "strain":
-        return f"{_organism(arc, 'source')} -> {_organism(arc, 'target')}"
-    return " -> ".join(genus_species(_organism(arc, side)).capitalize() for side in ("source", "target"))
+        return " -> ".join(names)
+    return " -> ".join(genus_species(n).capitalize() for n in names)
 
 
 def merge_genus(edges: list, merge: bool = False, level: str = "species") -> tuple:
@@ -1000,7 +1005,10 @@ def merge_genus(edges: list, merge: bool = False, level: str = "species") -> tup
             "rule": "nodes by genus; arcs by source genus, target genus and sign; median of the log2 means"}
     if not merge:
         return edges, info
-    groups = {}
+    groups, name_of = {}, {}
+    for e in edges:
+        for side in ("source", "target"):
+            name_of.setdefault(e[side], _organism(e, side))
     for e in edges:
         kind = ABSENT if e.get("status") == ABSENT else e.get("effect")
         key = (genus_name(_organism(e, "source")), genus_name(_organism(e, "target")), kind)
@@ -1010,7 +1018,7 @@ def merge_genus(edges: list, merge: bool = False, level: str = "species") -> tup
         arc = dict(arcs[0]) if len(arcs) == 1 else _merged(arcs)
         if kind == ABSENT:
             arc["status"] = ABSENT                       # every arc behind it found no interaction
-        pairs = sorted({_pair(a, level) for a in arcs})
+        pairs = sorted({_pair(a, level, name_of) for a in arcs})
         arc.update({side: genus for side, genus in (("source", source), ("target", target))})
         for side, genus in (("source", source), ("target", target)):
             arc.update({f"{side}_name": genus, f"{side}_taxon_id": "", f"{side}_species": "",

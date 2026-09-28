@@ -209,10 +209,21 @@ def rule_meta(alpha: float = None, factor: float = None) -> dict:
             "test": NO_GROWTH_TEST, "alpha": alpha, "factor": factor, "applied": bool(alpha)}
 
 
+def _unspiked(reps, species, spike_factor) -> list:
+    """The replicates whose curve of `species` carries no implausible spike: the ones a comparison uses."""
+    return [r for r in reps if not spike(r.curve(species), spike_factor)]
+
+
 def _grown_values(reps, species, role, prop, method, skipped, spike_factor, flagged, no_growth, end,
                   alpha, factor) -> list:
-    """The log2 values of a set, or none when the set did not grow (the no-growth rule, #37)."""
-    verdict = grew(reps, species, end, alpha, factor)
+    """The log2 values of a set, or none when the set did not grow (the no-growth rule, #37). The rule is
+    judged on the replicates that are compared, without those left out for a spike, so an artifact cannot
+    make a set count as grown (code review of 2026-09-28)."""
+    used = _unspiked(reps, species, spike_factor)
+    if not used:
+        # every replicate is left out for a spike: missing data, not a growth result (see _compare)
+        return _log_values(reps, species, role, prop, method, skipped, spike_factor, flagged, no_growth)
+    verdict = grew(used, species, end, alpha, factor)
     if not verdict["grew"]:
         skipped.append((f"{species}: {role}", verdict["reason"] or "no growth"))
         if no_growth is not None:
@@ -294,12 +305,24 @@ def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, met
     replicate), and "skipped" as a list of (label, reason).
     """
     _check_method(method)
-    check_replicate_sets(mono_a, mono_b, co, species_a, species_b)
-    start, end = shared_window(c for rep in [*mono_a, *mono_b, *co] for c in rep.curves)
+    problems = check_replicate_sets(mono_a, mono_b, co, species_a, species_b, strict=False)
+    every = [c for rep in [*mono_a, *mono_b, *co] for c in rep.curves]
+    # the design as a whole, for the record only: each species is compared over its own window below
+    design = (Counter(c.times[0] for c in every).most_common(1)[0][0], min(c.times[-1] for c in every))
 
-    result = {"method": method, "log": LOG, "window": (start, end), "skipped": [], "flagged": []}
+    result = {"method": method, "log": LOG, "window": design, "skipped": [], "flagged": []}
     for key, species, monos in (("species_a", species_a, mono_a), ("species_b", species_b, mono_b)):
-        window = shared_window(rep.curve(species) for rep in [*co, *monos])
+        # a problem with one species (its technique, units or start times) leaves out its own arc only
+        # (code review of 2026-09-28: it refused both arcs of the pair)
+        reason = problems.get(species)
+        if not reason:
+            try:
+                window = shared_window(rep.curve(species) for rep in [*co, *monos])
+            except ValueError as e:
+                reason = f"{species}: {e}"
+        if reason:
+            result[key] = {"species": species, "outcome": UNUSABLE, "reason": reason}
+            continue
         end = window[1]
         prop = _property(end, method)
         zero_co, zero_mono = [], []
@@ -310,10 +333,12 @@ def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, met
                                   spike_factor, result["flagged"], zero_mono, end, no_growth_alpha,
                                   no_growth_factor)
         c = _compare(co_log2, mono_log2, len(zero_co), len(zero_mono))
-        stationary = {"with": stationary_verdict(co, species, end),
-                      "without": stationary_verdict(monos, species, end)}
+        co_used, monos_used = _unspiked(co, species, spike_factor), _unspiked(monos, species, spike_factor)
+        stationary = {"with": stationary_verdict(co_used, species, end),
+                      "without": stationary_verdict(monos_used, species, end)}
         result[key] = {"species": species, "window": window, "stationary": stationary,
-                       "zero_start": {"with": starts_at_zero(co, species), "without": starts_at_zero(monos, species)},
+                       "zero_start": {"with": starts_at_zero(co_used, species),
+                                      "without": starts_at_zero(monos_used, species)},
                        "outcome": c["outcome"], "mean": c["mean"],
                        "sd": c["sd"], "se": c["se"],
                        "n_co": c["n_with"], "n_mono": c["n_without"],
@@ -358,8 +383,11 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc",
     outside = [r for r in dropouts if r not in members]
     if outside:
         raise ValueError(f"drop-out species {outside} not a member of the full community {sorted(members)}")
-    check_sets([("full community", full, members)]
-               + [(f"community without {r}", reps, [m for m in members if m != r]) for r, reps in dropouts.items()])
+    # a problem with one member (its technique or units) leaves out the arcs to that member only (code
+    # review of 2026-09-28: it refused the whole community)
+    problems = check_sets([("full community", full, members)]
+                          + [(f"community without {r}", reps, [m for m in members if m != r])
+                             for r, reps in dropouts.items()], strict=False)
     every = [c for rep in [*full, *(r for reps in dropouts.values() for r in reps)] for c in rep.curves]
     # the design's usual first time point; a curve that starts later leaves its replicate out of its own arcs
     # only, not out of the arcs of the other members (Karoline, 2026-09-28, with the per-arc windows)
@@ -380,6 +408,9 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc",
     for removed, reps in dropouts.items():
         without_role = f"community without {removed}"
         for target in (m for m in members if m != removed):
+            if target in problems:
+                result["skipped"].append((f"arc {removed} -> {target}", problems[target]))
+                continue
             full_t, reps_t = on_time(full, target), on_time(reps, target)
             if not full_t or not reps_t:
                 result["skipped"].append((f"arc {removed} -> {target}", f"every curve of {target} in the "
@@ -407,9 +438,14 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc",
                 continue
             result["arcs"].append({"source": removed, "target": target, "evidence": evidence,
                                    "community": community, "window": window,
-                                   "stationary": {"with": stationary_verdict(full_t, target, window[1]),
-                                                  "without": stationary_verdict(reps_t, target, window[1])},
-                                   "zero_start": {"with": starts_at_zero(full_t, target),
-                                                  "without": starts_at_zero(reps_t, target)},
+                                   "stationary": {
+                                       "with": stationary_verdict(_unspiked(full_t, target, spike_factor), target,
+                                                                  window[1]),
+                                       "without": stationary_verdict(_unspiked(reps_t, target, spike_factor),
+                                                                     target, window[1])},
+                                   "zero_start": {"with": starts_at_zero(_unspiked(full_t, target, spike_factor),
+                                                                         target),
+                                                  "without": starts_at_zero(_unspiked(reps_t, target, spike_factor),
+                                                                            target)},
                                    **c})
     return result

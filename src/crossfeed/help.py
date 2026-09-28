@@ -399,11 +399,11 @@ fast grower reaching the same level look alike. It is misleading when one curve 
 and the other did not; grownet then marks the arc <code>stationary_phase_differs</code>.</dd>
 <dt>Growth rate (growth_rate)</dt>
 <dd>For: the speed of growth, independent of yield and of the unit of abundance, and with easylinear the
-same rate mGrowthDB reports. Against: it ignores yield and lag; it needs densely sampled curves (at least 6
-points), so a sparsely sampled study gives no rates at all; and it is sensitive to noise in the steepest
-part of the curve. easylinear takes the steepest straight stretch of log abundance and depends on its
-window; baranyi fits a growth model up to the end of the plateau, and refuses curves the model does not
-describe, such as two growth phases.</dd>
+same method mGrowthDB uses for the rates it reports. Against: it ignores yield and lag; it needs densely
+sampled curves (at least 6 points), so a sparsely sampled study gives no rates at all; and it is
+sensitive to noise in the steepest part of the curve. easylinear takes the steepest straight stretch of
+log abundance and depends on its window; baranyi fits a growth model up to the end of the plateau, and
+refuses curves the model does not describe, such as two growth phases.</dd>
 </dl>
 
 <h2 id="example">Try the example</h2>

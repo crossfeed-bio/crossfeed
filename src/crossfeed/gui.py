@@ -17,6 +17,7 @@ import http.server
 import secrets
 import socketserver
 import threading
+import time
 import urllib.parse
 import webbrowser
 from collections import Counter
@@ -625,6 +626,22 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
             "skipped": skipped, "errors": errors, "hidden": extra["hidden"], "absence": extra["absence"]}
 
 
+# searches kept for their pages, downloads and reports: the latest ones only, so a page left open all day
+# does not keep every result in memory (code review of 2026-09-28)
+KEPT_JOBS = 20
+# the species list (and All's list of studies) is read again after this many seconds, so a study published
+# while the page runs is found without a restart (code review of 2026-09-28)
+INDEX_MAX_AGE = 3600
+_INDEX_LOCK = threading.Lock()
+
+
+def prune_jobs(jobs: dict, keep: int = KEPT_JOBS) -> None:
+    """Drop all but the latest `keep` searches, never one still running (dicts keep insertion order)."""
+    for old in list(jobs)[:-keep]:
+        if jobs[old]["status"] != "running":
+            del jobs[old]
+
+
 class _Handler(http.server.BaseHTTPRequestHandler):
     """Routes: the page, a search and its progress, the downloads, the report and Cytoscape. Every request
     carries the session token."""
@@ -743,10 +760,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         def work():
             try:
                 client = self.client_factory()
-                if self.state.get("index") is None:
-                    # the species list of all of mGrowthDB: slow to build, so built once per session
-                    progress(0, None, "Reading the species list of mGrowthDB (the first search only)")
-                    self.state["index"] = species_index(client, progress=progress)
+                with _INDEX_LOCK:          # two first searches build it once, not twice
+                    built = self.state.get("index_built", 0)
+                    if self.state.get("index") is None or time.monotonic() - built > INDEX_MAX_AGE:
+                        # the species list of all of mGrowthDB: slow to build, so built once an hour at most
+                        progress(0, None, "Reading the species list of mGrowthDB (the first search in an hour)")
+                        self.state["index"] = species_index(client, progress=progress)
+                        self.state["index_built"] = time.monotonic()
                 job["result"] = run_query(client, entries, settings, self.state["index"], progress=progress,
                                           all_studies=all_studies)
                 job["status"] = "done"
@@ -755,7 +775,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             except Exception as e:             # a bug must reach the page, not only a dead thread
                 job.update(status="failed", error=f"The search failed: {type(e).__name__}: {e}")
 
-        self.state.setdefault("jobs", {})[job["id"]] = job
+        jobs = self.state.setdefault("jobs", {})
+        jobs[job["id"]] = job
+        prune_jobs(jobs)
         job["thread"] = threading.Thread(target=work, daemon=True)
         job["thread"].start()
         return job

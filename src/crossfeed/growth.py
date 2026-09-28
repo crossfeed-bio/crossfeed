@@ -71,12 +71,17 @@ def _label(rep: Replicate, role: str, i: int) -> str:
     return f"{role} replicate {rep.name or i}"
 
 
-def check_sets(sets) -> None:
-    """Raise ValueError unless replicate sets can be compared.
+def check_sets(sets, strict: bool = True) -> dict:
+    """Raise ValueError unless replicate sets can be compared at all; {species: why} for species that
+    cannot be.
 
     sets: (role, replicates, expected species) triples. Every set is non-empty, every replicate in a set
-    holds a curve for exactly the expected species, and all curves across the sets share one time unit and
-    one abundance unit (no hours against days, no CFU against OD); units are not converted.
+    holds a curve for exactly the expected species, and all curves share one time unit (a window needs it).
+    Each species is compared only with itself, so its curves must share one technique and one abundance
+    unit (no CFU against OD); units are not converted. Different species may be measured differently.
+    With `strict` a species that cannot be compared raises too; otherwise it is returned, so a caller
+    leaves out only that species' arcs (code review of 2026-09-28: one species' units or technique
+    refused a whole pair or community).
     """
     curves = []
     for role, reps, expected in sets:
@@ -92,26 +97,38 @@ def check_sets(sets) -> None:
     # drop-out) only when both measured the species the same, species-identifying way, even when another
     # technique gives the same unit, since otherwise an effect may be the change of technique (Karoline,
     # 2026-09-27). Different species may be measured differently.
+    def mixed(pairs, attr) -> str:
+        """'' when every curve shares `attr`, else which curves carry which value."""
+        by_value = {}
+        for label, c in pairs:
+            by_value.setdefault(getattr(c, attr), []).append(label)
+        if len(by_value) < 2:
+            return ""
+        shown = (lambda v: v or "unrecorded") if attr == "technique" else repr
+        return "; ".join(f"{shown(v)}: {', '.join(labels)}" for v, labels in sorted(by_value.items()))
+
+    detail = mixed(curves, "time_unit")
+    if detail:
+        raise ValueError(f"mixed time units across replicate sets ({detail})")
+    problems = {}
     by_species = {}
     for label, c in curves:
-        by_species.setdefault(c.species, {}).setdefault(c.technique, []).append(label)
-    for species, techniques in sorted(by_species.items()):
-        if len(techniques) > 1:
-            detail = "; ".join(f"{t or 'unrecorded'}: {', '.join(labels)}" for t, labels in sorted(techniques.items()))
-            raise ValueError(f"{species} is measured by different techniques in the sets compared ({detail}); "
-                             "they are compared only when both use the same technique")
-
-    for attr, what in (("time_unit", "time units"), ("abundance_unit", "abundance units")):
-        units = {getattr(c, attr) for _, c in curves}
-        if len(units) > 1:
-            by_unit = {}
-            for label, c in curves:
-                by_unit.setdefault(getattr(c, attr), []).append(label)
-            detail = "; ".join(f"{u!r}: {', '.join(labels)}" for u, labels in sorted(by_unit.items()))
-            raise ValueError(f"mixed {what} across replicate sets ({detail})")
+        by_species.setdefault(c.species, []).append((label, c))
+    for species, pairs in sorted(by_species.items()):
+        detail = mixed(pairs, "technique")
+        if detail:
+            problems[species] = (f"{species} is measured by different techniques in the sets compared ({detail}); "
+                                 "they are compared only when both use the same technique")
+            continue
+        detail = mixed(pairs, "abundance_unit")
+        if detail:
+            problems[species] = f"{species} is measured in mixed abundance units across replicate sets ({detail})"
+    if strict and problems:
+        raise ValueError(next(iter(problems.values())))
+    return problems
 
 
-def check_replicate_sets(mono_a, mono_b, co, species_a: str, species_b: str) -> None:
+def check_replicate_sets(mono_a, mono_b, co, species_a: str, species_b: str, strict: bool = True) -> dict:
     """Raise ValueError unless the three replicate sets of a mono versus bi-culture comparison can be compared.
 
     mono_a holds monocultures of species_a only, mono_b monocultures of species_b only, and every co-culture
@@ -119,8 +136,8 @@ def check_replicate_sets(mono_a, mono_b, co, species_a: str, species_b: str) -> 
     """
     if species_a == species_b:
         raise ValueError("species A and species B must differ")
-    check_sets((("mono A", mono_a, (species_a,)), ("mono B", mono_b, (species_b,)),
-                ("co-culture", co, (species_a, species_b))))
+    return check_sets((("mono A", mono_a, (species_a,)), ("mono B", mono_b, (species_b,)),
+                       ("co-culture", co, (species_a, species_b))), strict)
 
 
 def shared_window(curves) -> tuple:
