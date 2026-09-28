@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass, field
 
-SCHEMA = "crossfeed.interaction_network/v0"
+SCHEMA = "grownet.interaction_network/v0"
 EFFECTS = ("facilitation", "inhibition", "neutral")
 # what an edge was derived from: a mono versus bi-culture comparison (a direct interaction), or a full
 # versus drop-out community comparison (not necessarily direct: strictly a hyper-arc, kept as an arc)
