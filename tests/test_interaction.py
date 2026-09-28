@@ -3,8 +3,19 @@ import math
 
 import pytest
 
+from crossfeed import interaction
 from crossfeed.growth import GrowthCurve, Replicate
-from crossfeed.interaction import dropout_interaction_strengths, interaction_strength
+from crossfeed.interaction import dropout_interaction_strengths, grew, interaction_strength, rule_meta
+from crossfeed.stats import welch
+
+
+@pytest.fixture(autouse=True)
+def _no_growth_rule_off(monkeypatch):
+    """These examples predate the no-growth rule (#37) and check the ratio math, the windows, the spike
+    guard and the outcomes on hand-computed curves. The rule is switched off here so each test keeps
+    checking what it says it checks; `TestNoGrowthRule` covers the rule itself."""
+    monkeypatch.setattr(interaction, "NO_GROWTH_ALPHA", 0.0)
+    monkeypatch.setattr(interaction, "NO_GROWTH_FACTOR", 0.0)
 
 A = "Faecalibacterium prausnitzii"
 B = "Blautia hydrogenotrophica"
@@ -329,3 +340,145 @@ def test_a_set_emptied_by_exclusions_is_not_read_as_no_growth():
     mono_a4 = [Replicate([_curve(A, (1, 1, 1, 1, 1), times=(0, 1, 2, 3, 4))], "a1")]
     b = interaction_strength(mono_a4, spiked, co4, A, B)["species_b"]
     assert b["outcome"] == "unusable" and b["mean"] is None
+
+
+# ---- the no-growth rule (#37, Karoline's register item 5) ----------------------------------------
+
+class TestNoGrowthRule:
+    """The rule itself, with the autouse switch-off lifted."""
+
+    @pytest.fixture(autouse=True)
+    def _rule_on(self, monkeypatch):
+        monkeypatch.setattr(interaction, "NO_GROWTH_ALPHA", 0.05)
+        monkeypatch.setattr(interaction, "NO_GROWTH_FACTOR", 1.5)
+
+    @staticmethod
+    def _set(species, series):
+        return [Replicate([_curve(species, values)], f"r{i}") for i, values in enumerate(series)]
+
+    def test_a_clearly_growing_set_has_grown(self):
+        # every replicate rises a hundredfold: the maxima are far above the starts
+        reps = self._set(A, [(1, 100), (1, 120), (1, 90)])
+        assert grew(reps, A, 10.0)["grew"]
+
+    def test_a_flat_set_has_not_grown_and_the_reason_says_why(self):
+        reps = self._set(A, [(1, 1), (1, 1.05), (1, 0.95)])
+        verdict = grew(reps, A, 10.0)
+        assert not verdict["grew"] and verdict["n"] == 3
+        assert "not significantly above" in verdict["reason"] and "1.5 times" in verdict["reason"]
+
+    def test_a_declining_set_has_not_grown(self):
+        # the maximum is the inoculum, as in the SMGDB00000013 monocultures
+        assert not grew(self._set(A, [(100, 1), (120, 2), (90, 1)]), A, 10.0)["grew"]
+
+    def test_a_rise_that_misses_significance_but_reaches_the_factor_counts_as_growth(self):
+        # rises log2(1/1) = 0 and log2(8/1) = 3: mean 1.5, at least log2(1.5) = 0.585 (geometric mean of the
+        # ratios sqrt(8) = 2.83, above 1.5). The paired test on 0, 3 has t = 1.5 / (2.12 / sqrt(2)) = 1 with
+        # df 1, p = 0.5. Without the factor, an ordinary comparison would be called obligate (#37)
+        reps = self._set(A, [(1, 1), (1, 8)])
+        verdict = grew(reps, A, 10.0)
+        assert verdict["grew"] and verdict["p"] == pytest.approx(0.5) and verdict["log2_rise"] == pytest.approx(1.5)
+
+    def test_each_replicate_peaks_at_its_own_time(self):
+        # replicate 1 peaks at 5 h, replicate 2 at 10 h (Karoline, on #68: the time of maximum abundance
+        # varies across replicates). Each rise is log2(8 / 1) = 3, so the differences do not vary and the
+        # test gives p = 0. At one shared time point the rises would be 3 and 1 at 5 h, or 1 and 3 at 10 h.
+        times = (0, 5, 10)
+        reps = [Replicate([_curve(A, (1, 8, 2), times)], "r1"), Replicate([_curve(A, (1, 2, 8), times)], "r2")]
+        verdict = grew(reps, A, 10.0, factor=0.0)                       # the test alone decides here
+        assert verdict["grew"] and verdict["log2_rise"] == pytest.approx(3.0) and verdict["p"] == 0.0
+
+    def test_pairing_removes_the_spread_between_inocula(self):
+        # inocula 1, 10, 100 each rise 1.5 times: every log2 rise is log2(1.5) = 0.585, so the paired test
+        # gives p = 0. Comparing the maxima (1.5, 15, 150) with the starts (1, 10, 100) as unrelated samples,
+        # Welch's test gives t = 18.5 / sqrt((6743.25 + 2997) / 3) = 0.325 with df 3.48, p = 0.76, because
+        # the inocula differ far more than each replicate rose.
+        reps = self._set(A, [(1, 1.5), (10, 15), (100, 150)])
+        verdict = grew(reps, A, 10.0, factor=0.0)
+        assert verdict["grew"] and verdict["p"] == 0.0
+        assert welch([1.5, 15, 150], [1, 10, 100])["p"] == pytest.approx(0.764, abs=0.005)
+
+    def test_one_replicate_cannot_carry_the_factor_for_the_set(self):
+        # ratios 1, 1, 3: their arithmetic mean is 1.67, but the geometric mean is 3 ** (1/3) = 1.44, below
+        # 1.5 (mean log2 rise 1.585 / 3 = 0.528 < 0.585). The paired test on 0, 0, 1.585 gives t = 1, p = 0.42.
+        verdict = grew(self._set(A, [(1, 1), (1, 1), (1, 3)]), A, 10.0)
+        assert not verdict["grew"] and verdict["log2_rise"] == pytest.approx(math.log2(3) / 3)
+        assert verdict["p"] == pytest.approx(1 - 1 / math.sqrt(3), abs=1e-3)
+
+    def test_the_default_factor_is_medium_and_a_user_can_make_it_stringent(self):
+        # the SMGDB00000013 shape (Comamonas in co-culture): ratios 1.35, 2.50, 2.25, geometric mean
+        # 7.594 ** (1/3) = 1.97, which the paired test cannot resolve at three replicates. It has grown at the
+        # default 1.5 and not at a factor of 2 (Karoline chose 1.5 on #68 so that this edge stays quantified)
+        reps = self._set(A, [(1, 1.35), (1, 2.5), (1, 2.25)])
+        default = grew(reps, A, 10.0)
+        assert default["grew"] and default["p"] > 0.05
+        assert 2 ** default["log2_rise"] == pytest.approx(1.966, abs=1e-3)
+        assert not grew(reps, A, 10.0, factor=2.0)["grew"]
+
+    def test_factor_zero_leaves_the_test_alone(self):
+        # the rise of 0 and 3 from before, which only the factor called growth
+        assert not grew(self._set(A, [(1, 1), (1, 8)]), A, 10.0, factor=0.0)["grew"]
+
+    def test_a_start_without_a_ratio_is_left_out_of_the_rule(self):
+        # a start of 0 has no log2 rise, so the rule cannot run on these replicates and the set falls back
+        # to its growth property, as before the rule existed
+        verdict = grew(self._set(A, [(0, 5), (0, 6)]), A, 10.0)
+        assert verdict["grew"] and verdict["n"] == 0
+
+    def test_one_replicate_cannot_establish_an_absence_of_growth(self):
+        # the test needs two per side, so the rule falls back to the values themselves
+        assert grew(self._set(A, [(1, 5)]), A, 10.0)["grew"]
+        assert not grew(self._set(A, [(5, 5)]), A, 10.0)["grew"]
+
+    def test_alpha_zero_switches_the_rule_off(self):
+        assert grew(self._set(A, [(1, 1), (1, 1)]), A, 10.0, alpha=0.0)["grew"]
+
+    def test_a_species_growing_only_in_co_culture_is_obligate(self):
+        mono = self._set(B, [(1, 1), (1, 1.02), (1, 0.98)])       # flat alone
+        mono_a = self._set(A, [(1, 40), (1, 45), (1, 50)])
+        co = [Replicate([_curve(A, (1, 40)), _curve(B, (1, 60))], "c1"),
+              Replicate([_curve(A, (1, 45)), _curve(B, (1, 70))], "c2"),
+              Replicate([_curve(A, (1, 50)), _curve(B, (1, 65))], "c3")]
+        side = interaction_strength(mono_a, mono, co, A, B)["species_b"]
+        assert side["outcome"] == "obligate" and side["mean"] is None
+        assert (side["n_co"], side["n_mono"]) == (3, 3)           # the flat replicates are counted
+
+    def test_a_set_that_only_drifts_never_reaches_a_ratio(self):
+        flat = self._set(A, [(1, 1), (1, 1.01), (1, 0.99)])
+        r = interaction_strength(flat, self._set(B, [(1, 1), (1, 1.01), (1, 0.99)]),
+                                 [Replicate([_curve(A, (1, 1)), _curve(B, (1, 1))], "c1"),
+                                  Replicate([_curve(A, (1, 1.01)), _curve(B, (1, 0.99))], "c2"),
+                                  Replicate([_curve(A, (1, 0.99)), _curve(B, (1, 1.01))], "c3")], A, B)
+        assert r["species_a"]["outcome"] == "no_growth" and r["species_b"]["outcome"] == "no_growth"
+        assert any("not significantly above" in reason for _, reason in r["skipped"])
+
+
+def test_the_rule_as_it_ran_is_recorded():
+    meta = rule_meta(0.01, 4.0)
+    assert (meta["alpha"], meta["factor"], meta["applied"]) == (0.01, 4.0, True)
+    assert "paired" in meta["test"] and "its own time" in meta["test"]
+    assert rule_meta(0.0, 2.0)["applied"] is False
+
+
+def _measured(species, values, technique):
+    return GrowthCurve(species, (0, 10), values, "h", "Cells/mL", technique)
+
+
+def test_a_monoculture_is_compared_only_with_a_co_culture_measured_the_same_way():
+    # Karoline, 2026-09-27: flow cytometry alone against qPCR in co-culture, both in Cells/mL, is not
+    # compared: an effect could be the change of technique rather than the partner
+    mono_a = [Replicate([_measured(A, (1, 1.4), "fc")], f"a{i}") for i in range(2)]
+    mono_b = [Replicate([_measured(B, (1, 1.4), "qpcr")], f"b{i}") for i in range(2)]
+    co = [Replicate([_measured(A, (1, 3), "qpcr"), _measured(B, (1, 1.4), "qpcr")], f"c{i}") for i in range(2)]
+    with pytest.raises(ValueError, match="measured by different techniques") as e:
+        interaction_strength(mono_a, mono_b, co, A, B)
+    assert "fc: " in str(e.value) and "qpcr: " in str(e.value) and A in str(e.value)
+
+
+def test_different_species_may_be_measured_by_different_techniques():
+    # A by qPCR on both sides, B by plating on both sides: each species is compared with itself
+    mono_a = [Replicate([_measured(A, (1, 1.4), "qpcr")], f"a{i}") for i in range(2)]
+    mono_b = [Replicate([_measured(B, (1, 1.4), "plates")], f"b{i}") for i in range(2)]
+    co = [Replicate([_measured(A, (1, 3), "qpcr"), _measured(B, (1, 1.4), "plates")], f"c{i}") for i in range(2)]
+    r = interaction_strength(mono_a, mono_b, co, A, B)
+    assert r["species_a"]["outcome"] == "quantified"

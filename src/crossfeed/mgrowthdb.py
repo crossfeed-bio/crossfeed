@@ -17,10 +17,13 @@ committed to the repository.
 from __future__ import annotations
 
 import csv
+import datetime
 import hashlib
+import http.client
 import io
 import json
 import os
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -28,6 +31,7 @@ import urllib.request
 from collections.abc import Iterable
 
 from . import __version__
+from .brand import NAME
 from .model import Edge, InteractionNetwork, Node, Study
 
 MGROWTHDB_API = "https://mgrowthdb.gbiomed.kuleuven.be/api/v1"
@@ -36,6 +40,18 @@ API_DOCS = "https://mgrowthdb.readthedocs.io/en/latest/api.html"
 
 class MGrowthDBError(RuntimeError):
     """A failed mGrowthDB request: a bad id, a network error, or the API being unreachable."""
+
+
+class _Status(Exception):
+    """An HTTP error status from mGrowthDB, raised by `_send` for the retry logic to judge."""
+
+    def __init__(self, code: int, reason: str = ""):
+        super().__init__(f"{code} {reason}".strip())
+        self.code = code
+
+
+# what a dropped or refused connection raises below urllib: retried like a network error
+_NETWORK = (OSError, http.client.HTTPException)
 
 
 class MGrowthDBClient:
@@ -58,6 +74,11 @@ class MGrowthDBClient:
         self.backoff = max(0.0, float(backoff))
         self._mem = {} if cache else None
         self.cache_dir = cache_dir
+        # one kept-open connection per thread: a new HTTPS connection per request cost about 120 ms against
+        # 55 ms on an open one, and the parallel prefetch (crossfeed.fetch) gives each worker its own
+        self._local = threading.local()
+        parsed = urllib.parse.urlsplit(self.base_url)
+        self._scheme, self._host, self._prefix = parsed.scheme, parsed.netloc, parsed.path
         if cache_dir:
             os.makedirs(cache_dir, exist_ok=True)
 
@@ -91,24 +112,63 @@ class MGrowthDBClient:
             except OSError:
                 pass
 
+    def _connection(self, fresh: bool = False):
+        conn = getattr(self._local, "conn", None)
+        if fresh or conn is None:
+            if conn is not None:
+                conn.close()
+            kind = http.client.HTTPSConnection if self._scheme == "https" else http.client.HTTPConnection
+            conn = self._local.conn = kind(self._host, timeout=self.timeout)
+        return conn
+
+    def _send(self, url: str, accept: str) -> bytes:
+        """One request over this thread's open connection, reopened once if the server dropped it."""
+        path = url[len(f"{self._scheme}://{self._host}"):] if url.startswith(f"{self._scheme}://") else url
+        headers = {"Accept": accept, "User-Agent": f"crossfeed/{__version__}", "Connection": "keep-alive"}
+        for attempt in (0, 1):
+            conn = self._connection(fresh=attempt == 1)
+            try:
+                conn.request("GET", path, headers=headers)
+                response = conn.getresponse()
+                body = response.read()
+            except _NETWORK:
+                if attempt == 1:
+                    raise
+                continue                          # a kept-open connection the server had closed: reopen
+            if response.status >= 400:
+                raise _Status(response.status, response.reason)
+            return body
+        raise OSError("unreachable")               # not reached
+
+    def _request(self, url: str, accept: str) -> bytes:
+        """`_send` with the retry rule: a 4xx is a real error (a bad id) and is not retried; a 5xx or a
+        network failure may be transient and is retried with a growing pause. JSON and CSV alike."""
+        last = None
+        for attempt in range(self.retries):
+            try:
+                return self._send(url, accept)
+            except _Status as e:
+                if e.code < 500:
+                    raise MGrowthDBError(
+                        f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})"
+                    ) from None
+                last = MGrowthDBError(f"mGrowthDB returned HTTP {e.code} for {url} (server error)")
+            except _NETWORK as e:
+                last = MGrowthDBError(
+                    f"could not reach mGrowthDB at {url}: {getattr(e, 'reason', e) or type(e).__name__} "
+                    "(check your network; the API may be temporarily down)"
+                )
+            if attempt < self.retries - 1:
+                time.sleep(self.backoff * (attempt + 1))
+        raise last
+
     def _get_text(self, path: str) -> str:
         """Fetch a non-JSON representation (the CSV of a measurement context), cached like the rest."""
         url = f"{self.base_url}/{path.lstrip('/')}"
         cached = self._cache_get(url)
         if cached is not None:
             return cached
-        req = urllib.request.Request(
-            url, headers={"Accept": "text/csv", "User-Agent": f"crossfeed/{__version__}"}
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                text = r.read().decode("utf-8")
-        except urllib.error.HTTPError as e:
-            raise MGrowthDBError(
-                f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})"
-            ) from e
-        except urllib.error.URLError as e:
-            raise MGrowthDBError(f"could not reach mGrowthDB at {url}: {e.reason}") from e
+        text = self._request(url, "text/csv").decode("utf-8")
         self._cache_put(url, text)
         return text
 
@@ -118,36 +178,12 @@ class MGrowthDBClient:
             clean = {k: v for k, v in params.items() if v is not None}
             if clean:
                 url += "?" + urllib.parse.urlencode(clean, doseq=True)
-
         cached = self._cache_get(url)
         if cached is not None:
             return cached
-
-        req = urllib.request.Request(
-            url, headers={"Accept": "application/json", "User-Agent": f"crossfeed/{__version__}"}
-        )
-        last = None
-        for attempt in range(self.retries):
-            try:
-                with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                    data = json.load(r)
-                self._cache_put(url, data)
-                return data
-            except urllib.error.HTTPError as e:
-                # 4xx are real errors (a bad id): do not retry. 5xx may be transient: retry.
-                if e.code < 500:
-                    raise MGrowthDBError(
-                        f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})"
-                    ) from e
-                last = MGrowthDBError(f"mGrowthDB returned HTTP {e.code} for {url} (server error)")
-            except urllib.error.URLError as e:
-                last = MGrowthDBError(
-                    f"could not reach mGrowthDB at {url}: {e.reason} "
-                    "(check your network; the API may be temporarily down)"
-                )
-            if attempt < self.retries - 1:
-                time.sleep(self.backoff * (attempt + 1))
-        raise last
+        data = json.loads(self._request(url, "application/json").decode("utf-8"))
+        self._cache_put(url, data)
+        return data
 
     def get_study(self, study_id: str) -> dict:
         """Study metadata: id, name, projectId, description, publishedAt, experiments[{id, name}]."""
@@ -208,6 +244,35 @@ def effect_from_logratio(strength, significance, alpha: float = 0.05) -> str:
     return "facilitation" if strength > 0 else "inhibition"
 
 
+def provenance(today: datetime.date | None = None, now: datetime.datetime | None = None) -> dict:
+    """What made a network and when: the tool, its version, and the derivation date and time (local, with
+    its offset). mGrowthDB changes over time, so the same version can derive a different network later;
+    the time says which data it saw."""
+    now = now or datetime.datetime.now().astimezone()
+    return {"tool": NAME, "tool_version": __version__,
+            "derived_on": (today or now.date()).isoformat(),
+            "derived_at": now.isoformat(timespec="seconds")}
+
+
+# mGrowthDB publishes no version of the database as a whole (its API has no version endpoint), so the
+# version of the data behind a network is when it was read plus each study's own upload and publication
+# dates, which change when a study is corrected.
+NO_DATABASE_VERSION = "mGrowthDB publishes no database version; each study's upload and publication dates are given"
+
+
+def data_versions(client, study_ids, retrieved_at: str) -> dict:
+    """The data a search read: the API, when, and for each study its uploadedAt and publishedAt."""
+    studies = {}
+    for sid in study_ids:
+        try:
+            study = client.get_study(sid)          # cached by the client, so no second request
+        except MGrowthDBError:
+            continue
+        studies[sid] = {"uploaded_at": study.get("uploadedAt", ""), "published_at": study.get("publishedAt", "")}
+    return {"api": MGROWTHDB_API, "retrieved_at": retrieved_at, "database_version": NO_DATABASE_VERSION,
+            "studies": studies}
+
+
 def records_to_network(records: Iterable[dict], meta: dict | None = None) -> InteractionNetwork:
     """Map interaction records into the neutral network. Real and testable.
 
@@ -215,27 +280,33 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
       {source, target, source_name?, target_name?, source_taxon_id?, source_species?, source_identity?
        (and the same for target), strength, significance, condition, method?, effect?,
        evidence?, community?, p_value?, weight?, effect_over_sd?, status?, sd?, se?, n_with?,
-       n_without?, outcome?, metric?, quality?, notes?, cautions?, experiments?,
-       study_id, study_citation?, study_license?, study_url?}
+       n_without?, outcome?, metric?, quality?, notes?, cautions?, experiments?, cultivation_mode?,
+       merged_arcs?, strength_range?, study_id, study_citation?, study_license?, study_url?,
+       studies? (a merged arc: [{id, citation, license, url}], one per study it rests on)}
+
+    `meta` starts from `provenance()` (tool, version, derivation date); keys given in `meta` win.
     """
-    net = InteractionNetwork(meta=dict(meta or {}))
+    net = InteractionNetwork(meta={**provenance(), **(meta or {})})
     for r in records:
         for side in ("source", "target"):
             nid = r[side]
             if nid not in net.nodes:
                 net.add_node(Node(id=nid, name=r.get(f"{side}_name", ""), taxon_id=r.get(f"{side}_taxon_id", ""),
                                   species=r.get(f"{side}_species", ""), identity=r.get(f"{side}_identity", "")))
-        sid = r["study_id"]
-        if sid not in net.studies:
-            net.add_study(Study(
-                id=sid, citation=r.get("study_citation", ""),
-                license=r.get("study_license", ""), url=r.get("study_url", ""),
-            ))
+        # a merged arc (register item 14) rests on several studies and lists them; any other on one
+        studies = r.get("studies") or [{"id": r["study_id"], "citation": r.get("study_citation", ""),
+                                        "license": r.get("study_license", ""), "url": r.get("study_url", "")}]
+        for st in studies:
+            if st["id"] not in net.studies:
+                net.add_study(Study(id=st["id"], citation=st.get("citation", ""),
+                                    license=st.get("license", ""), url=st.get("url", "")))
+        sid = r.get("study_id", studies[0]["id"])
         effect = r.get("effect") or effect_from_logratio(r.get("strength"), r.get("significance"))
         net.add_edge(Edge(
             source=r["source"], target=r["target"], effect=effect,
             strength=r.get("strength"), significance=r.get("significance"),
-            condition=r.get("condition", ""), method=r.get("method", ""), study_ids=(sid,),
+            condition=r.get("condition", ""), method=r.get("method", ""),
+            study_ids=tuple(st["id"] for st in studies) if r.get("studies") else (sid,),
             evidence=r.get("evidence"), community=tuple(r.get("community", ())),
             p_value=r.get("p_value"), weight=r.get("weight"), effect_over_sd=r.get("effect_over_sd"),
             status=r.get("status"), sd=r.get("sd"), se=r.get("se"),
@@ -244,5 +315,6 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             quality=tuple(r.get("quality", ())), notes=tuple(r.get("notes", ())),
             cautions=tuple(r.get("cautions", ())), experiments=tuple(r.get("experiments", ())),
             cultivation_mode=r.get("cultivation_mode", ""),
+            merged_arcs=r.get("merged_arcs"), strength_range=tuple(r.get("strength_range", ())),
         ))
     return net

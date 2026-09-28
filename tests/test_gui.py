@@ -9,9 +9,16 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from crossfeed import gui
+from crossfeed import gui, interaction
 from crossfeed.gui import DEFAULTS, parse_settings, render_form, render_result, run_query, serve
 from crossfeed.mgrowthdb import MGrowthDBError
+
+
+@pytest.fixture(autouse=True)
+def _no_growth_rule_off(monkeypatch):
+    """The fake study here predates the no-growth rule (#37): its curves check the page, not the rule."""
+    monkeypatch.setattr(interaction, "NO_GROWTH_ALPHA", 0.0)
+    monkeypatch.setattr(interaction, "NO_GROWTH_FACTOR", 0.0)
 
 A = "Faecalibacterium prausnitzii A2-165"
 B = "Blautia hydrogenotrophica DSM 10507"
@@ -56,6 +63,7 @@ class FakeClient:
         if study_id != self.study_id:
             raise MGrowthDBError(f"mGrowthDB returned HTTP 404 for {study_id}")
         return {"id": study_id, "name": "fake study", "url": "http://example/study",
+                "uploadedAt": "2025-06-26T13:03:03+00:00", "publishedAt": "2025-06-29T10:25:52+00:00",
                 "experiments": [{"id": e["id"]} for e in EXPERIMENTS]}
 
     def get_experiment(self, experiment_id):
@@ -108,7 +116,8 @@ def test_unknown_species_is_reported_without_results():
     assert r["unresolved"] == ["Escherichia coli"]
     assert r["studies"] == [] and r["network"].edges == []
     page = render_result("tok", r)
-    assert "Not in mGrowthDB" in page and "No interactions" in page
+    assert "Not used:" in page and "no species or strain of this name in mGrowthDB" in page
+    assert "No interactions" in page
 
 
 def test_absent_edges_are_kept_and_shown_apart():
@@ -140,6 +149,8 @@ def test_form_hides_every_setting_behind_one_button():
     head, _, tail = page.partition("<details>")
     assert "<select" not in head and "<input name=" not in head    # nothing but the species box is visible
     assert 'name="metric"' in tail and 'name="spike_factor"' in tail
+    # the no-growth rule's two numbers are advanced settings, shown with the rule's own defaults (#37)
+    assert 'name="no_growth_alpha"' in tail and 'name="no_growth_factor"' in tail
     assert 'name="include_low_quality"' in tail and 'name="include_neutral"' not in page
     # drop-out communities are included by default, so the box starts ticked (#47)
     assert 'name="include_dropout" value="1" checked' in tail
@@ -148,10 +159,15 @@ def test_form_hides_every_setting_behind_one_button():
 @pytest.mark.parametrize("form, expected", [
     # an unticked checkbox is simply absent from a post
     ({}, {**DEFAULTS, "only_entered": False, "include_dropout": False}),
-    ({"metric": ["max"], "spike_factor": ["50"], "studies": [" S1 "], "only_entered": ["1"],
-      "include_low_quality": ["1"], "include_dropout": ["1"]},
-     {"metric": "max", "spike_factor": 50.0, "studies": "S1", "only_entered": True, "include_low_quality": True,
-      "correction": "bh", "absence_threshold": 1.0, "include_dropout": True, "include_non_batch": False}),
+    ({"metric": ["growth_rate"], "rate_method": ["baranyi"], "rate_window": ["7"], "spike_factor": ["50"],
+      "studies": [" S1 "], "only_entered": ["1"],
+      "include_low_quality": ["1"], "include_dropout": ["1"], "no_growth_alpha": ["0.01"],
+      "no_growth_factor": ["4"], "exclude_studies": [" SMGDB00000008 "], "merge_arcs": ["1"], "min_studies": ["2"]},
+     {"metric": "growth_rate", "rate_method": "baranyi", "rate_window": 7, "spike_factor": 50.0, "studies": "S1",
+      "only_entered": True, "include_low_quality": True,
+      "correction": "bh", "absence_threshold": 1.0, "include_dropout": True, "include_non_batch": False,
+      "no_growth_alpha": 0.01, "no_growth_factor": 4.0, "exclude_studies": "SMGDB00000008", "merge_arcs": True,
+      "min_studies": 2}),
     ({"metric": ["nonsense"], "spike_factor": ["not a number"]},
      {**DEFAULTS, "only_entered": False, "include_dropout": False}),
 ])
@@ -162,7 +178,8 @@ def test_settings_fall_back_to_defaults(form, expected):
 def test_result_page_lists_arcs_and_download_links():
     page = render_result("tok", _query())
     assert "<table>" in page and "Faecalibacterium prausnitzii" in page
-    assert "/download.json?token=tok" in page and "/download.graphml?token=tok" in page
+    # one download button with a format menu (#76)
+    assert 'action="/download"' in page and '<option value="json">' in page and '<option value="graphml">' in page
 
 
 def test_result_page_cites_every_study_with_its_license():
@@ -284,7 +301,7 @@ def test_the_help_button_opens_a_help_page_behind_the_token(server):
     base, token = server
     assert f'href="/help?token={token}"' in _get(f"{base}/?token={token}")
     page = _get(f"{base}/help?token={token}")
-    assert "<h1>Help</h1>" in page and "Advanced settings" in page
+    assert '<h2 class="page">Help ' in page and "Advanced settings" in page
     assert f'href="/legend?token={token}"' in page                   # the legend is reachable from help
     for name in gui.EXAMPLE:
         assert name in page
@@ -303,3 +320,106 @@ def test_a_species_entered_under_its_new_name_still_matches_the_study_that_uses_
                   {"only_entered": True}, index=index)
     assert r["taxon_ids"] == [853, 53443]
     assert len(r["network"].edges) == 2          # the study names the strain prausnitzii, the ids agree
+
+
+def test_the_send_to_cytoscape_button_uses_the_network_already_computed(server, monkeypatch):
+    base, token = server
+    data = urllib.parse.urlencode({"species": "Faecalibacterium prausnitzii\nBlautia hydrogenotrophica",
+                                   "only_entered": "1"}).encode()
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
+        assert "Send to Cytoscape" in r.read().decode("utf-8")
+
+    sent = {}
+
+    def fake_send(net, **kwargs):
+        sent["edges"] = len(net.edges)
+        return {"suid": 7, "style": "crossfeed", "url": "http://127.0.0.1:1234/v1/networks/7"}
+
+    monkeypatch.setattr(gui, "send", fake_send)
+    with urllib.request.urlopen(f"{base}/cytoscape?token={token}", data=b"", timeout=10) as r:
+        page = r.read().decode("utf-8")
+    assert "Sent to Cytoscape: network 7" in page and sent["edges"] == 2   # not recomputed, the same net
+
+
+def test_cytoscape_not_running_is_explained_on_the_page(server, monkeypatch):
+    base, token = server
+    data = urllib.parse.urlencode({"species": "Faecalibacterium prausnitzii", "only_entered": ""}).encode()
+    urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10).read()
+
+    def refuse(net, **kwargs):
+        raise gui.CytoscapeError("could not reach Cytoscape on port 1234 (Connection refused). Start it")
+
+    monkeypatch.setattr(gui, "send", refuse)
+    with urllib.request.urlopen(f"{base}/cytoscape?token={token}", data=b"", timeout=10) as r:
+        page = r.read().decode("utf-8")
+    assert "could not reach Cytoscape on port 1234" in page and "Traceback" not in page
+
+
+def test_the_page_carries_the_mark_and_a_favicon(server):
+    base, token = server
+    page = _get(f"{base}/?token={token}")
+    assert 'rel="icon" href="data:image/svg+xml;utf8,' in page      # no extra request, no packaged file
+    assert page.count("<svg") >= 1 and "aria-label=\"grownet\"" in page
+
+
+def test_the_species_list_is_built_once_per_session(server, monkeypatch):
+    # building the index reads every study in mGrowthDB (about 40 s live); a second search reuses it
+    calls = []
+    original = gui.species_index
+    monkeypatch.setattr(gui, "species_index", lambda client, **kw: calls.append(1) or original(client, **kw))
+    base, token = server
+    for _ in range(2):
+        data = urllib.parse.urlencode({"species": f"{A}\n{B}", "only_entered": "1"}).encode()
+        with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
+            assert "interaction(s)" in r.read().decode("utf-8")
+    assert len(calls) == 1
+
+
+def test_an_empty_result_names_the_step_that_found_nothing():
+    # a name mGrowthDB does not hold: the page says so, instead of the explanation about study designs
+    unknown = render_result("tok", _query(entries=("Escherichia coli",)))
+    assert "None of the entries could be used" in unknown and "drop-out designs" not in unknown
+    assert "Download network" not in unknown and "Send to Cytoscape" not in unknown   # nothing to send
+    assert ">Report</summary>" in unknown and "#empty" in unknown                     # but the why is there
+    r = _query()
+    r["studies"], r["network"].edges = [], []
+    assert "no study grows them" in render_result("tok", r)
+
+
+def test_an_excluded_study_is_never_searched():
+    # the fake search finds SMGDB00000001; excluding it leaves nothing to derive, found or named
+    assert _query()["studies"] == ["SMGDB00000001"]
+    assert _query(exclude_studies="smgdb00000001")["studies"] == []
+    named = _query(studies="SMGDB00000001", exclude_studies="SMGDB00000001, SMGDB00000009")
+    assert named["studies"] == [] and named["network"].edges == []
+    assert 'name="exclude_studies"' in render_form("tok") and 'value=""' in render_form("tok")
+
+
+def test_the_settings_say_what_is_absent_and_what_the_replicates_are():
+    # Karoline, 2026-09-27: "absence of what?", and "a set" was not explained
+    page = render_form("tok")
+    assert "an interaction counts as absent (the species do not affect each other)" in page
+    assert "the replicate\n  growth curves of that species in one culture condition" in page
+    assert "a set " not in page
+
+
+def test_an_empty_result_caused_by_a_setting_names_the_setting():
+    excluded = render_result("tok", _query(exclude_studies="SMGDB00000001"))
+    assert "The only studies holding these species are in Exclude these studies (SMGDB00000001)" in excluded
+    partners = render_result("tok", _query(entries=("Faecalibacterium prausnitzii",)))
+    assert "involves a species you did not enter" in partners and "untick Only interactions" in partners
+    typo = render_result("tok", _query(entries=("Blautia hydrogenotrophca",)))
+    assert "Did you mean: Blautia hydrogenotrophica?" in typo
+
+
+def test_a_strain_is_named_by_its_current_name():
+    # taxon 853 is "Faecalibacterium prausnitzii A2-165" in the fake study; a later study calls it duncaniae,
+    # so the node and the resolved list use that name, while the old name still finds it (#24)
+    from crossfeed.taxonomy import SpeciesIndex
+    index = SpeciesIndex({"faecalibacterium prausnitzii": {853: A}, "blautia hydrogenotrophica": {53443: B}},
+                         current={853: "Faecalibacterium duncaniae A2-165"})
+    r = run_query(FakeClient(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"], {}, index=index)
+    node = r["network"].nodes["ncbi:853"]
+    assert (node.name, node.species) == ("Faecalibacterium duncaniae A2-165", "faecalibacterium duncaniae")
+    assert r["resolved"][0] == ("Faecalibacterium prausnitzii", {853: "Faecalibacterium duncaniae A2-165"})
+    assert len(r["network"].edges) == 2

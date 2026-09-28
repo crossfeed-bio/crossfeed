@@ -122,7 +122,7 @@ def test_the_bh14_shape_is_flagged_with_its_time_points():
 
 
 def test_a_decline_after_a_peak_is_not_a_spike():
-    # rises tenfold, then falls tenfold: no point jumps above both of its neighbours
+    # rises tenfold, then falls tenfold: no point jumps above both of its neighbors
     assert spike(_series((1e7, 1e8, 1e9, 1e9, 5e8, 2e8, 1e8))) is None
 
 
@@ -136,7 +136,7 @@ def test_factor_zero_switches_the_check_off():
 
 def test_a_jump_from_zero_is_left_to_the_no_growth_rule():
     assert spike(_series((0.0, 0.0, 0.0, 5.0))) is None
-    assert spike(_series((0.0, 5.0, 0.0, 0.0))) is None         # a zero neighbour gives no scale
+    assert spike(_series((0.0, 5.0, 0.0, 0.0))) is None         # a zero neighbor gives no scale
 
 
 # SMGDB00000013 (CFU/mL over 288 h), which the earlier max/median statistic flagged (Karoline, on #62)
@@ -150,7 +150,7 @@ def test_a_die_off_and_late_growth_are_not_spikes():
 
 
 def test_a_single_point_spike_and_the_largest_run_are_reported():
-    # 1e11 against neighbours 1e6 and 2e6: ratio 1e11 / 2e6 = 5e4
+    # 1e11 against neighbors 1e6 and 2e6: ratio 1e11 / 2e6 = 5e4
     found = spike(_series((1e6, 1e11, 2e6, 4e6, 8e6)))
     assert found["times"] == [1] and found["ratio"] == pytest.approx(5e4)
     # a jump of 50 is below the default factor of 100 and above a factor of 10

@@ -4,7 +4,8 @@ crossfeed is built under a collaboration governance agreement between Syntropa a
 
 ## Sources
 
-mGrowthDB is open. crossfeed pulls co-growth interaction data from mGrowthDB through its public API.
+mGrowthDB is open. crossfeed reads growth curves (monocultures, co-cultures and communities) from mGrowthDB
+through its public API and derives the interactions itself; mGrowthDB holds no interactions.
 See https://mgrowthdb.readthedocs.io/en/latest/api.html .
 
 ## Attribution at the edge level
@@ -15,7 +16,7 @@ licenses. This is preferred over bundling because it keeps the per-study terms c
 exactly which measurements stand behind each edge. Adopted with K. Faust, 2026-09-14.
 
 The per-study license is not currently exposed by the mGrowthDB study endpoint, so edges carry the study
-id and url with the license marked unresolved rather than guessed. Resolving where each study's license is
+id and url with the license left empty rather than guessed (the local page shows "license: see study"). Resolving where each study's license is
 published, and wiring it into the `study_license` field, is a pending item to confirm with the mGrowthDB
 side.
 

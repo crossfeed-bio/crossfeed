@@ -69,7 +69,7 @@ def _alternatives_note(client, bioreplicate: dict, species: str, own_id, single_
             parts.append(f"{technique} not comparable")
             continue
         found = spike(other, spike_factor)
-        parts.append(f"{technique} also spiked ({found['ratio']:.0f} times its neighbours)" if found
+        parts.append(f"{technique} also spiked ({found['ratio']:.0f} times its neighbors)" if found
                      else f"{technique} clean")
     if parts:
         return "other measurements of this strain in this replicate, not substituted: " + ", ".join(parts)
@@ -128,7 +128,8 @@ def replicates_for_experiment(client, experiment: dict, spike_factor: float = SP
             times = [t for t, _, _ in points]
             values = [v for _, v, _ in points]
             try:
-                curve = GrowthCurve(species, times, values, time_unit, _abundance_unit(context))
+                curve = GrowthCurve(species, times, values, time_unit, _abundance_unit(context),
+                                    context.get("techniqueType") or "")
             except ValueError as e:
                 skipped.append((f"{label}: {name}, {species}", str(e)))
                 continue

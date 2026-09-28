@@ -26,7 +26,7 @@ OUTCOMES = ("quantified", "obligate", "abolished", "no_growth")
 # why an edge is low quality: hidden by default and never read as the absence of an interaction
 QUALITY_FLAGS = ("single_replicate", "strains_pooled", "non_batch", "removed_member_detected")
 # cautions a reader should see that do not make an edge low quality: it keeps its status and is shown
-CAUTIONS = ("two_replicates",)
+CAUTIONS = ("two_replicates", "conditions_unverified")
 # what a node's id rests on: the NCBI taxon id of the strain, or genus and species of its name (#23)
 IDENTITIES = ("ncbi", "name")
 # whether a comparison counts as an interaction under the absence threshold (crossfeed.derive.absence)
@@ -85,6 +85,8 @@ class Edge:
     cautions: tuple = ()          # CAUTIONS: shown to the reader, without making the edge low quality
     experiments: tuple = ()       # ids of the experiments whose replicates the edge compares (its origin)
     cultivation_mode: str = ""    # batch, chemostat, and so on, as mGrowthDB records it
+    merged_arcs: int | None = None  # arcs merged into this one (register item 14), None when not merged
+    strength_range: tuple = ()    # (lowest, highest) log2 mean of the merged arcs
 
     def validate(self) -> list:
         problems = []
@@ -170,5 +172,6 @@ class InteractionNetwork:
             e["notes"] = tuple(e.get("notes", ()))
             e["cautions"] = tuple(e.get("cautions", ()))
             e["experiments"] = tuple(e.get("experiments", ()))
+            e["strength_range"] = tuple(e.get("strength_range", ()))
             net.add_edge(Edge(**e))
         return net

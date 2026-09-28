@@ -26,6 +26,7 @@ class GrowthCurve:
     values: tuple                 # abundance at each time point, specific to `species`
     time_unit: str                # e.g. "h"
     abundance_unit: str           # e.g. "OD600", "CFU/mL", "16S copies/mL"
+    technique: str = ""           # how the species was measured (mGrowthDB techniqueType: qpcr, 16s, fc, ...)
 
     def __post_init__(self):
         object.__setattr__(self, "times", tuple(float(t) for t in self.times))
@@ -87,6 +88,19 @@ def check_sets(sets) -> None:
                                  f"expected {list(expected)}")
             curves.extend((f"{_label(rep, role, i)}, {c.species}", c) for c in rep.curves)
 
+    # one species, one technique: a monoculture is compared with a co-culture (or a full community with a
+    # drop-out) only when both measured the species the same, species-identifying way, even when another
+    # technique gives the same unit, since otherwise an effect may be the change of technique (Karoline,
+    # 2026-09-27). Different species may be measured differently.
+    by_species = {}
+    for label, c in curves:
+        by_species.setdefault(c.species, {}).setdefault(c.technique, []).append(label)
+    for species, techniques in sorted(by_species.items()):
+        if len(techniques) > 1:
+            detail = "; ".join(f"{t or 'unrecorded'}: {', '.join(labels)}" for t, labels in sorted(techniques.items()))
+            raise ValueError(f"{species} is measured by different techniques in the sets compared ({detail}); "
+                             "they are compared only when both use the same technique")
+
     for attr, what in (("time_unit", "time units"), ("abundance_unit", "abundance units")):
         units = {getattr(c, attr) for _, c in curves}
         if len(units) > 1:
@@ -127,7 +141,7 @@ def shared_window(curves) -> tuple:
     return start, min(c.times[-1] for c in curves)
 
 
-def _cut(curve: GrowthCurve, end: float | None) -> tuple:
+def cut(curve: GrowthCurve, end: float | None) -> tuple:
     """The curve's points up to `end`, with a linearly interpolated point at `end` when it falls between
     two measurements."""
     times, values = curve.times, curve.values
@@ -158,7 +172,7 @@ FEATURES = {
 def curve_features(curve: GrowthCurve, end: float | None = None) -> dict:
     """Basic features of one growth curve, up to `end` (the whole curve by default): each name in FEATURES
     ("auc" in time unit times abundance unit, "max" in abundance unit) mapped to its value."""
-    times, values = _cut(curve, end)
+    times, values = cut(curve, end)
     return {name: fn(times, values) for name, fn in FEATURES.items()}
 
 
@@ -172,23 +186,23 @@ def spike(curve: GrowthCurve, factor: float = SPIKE_FACTOR) -> dict | None:
     """An implausible spike in a curve, or None.
 
     A spike is a run of one or two consecutive interior points that all exceed both of the run's
-    neighbours, the point before and the point after, by more than `factor`. In mGrowthDB study
-    SMGDB00000004 the BH_14 qPCR trace has two consecutive points of 5.264e13 cells/mL between neighbours of
+    neighbors, the point before and the point after, by more than `factor`. In mGrowthDB study
+    SMGDB00000004 the BH_14 qPCR trace has two consecutive points of 5.264e13 cells/mL between neighbors of
     1.06e8 and 4.8e8, a ratio near 1e5; healthy per-strain curves never jump like that from one point to
     the next and back.
 
-    The first and last points are never a spike, because they have a neighbour on one side only: a
+    The first and last points are never a spike, because they have a neighbor on one side only: a
     maximum at the start is the inoculum of a population that declines, and a maximum at the end is late
     growth. Both occur in SMGDB00000013, where CFU counts span eight orders of magnitude over 288 h, and
     the earlier statistic (the curve's maximum over its median) flagged them, which removed whole
     replicate sets and hid real growth (Karoline, on #62). A run of two covers a spike measured twice. A
-    neighbour that is zero or negative gives no scale to compare against, so that run is not flagged.
+    neighbor that is zero or negative gives no scale to compare against, so that run is not flagged.
 
     Perturbations (a pulse of substrate, a dilution) can explain a jump. mGrowthDB records them only for
     chemostats so far (SMGDB00000005), which are excluded from the default network (#42), so they are not
     considered here; a batch study with perturbations would need them taken into account.
 
-    Returns {"ratio": the smallest run value over the larger neighbour, "times": the run's time points}
+    Returns {"ratio": the smallest run value over the larger neighbor, "times": the run's time points}
     for the most extreme run when it exceeds `factor`; None when none does, or when `factor` is 0.
     """
     if not factor:
@@ -196,7 +210,7 @@ def spike(curve: GrowthCurve, factor: float = SPIKE_FACTOR) -> dict | None:
     values, found = curve.values, None
     for i in range(1, len(values) - 1):
         for length in range(1, SPIKE_RUN + 1):
-            j = i + length                       # the neighbour after the run
+            j = i + length                       # the neighbor after the run
             if j > len(values) - 1:
                 break
             reference = max(values[i - 1], values[j])

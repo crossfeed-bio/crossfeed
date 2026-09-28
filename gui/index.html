@@ -3,18 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>crossfeed network viewer</title>
+<title>grownet network viewer</title>
 <style>
   /* Self-contained: no external scripts, styles, or fonts, so this file opens offline by double-click and
      stays as portable as the neutral format it reads. It is the separate presentation layer; the Python
-     core stays dependency-free (see ../AGENTS.md). The GraphML it writes matches src/crossfeed/export.py
-     key for key, so a network exported here and one exported by the CLI are the same file. */
+     core stays dependency-free (see ../AGENTS.md). The GraphML it writes carries the keys and values of
+     src/crossfeed/export.py, so a network exported here and one exported by the CLI hold the same graph
+     (tests/test_legend.py runs both on one network). */
   :root{
     --bg:#f5f7f7; --panel:#ffffff; --ink:#16302f; --muted:#566a69; --line:#d7e0df;
     --teal:#2f6f6b; --teal-ink:#1c4744; --accent:#eef4f3;
     /* Okabe-Ito, safe across the common color-vision deficiencies. Sign is also carried by line style and
        arrowhead shape (see the legend), so color is never the only channel. */
-    --fac:#0072b2; --inh:#d55e00; --neu:#6b7a79; --warn:#9a6700;
+    --fac:#1A7F5A; --inh:#C2410C; --neu:#6b7a79; --warn:#9a6700;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
@@ -84,7 +85,7 @@
 <header>
   <div class="row1">
     <h1>crossfeed &middot; network viewer</h1>
-    <span class="tag">Read a crossfeed interaction network: focus by species, inspect the evidence behind each edge, download for Cytoscape or the pipeline.</span>
+    <span class="tag">Read a grownet interaction network: focus by species, inspect the evidence behind each edge, download for Cytoscape or the pipeline.</span>
   </div>
   <div id="srcbanner"></div>
 </header>
@@ -103,21 +104,15 @@
 <section id="adv">
   <div class="grid">
     <fieldset>
-      <legend>How interactions are computed</legend>
-      <div class="fld"><label>Growth metric</label><select id="s_metric"><option>growthRate (1/h)</option><option>AUC</option><option>maximum OD</option><option>lag / yield</option></select></div>
-      <div class="fld"><label>Per-strain signal in a community</label><select id="s_signal"><option>per-strain qPCR</option><option>deconvolution from OD</option><option>relative abundance (sequencing)</option></select></div>
-      <div class="fld"><label>Compare mono vs co</label><select id="s_compare"><option>log2(co / mono), deadband</option><option>difference / effect size</option></select></div>
-      <div class="fld"><label>Significance</label><select id="s_sig"><option>none (qualitative)</option><option>replicate test (Welch / MW)</option><option>effect size + FDR</option></select></div>
-      <div class="fld"><label>Minimum time points</label><input id="s_tp" type="number" min="2" value="2"></div>
-      <div class="status">Derivation settings. These describe how the CLI derives a network and record the agreed defaults (see METHOD_NOTES). They do not re-derive in the browser yet.</div>
-    </fieldset>
-    <fieldset>
-      <legend>Which cultures and taxa</legend>
-      <div class="fld"><label>Co-culture scope</label><select id="s_scope"><option>pairwise (two member) only</option><option>larger communities</option></select></div>
-      <div class="fld"><label>Taxonomic aggregation</label><select id="s_tax"><option>genus + species (baseline today)</option><option>strain</option><option>genus</option></select></div>
-      <div class="fld"><label>Drop-out (leave-one-out) communities</label><select id="s_drop"><option>exclude</option><option>include</option></select></div>
-      <div class="fld"><label>Chemostats &amp; serial dilutions</label><select id="s_chemo"><option>flag, keep separate</option><option>include with batch</option><option>exclude</option></select></div>
-      <div class="fld"><label>Environment / medium</label><select id="s_env" disabled><option>all conditions</option></select><div class="status">Restriction pending structured environment metadata in mGrowthDB.</div></div>
+      <legend>How a network is derived</legend>
+      <div class="status">This viewer reads a network that is already derived; it does not derive. The settings live
+      on the local page (<code>crossfeed gui</code>, Advanced settings) and on the command line
+      (<code>crossfeed derive --help</code>), with the same defaults, and every network records the ones it was
+      made with in <code>meta.settings</code>. By default: the area under the curve, compared as the mean log2
+      over replicate sets, after a no-growth check; strains keyed by NCBI taxon id; two-member co-cultures and
+      drop-out communities; the same species-identifying technique on both sides; batch cultures only; an
+      interaction absent when |log2 mean| is under one sd; Welch's t-test with Benjamini-Hochberg, reported
+      and never deciding. The reasons are in <code>docs/METHOD_NOTES.md</code>.</div>
     </fieldset>
     <fieldset>
       <legend>Filter this view (live)</legend>
@@ -130,7 +125,7 @@
         <div class="status">Off by default, as the pipeline and the Cytoscape style do. An absence is a measured result, not missing data.</div></div>
       <div class="fld"><label><input type="checkbox" id="s_lowq"> Show compromised edges (pooled strains, detected removed member, non-batch)</label>
         <div class="status">Off by default, as the pipeline exports them. A single-replicate edge is not in this group: it is shown and marked, because the comparison is sound and only its spread is unknown.</div></div>
-      <div class="fld"><label>Minimum supporting studies</label><input id="s_studies" type="number" min="1" value="1"><div class="status">Acts per edge today. A cross-study count needs edges for one interaction to be merged first (a planned step).</div></div>
+      <div class="fld"><label>Minimum supporting studies</label><input id="s_studies" type="number" min="1" value="1"><div class="status">Counts the studies each arc cites. Above 1 it needs a network derived with merged arcs (Merge parallel arcs, or <code>--merge-arcs</code>), since an arc as derived rests on one study.</div></div>
     </fieldset>
   </div>
   <div class="note">Defaults follow <code>docs/METHOD_NOTES.md</code>. The derivation choices are a scientific decision made by the collaboration; only the live filters on the right change the network already loaded.</div>
@@ -195,13 +190,24 @@ const nodeById={};
 function reindex(){for(const k in nodeById)delete nodeById[k];(NET.nodes||[]).forEach(n=>nodeById[n.id]=n);}
 const nodeName=id=>{const n=nodeById[id];return n?(n.name||n.id):id;};
 
-// effect -> visual style. Sign, color, line dash, and arrowhead shape all encode the same thing, so a
-// reader who cannot separate the colors still reads the sign from the dash and the head.
+// effect -> visual style, as the legend and the Cytoscape style draw it (Karoline, 2026-09-27): every arc ends
+// in the same arrowhead and the color alone carries the sign, facilitation green and inhibition the
+// orange-red chosen for readers with a color vision deficiency. Dashes carry evidence and quality, never the
+// sign: long dashes for a drop-out arc, dots for a single replicate (see dashOf).
 const STYLE={
   facilitation:{color:()=>getVar("--fac"),dash:"",head:"fac"},
-  inhibition:{color:()=>getVar("--inh"),dash:"7 5",head:"inh"},
-  neutral:{color:()=>getVar("--neu"),dash:"2 5",head:"neu"}
+  inhibition:{color:()=>getVar("--inh"),dash:"",head:"inh"},
+  neutral:{color:()=>getVar("--neu"),dash:"",head:"neu"}
 };
+const dashOf=e=>{const drop=isIndirect(e), one=flagsOf(e).includes("single_replicate");
+  return drop&&one?"11 4 2 4":drop?"11 6":one?"2 5":"";};
+// nodes by genus, the first word of the name, each genus its own color (crossfeed.brand.GENUS_COLORS)
+const GENUS_COLORS=["#2A78D6", "#EDA100", "#E87BA4", "#4A3AA7", "#A2C5FF", "#762E61", "#069CE4", "#C7CA85", "#B8892D", "#635A93", "#F1ACCC", "#A3B472", "#A74FBB", "#8AACE4", "#583A84", "#D75EB4", "#854E73", "#B25977", "#CC96C6", "#544EC5", "#9DDA4F", "#738242", "#8080FC", "#3C561C", "#92689C", "#4CDBE3", "#88194A", "#878CC9", "#4C701A", "#84C030", "#E5598E", "#BA93FB", "#959754", "#6B2094", "#724AAB", "#984260", "#9E658B", "#7B67CC", "#7E0F7A", "#7A5283", "#C8729C", "#E38AB5", "#B249AC", "#8E35A1", "#64B8D2", "#6C4302", "#A76C12", "#623B6B"];
+const genusOf=name=>{const w=String(name||"").replace(/[\[\]]/g,"").split(/\s+/).filter(Boolean);
+  const g=w[0]&&w[0].toLowerCase()==="candidatus"?w[1]:w[0];return g?g[0].toUpperCase()+g.slice(1).toLowerCase():"unknown";};
+function genusColors(list){const n={};list.forEach(nd=>{const g=genusOf(nodeName(nd.id));n[g]=(n[g]||0)+1;});
+  const ranked=Object.keys(n).sort((a,b)=>n[b]-n[a]||(a<b?-1:a>b?1:0));const c={};
+  ranked.forEach((g,i)=>c[g]=GENUS_COLORS[i%GENUS_COLORS.length]);return c;}
 const styleOf=e=>STYLE[e.effect]||STYLE.neutral;
 
 // ---- filtering: the species box plus the live filters. Never returns an edge whose endpoints are absent. ----
@@ -308,8 +314,7 @@ function defsMarkers(){
   for(const key of ["fac","inh","neu"]){
     const color=getVar("--"+key);
     const m=el("marker",{id:"arw-"+key,viewBox:"0 0 12 12",refX:"10",refY:"6",markerWidth:"9",markerHeight:"9",markerUnits:"userSpaceOnUse",orient:"auto-start-reverse"});
-    if(key==="inh") m.appendChild(el("path",{d:"M10,1 L10,11",stroke:color,"stroke-width":"2.4",fill:"none"}));         // T-bar = repression
-    else if(key==="neu") m.appendChild(el("path",{d:"M2,2 L10,6 L2,10",stroke:color,"stroke-width":"1.6",fill:"none"})); // open chevron
+    if(key==="neu") m.appendChild(el("path",{d:"M2,2 L10,6 L2,10",stroke:color,"stroke-width":"1.6",fill:"none"})); // open chevron
     else m.appendChild(el("path",{d:"M2,1 L11,6 L2,11 z",fill:color}));                                                  // filled arrow
     defs.appendChild(m);
   }
@@ -333,7 +338,7 @@ function render(){
     const st=styleOf(e), s=num(e.strength), w=1.4+4.6*(s===null?0.3:Math.abs(s)/MAXS);
     const g=edgeGeom(e); if(!g)return; const d=g.d;
     const path=el("path",{class:"edge",d,stroke:st.color(),"stroke-width":w,fill:"none","marker-end":"url(#arw-"+st.head+")"});
-    if(st.dash)path.setAttribute("stroke-dasharray",st.dash);
+    const dash=dashOf(e); if(dash)path.setAttribute("stroke-dasharray",dash);
     if(isLowQuality(e))path.setAttribute("opacity","0.45");   // flagged: shown, but not fully trusted
     if(isIndirect(e)){   // open ring at the midpoint: the arc is routed through something else
       const ring=el("circle",{class:"via",cx:g.mx,cy:g.my,r:4.5,fill:getVar("--bg"),stroke:st.color(),"stroke-width":1.8});
@@ -349,11 +354,12 @@ function render(){
   });
 
   const cxAll=nodes.length?nodes.reduce((s,nd)=>s+POS[nd.id].x,0)/nodes.length:0;
+  const fills=genusColors(nodes);
   nodes.forEach(nd=>{
     const p=POS[nd.id];
     const lft=p.x>cxAll;   // right-of-center nodes get their label on the left so it stays inside the canvas
     const g=el("g",{class:"node"+(selected===nd.id?" sel":""),"data-id":nd.id,transform:`translate(${p.x} ${p.y})`,tabindex:"0",role:"button","aria-label":nodeName(nd.id)});
-    g.appendChild(el("circle",{r:10}));
+    g.appendChild(el("circle",{r:10,style:"fill:"+fills[genusOf(nodeName(nd.id))]}));
     const t=el("text",{x:lft?-14:14,y:4}); if(lft)t.setAttribute("text-anchor","end"); t.textContent=nodeName(nd.id); g.appendChild(t);
     g._id=nd.id;
     g.addEventListener("click",()=>{if(dragMoved){dragMoved=false;return;}selectNode(nd.id);});
@@ -400,7 +406,9 @@ const SHOWN_FLAGGED=["single_replicate"];   // shown and marked: the comparison 
 const flagsOf=e=>Array.isArray(e.quality)?e.quality:[];
 const isLowQuality=e=>flagsOf(e).length>0;
 const isHiddenByDefault=e=>flagsOf(e).some(f=>HIDDEN_BY_DEFAULT.includes(f));
-const cautionsOf=e=>Array.isArray(e.cautions)?e.cautions:[];  // "two_replicates": worth knowing, not disqualifying
+// "two_replicates" and "conditions_unverified" (experiments told apart only by their descriptions): both are
+// worth knowing and neither disqualifies, so every caution is listed with the edge and none hides it
+const cautionsOf=e=>Array.isArray(e.cautions)?e.cautions:[];
 // An edge carries the status it was derived at, and `effect_over_sd` (|log2 mean| / sd), which is the
 // quantity the absence threshold k cuts. Because that number is on the edge, a reader can move k here
 // and see the answer change without rederiving. The file's own k is in meta.absence.
@@ -527,12 +535,13 @@ function positionNodes(){
 
 // ---- legend ----
 function buildLegend(){
-  const rows=[["facilitation (co grows more)","fac",""],["inhibition (co grows less)","inh","7 4"],["neutral","neu","2 4"]];
+  const rows=[["facilitation (co grows more)","fac",""],["inhibition (co grows less)","inh",""],
+              ["drop-out evidence (long dashes)","fac","11 6"],["single replicate (dots)","fac","2 5"]];
   const box=document.getElementById("legend"); box.textContent="";
   rows.forEach(([label,key,dash])=>{
     const div=document.createElement("div");div.className="li";
     div.innerHTML=`<svg viewBox="0 0 38 14"><defs><marker id="lg-${key}" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-reverse">`+
-      (key==="inh"?`<path d="M10,1 L10,11" stroke="var(--inh)" stroke-width="2.4" fill="none"/>`:
+      (key==="inh"?`<path d="M2,1 L11,6 L2,11 z" fill="var(--inh)"/>`:
        key==="neu"?`<path d="M2,2 L10,6 L2,10" stroke="var(--neu)" stroke-width="1.6" fill="none"/>`:
        `<path d="M2,1 L11,6 L2,11 z" fill="var(--fac)"/>`)+
       `</marker></defs><line x1="2" y1="7" x2="28" y2="7" stroke="var(--${key})" stroke-width="2.4" ${dash?`stroke-dasharray="${dash}"`:""} marker-end="url(#lg-${key})"/></svg><span>${label}</span>`;
@@ -558,8 +567,8 @@ function updateBanner(){
   else if(src){b.classList.add("live");b.textContent="Source: "+src;}
 }
 
-// ---- download. GraphML matches src/crossfeed/export.py key for key, typed and escaped, so a file from
-// here and one from the CLI are identical and both import into Cytoscape via File > Import > Network. ----
+// ---- download. GraphML carries the keys and values of src/crossfeed/export.py, so a file from here and one
+// from the CLI hold the same graph and both import into Cytoscape via File > Import > Network. ----
 function currentView(){const {nodes,edges}=visible();const q=document.getElementById("q").value.trim();
   const meta=Object.assign({},NET.meta,{viewer_filtered:(q||num(document.getElementById("s_thr").value)>0||document.getElementById("s_eff").value!=="all")||undefined,viewer_query:q||undefined});
   const known={schema:1,meta:1,nodes:1,edges:1,studies:1};
@@ -567,19 +576,28 @@ function currentView(){const {nodes,edges}=visible();const q=document.getElement
   return Object.assign({schema:NET.schema,meta,nodes,edges,studies:NET.studies||[]},extra);}
 function save(name,text,type){const b=new Blob([text],{type}),u=URL.createObjectURL(b),a=document.createElement("a");
   a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1500);}
+// the keys of src/crossfeed/export.py, copied by tests/test_legend.py's check, which also runs this writer
+// against the CLI's on the same network and requires the same graph, keys and values
+const GRAPHML_KEYS=[["g_tool", "graph", "tool", "string"], ["g_tool_version", "graph", "tool_version", "string"], ["g_derived_on", "graph", "derived_on", "string"], ["g_derived_at", "graph", "derived_at", "string"], ["n_name", "node", "name", "string"], ["n_label", "node", "label", "string"], ["n_taxonomy", "node", "taxonomy", "string"], ["n_model_ref", "node", "model_ref", "string"], ["n_taxon_id", "node", "taxon_id", "string"], ["n_species", "node", "species", "string"], ["n_identity", "node", "identity", "string"], ["e_effect", "edge", "effect", "string"], ["e_strength", "edge", "strength", "double"], ["e_significance", "edge", "significance", "double"], ["e_condition", "edge", "condition", "string"], ["e_method", "edge", "method", "string"], ["e_study_ids", "edge", "study_ids", "string"], ["e_p_value", "edge", "p_value", "double"], ["e_weight", "edge", "weight", "double"], ["e_effect_over_sd", "edge", "effect_over_sd", "double"], ["e_status", "edge", "status", "string"], ["e_sd", "edge", "sd", "double"], ["e_se", "edge", "se", "double"], ["e_n_with", "edge", "n_with", "int"], ["e_n_without", "edge", "n_without", "int"], ["e_outcome", "edge", "outcome", "string"], ["e_metric", "edge", "metric", "string"], ["e_quality", "edge", "quality", "string"], ["e_notes", "edge", "notes", "string"], ["e_evidence", "edge", "evidence", "string"], ["e_community", "edge", "community", "string"], ["e_cautions", "edge", "cautions", "string"], ["e_experiments", "edge", "experiments", "string"], ["e_cultivation_mode", "edge", "cultivation_mode", "string"], ["e_merged_arcs", "edge", "merged_arcs", "int"], ["e_strength_range", "edge", "strength_range", "string"]];
+function graphmlValue(attr,v){
+  if(v===null||v===undefined)return "";
+  if(Array.isArray(v))return v.join(attr==="notes"?"; ":" ");
+  return v;
+}
 function toGraphML(net){
-  const KEYS=[["n_name","node","name","string"],["n_taxonomy","node","taxonomy","string"],["n_model_ref","node","model_ref","string"],
-    ["e_effect","edge","effect","string"],["e_strength","edge","strength","double"],["e_significance","edge","significance","double"],
-    ["e_condition","edge","condition","string"],["e_method","edge","method","string"],["e_study_ids","edge","study_ids","string"]];
   const data=(key,val)=>{if(val===null||val===undefined||val==="")return"";return `      <data key="${key}">${esc(xmlClean(val))}</data>\n`;};
+  const of=kind=>GRAPHML_KEYS.filter(k=>k[1]===kind);
   let g='<?xml version="1.0" encoding="UTF-8"?>\n<graphml xmlns="http://graphml.graphdrawing.org/xmlns">\n';
-  KEYS.forEach(([id,f,nm,ty])=>{g+=`  <key id="${id}" for="${f}" attr.name="${nm}" attr.type="${ty}"/>\n`;});
+  GRAPHML_KEYS.forEach(([id,f,nm,ty])=>{g+=`  <key id="${id}" for="${f}" attr.name="${nm}" attr.type="${ty}"/>\n`;});
   g+='  <graph edgedefault="directed">\n';
-  (net.nodes||[]).forEach(n=>{g+=`    <node id="${esc(xmlClean(n.id))}">\n`+data("n_name",n.name)+data("n_taxonomy",n.taxonomy)+data("n_model_ref",n.model_ref)+`    </node>\n`;});
-  (net.edges||[]).forEach((e,i)=>{const s=num(e.strength),sig=num(e.significance);
-    g+=`    <edge id="e${i}" source="${esc(xmlClean(e.source))}" target="${esc(xmlClean(e.target))}">\n`+
-      data("e_effect",e.effect)+(s===null?"":data("e_strength",s))+(sig===null?"":data("e_significance",sig))+
-      data("e_condition",e.condition)+data("e_method",e.method)+data("e_study_ids",(e.study_ids||[]).join(" "))+`    </edge>\n`;});
+  of("graph").forEach(([id,,nm])=>{g+=data(id,(net.meta||{})[nm]).replace(/^      /,"    ");});
+  (net.nodes||[]).forEach(n=>{g+=`    <node id="${esc(xmlClean(n.id))}">\n`;
+    of("node").forEach(([id,,nm])=>{g+=data(id,nm==="label"?(n.name||n.id):graphmlValue(nm,n[nm]));});
+    g+=`    </node>\n`;});
+  (net.edges||[]).forEach((e,i)=>{
+    g+=`    <edge id="e${i}" source="${esc(xmlClean(e.source))}" target="${esc(xmlClean(e.target))}">\n`;
+    of("edge").forEach(([id,,nm])=>{g+=data(id,graphmlValue(nm,e[nm]));});
+    g+=`    </edge>\n`;});
   return g+"  </graph>\n</graphml>\n";
 }
 

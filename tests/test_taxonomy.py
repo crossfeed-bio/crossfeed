@@ -42,9 +42,18 @@ def test_index_collects_names_and_ids_across_studies():
 def test_crawl_stops_after_consecutive_misses():
     client = _client()
     species_index(client)
-    # the two studies plus five misses in a row after the last one, then it stops
-    assert client.asked[-1] == "SMGDB00000008"
-    assert len(client.asked) == 8
+    # the two studies, then MISS_RUN misses in a row after the last one, then it stops
+    from crossfeed.taxonomy import MISS_RUN
+    assert client.asked[-1] == f"SMGDB{3 + MISS_RUN:08d}"
+    assert len(client.asked) == 3 + MISS_RUN
+
+
+def test_a_gap_of_missing_studies_does_not_hide_later_ones():
+    # twelve absent ids between two studies (2 to 13): the old limit of five stopped before the second
+    from crossfeed.taxonomy import species_index as index_of
+    later = _client()
+    later.studies = {"SMGDB00000001": later.studies["SMGDB00000001"], "SMGDB00000014": later.studies["SMGDB00000003"]}
+    assert len(index_of(later)) == len(species_index(_client()))
 
 
 def test_name_and_taxon_id_both_resolve():
@@ -88,3 +97,45 @@ def test_repeated_entries_give_one_id():
 @pytest.mark.parametrize("bad", [{"communityStrains": [{"name": "No id"}]}, {"communityStrains": []}, {}])
 def test_strains_without_ids_are_ignored(bad):
     assert species_index(_FakeClient({"SMGDB00000001": [bad]})) == {}
+
+
+def test_common_ways_of_typing_are_understood_and_the_rest_say_why():
+    from crossfeed.taxonomy import split_entries
+    index = {"blautia hydrogenotrophica": {476272: "Blautia hydrogenotrophica DSM 10507"},
+             "blautia obeum": {40520: "Blautia obeum ATCC 29174"}}
+    entries = split_entries(["Blautia hydrogenotrophica, Blautia obeum", "- 476272", "NCBI:txid40520"])
+    assert entries == ["Blautia hydrogenotrophica", "Blautia obeum", "476272", "NCBI:txid40520"]
+    r = resolve_species(entries + ["Blautia", "B. obeum", "Blautia hydrogentrophica", "99999999", "%%%"], index)
+    assert [e for e, _ in r["resolved"]] == entries                          # commas, a dash, txid: all fine
+    why, hints = r["reasons"], r["suggestions"]
+    assert why["Blautia"].startswith("a genus alone") and hints["Blautia"] == ["Blautia hydrogenotrophica",
+                                                                               "Blautia obeum"]
+    assert hints["B. obeum"] == ["Blautia obeum"]                              # an abbreviated genus
+    assert hints["Blautia hydrogentrophica"] == ["Blautia hydrogenotrophica"]  # a close spelling
+    assert why["99999999"] == "no strain in mGrowthDB has NCBI taxon id 99999999"   # not taken as found
+    assert why["%%%"].startswith("not readable")
+
+
+def test_the_current_name_is_the_most_recently_published_one():
+    from crossfeed.taxonomy import species_index as build
+
+    class Dated(_FakeClient):
+        dates = {"SMGDB00000001": "2025-11-01", "SMGDB00000003": "2024-01-01"}
+
+        def get_study(self, sid):
+            if sid not in self.studies:
+                from crossfeed.mgrowthdb import MGrowthDBError
+                raise MGrowthDBError("mGrowthDB returned HTTP 404")        # as the real client does
+            return {"id": sid, "publishedAt": self.dates[sid], "experiments": [{"id": sid}]}
+
+        def get_experiment(self, eid):
+            return self.studies[eid][0]
+
+        def study_experiments(self, sid):
+            return [self.get_experiment(e["id"]) for e in self.get_study(sid)["experiments"]]
+
+    client = Dated({"SMGDB00000001": [_exp(("Faecalibacterium duncaniae A2-165", FP))],
+                    "SMGDB00000003": [_exp(("Faecalibacterium prausnitzii A2-165", FP))]})
+    index = build(client)
+    assert index.current[FP] == "Faecalibacterium duncaniae A2-165"          # study 1 is the more recent
+    assert "faecalibacterium prausnitzii" in index and "faecalibacterium duncaniae" in index   # both resolve
