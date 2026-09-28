@@ -14,7 +14,6 @@ from __future__ import annotations
 import dataclasses
 import html
 import http.server
-import json
 import secrets
 import socketserver
 import threading
@@ -27,7 +26,7 @@ from . import __version__, brand, interaction, rates
 from . import help as help_page
 from .adapter import condensed, unread
 from .attribution import studies_with_edges
-from .cytoscape import CytoscapeError, send, style
+from .cytoscape import CytoscapeError, send, style_xml
 from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, output_meta
 from .export import to_graphml
 from .growth import SPIKE_FACTOR
@@ -753,10 +752,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._download(query.get("format", ["json"])[0], query)
         elif parsed.path in ("/download.json", "/download.graphml"):
             self._download(parsed.path.rsplit(".", 1)[1], query)
-        elif parsed.path == "/grownet_style.json":
+        elif parsed.path == "/grownet_style.xml":
             # the Cytoscape style as a file, the same as `grownet style` writes, so a downloaded GraphML can
-            # take it without the command line (Karoline, 2026-09-28)
-            self._send(json.dumps([style()], indent=2) + "\n", "application/json", "grownet_style.json")
+            # take it without the command line (Karoline, 2026-09-28); XML, the one form Cytoscape imports
+            self._send(style_xml(), "application/xml; charset=utf-8", "grownet_style.xml")
         elif parsed.path == "/report.txt":
             result = self._result(query)
             if not result:

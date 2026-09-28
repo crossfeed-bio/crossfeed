@@ -340,7 +340,6 @@ def test_help_and_back_after_a_search_keeps_the_result(monkeypatch):
 def test_the_help_page_offers_the_cytoscape_style_as_a_download():
     # Karoline (2026-09-28): "in the help, allow users to download the cytoscape style, so they don't have to
     # run cmdline to get it"
-    import json as json_lib
     import threading
     import urllib.request
 
@@ -352,11 +351,11 @@ def test_the_help_page_offers_the_cytoscape_style_as_a_download():
     try:
         with urllib.request.urlopen(f"{base}/help?token=tok", timeout=10) as r:
             page = r.read().decode("utf-8")
-        assert page.count('href="/grownet_style.json?token=tok"') == 2           # both Cytoscape answers
-        with urllib.request.urlopen(f"{base}/grownet_style.json?token=tok", timeout=10) as r:
-            assert r.headers["Content-Disposition"] == 'attachment; filename="grownet_style.json"'
-            styles = json_lib.loads(r.read().decode("utf-8"))
-        from grownet.cytoscape import style
-        assert styles == [style()]                                    # the same file `grownet style` writes
+        assert page.count('href="/grownet_style.xml?token=tok"') == 2            # both Cytoscape answers
+        with urllib.request.urlopen(f"{base}/grownet_style.xml?token=tok", timeout=10) as r:
+            assert r.headers["Content-Disposition"] == 'attachment; filename="grownet_style.xml"'
+            body = r.read().decode("utf-8")
+        from grownet.cytoscape import style_xml
+        assert body == style_xml()                                    # the same file `grownet style` writes
     finally:
         server.shutdown()

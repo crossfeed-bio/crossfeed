@@ -17,7 +17,7 @@ ISSUES = f"{REPOSITORY}/issues"
 NEW_ISSUE = f"{ISSUES}/new/choose"
 MGROWTHDB = "https://mgrowthdb.gbiomed.kuleuven.be"
 # the local page's download of the Cytoscape style; the token is filled in when the page is written
-STYLE_LINK = "/grownet_style.json?token=__TOKEN__"
+STYLE_LINK = "/grownet_style.xml?token=__TOKEN__"
 
 # The About page (#80): the wording Craig agreed to on #80, naming both builders; change it only with
 # their agreement.
@@ -265,7 +265,7 @@ QA = (
     ("A GraphML file opened in Cytoscape does not look like the legend.",
      "A file carries no style. Send to Cytoscape applies it; for a downloaded file, "
      f"<a href=\"{STYLE_LINK}\">download the grownet style</a> (or write it with "
-     f"<code>{COMMAND} style --out grownet_style.json</code>), import it in Cytoscape (File, Import, Styles "
+     f"<code>{COMMAND} style --out grownet_style.xml</code>), import it in Cytoscape (File, Import, Styles "
      "from File) and choose grownet in the Style panel. The file holds every column the style maps (the "
      "line style, the width and the genus color)."),
     ("Gephi shows fewer arcs than the network has.",
