@@ -37,6 +37,7 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from collections import Counter
 
 from . import brand
@@ -165,6 +166,51 @@ def style(name: str = STYLE_NAME) -> dict:
                         {"value": 4.0, "lesser": "10.0", "equal": "10.0", "greater": "10.0"}]},
         ],
     }
+
+
+# Cytoscape's XML names for CyREST's column types
+_XML_TYPES = {"String": "string", "Double": "float", "Integer": "integer", "Long": "long", "Boolean": "boolean"}
+
+
+def style_xml(name: str = STYLE_NAME) -> str:
+    """The same style as `style`, in the XML that File, Import, Styles from File reads.
+
+    Cytoscape reads a style file only in this form: the CyREST JSON that `send` posts, and even the JSON
+    Cytoscape itself exports, are refused with "Don't know how to read file" (Karoline, 3.10.4, 2026-09-28).
+    """
+    s = style(name)
+    sections = {"NODE": [], "EDGE": []}
+    props = {}
+    for d in s["defaults"]:
+        props[d["visualProperty"]] = ET.Element("visualProperty", name=d["visualProperty"],
+                                                default=str(d["value"]))
+    for m in s["mappings"]:
+        vp = m["visualProperty"]
+        prop = props.setdefault(vp, ET.Element("visualProperty", name=vp))
+        kind = m["mappingType"]
+        mapping = ET.SubElement(prop, f"{kind}Mapping", attributeName=m["mappingColumn"],
+                                attributeType=_XML_TYPES[m["mappingColumnType"]])
+        if kind == "discrete":
+            for entry in m["map"]:
+                ET.SubElement(mapping, "discreteMappingEntry", attributeValue=entry["key"], value=entry["value"])
+        elif kind == "continuous":
+            for p in m["points"]:
+                ET.SubElement(mapping, "continuousMappingPoint", attrValue=str(p["value"]),
+                              equalValue=p["equal"], greaterValue=p["greater"], lesserValue=p["lesser"])
+    for vp, prop in props.items():
+        sections[vp.split("_", 1)[0]].append(prop)
+    vizmap = ET.Element("vizmap", id=f"VizMap-{name}", documentVersion="3.1")
+    visual_style = ET.SubElement(vizmap, "visualStyle", name=name)
+    ET.SubElement(visual_style, "network")
+    node = ET.SubElement(visual_style, "node")
+    ET.SubElement(node, "dependency", name="nodeSizeLocked", value="true")
+    node.extend(sections["NODE"])
+    edge = ET.SubElement(visual_style, "edge")
+    # the arrowhead takes its color from its own mapping, the same as the line's
+    ET.SubElement(edge, "dependency", name="arrowColorMatchesEdge", value="false")
+    edge.extend(sections["EDGE"])
+    ET.indent(vizmap, space="    ")
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + ET.tostring(vizmap, "unicode") + "\n"
 
 
 class CytoscapeError(RuntimeError):
