@@ -500,3 +500,11 @@ def test_merge_to_genus_from_the_page_gives_genus_nodes():
     r = _query(merge_genera=True)
     assert set(r["network"].nodes) == {"Faecalibacterium", "Blautia"}
     assert all(e.supporting_pairs == 1 for e in r["network"].edges)
+
+
+def test_average_replicates_are_one_line_per_experiment_in_what_a_reader_sees():
+    # Karoline (2026-09-28): 555 of all of mGrowthDB's 1972 skip lines were average replicates, one each
+    from crossfeed.adapter import AVERAGE, condensed
+    skipped = [("E1: Average(E1)", AVERAGE), ("E1: r1", "a spike"), ("E1: Average 2", AVERAGE), ("E2: avg", AVERAGE)]
+    assert condensed(skipped) == [("E1", f"2 average replicate(s) left out ({AVERAGE})"), ("E1: r1", "a spike"),
+                                  ("E2", f"1 average replicate(s) left out ({AVERAGE})")]

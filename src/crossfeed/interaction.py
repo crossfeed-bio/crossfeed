@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import math
 import statistics
+from collections import Counter
 
 from . import rates
 from .growth import (
@@ -250,6 +251,14 @@ def _compare(with_log2: list, without_log2: list, zero_with: int = 0, zero_witho
     return result
 
 
+def starts_at_zero(reps, species: str) -> bool:
+    """Whether most of a set's curves of `species` are zero at their first time point: such a set cannot
+    show whether the species grows, since no growth, no inoculum and counts below detection look the same
+    (Karoline, 2026-09-28; SMGDB00000006's STneg monoculture is 0 throughout)."""
+    firsts = [c.values[0] for c in (rep.curve(species) for rep in reps) if c is not None]
+    return bool(firsts) and sum(v <= 0 for v in firsts) * 2 > len(firsts)
+
+
 def stationary_verdict(reps, species: str, end: float):
     """Whether a replicate set reached stationary phase by `end`: True or False by the majority of its
     replicates (Karoline, 2026-09-28), or None when most of them cannot be judged (too few points)."""
@@ -304,6 +313,7 @@ def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, met
         stationary = {"with": stationary_verdict(co, species, end),
                       "without": stationary_verdict(monos, species, end)}
         result[key] = {"species": species, "window": window, "stationary": stationary,
+                       "zero_start": {"with": starts_at_zero(co, species), "without": starts_at_zero(monos, species)},
                        "outcome": c["outcome"], "mean": c["mean"],
                        "sd": c["sd"], "se": c["se"],
                        "n_co": c["n_with"], "n_mono": c["n_without"],
@@ -350,8 +360,14 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc",
         raise ValueError(f"drop-out species {outside} not a member of the full community {sorted(members)}")
     check_sets([("full community", full, members)]
                + [(f"community without {r}", reps, [m for m in members if m != r]) for r, reps in dropouts.items()])
-    start, end = shared_window(c for rep in [*full, *(r for reps in dropouts.values() for r in reps)]
-                               for c in rep.curves)
+    every = [c for rep in [*full, *(r for reps in dropouts.values() for r in reps)] for c in rep.curves]
+    # the design's usual first time point; a curve that starts later leaves its replicate out of its own arcs
+    # only, not out of the arcs of the other members (Karoline, 2026-09-28, with the per-arc windows)
+    start = Counter(c.times[0] for c in every).most_common(1)[0][0]
+    end = min(c.times[-1] for c in every)
+
+    def on_time(replicates, species):
+        return [r for r in replicates if math.isclose(r.curve(species).times[0], start, abs_tol=1e-9)]
 
     evidence = BICULTURE if len(members) == 2 else DROPOUT
     community = sorted(members)
@@ -364,13 +380,19 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc",
     for removed, reps in dropouts.items():
         without_role = f"community without {removed}"
         for target in (m for m in members if m != removed):
+            full_t, reps_t = on_time(full, target), on_time(reps, target)
+            if not full_t or not reps_t:
+                result["skipped"].append((f"arc {removed} -> {target}", f"every curve of {target} in the "
+                                          f"{'full community' if not full_t else without_role} starts after "
+                                          f"{start:g}; curves are compared only from a common start"))
+                continue
             # each arc has its own window: the target's curves in the two sets (Karoline, on #47)
-            window = shared_window(rep.curve(target) for rep in [*full, *reps])
+            window = shared_window(rep.curve(target) for rep in [*full_t, *reps_t])
             prop = _property(window[1], method)
             skips, flags, zero_full, zero_without = [], [], [], []
-            full_log2 = _grown_values(full, target, "full community", prop, method, skips, spike_factor,
+            full_log2 = _grown_values(full_t, target, "full community", prop, method, skips, spike_factor,
                                       flags, zero_full, window[1], no_growth_alpha, no_growth_factor)
-            without_log2 = _grown_values(reps, target, without_role, prop, method, skips, spike_factor,
+            without_log2 = _grown_values(reps_t, target, without_role, prop, method, skips, spike_factor,
                                          flags, zero_without, window[1], no_growth_alpha,
                                          no_growth_factor)
             once(skips, result["skipped"])
@@ -385,7 +407,9 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc",
                 continue
             result["arcs"].append({"source": removed, "target": target, "evidence": evidence,
                                    "community": community, "window": window,
-                                   "stationary": {"with": stationary_verdict(full, target, window[1]),
-                                                  "without": stationary_verdict(reps, target, window[1])},
+                                   "stationary": {"with": stationary_verdict(full_t, target, window[1]),
+                                                  "without": stationary_verdict(reps_t, target, window[1])},
+                                   "zero_start": {"with": starts_at_zero(full_t, target),
+                                                  "without": starts_at_zero(reps_t, target)},
                                    **c})
     return result

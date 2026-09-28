@@ -538,3 +538,18 @@ def test_a_set_follows_the_majority_and_the_caution_needs_max_and_a_disagreement
     assert stationary_cautions({"with": True, "without": None}, "max", "quantified") == ["stationary_unchecked"]
     assert stationary_cautions({"with": True, "without": True}, "max", "quantified") == []
     assert stationary_cautions({"with": True, "without": False}, "auc", "quantified") == []      # max only
+
+
+def test_an_obligate_arc_whose_monoculture_is_zero_from_the_start_is_cautioned():
+    # SMGDB00000006's STneg (Karoline, 2026-09-28: "Obligate, with a caution"): the monoculture reads 0 at
+    # every point, the first included, so no growth cannot be told from no inoculum or counts below detection
+    from crossfeed.derive import zero_start_cautions
+    from crossfeed.interaction import starts_at_zero
+    zero = [Replicate([_curve(A, (0, 0))], "m1"), Replicate([_curve(A, (0, 0))], "m2")]
+    grown = [Replicate([_curve(A, (0.1, 0.3))], "c1"), Replicate([_curve(A, (0.1, 0.4))], "c2")]
+    assert starts_at_zero(zero, A) is True and starts_at_zero(grown, A) is False
+    assert zero_start_cautions({"with": False, "without": True}, "obligate") == ["zero_at_start"]
+    assert zero_start_cautions({"with": True, "without": False}, "abolished") == ["zero_at_start"]
+    assert zero_start_cautions({"with": False, "without": True}, "quantified") == []      # a ratio was taken
+    # a monoculture that starts above zero and does not grow is an ordinary obligate arc, without the caution
+    assert zero_start_cautions({"with": False, "without": False}, "obligate") == []

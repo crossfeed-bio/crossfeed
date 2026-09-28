@@ -479,8 +479,10 @@ def test_three_replicates_carry_no_caution_and_a_caution_does_not_hide_an_edge()
     assert {e["status"] for e in edges} == {"present", "absent"}   # cautioned edges keep their status
 
 
-def test_a_replicate_with_a_late_starting_curve_is_left_out_and_reported():
-    # SMGDB00000008 has two such curves: a member's first measurement (0 h) is missing
+def test_a_replicate_with_a_late_starting_curve_is_left_out_of_that_species_arcs_only():
+    # SMGDB00000008 has two such curves: a member's first measurement (0 h) is missing. Karoline
+    # (2026-09-28, "Only for its own arcs"): the replicate is left out of the late member's arcs, and still
+    # serves every other member, which once lost it too
     client, study, exps = _dropout_study()
 
     def late_series(context_id, original=client.get_measurement_series):
@@ -492,6 +494,8 @@ def test_a_replicate_with_a_late_starting_curve_is_left_out_and_reported():
     assert (arcs[(C, A)]["n_with"], arcs[(C, A)]["n_without"]) == (2, 1)   # without C keeps replicate 0 only
     assert arcs[(C, A)]["quality"] == ["single_replicate"]
     assert (arcs[(B, A)]["n_with"], arcs[(B, A)]["n_without"]) == (2, 2)   # the other drop-out is untouched
+    assert (arcs[(C, B)]["n_with"], arcs[(C, B)]["n_without"]) == (2, 2)   # B's curves there start on time
+    assert "single_replicate" not in arcs[(C, B)]["quality"]
     assert any(label == "community without " + C + " replicate without C_1" and "starting after" in reason
                for label, reason in skipped)
 
@@ -516,7 +520,9 @@ def test_an_obligate_edge_counts_its_replicates_without_growth_and_is_shown():
     records, _ = interactions_from_replicates(client, study, exps)
     ab = next(r for r in records if r["source_name"] == A and r["target_name"] == B)
     assert ab["outcome"] == "obligate" and (ab["n_with"], ab["n_without"]) == (2, 2)
-    assert ab["quality"] == [] and ab["cautions"] == ["two_replicates"]
+    # B's monoculture is zero from its first point, so the arc also says that no growth cannot be told from
+    # no inoculum (Karoline, 2026-09-28)
+    assert ab["quality"] == [] and ab["cautions"] == ["two_replicates", "zero_at_start"]
     edges, meta = output_meta(records)
     assert meta["hidden"]["low_quality"] == 0
     assert next(e for e in edges if e["source_name"] == A)["status"] == "present"
@@ -724,6 +730,27 @@ def test_the_monoculture_set_with_the_co_cultures_qualifier_is_used():
     assert not any("none is guessed" in r for _, r in skipped)
     # matched by name, so no caution, although the pair has description-only variants
     assert not any("conditions_unverified" in r["cautions"] for r in records)
+
+
+
+def test_the_monoculture_set_worded_like_the_co_culture_is_used():
+    # SMGDB00000014's shape (Karoline, 2026-09-28: "Match identical wording"): two series of A on 0.1%
+    # linoleic acid, a dose response ("Growth of A on ...") and the controls of the co-culture ("A
+    # monoculture grown on ..."). Neither names the co-culture nor carries a qualifier, but only the second
+    # words the growth as the co-culture does once the organisms and the kind of culture are taken out.
+    # The co-culture takes it: A's areas 10 and 12 there against 20 and 24 together, so B -> A is +1.0.
+    exps = [_described("A_LA_0.1", [A], "Growth of A on minimal medium with 0.1% linoleic acid"),
+            _described("A_LA_0.1_mono", [A], "A monoculture grown on a minimal medium with 0.1% linoleic acid"),
+            _described("B_LA_0.1_mono", [B], "B monoculture grown on a minimal medium with 0.1% linoleic acid"),
+            _described("A_B_LA_0.1_co", [A, B], "A+B co-culture grown on a minimal medium with 0.1% linoleic acid")]
+    curves = {("A_LA_0.1", A): [(3, 3), (3, 3)], ("A_LA_0.1_mono", A): [(1, 1), (1, 1.4)],
+              ("B_LA_0.1_mono", B): [(1, 1), (1, 1.4)],
+              ("A_B_LA_0.1_co", A): [(1, 3), (1, 3.8)], ("A_B_LA_0.1_co", B): [(1, 1), (1, 1.4)]}
+    records, skipped = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S14"}, exps)
+    arc = next(r for r in records if (r["source_name"], r["target_name"]) == (B, A))
+    assert arc["strength"] == pytest.approx(1.0) and "E_A_LA_0.1_mono" in arc["experiments"]
+    assert "E_A_LA_0.1" not in arc["experiments"] and "conditions_unverified" not in arc["cautions"]
+    assert not any("none is guessed" in r for _, r in skipped)
 
 
 def test_a_study_of_monocultures_only_says_so():

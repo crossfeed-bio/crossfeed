@@ -28,6 +28,28 @@ from __future__ import annotations
 
 from .growth import SPIKE_FACTOR, GrowthCurve, Replicate, spike
 
+AVERAGE = "average of the replicates, not an independent replicate"
+
+
+def condensed(skipped: list) -> list:
+    """The skip list for reading: the average bioreplicates, left out as mGrowthDB marks them, become one
+    line per experiment ("3 average replicate(s) left out"), in place of the first; the rest is unchanged
+    (Karoline, 2026-09-28: a quarter of all of mGrowthDB's skip list was these lines)."""
+    averages = {}
+    for label, reason in skipped:
+        if reason == AVERAGE:
+            averages.setdefault(label.split(": ")[0], []).append(label)
+    out, done = [], set()
+    for label, reason in skipped:
+        if reason != AVERAGE:
+            out.append((label, reason))
+            continue
+        experiment = label.split(": ")[0]
+        if experiment not in done:
+            done.add(experiment)
+            out.append((experiment, f"{len(averages[experiment])} average replicate(s) left out ({AVERAGE})"))
+    return out
+
 MIN_POINTS = 2
 
 
@@ -100,7 +122,7 @@ def replicates_for_experiment(client, experiment: dict, spike_factor: float = SP
             continue
         name = bioreplicate.get("name") or str(bioreplicate.get("id"))
         if bioreplicate.get("isAverage"):
-            skipped.append((f"{label}: {name}", "average of the replicates, not an independent replicate"))
+            skipped.append((f"{label}: {name}", AVERAGE))
             continue
         time_unit = bioreplicate.get("measurementTimeUnits") or ""
         strain_contexts = list(_strain_contexts(bioreplicate))

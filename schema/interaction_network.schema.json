@@ -219,7 +219,8 @@
               "two_replicates",
               "conditions_unverified",
               "stationary_phase_differs",
-              "stationary_unchecked"
+              "stationary_unchecked",
+              "zero_at_start"
             ]
           }
         },

@@ -8,6 +8,7 @@ with its value, and every reason a pair gave no edge.
 from __future__ import annotations
 
 from . import interaction
+from .adapter import condensed
 from .help import SETTINGS
 from .mgrowthdb import MGROWTHDB_API, NO_DATABASE_VERSION
 
@@ -123,9 +124,10 @@ def report_text(result: dict) -> str:
         lines += [_edge_line(net, e) for e in absent]
     lines.append("")
 
-    lines.append(f"pairs the data did not support ({len(result['skipped'])}):" if result["skipped"]
+    skips = condensed(result["skipped"])
+    lines.append(f"pairs the data did not support ({len(skips)}):" if skips
                  else "pairs the data did not support: none")
-    lines += [f"  - {label}: {reason}" for label, reason in result["skipped"]]
+    lines += [f"  - {label}: {reason}" for label, reason in skips]
     lines.append("")
 
     lines.append("sources (cite the studies behind the edges you use):")

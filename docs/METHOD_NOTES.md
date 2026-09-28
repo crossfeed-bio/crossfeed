@@ -683,5 +683,21 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    qPCR points per curve, is too sparse to judge. A second phase after the last measurement cannot be seen
    by any rule.
 
+28. **Audit 2: what the skip list showed** (Karoline, 2026-09-28, choosing among her agent's options after
+   every skip reason over all of mGrowthDB was checked against the data):
+   - Matching monocultures (extends item 22): "Match identical wording". When several monoculture sets
+     remain after the "named" and "qualifier" rules, the one whose description words the growth like the
+     co-culture's, once the organisms and the kind of culture are taken out (the text after "monoculture"
+     or "co-culture"), is used, if it is the only one. SMGDB00000014's five At+Ct co-cultures (0.1% and
+     0.75% linoleic acid, ROS, TBHQ, DMSO) each match their own monocultures this way: 10 arcs.
+   - A set that is zero from its first time point: "Obligate, with a caution". SMGDB00000006's STneg
+     monoculture reads 0 throughout, so L. bulgaricus -> S. thermophilus LMG 18311 stays obligate and gains
+     the caution `zero_at_start`: no growth cannot be told from no inoculum or counts below detection.
+   - A curve starting after the design's common start: "Only for its own arcs". Its replicate is left out
+     of that member's arcs and still serves the others (with the per-arc windows of item 26). In
+     SMGDB00000008, 24 of the 26 arcs of two drop-outs regain their second replicate.
+   - The report: "One line per experiment" for the average bioreplicates mGrowthDB marks, which were a
+     quarter of the skip list; nothing changes in the networks.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.
