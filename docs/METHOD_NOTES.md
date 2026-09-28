@@ -699,5 +699,14 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    - The report: "One line per experiment" for the average bioreplicates mGrowthDB marks, which were a
      quarter of the skip list; nothing changes in the networks.
 
+29. **Where the Baranyi fit stops** (Karoline, 2026-09-28, after the settings audit). Fitted to whole
+   curves, the Baranyi-Roberts model was rejected on 152 curves of mGrowthDB that decline after their peak
+   or grow in two phases, so studies 7 and 13 gave no Baranyi arcs. She chose "Fit up to the maximum", and
+   then, when her agent showed that cutting at the first maximum leaves early-peaking curves too few points
+   (34 arcs), "End of the plateau": the fit uses the curve up to its maximum and on along the plateau after
+   it, while the log abundance stays within 10% of the rise below the maximum (the tolerance of item 27),
+   and stops at the first point below that. On mGrowthDB: 30 -> 40 Baranyi arcs (easylinear gives 49);
+   study 2 recovered, study 7 up from 0 to 10. Easylinear, the default, is unchanged.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.
