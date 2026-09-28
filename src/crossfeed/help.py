@@ -16,6 +16,11 @@ ISSUES = f"{REPOSITORY}/issues"
 NEW_ISSUE = f"{ISSUES}/new/choose"
 MGROWTHDB = "https://mgrowthdb.gbiomed.kuleuven.be"
 
+# The About page (#80): the wording Craig agreed to on #80, naming both builders; change it only with
+# their agreement.
+ABOUT = (f"{NAME} was built by Karoline Faust (KU Leuven) and Craig Heilmann (Syntropa), working through "
+         "their AI coding agents (Claude).")
+
 # key in gui.DEFAULTS -> (label on the page, command line flag, what it does and when to change it)
 SETTINGS = {
     "metric": ("Growth measure", "--metric auc|max|growth_rate",
@@ -402,3 +407,10 @@ def _default(value, key: str = "") -> str:
     if value == "":
         return "none"
     return str(value)
+
+
+def render_about() -> str:
+    """Who built the tool, and where its source, issues and license are (#80)."""
+    return (f"<h2 class=\"page\">About {_e(NAME)}</h2><p>{_e(ABOUT)}</p>"
+            f"<p>Source code, issues and license: <a href=\"{REPOSITORY}\">{REPOSITORY}</a></p>"
+            f"<p>Version {_e(__version__)}.</p>")

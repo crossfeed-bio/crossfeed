@@ -158,7 +158,7 @@ python -m crossfeed gui
 
 The tool version shows next to its name, and a Help page explains every advanced setting and arc
 attribute, the main design decisions, the command line, what to do when no network comes back, and where
-to report a problem. Type species names (or NCBI taxon ids), one per line, and press "Find interactions". crossfeed resolves
+to report a problem; an About page says who built it and links this repository. Type species names (or NCBI taxon ids), one per line, and press "Find interactions". crossfeed resolves
 the names to taxon ids from mGrowthDB's own strain records, finds the studies holding them, derives the
 interactions, and shows them as a table with downloads for JSON and GraphML. Every setting sits behind
 "Advanced settings" with the same defaults the command line uses.
