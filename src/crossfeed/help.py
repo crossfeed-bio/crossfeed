@@ -10,6 +10,7 @@ import html
 
 from . import __version__
 from .brand import COMMAND, NAME
+from .idea import idea_figure
 
 REPOSITORY = "https://github.com/crossfeed-bio/crossfeed"
 ISSUES = f"{REPOSITORY}/issues"
@@ -277,7 +278,8 @@ def _table(head, rows) -> str:
     return f"<table><tr>{th}</tr>" + "".join(rows) + "</table>"
 
 
-SECTIONS = (("what", "What grownet does"), ("example", "Try the example"), ("reading", "Reading the result"),
+SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"),
+            ("example", "Try the example"), ("reading", "Reading the result"),
             ("settings", "Advanced settings"), ("attributes", "Arc and node attributes"),
             ("decisions", "Why it works this way"), ("cli", "The command line"),
             ("empty", "No network came back"), ("qa", "Questions and problems"), ("cite", "How to cite"),
@@ -309,6 +311,36 @@ def render_help(token: str, defaults: dict, example: tuple) -> str:
 <p>Type species names, one per line, or NCBI taxon ids. grownet looks them up in mGrowthDB, reads the
 growth curves of every study that holds them, and derives the interactions between them on this machine.
 Nothing is uploaded, and nothing is written outside the file you download.</p>
+
+<h2 id="idea">The idea behind it</h2>
+<p>How one species affects another can be read from growth alone: grow each species by itself, grow the
+two together, and compare. Gause showed this with two ciliates feeding on the same bacteria,
+<i>Paramecium caudatum</i> and <i>P. aurelia</i> (Gause 1934). Grown separately, each species reached a
+stable population. Grown together, both grew at first, then <i>P. caudatum</i> declined until
+<i>P. aurelia</i> had displaced it entirely. Set against growth alone, the mixed culture showed how each
+species affected the other. grownet makes the same comparison on the growth curves in mGrowthDB.</p>
+{idea_figure()}
+<p class="muted">An illustration, not data: the curves are drawn with the Baranyi-Roberts model the tool
+fits.</p>
+<p>A partner that raises a species' growth facilitates it, drawn as a green arc from the partner to the
+species; one that lowers it inhibits it, an orange-red arc. The change, as the log2 ratio of growth together
+to growth alone over the replicates, is the arc's strength, and a change too small beside its spread
+(below the absence threshold) counts as no interaction. Three properties of a curve can be compared,
+marked in the figure: the area under the curve (auc, the default), which combines lag, rate and
+yield; the maximal abundance (max); and the growth rate, the steepest slope of log abundance (Growth
+measure, in the <a href="#settings">advanced settings</a>).</p>
+<p>The comparison holds only when both species are counted separately in the co-culture, by a technique
+that tells them apart and is the same one used alone, and when alone and together were grown under the same
+conditions; grownet checks both (<a href="#decisions">why it works this way</a>). The same comparison runs
+on drop-out experiments, a community with and without one member. A change says that the partner affects
+the species, not how: cross-feeding, competition for a nutrient, a toxin or a change of pH look the same
+here. Gause's yeasts are a case in point (Gause 1932, 1934): in mixed culture without oxygen, a yeast he
+named <i>Schizosaccharomyces kephir</i> inhibited <i>Saccharomyces cerevisiae</i> strongly, and only a
+separate measurement traced the inhibition to the ethyl alcohol it produced, about twice as much per unit
+of yeast volume as <i>S. cerevisiae</i>.</p>
+<p class="muted">Gause GF (1932) Experimental studies on the struggle for existence. I. Mixed population of
+two species of yeast. Journal of Experimental Biology 9: 389-402.<br>
+Gause GF (1934) The Struggle for Existence. Williams and Wilkins, Baltimore.</p>
 
 <h2 id="example">Try the example</h2>
 <p>The Example button fills the box with {_e(pair)}, a pair with enough data to show a result: the

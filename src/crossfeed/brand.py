@@ -97,6 +97,9 @@ summary {{ cursor: pointer; font-weight: 600; }}
 .note {{ background: var(--panel); border: 1px solid var(--line); padding: .7rem .9rem; border-radius: 8px; }}
 .result {{ margin-top: 1.4rem; border-top: 1px solid var(--line); padding-top: .4rem; }}
 .scroll {{ overflow-x: auto; }} .legend svg {{ max-width: 100%; height: auto; }}
+.idea {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: .8rem 1.2rem;
+        margin: .8rem 0 .3rem; }}
+.idea figure {{ margin: 0; }} .idea svg {{ width: 100%; height: auto; display: block; }}
 table {{ border-collapse: collapse; width: 100%; font-size: .9rem; margin-top: .5rem; }}
 th, td {{ text-align: left; padding: .38rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }}
 th {{ color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }}
