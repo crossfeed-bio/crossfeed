@@ -151,7 +151,10 @@ EDGE_ATTRIBUTES = {
                "removed_member_detected; empty means no issue found",
     "cautions": "remarks that do not lower quality: two_replicates (exactly two replicates on a side), "
                 "conditions_unverified (experiments of this pair differ only in their description, such as a "
-                "supplement, and nothing recorded says which monocultures or drop-outs match which)",
+                "supplement, and nothing recorded says which monocultures or drop-outs match which), "
+                "stationary_phase_differs (with max as the measure: one set reached stationary phase and the "
+                "other did not, so its maximum may still be rising), stationary_unchecked (with max: too few "
+                "time points, under 6, to tell)",
     "notes": "other remarks, for example a replicate left out for a spike",
     "evidence": "biculture (monoculture against a two-member co-culture: a direct interaction) or dropout "
                 "(a community against the same community without the source: direct or indirect)",
@@ -190,6 +193,10 @@ DECISIONS = (
     ("One number per comparison: the mean log2 ratio of the replicate sets.",
      "log2(with) minus log2(without) per species, averaged over replicates, with the spread of both sets "
      "combined in the sd. A log ratio is symmetric: a doubling is +1 and a halving is -1 (#3)."),
+    ("Curves are compared over the time they share.",
+     "Areas and maxima are taken from the common first time point to the earliest last time point of the "
+     "curves compared (for a bi-culture, every curve of the design; for a drop-out arc, the target's curves "
+     "with and without the removed member), interpolating at that end, so no curve is extrapolated (#1)."),
     ("An edge is present by its size against its spread, not by a p-value.",
      "With two or three replicates a real effect rarely reaches significance, so the test is reported as "
      "support and does not decide. The absence threshold k does: |mean| of at least k sd (#40, #54)."),

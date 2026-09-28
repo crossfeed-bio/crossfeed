@@ -648,5 +648,40 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    list is read from is derived, with every partner kept; Only these studies and Exclude these studies
    still apply. `derive --live --all` does the same from the command line.
 
+26. **The time window of a bi-culture arc** (open; found by the audit of 2026-09-28). Curves are compared
+   over the window they share, so none is extrapolated. For a drop-out arc that window is the target's own
+   curves with and without the removed member ("so one short curve elsewhere in the design does not
+   shorten it"). For a bi-culture it is every curve of the design, including the source alone, whose
+   curve is not part of the comparison. Example, SMGDB00000006: Lactobacillus delbrueckii subsp.
+   bulgaricus -> Streptococcus thermophilus STpos compares S. thermophilus over 0 to 6 h, because L.
+   bulgaricus alone was followed for 6 h, while both S. thermophilus sets run to 7 h or longer (+0.088 over
+   6 h, +0.074 over 7 h; absent either way). The arc's `experiments` does not list the source's
+   monoculture that set the window. Options: (a) keep the design-wide window (both arcs of a pair then
+   cover the same time); (b) give each bi-culture arc its own window, the target's curves only, as for
+   drop-outs, and list nothing more; (c) keep it and add the source's monoculture to `experiments`.
+   Proposed by her agent: (b), for consistency with drop-outs and because it uses all the target's data.
+   SETTLED 2026-09-28 (Karoline): "Concerning different windows for growth in mono- vs bi-culture (or
+   drop-out vs full community): OK." So (b): each arc is compared over the target's own curves in the
+   two sets, and "AUC requires an equal time window", which it has: both sets are cut to the same end.
+
+27. **Stationary phase, with max as the measure** (Karoline, 2026-09-28). Her words: "max is problematic
+   when the growth curve hasn't reached stationary phase yet (especially if it did in the other case). We
+   should test for it (simple & quick) and add a warning on the arc in case stationary phase was reached
+   in one case but not the other." And on the first proposal, a flat end: "Roseburia is known to have 2
+   growth peaks in some cases. none of the cases above deal with diauxic shift. Please think about a method
+   that is not invalidated by diauxic shift. We'll have to pay in run time to avoid this, it's common, and
+   we do want to make sure that we are not comparing curves where one reached stat phase and the other
+   didn't". Adopted, choosing among her agent's options: a curve reached stationary phase by the window's
+   end when (1) over the last fifth of the window it rises by less than 10% of its rise (window maximum
+   minus start; a decline counts), and (2) wherever it was measured after the window it never exceeds its
+   window maximum by more than 10% of that rise, so a diauxic pause with a measured second rise is not
+   stationary; a set follows the "Majority of replicates"; a curve needs "At least 6" points in the window
+   to be judged; the warning is for "Max only". Arcs gain the cautions `stationary_phase_differs` and
+   `stationary_unchecked` ("A caution of its own"). Tried on mGrowthDB first: on the dense curves
+   (studies 2, 4, 6, 7, 13; 7 to 18 points) it calls Roseburia's peaks and second peak stationary and
+   flags the B. hydrogenotrophica monocultures still rising at 48 h in study 4; study 8, with 3 or 4 noisy
+   qPCR points per curve, is too sparse to judge. A second phase after the last measurement cannot be seen
+   by any rule.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

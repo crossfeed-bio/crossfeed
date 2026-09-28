@@ -217,7 +217,9 @@
           "items": {
             "enum": [
               "two_replicates",
-              "conditions_unverified"
+              "conditions_unverified",
+              "stationary_phase_differs",
+              "stationary_unchecked"
             ]
           }
         },

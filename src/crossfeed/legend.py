@@ -57,7 +57,10 @@ NOTES = [
     ("Node", "one organism, labeled with its name; in Cytoscape colored by genus, each genus its own color."),
     ("Shown, with a caution", "two_replicates: the spread rests on two values per side. conditions_unverified: "
                               "experiments differ only in their description (a supplement), so which "
-                              "monocultures match is not recorded. The edge keeps its status and is drawn."),
+                              "monocultures match is not recorded. stationary_phase_differs and "
+                              "stationary_unchecked (max only): one set reached stationary phase and the "
+                              "other did not, or too few points to tell. The edge keeps its status and is "
+                              "drawn."),
     ("Not drawn by default", "the quality flags strains_pooled, removed_member_detected and non_batch. The "
                              "comparison itself is in doubt, so such an edge is never read as an absence of "
                              "an interaction."),

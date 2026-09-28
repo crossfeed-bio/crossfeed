@@ -439,6 +439,23 @@ def test_a_strain_is_named_by_its_current_name():
     assert len(r["network"].edges) == 2
 
 
+
+def test_a_node_keyed_by_name_keeps_its_own_name_when_its_taxon_id_is_shared():
+    # Audit 2026-09-28: SMGDB00000008 gives Lachnoclostridium clostridioforme 2_1_49FAA and L. symbiosum
+    # WAL-14673 the same taxon id, 1506553. The derivation keys both nodes by name; renaming by the id's
+    # latest name turned the symbiosum node into a second "clostridioforme", name and species key alike.
+    from crossfeed.gui import _current_names
+    from crossfeed.model import InteractionNetwork, Node
+    net = InteractionNetwork()
+    net.add_node(Node("lachnoclostridium symbiosum", name="Lachnoclostridium symbiosum WAL-14673",
+                      taxon_id="1506553", species="lachnoclostridium symbiosum", identity="name"))
+    net.add_node(Node("ncbi:853", name=A, taxon_id="853", species="faecalibacterium prausnitzii", identity="ncbi"))
+    _current_names(net, {1506553: "Lachnoclostridium clostridioforme 2_1_49FAA",
+                         853: "Faecalibacterium duncaniae A2-165"})
+    kept = net.nodes["lachnoclostridium symbiosum"]
+    assert (kept.name, kept.species) == ("Lachnoclostridium symbiosum WAL-14673", "lachnoclostridium symbiosum")
+    assert net.nodes["ncbi:853"].name == "Faecalibacterium duncaniae A2-165"      # a taxon-keyed node still is
+
 # ---- All, a genus entered, and the level genus arcs count at (Karoline 2026-09-28) ------------------
 
 def test_all_ignores_the_box_and_derives_every_study_with_every_partner():

@@ -377,7 +377,13 @@ style marks them (for example dashed), since one replicate is often all a study 
 `cautions` are shown without making an edge low quality: `two_replicates` marks an edge with exactly two
 replicates on a side, whose sd rests on two values, and `conditions_unverified` an edge from co-cultures of
 a pair that differ only in their description (a supplement, say) when nothing recorded says which
-monocultures match. Such an edge keeps its `status` and is exported.
+monocultures match. With `--metric max`, `stationary_phase_differs` marks an edge where one set reached
+stationary phase within the compared window and the other did not, so the maximum of one may still be
+rising, and `stationary_unchecked` one whose curves have too few time points (under 6) to tell. A curve has
+reached stationary phase when, over the last fifth of the window, it rises by less than 10% of its total
+rise, and it does not rise again by more than that later in its measured curve, so a pause between two
+growth phases (a diauxic shift) followed by a measured second rise does not count; a set follows the
+majority of its replicates (register item 27). Such an edge keeps its `status` and is exported.
 `notes` inform without disqualifying, for example a replicate left out for an implausible spike. Every
 comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2 values:
 `p_value` is the raw value and `significance` the adjusted one (Benjamini-Hochberg by default,
@@ -443,6 +449,13 @@ curve from mGrowthDB and compares replicate sets on the log2 scale, over the are
 default (`--metric max` for maximal abundance, `--metric growth_rate` for the maximum specific growth
 rate). Every edge therefore carries a spread, not just a number:
 its mean, standard deviation, standard error, and the replicate counts behind each side.
+
+Curves are compared over a shared time window, so no curve is extrapolated: from the common first time
+point to the earliest last time point among the curves compared, with the value at that end interpolated
+between the two measurements around it. For a bi-culture the window spans every curve of the design (both
+species alone and together); for a drop-out arc, the target's curves with and without the removed member.
+A replicate that starts later than the others is left out and reported. So a 6-hour monoculture and a
+7-hour co-culture are compared over their first 6 hours.
 
 Whether a comparison counts as an interaction follows that spread rather than a fixed cutoff on the
 effect: it is `absent` when its effect is smaller than k standard deviations of its own spread

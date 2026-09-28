@@ -194,6 +194,19 @@ TWO_REPLICATES = "two_replicates"
 # experiments that differ only in their description (a supplement, a lineage) under identical recorded
 # conditions, where nothing recorded says which monoculture or drop-out matches which (Karoline, 2026-09-27)
 CONDITIONS_UNVERIFIED = "conditions_unverified"
+# with max as the measure (Karoline, 2026-09-28): one set reached stationary phase and the other did not,
+# so the maximum of one may still be rising; or the curves are too sparse to tell
+STATIONARY_DIFFERS, STATIONARY_UNCHECKED = "stationary_phase_differs", "stationary_unchecked"
+
+
+def stationary_cautions(stationary, method: str, outcome: str) -> list:
+    """The stationary-phase caution of a quantified comparison on max, from its two set verdicts."""
+    if method != "max" or outcome != QUANTIFIED or not stationary:
+        return []
+    verdicts = (stationary.get("with"), stationary.get("without"))
+    if None in verdicts:
+        return [STATIONARY_UNCHECKED]
+    return [STATIONARY_DIFFERS] if verdicts[0] != verdicts[1] else []
 
 
 def conditions(exp: dict) -> str:
@@ -524,6 +537,7 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
              "n_with": side["n_co"], "n_without": side["n_mono"],
              "with_log2": side["co_log2"], "without_log2": side["mono_log2"]}
         quality, cautions = _replicate_flags(c["n_with"], c["n_without"])
+        cautions += stationary_cautions(side.get("stationary"), method, c["outcome"])
         if variants > 1 and not matched:
             # co-cultures of this pair under the same recorded conditions differ only in their description
             # (study 4's +Ac and -Ac), and nothing recorded says which one the monocultures match. When a
@@ -691,6 +705,7 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
     for arc in result["arcs"]:
         removed, target = arc["source"], arc["target"]
         quality, cautions = _replicate_flags(arc["n_with"], arc["n_without"])
+        cautions += stationary_cautions(arc.get("stationary"), method, arc["outcome"])
         notes = _spike_notes([f for f in result["flagged"] if f["role"] in ("full community",
                               f"community without {removed}")], target)
         if full_detected or detected[removed]:
