@@ -27,6 +27,12 @@ DERIVE_EXAMPLES = """examples:
     crossfeed derive --live --species "Faecalibacterium duncaniae A2-165" 476272 --all-partners \\
         --format graphml --out example.graphml
 
+  a genus (all its species in mGrowthDB) with every partner, one node per genus:
+    crossfeed derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
+
+  all of mGrowthDB (the page's All), arcs merged across studies and then to genus:
+    crossfeed derive --live --all --merge-arcs --merge-genera --out all_genera.json
+
   every species in one study, stricter about what counts as an interaction:
     crossfeed derive SMGDB00000004 --live --absence-threshold 2 --out study4.json
 
@@ -275,9 +281,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     d = sub.add_parser(
         "derive", help="derive an interaction network for species, or for one study",
-        description="Derive an interaction network from mGrowthDB growth curves: for species, strains or\n"
-                    "NCBI taxon ids (as the local page does), or for every species in one study. The\n"
-                    "settings are the local page's Advanced settings, with the same defaults.",
+        description="Derive an interaction network from mGrowthDB growth curves: for species, strains,\n"
+                    "genera or NCBI taxon ids (as the local page does), for all of mGrowthDB (--all, the\n"
+                    "page's All button), or for every species in one study. The settings are the local\n"
+                    "page's Advanced settings, with the same defaults.",
         epilog=DERIVE_EXAMPLES, formatter_class=argparse.RawDescriptionHelpFormatter)
     what = d.add_argument_group("what to derive")
     what.add_argument("study", nargs="?", default="",
@@ -292,7 +299,7 @@ def build_parser() -> argparse.ArgumentParser:
                       help="every study in mGrowthDB, with every partner, as the page's All button (needs "
                            "--live; the study argument then limits it to those studies)")
     what.add_argument("--exclude-studies", default="", metavar="IDS",
-                      help="with --species, comma separated study ids never to search (default: none)")
+                      help="with --species or --all, comma separated study ids never to search (default: none)")
     what.add_argument("--all-partners", action="store_true",
                       help="with --species, also keep interactions with species not entered (the page's "
                            "'Only interactions between the species entered', unticked)")

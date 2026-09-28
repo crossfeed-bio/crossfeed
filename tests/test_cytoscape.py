@@ -216,7 +216,8 @@ def test_the_sign_is_a_column_and_no_label_is_drawn():
 
 def test_the_genus_is_the_first_word_of_the_name():
     assert genus(Node("ncbi:1", name="Faecalibacterium duncaniae A2-165")) == "Faecalibacterium"
-    assert genus(Node("ncbi:2", name="[Clostridium] scindens ATCC 35704")) == "Clostridium"
+    # NCBI's brackets place it outside Clostridium, so it is its own genus (Karoline, 2026-09-28)
+    assert genus(Node("ncbi:2", name="[Clostridium] scindens ATCC 35704")) == "[Clostridium]"
     assert genus(Node("ncbi:3", name="Candidatus Arthromitus sp.")) == "Arthromitus"
     assert genus(Node("x", species="blautia hydrogenotrophica")) == "Blautia"      # the species key, no name
     assert genus(Node("x")) == "unknown"

@@ -168,11 +168,14 @@ def test_the_input_field_starts_empty_under_a_header_naming_the_options_and_a_ro
     page = gui.render_form("tok")
     assert re.search(r'<textarea id="species" name="species" rows="\d+"></textarea>', page)   # empty
     assert "placeholder" not in page
-    header = page.index('<label class="field" for="species">Species, strains or NCBI taxon ids</label>')
+    # Karoline (2026-09-28): "Genus to be mentioned in the title above the input box and a genus example
+    # query in the sentence below"
+    header = page.index('<label class="field" for="species">Species, strains, genera or NCBI taxon ids</label>')
     examples = page.index('<p class="examples">For example: ')
     assert header < examples < page.index("<textarea")            # a row below the header, above the box
-    for example in gui.INPUT_EXAMPLES:                              # one species, one strain, one taxon id
+    for example in gui.INPUT_EXAMPLES:                    # one species, one strain, one genus, one taxon id
         assert example in page[examples:page.index("<textarea")]
+    assert "Bacteroides" in gui.INPUT_EXAMPLES
     assert ".examples {" in page and "font-size: .82rem" in page   # in a smaller font
 
 
@@ -253,3 +256,18 @@ def test_all_on_the_command_line_needs_live_and_no_species(capsys):
     assert "--all searches mGrowthDB, so it needs --live" in capsys.readouterr().err
     assert main(["derive", "--all", "--live", "--species", "Blautia"]) == 2
     assert "--all derives every study; leave out --species" in capsys.readouterr().err
+
+
+def test_the_page_the_command_line_and_the_help_all_know_genera_and_all():
+    # Karoline (2026-09-28): "please make sure that the GUI, CLI and help integrate the new options (...
+    # CLI help documenting the new option; help page including the new advanced option and arc attribute)"
+    from crossfeed import help as help_page
+    from crossfeed.__main__ import build_parser
+    derive = next(a for a in build_parser()._subparsers._actions if a.choices).choices["derive"].format_help()
+    assert "--merge-genera" in derive and "--all" in derive and "--species Bacteroides" in derive
+    page = help_page.render_help("tok", gui.DEFAULTS, gui.EXAMPLE)
+    assert "Merge to genus" in page                                     # the advanced option
+    assert help_page._name("supporting_pairs") in page and help_page._name("merged_pairs") in page  # the arc fields
+    assert "a genus (it stands for every species of it" in page and "The All button" in page
+    form = gui.render_form("tok")
+    assert 'name="merge_genera"' in form and 'name="all"' in form

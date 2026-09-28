@@ -49,8 +49,9 @@ def metric_name(s: dict) -> str:
     return s.get("metric", "auc")
 
 
-# one of each kind the box takes, shown above it (the box itself starts empty; Karoline, 2026-09-27)
-INPUT_EXAMPLES = ("Blautia hydrogenotrophica", "Faecalibacterium duncaniae A2-165", "411483")
+# one of each kind the box takes, shown above it (the box itself starts empty; Karoline, 2026-09-27),
+# a genus among them (Karoline, 2026-09-28)
+INPUT_EXAMPLES = ("Blautia hydrogenotrophica", "Faecalibacterium duncaniae A2-165", "Bacteroides", "411483")
 DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window": rates.DEFAULT_WINDOW,
             "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
             "include_low_quality": False, "correction": "bh", "include_dropout": True,
@@ -197,7 +198,7 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
     """
     note = f"<p class=\"note\">{_esc(message)}</p>" if message else ""
     return _page(f"""{note}<form method="post" action="/run?token={_esc(token)}">
-<label class="field" for="species">Species, strains or NCBI taxon ids</label>
+<label class="field" for="species">Species, strains, genera or NCBI taxon ids</label>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in INPUT_EXAMPLES)}</p>
 <textarea id="species" name="species" rows="5">{_esc(entries)}</textarea>
 <p class="hint">One per line (a genus alone stands for all its species), or press Example. Interactions are

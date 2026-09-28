@@ -33,13 +33,26 @@ IDENTITIES = ("ncbi", "name", "genus")
 STATUSES = ("present", "absent")
 
 
+# words before a genus that are not a genus: "Candidatus Arthromitus", "unclassified Bacteroides",
+# "uncultured Candidatus ..." (Craig's agent on #85); an organism known only to its genus joins that genus
+# (Karoline, 2026-09-28)
+GENUS_QUALIFIERS = ("candidatus", "unclassified", "uncultured")
+
+
 def genus_name(name: str) -> str:
-    """The genus of an organism name, its first word ("[Clostridium] scindens" -> Clostridium,
-    "Candidatus Arthromitus" -> Arthromitus), as mGrowthDB writes the name: not from NCBI's lineage."""
-    words = (name or "").replace("[", "").replace("]", "").split()
-    if words and words[0].lower() == "candidatus":
+    """The genus of an organism name, as mGrowthDB writes the name (not NCBI's lineage): its first word
+    after any qualifier ("Candidatus Arthromitus" -> Arthromitus, "unclassified Bacteroides" ->
+    Bacteroides). NCBI's brackets stay: "[Clostridium] scindens" is placed outside Clostridium, so its
+    genus is [Clostridium], apart from Clostridium itself (Karoline, 2026-09-28)."""
+    words = (name or "").split()
+    while words and words[0].lower() in GENUS_QUALIFIERS:
         words = words[1:]
-    return words[0].capitalize() if words else "unknown"
+    if not words:
+        return "unknown"
+    first = words[0]
+    if first.startswith("[") and first.endswith("]"):
+        return "[" + first[1:-1].capitalize() + "]"
+    return first.capitalize()
 
 
 @dataclass(frozen=True)

@@ -13,7 +13,9 @@ tagged version is never reused for changed content.
   between two genera merged by sign, with the median log2 mean and new arc fields `supporting_pairs` and
   `merged_pairs` (species pairs, or strain pairs when only taxon ids were entered). Interactions within a
   genus stay as a self-loop; absent arcs as one hidden absent arc per genus pair. With Merge parallel arcs
-  on too, a pair measured in several studies counts once. Nodes gain the identity `genus` (item 24).
+  on too, a pair measured in several studies counts once. Nodes gain the identity `genus` (item 24). The
+  genus skips qualifiers (Candidatus, unclassified, uncultured) and keeps NCBI's brackets, so [Clostridium]
+  is not Clostridium, in the merge, the genus query and the genus colors alike.
 - A genus entered alone ("Blautia") stands for every species of it in mGrowthDB, listed on the page and
   in the report, instead of being refused as "a genus alone".
 - An About button beside Help (#80): who built grownet, in the wording Craig agreed to on #80, with the

@@ -17,6 +17,7 @@ import difflib
 import re
 
 from .derive import genus_species
+from .model import genus_name
 
 STUDY_ID = "SMGDB{:08d}"
 # stop crawling after this many consecutive study ids are absent. Study 3 is already missing; a larger gap
@@ -186,9 +187,10 @@ def resolve_species(entries, index: dict) -> dict:
             key = genus_species(text)
             matches = index.get(key)
             if not matches and len(key.split()) == 1:
-                # a genus alone stands for every strain of it in mGrowthDB (Karoline, 2026-09-28): the genus
-                # is the first word of the names mGrowthDB records, so "[Clostridium]" is not Clostridium
-                species = sorted(k for k in index if k.split()[0] == key)
+                # a genus alone stands for every strain of it in mGrowthDB (Karoline, 2026-09-28), by the rule
+                # the genus merge uses: "unclassified Bacteroides" is Bacteroides, "[Clostridium]" is not
+                # Clostridium
+                species = sorted(k for k in index if genus_name(k).lower() == genus_name(key).lower())
                 if species:
                     matches = {t: n for k in species for t, n in index[k].items()}
                     out["genera"][text] = [_display(k) for k in species]

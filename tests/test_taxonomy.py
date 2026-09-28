@@ -142,7 +142,7 @@ def test_the_current_name_is_the_most_recently_published_one():
 
 def test_a_genus_alone_stands_for_every_strain_of_it():
     # Karoline (2026-09-28): a genus entered resolves to all its strains in mGrowthDB, and the species it
-    # expanded to are listed; "[Clostridium]" is a different first word, so it is not Clostridium
+    # expanded to are listed; "[Clostridium]" is placed outside Clostridium, so it is not Clostridium
     index = {"blautia hydrogenotrophica": {476272: "Blautia hydrogenotrophica DSM 10507"},
              "blautia obeum": {40520: "Blautia obeum ATCC 29174", 7: "Blautia obeum A2-235"},
              "[clostridium] scindens": {29347: "[Clostridium] scindens ATCC 35704"},
@@ -151,3 +151,10 @@ def test_a_genus_alone_stands_for_every_strain_of_it():
     assert r["taxon_ids"] == [476272, 40520, 7, 1492] and r["unresolved"] == []
     assert r["genera"] == {"blautia": ["Blautia hydrogenotrophica", "Blautia obeum"],
                            "Clostridium": ["Clostridium butyricum"]}
+    assert resolve_species(["[Clostridium]"], index)["genera"] == {"[Clostridium]": ["[clostridium] scindens"]}
+
+
+def test_an_organism_known_only_to_its_genus_is_in_that_genus():
+    index = {"bacteroides fragilis": {1: "Bacteroides fragilis NCTC 9343"},
+             "unclassified bacteroides": {2: "unclassified Bacteroides"}}
+    assert resolve_species(["Bacteroides"], index)["taxon_ids"] == [1, 2]

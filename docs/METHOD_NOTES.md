@@ -637,7 +637,10 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    counts once; the strength is the median, as in item 14; the genus is the first word of the name
    mGrowthDB records ([Clostridium] is not Clostridium), not NCBI's lineage, so a reclassified genus follows
    its names. Edges gain `supporting_pairs` and `merged_pairs`, nodes the identity `genus` (optional,
-   backward compatible).
+   backward compatible). After Craig's agent's review of #85 (qualifiers such as "unclassified" made a
+   genus of their own), Karoline chose: an organism named like "unclassified Bacteroides" is merged into
+   its genus ("Merge into its genus"; mGrowthDB holds none today), and "[Clostridium] scindens" is its own
+   genus, [Clostridium], apart from Clostridium ("Its own genus"), as the genus query already treated it.
 
 25. **All of mGrowthDB** (Karoline, 2026-09-28). Her words: "a button next to 'Example' that says: 'All'.
    If this button is pushed, the input field is ignored and instead, the entire interaction network is

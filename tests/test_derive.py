@@ -864,3 +864,17 @@ def test_merging_to_genus_is_off_by_default_and_gives_a_valid_network_with_genus
     assert net.validate() == [] and set(net.nodes) == {"Blautia", "Faecalibacterium"}
     assert net.nodes["Blautia"].identity == "genus" and net.nodes["Blautia"].taxon_id == ""
     assert net.edges[0].supporting_pairs == 2 and 'key="e_supporting_pairs">2<' in to_graphml(net)
+
+
+def test_the_genus_rule_skips_qualifiers_and_keeps_ncbi_brackets():
+    # Craig's agent on #85: "unclassified" and "uncultured" collapsed into a genus called Unclassified;
+    # Karoline (2026-09-28): such an organism joins its genus, and "[Clostridium]" is not Clostridium
+    from crossfeed.model import genus_name
+    cases = {"Candidatus Arthromitus sp": "Arthromitus", "unclassified Bacteroides": "Bacteroides",
+             "uncultured Candidatus Saccharibacteria": "Saccharibacteria", "Blautia sp. SC05B48": "Blautia",
+             "[Clostridium] scindens VPI 13733": "[Clostridium]", "clostridium butyricum": "Clostridium",
+             "": "unknown", "unclassified": "unknown"}
+    assert {name: genus_name(name) for name in cases} == cases
+    edges, _ = merge_genus([_garc(1.0, "unclassified Bacteroides", FP), _garc(2.0, "unclassified Blautia", FP),
+                            _garc(3.0, "[Clostridium] scindens VPI 13733", FP)], merge=True)
+    assert sorted(e["source"] for e in edges) == ["Bacteroides", "Blautia", "[Clostridium]"]
