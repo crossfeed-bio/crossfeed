@@ -295,3 +295,36 @@ def test_the_readme_names_the_tool_grownet():
     # outside code and links, crossfeed appears only where the README explains the old name
     leftover = [line for line in prose.splitlines() if "crossfeed" in line]
     assert all("called crossfeed" in line or "crossfeed-bio" in line for line in leftover)
+
+
+def test_help_and_back_after_a_search_keeps_the_result(monkeypatch):
+    # Karoline (2026-09-28, audit step 8): "clicking help after a result was obtained and then coming back to
+    # the main page causes a full loss of the result, which is problematic"
+    import html as html_lib
+    import threading
+    import urllib.parse
+    import urllib.request
+
+    from test_gui import FakeClient
+    handler = type("H", (gui._Handler,), {"token": "tok", "client_factory": staticmethod(FakeClient), "state": {},
+                                          "wait": 5.0})
+    server = gui._Server(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        form = urllib.parse.urlencode({"species": "Faecalibacterium prausnitzii\nBlautia hydrogenotrophica",
+                                       "only_entered": "1"}).encode()
+        with urllib.request.urlopen(f"{base}/run?token=tok", data=form, timeout=10) as r:
+            result_page = r.read().decode("utf-8")
+        assert "interaction(s)" in result_page
+        for name in ("help", "legend", "about"):
+            link = re.search(rf'href="(/{name}\?token=tok&amp;job=[0-9a-f]+)"', result_page)
+            assert link, f"the {name} link does not carry the search"
+            with urllib.request.urlopen(base + html_lib.unescape(link.group(1)), timeout=10) as r:
+                page = r.read().decode("utf-8")
+            back = re.search(r'href="(/\?token=tok&amp;job=[0-9a-f]+#result)">Back', page)
+            assert back, f"{name}'s Back does not return to the search"
+            with urllib.request.urlopen(base + html_lib.unescape(back.group(1)), timeout=10) as r:
+                assert "interaction(s)" in r.read().decode("utf-8")      # the result is still there
+    finally:
+        server.shutdown()

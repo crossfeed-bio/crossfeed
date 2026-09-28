@@ -265,6 +265,13 @@ tagged version is never reused for changed content.
   unused `requests` dependency was dropped.
 
 ### Fixed
+- From Karoline's checks (audit step 8): Help, Legend or About opened from a result, then Back, returned to
+  an empty page and the result was lost; their links and Back now carry the search, so Back returns to it.
+  A GraphML file imported into Cytoscape did not take the whole grownet style, because the file lacked the
+  columns the style maps; GraphML now carries genus, genus_color, line_style and display_weight, from the
+  tool and the viewer alike, and the viewer's genus rule matches the tool's (qualifiers skipped, NCBI's
+  brackets kept). The help page says how to style a GraphML file in Cytoscape, and that Gephi may merge
+  parallel arcs on import.
 - From a code review of the whole package (2026-09-28): with the growth rate (easylinear), a curve that only
   declines crashed the comparison and dropped the whole pair or community (SMGDB00000014 lost three
   co-cultures); its rate is now its steepest, non-positive slope. A problem with one species (mixed
