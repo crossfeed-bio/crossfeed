@@ -134,3 +134,38 @@ def test_directions_carry_their_color_and_the_legend_opens_in_the_frame():
     assert '<td class="up">facilitation</td>' in result
     legend = gui.render_legend("tok")
     assert '<div class="app"><header>' in legend and "Interaction network legend" in legend
+
+
+def test_the_introduction_cites_gause_and_shows_the_idea():
+    page = help.render_help("tok", gui.DEFAULTS, gui.EXAMPLE)
+    intro = page[page.index('<h2 id="idea">'):page.index('<h2 id="example">')]
+    assert "Gause GF (1932)" in intro and "Gause GF (1934)" in intro
+    assert intro.count("<svg") == 4 and "A alone" in intro and "A and B together" in intro
+
+
+def test_the_figure_marks_every_growth_measure_the_tool_can_compare():
+    from crossfeed.idea import idea_figure
+    figure = idea_figure()
+    marks = {"auc": "area (auc)", "max": "maximum (max)", "growth_rate": "growth rate"}
+    assert set(gui.METRICS) == set(marks)                   # a new measure needs a mark in the figure
+    assert all(label in figure for label in marks.values())
+
+
+def test_the_figure_shows_what_its_arcs_say():
+    from crossfeed import brand, idea
+    final = {name: {w: idea._curve(params[name])[-1][1] for w, params in
+                    (("alone", idea.ALONE), ("together", idea.TOGETHER))} for name in "AB"}
+    assert final["A"]["together"] < final["A"]["alone"]      # B inhibits A: the orange-red arc
+    assert final["B"]["together"] > final["B"]["alone"]      # A facilitates B: the green arc
+    arcs = idea._arcs()
+    assert brand.GROWTH in arcs and brand.INHIBITION in arcs
+
+
+def test_the_marked_stretch_holds_the_steepest_rise_of_log_abundance():
+    import math
+
+    from crossfeed import idea
+    points = idea._curve(idea.ALONE["A"])
+    slopes = [(math.log(b[1]) - math.log(a[1])) / (b[0] - a[0]) for a, b in zip(points[:-1], points[1:], strict=True)]
+    steepest = points[slopes.index(max(slopes))]
+    assert steepest in idea._steep_stretch(points)
