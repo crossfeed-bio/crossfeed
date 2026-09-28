@@ -572,10 +572,14 @@ def test_a_published_file_of_another_format_or_schema_is_not_used():
     import datetime
 
     from grownet import published
+    from grownet.model import SCHEMA
     now = datetime.datetime(2026, 9, 28, 12, tzinfo=datetime.timezone.utc)
-    good = {"format": published.FORMAT, "network": {"schema": "crossfeed.interaction_network/v0",
+    good = {"format": published.FORMAT, "network": {"schema": SCHEMA,
                                                      "meta": {"derived_at": "2026-09-28T10:00:00+00:00"}}}
     assert published.fresh(good, now)
     assert not published.fresh({**good, "format": "grownet.all_result/v0"}, now)
     assert not published.fresh({**good, "network": {**good["network"], "schema": "other/v1"}}, now)
+    # a file published before the schema id became grownet's (#102) is derived again, not read
+    assert not published.fresh({**good, "network": {**good["network"],
+                                                    "schema": "crossfeed.interaction_network/v0"}}, now)
     assert not published.fresh({**good, "network": {**good["network"], "meta": {}}}, now)
