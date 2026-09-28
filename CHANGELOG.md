@@ -18,6 +18,8 @@ tagged version is never reused for changed content.
   is not Clostridium, in the merge, the genus query and the genus colors alike.
 - A genus entered alone ("Blautia") stands for every species of it in mGrowthDB, listed on the page and
   in the report, instead of being refused as "a genus alone".
+- The README says the tool is now called grownet and what keeps the crossfeed name until the rename, that
+  the tests also run on Windows and macOS, and that the local page's About says who built the tool.
 - An About button beside Help (#80): who built grownet, in the wording Craig agreed to on #80, with the
   repository link and the version.
 - The help page opens with the idea behind the tool, after Gause (1932, 1934): grow two species alone
@@ -43,6 +45,13 @@ tagged version is never reused for changed content.
   (the species do not affect each other), and the no-growth settings say they test the replicate growth
   curves of one species in one culture condition. A new setting, Exclude these studies
   (`--exclude-studies` with `--species`), leaves the listed studies out of a search; empty by default.
+- Release automation (#26, #27): a version tag runs `.github/workflows/release.yml`, which checks the tag
+  against the version and this changelog, tests the wheel in a clean environment on Linux, Windows and
+  macOS, builds and starts the Windows program, publishes to PyPI through trusted publishing once a
+  maintainer approves, and creates the GitHub release with the notes from this changelog and
+  `grownet-<version>-windows.zip` attached. CI builds and starts both on every push. A double-clicked
+  `grownet.exe` opens the page, and on an error waits for Enter instead of closing. RELEASING.md gives the
+  setup and the steps; the README's install section offers the Windows zip, uv and PyPI.
 - The gate gained a merge-marker check, after conflict markers from a merge reached this changelog
   unseen (now removed, both sides kept).
 - Documentation made to agree with the code, after an audit (21 conflicts): the README's Cytoscape style,

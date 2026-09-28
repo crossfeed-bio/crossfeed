@@ -4,6 +4,10 @@
 [![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![python: 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
+The tool is now called **grownet** (#71): the local page, the Cytoscape style, the networks it writes and
+the Windows program already say grownet. The Python package, the `crossfeed` command, the module and this
+repository keep the old name until the rename, so the commands below still start with `crossfeed`.
+
 **crossfeed** turns experimentally grounded microbial co-growth data from
 [mGrowthDB](https://mgrowthdb.gbiomed.kuleuven.be/) into directed interaction networks, in a neutral and
 openly citable format that downstream tools (such as Syntropa and microbetag) can consume.
@@ -33,7 +37,22 @@ own derivation method. Nothing here needs another document to follow.
 
 ## Install
 
-### To use it (macOS and Linux)
+Three ways, from the least to the most technical. All give the same program.
+
+### Windows, without installing anything
+
+From the first release on, each [release](https://github.com/crossfeed-bio/crossfeed/releases) carries
+`grownet-<version>-windows.zip`: the whole program in one folder, Python included. Unzip it (right-click,
+Extract All), open the folder and double-click `grownet.exe`. A black window opens and shows an address, and
+your browser opens the page there; closing the black window stops the program.
+
+Windows warns about any new program it has not seen many people run, so the first time it says "Windows
+protected your PC": click "More info", then "Run anyway". That is Windows being cautious about an unfamiliar
+program, not a finding about this one, which is built in public by this repository's automated build. On
+Windows 11 with Smart App Control on, Windows may block it instead; then use one of the two routes below.
+The zip's `README.txt` says the same, for whoever unzips it.
+
+### With uv (macOS, Linux and Windows)
 
 The quickest route is [uv](https://docs.astral.sh/uv/), which fetches a suitable Python by itself. The
 Python that ships with macOS (3.9) is too old for crossfeed, and uv avoids that. Install uv once:
@@ -42,7 +61,8 @@ Python that ships with macOS (3.9) is too old for crossfeed, and uv avoids that.
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Then open the local page (the first run installs crossfeed; later runs start at once):
+(On Windows, use the PowerShell command on [uv's site](https://docs.astral.sh/uv/getting-started/installation/).)
+Then open the local page (the first run installs it; later runs start at once):
 
 ```bash
 uvx --from git+https://github.com/crossfeed-bio/crossfeed crossfeed gui
@@ -50,27 +70,28 @@ uvx --from git+https://github.com/crossfeed-bio/crossfeed crossfeed gui
 
 Any `crossfeed` command works the same way, for example
 `uvx --from git+https://github.com/crossfeed-bio/crossfeed crossfeed derive SMGDB00000004 --live`.
+This always runs the latest version in the repository.
 
-With Python 3.10 or newer already installed (Homebrew, conda, python.org), plain pip works too:
+### From PyPI
+
+From the first release on (0.1.0, published after the rename to grownet), the program is on
+[PyPI](https://pypi.org), so it installs like any other Python tool, as a command of its own:
 
 ```bash
-python3 -m pip install --user "git+https://github.com/crossfeed-bio/crossfeed"
+uv tool install grownet        # or: pipx install grownet
+grownet gui
 ```
 
-Windows users: a double-click build is planned (#26). Until then, install uv with the PowerShell command
-on [its site](https://docs.astral.sh/uv/getting-started/installation/); the `uvx` command is the same.
+`uv tool upgrade grownet` (or `pipx upgrade grownet`) moves to a new release. With Python 3.10 or newer
+already installed and neither uv nor pipx, `python3 -m pip install --user grownet` works too (on Windows,
+`py -m pip install --user grownet`). Until that release, the same works from the repository:
+`python3 -m pip install --user "git+https://github.com/crossfeed-bio/crossfeed"`.
 
 ### To develop it
 
-Python 3.10 or newer.
-
-```
-git clone https://github.com/crossfeed-bio/crossfeed
-cd crossfeed
-python -m venv .venv
-. .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-```
+From a clone, with Python 3.10 or newer: the setup and the checks are in
+[CONTRIBUTING.md](CONTRIBUTING.md#development-setup), and how a release is made in
+[RELEASING.md](RELEASING.md).
 
 ## Quickstart
 
@@ -470,7 +491,7 @@ Discipline is a feature here. Every commit and every CI run passes the same self
 (`checks/gate.py`): no committed secrets, no raw or pulled data (only the synthetic fixtures under
 `tests/fixtures/`), no local-machine paths, imports that resolve to the standard library or crossfeed
 itself, a documented house style, and a schema contract that keeps the shipped schema in step with the
-code. The tests run on Python 3.10 to 3.12. Get the same checks locally with `make check`, or run them on
+code. The tests run on Python 3.10 to 3.12 on Linux, and on Windows and macOS. Get the same checks locally with `make check`, or run them on
 every commit with `pre-commit install`. See [CONTRIBUTING.md](CONTRIBUTING.md). Found a security issue?
 Report it privately (see [SECURITY.md](SECURITY.md)), not in a public issue.
 
@@ -482,7 +503,7 @@ used only for the agreed analysis and is never ingested into any downstream corp
 [docs/DATA_GOVERNANCE.md](docs/DATA_GOVERNANCE.md).
 
 A joint open source project of Syntropa and the KU Leuven Laboratory of Molecular Bacteriology
-(K. Faust, H. Zafeiropoulos). Contributions welcome.
+(K. Faust, H. Zafeiropoulos). The local page's About says who built the tool. Contributions welcome.
 
 ## License
 

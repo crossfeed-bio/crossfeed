@@ -15,6 +15,10 @@ Rules for this file:
 
 ## Current state
 
+- 2026-09-28 (Karoline): "for me, project implementation is now complete and so focus can be on
+  auditing/testing." New features are not proposed unprompted; the work is auditing, testing against
+  mGrowthDB, and fixing what that finds. Still to come: the rename (#71) and the 0.1.0 release
+  (RELEASING.md).
 - 2026-09-17: v0.0.2 is unreleased on `main`. The pipeline runs end to end on live mGrowthDB data with
   the provisional `BaselineDeriver`. CLI: `derive`, `validate`, `schema`; outputs JSON and GraphML.
 - 2026-09-17: Helpers `crossfeed.growth` and `crossfeed.interaction` are merged (#9, feature #3). Karoline's
@@ -205,10 +209,22 @@ Rules for this file:
 ## Genus merging, genus queries and All (2026-09-28)
 
 Karoline's requests and choices are in METHOD_NOTES items 24 and 25, in her words. For agents: the genus
-rule is `model.genus_name` (first word of the name, brackets and "Candidatus" dropped), shared by the genus
-colors and the merge, so the two cannot disagree. `derive.merge_genus` runs after `merge_parallel` in
+rule is `model.genus_name` (first word after the qualifiers Candidatus, unclassified and uncultured;
+NCBI's brackets kept, so [Clostridium] is not Clostridium), shared by the genus colors, the merge and the
+genus query, so they cannot disagree. `derive.merge_genus` runs after `merge_parallel` in
 `output_meta`. `gui.support_level` decides species or strain pairs. `SpeciesIndex.studies` lists every study
 the crawl found, which All derives. Names decide the genus: Phocaeicola (former Bacteroides) stays apart.
+## Release (2026-09-27)
+
+Karoline's answers on the first release, in her words: the rename "Wait for #79 first"; version
+"0.1.0"; builds "Windows only" (no macOS or Linux program: those users install with uv or PyPI);
+publishing "I prepare, you and Craig publish". So the agent prepares everything, and a person sets up
+PyPI trusted publishing, approves the `pypi` environment and pushes the tag (RELEASING.md). Order: #79,
+the rename (#71), the release pull request, the tag. Windows ships unsigned first (a one-folder zip,
+Karoline on #63), then the SignPath Foundation, which needs an existing release, then perhaps the
+Microsoft Store; a certificate is never bought (#63). Verified: the zip builds on a Windows runner
+(9 MB), starts, serves the page and derives the fixture; the wheel installs and starts in a clean
+environment.
 
 ## Open questions (need a human)
 
