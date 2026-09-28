@@ -19,7 +19,7 @@ def test_empty_network_is_explained(tmp_path, capsys):
 def test_validate_reports_problems(tmp_path, capsys):
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps({
-        "schema": "crossfeed.interaction_network/v0", "nodes": [], "studies": [],
+        "schema": "grownet.interaction_network/v0", "nodes": [], "studies": [],
         "edges": [{"source": "a", "target": "b", "effect": "facilitation"}],  # no study_ids
     }), encoding="utf-8")
     rc = main(["validate", str(bad)])

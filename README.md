@@ -226,7 +226,7 @@ date and time as graph attributes.
 
 ```json
 {
-  "schema": "crossfeed.interaction_network/v0",
+  "schema": "grownet.interaction_network/v0",
   "meta": {"tool": "grownet", "tool_version": "0.0.2", "derived_on": "2026-09-27",
            "derived_at": "2026-09-27T14:15:53+02:00", "source_db": "mGrowthDB (live)",
            "settings": {"metric": "auc", "...": "..."}, "data": {"...": "..."}},
