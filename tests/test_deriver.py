@@ -18,7 +18,7 @@ def _mono(name, gr):
 
 
 def _co(a, b, cond, gr_a, gr_b):
-    return {"id": "E_" + cond, "name": cond, "communityStrains": [{"name": a}, {"name": b}],
+    return {"id": "E_" + cond, "name": cond, "cultivationMode": "batch", "communityStrains": [{"name": a}, {"name": b}],
             "bioreplicates": [{"name": "Average", "measurementContexts": [
                 {"techniqueType": "qpcr", "subject": {"type": "strain", "name": a}, "growthRate": gr_a},
                 {"techniqueType": "qpcr", "subject": {"type": "strain", "name": b}, "growthRate": gr_b}]}]}

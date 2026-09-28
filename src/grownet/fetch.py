@@ -63,13 +63,13 @@ def prefetch_studies(client, study_ids, include_non_batch: bool = False, progres
     experiment_ids = [e["id"] for s in studies for e in s.get("experiments", [])]
     experiments = [e for e in _each(client.get_experiment, experiment_ids, progress, "Reading experiments") if e]
     derived = [e for e in experiments if include_non_batch or cultivation(e) == BATCH]
-    if keep is not None:
-        # only what a derivation limited to `keep` reads (derive.relevant_experiments), per study
-        from .derive import relevant_experiments
-        by_study = {}
-        for e in derived:
-            by_study.setdefault(e.get("studyId"), []).append(e)
-        derived = [e for group in by_study.values() for e in relevant_experiments(group, keep, dropout)]
+    # only what the derivation reads (derive.relevant_experiments), per study: with `keep`, what can give an
+    # interaction between kept strains; without it, what can take part in any comparison
+    from .derive import relevant_experiments
+    by_study = {}
+    for e in derived:
+        by_study.setdefault(e.get("studyId"), []).append(e)
+    derived = [e for group in by_study.values() for e in relevant_experiments(group, keep, dropout)]
     stubs = [b["id"] for e in derived for b in e.get("bioreplicates", [])]
     bioreplicates = [b for b in _each(client.get_bioreplicate, stubs, progress, "Reading replicates") if b]
     contexts = []

@@ -792,14 +792,19 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
         def work():
             try:
-                client = self.client_factory()
                 with _INDEX_LOCK:          # two first searches build it once, not twice
                     built = self.state.get("index_built", 0)
                     if self.state.get("index") is None or time.monotonic() - built > INDEX_MAX_AGE:
-                        # the species list of all of mGrowthDB: slow to build, so built once an hour at most
+                        # the species list of all of mGrowthDB, and the client whose cache keeps what the
+                        # searches read: both renewed once an hour, so a change in mGrowthDB is seen within
+                        # the hour, and a second search does not read the same records again (audit of
+                        # 2026-09-28: every search started with an empty cache)
+                        fresh = self.client_factory()
                         progress(0, None, "Reading the species list of mGrowthDB (the first search in an hour)")
-                        self.state["index"] = species_index(client, progress=progress)
+                        self.state["index"] = species_index(fresh, progress=progress)
+                        self.state["client"] = fresh
                         self.state["index_built"] = time.monotonic()
+                    client = self.state["client"]
                 job["result"] = run_query(client, entries, settings, self.state["index"], progress=progress,
                                           all_studies=all_studies)
                 job["status"] = "done"
