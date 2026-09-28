@@ -77,7 +77,11 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install pyinstaller==6.22.3 .
-      - run: python packaging/windows/build.py "grownet-${{ github.ref_name }}-windows.zip"
+      - name: build the program and zip it (the tag reaches the shell as a variable, never as code)
+        env:
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: python packaging/windows/build.py "grownet-$TAG-windows.zip"
       - run: python packaging/smoke.py dist/grownet/grownet.exe --no-browser
       - run: dist/grownet/grownet.exe derive SMGDB00000004 --fixture tests/fixtures/example_interactions.json --out example.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
