@@ -15,6 +15,7 @@ from grownet.cytoscape import (
     network_json,
     send,
     style,
+    style_xml,
 )
 from grownet.mgrowthdb import records_to_network
 from grownet.model import Node
@@ -137,6 +138,33 @@ def test_the_style_maps_what_the_legend_shows():
     assert width["mappingType"] == "continuous" and width["points"][0]["value"] == 0.0
     dashes = {p["key"] for p in mappings[("EDGE_LINE_TYPE", "line_style")]["map"]}
     assert dashes == {"SOLID", "LONG_DASH", "DOT", "DASH_DOT"}
+
+
+def test_the_style_file_is_the_xml_cytoscape_imports_with_every_default_and_mapping():
+    # Karoline (2026-09-28): "the manual import of grownet_style.json did not work for cytoscape 3.10.4";
+    # Cytoscape refuses JSON style files, its own exports included, and reads this XML (checked in 3.10.4:
+    # the imported style draws widths, dashes, colors, hidden absent arcs and genus colors as Send does)
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(style_xml())
+    assert root.tag == "vizmap" and root.get("documentVersion") == "3.1"
+    (vs,) = root.findall("visualStyle")
+    assert vs.get("name") == "grownet" and [c.tag for c in vs] == ["network", "node", "edge"]
+    props = {p.get("name"): (section.tag, p) for section in vs for p in section.findall("visualProperty")}
+    for d in style()["defaults"]:
+        section, p = props[d["visualProperty"]]
+        assert section == d["visualProperty"].split("_")[0].lower() and p.get("default") == str(d["value"])
+    types = {"String": "string", "Double": "float"}
+    for m in style()["mappings"]:
+        section, p = props[m["visualProperty"]]
+        (mapping,) = p
+        assert mapping.tag == m["mappingType"] + "Mapping" and mapping.get("attributeName") == m["mappingColumn"]
+        assert mapping.get("attributeType") == types[m["mappingColumnType"]]
+        if m["mappingType"] == "discrete":
+            assert {(e.get("attributeValue"), e.get("value")) for e in mapping} == \
+                {(e["key"], e["value"]) for e in m["map"]}
+        if m["mappingType"] == "continuous":
+            assert [(float(q.get("attrValue")), q.get("lesserValue"), q.get("equalValue"), q.get("greaterValue"))
+                    for q in mapping] == [(q["value"], q["lesser"], q["equal"], q["greater"]) for q in m["points"]]
 
 
 def test_a_network_is_posted_styled_and_laid_out(cyrest):

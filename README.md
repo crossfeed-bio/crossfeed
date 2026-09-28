@@ -211,7 +211,7 @@ The style applied is the one the legend describes: the same arrowhead on every a
 and inhibition orange-red (the color alone carries the sign), width by `weight`, absent edges hidden, long
 dashes for drop-out arcs and dots for single-replicate ones, and nodes colored by genus. It is called
 `grownet`, and a style of that name already in the session is brought up to date, so it always matches the
-legend. `grownet style --out grownet_style.json` writes it as a file for File, Import, Styles from File.
+legend. `grownet style --out grownet_style.xml` writes it as a file for File, Import, Styles from File.
 When Cytoscape is not running, the command says so and names the port instead of failing.
 
 ## The output format

@@ -12,7 +12,7 @@ tagged version is never reused for changed content.
   page's All button and `derive --all` use it when it is less than a day old and the settings are the
   defaults, and derive live otherwise, or with `--no-published`; the page and the report say when it was
   derived. One derivation a day instead of about 1,300 requests to mGrowthDB per All.
-- The local page offers the Cytoscape style as a download (`/grownet_style.json`, the file `grownet style`
+- The local page offers the Cytoscape style as a download (`/grownet_style.xml`, the file `grownet style`
   writes), linked from the help page's Cytoscape answers, so styling a GraphML file needs no command line.
   Help, Legend and About have a Back at the upper right as well as at the end, and the grownet mark leads
   back to the search being worked on instead of an empty page.
@@ -238,6 +238,12 @@ tagged version is never reused for changed content.
 - Edges gained optional `cautions` (`two_replicates`, shown without making an edge low quality) and
   `experiments` (the ids of the experiments an edge compares), plus the quality flag
   `removed_member_detected`.
+
+### Fixed
+- The style file imports in Cytoscape: `grownet style` and the help page's download now write Cytoscape's
+  XML style format (`grownet_style.xml`). File, Import, Styles from File refused the JSON file with "Don't
+  know how to read file" (found by Karoline in Cytoscape 3.10.4); Cytoscape reads no JSON style file, its
+  own exports included. Send to Cytoscape was not affected.
 
 ### Changed
 - Fewer requests to mGrowthDB, with identical networks (checked on all of mGrowthDB): a monoculture no
