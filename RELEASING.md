@@ -34,8 +34,13 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
    - Workflow name: `release.yml`
    - Environment name: `pypi`
 
-   The first release then creates the project on PyPI under that account.
-3. **A protected environment on GitHub.** In the repository's Settings, Environments, create `pypi`. Under
+   The first release then creates the project on PyPI under that account, its first owner.
+3. **A second owner.** Right after the first release, the first owner opens the project on PyPI (Manage
+   project, Collaborators) and invites the other maintainer's PyPI username with the role Owner; they
+   accept from their own account, which needs two-factor authentication too. Karoline and Craig are both
+   owners, in either order (Karoline, 2026-09-28: "I don't care wether I am first or 2nd"), so the project
+   never depends on one account. Releases do not depend on either: they come from the workflow.
+4. **A protected environment on GitHub.** In the repository's Settings, Environments, create `pypi`. Under
    "Deployment protection rules", add the maintainers as required reviewers, so publishing waits for a
    person's approval, and under "Deployment branches and tags" allow only tags matching `v*`.
 
