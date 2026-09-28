@@ -13,7 +13,10 @@ and on 2026-09-27 that the implementation is its own option:
   because an unguarded fit converged on every curve, some to nonsense: mu must stay within 5 times the
   steepest observed slope, and the fit must explain at least R2 = 0.9 of log abundance. A rejected fit is
   reported, never replaced by another number. It is a different quantity from easylinear (median 1.16
-  times the reported rate on SMGDB00000004), fitted to the whole curve rather than its steepest part.
+  times the reported rate on SMGDB00000004). It is fitted to the part of the curve the model describes: up
+  to the maximum and on along the plateau after it, cut where the curve declines below the plateau
+  (Karoline, 2026-09-28: "Fit up to the maximum", then "End of the plateau"). Fitted to whole curves it was
+  rejected on 152 curves of mGrowthDB that decline after their peak or grow in two phases.
 
 A rate is per time unit of the curve; the comparison takes log2 of rates with and without the partner,
 like any other metric. `RateUnavailable` says why a curve has no rate, and the caller reports it.
@@ -28,6 +31,21 @@ DEFAULT_WINDOW = 5          # growthrates' default h, which matched mGrowthDB's 
 QUOTA = 0.95                # growthrates' default quota
 BARANYI_MIN_POINTS = 6
 BARANYI_MIN_R2 = 0.9
+PLATEAU = 0.10              # the plateau after the maximum: within this share of the rise below it (log)
+
+
+def _until_decline(xs, ys):
+    """The points up to the end of the plateau after the curve's maximum: the plateau goes on while the log
+    abundance stays within PLATEAU times the rise (maximum minus first value) below the maximum, and ends at
+    the first point below that, where the decline begins."""
+    if not ys:
+        return xs, ys
+    top = max(ys)
+    band = top - PLATEAU * (top - ys[0])
+    end = ys.index(top)
+    while end + 1 < len(ys) and ys[end + 1] >= band:
+        end += 1
+    return xs[:end + 1], ys[:end + 1]
 _MAX_EXP = 700.0
 
 
@@ -171,10 +189,13 @@ def _fit_once(times, logs, params, max_iter=200):
 
 
 def baranyi(times, values) -> float:
-    """The Baranyi-Roberts maximum specific growth rate, guarded (see the module docstring)."""
+    """The Baranyi-Roberts maximum specific growth rate, guarded, fitted up to the end of the plateau after the
+    curve's maximum (see the module docstring)."""
     xs, ys = _positive_logs(times, values)
+    xs, ys = _until_decline(xs, ys)
     if len(xs) < BARANYI_MIN_POINTS:
-        raise RateUnavailable(f"{len(xs)} positive time point(s); a Baranyi fit needs {BARANYI_MIN_POINTS}")
+        raise RateUnavailable(f"{len(xs)} positive time point(s) up to the end of the plateau; a Baranyi fit needs "
+                              f"{BARANYI_MIN_POINTS}")
     slope, t_at, y_at = _steepest(xs, ys)
     y0 = sum(ys[:2]) / 2
     mu0 = max(slope, 1e-3)
@@ -205,7 +226,7 @@ def baranyi(times, values) -> float:
     r2 = 1 - best[1] / total if total > 0 else float("nan")
     if not r2 >= BARANYI_MIN_R2:
         raise RateUnavailable(f"Baranyi fit rejected: R2 {r2:.2f} below {BARANYI_MIN_R2}; the model does not "
-                              "describe this curve (for example it declines after the peak)")
+                              "describe this curve up to the end of its plateau (for example two growth phases)")
     return math.exp(best[0][1])
 
 

@@ -32,8 +32,10 @@ SETTINGS = {
                     "Used with growth_rate. easylinear (the default) fits straight lines to log abundance over "
                     "sliding windows and takes the steepest part, as mGrowthDB computes the rates it reports "
                     "(it matched them on 190 of 192 curves within 10%). baranyi fits the Baranyi-Roberts growth "
-                    "model to the whole curve; a curve it does not describe (for example one that declines "
-                    "after its peak) is left out and reported, never given another number."),
+                    "model to the curve up to the end of the plateau after its maximum, so a decline after the peak "
+                    "does not matter; a curve "
+                    "it still does not describe (for example two growth phases) is left out and reported, never "
+                    "given another number."),
     "rate_window": ("Growth rate window", "--rate-window N",
                     "Used with easylinear: how many consecutive points each fitted line spans. 5, the default, "
                     "is what mGrowthDB uses; fewer points follow noise, more flatten the steepest part."),

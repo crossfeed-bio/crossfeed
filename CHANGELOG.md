@@ -228,6 +228,8 @@ tagged version is never reused for changed content.
   `removed_member_detected`.
 
 ### Changed
+- The Baranyi growth-rate fit uses the curve up to the end of the plateau after its maximum, not the whole
+  curve, so a decline after the peak no longer rejects it (register item 29): 30 -> 40 arcs on mGrowthDB.
 - A curve that starts after its design's common start leaves its replicate out of that member's own arcs
   only; the replicate still serves the other members (SMGDB00000008: 24 arcs regain a second replicate).
   The page, the report and the command line list average replicates as one line per experiment.
