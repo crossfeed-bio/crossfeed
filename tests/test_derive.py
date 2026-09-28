@@ -915,3 +915,40 @@ def test_a_strain_named_differently_by_two_studies_counts_as_one_genus_pair():
     edges, _ = merge_genus([old, new], merge=True)
     assert edges[0]["supporting_pairs"] == 1
     assert edges[0]["merged_pairs"] == ["Faecalibacterium prausnitzii -> Blautia hydrogenotrophica"]
+
+
+def test_skipping_uncompared_monocultures_changes_no_arc():
+    # Craig's agent on #95: "Networks identical" was shown once against mGrowthDB, and nothing held it. A
+    # filter that skips too much gives fewer arcs, not an error. So: one study with a monoculture no
+    # co-culture uses (C), a strain named differently in its monoculture and its co-culture but sharing a
+    # taxon id (A2 as A), and a second strain of B pooled into B's monocultures; derived with the filter
+    # and with every experiment read, the records must be the same, and the filter must read less.
+    import grownet.derive as derive_module
+    C, A2, B2 = "Roseburia intestinalis L1-82", "Faecalibacterium duncaniae A2-165", "Blautia hydrogenotrophica S5a33"
+    taxa = {A: 411483, A2: 411483, B: 53443, C: 536231}
+    exps = [_rep_experiment("mono A", [A2], taxa), _rep_experiment("mono B", [B], taxa),
+            _rep_experiment("mono B2", [B2], taxa), _rep_experiment("mono C", [C], taxa),
+            _rep_experiment("co", [A, B], taxa)]
+    curves = {("mono A", A2): [(1, 1), (1, 1.4)], ("mono B", B): [(1, 1), (1, 1.4)],
+              ("mono B2", B2): [(1, 1.2), (1, 1.3)], ("mono C", C): [(1, 2), (1, 2.2)],
+              ("co", A): [(1, 3), (1, 3.8)], ("co", B): [(1, 1), (1, 1.4)]}
+
+    def derive(read_everything):
+        client = _SeriesClient([dict(e) for e in exps], dict(curves))
+        read = []
+        real = client.get_bioreplicate
+        client.get_bioreplicate = lambda bid: read.append(bid) or real(bid)
+        real_filter = derive_module.relevant_experiments
+        if read_everything:            # set by hand: monkeypatch.undo() would also undo this file's settings
+            derive_module.relevant_experiments = lambda e, keep, dropout=True: list(e)
+        try:
+            records, _ = interactions_from_replicates(client, {"id": "S", "name": "study"}, client.experiments)
+        finally:
+            derive_module.relevant_experiments = real_filter
+        return records, read
+
+    filtered, read_filtered = derive(False)
+    everything, read_everything = derive(True)
+    assert filtered == everything and filtered                     # the same arcs, and there are some
+    assert not any(b.startswith("mono C/") for b in read_filtered)  # C has no co-culture: not read
+    assert any(b.startswith("mono C/") for b in read_everything) and len(read_filtered) < len(read_everything)
