@@ -13,7 +13,7 @@
   "additionalProperties": false,
   "properties": {
     "schema": {
-      "const": "crossfeed.interaction_network/v0"
+      "const": "grownet.interaction_network/v0"
     },
     "meta": {
       "type": "object"

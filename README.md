@@ -94,7 +94,9 @@ From a clone, with Python 3.10 or newer: the setup and the checks are in
 
 ## Quickstart
 
-Run the first slice offline, from the bundled synthetic fixture (no network), to see a network:
+From a clone of the repository, run the first slice offline, from the synthetic fixture in
+`tests/fixtures` (no network), to see a network. The fixture is part of the repository, not of an
+installed grownet, so after an install use the live commands below instead.
 
 ```
 python -m grownet derive SMGDB00000004 --fixture tests/fixtures/example_interactions.json
@@ -226,7 +228,7 @@ date and time as graph attributes.
 
 ```json
 {
-  "schema": "crossfeed.interaction_network/v0",
+  "schema": "grownet.interaction_network/v0",
   "meta": {"tool": "grownet", "tool_version": "0.0.2", "derived_on": "2026-09-27",
            "derived_at": "2026-09-27T14:15:53+02:00", "source_db": "mGrowthDB (live)",
            "settings": {"metric": "auc", "...": "..."}, "data": {"...": "..."}},

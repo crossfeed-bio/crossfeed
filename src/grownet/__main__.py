@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections import Counter
 
@@ -412,7 +413,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None):
     a = build_parser().parse_args(argv)
-    return a.fn(a)
+    try:
+        return a.fn(a)
+    except OSError as e:
+        # a file that cannot be read or written is the user's to fix, so it gets a line, not a traceback
+        # (Karoline, 2026-09-28: the README's fixture path, run outside a clone)
+        if e.filename is None:
+            raise
+        where = "" if os.path.isabs(e.filename) else f" (relative to {os.getcwd()})"
+        print(f"grownet: {e.filename}{where}: {e.strerror}", file=sys.stderr)
+        return 2
+    except json.JSONDecodeError as e:
+        print(f"grownet: the file given is not valid JSON ({e})", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":
