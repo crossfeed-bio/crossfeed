@@ -197,6 +197,17 @@ CONDITIONS_UNVERIFIED = "conditions_unverified"
 # with max as the measure (Karoline, 2026-09-28): one set reached stationary phase and the other did not,
 # so the maximum of one may still be rising; or the curves are too sparse to tell
 STATIONARY_DIFFERS, STATIONARY_UNCHECKED = "stationary_phase_differs", "stationary_unchecked"
+# an obligate or abolished arc whose set without growth is zero from its first time point: no growth cannot
+# be told from no inoculum or counts below detection (Karoline, 2026-09-28: "Obligate, with a caution")
+ZERO_AT_START = "zero_at_start"
+
+
+def zero_start_cautions(zero_start, outcome: str) -> list:
+    """The zero-at-start caution of an obligate or abolished comparison."""
+    if not zero_start:
+        return []
+    side = "without" if outcome == OBLIGATE else "with" if outcome == ABOLISHED else None
+    return [ZERO_AT_START] if side and zero_start.get(side) else []
 
 
 def stationary_cautions(stationary, method: str, outcome: str) -> list:
@@ -347,6 +358,18 @@ def _qualifier(name: str) -> str:
     return " ".join((name or "").casefold().split()[:-1])
 
 
+# the word a description uses for the kind of culture; what precedes it names the organisms
+_CULTURE_WORD = re.compile(r"\b(?:mono|co|bi)-?cultures?\b|\bcocultures?\b", re.I)
+
+
+def _setting(description: str) -> str:
+    """What a description says about how a culture was grown, with the organisms and the kind of culture
+    taken out: the text after its culture word ("At monoculture grown on a minimal medium with 0.1% linoleic
+    acid" -> "grown on a minimal medium with 0.1% linoleic acid"), or "" when it has none."""
+    m = _CULTURE_WORD.search(description or "")
+    return " ".join(description[m.end():].casefold().split()) if m else ""
+
+
 def _choose_monocultures(groups: dict, exp: dict):
     """(the monoculture set a co-culture is compared with, how it was chosen), or (None, why) when that is
     not known. How: "only" (the one set there is), "named" or "qualifier".
@@ -354,8 +377,12 @@ def _choose_monocultures(groups: dict, exp: dict):
     One set under the co-culture's recorded conditions: that one. Several, told apart only by their
     descriptions: the one whose description names the co-culture experiment, as study 7's controls do
     ('controls of the "bhri" experiment'); failing that, the one whose name carries the same qualifier as the
-    co-culture's ("Evolved AtCt" with "Evolved At", "CtOa" with the plain "Ct", as in study 13). Otherwise
-    none is guessed (Karoline, 2026-09-27: "yes to 1-3", then "yes" to the qualifier rule).
+    co-culture's ("Evolved AtCt" with "Evolved At", "CtOa" with the plain "Ct", as in study 13); failing
+    that, the one whose description words the growth the same way once the organisms and the kind of culture
+    are taken out (`_setting`: study 14's "At+Ct co-culture grown on a minimal medium with 0.1% linoleic
+    acid" with "At monoculture grown on a minimal medium with 0.1% linoleic acid"). Otherwise none is
+    guessed (Karoline, 2026-09-27: "yes to 1-3", then "yes" to the qualifier rule; 2026-09-28: "Match
+    identical wording").
     """
     if len(groups) == 1:
         return next(iter(groups.values())), "only"
@@ -367,6 +394,10 @@ def _choose_monocultures(groups: dict, exp: dict):
     same = [g for g in groups.values() if {_qualifier(n) for n in g[4]} == {qualifier}]
     if not named and len(same) == 1:
         return same[0], "qualifier"
+    setting = _setting(exp.get("description", ""))
+    worded = [g for g in groups.values() if setting and any(_setting(d) == setting for d in g[3])]
+    if not named and len(worded) == 1:
+        return worded[0], "wording"
     labels = "; ".join(sorted({g[3][0][:70] for g in groups.values()}))
     return None, (f"{len(groups)} monoculture sets under this experiment's recorded conditions, told apart only by "
                   f"their descriptions ({labels}); none names this co-culture, so which one matches it is not "
@@ -503,7 +534,7 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
         groups = monos.get(key, {})
         chosen, how = _choose_monocultures(groups, exp) if groups else (None, "")
         why = "" if chosen else how
-        if how in ("named", "qualifier"):
+        if how in ("named", "qualifier", "wording"):
             matched.add(species)          # the match with this co-culture is recorded, by name
         found, strains, ids = (chosen[0], chosen[1], chosen[2]) if chosen else ([], set(), [])
         if not groups:
@@ -538,6 +569,7 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
              "with_log2": side["co_log2"], "without_log2": side["mono_log2"]}
         quality, cautions = _replicate_flags(c["n_with"], c["n_without"])
         cautions += stationary_cautions(side.get("stationary"), method, c["outcome"])
+        cautions += zero_start_cautions(side.get("zero_start"), c["outcome"])
         if variants > 1 and not matched:
             # co-cultures of this pair under the same recorded conditions differ only in their description
             # (study 4's +Ac and -Ac), and nothing recorded says which one the monocultures match. When a
@@ -639,11 +671,12 @@ def _detected_note(role: str, detected) -> str:
 
 
 def _common_start(full, dropouts, skipped) -> tuple:
-    """(full, dropouts) without the replicates holding a curve that starts after the design's usual start.
+    """(full, dropouts) unchanged, with every curve that starts after the design's usual start reported.
 
-    Curves are compared only from a common start time (Karoline's specification, #1). In a community
-    replicate every member has a curve, so a member whose first measurement is missing takes its whole
-    replicate out; it is reported. The usual start is the most common first time point in the design.
+    Curves are compared only from a common start time (Karoline's specification, #1). A member whose first
+    measurement is missing leaves its replicate out of that member's own arcs only
+    (`interaction.dropout_interaction_strengths`); the replicate still serves every other member (Karoline,
+    2026-09-28: "Only for its own arcs"). The usual start is the most common first time point in the design.
     """
     reps = [*full, *(r for group in dropouts.values() for r in group)]
     firsts = Counter(c.times[0] for r in reps for c in r.curves)
@@ -651,20 +684,19 @@ def _common_start(full, dropouts, skipped) -> tuple:
         return full, dropouts
     start = firsts.most_common(1)[0][0]
 
-    def keep(role, replicates):
-        kept = []
+    def report(role, replicates):
         for rep in replicates:
             late = [c for c in rep.curves if not math.isclose(c.times[0], start, abs_tol=1e-9)]
             if late:
                 skipped.append((f"{role} replicate {rep.name}", "curve(s) starting after the common start "
                                 f"{start:g}: " + ", ".join(f"{c.species} at {c.times[0]:g}" for c in late)
-                                + "; left out, since curves are compared only from a common start"))
-            else:
-                kept.append(rep)
-        return kept
+                                + "; this replicate is left out of those species' own arcs only, since curves "
+                                "are compared only from a common start"))
 
-    kept = {r: keep(f"community without {r}", group) for r, group in dropouts.items()}
-    return keep("full community", full), {r: group for r, group in kept.items() if group}
+    for r, group in dropouts.items():
+        report(f"community without {r}", group)
+    report("full community", full)
+    return full, dropouts
 
 
 def _variants(exps) -> dict:
@@ -706,6 +738,7 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
         removed, target = arc["source"], arc["target"]
         quality, cautions = _replicate_flags(arc["n_with"], arc["n_without"])
         cautions += stationary_cautions(arc.get("stationary"), method, arc["outcome"])
+        cautions += zero_start_cautions(arc.get("zero_start"), arc["outcome"])
         notes = _spike_notes([f for f in result["flagged"] if f["role"] in ("full community",
                               f"community without {removed}")], target)
         if full_detected or detected[removed]:

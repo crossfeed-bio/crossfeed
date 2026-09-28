@@ -23,6 +23,7 @@ from collections import Counter
 
 from . import __version__, brand, interaction, rates
 from . import help as help_page
+from .adapter import condensed
 from .attribution import studies_with_edges
 from .cytoscape import CytoscapeError, send
 from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, output_meta
@@ -427,9 +428,10 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
                  f"<a href=\"/help?token={_esc(token)}#empty\">What to try</a>.</p>{hidden}{outputs}")
     studies = ", ".join(result["studies"]) or "none"
     skipped = ""
-    if result["skipped"]:
-        items = "".join(f"<li>{_esc(label)}: {_esc(reason)}</li>" for label, reason in result["skipped"][:50])
-        skipped = (f"<details><summary>{len(result['skipped'])} pair(s) the data did not support</summary>"
+    skips = condensed(result["skipped"])
+    if skips:
+        items = "".join(f"<li>{_esc(label)}: {_esc(reason)}</li>" for label, reason in skips[:50])
+        skipped = (f"<details><summary>{len(skips)} pair(s) the data did not support</summary>"
                    f"<ul>{items}</ul></details>")
     errors = "".join(f"<p class=\"note\">{_esc(e)}</p>" for e in result["errors"])
     return (f"<section class=\"result\" id=\"result\">{note}{species_heading}<ul>{resolved}</ul>{unresolved}"

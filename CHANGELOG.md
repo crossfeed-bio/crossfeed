@@ -7,6 +7,10 @@ tagged version is never reused for changed content.
 ## [0.0.2] (unreleased)
 
 ### Added
+- A monoculture set is also matched to a co-culture by identical wording of how it was grown, once the
+  organisms and the kind of culture are set aside (register item 28): SMGDB00000014's five co-cultures
+  now give 10 arcs. An obligate or abolished arc whose set without growth is zero from its first time point
+  carries the caution `zero_at_start`.
 - With max as the growth measure, arcs are checked for stationary phase (register item 27): the caution
   `stationary_phase_differs` marks an arc where one set reached stationary phase within the compared window
   and the other did not, and `stationary_unchecked` one whose curves have under 6 time points. The rule is
@@ -224,6 +228,9 @@ tagged version is never reused for changed content.
   `removed_member_detected`.
 
 ### Changed
+- A curve that starts after its design's common start leaves its replicate out of that member's own arcs
+  only; the replicate still serves the other members (SMGDB00000008: 24 arcs regain a second replicate).
+  The page, the report and the command line list average replicates as one line per experiment.
 - Each bi-culture arc is compared over its own window, the target's curves alone and together, as drop-out
   arcs already were, so the partner's shorter monoculture no longer shortens it (register item 26). On
   mGrowthDB one arc changes (SMGDB00000006, L. bulgaricus -> S. thermophilus STpos: +0.088 to +0.074,

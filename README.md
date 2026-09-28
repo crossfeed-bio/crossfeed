@@ -383,7 +383,9 @@ rising, and `stationary_unchecked` one whose curves have too few time points (un
 reached stationary phase when, over the last fifth of the window, it rises by less than 10% of its total
 rise, and it does not rise again by more than that later in its measured curve, so a pause between two
 growth phases (a diauxic shift) followed by a measured second rise does not count; a set follows the
-majority of its replicates (register item 27). Such an edge keeps its `status` and is exported.
+majority of its replicates (register item 27). `zero_at_start` marks an obligate or abolished edge whose
+set without growth is zero from its first time point, so no growth cannot be told from no inoculum or
+counts below detection. Such an edge keeps its `status` and is exported.
 `notes` inform without disqualifying, for example a replicate left out for an implausible spike. Every
 comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2 values:
 `p_value` is the raw value and `significance` the adjusted one (Benjamini-Hochberg by default,

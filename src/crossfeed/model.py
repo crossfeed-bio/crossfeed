@@ -26,7 +26,8 @@ OUTCOMES = ("quantified", "obligate", "abolished", "no_growth")
 # why an edge is low quality: hidden by default and never read as the absence of an interaction
 QUALITY_FLAGS = ("single_replicate", "strains_pooled", "non_batch", "removed_member_detected")
 # cautions a reader should see that do not make an edge low quality: it keeps its status and is shown
-CAUTIONS = ("two_replicates", "conditions_unverified", "stationary_phase_differs", "stationary_unchecked")
+CAUTIONS = ("two_replicates", "conditions_unverified", "stationary_phase_differs", "stationary_unchecked",
+            "zero_at_start")
 # what a node's id rests on: the NCBI taxon id of the strain, or genus and species of its name (#23)
 IDENTITIES = ("ncbi", "name", "genus")
 # whether a comparison counts as an interaction under the absence threshold (crossfeed.derive.absence)

@@ -14,6 +14,7 @@ import json
 import sys
 from collections import Counter
 
+from .adapter import condensed
 from .attribution import render_attribution
 from .mgrowthdb import MGrowthDBError, records_to_network
 from .schema import schema_json, validate_document
@@ -208,6 +209,7 @@ def _emit(a, net, skipped, extra, label, result):
               + (f"; {sent['warning']}" if sent.get("warning") else ""), file=sys.stderr)
 
     print(render_attribution(net), file=sys.stderr)
+    skipped = condensed(skipped)
     if skipped:
         print(f"\nskipped {len(skipped)} pair(s) the data did not cleanly support:", file=sys.stderr)
         for label, reason in skipped:
