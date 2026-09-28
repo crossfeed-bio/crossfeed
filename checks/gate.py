@@ -1,4 +1,4 @@
-"""crossfeed guardrails: a re-runnable gate (run in CI and before every commit).
+"""grownet guardrails: a re-runnable gate (run in CI and before every commit).
 
 Self-contained (no dependency on any private path), so it runs the same for every contributor and in
 CI. Discipline is the point: each check is a small, readable guard that blocks a class of mistake.
@@ -7,7 +7,7 @@ Checks:
   1. secrets          no api keys, tokens, or private keys in tracked text
   2. no-raw-data      no pulled or raw experimental data committed (only synthetic tests/fixtures)
   3. no-local-paths   no absolute local-machine paths (the repo is portable and self-contained)
-  4. self-contained   every import under src/ resolves to the standard library or crossfeed itself
+  4. self-contained   every import under src/ resolves to the standard library or grownet itself
   5. house-style      docs use ASCII punctuation and US spelling; prose carries no hedging caveats
   6. schema-contract  the shipped JSON Schema matches the code, and emitted networks validate against it
   7. claims          the docs a stranger reads name the deriver the code actually defaults to, and do not
@@ -147,8 +147,8 @@ def check_self_contained(rels):
             else:
                 continue
             for m in mods:
-                if m != "crossfeed" and m not in STDLIB:
-                    bad.append(f"{r}: imports {m!r} (not stdlib or crossfeed; declare it or drop it)")
+                if m != "grownet" and m not in STDLIB:
+                    bad.append(f"{r}: imports {m!r} (not stdlib or grownet; declare it or drop it)")
     return bad
 
 
@@ -176,18 +176,18 @@ def check_house_style(rels):
 
 
 def check_schema_contract(_rels):
-    """Import crossfeed and confirm the shipped schema matches the code and emitted networks validate.
-    Skips (does not fail) if crossfeed is not importable, so the gate still runs standalone."""
+    """Import grownet and confirm the shipped schema matches the code and emitted networks validate.
+    Skips (does not fail) if grownet is not importable, so the gate still runs standalone."""
     src = os.path.join(ROOT, "src")
     if src not in sys.path:
         sys.path.insert(0, src)
     try:
         import json
 
-        from crossfeed.mgrowthdb import records_to_network
-        from crossfeed.schema import SCHEMA_DOC, SCHEMA_FILE, validate_document
+        from grownet.mgrowthdb import records_to_network
+        from grownet.schema import SCHEMA_DOC, SCHEMA_FILE, validate_document
     except Exception as e:  # noqa: BLE001 - the gate must not crash if the package is absent
-        print(f"    (schema-contract skipped: crossfeed not importable: {e})")
+        print(f"    (schema-contract skipped: grownet not importable: {e})")
         return []
 
     bad = []
@@ -196,7 +196,7 @@ def check_schema_contract(_rels):
             on_disk = json.load(f)
         if on_disk != SCHEMA_DOC:
             bad.append("schema/interaction_network.schema.json drifted from schema.py "
-                       "(regenerate it from crossfeed.schema.schema_json)")
+                       "(regenerate it from grownet.schema.schema_json)")
     except OSError:
         bad.append("schema/interaction_network.schema.json is missing")
 

@@ -27,8 +27,8 @@ from xml.etree import ElementTree as ET
 import pytest
 from test_gui import A, B, FakeClient
 
-from crossfeed import __version__, gui, interaction
-from crossfeed.help import SETTINGS
+from grownet import __version__, gui, interaction
+from grownet.help import SETTINGS
 
 GATE = threading.Event()        # holds the slow client's first request until a test lets it go
 
@@ -181,8 +181,8 @@ def test_the_input_field_starts_empty_under_a_header_naming_the_options_and_a_ro
 
 def test_the_command_line_gives_everything_the_page_does(monkeypatch, tmp_path, capsys):
     """Every advanced setting has its option, and the page's three outputs (network in either format,
-    Cytoscape, the report) are there, with the page's own report. `crossfeed derive --help` lists them."""
-    from crossfeed.__main__ import build_parser, main
+    Cytoscape, the report) are there, with the page's own report. `grownet derive --help` lists them."""
+    from grownet.__main__ import build_parser, main
     derive = next(a for a in build_parser()._actions if a.dest == "cmd").choices["derive"]
     options = {o for action in derive._actions for o in action.option_strings}
     for key, (_, flag, _) in SETTINGS.items():
@@ -191,9 +191,9 @@ def test_the_command_line_gives_everything_the_page_does(monkeypatch, tmp_path, 
     help_text = derive.format_help()
     assert "examples:" in help_text and "--report FILE" in help_text and "a set " not in help_text
 
-    monkeypatch.setattr("crossfeed.mgrowthdb.MGrowthDBClient", FakeClient)
+    monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", FakeClient)
     sent = {}
-    monkeypatch.setattr("crossfeed.cytoscape.send", lambda net, **kw: sent.update(n=len(net.edges)) or
+    monkeypatch.setattr("grownet.cytoscape.send", lambda net, **kw: sent.update(n=len(net.edges)) or
                         {"suid": 3, "style": "grownet", "warning": ""})
     out, report = tmp_path / "net.graphml", tmp_path / "report.txt"
     assert main(["derive", "--live", "--species", A, B, "--format", "graphml", "--out", str(out),
@@ -203,7 +203,7 @@ def test_the_command_line_gives_everything_the_page_does(monkeypatch, tmp_path, 
     assert f"tool: grownet {__version__}" in text and "Absence threshold k (--absence-threshold): 2.0" in text
     # the report is the page's own, for the same search
     page = gui.run_query(FakeClient(), [A, B], {"absence_threshold": 2.0})
-    from crossfeed.report import report_text
+    from grownet.report import report_text
     def without_times(t):                  # the two runs are seconds apart; the rest must be identical
         return [line for line in t.splitlines() if not line.startswith(("run:", "data: "))]
     assert without_times(text) == without_times(report_text(page))
@@ -237,7 +237,7 @@ def test_each_search_keeps_its_own_outputs(server):
 def test_the_page_and_the_command_line_start_from_the_same_defaults():
     # a setting whose default differs between the page and the command line gives two tools; each page
     # setting is mapped to its option here, so a new setting without a mapping fails too
-    from crossfeed.__main__ import build_parser
+    from grownet.__main__ import build_parser
     a = build_parser().parse_args(["derive", "--live", "--species", "x"])
     cli = {"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
            "spike_factor": a.spike_factor, "absence_threshold": a.absence_threshold,
@@ -251,7 +251,7 @@ def test_the_page_and_the_command_line_start_from_the_same_defaults():
 
 
 def test_all_on_the_command_line_needs_live_and_no_species(capsys):
-    from crossfeed.__main__ import main
+    from grownet.__main__ import main
     assert main(["derive", "--all", "--fixture", "x.json"]) == 2
     assert "--all searches mGrowthDB, so it needs --live" in capsys.readouterr().err
     assert main(["derive", "--all", "--live", "--species", "Blautia"]) == 2
@@ -261,8 +261,8 @@ def test_all_on_the_command_line_needs_live_and_no_species(capsys):
 def test_the_page_the_command_line_and_the_help_all_know_genera_and_all():
     # Karoline (2026-09-28): "please make sure that the GUI, CLI and help integrate the new options (...
     # CLI help documenting the new option; help page including the new advanced option and arc attribute)"
-    from crossfeed import help as help_page
-    from crossfeed.__main__ import build_parser
+    from grownet import help as help_page
+    from grownet.__main__ import build_parser
     derive = next(a for a in build_parser()._subparsers._actions if a.choices).choices["derive"].format_help()
     assert "--merge-genera" in derive and "--all" in derive and "--species Bacteroides" in derive
     page = help_page.render_help("tok", gui.DEFAULTS, gui.EXAMPLE)
@@ -276,7 +276,7 @@ def test_the_page_the_command_line_and_the_help_all_know_genera_and_all():
 def test_the_help_weighs_each_growth_measure():
     # Karoline (2026-09-28): "in the help, can you also describe briefly the advantages and disadvantages of
     # each growth curve characteristic?"
-    from crossfeed import help as help_page
+    from grownet import help as help_page
     page = help_page.render_help("tok", gui.DEFAULTS, gui.EXAMPLE)
     section = page[page.index('<h2 id="measures">'):page.index('<h2 id="example">')]
     for measure in ("auc", "max", "growth_rate"):                    # every measure the tool offers
@@ -285,10 +285,12 @@ def test_the_help_weighs_each_growth_measure():
 
 
 def test_the_readme_names_the_tool_grownet():
-    # Karoline (2026-09-28): "readme in the repo still talks about crossfeed instead of grownet"
+    # Karoline (2026-09-28): "readme in the repo still talks about crossfeed instead of grownet", and "The
+    # README can have a subtitle or title extension that shows where the tool name comes from: Growth-curve
+    # derived interaction networks."
     from pathlib import Path
     text = Path(__file__).resolve().parents[1].joinpath("README.md").read_text(encoding="utf-8")
-    assert text.startswith("# grownet\n") and "**grownet** turns" in text
+    assert text.startswith("# grownet: Growth-curve derived interaction networks\n") and "**grownet** turns" in text
     prose = re.sub(r"`[^`]*`|\(https?://[^)]*\)|https?://\S+|```.*?```", "", text, flags=re.S)
     # outside code and links, crossfeed appears only where the README explains the old name
     leftover = [line for line in prose.splitlines() if "crossfeed" in line]

@@ -10,10 +10,10 @@ repeats what CI has already shown to work.
 
 ## Order for the first release (0.1.0)
 
-1. #79 is reviewed and merged.
-2. The rename pull request (#71): the package, the module and the command become `grownet`, Karoline's
-   choice. It proposes whether `crossfeed` stays as a second command for a while; the schema id is Craig's
-   call. The release workflow's `install` job then starts `grownet` instead of `crossfeed`.
+1. #79 is reviewed and merged (done).
+2. The rename (#71): the package, the module and the command are `grownet` (done, 2026-09-28, with no
+   `crossfeed` alias, since nothing had been released). The repository name and the schema id are Craig's
+   call and are unchanged.
 3. The one-time setup below.
 4. The release pull request, then the tag (below). For 0.1.0 it also renames the changelog's unreleased
    `[0.0.2]` section to `[0.1.0]` (0.0.2 was never published) and replaces the changelog's opening
@@ -42,7 +42,7 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
 ## Each release
 
 1. **A release pull request** that:
-   - sets the version in `pyproject.toml` and in `src/crossfeed/__init__.py` (`__version__`);
+   - sets the version in `pyproject.toml` and in `src/grownet/__init__.py` (`__version__`);
    - turns `## [x.y.z] (unreleased)` in `CHANGELOG.md` into `## [x.y.z] (YYYY-MM-DD)`, and starts a new
      unreleased section above it if work continues.
    `python packaging/check_release.py vX.Y.Z` must say the tag is ready.

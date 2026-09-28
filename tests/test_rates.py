@@ -4,10 +4,10 @@ import math
 
 import pytest
 
-from crossfeed import rates
-from crossfeed.growth import GrowthCurve, Replicate
-from crossfeed.interaction import interaction_strength
-from crossfeed.rates import RateUnavailable, baranyi, easylinear, method_name
+from grownet import rates
+from grownet.growth import GrowthCurve, Replicate
+from grownet.interaction import interaction_strength
+from grownet.rates import RateUnavailable, baranyi, easylinear, method_name
 
 T = [float(t) for t in range(13)]
 

@@ -1,7 +1,7 @@
 """Start the local page from an installed or built grownet, check it answers, and stop it.
 
 Usage: python packaging/smoke.py COMMAND [ARGS...], for example `grownet.exe --no-browser` or
-`crossfeed gui --no-browser`. Used by CI on the clean install and on the Windows build (#26, #27).
+`grownet gui --no-browser`. Used by CI on the clean install and on the Windows build (#26, #27).
 """
 import re
 import subprocess

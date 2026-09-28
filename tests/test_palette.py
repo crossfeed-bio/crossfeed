@@ -14,10 +14,10 @@ import math
 
 import pytest
 
-from crossfeed.cytoscape import FACILITATION as CY_FACILITATION
-from crossfeed.cytoscape import INHIBITION as CY_INHIBITION
-from crossfeed.cytoscape import MUTED as CY_MUTED
-from crossfeed.legend import FACILITATION, INHIBITION, MUTED
+from grownet.cytoscape import FACILITATION as CY_FACILITATION
+from grownet.cytoscape import INHIBITION as CY_INHIBITION
+from grownet.cytoscape import MUTED as CY_MUTED
+from grownet.legend import FACILITATION, INHIBITION, MUTED
 
 _RGB_TO_LMS = ((0.31399, 0.63951, 0.04649), (0.15537, 0.75789, 0.08670), (0.01775, 0.10945, 0.87262))
 _LMS_TO_RGB = ((5.47221, -4.64196, 0.16963), (-1.12524, 2.29317, -0.16789), (0.02980, -0.19318, 1.16364))

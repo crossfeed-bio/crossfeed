@@ -231,6 +231,12 @@ tagged version is never reused for changed content.
   `removed_member_detected`.
 
 ### Changed
+- The rename (#71): the package, the module and the command are `grownet` (`grownet derive ...`, `python -m
+  grownet`, `uvx --from git+https://github.com/crossfeed-bio/crossfeed grownet gui`), with no `crossfeed`
+  alias, since nothing had been released. The repository address, the schema id
+  (`crossfeed.interaction_network/v0`) and the method label stored in each network (`crossfeed replicate
+  v1`) are unchanged, so networks already written stay valid. The README is titled "grownet: Growth-curve
+  derived interaction networks".
 - The Baranyi growth-rate fit uses the curve up to the end of the plateau after its maximum, not the whole
   curve, so a decline after the peak no longer rejects it (register item 29): 30 -> 40 arcs on mGrowthDB.
 - A curve that starts after its design's common start leaves its replicate out of that member's own arcs

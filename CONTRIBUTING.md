@@ -1,6 +1,6 @@
-# Contributing to crossfeed
+# Contributing to grownet
 
-crossfeed is a small open collaboration between Syntropa and the KU Leuven Laboratory of Molecular
+grownet is a small open collaboration between Syntropa and the KU Leuven Laboratory of Molecular
 Bacteriology. Issues and pull requests are welcome. Discipline is deliberate here: the checks below run
 the same way for everyone, in CI and before every commit, so the repository stays honest and portable.
 
@@ -14,14 +14,14 @@ propose work by opening a Feature issue.
 
 ```
 git clone https://github.com/crossfeed-bio/crossfeed
-cd crossfeed
+cd grownet
 python -m venv .venv
 . .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 pre-commit install            # optional: run the checks on every commit (pip install pre-commit first)
 ```
 
-The page then opens with `python -m crossfeed gui`. How a version is released (PyPI and the Windows
+The page then opens with `python -m grownet gui`. How a version is released (PyPI and the Windows
 program) is in [RELEASING.md](RELEASING.md).
 
 ## Before you open a pull request
@@ -41,7 +41,7 @@ If you enabled `pre-commit install`, these run automatically on every commit.
 `checks/gate.py` is self-contained (no dependency on any private path) and blocks a class of mistake per
 check: committed secrets, raw or pulled experimental data (only the synthetic fixtures under
 `tests/fixtures/` belong in the repository, never data pulled from mGrowthDB or shared by a collaborator),
-absolute local-machine paths, imports that are not the standard library or crossfeed, the house style,
+absolute local-machine paths, imports that are not the standard library or grownet, the house style,
 and a schema contract. See [docs/DATA_GOVERNANCE.md](docs/DATA_GOVERNANCE.md) for the data rules.
 
 House style, checked on documentation: ASCII punctuation (use a comma, colon, parentheses, or the word
@@ -60,10 +60,10 @@ an issue to discuss before you implement one.
 
 ## The neutral format is a contract
 
-`src/crossfeed/model.py` and the JSON Schema at `schema/interaction_network.schema.json` are the contract
+`src/grownet/model.py` and the JSON Schema at `schema/interaction_network.schema.json` are the contract
 downstream tools read. Keep it backward compatible where you can, keep every edge carrying at least one
 supporting study (the edge-level attribution), and regenerate the schema file from the code if you change
-it (`python -m crossfeed schema --out schema/interaction_network.schema.json`). The gate fails if the
+it (`python -m grownet schema --out schema/interaction_network.schema.json`). The gate fails if the
 file and the code drift, or if an emitted network does not validate against its own schema.
 
 ## Style and scope

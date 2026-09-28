@@ -3,7 +3,7 @@ import math
 
 import pytest
 
-from crossfeed.stats import benjamini_hochberg, benjamini_yekutieli, incomplete_beta, paired, t_cdf, welch
+from grownet.stats import benjamini_hochberg, benjamini_yekutieli, incomplete_beta, paired, t_cdf, welch
 
 
 @pytest.mark.parametrize("df, critical", [(1, 12.706), (2, 4.303), (4, 2.776), (10, 2.228), (30, 2.042)])

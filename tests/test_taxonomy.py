@@ -1,7 +1,7 @@
 """Species name to NCBI taxon id, against a fake mGrowthDB client (no live calls)."""
 import pytest
 
-from crossfeed.taxonomy import resolve_species, species_index
+from grownet.taxonomy import resolve_species, species_index
 
 FP, BH, RI = 853, 53443, 536231
 
@@ -43,14 +43,14 @@ def test_crawl_stops_after_consecutive_misses():
     client = _client()
     species_index(client)
     # the two studies, then MISS_RUN misses in a row after the last one, then it stops
-    from crossfeed.taxonomy import MISS_RUN
+    from grownet.taxonomy import MISS_RUN
     assert client.asked[-1] == f"SMGDB{3 + MISS_RUN:08d}"
     assert len(client.asked) == 3 + MISS_RUN
 
 
 def test_a_gap_of_missing_studies_does_not_hide_later_ones():
     # twelve absent ids between two studies (2 to 13): the old limit of five stopped before the second
-    from crossfeed.taxonomy import species_index as index_of
+    from grownet.taxonomy import species_index as index_of
     later = _client()
     later.studies = {"SMGDB00000001": later.studies["SMGDB00000001"], "SMGDB00000014": later.studies["SMGDB00000003"]}
     assert len(index_of(later)) == len(species_index(_client()))
@@ -100,7 +100,7 @@ def test_strains_without_ids_are_ignored(bad):
 
 
 def test_common_ways_of_typing_are_understood_and_the_rest_say_why():
-    from crossfeed.taxonomy import split_entries
+    from grownet.taxonomy import split_entries
     index = {"blautia hydrogenotrophica": {476272: "Blautia hydrogenotrophica DSM 10507"},
              "blautia obeum": {40520: "Blautia obeum ATCC 29174"}}
     entries = split_entries(["Blautia hydrogenotrophica, Blautia obeum", "- 476272", "NCBI:txid40520"])
@@ -116,14 +116,14 @@ def test_common_ways_of_typing_are_understood_and_the_rest_say_why():
 
 
 def test_the_current_name_is_the_most_recently_published_one():
-    from crossfeed.taxonomy import species_index as build
+    from grownet.taxonomy import species_index as build
 
     class Dated(_FakeClient):
         dates = {"SMGDB00000001": "2025-11-01", "SMGDB00000003": "2024-01-01"}
 
         def get_study(self, sid):
             if sid not in self.studies:
-                from crossfeed.mgrowthdb import MGrowthDBError
+                from grownet.mgrowthdb import MGrowthDBError
                 raise MGrowthDBError("mGrowthDB returned HTTP 404", status=404)   # as the real client does
             return {"id": sid, "publishedAt": self.dates[sid], "experiments": [{"id": sid}]}
 

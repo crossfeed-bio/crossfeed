@@ -1,12 +1,12 @@
 """A local page: type species names, get their interaction network.
 
-`crossfeed gui` starts a small server from the standard library on 127.0.0.1, with a random token in the
+`grownet gui` starts a small server from the standard library on 127.0.0.1, with a random token in the
 URL, and opens the browser. Nothing is hosted, nothing is uploaded, and the page has no JavaScript: the
 form posts back and the server returns HTML rendered in Python. Settings live in an HTML `details` block
 ("Advanced settings"), so the plain page is a box for species and a button.
 
 The work is in `run_query`, which is pure apart from the client it is given: names to taxon ids
-(crossfeed.taxonomy), taxon ids to studies (mGrowthDB search), then the existing derivation per study.
+(grownet.taxonomy), taxon ids to studies (mGrowthDB search), then the existing derivation per study.
 Rendering is in `render_form` and `render_result`, so both are testable without a socket.
 """
 from __future__ import annotations
@@ -59,7 +59,7 @@ DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window":
             "include_low_quality": False, "correction": "bh", "include_dropout": True,
             "include_non_batch": False, "studies": "", "exclude_studies": "", "only_entered": True,
             "merge_arcs": False, "min_studies": 1, "merge_genera": False,
-            # None: the no-growth rule's own defaults, read when used (crossfeed.interaction.grew)
+            # None: the no-growth rule's own defaults, read when used (grownet.interaction.grew)
             "no_growth_alpha": None, "no_growth_factor": None}
 PROVISIONAL = ("Each interaction compares a species' growth with and without its partner across replicates "
                "(mean log2 difference). An interaction is reported when |mean| is at least k standard "
@@ -832,7 +832,7 @@ def serve(port: int = 0, open_browser: bool = True, client_factory=None) -> None
     try:
         server = _Server(("127.0.0.1", port), handler)
     except OSError as e:
-        raise SystemExit(f"crossfeed gui: cannot use port {port} ({e.strerror}). Pick another with --port, "
+        raise SystemExit(f"grownet gui: cannot use port {port} ({e.strerror}). Pick another with --port, "
                          "or leave it out to use a free one.") from None
     with server as httpd:
         url = f"http://127.0.0.1:{httpd.server_address[1]}/?token={handler.token}"

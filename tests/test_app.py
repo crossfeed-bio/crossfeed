@@ -1,5 +1,5 @@
 """The self-contained program's entry (#26): double-click opens the page, arguments are the command line."""
-from crossfeed import app
+from grownet import app
 
 
 def test_no_arguments_or_options_alone_open_the_local_page():

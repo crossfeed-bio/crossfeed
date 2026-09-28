@@ -1,7 +1,7 @@
 """CLI behavior: an empty result is explained, not silent; validate reports problems."""
 import json
 
-from crossfeed.__main__ import main
+from grownet.__main__ import main
 
 
 def test_empty_network_is_explained(tmp_path, capsys):

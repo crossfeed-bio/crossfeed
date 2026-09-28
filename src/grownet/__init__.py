@@ -1,4 +1,4 @@
-"""crossfeed: experimentally grounded microbial interaction networks from mGrowthDB.
+"""grownet: experimentally grounded microbial interaction networks from mGrowthDB.
 
 A thin client that pulls co-growth data from mGrowthDB and emits a directed interaction
 network in a neutral, openly citable format that downstream tools (Syntropa, microbetag)

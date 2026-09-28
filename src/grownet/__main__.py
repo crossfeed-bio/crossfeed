@@ -1,11 +1,11 @@
-"""grownet command line (the command is still crossfeed): derive interaction networks from mGrowthDB.
+"""grownet command line: derive interaction networks from mGrowthDB.
 
-  python -m crossfeed derive SMGDB00000004 --live                 # every species in one study
-  python -m crossfeed derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"
-  python -m crossfeed derive SMGDB00000004 --fixture records.json  # offline, from interaction records
-  python -m crossfeed validate network.json                       # check a network against the schema
-  python -m crossfeed schema --out interaction_network.schema.json # emit the neutral-format schema
-  python -m crossfeed gui                                          # a local page for species names
+  python -m grownet derive SMGDB00000004 --live                 # every species in one study
+  python -m grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"
+  python -m grownet derive SMGDB00000004 --fixture records.json  # offline, from interaction records
+  python -m grownet validate network.json                       # check a network against the schema
+  python -m grownet schema --out interaction_network.schema.json # emit the neutral-format schema
+  python -m grownet gui                                          # a local page for species names
 """
 from __future__ import annotations
 
@@ -21,23 +21,22 @@ from .schema import schema_json, validate_document
 
 DERIVE_EXAMPLES = """examples:
   the local page's Example, written to a file, with its report, and sent to Cytoscape:
-    crossfeed derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica" \\
+    grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica" \\
         --out example.json --report example_report.txt --to-cytoscape
 
   a strain and a taxon id, every partner, as GraphML:
-    crossfeed derive --live --species "Faecalibacterium duncaniae A2-165" 476272 --all-partners \\
+    grownet derive --live --species "Faecalibacterium duncaniae A2-165" 476272 --all-partners \\
         --format graphml --out example.graphml
 
   a genus (all its species in mGrowthDB) with every partner, one node per genus:
-    crossfeed derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
+    grownet derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
 
   all of mGrowthDB (the page's All), arcs merged across studies and then to genus:
-    crossfeed derive --live --all --merge-arcs --merge-genera --out all_genera.json
+    grownet derive --live --all --merge-arcs --merge-genera --out all_genera.json
 
   every species in one study, stricter about what counts as an interaction:
-    crossfeed derive SMGDB00000004 --live --absence-threshold 2 --out study4.json
+    grownet derive SMGDB00000004 --live --absence-threshold 2 --out study4.json
 
-The command becomes grownet when the package is renamed.
 """
 
 
@@ -75,7 +74,7 @@ def _derive(a):
     if a.species or a.all_studies:
         return _derive_species(a)
     if not a.study:
-        print("derive needs a study id, or --species with names (see crossfeed derive --help)", file=sys.stderr)
+        print("derive needs a study id, or --species with names (see grownet derive --help)", file=sys.stderr)
         return 2
     if a.deriver and not a.live:
         print("--deriver applies to --live (it derives from raw growth data); "
@@ -285,7 +284,7 @@ def _gui(a):
 
 def build_parser() -> argparse.ArgumentParser:
     """The command line, apart from running it, so the help page can be checked against it (#78)."""
-    ap = argparse.ArgumentParser(prog="crossfeed", description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(prog="grownet", description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     d = sub.add_parser(

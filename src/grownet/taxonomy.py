@@ -51,7 +51,7 @@ def species_index(client, max_studies: int = MAX_STUDIES, progress=None) -> dict
     """Map a genus and species key to {taxon id: a name seen for it}, crawled from mGrowthDB.
 
     Study ids are consecutive, so the crawl walks them and stops after MISS_RUN absent ids in a row. The
-    studies and their experiments are read in parallel (`crossfeed.fetch`), then walked in id order, so the
+    studies and their experiments are read in parallel (`grownet.fetch`), then walked in id order, so the
     first name seen for a taxon is the same as a one-by-one crawl would keep. A study or experiment that
     cannot be read is skipped: a partial index is more useful than no index.
     """

@@ -1,8 +1,8 @@
 """The neutral-format contract: the shipped schema matches the code, and validation catches breakage."""
 import json
 
-from crossfeed.mgrowthdb import records_to_network
-from crossfeed.schema import SCHEMA_DOC, SCHEMA_FILE, schema_json, validate_document
+from grownet.mgrowthdb import records_to_network
+from grownet.schema import SCHEMA_DOC, SCHEMA_FILE, schema_json, validate_document
 
 
 def _good_doc():
@@ -64,7 +64,7 @@ def _dropout_doc():
 
 
 def test_dropout_edge_round_trips_and_validates():
-    from crossfeed.model import InteractionNetwork
+    from grownet.model import InteractionNetwork
     doc = _dropout_doc()
     assert doc["edges"][0]["evidence"] == "dropout"
     assert list(doc["edges"][0]["community"]) == ["a", "b", "c"]
@@ -74,7 +74,7 @@ def test_dropout_edge_round_trips_and_validates():
 
 
 def test_unknown_evidence_rejected():
-    from crossfeed.model import Edge
+    from grownet.model import Edge
     doc = _dropout_doc()
     doc["edges"][0]["evidence"] = "direct"
     assert any("evidence" in p for p in validate_document(doc))
@@ -88,7 +88,7 @@ def test_community_must_be_a_list_of_ids():
 
 
 def test_document_without_the_new_fields_still_valid():
-    from crossfeed.model import InteractionNetwork
+    from grownet.model import InteractionNetwork
     doc = _good_doc()
     for edge in doc["edges"]:
         del edge["evidence"], edge["community"]
@@ -100,7 +100,7 @@ def test_document_without_the_new_fields_still_valid():
 # ---- cautions and experiments of origin (#47) -----------------------------------------------------
 
 def test_cautions_and_experiments_round_trip_and_validate():
-    from crossfeed.model import InteractionNetwork
+    from grownet.model import InteractionNetwork
     recs = [{"source": "a", "target": "b", "effect": "facilitation", "strength": 1.0, "study_id": "S1",
              "cautions": ["two_replicates"], "experiments": ["E1", "E2"]}]
     doc = records_to_network(recs).to_dict()

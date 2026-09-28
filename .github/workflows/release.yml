@@ -65,8 +65,8 @@ jobs:
           python -m venv clean
           if [ -d clean/Scripts ]; then bin=clean/Scripts; else bin=clean/bin; fi
           "$bin/python" -m pip install dist/*.whl
-          "$bin/crossfeed" --help
-          python packaging/smoke.py "$bin/crossfeed" gui --no-browser
+          "$bin/grownet" --help
+          python packaging/smoke.py "$bin/grownet" gui --no-browser
 
   windows:
     needs: check

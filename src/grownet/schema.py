@@ -1,6 +1,6 @@
 """The neutral interaction-network format: a published JSON Schema and a dependency-free validator.
 
-What crossfeed emits (crossfeed.model.InteractionNetwork.to_dict) is the contract downstream tools read
+What grownet emits (grownet.model.InteractionNetwork.to_dict) is the contract downstream tools read
 (Syntropa, microbetag). SCHEMA_DOC is the canonical JSON Schema (draft-07); it is also shipped as
 `schema/interaction_network.schema.json` so any tool in any language can validate against a file.
 
@@ -33,8 +33,8 @@ SCHEMA_FILE = os.path.join(
 SCHEMA_DOC = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "https://github.com/crossfeed-bio/crossfeed/blob/main/schema/interaction_network.schema.json",
-    "title": "crossfeed interaction network",
-    "description": ("The neutral, openly citable interaction-network format crossfeed emits from "
+    "title": "grownet interaction network",
+    "description": ("The neutral, openly citable interaction-network format grownet emits from "
                     "mGrowthDB co-growth data. Interactions are directed and condition-specific, and "
                     "every edge carries the studies it was derived from (edge-level attribution)."),
     "type": "object",
@@ -116,7 +116,7 @@ def _objs(x):
 
 
 def validate_document(doc) -> list:
-    """Return every problem with `doc` as a crossfeed interaction-network document (empty list = valid).
+    """Return every problem with `doc` as a grownet interaction-network document (empty list = valid).
 
     Dependency-free. Checks the top-level shape, per-item required fields and the effect enum, the
     non-empty study_ids on every edge, and (when the shape is sound) referential integrity via the model.

@@ -2,7 +2,7 @@
 
 An interaction strength compares a target species' growth with a source species present against its
 growth with the source absent. The growth property is a growth curve feature chosen by the caller
-(`method`, default "auc", the area under the curve; see crossfeed.growth.FEATURES).
+(`method`, default "auc", the area under the curve; see grownet.growth.FEATURES).
 
 Each replicate set is summarized on the log2 scale first, so no replicate is used twice:
 
@@ -84,7 +84,7 @@ NO_GROWTH_TEST = ("paired two-sided t-test of log2(maximum / first time point) p
 
 def _feature(method: str):
     """The (times, values) -> number function behind a metric name: auc, max, or a growth rate
-    ("growth_rate:easylinear:5", "growth_rate:baranyi"; crossfeed.rates)."""
+    ("growth_rate:easylinear:5", "growth_rate:baranyi"; grownet.rates)."""
     if method in FEATURES:
         return FEATURES[method]
     rate = rates.feature(method)
@@ -119,7 +119,7 @@ def _log_values(reps, species, role, prop, method, skipped, spike_factor=SPIKE_F
                 no_growth=None) -> list:
     """log2 of the property for each replicate in a set.
 
-    A replicate whose curve for `species` carries an implausible spike (`crossfeed.growth.spike`) is left
+    A replicate whose curve for `species` carries an implausible spike (`grownet.growth.spike`) is left
     out for that species and reported, never dropped silently; its other species still take part. A
     non-positive property is left out and reported as before.
     """
@@ -286,7 +286,7 @@ def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, met
     """Interaction strength of a species pair from mono versus bi-culture replicate sets.
 
     mono_a, mono_b: Replicates of species_a and species_b grown alone. co: Replicates of the co-culture,
-    each with a curve for species_a and species_b. method: a name in crossfeed.growth.FEATURES.
+    each with a curve for species_a and species_b. method: a name in grownet.growth.FEATURES.
 
     Raises ValueError when the sets are not comparable (mixed units, missing species, different start
     times) or for an unknown method. Replicates with a zero or negative property are left out of that

@@ -73,12 +73,12 @@ def default_deriver() -> str:
     Anchoring on the code rather than on a name written here is the point: a guard that carries its own
     copy of the answer goes stale in exactly the way it exists to prevent.
     """
-    src = open(os.path.join(ROOT, "src", "crossfeed", "derive.py"), encoding="utf-8").read()
+    src = open(os.path.join(ROOT, "src", "grownet", "derive.py"), encoding="utf-8").read()
     tree = ast.parse(src)
     fn = next((n for n in ast.walk(tree)
                if isinstance(n, ast.FunctionDef) and n.name == "derive_interactions"), None)
     if fn is None:
-        raise SystemExit("claims-check: derive_interactions not found in src/crossfeed/derive.py")
+        raise SystemExit("claims-check: derive_interactions not found in src/grownet/derive.py")
     for node in ast.walk(fn):
         # the `deriver = deriver or SomeDeriver(...)` fallback
         if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or):
@@ -90,7 +90,7 @@ def default_deriver() -> str:
 
 
 def deriver_classes() -> list:
-    src = open(os.path.join(ROOT, "src", "crossfeed", "derive.py"), encoding="utf-8").read()
+    src = open(os.path.join(ROOT, "src", "grownet", "derive.py"), encoding="utf-8").read()
     return [n.name for n in ast.walk(ast.parse(src))
             if isinstance(n, ast.ClassDef) and n.name.endswith("Deriver") and n.name != "Deriver"]
 
@@ -136,7 +136,7 @@ VOCABULARIES = ("QUALITY_FLAGS", "CAUTIONS", "EVIDENCE", "OUTCOMES")
 
 def model_vocabulary(name: str) -> list:
     """The string values of a module-level tuple in model.py, read from the source."""
-    src = open(os.path.join(ROOT, "src", "crossfeed", "model.py"), encoding="utf-8").read()
+    src = open(os.path.join(ROOT, "src", "grownet", "model.py"), encoding="utf-8").read()
     for node in ast.walk(ast.parse(src)):
         if isinstance(node, ast.Assign) and any(
                 isinstance(tgt, ast.Name) and tgt.id == name for tgt in node.targets):

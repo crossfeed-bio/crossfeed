@@ -448,8 +448,7 @@ publication dates, which change when a study is corrected.</p>
 its report, and the network sent to Cytoscape:</p>
 <pre>{_e(EXAMPLE_CLI)}</pre>
 <p>Without installing anything, <code>uvx --from git+{REPOSITORY} {COMMAND} ...</code> runs the same
-command. The command is still called <code>{COMMAND}</code>: it becomes <code>{NAME}</code> when the package
-is renamed (#71). Other uses:</p>
+command. Other uses:</p>
 <pre>{COMMAND} derive SMGDB00000004 --live --format graphml --out study4.graphml
 {COMMAND} derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
 {COMMAND} derive --live --all --merge-arcs --merge-genera --out all_genera.json
