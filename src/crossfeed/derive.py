@@ -5,11 +5,13 @@ comparing a strain's growth ALONE vs WITH a partner, under one condition. The CO
 scientific choice owned by the collaboration (K. Faust): which growth metric, how to read a per-strain
 signal inside a community, and the significance test.
 
-That choice plugs in through the `Deriver` interface. `BaselineDeriver` is ONE transparent, provisional
-implementation so the seam runs end to end on real data today; the agreed method arrives as another
-`Deriver` and drops in without touching the network model or the pipeline.
+That choice plugs in through the `Deriver` interface. The default is `ReplicateDeriver`, the method the
+collaboration specified and settled (docs/METHOD_NOTES.md): replicate growth curves compared on the log2
+scale, with the rules recorded there. `BaselineDeriver` remains only as the retired placeholder that first
+ran the seam end to end, reachable with `--deriver`; another method drops in the same way, without touching
+the network model or the pipeline.
 
-Baseline v0 (documented and conservative):
+The retired baseline v0, for the record:
   * metric: per-strain `growthRate` (1/h), a RATE that travels better across techniques than an absolute
     AUC. The mono and co techniques are recorded per edge; a technique mismatch is FLAGGED, not hidden.
   * mono growth: the strain's growthRate in its single-strain experiment (community-level context).
@@ -25,10 +27,21 @@ import json
 import math
 import re
 from collections import Counter
+from statistics import median
 
 from .adapter import replicates_for_experiment
 from .growth import SPIKE_FACTOR, GrowthCurve, Replicate
-from .interaction import ABOLISHED, NO_GROWTH, OBLIGATE, UNUSABLE, dropout_interaction_strengths, interaction_strength
+from .interaction import (
+    ABOLISHED,
+    NO_GROWTH,
+    OBLIGATE,
+    QUANTIFIED,
+    UNUSABLE,
+    dropout_interaction_strengths,
+    interaction_strength,
+    rule_meta,
+)
+from .interaction import DROPOUT as DROPOUT_EVIDENCE
 from .mgrowthdb import MGrowthDBClient
 from .stats import CORRECTIONS, welch
 
@@ -177,6 +190,9 @@ def cultivation(exp: dict) -> str:
     return (exp.get("cultivationMode") or "unspecified").strip().lower()
 # Cautions are shown without making an edge low quality (Karoline, on #47): the edge keeps its status.
 TWO_REPLICATES = "two_replicates"
+# experiments that differ only in their description (a supplement, a lineage) under identical recorded
+# conditions, where nothing recorded says which monoculture or drop-out matches which (Karoline, 2026-09-27)
+CONDITIONS_UNVERIFIED = "conditions_unverified"
 
 
 def conditions(exp: dict) -> str:
@@ -270,8 +286,15 @@ def _identity(identities: dict, name: str) -> dict:
 
 
 def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, identities=None) -> dict:
-    """(node id, conditions) -> (monoculture replicates, the distinct strain names pooled under it, the ids
-    of the experiments they come from). Only strains identified by name can pool different strains."""
+    """(node id, conditions) -> {run group: (monoculture replicates, the distinct strain names pooled under
+    it, the ids of the experiments they come from, their descriptions, their names)}.
+
+    Monocultures are pooled only when they are replicates: identical recorded conditions AND the same
+    description apart from a run number (`run_group`), the rule communities already follow (Karoline, on
+    #47 and on 2026-09-27). mGrowthDB records supplements, concentrations, starting densities and lineages
+    in the description only, so monocultures that differ there were grown differently and stay apart.
+    Only strains identified by name can pool different strains.
+    """
     identities = identities if identities is not None else strain_identities(exps, [])
     index = {}
     for exp in exps:
@@ -281,15 +304,59 @@ def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, ident
         replicates, skips = replicates_for_experiment(client, exp, spike_factor)
         skipped += skips
         key = (_identity(identities, members[0])["id"], conditions(exp))
-        reps, strains, ids = index.setdefault(key, ([], set(), []))
+        reps, strains, ids, descriptions, names = index.setdefault(key, {}).setdefault(
+            run_group(exp), ([], set(), [], [], []))
         reps.extend(replicates)
         strains.add(members[0])
         ids.append(_exp_id(exp))
-    for (key, _), (_, strains, _) in index.items():
-        if len(strains) > 1 and not key.startswith("ncbi:"):
-            skipped.append((f"monocultures of {key}", f"{len(strains)} strains pooled into one monoculture set "
-                            f"({', '.join(sorted(strains))}); edges using it are flagged {STRAINS_POOLED}"))
+        descriptions.append(exp.get("description") or exp.get("name") or "")
+        names.append(exp.get("name") or "")
+    for (key, _), groups in index.items():
+        for _, (_, strains, _, _, _) in groups.items():
+            if len(strains) > 1 and not key.startswith("ncbi:"):
+                skipped.append((f"monocultures of {key}", f"{len(strains)} strains pooled into one monoculture set "
+                                f"({', '.join(sorted(strains))}); edges using it are flagged {STRAINS_POOLED}"))
     return index
+
+
+_QUOTED = re.compile(r'["\u201c\u201d\']([^"\u201c\u201d\']+)["\u201c\u201d\']')
+
+
+def _quoted(text: str) -> set:
+    """The names a description quotes, as 'controls of the "bhri" experiment' quotes bhri."""
+    return {q.strip().casefold() for q in _QUOTED.findall(text or "")}
+
+
+def _qualifier(name: str) -> str:
+    """The words of an experiment name before its last one, where studies put what sets a line apart:
+    "Evolved AtCt" -> "evolved", "Ancestral At" -> "ancestral", "At" or "CtOa" -> "" (SMGDB00000013)."""
+    return " ".join((name or "").casefold().split()[:-1])
+
+
+def _choose_monocultures(groups: dict, exp: dict):
+    """(the monoculture set a co-culture is compared with, how it was chosen), or (None, why) when that is
+    not known. How: "only" (the one set there is), "named" or "qualifier".
+
+    One set under the co-culture's recorded conditions: that one. Several, told apart only by their
+    descriptions: the one whose description names the co-culture experiment, as study 7's controls do
+    ('controls of the "bhri" experiment'); failing that, the one whose name carries the same qualifier as the
+    co-culture's ("Evolved AtCt" with "Evolved At", "CtOa" with the plain "Ct", as in study 13). Otherwise
+    none is guessed (Karoline, 2026-09-27: "yes to 1-3", then "yes" to the qualifier rule).
+    """
+    if len(groups) == 1:
+        return next(iter(groups.values())), "only"
+    name = (exp.get("name") or "").strip().casefold()
+    named = [g for g in groups.values() if any(name in _quoted(d) for d in g[3])]
+    if len(named) == 1:
+        return named[0], "named"
+    qualifier = _qualifier(exp.get("name", ""))
+    same = [g for g in groups.values() if {_qualifier(n) for n in g[4]} == {qualifier}]
+    if not named and len(same) == 1:
+        return same[0], "qualifier"
+    labels = "; ".join(sorted({g[3][0][:70] for g in groups.values()}))
+    return None, (f"{len(groups)} monoculture sets under this experiment's recorded conditions, told apart only by "
+                  f"their descriptions ({labels}); none names this co-culture, so which one matches it is not "
+                  "known and none is guessed")
 
 
 def _exp_id(exp: dict) -> str:
@@ -352,8 +419,8 @@ def absence(mean, sd, outcome: str, k: float = ABSENCE_THRESHOLD):
     of its own spread. k = 1 is the mean plus or minus sd rule; k = 0 marks nothing absent (except a mean
     of exactly zero), so everything can be exported and the cut tuned later on `effect_over_sd`. Obligate
     and abolished comparisons are present. With no spread estimate (a single replicate) the status is
-    None: undetermined, and such an edge is flagged low quality anyway. With zero spread and a non-zero
-    mean the comparison is present.
+    None: undetermined; such an edge is flagged single_replicate and shown. With zero spread and a
+    non-zero mean the comparison is present.
     """
     if outcome in (OBLIGATE, ABOLISHED):
         return PRESENT
@@ -400,24 +467,36 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
 
 def _spike_notes(flagged, target: str) -> list:
     return [f"{f['role']} replicate {f['replicate']} left out: implausible spike, maximum "
-            f"{f['ratio']:.0f} times its neighbours at {', '.join(f'{t:g}' for t in f['times'])}"
+            f"{f['ratio']:.0f} times its neighbors at {', '.join(f'{t:g}' for t in f['times'])}"
             for f in flagged if f["species"] == target]
 
 
+def _no_growth_kwargs(no_growth) -> dict:
+    alpha, factor = no_growth or (None, None)
+    return {"no_growth_alpha": alpha, "no_growth_factor": factor}
+
+
 def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, records, skipped,
-              identities=None) -> None:
+              identities=None, no_growth=None, variants=1) -> None:
     """The edges of one two-member co-culture against the monocultures of its members."""
     a, b = _members(exp)
     cond = exp.get("name", "")
     co_reps, skips = replicates_for_experiment(client, exp, spike_factor)
     skipped += skips
-    sets, pooled, origin = {}, {}, {}
+    sets, pooled, origin, matched = {}, {}, {}, set()
     for species in (a, b):
         key = (_identity(identities or {}, species)["id"], conditions(exp))
-        found, strains, ids = monos.get(key, ([], set(), []))
-        if not found:
+        groups = monos.get(key, {})
+        chosen, how = _choose_monocultures(groups, exp) if groups else (None, "")
+        why = "" if chosen else how
+        if how in ("named", "qualifier"):
+            matched.add(species)          # the match with this co-culture is recorded, by name
+        found, strains, ids = (chosen[0], chosen[1], chosen[2]) if chosen else ([], set(), [])
+        if not groups:
             skipped.append((f"{a} with {b} [{cond}]",
                             f"no monoculture replicates for {species} under this experiment's conditions"))
+        elif not chosen:
+            skipped.append((f"{a} with {b} [{cond}]", f"{species}: {why}"))
         sets[species] = _renamed(found, species)
         pooled[species] = len(strains) > 1 and not key[0].startswith("ncbi:")
         origin[species] = ids
@@ -426,7 +505,8 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
             skipped.append((f"{a} with {b} [{cond}]", "no usable co-culture replicates"))
         return
     try:
-        result = interaction_strength(sets[a], sets[b], co_reps, a, b, method=method, spike_factor=spike_factor)
+        result = interaction_strength(sets[a], sets[b], co_reps, a, b, method=method, spike_factor=spike_factor,
+                                      **_no_growth_kwargs(no_growth))
     except ValueError as e:
         skipped.append((f"{a} with {b} [{cond}]", str(e)))
         return
@@ -443,6 +523,12 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
              "n_with": side["n_co"], "n_without": side["n_mono"],
              "with_log2": side["co_log2"], "without_log2": side["mono_log2"]}
         quality, cautions = _replicate_flags(c["n_with"], c["n_without"])
+        if variants > 1 and not matched:
+            # co-cultures of this pair under the same recorded conditions differ only in their description
+            # (study 4's +Ac and -Ac), and nothing recorded says which one the monocultures match. When a
+            # member's set was matched by name (study 7's controls, study 13's "Evolved" lines), the names
+            # account for the variants, and the pair needs no caution
+            cautions.append(CONDITIONS_UNVERIFIED)
         if pooled[target]:
             quality.append(STRAINS_POOLED)
         mode = cultivation(exp)
@@ -566,8 +652,17 @@ def _common_start(full, dropouts, skipped) -> tuple:
     return keep("full community", full), {r: group for r, group in kept.items() if group}
 
 
+def _variants(exps) -> dict:
+    """(members, recorded conditions) -> how many description variants (`run_group`) of that community a
+    study holds: more than one means experiments that differ only in their description."""
+    groups = {}
+    for exp in exps:
+        groups.setdefault((frozenset(_members(exp)), conditions(exp)), set()).add(run_group(exp))
+    return {key: len(g) for key, g in groups.items()}
+
+
 def _dropout(client, design, method, spike_factor, study_id, study_meta, records, skipped,
-             identities=None) -> None:
+             identities=None, no_growth=None, variants=None) -> None:
     """The arcs of one drop-out design, from `crossfeed.interaction.dropout_interaction_strengths`."""
     members, full_exps, drops = design
     label = f"drop-out design of {len(members)} members ({', '.join(e.get('name', '') for e in full_exps)})"
@@ -586,7 +681,8 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
         skipped.append((label, "no usable full community replicates" if not full else "no usable drop-out"))
         return
     try:
-        result = dropout_interaction_strengths(full, dropouts, method=method, spike_factor=spike_factor)
+        result = dropout_interaction_strengths(full, dropouts, method=method, spike_factor=spike_factor,
+                                               **_no_growth_kwargs(no_growth))
     except ValueError as e:
         skipped.append((label, str(e)))
         return
@@ -605,15 +701,48 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
         mode = cultivation(full_exps[0])
         if mode != BATCH:
             quality.append(NON_BATCH)
+        # the full community or this drop-out comes in variants told apart only by their descriptions, so
+        # which drop-out goes with which full community is not recorded (Karoline, 2026-09-27)
+        key = conditions(full_exps[0])
+        if (variants or {}).get((frozenset(members), key), 1) > 1 or \
+                (variants or {}).get((frozenset(members - {removed}), key), 1) > 1:
+            cautions.append(CONDITIONS_UNVERIFIED)
         cond = ", ".join(e.get("name", "") for e in drops[removed])
         experiments = [_exp_id(e) for e in [*full_exps, *drops[removed]]]
         records.append(_record(removed, target, arc, method, quality, cautions, notes, cond, arc["evidence"],
                                members, experiments, study_id, study_meta, identities, mode))
 
 
+def _wanted(exps, keep) -> set:
+    """The member names `keep(name, taxon id)` accepts, over a study's experiments."""
+    return {s.get("name") for exp in exps for s in exp.get("communityStrains", [])
+            if s.get("name") and keep(s.get("name"), s.get("NCBId"))}
+
+
+def relevant_experiments(exps, keep, dropout: bool = True) -> list:
+    """The experiments a derivation limited to `keep` reads: monocultures of kept strains, two-member
+    co-cultures of two kept strains, and every experiment of a drop-out design holding at least two kept
+    members. A design is kept whole, since its common start is taken over all its drop-outs, so leaving
+    one out could change which replicates are compared. With `keep` None: every experiment."""
+    if keep is None:
+        return list(exps)
+    wanted = _wanted(exps, keep)
+    ids = set()
+    for exp in exps:
+        members = set(_members(exp))
+        if (len(members) == 1 and members <= wanted) or (len(members) == 2 and members <= wanted):
+            ids.add(id(exp))
+    if dropout:
+        for members, full, drops in dropout_designs(exps, []):
+            if len(members & wanted) >= 2:
+                ids.update(id(e) for e in [*full, *(e for group in drops.values() for e in group)])
+    return [exp for exp in exps if id(exp) in ids]
+
+
 def interactions_from_replicates(client, study: dict, exps: list, study_id: str = None,
                                  method: str = "auc", spike_factor: float = SPIKE_FACTOR,
-                                 dropout: bool = True, include_non_batch: bool = False):
+                                 dropout: bool = True, include_non_batch: bool = False,
+                                 no_growth_alpha: float = None, no_growth_factor: float = None, keep=None):
     """The specified comparison, run on a study: (records, skipped).
 
     Two designs give edges. Each two-member co-culture is compared with the monoculture replicates of
@@ -629,8 +758,10 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
     apart. One edge per experiment; merging edges is a separate decision. Filtering low-quality edges
     happens at output (`select_edges`), so nothing computed is lost. Only batch experiments are derived
     unless `include_non_batch` is set; every edge records its `cultivation_mode`, and a non-batch edge is
-    flagged `non_batch` (Karoline, #42).
+    flagged `non_batch` (Karoline, #42). `no_growth_alpha` and `no_growth_factor` set the no-growth rule
+    (`crossfeed.interaction.grew`; None means the defaults there).
     """
+    no_growth = (no_growth_alpha, no_growth_factor)
     study_id = study_id or study.get("id")
     study_meta = {
         "study_citation": study.get("name", study_id),
@@ -638,16 +769,33 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
         "study_license": "",
     }
     records, skipped = [], []
+    if exps and all(len(_members(exp)) < 2 for exp in exps):
+        # SMGDB00000015 holds 91 monocultures and nothing else: say so first, not only per replicate
+        skipped.append((f"study {study_id}", f"only monocultures ({len(exps)} experiments of one strain each): "
+                        "an interaction needs a co-culture or a community to compare with"))
     exps = _batch_only(exps, include_non_batch, skipped)
     identities = strain_identities(exps, skipped)
-    monos = _mono_index(client, exps, skipped, spike_factor, identities)
+    # with `keep`, only what can give an interaction between kept strains is read (a search with "only the
+    # species entered"); identities and variants still come from every experiment, so matching is unchanged
+    relevant = {id(e) for e in relevant_experiments(exps, keep, dropout)}
+    wanted = _wanted(exps, keep) if keep is not None else None
+    monos = _mono_index(client, [e for e in exps if id(e) in relevant], skipped, spike_factor, identities)
+    variants = _variants(exps)
     for exp in exps:
         if len(_members(exp)) == 2:
+            if id(exp) not in relevant:
+                if wanted is not None and set(_members(exp)) & wanted:
+                    skipped.append((" with ".join(_members(exp)) + f" [{exp.get('name', '')}]",
+                                    "not derived: the partner is not among the species entered"))
+                continue
             _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, records, skipped,
-                      identities)
+                      identities, no_growth, variants[(frozenset(_members(exp)), conditions(exp))])
     if dropout:
         for design in dropout_designs(exps, skipped):
-            _dropout(client, design, method, spike_factor, study_id, study_meta, records, skipped, identities)
+            if wanted is not None and len(design[0] & wanted) < 2:
+                continue
+            _dropout(client, design, method, spike_factor, study_id, study_meta, records, skipped, identities,
+                     no_growth, variants)
     elif any(len(_members(exp)) > 2 for exp in exps):
         skipped.append(("communities of more than two members", "drop-out designs switched off; no arcs derived"))
     return records, skipped
@@ -697,14 +845,94 @@ def select_edges(records, include_low_quality: bool = False) -> tuple:
     return edges, hidden
 
 
+def _merged(arcs: list) -> dict:
+    """One arc for several arcs of one source, target and sign (register item 14, Karoline 2026-09-27).
+
+    The strength is the median of the arcs' log2 means, with their range; obligate and abolished arcs,
+    which have no ratio, count toward the arc without entering the median, and an arc made only of them
+    keeps that outcome. A median has no sd, se or combined test, so those stay empty rather than invented.
+    It lists every study, experiment and condition it rests on, and is drop-out evidence if any of its arcs
+    is, since it may then be indirect.
+    """
+    numeric = [a["strength"] for a in arcs if a.get("strength") is not None]
+    strength = round(median(numeric), 4) if numeric else None
+    outcomes = {a.get("outcome") for a in arcs}
+    outcome = QUANTIFIED if numeric else (outcomes.pop() if len(outcomes) == 1 else arcs[0].get("outcome"))
+
+    def union(key):
+        seen = []
+        for a in arcs:
+            for x in a.get(key) or []:
+                if x not in seen:
+                    seen.append(x)
+        return seen
+
+    studies = []
+    for a in arcs:
+        st = {"id": a["study_id"], "citation": a.get("study_citation", ""), "license": a.get("study_license", ""),
+              "url": a.get("study_url", "")}
+        if st["id"] not in {s["id"] for s in studies}:
+            studies.append(st)
+    conditions = list(dict.fromkeys(a.get("condition", "") for a in arcs))
+    return {**arcs[0], "strength": strength, "weight": None if strength is None else round(abs(strength), 4),
+            "sd": None, "se": None, "effect_over_sd": None, "p_value": None, "significance": None,
+            "n_with": None, "n_without": None, "outcome": outcome,
+            "status": PRESENT if any(a.get("status") == PRESENT for a in arcs) else None,
+            "quality": union("quality"), "cautions": union("cautions"), "notes": union("notes"),
+            "experiments": union("experiments"), "community": sorted(set(union("community"))),
+            "evidence": (DROPOUT_EVIDENCE if any(a.get("evidence") == DROPOUT_EVIDENCE for a in arcs)
+                         else arcs[0].get("evidence")),
+            "condition": "; ".join(c for c in conditions if c),
+            "cultivation_mode": "; ".join(dict.fromkeys(a.get("cultivation_mode", "") for a in arcs)),
+            "method": f"{arcs[0].get('method', '')}; merged: the median of {len(arcs)} arcs",
+            "merged_arcs": len(arcs),
+            "strength_range": [min(numeric), max(numeric)] if numeric else [],
+            "studies": studies, "study_id": studies[0]["id"]}
+
+
+def merge_parallel(edges: list, merge: bool = True, min_studies: int = 1) -> tuple:
+    """(edges, meta) with the parallel arcs of each source and target merged (register item 14).
+
+    Karoline's choices (2026-09-27): arcs with the same source and target merge, across conditions, studies
+    and evidence; the strength is their median; arcs whose signs disagree are not merged, only arcs that
+    agree; merging is an advanced setting, off by default. Absent arcs (no interaction found) have no
+    direction and stay separate. `min_studies` then keeps arcs resting on at least that many studies.
+    """
+    info = {"merge_arcs": merge, "merged": 0, "left_apart_for_disagreeing_signs": 0, "min_studies": min_studies,
+            "below_min_studies": 0, "rule": "same source and target; median of the log2 means; signs must agree"}
+    if not merge and min_studies <= 1:
+        return edges, info                    # off, as by default: every arc exactly as derived
+    groups = {}
+    for e in edges:
+        groups.setdefault((e["source"], e["target"]), []).append(e)
+    out, merged, conflicts = [], 0, 0
+    for arcs in groups.values():
+        signed = [a for a in arcs if a.get("status") != ABSENT and a.get("effect") in ("facilitation", "inhibition")]
+        rest = [a for a in arcs if a not in signed]
+        signs = {a["effect"] for a in signed}
+        if merge and len(signed) >= 2 and len(signs) == 1:
+            out.append(_merged(signed))
+            merged += 1
+        else:
+            conflicts += merge and len(signs) > 1
+            out.extend(signed)
+        out.extend(rest)
+    kept = [e for e in out if len(e.get("studies") or [e]) >= min_studies]
+    return kept, {**info, "merged": merged, "left_apart_for_disagreeing_signs": conflicts,
+                  "below_min_studies": len(out) - len(kept)}
+
+
 def output_meta(records, include_low_quality: bool = False, correction: str = "bh",
-                absence_threshold: float = ABSENCE_THRESHOLD) -> tuple:
+                absence_threshold: float = ABSENCE_THRESHOLD, no_growth_alpha: float = None,
+                no_growth_factor: float = None, merge_arcs: bool = False, min_studies: int = 1) -> tuple:
     """(edges, meta) for writing a network.
 
     Sets each record's `status` from the absence threshold k (None, undetermined, for a low-quality
     edge, which is never read as an absence) and its `significance` from the chosen correction, drops
     low-quality edges unless asked, and records all of it in `meta`, so a file says how it was made and
-    how many edges each rule touched.
+    how many edges each rule touched. `meta.no_growth` records the no-growth rule the derivation ran with,
+    since the count of obligate and abolished edges depends on it (#37); pass the same values given to
+    the derivation.
     """
     for record in records:
         # a low-quality edge is never read as the absence of an interaction (Karoline, on #40; #50)
@@ -712,12 +940,16 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
             record.get("strength"), record.get("sd"), record.get("outcome"), absence_threshold)
     tests = adjust_significance(records, correction)
     edges, hidden = select_edges(records, include_low_quality)
+    edges, merge = merge_parallel(edges, merge_arcs, min_studies)
     statistics = {**STATISTICS, "correction": STATISTICS["correction"].format(name=CORRECTIONS[correction][0]),
                   "tests": tests}
     absent = sum(1 for e in edges if e.get("status") == ABSENT)
     meta = {"statistics": statistics,
             "absence": {"rule": "absent when |log2 mean| < k * sd", "k": absence_threshold, "absent": absent},
-            "filters": {"include_low_quality": include_low_quality}, "hidden": hidden}
+            "no_growth": {**rule_meta(no_growth_alpha, no_growth_factor),
+                          "obligate": sum(1 for e in edges if e.get("outcome") == OBLIGATE),
+                          "abolished": sum(1 for e in edges if e.get("outcome") == ABOLISHED)},
+            "filters": {"include_low_quality": include_low_quality}, "hidden": hidden, "merge": merge}
     return edges, meta
 
 
@@ -747,8 +979,8 @@ class ReplicateDeriver(Deriver):
     """The comparison the collaboration specified, over replicate growth curves.
 
     Reads each replicate's measured series through `crossfeed.adapter`, compares the replicate sets with
-    `crossfeed.interaction.interaction_strength` (area under the curve by default, maximal abundance
-    selectable), and emits edges carrying the standard error and the replicate counts. This is the default
+    `crossfeed.interaction.interaction_strength` (area under the curve by default; maximal abundance or a
+    growth rate selectable), and emits edges carrying the standard error and the replicate counts. This is the default
     for a live derivation; `BaselineDeriver` remains only as the retired placeholder it always was.
     """
 
@@ -756,19 +988,24 @@ class ReplicateDeriver(Deriver):
     needs_client = True
 
     def __init__(self, method: str = "auc", spike_factor: float = SPIKE_FACTOR, client=None,
-                 dropout: bool = True, include_non_batch: bool = False):
+                 dropout: bool = True, include_non_batch: bool = False, no_growth_alpha: float = None,
+                 no_growth_factor: float = None, keep=None):
+        self.keep = keep
         self.method = method
         self.spike_factor = spike_factor
         self.client = client
         self.dropout = dropout
         self.include_non_batch = include_non_batch
+        self.no_growth_alpha = no_growth_alpha
+        self.no_growth_factor = no_growth_factor
 
     def derive(self, study: dict, exps: list):
         if self.client is None:
             raise ValueError("ReplicateDeriver needs a client: it reads each replicate's measured series")
         return interactions_from_replicates(self.client, study, exps, study.get("id"),
                                             self.method, self.spike_factor, self.dropout,
-                                            self.include_non_batch)
+                                            self.include_non_batch, self.no_growth_alpha,
+                                            self.no_growth_factor, self.keep)
 
 
 class BaselineDeriver(Deriver):
@@ -789,14 +1026,21 @@ class BaselineDeriver(Deriver):
 
 def derive_interactions(client: MGrowthDBClient, study_id: str, deriver: Deriver = None,
                         metric: str = "auc", spike_factor: float = SPIKE_FACTOR, dropout: bool = True,
-                        include_non_batch: bool = False):
+                        include_non_batch: bool = False, no_growth_alpha: float = None,
+                        no_growth_factor: float = None, keep=None):
     """Fetch a study and its experiments from the API, then derive interactions with `deriver`
     (default: ReplicateDeriver, the specified comparison). `metric`, `spike_factor` and `dropout` configure
     the default deriver only. A deriver that reads measured series says so with `needs_client`."""
     deriver = deriver or ReplicateDeriver(method=metric, spike_factor=spike_factor, dropout=dropout,
-                                         include_non_batch=include_non_batch)
+                                         include_non_batch=include_non_batch, no_growth_alpha=no_growth_alpha,
+                                         no_growth_factor=no_growth_factor, keep=keep)
     if getattr(deriver, "needs_client", False) and getattr(deriver, "client", None) is None:
         deriver.client = client
+    if getattr(deriver, "needs_client", False):
+        # read the study's growth curves in parallel first; the derivation then finds them cached
+        from .fetch import prefetch_studies
+        prefetch_studies(deriver.client, [study_id], include_non_batch, keep=getattr(deriver, "keep", None),
+                         dropout=getattr(deriver, "dropout", True))
     study = dict(client.get_study(study_id))
     study.setdefault("id", study_id)
     exps = [client.get_experiment(e["id"]) for e in study.get("experiments", [])]

@@ -6,8 +6,8 @@ to this code.
 
 Following Karoline's suggestion, the choices below are user-configurable settings, not one fixed method.
 Each has a sensible default. A user changes any of them by selecting a `Deriver` and its options on the
-command line (see [CONTRIBUTING.md](../CONTRIBUTING.md)); the viewer in `gui/` shows the same settings so
-a reader can see how a network was made. This note records the defaults. The "Proposed default" line
+command line or in the local page's advanced settings (`crossfeed gui`), which show the same settings
+with the same defaults, and every network records the ones it was made with. This note records the defaults. The "Proposed default" line
 under each setting is Craig's opening vote, so there is something concrete to react to. Karoline and Haris
 weigh in, we settle each default together, and the settled value ships as the default.
 
@@ -31,7 +31,8 @@ counts, outcome, metric, `quality` flags and `notes`.
   `meta.hidden` counting what was left out (item 21). Single-replicate edges are shown by default and
   marked in the Cytoscape style (Karoline, on #62).
 - **A statistical test is reported, never used to decide** (Karoline, 2026-09-21): Welch's t-test on the
-  per-replicate log2 values, `p_value` raw and `significance` Benjamini-Hochberg adjusted over every
+  per-replicate log2 values, `p_value` raw and `significance` adjusted (Benjamini-Hochberg by default,
+  Benjamini-Yekutieli as a setting) over every
   comparison tested in one derivation, named in `meta.statistics` (item 10).
 - **An implausible spike in a curve is flagged and the curve left out for its species only** (#48),
   recorded on the edge as a note rather than as a quality issue while two replicates remain.
@@ -68,30 +69,39 @@ mGrowthDB reports. Some consequences worth stating plainly, because several are 
 
 ## Defaults at a glance
 
-1. Growth metric: **AUC** (settled 2026-09-19), `max` selectable, growth rate to follow once it has a rule
-2. Per-strain signal in a community: **per-strain qPCR, as the study reports it**
-3. Mono versus co comparison: **mean log2 over replicate sets** (settled), coupled to 1; the neutral call
-   comes from the spread, not a constant band (item 19)
-4. Significance and uncertainty: **sd, se and replicate counts on every edge** (shipped); presence
-   follows the spread (item 19); Welch's t-test with Benjamini-Hochberg correction is reported as support
-   and does not decide (settled 2026-09-21, item 10)
-5. Co-culture scope: **pairwise, two member**
-6. Technique mismatch: **flag on every edge**, and do not trust the sign near the band under a mismatch
-7. Taxonomic identity: **genus and species today**, plus an NCBI taxid on every node (needs building);
-   an edge whose monoculture set pooled two strains is flagged `strains_pooled`
-8. Environment and medium: **keep all conditions, tag each edge**; restriction waits on mGrowthDB metadata
-9. Drop-out (leave one out) communities: **include, labeled by evidence** (settled by Craig 2026-09-20);
-   not implemented yet
-10. Edge thresholds: **minimum strength 0, minimum supporting studies 1**, meaningful once edges merge
-11. Minimum time points: **carry the fit quality mGrowthDB reports**, gate on it rather than a fixed count
-12. Chemostats and serial dilutions: **flag and keep separate from batch**
-13. Output format: **JSON canonical, GraphML on demand**
-14. Query scope: **no default chosen yet**; whether a query for a species also returns its other strains,
-    or other species of its genus (Karoline's list, 2026-09-18)
-15. Absences of interaction: **exported as edges with `status` absent under threshold k, default 1,
-    hidden by the display** (settled 2026-09-21; replaces "show neutral edges", since a neutral edge is a
-    contradiction)
-16. Show low-quality edges: **off** (settled 2026-09-21); computed, flagged, and hidden
+The method as it runs today (2026-09-27), with where each choice was settled. The sections below are the
+history of how each was decided.
+
+1. Growth metric: **AUC** (item 11), `max` selectable, and the growth rate selectable (#41): easylinear by
+   default, as mGrowthDB computes its reported rates, window 5; a guarded Baranyi fit as the alternative
+2. Per-strain signal: **a per-strain measurement context as mGrowthDB records it** (subject strain); a
+   species is compared only with itself measured by the same technique (item 23)
+3. Mono versus co comparison: **mean log2 over replicate sets** (items 1, 12), after the no-growth rule
+   (item 5: paired test, or a rise of 1.5 times)
+4. Significance and uncertainty: **sd, se and replicate counts on every edge**; presence follows the spread
+   through the absence threshold k (item 15, default 1); Welch's t-test with Benjamini-Hochberg (or
+   Benjamini-Yekutieli) is reported as support and decides nothing (item 10)
+5. Designs: **two-member co-cultures and drop-out communities** (item 2), both included by default
+6. Technique: **the same species-identifying technique on both sides**, or the pair is skipped (item 23)
+7. Taxonomic identity: **strains keyed by NCBI taxon id, named by their current name** (#23, #24); a
+   strain without an id falls back to genus and species, where pooled strains are flagged `strains_pooled`
+8. Environment and medium: **all recorded conditions kept, one edge per experiment**; experiments pool only
+   when their recorded conditions and descriptions agree (items 22, #47); filtering by environment cannot
+   be built on mGrowthDB's metadata (Karoline, #61)
+9. Drop-out communities: **included, labeled by evidence** (settled by Craig 2026-09-20; built, #47)
+10. Edge thresholds: **no strength floor**; merging parallel arcs is a setting, off by default, and a
+    minimum-supporting-studies filter applies to merged arcs (item 14)
+11. Minimum time points: **a curve needs its points for the metric** (easylinear: window plus one); no
+    fit-quality gate on mGrowthDB's values, which are not read
+12. Chemostats and serial dilutions: **left out by default**, included with a setting and flagged `non_batch`
+    (#42)
+13. Output format: **JSON canonical, GraphML on demand**, and a report
+14. Query scope: **a species name resolves to all its strains** in mGrowthDB, and only interactions between
+    the species entered are shown unless unticked
+15. Absences of interaction: **exported as edges with `status` absent under threshold k, default 1, hidden
+    by the display** (settled 2026-09-21)
+16. Show low-quality edges: **off** (settled 2026-09-21); computed, flagged, and hidden; single-replicate
+    edges are shown and marked
 
 ## 1 and 3. The growth metric and how mono is compared to co (one coupled choice)
 
@@ -211,10 +221,11 @@ setting to leave them out. Built in #47; the rules Karoline set for it are in "D
 - **minimum interaction strength**: hide edges below a magnitude.
 - **minimum number of supporting studies**: hide edges seen in fewer than N studies.
 
-The strength floor works today. The supporting-studies floor does not mean much yet: edges for one
-interaction are not merged, so every edge has exactly one study id, and raising the floor above one empties
-the network rather than selecting well-replicated edges. A merge step (one edge per interaction, unioned
-study ids, combined strength) has to come first.
+(Status 2026-09-27: no strength floor is offered. Merging parallel arcs is built, as a setting off by
+default, and the supporting-studies floor applies to merged arcs; see item 14.) At the time of writing:
+the supporting-studies floor did not mean much, since edges for one interaction were not merged, so every
+edge had exactly one study id and raising the floor above one emptied the network. A merge step had to
+come first.
 
 **Proposed default (Craig): minimum strength 0 and minimum supporting studies 1, filtered in the viewer;
 build edge merging, then a published network can carry a strength floor and a replication floor.** Hiding
@@ -326,6 +337,23 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    growth is a test across replicates comparing start abundance to maximum abundance, not a
    detection limit. Still ours to pick: which test and its alpha (the same choice as item 10), and what
    to do when a set has no replicates to test with.
+   SETTLED 2026-09-27 (Karoline, on #68): "yes to all 3, as long as the maximum in the paired test can
+   come from different time points (since the time of maximum abundance may vary across replicates)."
+   The three: keep the twofold half at a factor of 2, make both numbers settings recorded in the network,
+   and test with a paired test. `crossfeed.interaction.grew` takes one rise per replicate,
+   log2(maximum / abundance at the first time point), each maximum at that replicate's own time, and
+   applies it before any ratio. The set has grown when a paired two-sided t-test finds the mean rise above
+   zero at `NO_GROWTH_ALPHA` (0.05), or when the mean rise reaches log2(`NO_GROWTH_FACTOR`) (a geometric
+   mean of the ratios reaching the factor). The default factor is 1.5 (Karoline, later the same day, her
+   words: "I'd put the factor (which defines growth) as an advanced option. the default can be medium
+   (1.5) and it can be made more stringent by the user (e.g. set to 2)."). At 2, two near-twofold rises
+   became strong claims (SMGDB00000013 Ochrobactrum to Comamonas abolished, SMGDB00000008 B. finegoldii
+   to B. thetaiotaomicron obligate); at 1.5 both stay quantified. Pairing each maximum with its own start removes the spread between
+   inocula, which the earlier Welch test on unrelated samples counted as noise. Below two replicates the
+   test cannot run and the set counts as grown when its maximum exceeds its start. Why the factor: with
+   two or three replicates a real rise often misses significance, and the test alone made 10 of
+   SMGDB00000004's 20 edges obligate or abolished, and 8 of SMGDB00000013's 9. `meta.no_growth` records
+   both numbers and the obligate and abolished counts (Craig's agent, on #68).
 6. **Whether crossfeed ships a user interface at all** (#18). Karoline asked for a local page where a
    person types species names and gets their interactions, with settings hidden behind an "Advanced
    settings" button. Built as a standard-library server on 127.0.0.1 with no JavaScript, so the promise
@@ -480,6 +508,15 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    or drop the threshold until merging exists. Proposed default: build the merge, after which a
    replication floor becomes meaningful. Setting 10.
    DEFERRED by Karoline 2026-09-19 until the settled items have landed.
+   SETTLED 2026-09-27 (Karoline, choosing among her agent's options): arcs with the same source and target
+   merge, across conditions, studies and evidence; the merged strength is the median of their log2 means,
+   with the range; arcs whose signs disagree are not merged ("No merge on conflict": only agreeing arcs
+   merge); merging is an advanced setting, off by default, with a minimum-supporting-studies filter. Her
+   earlier words on #47: "could be condensed into an arc with a number-of-studies-supporting-the-arc
+   attribute". Consequences stated by her agent: absent arcs have no direction and stay separate; obligate
+   and abolished arcs join their direction and count without entering the median; a merged arc carries no
+   sd, se or combined test, lists every study, experiment and condition, and is drop-out evidence if any
+   of its arcs is. Edges gain `merged_arcs` and `strength_range` (optional, backward compatible).
 
 15. **The repository holds two implementations of the comparison, and the pipeline reaches the weaker one**
    (raised by the Syntropa-side review, 2026-09-18). `interaction.py` with `growth.py` is the comparison
@@ -556,6 +593,9 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    the data, not by a constant. OPEN within this item: `obligate` and `abolished` carry no mean and no sd
    by construction, so no row above can place them, and the Syntropa side has proposed a fifth row
    showing them by default with the effect taken from the outcome (see #40).
+   SINCE THEN (2026-09-21, Karoline, revising this item): there is no neutral edge. A clean comparison whose
+   spread crosses zero keeps the sign of its mean and gets `status` absent (item 15, threshold k); obligate
+   and abolished edges take their direction from the outcome and are always present.
 20. **Edge quality as an attribute** (Karoline, 2026-09-21). Rather than drop a weak edge or silently
    keep it, an edge carries a list of quality flags saying what is wrong with it, so a consumer can filter
    on the specific problem. Her words: "keep edges computed on a single replicate but flag them as
@@ -577,6 +617,48 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    AMENDED 2026-09-21 (Karoline, on #62): "change the default treatment for the single_replicate case and
    ... show those edges but take care in the cytoscape style that they are marked somehow, e.g. dashed."
    They keep the flag and an undetermined `status`; the other low-quality flags stay hidden by default.
+   SINCE THEN (2026-09-21, item 15): absences are exported as edges with `status` absent and hidden by the
+   display, so only one display setting remains, "Show low-quality edges", off by default.
+
+22. **Conditions recorded only in descriptions** (Karoline, 2026-09-27). A co-culture was compared with
+   the monocultures that share its recorded conditions (cultivation mode and every compartment field:
+   medium, temperature, pH, volume, stirring, gases, pressure, dilution rate, inoculum), and a drop-out
+   with the full community under the same conditions. But mGrowthDB records supplements, concentrations,
+   starting densities and lineages only in the free-text description, so monocultures grown differently
+   were pooled: SMGDB00000013 pooled evolved and ancestral lines, SMGDB00000014 0% to 1% oleic and
+   linoleic acid, SMGDB00000015 glutamate and starting densities from about 10^2 to 10^7, SMGDB00000007
+   the controls of three experiments. Karoline's decision, her words: "yes to 1-3, and 4 is noted", for
+   these proposals of her agent:
+   1. monocultures are pooled only when their descriptions also agree (apart from a run number), as
+      communities already are;
+   2. when several monoculture sets fit a co-culture, the one whose description names that co-culture
+      experiment is used (SMGDB00000007: 'controls of the "bhri" experiment'); otherwise the pair is
+      skipped with the reason and the candidates, never guessed;
+   3. edges from co-cultures of a pair that differ only in their description (SMGDB00000004's +Ac and
+      -Ac), and drop-out arcs whose full community or drop-out has such variants, carry the caution
+      `conditions_unverified`: shown, and marked;
+   4. the lasting fix is in mGrowthDB: supplements, concentrations, starting density and lineage as
+      recorded fields (noted by Karoline for mGrowthDB).
+   Then, for SMGDB00000013, whose names pair up ("Evolved AtCt" with "Evolved At", "CtOa" with the plain
+   "Ct"), a qualifier rule, used only when no description names the co-culture: the monoculture set whose
+   name carries the same words before its last one. Karoline: "yes". A pair matched by name or qualifier
+   carries no `conditions_unverified`, since the names account for the variants.
+   Effect: SMGDB00000004 keeps its 20 edges, 16 cautioned; SMGDB00000007 compares each co-culture with
+   its own controls; SMGDB00000008 is unchanged; SMGDB00000013 gives 9 edges, each compared with its own
+   line (Ochrobactrum to Comamonas is now obligate: the plain Comamonas monoculture did not grow, where
+   the pooled set of plain, ancestral and evolved lines did); SMGDB00000014 derives nothing, its 15
+   monoculture variants per strain differing in concentrations no name or description ties to a
+   co-culture.
+
+23. **One species-identifying technique on both sides** (Karoline, 2026-09-27). Her words: "mono-cultures
+   should only be compared to co-cultures if both use the same, species-identifying technique, even if
+   another technique would result in the same unit, because otherwise we do not know whether an effect is
+   due to the co-culture or due to the change in technique." So a species' curves in the sets compared
+   (monocultures and co-cultures, or a full community and a drop-out) must share mGrowthDB's
+   `techniqueType`, beyond the unit check; different species may be measured differently. Whole-culture
+   measurements (subject bioreplicate: OD, pH, total counts) are not species-identifying and are not used
+   for monocultures either, as before (SMGDB00000010 and SMGDB00000015 measure their monocultures only that
+   way). No edge derived from mGrowthDB on 2026-09-27 changed: every one already compared one technique.
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

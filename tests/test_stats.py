@@ -3,7 +3,7 @@ import math
 
 import pytest
 
-from crossfeed.stats import benjamini_hochberg, benjamini_yekutieli, incomplete_beta, t_cdf, welch
+from crossfeed.stats import benjamini_hochberg, benjamini_yekutieli, incomplete_beta, paired, t_cdf, welch
 
 
 @pytest.mark.parametrize("df, critical", [(1, 12.706), (2, 4.303), (4, 2.776), (10, 2.228), (30, 2.042)])
@@ -38,6 +38,25 @@ def test_welch_needs_two_values_per_side():
 def test_welch_without_spread():
     assert welch([1.0, 1.0], [2.0, 2.0])["p"] == 0.0
     assert welch([1.0, 1.0], [1.0, 1.0])["p"] == 1.0
+
+
+def test_paired_on_a_hand_computed_example():
+    # differences 2, 3, 2: mean 7/3, sd 1/sqrt(3), so t = (7/3) / ((1/sqrt(3)) / sqrt(3)) = 7 with df 2.
+    # For df 2 the two-sided p is 1 - t / sqrt(t^2 + 2) = 1 - 7 / sqrt(51) = 0.0198
+    result = paired([3, 5, 4], [1, 2, 2])
+    assert result["t"] == pytest.approx(7.0) and result["df"] == 2
+    assert result["p"] == pytest.approx(1 - 7 / math.sqrt(51))
+
+
+def test_paired_needs_two_pairs_and_equal_lengths():
+    assert paired([1.0], [2.0]) is None
+    with pytest.raises(ValueError):
+        paired([1.0, 2.0], [1.0])
+
+
+def test_paired_without_spread():
+    assert paired([3.0, 4.0], [1.0, 2.0])["p"] == 0.0                   # every difference is 2
+    assert paired([1.0, 2.0], [1.0, 2.0])["p"] == 1.0
 
 
 def test_benjamini_hochberg_on_a_textbook_example():

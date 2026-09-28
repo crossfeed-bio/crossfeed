@@ -3,6 +3,7 @@ import math
 
 import pytest
 
+from crossfeed import interaction
 from crossfeed.derive import (
     _gs,
     absence,
@@ -14,6 +15,15 @@ from crossfeed.derive import (
     output_meta,
 )
 from crossfeed.mgrowthdb import records_to_network
+
+
+@pytest.fixture(autouse=True)
+def _no_growth_rule_off(monkeypatch):
+    """These examples predate the no-growth rule (#37) and check the ratio math, the windows, the spike
+    guard and the outcomes on hand-computed curves. The rule is switched off here so each test keeps
+    checking what it says it checks; `TestNoGrowthRule` covers the rule itself."""
+    monkeypatch.setattr(interaction, "NO_GROWTH_ALPHA", 0.0)
+    monkeypatch.setattr(interaction, "NO_GROWTH_FACTOR", 0.0)
 
 STUDY = {"id": "SMGDB_TEST", "name": "synthetic test study", "url": "http://example/study"}
 A = "Faecalibacterium prausnitzii A2-165"
@@ -286,6 +296,10 @@ def test_output_meta_records_the_statistics_and_the_absence_rule():
     assert meta["absence"]["absent"] == 1
     _, conservative = output_meta(records, correction="by")
     assert "Benjamini-Yekutieli" in conservative["statistics"]["correction"]
+    # the no-growth rule's numbers travel with the network, since the obligate count depends on them (#37)
+    assert (meta["no_growth"]["alpha"], meta["no_growth"]["obligate"], meta["no_growth"]["abolished"]) == (0.0, 0, 0)
+    _, chosen = output_meta(records, no_growth_alpha=0.01, no_growth_factor=4.0)
+    assert (chosen["no_growth"]["alpha"], chosen["no_growth"]["factor"]) == (0.01, 4.0)
 
 
 def test_a_single_replicate_edge_is_kept_and_flagged_low_quality():
@@ -623,3 +637,164 @@ def test_a_dropout_design_in_a_chemostat_is_excluded_too():
     records, skipped = interactions_from_replicates(client, study, _mode(exps, "serial dilution"))
     assert records == []
     assert any("serial dilution, excluded by default" in reason for _, reason in skipped)
+
+
+# ---- conditions recorded only in descriptions (Karoline, 2026-09-27) -----------------------------
+
+def _described(name, species, description):
+    exp = _rep_experiment(name, species)
+    exp["description"] = description
+    return exp
+
+
+def test_monocultures_told_apart_only_by_their_descriptions_are_not_pooled():
+    # SMGDB00000014's shape: A grown alone with and without a supplement, under identical recorded
+    # conditions. Pooling them would compare the co-culture with a mix of conditions; neither names the
+    # co-culture, so none is guessed and the pair says why.
+    exps = [_described("A plain", [A], "A on minimal medium"), _described("A oleic", [A], "A with 1% oleic acid"),
+            _described("B alone", [B], "B on minimal medium"), _described("co", [A, B], "A and B")]
+    curves = {("A plain", A): [(1, 1), (1, 1.4)], ("A oleic", A): [(1, 6), (1, 7)],
+              ("B alone", B): [(1, 1), (1, 1.4)], ("co", A): [(1, 3), (1, 3.8)], ("co", B): [(1, 1), (1, 1.4)]}
+    records, skipped = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S"}, exps)
+    assert records == []
+    reason = next(r for label, r in skipped if label.startswith(f"{A} with {B}"))
+    assert "2 monoculture sets" in reason and "told apart only by their descriptions" in reason
+    assert "none is guessed" in reason
+
+
+def test_the_monoculture_set_whose_description_names_the_co_culture_is_used():
+    # SMGDB00000007's shape: each co-culture has its own controls, 'controls of the "co" experiment'. The
+    # named set (areas 10, 12) is used, not the other (areas 30, 30), so B -> A is the hand-computed +1.0.
+    exps = [_described("A1", [A], 'A controls of the "co" experiment'),
+            _described("A2", [A], 'A controls of the "other" experiment'),
+            _described("B1", [B], 'B controls of the "co" experiment'), _described("co", [A, B], "A and B")]
+    curves = {("A1", A): [(1, 1), (1, 1.4)], ("A2", A): [(3, 3), (3, 3)], ("B1", B): [(1, 1), (1, 1.4)],
+              ("co", A): [(1, 3), (1, 3.8)], ("co", B): [(1, 1), (1, 1.4)]}
+    records, _ = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S"}, exps)
+    arc = _by_arc(records)[(B, A)]
+    assert arc["strength"] == pytest.approx(1.0) and "E_A1" in arc["experiments"] and "E_A2" not in arc["experiments"]
+    assert "conditions_unverified" not in arc["cautions"]
+
+
+def test_co_cultures_differing_only_in_description_are_cautioned():
+    # SMGDB00000004's shape: RI_BH +Ac and -Ac under identical recorded conditions, one monoculture set per
+    # strain. At most one of them matches the monocultures, and nothing recorded says which.
+    exps = [_described("mono A", [A], "A"), _described("mono B", [B], "B"),
+            _described("co +Ac", [A, B], "A and B with initial acetate"),
+            _described("co -Ac", [A, B], "A and B without initial acetate")]
+    curves = {("mono A", A): [(1, 1), (1, 1.4)], ("mono B", B): [(1, 1), (1, 1.4)]}
+    for n in ("co +Ac", "co -Ac"):
+        curves.update({(n, A): [(1, 3), (1, 3.8)], (n, B): [(1, 1), (1, 1.4)]})
+    records, _ = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S"}, exps)
+    assert len(records) == 4 and all("conditions_unverified" in r["cautions"] for r in records)
+    edges, meta = output_meta(records)
+    assert meta["hidden"]["low_quality"] == 0                      # a caution: shown, not hidden
+
+
+def test_a_pair_with_one_co_culture_is_not_cautioned():
+    client, study, exps = _replicate_study()
+    records, _ = interactions_from_replicates(client, study, exps)
+    assert not any("conditions_unverified" in r["cautions"] for r in records)
+
+
+def test_dropout_arcs_are_cautioned_when_the_full_community_has_description_variants():
+    # two full communities told apart only by their descriptions: which drop-out goes with which is not recorded
+    client, study, exps = _dropout_study(full_names=("full +glc", "full -glc"))
+    records, _ = interactions_from_replicates(client, study, exps)
+    assert records and all("conditions_unverified" in r["cautions"] for r in records)
+    plain, _ = interactions_from_replicates(*_dropout_study()[:1], {"id": "S"}, _dropout_study()[2])
+    assert not any("conditions_unverified" in r["cautions"] for r in plain)
+
+
+def test_the_monoculture_set_with_the_co_cultures_qualifier_is_used():
+    # SMGDB00000013's shape: plain, "Ancestral" and "Evolved" lines of A, none naming a co-culture. The
+    # co-culture "Evolved AB" takes "Evolved A" (areas 10, 12: B -> A is +1.0), the plain "AB" takes "A"
+    exps = [_described("A", [A], "monoculture of A"), _described("Ancestral A", [A], "ancestral A, controls"),
+            _described("Evolved A", [A], "A evolved for 10 weeks"), _described("B", [B], "monoculture of B"),
+            _described("Evolved AB", [A, B], "evolved A with B"), _described("AB", [A, B], "A with B")]
+    curves = {("A", A): [(3, 3), (3, 3)], ("Ancestral A", A): [(2, 2), (2, 2)], ("Evolved A", A): [(1, 1), (1, 1.4)],
+              ("B", B): [(1, 1), (1, 1.4)]}
+    for n in ("Evolved AB", "AB"):
+        curves.update({(n, A): [(1, 3), (1, 3.8)], (n, B): [(1, 1), (1, 1.4)]})
+    records, skipped = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S"}, exps)
+    by_exp = {(r["source_name"], r["target_name"], r["condition"]): r for r in records}
+    evolved = by_exp[(B, A, "Evolved AB")]
+    assert evolved["strength"] == pytest.approx(1.0) and "E_Evolved A" in evolved["experiments"]
+    assert "E_A" in by_exp[(B, A, "AB")]["experiments"] and "E_Evolved A" not in by_exp[(B, A, "AB")]["experiments"]
+    assert not any("none is guessed" in r for _, r in skipped)
+    # matched by name, so no caution, although the pair has description-only variants
+    assert not any("conditions_unverified" in r["cautions"] for r in records)
+
+
+def test_a_study_of_monocultures_only_says_so():
+    # SMGDB00000015's shape: nothing but monocultures, so nothing to compare, stated once up front
+    exps = [_described("A", [A], "A alone"), _described("B", [B], "B alone")]
+    curves = {("A", A): [(1, 1), (1, 1.4)], ("B", B): [(1, 1), (1, 1.4)]}
+    records, skipped = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S15"}, exps)
+    assert records == [] and skipped[0][1].startswith("only monocultures (2 experiments of one strain each)")
+
+
+# ---- merging parallel arcs (register item 14, Karoline 2026-09-27) --------------------------------
+
+from crossfeed.derive import merge_parallel  # noqa: E402
+
+
+def _arc(strength, study="S1", effect=None, status="present", outcome="quantified", evidence="biculture",
+         condition="c", source="ncbi:1", target="ncbi:2"):
+    effect = effect or ("facilitation" if (strength or 1) > 0 else "inhibition")
+    return {"source": source, "target": target, "source_name": "A", "target_name": "B", "effect": effect,
+            "strength": strength, "weight": None if strength is None else abs(strength), "sd": 0.1, "se": 0.05,
+            "status": status, "outcome": outcome, "evidence": evidence, "condition": condition,
+            "experiments": [f"E_{study}_{condition}"], "quality": [], "cautions": [], "notes": [],
+            "community": [], "method": "m", "study_id": study, "study_citation": f"study {study}"}
+
+
+def test_agreeing_arcs_merge_into_their_median_with_the_range_and_every_study():
+    # 1.0, 2.0 and 4.0 from two studies: median 2.0, range 1.0 to 4.0, three arcs, both studies
+    edges, meta = merge_parallel([_arc(1.0, "S1", condition="a"), _arc(2.0, "S1", condition="b"),
+                                  _arc(4.0, "S2", condition="c")])
+    assert len(edges) == 1 and meta["merged"] == 1
+    arc = edges[0]
+    assert (arc["strength"], arc["strength_range"], arc["merged_arcs"]) == (2.0, [1.0, 4.0], 3)
+    assert [s["id"] for s in arc["studies"]] == ["S1", "S2"] and arc["condition"] == "a; b; c"
+    assert arc["sd"] is None and arc["significance"] is None          # a median has no sd or combined test
+
+
+def test_arcs_whose_signs_disagree_are_not_merged():
+    edges, meta = merge_parallel([_arc(1.0), _arc(-0.5)])
+    assert len(edges) == 2 and meta["merged"] == 0 and meta["left_apart_for_disagreeing_signs"] == 1
+
+
+def test_an_absent_arc_stays_separate_and_a_drop_out_makes_the_merge_possibly_indirect():
+    edges, _ = merge_parallel([_arc(1.0), _arc(2.0, evidence="dropout"), _arc(0.1, status="absent")])
+    merged = [e for e in edges if e.get("merged_arcs")]
+    assert len(edges) == 2 and merged[0]["strength"] == 1.5 and merged[0]["evidence"] == "dropout"
+    assert any(e["status"] == "absent" and not e.get("merged_arcs") for e in edges)
+
+
+def test_obligate_arcs_count_without_entering_the_median():
+    edges, _ = merge_parallel([_arc(None, outcome="obligate", effect="facilitation"), _arc(1.5), _arc(2.5)])
+    assert (edges[0]["strength"], edges[0]["merged_arcs"], edges[0]["outcome"]) == (2.0, 3, "quantified")
+    only, _ = merge_parallel([_arc(None, outcome="obligate", effect="facilitation", study=s) for s in ("S1", "S2")])
+    assert only[0]["strength"] is None and only[0]["outcome"] == "obligate"
+
+
+def test_the_minimum_of_supporting_studies_keeps_well_replicated_arcs():
+    arcs = [_arc(1.0, "S1"), _arc(2.0, "S2"), _arc(1.0, "S1", source="ncbi:3")]   # two pairs
+    edges, meta = merge_parallel(arcs, merge=True, min_studies=2)
+    assert [e["source"] for e in edges] == ["ncbi:1"] and meta["below_min_studies"] == 1
+
+
+def test_merging_off_leaves_every_arc_as_derived():
+    arcs = [_arc(1.0), _arc(2.0)]
+    edges, meta = merge_parallel(arcs, merge=False)
+    assert edges is arcs and meta["merged"] == 0
+
+
+def test_a_merged_arc_makes_a_valid_network_citing_every_study():
+    from crossfeed.export import to_graphml
+    edges, _ = merge_parallel([_arc(1.0, "S1"), _arc(3.0, "S2")])
+    net = records_to_network(edges)
+    assert net.validate() == [] and net.edges[0].study_ids == ("S1", "S2") and set(net.studies) == {"S1", "S2"}
+    assert net.edges[0].merged_arcs == 2 and net.edges[0].strength_range == (1.0, 3.0)
+    assert 'key="e_merged_arcs">2<' in to_graphml(net) and 'key="e_strength_range">1 3<' in to_graphml(net)

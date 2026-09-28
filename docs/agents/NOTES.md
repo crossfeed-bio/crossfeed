@@ -165,7 +165,7 @@ Rules for this file:
   edges must not be hidden "just because they don't have the measurements on one side by definition":
   the side without growth counts its replicates without growth.
 - 2026-09-21 (Karoline, on #62): "Yes to the spike guard": a spike is one or two consecutive interior points
-  above both neighbours by the factor, replacing the maximum over the median, which flagged die-offs and
+  above both neighbors by the factor, replacing the maximum over the median, which flagged die-offs and
   late growth in SMGDB00000013 and SMGDB00000014. The first and last points are never a spike. Edge case
   she named: "perturbations may explain spikes, but right now only occur in chemostats"
   (SMGDB00000005). On line styles: "Cytoscape supports different dash styles", so single-replicate and
@@ -181,6 +181,26 @@ Rules for this file:
   status; strains_pooled, removed_member_detected and non_batch stay hidden by default. Study 8's missing
   biological replicates are for mGrowthDB to fix: "We can't start correcting data in the tool; this needs
   to happen in mGrowthDB." Karoline has noted it for mGrowthDB development.
+- 2026-09-27 (Karoline, on #68, the no-growth rule of item 5): her words: "yes to all 3, as long as the
+  maximum in the paired test can come from different time points (since the time of maximum abundance may
+  vary across replicates)." The three were her agent's proposals: keep the twofold half at a factor of 2;
+  make alpha and the factor settings and record them in the network (Craig's agent's request); test with
+  a paired test on each replicate's log2(maximum / start) instead of Welch on unrelated samples.
+  Revised the same day, her words: "I'd put the factor (which defines growth) as an advanced option. the
+  default can be medium (1.5) and it can be made more stringent by the user (e.g. set to 2)." So
+  `NO_GROWTH_FACTOR` is 1.5. Measured on six live studies, 1.5 admits three sets more than 2 does, all
+  sustained rises of 1.7 to 2 times, none a single noisy point.
+- 2026-09-27 (Karoline, conditions recorded only in descriptions, METHOD_NOTES item 22): "yes to 1-3,
+  and 4 is noted". Monocultures pool only when their descriptions agree (`_mono_index` keys on
+  `run_group`); several candidate sets: the one whose description quotes the co-culture's name
+  (`_choose_monocultures`), then the one whose name has the same qualifier (`_qualifier`: the words
+  before the last, "Evolved AtCt" -> "evolved"; Karoline: "yes"), else the pair is skipped; description-only
+  variants of a pair or a drop-out design get the caution `conditions_unverified`, unless a member's set
+  was matched by name or qualifier.
+- 2026-09-27 (Karoline, METHOD_NOTES item 23): a monoculture is compared with a co-culture only when both
+  use the same species-identifying technique, even when another technique gives the same unit.
+  `growth.check_sets` requires one `GrowthCurve.technique` per species across the sets compared; the
+  adapter fills it from `techniqueType`. Whole-culture traces stay out of monoculture comparisons.
 
 ## Open questions (need a human)
 
@@ -197,6 +217,34 @@ Rules for this file:
   The Microsoft Store removes the warning entirely, signs the app itself, and its registration is now
   free. See METHOD_NOTES item 9 for the full comparison.
 
+## Color and readers with a color vision deficiency
+
+Facilitation is green #1A7F5A, inhibition orange-red #C2410C, an absent edge gray #8A8A8A, in the legend,
+the Cytoscape style and the mark. The orange replaced a plain red on 2026-09-27, when Karoline made the arc
+tips uniform: the color became the only cue for the sign, and green against red is the pair a reader with a
+color vision deficiency finds hardest. `tests/test_palette.py` simulates protanopia and deuteranopia
+(Vienot 1999) and requires the two to stay 70 sRGB units apart; they manage 87 and 97, where green and red
+managed 58. It also checks that both read as text on white and that the legend and the style use one
+palette. Gray is separated from both by lightness, not hue, and an absent edge is thinner and hidden by
+default, so color is never its only cue.
+
+## Showing the sign
+
+The Cytoscape style draws no edge labels (Karoline, 2026-09-27: the sign "should not be displayed by
+default but should of course be an edge attribute"). Every edge already carries `strength` (the signed
+log2 mean), `effect` (the word) and `weight` (its magnitude), so a user maps Label to `strength` in the
+Style tab when they want it drawn. Nothing in the tool has to change for that.
+
+## The mark
+
+`docs/logo.svg` and `legend.LOGO`: three gray nodes joined by directed edges, one green (facilitation) and
+one red (inhibition), both ending in the same arrowhead. Karoline chose it on 2026-09-27 from three
+variants, with the rule that follows from it: **arc tips are uniform everywhere, and the color alone
+distinguishes a positive from a negative effect**, in the legend and the Cytoscape style alike. Gray nodes
+keep the two signal colors meaning one thing each. The page embeds the mark as a data URI, so nothing has
+to be packaged or fetched. Open for her: green and red are the hardest pair for a reader with a color
+vision deficiency, and with the heads now identical the color is the only cue.
+
 ## Legend
 
 `src/crossfeed/legend.py` draws the legend; `docs/legend.svg` is its output (`make legend`) and the README
@@ -205,6 +253,97 @@ QUALITY_FLAGS, CAUTIONS, EVIDENCE and STATUSES, and the shipped file to equal wh
 flag therefore means adding a line to the legend, the same way Craig's viewer guard works (#57). The dash
 patterns are the ones the Cytoscape style will use (#25): long dashes for drop-out evidence, dots for a
 single replicate.
+## Merging parallel arcs (register item 14, 2026-09-27)
+
+`derive.merge_parallel` runs at the output stage, after status and filters (`output_meta(...,
+merge_arcs, min_studies)`), so no single arc's numbers change. Off by default. `_merged` builds the arc; a
+merged record lists `studies` (dicts), which `records_to_network` turns into several `study_ids`. With
+merging off and `min_studies` 1 the edges pass through untouched (records need no source or target then).
+On 2026-09-27 no pair in mGrowthDB had arcs from two studies, so `min_studies` 2 gives an empty network.
+
+## Reading only what a search needs (2026-09-27)
+
+`derive.relevant_experiments(exps, keep)` is the one rule for what a search with "only the species
+entered" reads: monocultures and two-member co-cultures of kept strains, and every experiment of a drop-out
+design with at least two kept members. Designs are kept whole because `_common_start` takes the most common
+first time point over the full community and all its drop-outs, so leaving one out could change which
+replicates are compared. Strain identities and description variants still come from every experiment.
+`gui.run_query(..., narrow=False)` reads everything; eight live searches gave identical networks both ways.
+
+## Growth rate metric (#41, built 2026-09-27)
+
+`crossfeed.rates`: `easylinear` reimplements growthrates' fit_easylinear (windows of h points starting at
+points 1 to N minus h, steepest slope, widened to every window within quota 0.95 of it, refit), and matched mGrowthDB's
+reported growthRate on 190 of 192 curves within 10% (SMGDB00000002, 4, 7, 13; median ratio 1.00 each);
+keeping growthrates' loop, which skips the last possible window, matched better on study 13. `baranyi` is the prototype's
+guarded Levenberg-Marquardt fit (multi-start, mu within 5x the steepest slope, R2 >= 0.9); a rejected fit
+raises `RateUnavailable`, and `interaction._log_values` leaves that replicate out with the reason, never
+as no growth. Metric names carry the rule: "growth_rate:easylinear:5", "growth_rate:baranyi"
+(`gui.metric_name`, `rates.method_name`). Karoline decided the implementations on #41 (2026-09-19) and
+asked for the implementation as its own option (2026-09-27); easylinear is the default because it
+reproduces mGrowthDB's numbers.
+
+## Speed: parallel prefetch (2026-09-27)
+
+Nearly all of a search's time was waiting on requests made one after another (about 100 ms each; 839 for
+a cold Example). `crossfeed.fetch.prefetch_studies` reads, WORKERS (6) at a time, exactly what the
+derivation will read (study, experiments, batch-only bioreplicates, one series per strain context) into
+the client's in-memory cache; the derivation then runs unchanged. `species_index` crawls the same way and
+walks the results in id order, so the first name seen per taxon is unchanged. The client keeps one
+connection open per thread (`_connection`, `_send`) and retries JSON and CSV through one path
+(`_request`). Verified against the sequential version on all studies: identical records, skip reasons and
+index. A cache across sessions was ruled out: mGrowthDB shows only a study's latest version, and its change
+history is not in the API, so a stored copy cannot tell it is stale (Karoline). A test double without
+`get_study` and friends gets the one-by-one path (`fetch.can_prefetch`).
+
+## Cytoscape (CyREST) quirks
+
+- Applying a style or a layout is a GET (`/v1/apply/styles/{name}/{suid}`, `/v1/apply/layouts/...`); a
+  POST gets 405. The first version posted, swallowed the error, and every network arrived unstyled
+  (found by Karoline, 2026-09-27). The fake CyREST in `tests/test_cytoscape.py` now refuses that POST too.
+- Posting a style whose title exists makes Cytoscape add a renamed copy (grownet_0). So `_ensure_style`
+  updates an existing grownet style in place: PUT defaults, then DELETE each mapping by visual property
+  (`/styles/{name}/mappings/{vp}`), then POST the mappings. DELETE on `/styles/{name}/mappings` as a whole
+  is refused (405): that made every second send of a session arrive unstyled until it was found live.
+  Verify both paths live, a first send (style created) and a second (style updated).
+- Node colors are a per-network `genus_color` column with a passthrough mapping, so one shared style
+  never recolors an earlier network. Colors: `brand.GENUS_COLORS`, validated with the dataviz palette
+  script together with the two arc colors; each genus its own color (Karoline, 2026-09-27), from a list of
+  48 picked greedily for separation (see the comment on `brand.GENUS_COLORS`).
+- Verify against the real app by reading back view properties: `GET /v1/networks/{suid}/views/{view}/
+  nodes?visualProperty=NODE_FILL_COLOR` (and the same for edges).
+
+## Page style and name
+
+`src/crossfeed/brand.py` holds the tool's name (`NAME` = grownet), the command users type today
+(`COMMAND` = crossfeed, until the package rename of #71 flips it), the mark (the same SVG as `legend.LOGO`
+on the Cytoscape branch, #70; the legend should take it from brand once both are merged), the palette and
+the page CSS. The style is the one Karoline approved on 2026-09-27 ("The interface looks good"), with the
+inhibition color she chose later (#C2410C). Every page goes through `gui._page(body, token)`, which adds
+the header; the legend is served inside it (`render_legend`), not through `legend.legend_page`.
+
+## The one page, progress and outputs
+
+A search is a job (#75): `_Handler._start` runs `run_query` in a thread with a `progress(done, total,
+message)` callback, and the POST redirects (303) to `/?job=ID`, which shows `render_progress` (a native
+`<progress>` and a one-second meta refresh) until the job is done, then `render_result`. The POST first
+waits `_Handler.wait` (1 s) so a quick search skips the progress page; tests set it to 0.05. Every page
+with a result is `render_form(..., below=...)`, so the result sits under the settings (#74). The outputs
+(#76) are `_outputs`: a GET form to `/download?format=json|graphml`, the POST to `/cytoscape`, and a
+`details` holding `report.report_text`, also served at `/report.txt`. `tests/test_interface.py` quotes
+Karoline's words for these and checks each through the running server; see AGENTS.md before changing it.
+
+## Help page
+
+`src/crossfeed/help.py` holds the help page as data keyed by the code's own names (#78):
+`SETTINGS` by `gui.DEFAULTS` key, `EDGE_ATTRIBUTES` and `NODE_ATTRIBUTES` by model field, `CLI_ONLY` for
+`derive` options that are not page settings. `tests/test_help.py` requires an entry for every setting,
+every `derive` option (read from `__main__.build_parser`) and every model field, and requires the
+attribute text to name every value of the model vocabularies. So a new setting, flag or field needs its
+help line in the same change, the same way the legend works. The settings are a `dl`, not a table, and
+field names break only after underscores (`<wbr>`), so the page has no horizontal scroll at phone width.
+`records_to_network` starts `meta` from `mgrowthdb.provenance()` (tool, version, date); the report of
+#76 reads them from there.
 
 ## Cultivation mode
 
@@ -212,6 +351,34 @@ single replicate.
 `include_non_batch` is set, and reports the rest with their mode (#42). The mode is part of `conditions`,
 so a design never mixes modes. Test fixtures must declare `"cultivationMode": "batch"` or they derive
 nothing, which is the point of the rule.
+## Cytoscape (#25)
+
+`crossfeed.cytoscape` posts Cytoscape.js JSON to CyREST. Verified 2026-09-27 against a real Cytoscape
+3.10.3 on macOS: SMGDB00000004 arrived with 3 nodes and 20 edges, every attribute as a column, and all
+seven style mappings live on the view (EDGE_VISIBLE, EDGE_TARGET_ARROW_SHAPE, EDGE_WIDTH, NODE_LABEL,
+EDGE_LINE_TYPE, EDGE_STROKE_UNSELECTED_PAINT, EDGE_TARGET_ARROW_UNSELECTED_PAINT).
+
+Two things learned there:
+
+  * Cytoscape does not refuse a style whose title it already holds: it renames the new one (`crossfeed_0`),
+    so a second run piles up copies. `send` asks for the style list first and leaves an existing style
+    alone, since the user may have adjusted it.
+  * One column maps to one visual property, so the two dash channels (drop-out evidence, single replicate)
+    and the missing width of obligate and abolished arcs are computed into the `line_style` and
+    `display_weight` columns instead of being layered as several mappings.
+
+## The no-growth rule
+
+`crossfeed.interaction.grew` decides whether a species grew in a replicate set, before any ratio is
+computed (#37, register item 5, settled on #68). One rise per replicate, log2(maximum / first time
+point), each maximum at its own time; grown when a paired t-test finds the rises above zero
+(`NO_GROWTH_ALPHA` = 0.05) or their mean reaches log2(`NO_GROWTH_FACTOR`) (1.5). Both are settings; `None`
+in the plumbing means "read the module constant when used", so tests can switch the rule off by
+monkeypatching the constants. Tests that predate the rule do that through an autouse fixture and say so;
+`TestNoGrowthRule` covers the rule itself. Pass the same two values to `output_meta` as to the derivation,
+or `meta.no_growth` will misstate the rule. The paired test is not uniformly stronger than Welch: where
+the ratios vary more across replicates than the raw values do, its p is larger (SMGDB00000013, Comamonas
+in co-culture: Welch 0.02, paired 0.07).
 
 ## Gotchas
 

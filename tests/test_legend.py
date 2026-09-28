@@ -5,7 +5,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from crossfeed.legend import LEFT, TEXT_X, WIDTH, legend_page, legend_svg
+from crossfeed.legend import ARCS, LEFT, TEXT_X, WIDTH, legend_page, legend_svg
 from crossfeed.model import CAUTIONS, EFFECTS, EVIDENCE, OUTCOMES, QUALITY_FLAGS, STATUSES
 
 SVG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "legend.svg")
@@ -51,3 +51,72 @@ def test_the_page_carries_the_drawing_and_a_way_back():
     page = legend_page("tok&1")
     assert "<svg" in page and 'href="/?token=tok&amp;1"' in page
     assert "<svg" in legend_page() and "Back to crossfeed" not in legend_page()
+
+
+def test_every_arc_ends_in_the_same_head():
+    # Karoline, 2026-09-27: uniform tips, the color carries the sign. A bar head would be a line, not a
+    # path, so counting the heads catches a row that goes its own way
+    svg = legend_svg()
+    heads = re.findall(r'<path d="M [\d.]+ [\d.]+ l -15 -7\.5 l 0 15 z" fill="(#[0-9A-Fa-f]{6})"/>', svg)
+    assert len(heads) == len(ARCS)
+    assert len(set(heads)) > 1                       # they differ in color, which is the whole point
+
+
+def test_the_viewer_draws_the_same_vocabulary():
+    # gui/index.html, the standalone viewer, uses the legend's colors, one arrowhead for every arc (no
+    # T-bar), dashes only for evidence and quality, and the genus colors of crossfeed.brand (2026-09-27)
+    import json
+    import re
+    from pathlib import Path
+
+    from crossfeed import brand
+    page = (Path(__file__).resolve().parents[1] / "gui" / "index.html").read_text(encoding="utf-8")
+    assert f"--fac:{brand.GROWTH};" in page and f"--inh:{brand.INHIBITION};" in page
+    assert "M10,1 L10,11" not in page                                   # the T-bar head is gone
+    assert 'inhibition:{color:()=>getVar("--inh"),dash:"",head:"inh"}' in page
+    colors = json.loads(re.search(r"const GENUS_COLORS=(\[.*?\]);", page).group(1))
+    assert colors == list(brand.GENUS_COLORS)
+
+
+def test_the_viewer_writes_the_same_graphml_as_the_command_line(tmp_path):
+    # gui/index.html's toGraphML, run with Node on a real-shaped network, gives the same graph, keys and
+    # values as crossfeed.export.to_graphml (the viewer once wrote 9 of the 34 keys)
+    import json
+    import re
+    import shutil
+    import subprocess
+    from pathlib import Path
+    from xml.etree import ElementTree as ET
+
+    import pytest
+
+    from crossfeed.export import _KEYS, to_graphml
+    from crossfeed.mgrowthdb import records_to_network
+    if not shutil.which("node"):
+        pytest.skip("node is not installed")
+    page = (Path(__file__).resolve().parents[1] / "gui" / "index.html").read_text(encoding="utf-8")
+    assert json.loads(re.search(r"const GRAPHML_KEYS=(\[.*?\]);", page).group(1)) == [list(k) for k in _KEYS]
+    js = "\n".join(re.search(pattern, page, re.S).group(0) for pattern in (
+        r"function esc\(s\)\{.*?\}\n", r"function xmlClean\(s\)\{.*?\}\n", r"const GRAPHML_KEYS=\[.*?\];\n",
+        r"function graphmlValue\(attr,v\)\{.*?\n\}\n", r"function toGraphML\(net\)\{.*?\n\}\n"))
+    record = {"source": "ncbi:1", "target": "ncbi:2", "source_name": "Blautia a", "target_name": "Roseburia b",
+              "source_taxon_id": "1", "effect": "inhibition", "strength": -1.25, "weight": 1.25, "sd": 0.5,
+              "status": "present", "quality": ["single_replicate"], "notes": ["one note", "two"],
+              "cautions": ["two_replicates"], "experiments": ["E1", "E2"], "study_id": "S1",
+              "strength_range": [-2, -0.5], "merged_arcs": 2, "n_with": 3}
+    net = records_to_network([record])
+    doc = json.loads(net.to_json())
+    script = tmp_path / "run.js"
+    script.write_text(js + f"\nprocess.stdout.write(toGraphML({json.dumps(doc)}));", encoding="utf-8")
+    ours = subprocess.run(["node", str(script)], capture_output=True, text=True, check=True).stdout
+
+    def content(xml):
+        root = ET.fromstring(xml)
+        ns = "{http://graphml.graphdrawing.org/xmlns}"
+        keys = sorted((k.get("id"), k.get("for"), k.get("attr.name"), k.get("attr.type"))
+                      for k in root.iter(ns + "key"))
+        data = sorted((el.tag.split("}")[1], el.get("id", ""), d.get("key"), d.text)
+                      for el in root.iter() if el.tag in (ns + "graph", ns + "node", ns + "edge")
+                      for d in el.findall(ns + "data"))
+        return keys, data
+    assert content(ours) == content(to_graphml(net))

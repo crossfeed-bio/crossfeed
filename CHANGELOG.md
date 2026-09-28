@@ -7,9 +7,99 @@ tagged version is never reused for changed content.
 ## [0.0.2] (unreleased)
 
 ### Added
+- The help page now explains every advanced setting (with its command line flag and default), every arc
+  and node attribute, the main design decisions and why, the command line with the page's own example,
+  what to do when no network comes back, a short Q&A, how to cite, and links the issue tracker. Tests
+  require an entry for every setting, command line option and model field, so it cannot fall behind (#78).
+- `derive --live --species NAME ...` runs the local page's search from the command line, with
+  `--all-partners` for the page's "only the species entered" box unticked (#78).
+- The report and every network record when the search ran (date, time and offset) and the version of
+  the data: mGrowthDB publishes none for the whole database, so each study's upload and publication
+  dates. Input that gives nothing now says why, per entry (unreadable, a taxon id mGrowthDB does not hold,
+  a genus alone, an unknown name, with suggestions), commas and `txid` ids are understood, an empty result
+  names the setting that caused it, and the Cytoscape messages say what to do on the page and the
+  command line alike.
+- `derive --report FILE` writes the page's report from the command line, and `crossfeed derive --help`
+  groups its options as the page does (what to derive, the settings, the outputs), in the page's
+  wording, with examples. A test requires an option for every setting and all three outputs.
+- Clearer advanced settings: the absence threshold says it decides when an interaction counts as absent
+  (the species do not affect each other), and the no-growth settings say they test the replicate growth
+  curves of one species in one culture condition. A new setting, Exclude these studies
+  (`--exclude-studies` with `--species`), leaves the listed studies out of a search; empty by default.
+- The gate gained a merge-marker check, after conflict markers from a merge reached this changelog
+  unseen (now removed, both sides kept).
+- Documentation made to agree with the code, after an audit (21 conflicts): the README's Cytoscape style,
+  output example and field descriptions, technique rule, metric options and correction; the help page's
+  effect, community and empty-result wording; "k = 0 marks only a mean of exactly zero absent" everywhere;
+  METHOD_NOTES' defaults at a glance, rewritten from the running code; the viewer's derivation panel,
+  which described the retired baseline, replaced by a plain statement. The viewer's GraphML now writes all
+  of export.py's keys (it wrote 9 of 34), and a test runs it with Node against the CLI's. Page and CLI
+  defaults are checked equal by a test.
+- Merge parallel arcs (register item 14, Karoline's choices): an advanced setting, off by default
+  (`--merge-arcs`), making the arcs of each source and target, across conditions, studies and evidence, one
+  arc with the median log2 mean and its range; arcs whose signs disagree are not merged, absent arcs stay
+  separate. Minimum supporting studies (`--min-studies`) keeps arcs resting on that many studies. Edges
+  gain `merged_arcs` and `strength_range`.
+- A species is compared only when its monocultures and co-cultures (or full community and drop-out) were
+  measured by the same technique, not only in the same unit (Karoline, METHOD_NOTES item 23). No edge in
+  mGrowthDB changed; it guards future data.
+- With "only interactions between the species entered" (the default), a search reads only what can give
+  such an interaction: monocultures and co-cultures of the entered strains, and whole drop-out designs
+  holding two of them. Searches take about half as long (the Example about 2 s once the species list is
+  in); checked on eight searches, the networks are identical to reading everything.
+- The standalone viewer (`gui/index.html`) draws the legend's colors, one arrowhead, dashes for evidence
+  and quality, and genus colors. CI also runs on Windows and macOS. The species list looks 25 missing
+  study ids ahead instead of 5. Download, Report and Send to Cytoscape answer for the search on screen. A
+  study of monocultures only says so.
+- A strain is shown by its current name (#24, Karoline's rule of 2026-09-18): the name used by the most
+  recently published study holding its taxon id, in the network's nodes and the resolved list; old names
+  still find it. Taxon 411483 now reads Faecalibacterium duncaniae throughout.
+- Growth rate as a metric (#41): `--metric growth_rate` and the Growth measure setting, with the
+  implementation as its own setting (`--rate-method`): easylinear by default, as mGrowthDB computes its
+  reported rates (it matched them on 190 of 192 curves within 10%), window 5 (`--rate-window`); or a
+  guarded Baranyi fit, where a curve the model does not describe is left out and reported. The edge's
+  metric names the rule (`growth_rate:easylinear:5`). The default for interactions stays auc.
+- Faster: the Example search takes about 10 s from a cold start instead of 84 s, and about 4.5 s for a
+  later search in the same session instead of 25 s. Nearly all the time was requests made one after
+  another; they are now made six at a time over kept-open connections (`crossfeed.fetch`), and the
+  derivation reads them from the cache it always used. Checked on every study: records, skip reasons
+  and the species list are identical to the one-by-one version. A growth curve download is now retried
+  like every other request.
+- Conditions recorded only in descriptions (Karoline, METHOD_NOTES item 22): monocultures are pooled only
+  when their descriptions agree; a co-culture uses the monoculture set whose description names it, or is
+  skipped with the reason when several fit; edges from description-only variants carry the new caution
+  `conditions_unverified`; failing a name, the set whose name has the same qualifier ("Evolved AtCt" with
+  "Evolved At"). SMGDB00000014 now derives nothing, each pair saying why.
+- Nodes in Cytoscape: each genus its own color (Karoline), from a list of 48 ordered by how distinct each
+  stays. Fixed: a second send in one Cytoscape session arrived unstyled, because updating the existing
+  style asked CyREST to delete all mappings at once, which it refuses; they are now deleted one by one.
+- Fixed: Send to Cytoscape delivered the network without its style. CyREST applies styles and layouts
+  by GET and refused the POST (405), and the error was swallowed. The style is now called grownet,
+  brought up to date in place when Cytoscape already has it, and a failure is reported on the page.
+  Nodes are colored by genus (the first word of the name): four hues checked for color vision
+  deficiency against the arc colors, and further genera each their own color from a list ordered by
+  how distinct it stays; labels sit under the nodes.
+- The species box starts empty, under the header "Species, strains or NCBI taxon ids" and a smaller row
+  of examples (a species, a strain, a taxon id). An empty result says which step found nothing. GraphML
+  nodes carry a `label` (the strain name), which Gephi uses as the node label.
+- The result appears on the same page, under the settings that produced it (#74); a search in progress
+  shows a progress bar and the page updates by itself, without JavaScript (#75); three outputs sit above
+  the table: Download network with a JSON or GraphML menu, Send to Cytoscape, and Report, the detailed
+  comments of the search with every setting and the tool version, shown on the page and downloadable as
+  a text file (#76). `tests/test_interface.py` checks each of Karoline's requirements for these.
+- The local page is drawn in the grownet style Karoline approved: a header with the mark, the name and
+  the version, Legend and Help; one green primary action; quiet table headers, directions in the legend's
+  two colors (inhibition the orange-red #C2410C) and flags as pills. The legend opens inside the same
+  frame. The page, the help and every network's `meta` name the tool grownet; the command stays
+  `crossfeed` until the package is renamed (#71).
+- The tool version shows next to the name on the local page. Every network's `meta` records the tool,
+  `tool_version`, `derived_on` and every setting used; GraphML carries the first three as graph
+  attributes (#78).
 - The local page gained an Example button, which fills the species box with a pair that derives a network
   (Faecalibacterium duncaniae and Blautia hydrogenotrophica), and a Help button opening a help page that
   explains what the tool does, how to read a result, and links the legend (#73).
+- The mark (`docs/logo.svg`): three nodes joined by directed edges, green for facilitation and red for
+  inhibition, both with the same arrowhead. It is the page's favicon and sits beside its title.
 - A legend (`docs/legend.svg`, `make legend`, and "What the arcs mean" on the local page): one picture of
   what each arc, head, dash and flag means. It is drawn from the code, and a test requires it to name every
   value in the model's vocabulary, so it cannot drift from what the network shows.
@@ -17,6 +107,18 @@ tagged version is never reused for changed content.
   their mode, and derived with `--include-non-batch` or the matching advanced setting, where their edges
   are flagged `non_batch`. An experiment with no recorded mode counts as not batch. Edges gained
   `cultivation_mode`. SMGDB00000001, SMGDB00000005 and SMGDB00000011 now say why they derive nothing.
+- Send a network into a running Cytoscape (#25): `crossfeed derive ... --to-cytoscape` and a
+  "Send to Cytoscape" button on the local page post it through CyREST on localhost, with the style the
+  legend describes (direction by color and arrowhead, width by weight, absent edges hidden, drop-out arcs
+  long-dashed and single-replicate arcs dotted). `crossfeed style` writes the style as a file instead.
+  Cytoscape not running is reported with the port, never as a traceback. No new dependency.
+- The no-growth rule (#37): before any ratio, a species counts as grown in a replicate set only when its
+  rise from the first time point, log2(maximum / start) per replicate with each maximum at its own time,
+  is significant (paired t-test, alpha 0.05) or reaches 1.5 times as a geometric mean. A set that did not
+  grow feeds the existing `obligate`, `abolished` and `no_growth` outcomes instead of a ratio between two
+  near-zero quantities. Both numbers are settings (`--no-growth-alpha`, `--no-growth-factor`, and the
+  advanced settings on the local page), and `meta.no_growth` records them with the obligate and abolished
+  counts. In SMGDB00000013 this makes Comamonas to Ochrobactrum obligate.
 - A pluggable derivation seam (`crossfeed.derive.Deriver`): the comparison method is a drop-in strategy,
   with the provisional `BaselineDeriver` as one implementation. The agreed method arrives as another
   `Deriver` without touching the model or the pipeline.
@@ -92,6 +194,12 @@ tagged version is never reused for changed content.
   `removed_member_detected`.
 
 ### Changed
+- Inhibition is drawn in orange-red (#C2410C) rather than red (Karoline, 2026-09-27). With uniform arc
+  tips the color is the only cue for the sign, and green against red is the hardest pair for a reader with
+  a color vision deficiency: simulated, the new pair stays about 90 sRGB units apart under protanopia and
+  deuteranopia, where green and red managed 58. `tests/test_palette.py` keeps it that way.
+- Arcs end in the same arrowhead whether they facilitate or inhibit: the color carries the sign, in the
+  legend and in the Cytoscape style (Karoline, 2026-09-27). The bar head is retired.
 - Nodes are strains keyed by NCBI taxon id (`ncbi:411483`) and named with the strain name, with `taxon_id`,
   `species` (genus and species from the name) and `identity` as node fields (#23). Monocultures are matched
   to co-cultures by taxon id, so another strain of the same species is never used: in SMGDB00000006,

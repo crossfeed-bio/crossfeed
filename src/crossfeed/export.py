@@ -19,7 +19,14 @@ _NS = "http://graphml.graphdrawing.org/xmlns"
 
 # (key id, for, attribute name, attribute type)
 _KEYS = [
+    # what made the network and when (crossfeed.mgrowthdb.provenance), as graph attributes
+    ("g_tool", "graph", "tool", "string"),
+    ("g_tool_version", "graph", "tool_version", "string"),
+    ("g_derived_on", "graph", "derived_on", "string"),
+    ("g_derived_at", "graph", "derived_at", "string"),
     ("n_name", "node", "name", "string"),
+    # Gephi takes a node's label from an attribute called label (Cytoscape uses name): the same strain name
+    ("n_label", "node", "label", "string"),
     ("n_taxonomy", "node", "taxonomy", "string"),
     ("n_model_ref", "node", "model_ref", "string"),
     ("n_taxon_id", "node", "taxon_id", "string"),
@@ -48,6 +55,8 @@ _KEYS = [
     ("e_cautions", "edge", "cautions", "string"),
     ("e_experiments", "edge", "experiments", "string"),
     ("e_cultivation_mode", "edge", "cultivation_mode", "string"),
+    ("e_merged_arcs", "edge", "merged_arcs", "int"),
+    ("e_strength_range", "edge", "strength_range", "string"),
 ]
 
 
@@ -72,11 +81,14 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
 
     graph = ET.SubElement(root, f"{{{_NS}}}graph")
     graph.set("edgedefault", "directed")
+    for key in ("tool", "tool_version", "derived_on", "derived_at"):
+        _data(graph, f"g_{key}", net.meta.get(key))
 
     for node in net.nodes.values():
         n = ET.SubElement(graph, f"{{{_NS}}}node")
         n.set("id", node.id)
         _data(n, "n_name", node.name)
+        _data(n, "n_label", node.name or node.id)
         _data(n, "n_taxonomy", node.taxonomy)
         _data(n, "n_model_ref", node.model_ref)
         _data(n, "n_taxon_id", node.taxon_id)
@@ -113,6 +125,9 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(ed, "e_community", " ".join(e.community))
         _data(ed, "e_cautions", " ".join(e.cautions))
         _data(ed, "e_experiments", " ".join(e.experiments))
+        if e.merged_arcs is not None:
+            _data(ed, "e_merged_arcs", e.merged_arcs)
+        _data(ed, "e_strength_range", " ".join(f"{x:g}" for x in e.strength_range))
         _data(ed, "e_cultivation_mode", e.cultivation_mode)
 
     if pretty:

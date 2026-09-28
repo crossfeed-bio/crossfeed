@@ -23,9 +23,10 @@ own derivation method. Nothing here needs another document to follow.
 - [The command line](#the-command-line)
 - [The legend](#the-legend)
 - [The local page](#the-local-page)
+- [Send it to Cytoscape](#send-it-to-cytoscape)
 - [The output format](#the-output-format)
 - [Plug in your own method](#plug-in-your-own-method)
-- [How the provisional baseline works](#how-the-provisional-baseline-works)
+- [How the derivation works](#how-the-derivation-works)
 - [Guardrails](#guardrails)
 - [Attribution and data governance](#attribution-and-data-governance)
 - [License](#license)
@@ -112,13 +113,22 @@ concrete demonstration of the seam.
 
 ```
 python -m crossfeed derive STUDY [--live | --fixture FILE] [--deriver MODULE:CLASS] [--format json|graphml] [--out FILE]
+python -m crossfeed derive --live --species NAME [NAME ...] [--all-partners] [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
 python -m crossfeed validate FILE
 python -m crossfeed schema [--out FILE]
 ```
 
 - `derive STUDY --live` fetches the study from the mGrowthDB API and derives interactions.
+- `derive --live --species NAME ...` does what the local page does: resolves species or strain names (or
+  NCBI taxon ids) through mGrowthDB, derives every study holding them, and keeps the interactions between
+  the species given (`--all-partners` keeps their other partners too). The page's Example, from the
+  command line: `crossfeed derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"`.
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the baseline (see below).
+- The command line does everything the local page does: every advanced setting has its option, and
+  the page's three outputs are `--out FILE` (with `--format`), `--to-cytoscape` and `--report FILE`, the
+  same report the page shows. `crossfeed derive --help` lists every option in the page's words, with
+  examples.
 - `--format graphml` emits GraphML (for Cytoscape, igraph, networkx, Gephi) instead of the neutral JSON.
 - `--out FILE` writes the network to a file instead of stdout; attribution and skipped pairs print to
   stderr.
@@ -146,7 +156,9 @@ opens it in the browser:
 python -m crossfeed gui
 ```
 
-Type species names (or NCBI taxon ids), one per line, and press "Find interactions". crossfeed resolves
+The tool version shows next to its name, and a Help page explains every advanced setting and arc
+attribute, the main design decisions, the command line, what to do when no network comes back, and where
+to report a problem. Type species names (or NCBI taxon ids), one per line, and press "Find interactions". crossfeed resolves
 the names to taxon ids from mGrowthDB's own strain records, finds the studies holding them, derives the
 interactions, and shows them as a table with downloads for JSON and GraphML. Every setting sits behind
 "Advanced settings" with the same defaults the command line uses.
@@ -155,43 +167,77 @@ The page is served from the standard library on 127.0.0.1 with a token in its UR
 no JavaScript, and uploads nothing: the data is pulled from mGrowthDB to your machine, and the results
 stay there.
 
+## Send it to Cytoscape
+
+With Cytoscape running, `crossfeed derive SMGDB00000004 --live --to-cytoscape` posts the network straight
+into the open session through CyREST on `127.0.0.1:1234` (`--cytoscape-port` changes the port), and the
+local page has a "Send to Cytoscape" button that sends the network it already computed. The edge and node
+attributes become columns, so effect, weight, status, quality, the study ids and the experiments are there
+for filtering; the evidence (biculture or dropout) is Cytoscape's `interaction` column, and nodes carry a
+`genus` column.
+
+No edge labels are drawn, so a network stays readable. The sign is on every edge as a column instead:
+`strength` holds the signed log2 mean (`-2.66`), `effect` the word, and `weight` its magnitude. To show it,
+map Label to `strength` in Cytoscape's Style tab; to filter on direction, filter on `effect`.
+
+The style applied is the one the legend describes: the same arrowhead on every arc, facilitation green
+and inhibition orange-red (the color alone carries the sign), width by `weight`, absent edges hidden, long
+dashes for drop-out arcs and dots for single-replicate ones, and nodes colored by genus. It is called
+`grownet`, and a style of that name already in the session is brought up to date, so it always matches the
+legend. `crossfeed style --out grownet_style.json` writes it as a file for File, Import, Styles from File.
+When Cytoscape is not running, the command says so and names the port instead of failing.
+
 ## The output format
 
 `derive` emits one JSON document: the neutral interaction network. It is the contract downstream tools
 read, and it is pinned by a JSON Schema at
-[`schema/interaction_network.schema.json`](schema/interaction_network.schema.json).
+[`schema/interaction_network.schema.json`](schema/interaction_network.schema.json). Its `meta` records
+the tool, `tool_version` and `derived_on` (the date: mGrowthDB changes, so the same version can derive a
+different network later), `derived_at` (the date and time), the data read (`meta.data`: the API, when,
+and each study's upload and publication dates) and every setting used; GraphML carries the tool, version,
+date and time as graph attributes.
 
 ```json
 {
   "schema": "crossfeed.interaction_network/v0",
-  "meta": {"source_db": "mGrowthDB (live)", "study_id": "SMGDB00000004"},
+  "meta": {"tool": "grownet", "tool_version": "0.0.2", "derived_on": "2026-09-27",
+           "derived_at": "2026-09-27T14:15:53+02:00", "source_db": "mGrowthDB (live)",
+           "settings": {"metric": "auc", "...": "..."}, "data": {"...": "..."}},
   "nodes": [
     {"id": "ncbi:476272", "name": "Blautia hydrogenotrophica DSM 10507", "taxon_id": "476272",
      "species": "blautia hydrogenotrophica", "identity": "ncbi", "taxonomy": "", "model_ref": ""},
-    {"id": "ncbi:411483", "name": "Faecalibacterium prausnitzii A2-165", "taxon_id": "411483",
-     "species": "faecalibacterium prausnitzii", "identity": "ncbi", "taxonomy": "", "model_ref": ""}
+    {"id": "ncbi:411483", "name": "Faecalibacterium duncaniae", "taxon_id": "411483",
+     "species": "faecalibacterium duncaniae", "identity": "ncbi", "taxonomy": "", "model_ref": ""}
   ],
   "edges": [
     {
-      "source": "ncbi:476272",
-      "target": "ncbi:411483",
+      "source": "ncbi:411483",
+      "target": "ncbi:476272",
       "effect": "facilitation",
-      "strength": 1.28,
-      "significance": 0.064,
-      "p_value": 0.032,
-      "condition": "FP/BH co-culture",
-      "method": "crossfeed baseline v0 (PROVISIONAL): ...",
+      "strength": 1.305,
+      "significance": 0.0715,
+      "p_value": 0.0143,
+      "weight": 1.305,
+      "effect_over_sd": 6.7714,
+      "status": "present",
+      "condition": "FP_BH +Ac",
+      "method": "crossfeed replicate v1: mean log2(auc in co-culture) minus mean log2(auc in monoculture) ...",
       "study_ids": ["SMGDB00000004"],
-      "sd": 0.43,
-      "se": 0.25,
-      "n_with": 3,
-      "n_without": 3,
+      "sd": 0.1927,
+      "se": 0.1363,
+      "n_with": 2,
+      "n_without": 2,
       "outcome": "quantified",
       "metric": "auc",
       "quality": [],
-      "notes": [],
+      "notes": ["monoculture replicate BH_14 left out: implausible spike, ..."],
       "evidence": "biculture",
-      "community": ["ncbi:411483", "ncbi:476272"]
+      "community": ["ncbi:411483", "ncbi:476272"],
+      "cautions": ["two_replicates", "conditions_unverified"],
+      "experiments": ["EMGDB000000031", "EMGDB000000027"],
+      "cultivation_mode": "batch",
+      "merged_arcs": null,
+      "strength_range": []
     }
   ],
   "studies": [
@@ -216,8 +262,10 @@ taxon's rank, and a few records still carry a species-level id, which mGrowthDB 
 remains for the retired baseline and existing files. `strength` and `significance` are your
 method's numbers (or `null`). `study_ids` on every edge is the edge-level attribution and must carry at
 least one study. `sd` and `se` are the standard deviation and standard error of the strength across
-replicates, with `n_with` and `n_without` the replicate counts behind it, and `metric` the growth property compared (`auc` by default,
-`max` selectable). `outcome` says what the comparison could establish: `quantified`, `obligate` (the
+replicates, with `n_with` and `n_without` the replicate counts behind it, and `metric` the growth property
+compared (`auc` by default; `max`, or a growth rate recorded with its rule, `growth_rate:easylinear:5` or
+`growth_rate:baranyi`). `merged_arcs` and `strength_range` are set only with `--merge-arcs`: how many arcs
+of one source and target were merged, and the lowest and highest log2 mean among them. `outcome` says what the comparison could establish: `quantified`, `obligate` (the
 target grows only with the source present), `abolished` (only without it), or `no_growth`. For an
 obligate or abolished edge, the count on the side without growth is its replicates without growth. A
 comparison whose set was emptied by exclusions (every replicate spiked, for example) says nothing about
@@ -252,14 +300,24 @@ experiment with no mode recorded, is reported with its mode and left out. `--inc
 matching advanced setting) derives them anyway, with their edges flagged `non_batch`. Every edge records
 its `cultivation_mode`.
 
+**Growth comes first.** Before any ratio, each replicate set is checked for growth. Each replicate gives
+one rise, log2(maximum / abundance at the first time point), with the maximum taken wherever that
+replicate peaks, since the time of maximum abundance varies across replicates. The set has grown when a
+paired t-test finds the rises above zero (alpha 0.05, `--no-growth-alpha`) or when their mean reaches
+log2(1.5), a rise of 1.5 times as a geometric mean. The factor defines growth: 1.5 is a medium default,
+and `--no-growth-factor 2` (one doubling) is more stringent. A set that did not grow yields
+`obligate`, `abolished` or `no_growth` rather than a log ratio between two near-zero quantities. With one
+replicate the test cannot run, so the set counts as grown when its maximum exceeds its start. The obligate
+and abolished counts depend on these two numbers, so `meta.no_growth` records them in every network.
+
 **How presence and absence are decided.** Every tested comparison is exported as an edge, and its
 `status` says whether it counts as an interaction under the **absence threshold k**:
 
 - `status` is `absent` when |log2 mean| < k × sd, and `present` otherwise. In words: an effect smaller than
   k standard deviations of its own spread is not treated as an interaction.
 - The default is **k = 1**, which is the rule that the interval mean ± sd must stay on one side of zero.
-  `--absence-threshold K` (or the matching advanced setting) changes it. **k = 0 marks nothing absent**, so
-  every comparison is exported as present and the cut can be chosen later.
+  `--absence-threshold K` (or the matching advanced setting) changes it. **k = 0 marks only a mean of
+  exactly zero absent**, so nearly every comparison is exported as present and the cut can be chosen later.
 - `effect_over_sd` holds |log2 mean| / sd, the exact quantity the threshold cuts. In Cytoscape, a column
   filter keeping edges with `effect_over_sd` ≥ k reproduces the tool's rule for any k, so exporting with
   k = 0 and filtering in Cytoscape lets you watch how the network changes with the threshold.
@@ -270,7 +328,8 @@ its `cultivation_mode`.
 - **Obligate** (the target grows only with the source present) and **abolished** (it grows only without
   it) are the extremes of facilitation and inhibition. They have no log2 ratio, so no `weight` and no
   `effect_over_sd`; they are always present and are drawn with their own style.
-- A mean of exactly zero is always absent. A low-quality edge's `status` is `null` (undetermined) whatever
+- A mean of exactly zero is absent, unless its status is undetermined. A low-quality edge's `status` is
+  `null` (undetermined) whatever
   its numbers, since low quality is never read as an absence; an edge with no spread estimate (a single
   replicate) is one such case and also has no `effect_over_sd`.
 - Absent edges stay in the output. Hiding them is the display's job: the Cytoscape style hides `absent`
@@ -279,17 +338,20 @@ its `cultivation_mode`.
 
 `quality` lists what makes an edge low quality: `single_replicate` (no spread can be estimated, so such an
 edge carries no `sd`, `se` or test), `strains_pooled` (monocultures of different strains of one species were
-pooled, until nodes are keyed by taxon id), `non_batch`, and `removed_member_detected` (a drop-out
+pooled, which happens only for strains without a taxon id, keyed by name), `non_batch`, and `removed_member_detected` (a drop-out
 experiment measured the member it should lack). A low-quality edge keeps the sign of its mean
 and is never read as an absence. Low-quality edges are left out of the output by default
 (`--include-low-quality`, or the matching advanced setting), and `meta.hidden` counts them, except
 `single_replicate` edges: those are shown by default with their `status` undetermined, and the Cytoscape
 style marks them (for example dashed), since one replicate is often all a study has.
 `cautions` are shown without making an edge low quality: `two_replicates` marks an edge with exactly two
-replicates on a side, whose sd rests on two values. Such an edge keeps its `status` and is exported.
+replicates on a side, whose sd rests on two values, and `conditions_unverified` an edge from co-cultures of
+a pair that differ only in their description (a supplement, say) when nothing recorded says which
+monocultures match. Such an edge keeps its `status` and is exported.
 `notes` inform without disqualifying, for example a replicate left out for an implausible spike. Every
 comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2 values:
-`p_value` is the raw value and `significance` the Benjamini-Hochberg adjusted one across all comparisons
+`p_value` is the raw value and `significance` the adjusted one (Benjamini-Hochberg by default,
+Benjamini-Yekutieli with `--correction by`) across all comparisons
 tested in the derivation (`meta.statistics`). The test supports an edge when significant and decides
 nothing: with few replicates, any of these results may change with more experiments.
 
@@ -348,7 +410,8 @@ before you implement one.
 
 `ReplicateDeriver` (`src/crossfeed/derive.py`) is the default. It reads each replicate's measured growth
 curve from mGrowthDB and compares replicate sets on the log2 scale, over the area under the curve by
-default (`--metric max` for maximal abundance). Every edge therefore carries a spread, not just a number:
+default (`--metric max` for maximal abundance, `--metric growth_rate` for the maximum specific growth
+rate). Every edge therefore carries a spread, not just a number:
 its mean, standard deviation, standard error, and the replicate counts behind each side.
 
 Whether a comparison counts as an interaction follows that spread rather than a fixed cutoff on the
@@ -367,16 +430,17 @@ to show them; `meta.hidden` says how many were left out, so a network file never
 Single-replicate edges are the exception: they are shown, flagged, and marked by the Cytoscape style.
 
 Each comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2
-values, reported as `p_value` and as `significance`, the Benjamini-Hochberg adjusted value over every
+values, reported as `p_value` and as `significance`, the adjusted value (Benjamini-Hochberg by default)
+over every
 comparison tested in the derivation (`meta.statistics`). The test supports an edge when significant and
 decides nothing: with two or three replicates a real effect often fails to reach significance, and any of
 these results may change with more experiments.
 
-Two things to read before trusting a magnitude. Where a study measures monoculture growth by flow
-cytometry or optical density and per-strain co-culture growth by qPCR, each edge records both techniques
-and flags the mismatch: a systematic offset between instruments enters the comparison, so near the
-neutral band the sign can move and not only the size. And an edge computed from a single replicate
-carries no sd or se at all, which is why it is flagged.
+Two things to read before trusting a magnitude. A species is compared only with itself measured by the
+same species-identifying technique: where a study measures monocultures by flow cytometry and co-cultures
+by qPCR, the pair is skipped with that reason, even when both give cells/mL, since otherwise an effect
+could be the change of instrument (Karoline). And an edge computed from a single replicate carries no sd
+or se at all, which is why it is flagged.
 
 `BaselineDeriver` remains only as the retired placeholder, reachable with `--deriver`. The open method
 choices, and who settled each, are in [docs/METHOD_NOTES.md](docs/METHOD_NOTES.md).

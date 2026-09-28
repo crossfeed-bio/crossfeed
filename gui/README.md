@@ -12,10 +12,11 @@ Use it:
 - Click a species to list its interactions, each with effect, a coarse strength, condition, and the
   studies behind it. Facilitation, inhibition, and neutral are drawn with distinct color, line style, and
   arrowhead, so the sign reads without relying on color alone.
-- Open "Advanced settings" to see the derivation choices and their defaults (from
-  [docs/METHOD_NOTES.md](../docs/METHOD_NOTES.md)) alongside the live view filters.
-- Download the current view as JSON or as GraphML. The GraphML matches `src/crossfeed/export.py`, so it is
-  the same file the CLI writes, and it imports into Cytoscape through File, then Import, then Network.
+- Open "Advanced settings" for the live view filters and a statement of how networks are derived; the
+  derivation settings themselves are on the local page (`crossfeed gui`) and the command line.
+- Download the current view as JSON or as GraphML. The GraphML carries the keys and values of
+  `src/crossfeed/export.py`, the same graph the CLI writes, and it imports into Cytoscape through File, then
+  Import, then Network.
 
 No real data ships here: the built-in example is synthetic. Load a real network from a file to view
 experimental interactions.
