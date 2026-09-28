@@ -14,7 +14,7 @@ import json
 import sys
 from collections import Counter
 
-from .adapter import condensed
+from .adapter import condensed, unread
 from .attribution import render_attribution
 from .mgrowthdb import MGrowthDBError, records_to_network
 from .schema import schema_json, validate_document
@@ -119,8 +119,15 @@ def _derive(a):
     if a.live:
         from .mgrowthdb import data_versions
         net.meta["data"] = data_versions(client, [a.study], net.meta["derived_at"])
+    errors = []
+    failed = unread(skipped)
+    if failed:
+        # a request that failed after its retries: the network is incomplete (audit step 7)
+        errors.append(f"{len(failed)} replicate(s) or growth curve(s) could not be read from mGrowthDB (for "
+                      f"example {failed[0][0]}: {failed[0][1]}); the result is incomplete, so run it again")
+        print(f"warning: {errors[0]}", file=sys.stderr)
     result = {"study": a.study, "entries": [], "resolved": [], "unresolved": [], "studies": [a.study],
-              "skipped": skipped, "errors": [], "network": net}
+              "skipped": skipped, "errors": errors, "network": net}
     return _emit(a, net, skipped, extra, a.study, result)
 
 

@@ -24,7 +24,7 @@ from collections import Counter
 
 from . import __version__, brand, interaction, rates
 from . import help as help_page
-from .adapter import condensed
+from .adapter import condensed, unread
 from .attribution import studies_with_edges
 from .cytoscape import CytoscapeError, send
 from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, output_meta
@@ -607,6 +607,13 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         # co-cultures left underived because their partner was not entered count like dropped interactions
         partners_only += sum("the partner is not among the species entered" in r for _, r in skips)
 
+    # a request that failed after its retries leaves a gap in what was read, so the result is incomplete:
+    # said at the top, not only among the pairs the data did not support (audit step 7, 2026-09-28)
+    failed = unread(skipped)
+    if failed:
+        errors.append(f"{len(failed)} replicate(s) or growth curve(s) could not be read from mGrowthDB "
+                      f"(for example {failed[0][0]}: {failed[0][1]}); the result is incomplete, so run the "
+                      "search again")
     records, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"],
                                  s["no_growth_alpha"], s["no_growth_factor"], s["merge_arcs"], s["min_studies"],
                                  s["merge_genera"], support_level(names))

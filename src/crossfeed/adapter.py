@@ -29,6 +29,14 @@ from __future__ import annotations
 from .growth import SPIKE_FACTOR, GrowthCurve, Replicate, spike
 
 AVERAGE = "average of the replicates, not an independent replicate"
+# how a replicate or series that mGrowthDB failed to deliver is reported: a gap in the data read, not a
+# property of the data (audit step 7)
+UNREAD = "could not read"
+
+
+def unread(skipped: list) -> list:
+    """The skipped entries that are failed reads from mGrowthDB, not data that was read and refused."""
+    return [(label, reason) for label, reason in skipped if reason.startswith(UNREAD)]
 
 
 def condensed(skipped: list) -> list:
@@ -118,7 +126,7 @@ def replicates_for_experiment(client, experiment: dict, spike_factor: float = SP
         try:
             bioreplicate = client.get_bioreplicate(stub["id"])
         except Exception as e:  # noqa: BLE001 - one unreadable bioreplicate must not lose the others
-            skipped.append((f"{label}: {stub.get('name', stub.get('id'))}", f"could not read it: {e}"))
+            skipped.append((f"{label}: {stub.get('name', stub.get('id'))}", f"{UNREAD} it: {e}"))
             continue
         name = bioreplicate.get("name") or str(bioreplicate.get("id"))
         if bioreplicate.get("isAverage"):
@@ -141,7 +149,7 @@ def replicates_for_experiment(client, experiment: dict, spike_factor: float = SP
             try:
                 points = client.get_measurement_series(context["id"])
             except Exception as e:  # noqa: BLE001 - report the context, keep the others
-                skipped.append((f"{label}: {name}, {species}", f"could not read its series: {e}"))
+                skipped.append((f"{label}: {name}, {species}", f"{UNREAD} its series: {e}"))
                 continue
             if len(points) < MIN_POINTS:
                 skipped.append((f"{label}: {name}, {species}",

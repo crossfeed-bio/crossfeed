@@ -268,6 +268,11 @@ tagged version is never reused for changed content.
   spike. Merge to genus counts a strain that studies name differently once. The local page keeps its 20
   latest searches, reads the species list again after an hour, and builds it once when two searches start
   together.
+- When mGrowthDB could not be reached (a network failure, a timeout, server errors), the species list came
+  back empty and a search said the species were not in mGrowthDB. Only "no such study" (HTTP 404) now ends
+  the crawl; anything else stops the search with "mGrowthDB could not be read". A replicate or growth curve
+  that fails to download partway through a search now marks the result incomplete at the top of the page,
+  in the report and on the command line, instead of only among the pairs the data did not support.
 - A node keyed by name, because mGrowthDB gives its taxon id to more than one species, keeps its own name:
   the current-name step renamed it by the id's latest name, so in SMGDB00000008 Lachnoclostridium
   symbiosum WAL-14673 appeared as a second L. clostridioforme (found by the audit of 2026-09-28).

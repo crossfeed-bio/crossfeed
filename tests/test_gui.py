@@ -56,12 +56,12 @@ class FakeClient:
 
     def study_experiments(self, study_id):
         if study_id != self.study_id:
-            raise MGrowthDBError(f"mGrowthDB returned HTTP 404 for {study_id}")
+            raise MGrowthDBError(f"mGrowthDB returned HTTP 404 for {study_id}", status=404)
         return EXPERIMENTS
 
     def get_study(self, study_id):
         if study_id != self.study_id:
-            raise MGrowthDBError(f"mGrowthDB returned HTTP 404 for {study_id}")
+            raise MGrowthDBError(f"mGrowthDB returned HTTP 404 for {study_id}", status=404)
         return {"id": study_id, "name": "fake study", "url": "http://example/study",
                 "uploadedAt": "2025-06-26T13:03:03+00:00", "publishedAt": "2025-06-29T10:25:52+00:00",
                 "experiments": [{"id": e["id"]} for e in EXPERIMENTS]}
@@ -516,3 +516,24 @@ def test_only_the_latest_searches_are_kept_and_a_running_one_never_goes():
     jobs["j0"]["status"] = "running"
     gui.prune_jobs(jobs, keep=20)
     assert "j0" in jobs and "j1" not in jobs and "j24" in jobs and len(jobs) == 21
+def test_an_unreachable_mgrowthdb_is_reported_not_read_as_an_empty_database():
+    # audit step 7 (2026-09-28): with nothing listening, the species list came back empty and the page
+    # said "no species or strain of this name in mGrowthDB"; a missing study (404) still ends the crawl
+    from crossfeed.mgrowthdb import MGrowthDBClient
+    from crossfeed.taxonomy import species_index
+    down = MGrowthDBClient(base_url="http://127.0.0.1:9/api/v1", retries=1, timeout=2)
+    with pytest.raises(MGrowthDBError, match="mGrowthDB could not be read"):
+        species_index(down)
+    assert species_index(FakeClient()).studies == ["SMGDB00000001"]     # 404s after it end the crawl
+
+
+def test_a_growth_curve_that_fails_to_download_makes_the_result_incomplete():
+    # audit step 7: a series that mGrowthDB fails to deliver after the retries was only one line among the
+    # pairs the data did not support; the search now says at the top that its result is incomplete
+    class Flaky(FakeClient):
+        def get_measurement_series(self, context_id):
+            if context_id.startswith("co/0/"):
+                raise MGrowthDBError("mGrowthDB returned HTTP 500 for a series (server error)", status=500)
+            return super().get_measurement_series(context_id)
+    r = run_query(Flaky(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"], {})
+    assert any("could not be read from mGrowthDB" in e and "incomplete" in e for e in r["errors"])
