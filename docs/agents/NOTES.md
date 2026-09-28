@@ -15,6 +15,10 @@ Rules for this file:
 
 ## Current state
 
+- 2026-09-28 (Karoline): "for me, project implementation is now complete and so focus can be on
+  auditing/testing." New features are not proposed unprompted; the work is auditing, testing against
+  mGrowthDB, and fixing what that finds. Still to come: the rename (#71) and the 0.1.0 release
+  (RELEASING.md).
 - 2026-09-17: v0.0.2 is unreleased on `main`. The pipeline runs end to end on live mGrowthDB data with
   the provisional `BaselineDeriver`. CLI: `derive`, `validate`, `schema`; outputs JSON and GraphML.
 - 2026-09-17: Helpers `crossfeed.growth` and `crossfeed.interaction` are merged (#9, feature #3). Karoline's

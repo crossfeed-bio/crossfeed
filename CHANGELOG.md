@@ -18,6 +18,8 @@ tagged version is never reused for changed content.
   is not Clostridium, in the merge, the genus query and the genus colors alike.
 - A genus entered alone ("Blautia") stands for every species of it in mGrowthDB, listed on the page and
   in the report, instead of being refused as "a genus alone".
+- The README says the tool is now called grownet and what keeps the crossfeed name until the rename, that
+  the tests also run on Windows and macOS, and that the local page's About says who built the tool.
 - An About button beside Help (#80): who built grownet, in the wording Craig agreed to on #80, with the
   repository link and the version.
 - The help page opens with the idea behind the tool, after Gause (1932, 1934): grow two species alone
