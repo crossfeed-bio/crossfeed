@@ -7,6 +7,9 @@ tagged version is never reused for changed content.
 ## [0.0.2] (unreleased)
 
 ### Added
+- The help page compares the three growth measures (area, maximum, growth rate): what each captures, and
+  its strengths and weaknesses. The README calls the tool grownet, keeping crossfeed only for the command,
+  the module, the repository and the schema id until the rename is released.
 - A monoculture set is also matched to a co-culture by identical wording of how it was grown, once the
   organisms and the kind of culture are set aside (register item 28): SMGDB00000014's five co-cultures
   now give 10 arcs. An obligate or abolished arc whose set without growth is zero from its first time point

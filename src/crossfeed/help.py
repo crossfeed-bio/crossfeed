@@ -315,7 +315,7 @@ def _table(head, rows) -> str:
     return f"<table><tr>{th}</tr>" + "".join(rows) + "</table>"
 
 
-SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"),
+SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"), ("measures", "Which growth measure"),
             ("example", "Try the example"), ("reading", "Reading the result"),
             ("settings", "Advanced settings"), ("attributes", "Arc and node attributes"),
             ("decisions", "Why it works this way"), ("cli", "The command line"),
@@ -380,6 +380,31 @@ of yeast volume as <i>S. cerevisiae</i>.</p>
 <p class="muted">Gause GF (1932) Experimental studies on the struggle for existence. I. Mixed population of
 two species of yeast. Journal of Experimental Biology 9: 389-402.<br>
 Gause GF (1934) The Struggle for Existence. Williams and Wilkins, Baltimore.</p>
+
+<h2 id="measures">Which growth measure</h2>
+<p>Each measure answers a different question, so an arc can differ between them: on all of mGrowthDB (September 2026)
+the area and the maximum agree on the sign of every arc both find, while the area and the growth rate agree on
+18 of 23, since a partner can, for example, lower a species' final yield while speeding up its early growth.
+Choose it under Growth measure in the <a href="#settings">advanced settings</a>.</p>
+<dl class="settings">
+<dt>Area under the curve (auc, the default)</dt>
+<dd>For: it combines lag, rate and yield in one number and uses every point of the curve, so it is robust
+to noise in any one of them, and it is defined for any curve with two points. Against: it cannot say which
+of lag, rate or yield changed; it needs the same time window on both sides, which grownet ensures; and it
+counts the starting abundance too, so a larger inoculum raises it.</dd>
+<dt>Maximal abundance (max)</dt>
+<dd>For: the simplest to read, the yield a species reaches, and unaffected by a decline after the peak.
+Against: it rests on one point, so one noisy measurement moves it, and it ignores timing, so a slow and a
+fast grower reaching the same level look alike. It is misleading when one curve reached stationary phase
+and the other did not; grownet then marks the arc <code>stationary_phase_differs</code>.</dd>
+<dt>Growth rate (growth_rate)</dt>
+<dd>For: the speed of growth, independent of yield and of the unit of abundance, and with easylinear the
+same rate mGrowthDB reports. Against: it ignores yield and lag; it needs densely sampled curves (at least 6
+points), so a sparsely sampled study gives no rates at all; and it is sensitive to noise in the steepest
+part of the curve. easylinear takes the steepest straight stretch of log abundance and depends on its
+window; baranyi fits a growth model up to the end of the plateau, and refuses curves the model does not
+describe, such as two growth phases.</dd>
+</dl>
 
 <h2 id="example">Try the example</h2>
 <p>The Example button fills the box with {_e(pair)}, a pair with enough data to show a result: the
