@@ -235,6 +235,10 @@ tagged version is never reused for changed content.
   `removed_member_detected`.
 
 ### Fixed
+- A file the command line cannot read or write (a missing fixture, an output folder that does not exist,
+  a file that is not JSON) is reported in one line, with the folder a relative path was read from, instead
+  of a traceback. The README's offline Quickstart says it runs from a clone: the fixture is in the
+  repository's `tests/fixtures`, not in an installed grownet (found by Karoline after a pip install).
 - The style file imports in Cytoscape: `grownet style` and the help page's download now write Cytoscape's
   XML style format (`grownet_style.xml`). File, Import, Styles from File refused the JSON file with "Don't
   know how to read file" (found by Karoline in Cytoscape 3.10.4); Cytoscape reads no JSON style file, its
