@@ -1,10 +1,13 @@
 # Changelog
 
-All notable changes to crossfeed are recorded here. The format follows Keep a Changelog, and versions
-stay in the 0.0.x range while the interface settles. A released version is a promise about content: a
-tagged version is never reused for changed content.
+All notable changes to grownet (called crossfeed before 0.1.0) are recorded here. The format follows Keep
+a Changelog. A released version is a promise about content: a tagged version is never reused for changed
+content.
 
-## [0.0.2] (unreleased)
+## [0.1.0] (unreleased)
+
+The first release, on PyPI (`grownet`) and as a Windows program. It holds everything since 0.0.1; 0.0.2
+was never published.
 
 ### Added
 - The local page offers the Cytoscape style as a download (`/grownet_style.xml`, the file `grownet style`
