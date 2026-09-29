@@ -29,6 +29,7 @@ _KEYS = [
     ("g_tool_version", "graph", "tool_version", "string"),
     ("g_derived_on", "graph", "derived_on", "string"),
     ("g_derived_at", "graph", "derived_at", "string"),
+    ("g_provisional", "graph", "provisional", "string"),
     ("n_name", "node", "name", "string"),
     # Gephi takes a node's label from an attribute called label (Cytoscape uses name): the same strain name
     ("n_label", "node", "label", "string"),
@@ -92,7 +93,7 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
 
     graph = ET.SubElement(root, f"{{{_NS}}}graph")
     graph.set("edgedefault", "directed")
-    for key in ("tool", "tool_version", "derived_on", "derived_at"):
+    for key in ("tool", "tool_version", "derived_on", "derived_at", "provisional"):
         _data(graph, f"g_{key}", net.meta.get(key))
 
     from .cytoscape import display_weight, genus, genus_colors, line_style  # the style's own columns

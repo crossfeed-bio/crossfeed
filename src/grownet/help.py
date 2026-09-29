@@ -117,6 +117,7 @@ CLI_ONLY = {
     "--species": "species, strain or genus names, or NCBI taxon ids: search every study holding them, as the page "
                  "does",
     "--all": "every study in mGrowthDB, with every partner, as the page's All button (with --live)",
+    "--no-published": "with --all, derive live instead of reading the network derived once a day",
     "--live": "fetch from the mGrowthDB API (the normal case)",
     "--fixture": "derive from a JSON list of interaction records instead (offline, for testing)",
     "--deriver": "plug in your own derivation method, given as module:ClassName (one study at a time)",
@@ -363,8 +364,11 @@ def render_help(token: str, defaults: dict, example: tuple, job: str = "") -> st
 <p>Type species names, one per line, strain names, a genus (it stands for every species of it in
 mGrowthDB), or NCBI taxon ids. grownet looks them up in mGrowthDB, reads the growth curves of every study
 that holds them, and derives the interactions between them on this machine. The All button ignores the
-box and derives every study in mGrowthDB, with every partner. Nothing is uploaded, and nothing is written
-outside the file you download.</p>
+box and derives every study in mGrowthDB, with every partner. With the default settings, All reads the
+network the grownet repository derives from mGrowthDB once a day, when it is less than a day old, which
+spares mGrowthDB about 1,300 requests; the result says when it was derived. Any other setting, or GitHub
+out of reach, derives it live. Nothing is uploaded, and nothing is written outside the file you
+download.</p>
 
 <h2 id="idea">The idea behind it</h2>
 <p>How one species affects another can be read from growth alone: grow each species by itself, grow the

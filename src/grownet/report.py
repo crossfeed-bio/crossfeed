@@ -70,6 +70,8 @@ def report_text(result: dict) -> str:
         lines.append(f"study derived: {result['study']} (every species in it)")
     elif result.get("all"):
         lines.append("query: all of mGrowthDB (every study, with every partner)")
+        if result.get("published"):
+            lines.append(f"  from the network derived once a day in the grownet repository, at {result['published']}")
     else:
         lines.append("species entered: " + (", ".join(result.get("entries", [])) or "none"))
     genera = result.get("genera", {})

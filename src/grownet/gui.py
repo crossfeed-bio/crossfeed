@@ -24,10 +24,11 @@ from collections import Counter
 
 from . import __version__, brand, interaction, rates
 from . import help as help_page
+from . import published as daily
 from .adapter import condensed, unread
 from .attribution import studies_with_edges
 from .cytoscape import CytoscapeError, send, style_xml
-from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, output_meta
+from .derive import ABSENCE_THRESHOLD, PROVISIONAL, derive_interactions, genus_species, output_meta
 from .export import to_graphml
 from .growth import SPIKE_FACTOR
 from .legend import legend_svg
@@ -61,12 +62,6 @@ DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window":
             "merge_arcs": False, "min_studies": 1, "merge_genera": False,
             # None: the no-growth rule's own defaults, read when used (grownet.interaction.grew)
             "no_growth_alpha": None, "no_growth_factor": None}
-PROVISIONAL = ("Each interaction compares a species' growth with and without its partner across replicates "
-               "(mean log2 difference). An interaction is reported when |mean| is at least k standard "
-               "deviations (the absence threshold, default 1: the mean plus or minus its standard deviation "
-               "stays on one side of zero). Welch's t-test, corrected for multiple testing, is shown "
-               "as supporting evidence and does not decide; with few replicates, more experiments may change "
-               "any of these results (see docs/METHOD_NOTES.md).")
 MISMATCH = ("Monoculture and co-culture growth were measured by different techniques in some of these "
             "studies, so neither the magnitude nor, near zero, the direction of those interactions is fully "
             "dependable.")
@@ -427,8 +422,10 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
     resolved = "".join(entry_line(entry, matches) for entry, matches in result["resolved"])
     species_heading = "<h2>Species</h2>"
     if result.get("all"):
+        daily_note = (f" (the network derived once a day, on {_esc(result['published'][:16].replace('T', ' '))}; "
+                      "any other setting derives it live)" if result.get("published") else "")
         species_heading, resolved = "<h2>All of mGrowthDB</h2>", (
-            f"<li>every study, with every partner: {len(result['studies'])} studies</li>")
+            f"<li>every study, with every partner: {len(result['studies'])} studies{daily_note}</li>")
     unresolved = _unresolved_list(result)
     net = result["network"]
     mismatch = any("MISMATCH" in (e.method or "") for e in net.edges)
@@ -542,7 +539,7 @@ def support_level(entries) -> str:
 
 
 def run_query(client, entries, settings: dict | None = None, index: dict | None = None, progress=None,
-              narrow: bool = True, all_studies: bool = False) -> dict:
+              narrow: bool = True, all_studies: bool = False, published: bool = True) -> dict:
     """Species names or taxon ids to an interaction network, through mGrowthDB and the existing derivation.
 
     Returns {"resolved", "unresolved", "taxon_ids", "studies", "network", "skipped", "errors"}. Failures
@@ -552,13 +549,20 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
 
     `all_studies` is the page's All button (Karoline, 2026-09-28): the entries are ignored and every study
     mGrowthDB holds is derived, with every partner kept, still under Only these studies and Exclude these
-    studies.
+    studies. With the default settings it is read from the network derived once a day in the grownet
+    repository when that is less than a day old (`grownet.published`, #96); `published` False, or any other
+    setting, derives it live.
     """
     def say(done, total, message):
         if progress:
             progress(done, total, message)
 
     s = {**DEFAULTS, **(settings or {})}
+    if all_studies and published and daily.usable(s, DEFAULTS):
+        say(0, None, "Reading today's All network from the grownet repository")
+        found = daily.fetch()
+        if found:
+            return found
     names = [] if all_studies else split_entries(entries)    # one per line, and at commas and semicolons
     say(0, None, "Looking up the species in mGrowthDB")
     index = species_index(client) if index is None else index

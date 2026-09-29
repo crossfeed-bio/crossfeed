@@ -155,7 +155,8 @@ def _derive_species(a):
                 "no_growth_alpha": a.no_growth_alpha,
                 "no_growth_factor": a.no_growth_factor}
     try:
-        result = run_query(MGrowthDBClient(), a.species or [], settings, all_studies=a.all_studies)
+        result = run_query(MGrowthDBClient(), a.species or [], settings, all_studies=a.all_studies,
+                           published=not a.no_published)
     except MGrowthDBError as e:
         print(f"live fetch failed: {e}", file=sys.stderr)
         return 1
@@ -306,6 +307,9 @@ def build_parser() -> argparse.ArgumentParser:
     what.add_argument("--all", action="store_true", dest="all_studies",
                       help="every study in mGrowthDB, with every partner, as the page's All button (needs "
                            "--live; the study argument then limits it to those studies)")
+    what.add_argument("--no-published", action="store_true",
+                      help="with --all, derive live even when the network derived once a day in the grownet "
+                           "repository is less than a day old (it is used only with the default settings)")
     what.add_argument("--exclude-studies", default="", metavar="IDS",
                       help="with --species or --all, comma separated study ids never to search (default: none)")
     what.add_argument("--all-partners", action="store_true",
