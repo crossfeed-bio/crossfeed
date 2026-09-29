@@ -74,8 +74,9 @@ This always runs the latest version in the repository.
 
 ### From PyPI
 
-From the first release on (0.1.0), the program is on
-[PyPI](https://pypi.org), so it installs like any other Python tool, as a command of its own:
+Since the first release (0.1.0), the program is on
+[PyPI](https://pypi.org/project/grownet/), so it installs like any other Python tool, as a command of its
+own:
 
 ```bash
 uv tool install grownet        # or: pipx install grownet
@@ -84,8 +85,10 @@ grownet gui
 
 `uv tool upgrade grownet` (or `pipx upgrade grownet`) moves to a new release. With Python 3.10 or newer
 already installed and neither uv nor pipx, `python3 -m pip install --user grownet` works too (on Windows,
-`py -m pip install --user grownet`). Until that release, the same works from the repository:
-`python3 -m pip install --user "git+https://github.com/crossfeed-bio/crossfeed"`.
+`py -m pip install --user grownet`). Use one of these routes, not several: each writes its own `grownet`
+command, and they collide. If pipx says "File exists at ~/.local/bin/grownet ... Not modifying", an earlier
+`pip install --user` (for example from the repository, before 0.1.0) still owns the command; remove it
+with `python3 -m pip uninstall grownet`, then run `pipx install --force grownet` (found by Karoline).
 
 ### To develop it
 
