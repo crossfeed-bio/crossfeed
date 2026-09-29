@@ -1039,7 +1039,8 @@ def merge_genus(edges: list, merge: bool = False, level: str = "species") -> tup
 
 
 # How to read a derived network, on the page and in every file written from it, so a file that travels
-# without the page (a download, the daily All network) states its own terms (Craig's agent, #96)
+# without the page (a download, the daily All network) states its own terms (Craig's agent, #96). It is
+# part of a derivation's meta, not of the format: `derive --fixture` only formats given records.
 PROVISIONAL = ("Each interaction compares a species' growth with and without its partner across replicates "
                "(mean log2 difference). An interaction is reported when |mean| is at least k standard "
                "deviations (the absence threshold, default 1: the mean plus or minus its standard deviation "

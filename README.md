@@ -396,7 +396,8 @@ Benjamini-Yekutieli with `--correction by`) across all comparisons
 tested in the derivation (`meta.statistics`). The test supports an edge when significant and decides
 nothing: with few replicates, any of these results may change with more experiments. Every derived network
 carries this caution in `meta.provisional` (a graph attribute in GraphML), the paragraph the page shows
-above its result, so a file read without the page still says how to read it.
+above its result, so a file read without the page still says how to read it. It belongs to derivations:
+`derive --fixture`, which only formats records it is given, does not add it.
 
 ## Plug in your own method
 
