@@ -94,7 +94,10 @@ derivation method). Labels are created by a maintainer; if one is missing, say s
 
 - **No real data in git.** Only the synthetic fixtures under `tests/fixtures/` belong in the repository.
   Nothing pulled from mGrowthDB, nothing shared by a collaborator, no cached API responses. See
-  [docs/DATA_GOVERNANCE.md](docs/DATA_GOVERNANCE.md).
+  [docs/DATA_GOVERNANCE.md](docs/DATA_GOVERNANCE.md). The rule is about the repository's history: the
+  daily All network, a derived network with no raw curves that cites its studies, is published as an
+  asset of the `all-network` release by `.github/workflows/all-network.yml`, outside git, and replaced
+  each day (agreed by Karoline and Craig on #96).
 - **Unpublished collaborator data** is used only for the agreed analysis, never written into issues,
   pull requests, or the notes file.
 - **The derivation method is a scientific decision** owned by the collaboration. Do not change

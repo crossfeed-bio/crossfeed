@@ -562,6 +562,11 @@ def test_the_daily_all_network_is_used_when_fresh_and_the_settings_are_the_defau
                         lambda: published.fetch_from(opener, now=derived + datetime.timedelta(hours=1)))
     r = run_query(FakeClient(), [], {}, all_studies=True)
     assert r["published"] == payload["network"]["meta"]["derived_at"] and r["all"]
+    # the published file says how to read it, as the page does (Craig's agent, #96), in JSON and GraphML
+    from grownet.derive import PROVISIONAL
+    from grownet.export import to_graphml
+    assert r["network"].meta["provisional"] == PROVISIONAL and PROVISIONAL in render_result("tok", r)
+    assert "g_provisional" in to_graphml(r["network"]) and "few replicates" in to_graphml(r["network"])
     assert "derived once a day" in render_result("tok", r)
     # any other setting derives it live, and so does the command line's --no-published
     assert "published" not in run_query(FakeClient(), [], {"absence_threshold": 2.0}, all_studies=True)

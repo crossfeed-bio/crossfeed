@@ -28,7 +28,7 @@ from . import published as daily
 from .adapter import condensed, unread
 from .attribution import studies_with_edges
 from .cytoscape import CytoscapeError, send, style_xml
-from .derive import ABSENCE_THRESHOLD, derive_interactions, genus_species, output_meta
+from .derive import ABSENCE_THRESHOLD, PROVISIONAL, derive_interactions, genus_species, output_meta
 from .export import to_graphml
 from .growth import SPIKE_FACTOR
 from .legend import legend_svg
@@ -62,12 +62,6 @@ DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window":
             "merge_arcs": False, "min_studies": 1, "merge_genera": False,
             # None: the no-growth rule's own defaults, read when used (grownet.interaction.grew)
             "no_growth_alpha": None, "no_growth_factor": None}
-PROVISIONAL = ("Each interaction compares a species' growth with and without its partner across replicates "
-               "(mean log2 difference). An interaction is reported when |mean| is at least k standard "
-               "deviations (the absence threshold, default 1: the mean plus or minus its standard deviation "
-               "stays on one side of zero). Welch's t-test, corrected for multiple testing, is shown "
-               "as supporting evidence and does not decide; with few replicates, more experiments may change "
-               "any of these results (see docs/METHOD_NOTES.md).")
 MISMATCH = ("Monoculture and co-culture growth were measured by different techniques in some of these "
             "studies, so neither the magnitude nor, near zero, the direction of those interactions is fully "
             "dependable.")

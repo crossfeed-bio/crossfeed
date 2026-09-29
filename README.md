@@ -394,7 +394,9 @@ comparison with at least two replicates per side also gets Welch's t-test on the
 `p_value` is the raw value and `significance` the adjusted one (Benjamini-Hochberg by default,
 Benjamini-Yekutieli with `--correction by`) across all comparisons
 tested in the derivation (`meta.statistics`). The test supports an edge when significant and decides
-nothing: with few replicates, any of these results may change with more experiments.
+nothing: with few replicates, any of these results may change with more experiments. Every derived network
+carries this caution in `meta.provisional` (a graph attribute in GraphML), the paragraph the page shows
+above its result, so a file read without the page still says how to read it.
 
 ## Plug in your own method
 
