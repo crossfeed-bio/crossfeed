@@ -4,7 +4,7 @@ All notable changes to grownet (called crossfeed before 0.1.0) are recorded here
 a Changelog. A released version is a promise about content: a tagged version is never reused for changed
 content.
 
-## [0.1.0] (unreleased)
+## [0.1.0] (2026-09-29)
 
 The first release, on PyPI (`grownet`) and as a Windows program. It holds everything since 0.0.1; 0.0.2
 was never published.
