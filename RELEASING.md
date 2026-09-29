@@ -72,7 +72,15 @@ The program is unsigned, so Windows warns on first start (the zip's README and t
 beforehand). The route agreed on #26 and #63:
 
 1. **The SignPath Foundation** signs open-source projects free of charge and requires an existing release
-   in the form to be signed, which the first release provides. Apply at <https://signpath.org>. Signing
+   in the form to be signed, which the first release provides. Apply at <https://signpath.org>. **Not yet
+   (Karoline, 2026-09-29):** the application asks the project to show that it "is widely used or trusted"
+   (media coverage, blog posts, download statistics, GitHub insights, community discussions), which a
+   project released that day cannot; "If we don't have that by the next release, we should explain to
+   users how to click through the warning instead". So each release's notes open with how to get past the
+   warning (`packaging/check_release.py`), as the README and the zip's README.txt do. Also needed when
+   applying: a public code signing policy page (the SignPath attribution line, the team by role, and a
+   privacy statement saying what the program sends where), two-factor authentication for every role,
+   and a product name and version in `grownet.exe`'s file metadata. Signing
    lets Windows build up reputation across releases (an unsigned program starts from zero every time),
    should let it pass Smart App Control on Windows 11, and reduces antivirus false alarms. The publisher shown to
    a user is then the SignPath Foundation. The workflow gains a signing step before the zip is made.

@@ -46,7 +46,8 @@ Extract All), open the folder and double-click `grownet.exe`. A black window ope
 your browser opens the page there; closing the black window stops the program.
 
 Windows warns about any new program it has not seen many people run, so the first time it says "Windows
-protected your PC": click "More info", then "Run anyway". That is Windows being cautious about an unfamiliar
+protected your PC". Click the small "More info" link under the message; only then does a "Run anyway"
+button appear, and clicking it starts grownet. That is Windows being cautious about an unfamiliar
 program, not a finding about this one, which is built in public by this repository's automated build. On
 Windows 11 with Smart App Control on, Windows may block it instead; then use one of the two routes below.
 The zip's `README.txt` says the same, for whoever unzips it.
@@ -73,8 +74,9 @@ This always runs the latest version in the repository.
 
 ### From PyPI
 
-From the first release on (0.1.0), the program is on
-[PyPI](https://pypi.org), so it installs like any other Python tool, as a command of its own:
+Since the first release (0.1.0), the program is on
+[PyPI](https://pypi.org/project/grownet/), so it installs like any other Python tool, as a command of its
+own:
 
 ```bash
 uv tool install grownet        # or: pipx install grownet
@@ -83,8 +85,10 @@ grownet gui
 
 `uv tool upgrade grownet` (or `pipx upgrade grownet`) moves to a new release. With Python 3.10 or newer
 already installed and neither uv nor pipx, `python3 -m pip install --user grownet` works too (on Windows,
-`py -m pip install --user grownet`). Until that release, the same works from the repository:
-`python3 -m pip install --user "git+https://github.com/crossfeed-bio/crossfeed"`.
+`py -m pip install --user grownet`). Use one of these routes, not several: each writes its own `grownet`
+command, and they collide. If pipx says "File exists at ~/.local/bin/grownet ... Not modifying", an earlier
+`pip install --user` (for example from the repository, before 0.1.0) still owns the command; remove it
+with `python3 -m pip uninstall grownet`, then run `pipx install --force grownet` (found by Karoline).
 
 ### To develop it
 
