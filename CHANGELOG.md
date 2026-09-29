@@ -4,6 +4,14 @@ All notable changes to grownet (called crossfeed before 0.1.0) are recorded here
 a Changelog. A released version is a promise about content: a tagged version is never reused for changed
 content.
 
+## [0.1.1] (unreleased)
+
+### Changed
+- Each release's notes on GitHub open with how to start the Windows program and get past the "Windows
+  protected your PC" warning: the small More info link, and only then Run anyway (as Karoline found on
+  Windows). The README and the zip's README.txt say the same, more precisely than before. Signing through
+  the SignPath Foundation waits until the project can show the use and trust it asks for.
+
 ## [0.1.0] (2026-09-29)
 
 The first release, on PyPI (`grownet`) and as a Windows program. It holds everything since 0.0.1; 0.0.2

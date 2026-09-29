@@ -4,7 +4,7 @@ Usage: python packaging/check_release.py v0.1.0 notes.md
 
 The tag must be v plus the version in pyproject.toml, the package's __version__ must be the same, and
 CHANGELOG.md must hold a section for it that is no longer marked unreleased. The notes file gets that
-section, for the GitHub release.
+section, for the GitHub release, after a paragraph on starting the Windows program.
 """
 import re
 import sys
@@ -36,6 +36,25 @@ def check(tag: str, root: Path = ROOT) -> tuple:
     return problems, notes
 
 
+# First on every release page, where Windows users download the program: it is unsigned until the project
+# can show the reputation SignPath asks for, so the click-through is explained where the zip is (Karoline,
+# 2026-09-29). "More info" is a small link; "Run anyway" appears only after it (her test on Windows).
+WINDOWS = """**Windows:** download `grownet-{tag}-windows.zip` below, unzip it (right-click, Extract All) and \
+double-click `grownet.exe` in the extracted folder. The first time, Windows shows "Windows protected your \
+PC". Click the small **More info** link under the message; only then does a **Run anyway** button appear, \
+and clicking it starts grownet. Windows says this about any program that few people have run yet, and \
+grownet is new: it is built in public from this repository by its release workflow. With Smart App \
+Control on (Windows 11) there may be no Run anyway; then install with `uv tool install grownet` or \
+`pipx install grownet` instead (see the README).
+
+**Everyone else:** `uv tool install grownet` or `pipx install grownet`, then `grownet gui`."""
+
+
+def release_notes(tag: str, section: str) -> str:
+    """The GitHub release's notes: how to start the program on Windows, then the changelog section."""
+    return WINDOWS.format(tag=tag) + "\n\n" + section
+
+
 def main(argv) -> int:
     tag, notes_file = argv[0], (argv[1] if len(argv) > 1 else None)
     problems, notes = check(tag)
@@ -44,7 +63,7 @@ def main(argv) -> int:
     if problems:
         return 1
     if notes_file:
-        Path(notes_file).write_text(notes + "\n", encoding="utf-8")
+        Path(notes_file).write_text(release_notes(tag, notes) + "\n", encoding="utf-8")
     print(f"release check: {tag} is ready")
     return 0
 

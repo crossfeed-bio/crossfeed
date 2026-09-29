@@ -18,7 +18,8 @@ What Windows will say, and why
 Windows warns about any new program it has not seen many people run. grownet is new and made by a small
 research collaboration, so you will see this the first time:
 
-  "Windows protected your PC"  ->  click "More info", then "Run anyway".
+  "Windows protected your PC"  ->  click the small "More info" link under the message; only then
+                                   does a "Run anyway" button appear. Click it.
 
 This is Windows being cautious about an unfamiliar program, not a finding about grownet. The program is
 built in public from the source code at https://github.com/crossfeed-bio/crossfeed by its automated build,

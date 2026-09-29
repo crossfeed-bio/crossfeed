@@ -46,7 +46,8 @@ Extract All), open the folder and double-click `grownet.exe`. A black window ope
 your browser opens the page there; closing the black window stops the program.
 
 Windows warns about any new program it has not seen many people run, so the first time it says "Windows
-protected your PC": click "More info", then "Run anyway". That is Windows being cautious about an unfamiliar
+protected your PC". Click the small "More info" link under the message; only then does a "Run anyway"
+button appear, and clicking it starts grownet. That is Windows being cautious about an unfamiliar
 program, not a finding about this one, which is built in public by this repository's automated build. On
 Windows 11 with Smart App Control on, Windows may block it instead; then use one of the two routes below.
 The zip's `README.txt` says the same, for whoever unzips it.
