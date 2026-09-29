@@ -148,7 +148,9 @@ python -m grownet schema [--out FILE]
   for every species of it that mGrowthDB holds. The page's Example, from the command line:
   `grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"`.
 - `derive --live --all` does what the page's All button does: every study in mGrowthDB, with every
-  partner (a study argument limits it to those studies).
+  partner (a study argument limits it to those studies). With the default settings it reads the network
+  derived once a day by `.github/workflows/all-network.yml` (the `all-network` release), when that is
+  less than a day old, and derives live otherwise; `--no-published` always derives live.
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the baseline (see below).
 - The command line does everything the local page does: every advanced setting has its option, and
@@ -392,7 +394,10 @@ comparison with at least two replicates per side also gets Welch's t-test on the
 `p_value` is the raw value and `significance` the adjusted one (Benjamini-Hochberg by default,
 Benjamini-Yekutieli with `--correction by`) across all comparisons
 tested in the derivation (`meta.statistics`). The test supports an edge when significant and decides
-nothing: with few replicates, any of these results may change with more experiments.
+nothing: with few replicates, any of these results may change with more experiments. Every derived network
+carries this caution in `meta.provisional` (a graph attribute in GraphML), the paragraph the page shows
+above its result, so a file read without the page still says how to read it. It belongs to derivations:
+`derive --fixture`, which only formats records it is given, does not add it.
 
 ## Plug in your own method
 

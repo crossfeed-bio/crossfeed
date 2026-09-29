@@ -1038,6 +1038,17 @@ def merge_genus(edges: list, merge: bool = False, level: str = "species") -> tup
     return out, {**info, "genus_arcs": len(out), "from_arcs": len(edges)}
 
 
+# How to read a derived network, on the page and in every file written from it, so a file that travels
+# without the page (a download, the daily All network) states its own terms (Craig's agent, #96). It is
+# part of a derivation's meta, not of the format: `derive --fixture` only formats given records.
+PROVISIONAL = ("Each interaction compares a species' growth with and without its partner across replicates "
+               "(mean log2 difference). An interaction is reported when |mean| is at least k standard "
+               "deviations (the absence threshold, default 1: the mean plus or minus its standard deviation "
+               "stays on one side of zero). Welch's t-test, corrected for multiple testing, is shown "
+               "as supporting evidence and does not decide; with few replicates, more experiments may change "
+               "any of these results (see docs/METHOD_NOTES.md in the grownet repository).")
+
+
 def output_meta(records, include_low_quality: bool = False, correction: str = "bh",
                 absence_threshold: float = ABSENCE_THRESHOLD, no_growth_alpha: float = None,
                 no_growth_factor: float = None, merge_arcs: bool = False, min_studies: int = 1,
@@ -1062,7 +1073,7 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
     statistics = {**STATISTICS, "correction": STATISTICS["correction"].format(name=CORRECTIONS[correction][0]),
                   "tests": tests}
     absent = sum(1 for e in edges if e.get("status") == ABSENT)
-    meta = {"statistics": statistics,
+    meta = {"provisional": PROVISIONAL, "statistics": statistics,
             "absence": {"rule": "absent when |log2 mean| < k * sd", "k": absence_threshold, "absent": absent},
             "no_growth": {**rule_meta(no_growth_alpha, no_growth_factor),
                           "obligate": sum(1 for e in edges if e.get("outcome") == OBLIGATE),

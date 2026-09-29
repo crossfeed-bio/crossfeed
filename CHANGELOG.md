@@ -10,6 +10,14 @@ The first release, on PyPI (`grownet`) and as a Windows program. It holds everyt
 was never published.
 
 ### Added
+- All reads the network the repository derives once a day (#96): `.github/workflows/all-network.yml`
+  derives All with the default settings and publishes it as the assets of the `all-network` release. The
+  page's All button and `derive --all` use it when it is less than a day old and the settings are the
+  defaults, and derive live otherwise, or with `--no-published`; the page and the report say when it was
+  derived. One derivation a day instead of about 1,300 requests to mGrowthDB per All. A failed daily
+  build opens an issue labeled `all-network-failed`, closed by the next build that succeeds.
+- Every derived network carries the page's caution on how to read it in `meta.provisional` (a graph
+  attribute in GraphML), so a download or the daily All network states its own terms without the page.
 - The local page offers the Cytoscape style as a download (`/grownet_style.xml`, the file `grownet style`
   writes), linked from the help page's Cytoscape answers, so styling a GraphML file needs no command line.
   Help, Legend and About have a Back at the upper right as well as at the end, and the grownet mark leads

@@ -20,6 +20,13 @@ id and url with the license left empty rather than guessed (the local page shows
 published, and wiring it into the `study_license` field, is a pending item to confirm with the mGrowthDB
 side.
 
+## The daily All network
+
+The All network is derived from mGrowthDB once a day and published as an asset of the `all-network`
+release, outside git (#96). It carries no raw growth curves, only derived nodes and arcs, and every arc
+cites its studies. Its report, `all_report.txt`, is published alongside it and lists every study behind
+an arc with its title and DOI, so each can be credited (Karoline, 2026-09-29).
+
 ## Unpublished collaborator data
 
 Any unpublished interaction calls, media, or genomes shared by a collaborator are used only for the

@@ -1,0 +1,67 @@
+name: all-network
+
+# Derives the All network of mGrowthDB once a day with the default settings and publishes it as the assets of
+# one fixed release, `all-network`, replacing the previous day's (#96). The page's All button and
+# `grownet derive --all` read it when it is less than a day old and the settings are the defaults, and derive
+# live otherwise. Release assets are not in git, so no data enters the repository. Scheduled runs use the
+# default branch only; "Run workflow" on the Actions tab starts one by hand.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: all-network
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write        # to say so when a daily build fails
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install .
+      - name: derive All
+        run: python packaging/publish_all.py out
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view all-network >/dev/null 2>&1 || gh release create all-network --prerelease \
+            --latest=false --title "All network, derived once a day" \
+            --notes "The All network of mGrowthDB, derived with the default settings by .github/workflows/all-network.yml and replaced once a day. grownet reads all_result.json when it is less than a day old; all_network.json and all_report.txt are the same network and its report. Every arc cites the studies it comes from."
+          gh release upload all-network out/* --clobber
+      - name: say so when the build fails
+        # a failed day leaves the file to age past a day, and every copy of grownet then derives All live
+        # from mGrowthDB at once, so a failure opens an issue (Craig's agent, #96)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create all-network-failed --color B60205 --force \
+            --description "The daily All network could not be derived or published"
+          open=$(gh issue list --label all-network-failed --state open --json number -q '.[0].number')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "Failed again: $RUN"
+          else
+            gh issue create --label all-network-failed --title "The daily All network failed" --body "The run $RUN did not publish the All network. Until a run succeeds, the published file ages past a day and every copy of grownet derives All live from mGrowthDB. This issue closes itself when a run succeeds."
+          fi
+      - name: close the failure issue once a build succeeds
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          for n in $(gh issue list --label all-network-failed --state open --json number -q '.[].number'); do
+            gh issue close "$n" --comment "Published again: $RUN"
+          done

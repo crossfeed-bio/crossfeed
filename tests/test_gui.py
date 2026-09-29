@@ -537,3 +537,54 @@ def test_a_growth_curve_that_fails_to_download_makes_the_result_incomplete():
             return super().get_measurement_series(context_id)
     r = run_query(Flaky(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"], {})
     assert any("could not be read from mGrowthDB" in e and "incomplete" in e for e in r["errors"])
+
+
+# ---- the All network derived once a day in the grownet repository (#96) ------------------------------
+
+def test_the_daily_all_network_is_used_when_fresh_and_the_settings_are_the_defaults(monkeypatch):
+    # Karoline (2026-09-28): "For the All network, could we build it, save it in grownet's github, serve from
+    # there if less than a day old", and "let's serve the All network from the grownet repository"
+    import datetime
+    import io
+
+    from grownet import published
+    live = run_query(FakeClient(), [], {}, all_studies=True, published=False)
+    payload = json.loads(json.dumps(published.to_payload(live)))          # as the release asset holds it
+    derived = datetime.datetime.fromisoformat(payload["network"]["meta"]["derived_at"])
+
+    def opener(url, timeout):
+        assert url == published.URL
+        return io.BytesIO(json.dumps(payload).encode())
+    in_23_hours = published.fetch_from(opener, now=derived + datetime.timedelta(hours=23))
+    assert in_23_hours["network"].edges == live["network"].edges and in_23_hours["skipped"] == live["skipped"]
+    assert published.fetch_from(opener, now=derived + datetime.timedelta(hours=25)) is None   # a day: live
+    monkeypatch.setattr(published, "fetch",
+                        lambda: published.fetch_from(opener, now=derived + datetime.timedelta(hours=1)))
+    r = run_query(FakeClient(), [], {}, all_studies=True)
+    assert r["published"] == payload["network"]["meta"]["derived_at"] and r["all"]
+    # the published file says how to read it, as the page does (Craig's agent, #96), in JSON and GraphML
+    from grownet.derive import PROVISIONAL
+    from grownet.export import to_graphml
+    assert r["network"].meta["provisional"] == PROVISIONAL and PROVISIONAL in render_result("tok", r)
+    assert "g_provisional" in to_graphml(r["network"]) and "few replicates" in to_graphml(r["network"])
+    assert "derived once a day" in render_result("tok", r)
+    # any other setting derives it live, and so does the command line's --no-published
+    assert "published" not in run_query(FakeClient(), [], {"absence_threshold": 2.0}, all_studies=True)
+    assert "published" not in run_query(FakeClient(), [], {}, all_studies=True, published=False)
+
+
+def test_a_published_file_of_another_format_or_schema_is_not_used():
+    import datetime
+
+    from grownet import published
+    from grownet.model import SCHEMA
+    now = datetime.datetime(2026, 9, 28, 12, tzinfo=datetime.timezone.utc)
+    good = {"format": published.FORMAT, "network": {"schema": SCHEMA,
+                                                     "meta": {"derived_at": "2026-09-28T10:00:00+00:00"}}}
+    assert published.fresh(good, now)
+    assert not published.fresh({**good, "format": "grownet.all_result/v0"}, now)
+    assert not published.fresh({**good, "network": {**good["network"], "schema": "other/v1"}}, now)
+    # a file published before the schema id became grownet's (#102) is derived again, not read
+    assert not published.fresh({**good, "network": {**good["network"],
+                                                    "schema": "crossfeed.interaction_network/v0"}}, now)
+    assert not published.fresh({**good, "network": {**good["network"], "meta": {}}}, now)
