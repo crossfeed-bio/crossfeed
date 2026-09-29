@@ -11,6 +11,9 @@ content.
   protected your PC" warning: the small More info link, and only then Run anyway (as Karoline found on
   Windows). The README and the zip's README.txt say the same, more precisely than before. Signing through
   the SignPath Foundation waits until the project can show the use and trust it asks for.
+- The README's PyPI section no longer offers the pre-release install from the repository, and says to
+  use one install route at a time and what to do when pipx finds a `grownet` command left by an earlier
+  `pip install --user` (found by Karoline).
 
 ## [0.1.0] (2026-09-29)
 
