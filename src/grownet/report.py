@@ -14,6 +14,8 @@ from .mgrowthdb import MGROWTHDB_API, NO_DATABASE_VERSION
 
 
 def _value(key: str, value) -> str:
+    if value is None and key == "max_adjusted_p":
+        return "off"
     if value is None and key.startswith("no_growth_"):
         value = getattr(interaction, key.upper())      # None: the rule's own default
     if value is True:
@@ -103,6 +105,10 @@ def report_text(result: dict) -> str:
     rule = meta.get("no_growth", {})
     lines.append(f"result: {len(shown)} interaction(s), {len(absent)} below the absence threshold "
                  f"(k = {meta.get('absence', {}).get('k', '')}), {hidden} low-quality edge(s) hidden")
+    applied = meta.get("statistics", {}).get("filter", {})
+    if applied.get("max_adjusted_p") is not None:
+        lines.append(f"adjusted p-value filter: interactions above {applied['max_adjusted_p']:g} left out: "
+                     f"{applied.get('left_out', 0)}; kept untested (no p-value): {applied.get('untested', 0)}")
     if rule:
         lines.append(f"no-growth rule: {rule.get('test', '')}; alpha {rule.get('alpha')}, factor "
                      f"{rule.get('factor')}; {rule.get('obligate', 0)} obligate, {rule.get('abolished', 0)} abolished")

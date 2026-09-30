@@ -220,7 +220,8 @@
               "conditions_unverified",
               "stationary_phase_differs",
               "stationary_unchecked",
-              "zero_at_start"
+              "zero_at_start",
+              "untested"
             ]
           }
         },

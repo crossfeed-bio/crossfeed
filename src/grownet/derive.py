@@ -200,6 +200,10 @@ STATIONARY_DIFFERS, STATIONARY_UNCHECKED = "stationary_phase_differs", "stationa
 # an obligate or abolished arc whose set without growth is zero from its first time point: no growth cannot
 # be told from no inoculum or counts below detection (Karoline, 2026-09-28: "Obligate, with a caution")
 ZERO_AT_START = "zero_at_start"
+# With the adjusted p-value filter on, an arc that has no p-value (obligate or abolished: no finite ratio;
+# a single replicate on one side: no spread) cannot be judged by it; it is kept and says so (Karoline,
+# 2026-09-30: "Keep them, labeled untested")
+UNTESTED = "untested"
 
 
 def zero_start_cautions(zero_start, outcome: str) -> list:
@@ -1049,10 +1053,44 @@ PROVISIONAL = ("Each interaction compares a species' growth with and without its
                "any of these results (see docs/METHOD_NOTES.md in the grownet repository).")
 
 
+# Appended to the caution when the filter is on, since the caution then no longer holds: the adjusted p-value
+# decides too
+FILTER_NOTE = (" With the adjusted p-value filter on, an interaction is also left out when its adjusted "
+               "p-value is above {q:g}; arcs without a p-value are kept and marked untested.")
+
+
+def filter_significance(records, max_adjusted_p: float | None = None) -> tuple:
+    """(records, info): the advanced filter on the adjusted p-value, off by default (register item 31).
+
+    Karoline (2026-09-30): "add an advanced option, by default off, that allows filtering arcs on adjusted
+    p-value". With it on, an interaction (status present) whose adjusted p-value is above `max_adjusted_p`
+    is left out and counted, like a low-quality edge ("Left out, counted"); absent and undetermined arcs are
+    not interactions and stay as they are. An arc without a p-value is kept with the caution `untested`.
+    It runs after the adjustment and before merging, so a merged arc rests only on arcs that passed.
+    """
+    info = {"max_adjusted_p": max_adjusted_p, "left_out": 0, "untested": 0}
+    if max_adjusted_p is None:
+        return records, info
+    kept = []
+    for record in records:
+        if record.get("p_value") is None:
+            record["cautions"] = [*record.get("cautions", []), UNTESTED]
+            info["untested"] += 1
+        # adjust_significance gives every record with a p-value its adjusted value, so `significance` is
+        # None here only if the adjustment was skipped: a guard, not a case (Craig's agent, reviewing #106)
+        elif record.get("status") == PRESENT and (record.get("significance") is None
+                                                  or record["significance"] > max_adjusted_p):
+            info["left_out"] += 1
+            continue
+        kept.append(record)
+    return kept, info
+
+
 def output_meta(records, include_low_quality: bool = False, correction: str = "bh",
                 absence_threshold: float = ABSENCE_THRESHOLD, no_growth_alpha: float = None,
                 no_growth_factor: float = None, merge_arcs: bool = False, min_studies: int = 1,
-                merge_genera: bool = False, support_level: str = "species") -> tuple:
+                merge_genera: bool = False, support_level: str = "species",
+                max_adjusted_p: float | None = None) -> tuple:
     """(edges, meta) for writing a network.
 
     Sets each record's `status` from the absence threshold k (None, undetermined, for a low-quality
@@ -1067,13 +1105,20 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
         record["status"] = None if is_low_quality(record) else absence(
             record.get("strength"), record.get("sd"), record.get("outcome"), absence_threshold)
     tests = adjust_significance(records, correction)
+    records, significance_filter = filter_significance(records, max_adjusted_p)
     edges, hidden = select_edges(records, include_low_quality)
+    if max_adjusted_p is not None:
+        hidden["not_significant"] = significance_filter["left_out"]
     edges, merge = merge_parallel(edges, merge_arcs, min_studies)
     edges, genus = merge_genus(edges, merge_genera, support_level)
     statistics = {**STATISTICS, "correction": STATISTICS["correction"].format(name=CORRECTIONS[correction][0]),
-                  "tests": tests}
+                  "tests": tests, "filter": significance_filter}
+    if max_adjusted_p is not None:
+        statistics["role"] = (f"presence is decided by the absence threshold, and an interaction whose adjusted "
+                              f"p-value is above {max_adjusted_p:g} is left out (the adjusted p-value filter)")
     absent = sum(1 for e in edges if e.get("status") == ABSENT)
-    meta = {"provisional": PROVISIONAL, "statistics": statistics,
+    provisional = PROVISIONAL + ("" if max_adjusted_p is None else FILTER_NOTE.format(q=max_adjusted_p))
+    meta = {"provisional": provisional, "statistics": statistics,
             "absence": {"rule": "absent when |log2 mean| < k * sd", "k": absence_threshold, "absent": absent},
             "no_growth": {**rule_meta(no_growth_alpha, no_growth_factor),
                           "obligate": sum(1 for e in edges if e.get("outcome") == OBLIGATE),

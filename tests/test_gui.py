@@ -1,4 +1,5 @@
 """The local page: rendering, the query behind it, and the server routes (a fake client, no live calls)."""
+import html
 import json
 import threading
 import time
@@ -168,12 +169,25 @@ def test_form_hides_every_setting_behind_one_button():
       "only_entered": True, "include_low_quality": True,
       "correction": "bh", "absence_threshold": 1.0, "include_dropout": True, "include_non_batch": False,
       "no_growth_alpha": 0.01, "no_growth_factor": 4.0, "exclude_studies": "SMGDB00000008", "merge_arcs": True,
-      "min_studies": 2, "merge_genera": True}),
+      "min_studies": 2, "merge_genera": True, "max_adjusted_p": None}),
     ({"metric": ["nonsense"], "spike_factor": ["not a number"]},
      {**DEFAULTS, "only_entered": False, "include_dropout": False}),
 ])
 def test_settings_fall_back_to_defaults(form, expected):
     assert parse_settings(form) == expected
+
+
+@pytest.mark.parametrize("form, expected", [
+    ({"max_adjusted_p": ["0.1"]}, None),                          # a value without the tick: still off
+    ({"filter_adjusted_p": ["1"], "max_adjusted_p": ["0.1"]}, 0.1),
+    ({"filter_adjusted_p": ["1"], "max_adjusted_p": ["nonsense"]}, 0.05),
+    ({"filter_adjusted_p": ["1"], "max_adjusted_p": ["5"]}, 0.05),  # not a probability
+    ({"filter_adjusted_p": ["1"], "max_adjusted_p": ["0"]}, 0.05),
+])
+def test_the_adjusted_p_filter_is_off_unless_ticked_and_takes_a_probability(form, expected):
+    # Karoline (2026-09-30): "an advanced option, by default off"; "Settable, 0.05 default"
+    assert DEFAULTS["max_adjusted_p"] is None
+    assert parse_settings(form)["max_adjusted_p"] == expected
 
 
 def test_result_page_lists_arcs_and_download_links():
@@ -565,7 +579,8 @@ def test_the_daily_all_network_is_used_when_fresh_and_the_settings_are_the_defau
     # the published file says how to read it, as the page does (Craig's agent, #96), in JSON and GraphML
     from grownet.derive import PROVISIONAL
     from grownet.export import to_graphml
-    assert r["network"].meta["provisional"] == PROVISIONAL and PROVISIONAL in render_result("tok", r)
+    # escaped on the page: the text comes from a file downloaded from GitHub
+    assert r["network"].meta["provisional"] == PROVISIONAL and html.escape(PROVISIONAL) in render_result("tok", r)
     assert "g_provisional" in to_graphml(r["network"]) and "few replicates" in to_graphml(r["network"])
     assert "derived once a day" in render_result("tok", r)
     # any other setting derives it live, and so does the command line's --no-published
@@ -588,3 +603,37 @@ def test_a_published_file_of_another_format_or_schema_is_not_used():
     assert not published.fresh({**good, "network": {**good["network"],
                                                     "schema": "crossfeed.interaction_network/v0"}}, now)
     assert not published.fresh({**good, "network": {**good["network"], "meta": {}}}, now)
+
+
+def test_the_page_offers_the_adjusted_p_filter_off_and_says_what_it_left_out():
+    # Karoline (2026-09-30): the filter is "by default off", and "the help should motivate why"
+    form = render_form("tok", job="j1")
+    assert 'name="filter_adjusted_p" value="1">' in form
+    assert 'name="max_adjusted_p" type="text" size="6" value="0.05"' in form
+    assert 'href="/help?token=tok&amp;job=j1#statistics"' in form        # the why, keeping the search
+    # and across which data the p-values are corrected (Karoline, 2026-09-30)
+    assert ("across every comparison of this search together: all arcs of all the studies it reads"
+            in " ".join(form.split()))
+    live = run_query(FakeClient(), [], {}, all_studies=True, published=False)
+    tested = [e for e in live["network"].edges if e.status == "present" and e.significance is not None]
+    assert tested, "the fake studies need a tested interaction for this test"
+    r = run_query(FakeClient(), [], {"max_adjusted_p": 1e-12}, all_studies=True, published=False)
+    assert r["hidden"]["not_significant"] == len(tested) and r["settings"]["max_adjusted_p"] == 1e-12
+    assert r["network"].meta["statistics"]["filter"]["left_out"] == len(tested)
+    from grownet.report import report_text
+    page = render_result("tok", r)
+    assert f"Left out by the adjusted p-value filter: {len(tested)} interaction(s)" in page
+    assert "With the adjusted p-value filter on" in page                  # the caution says it decides too
+    assert "adjusted p-value filter: interactions above 1e-12 left out" in report_text(r)
+
+
+def test_a_result_the_filter_emptied_says_so_rather_than_blaming_the_threshold():
+    from grownet.model import InteractionNetwork
+    result = _query()
+    result["hidden"] = {"low_quality": 0, "not_significant": 3}
+    doc = result["network"].to_dict()
+    absent_only = InteractionNetwork.from_dict({**doc, "edges": [{**e, "status": "absent"} for e in doc["edges"]]})
+    page = render_result("tok", {**result, "network": absent_only})
+    assert "<h2>No interactions pass the adjusted p-value filter</h2>" in page
+    empty = render_result("tok", {**result, "network": InteractionNetwork.from_dict({**doc, "edges": []})})
+    assert "The adjusted p-value filter left out all 3 interaction(s)" in empty

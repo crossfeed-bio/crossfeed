@@ -62,9 +62,23 @@ SETTINGS = {
                           "interactions count as present; 0 marks only a mean of exactly zero absent. Absent "
                           "interactions stay in the downloads with status absent."),
     "correction": ("Multiple testing correction", "--correction bh|by",
-                   "How the reported p-values are adjusted for the number of comparisons in one search: "
-                   "Benjamini-Hochberg (default) or the more conservative Benjamini-Yekutieli, which holds "
-                   "under any dependence between tests. The p-values support an edge; they decide nothing."),
+                   "How the p-values of Welch's t-test are adjusted for multiple testing, over every "
+                   "comparison one search tests (every arc of every study it reads, absent and low-quality "
+                   "ones included): Benjamini-Hochberg (default) or the more conservative "
+                   "Benjamini-Yekutieli, which holds under any dependence between tests. The adjusted "
+                   "p-values support an interaction and decide nothing, unless the filter below is on (see "
+                   "How an interaction is decided, above)."),
+    "max_adjusted_p": ("Filter on adjusted p-value", "--max-adjusted-p Q",
+                       "Off by default. When ticked, an interaction whose adjusted p-value is above the "
+                       "threshold (0.05 unless you type another) is left out as well, and the page and the "
+                       "file count how many. Absent and undetermined arcs are not interactions and stay as "
+                       "they are; an arc without a p-value (obligate, abolished, a single replicate) is kept "
+                       "and marked untested; merging uses only the arcs that passed. It is off by default for "
+                       "two reasons: with two or three replicates per side, as in most of mGrowthDB, the test "
+                       "misses many real effects, and an adjusted p-value depends on the other comparisons "
+                       "in the same search, so the same arc can pass in one search and fail in another. "
+                       "Turn it on for a network whose false discovery rate is controlled, at the cost of "
+                       "missing effects (see How an interaction is decided, above)."),
     "spike_factor": ("Spike limit", "--spike-factor F",
                      "A replicate curve with one or two interior points more than F times above both "
                      "neighbors (default 100) is left out and reported, with the other measurements of the "
@@ -146,7 +160,8 @@ EDGE_ATTRIBUTES = {
     "status": "present, absent (below the absence threshold), or empty when undetermined (a single "
               "replicate or a low-quality edge)",
     "p_value": "Welch's t-test on the per-replicate log2 values, unadjusted",
-    "significance": "the p-value adjusted for multiple testing (see the correction setting)",
+    "significance": "the p-value adjusted for multiple testing over every comparison of the search, shown as "
+                    "q (see How an interaction is decided)",
     "outcome": "quantified (a ratio was computed), obligate (the target grows only with the source), "
                "abolished (only without it), or no_growth",
     "metric": "the growth property compared: auc, max, or a growth rate with its rule "
@@ -161,7 +176,8 @@ EDGE_ATTRIBUTES = {
                 "other did not, so its maximum may still be rising), stationary_unchecked (with max: too few "
                 "time points, under 6, to tell), zero_at_start (an obligate or abolished arc whose set without "
                 "growth is zero from its first time point, so no growth cannot be told from no inoculum or "
-                "counts below detection)",
+                "counts below detection), untested (with the adjusted p-value filter on: the arc has no "
+                "p-value, so the filter kept it without judging it)",
     "notes": "other remarks, for example a replicate left out for a spike",
     "evidence": "biculture (monoculture against a two-member co-culture: a direct interaction) or dropout "
                 "(a community against the same community without the source: direct or indirect)",
@@ -332,6 +348,7 @@ def _table(head, rows) -> str:
 
 SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"), ("measures", "Which growth measure"),
             ("example", "Try the example"), ("reading", "Reading the result"),
+            ("statistics", "How an interaction is decided"),
             ("settings", "Advanced settings"), ("attributes", "Arc and node attributes"),
             ("decisions", "Why it works this way"), ("cli", "The command line"),
             ("empty", "No network came back"), ("qa", "Questions and problems"), ("cite", "How to cite"),
@@ -433,8 +450,9 @@ refuses curves the model does not describe, such as two growth phases.</dd>
 <p>Each row is one directed interaction: a source species, the species it affects, the direction, and the
 mean log2 difference with its standard deviation. An interaction counts as present when the effect is at
 least k standard deviations of its own spread, with k the absence threshold. The adjusted p-value is
-shown as support and decides nothing. Results are provisional: with two or three replicates, more
-experiments can change any of them.</p>
+shown as support and decides nothing, unless you switch on the filter on it
+(<a href="#statistics">How an interaction is decided</a>). Results are provisional: with two or three
+replicates, more experiments can change any of them.</p>
 <p>While a search runs, a progress bar shows which study is being read, and the page updates by itself.
 The result then appears under the settings that produced it, so you can change a setting and search
 again. Three buttons sit above the table: <strong>Download network</strong>, with the format (JSON or
@@ -443,6 +461,40 @@ machine, in the legend's style; and <strong>Report</strong>, which opens the det
 search (every setting, every interaction, every pair the data did not support, the sources) and
 downloads them as a text file, with the tool version.</p>
 <p><a href="/legend?token={t}{legend_job}">The legend</a> explains every line, arrowhead and flag.</p>
+
+<h2 id="statistics">How an interaction is decided</h2>
+<p><strong>The effect.</strong> For each arc, the target's growth (the chosen measure) is compared between
+the replicates with the source and the replicates without it: the log2 of each replicate's value, the mean
+on each side, and their difference, the log2 mean. Its standard deviation is its spread over the
+replicates.</p>
+<p><strong>The call.</strong> An interaction is present when |log2 mean| is at least k standard deviations
+(the absence threshold, default 1: the mean plus or minus its sd stays on one side of zero), and absent
+otherwise. It is undetermined when one side has a single replicate, since there is then no spread; it is
+obligate or abolished when the target did not grow on one side, since there is then no finite ratio.</p>
+<p><strong>The p-value.</strong> Every arc with at least two replicates on each side is tested with Welch's
+two-sided t-test on the per-replicate log2 values (<code>p_value</code>). The p-values are adjusted for
+multiple testing over every comparison one search tests: every arc of every study the search reads,
+absent and low-quality ones included, with Benjamini-Hochberg by default or Benjamini-Yekutieli
+(Multiple testing correction). The result is the adjusted p-value (<code>significance</code>, q on the
+page). Arcs without a test have no p-value: a single replicate on a side, obligate and abolished arcs,
+and merged arcs (Merge parallel arcs, Merge to genus), which are merged after the adjustment and have no
+test of their own. The file records the test, the correction and the number of tests in
+<code>meta.statistics</code>.</p>
+<p><strong>Why the p-value does not decide, by default.</strong> First, with two or three replicates per
+side, as in most of mGrowthDB, the test has little power: a large and consistent effect can miss 0.05.
+In September 2026, for example, removing Bacteroides ovatus from the SMGDB00000008 community lowered
+Lachnoclostridium symbiosum about 29-fold (log2 mean -4.85), with an adjusted p-value of 0.052 when the
+study was derived alone. Second, an adjusted p-value depends on the other comparisons in the same search:
+the same arc gets another value when other studies are read alongside it. Deriving all of mGrowthDB
+together, two arcs of SMGDB00000004 passed 0.05 that did not when the study was derived alone, and two of
+SMGDB00000007 failed that passed. The absence threshold judges each arc on its own data only.</p>
+<p><strong>The filter.</strong> Filter on adjusted p-value, in Advanced settings and off by default,
+also leaves out every interaction whose adjusted p-value is above a threshold (0.05 unless you type
+another). Use it for a network whose false discovery rate is controlled, knowing that it misses effects
+the few replicates cannot confirm. The page and the file say how many interactions it left out
+(<code>meta.hidden</code>, <code>meta.statistics.filter</code>). Absent and undetermined arcs stay as they
+are; arcs without a p-value are kept and marked <code>untested</code>, since the filter cannot judge them;
+merging then uses only the arcs that passed.</p>
 
 <h2 id="settings">Advanced settings</h2>
 <p>Every setting has a default that suits most searches. The command line takes the same settings.</p>
@@ -515,6 +567,8 @@ itself are for mGrowthDB, since grownet shows the data as mGrowthDB holds it.</p
 
 
 def _default(value, key: str = "") -> str:
+    if value is None and key == "max_adjusted_p":
+        return "off"
     if value is None and key.startswith("no_growth_"):
         from . import interaction  # None means the rule's own default, read when used
         value = getattr(interaction, key.upper())

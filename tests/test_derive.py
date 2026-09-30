@@ -5,6 +5,7 @@ import pytest
 
 from grownet import interaction
 from grownet.derive import (
+    PROVISIONAL,
     _gs,
     absence,
     adjust_significance,
@@ -284,6 +285,37 @@ def test_significance_is_benjamini_hochberg_over_every_tested_comparison():
     records = [{"p_value": 0.01}, {"p_value": 0.04}, {"p_value": None}, {"p_value": 0.03}, {"p_value": 0.005}]
     assert adjust_significance(records) == 4                # the untested record is not a test
     assert [r.get("significance") for r in records] == pytest.approx([0.02, 0.04, None, 0.04, 0.02])
+
+
+def test_the_adjusted_p_filter_leaves_out_interactions_above_it_and_keeps_untested_arcs():
+    # Karoline (2026-09-30): "an advanced option, by default off, that allows filtering arcs on adjusted
+    # p-value"; failing interactions "Left out, counted"; arcs without a p-value "Keep them, labeled untested"
+    def records():
+        return [{"strength": 1.0, "sd": 0.3, "outcome": "quantified", "quality": [], "p_value": 0.001},
+                {"strength": 1.0, "sd": 0.3, "outcome": "quantified", "quality": [], "p_value": 0.4},
+                {"strength": 0.1, "sd": 0.3, "outcome": "quantified", "quality": [], "p_value": 0.9},
+                {"strength": None, "sd": None, "outcome": "obligate", "quality": [], "p_value": None},
+                {"strength": 1.0, "sd": None, "outcome": "quantified", "quality": ["single_replicate"],
+                 "p_value": None}]
+    edges, meta = output_meta(records())                                  # off by default: nothing moves
+    assert len(edges) == 5 and not any("untested" in e.get("cautions", []) for e in edges)
+    assert "not_significant" not in meta["hidden"] and meta["statistics"]["filter"]["max_adjusted_p"] is None
+    assert meta["provisional"] == PROVISIONAL
+    edges, meta = output_meta(records(), max_adjusted_p=0.05)
+    # the non-significant interaction is left out; the absent arc, the obligate arc and the single
+    # replicate stay, the last two marked untested
+    assert [(e["outcome"], e["status"], e.get("p_value")) for e in edges] == [
+        ("quantified", "present", 0.001), ("quantified", "absent", 0.9), ("obligate", "present", None),
+        ("quantified", None, None)]
+    assert [("untested" in e.get("cautions", [])) for e in edges] == [False, False, True, True]
+    assert meta["hidden"]["not_significant"] == 1
+    assert meta["statistics"]["filter"] == {"max_adjusted_p": 0.05, "left_out": 1, "untested": 2}
+    assert "left out" in meta["statistics"]["role"] and "0.05" in meta["provisional"]
+    # the caution is part of the format: a network carrying it is built and validates (it did not at first,
+    # found by a live derivation of SMGDB00000008)
+    base = {"source": "a", "target": "b", "source_name": "Alpha one", "target_name": "Beta two", "study_id": "S1"}
+    net = records_to_network([{**base, **e} for e in edges], meta=meta)
+    assert net.validate() == [] and ("untested",) in [e.cautions for e in net.edges]
 
 
 def test_output_meta_records_the_statistics_and_the_absence_rule():
