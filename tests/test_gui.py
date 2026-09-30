@@ -611,6 +611,9 @@ def test_the_page_offers_the_adjusted_p_filter_off_and_says_what_it_left_out():
     assert 'name="filter_adjusted_p" value="1">' in form
     assert 'name="max_adjusted_p" type="text" size="6" value="0.05"' in form
     assert 'href="/help?token=tok&amp;job=j1#statistics"' in form        # the why, keeping the search
+    # and across which data the p-values are corrected (Karoline, 2026-09-30)
+    assert ("across every comparison of this search together: all arcs of all the studies it reads"
+            in " ".join(form.split()))
     live = run_query(FakeClient(), [], {}, all_studies=True, published=False)
     tested = [e for e in live["network"].edges if e.status == "present" and e.significance is not None]
     assert tested, "the fake studies need a tested interaction for this test"

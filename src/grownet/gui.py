@@ -170,8 +170,11 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   zero; 0 marks only a mean of exactly zero absent</span></div>
 <div class="row"><label>Multiple testing correction
   <select name="correction">{corrections}</select></label>
-  <span class="muted">how the p-values of Welch's t-test are adjusted, over every comparison this search
-  tests: Benjamini-Hochberg (default) or the more conservative Benjamini-Yekutieli</span></div>
+  <span class="muted">how the p-values of Welch's t-test are adjusted: Benjamini-Hochberg (default) or the
+  more conservative Benjamini-Yekutieli. The adjustment runs across every comparison of this search
+  together: all arcs of all the studies it reads, absent and low-quality ones included, not study by study.
+  So an arc's adjusted p-value can change with the other studies a search reads (All reads every
+  study)</span></div>
 <div class="row"><label><input type="checkbox" name="filter_adjusted_p" value="1"{p_filter}>
   Filter on adjusted p-value, at most
   <input name="max_adjusted_p" type="text" size="6" value="{p_value}"></label>
