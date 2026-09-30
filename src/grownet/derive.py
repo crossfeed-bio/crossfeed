@@ -1076,6 +1076,8 @@ def filter_significance(records, max_adjusted_p: float | None = None) -> tuple:
         if record.get("p_value") is None:
             record["cautions"] = [*record.get("cautions", []), UNTESTED]
             info["untested"] += 1
+        # adjust_significance gives every record with a p-value its adjusted value, so `significance` is
+        # None here only if the adjustment was skipped: a guard, not a case (Craig's agent, reviewing #106)
         elif record.get("status") == PRESENT and (record.get("significance") is None
                                                   or record["significance"] > max_adjusted_p):
             info["left_out"] += 1
