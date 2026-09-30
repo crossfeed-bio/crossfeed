@@ -96,7 +96,7 @@ def _derive(a):
                                                    no_growth_factor=a.no_growth_factor)
             records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold,
                                          a.no_growth_alpha, a.no_growth_factor, a.merge_arcs, a.min_studies,
-                                         a.merge_genera)
+                                         a.merge_genera, max_adjusted_p=a.max_adjusted_p)
             extra["settings"] = {"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
                                  "merge_arcs": a.merge_arcs, "min_studies": a.min_studies,
                                  "merge_genera": a.merge_genera,
@@ -105,7 +105,7 @@ def _derive(a):
                                  "include_low_quality": a.include_low_quality, "correction": a.correction,
                                  "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
                                  "no_growth_alpha": a.no_growth_alpha, "no_growth_factor": a.no_growth_factor,
-                                 "deriver": a.deriver or ""}
+                                 "max_adjusted_p": a.max_adjusted_p, "deriver": a.deriver or ""}
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
             return 1
@@ -153,7 +153,7 @@ def _derive_species(a):
                 "only_entered": not a.all_partners, "exclude_studies": a.exclude_studies,
                 "merge_arcs": a.merge_arcs, "min_studies": a.min_studies, "merge_genera": a.merge_genera,
                 "no_growth_alpha": a.no_growth_alpha,
-                "no_growth_factor": a.no_growth_factor}
+                "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p}
     try:
         result = run_query(MGrowthDBClient(), a.species or [], settings, all_studies=a.all_studies,
                            published=not a.no_published)
@@ -239,6 +239,17 @@ def _emit(a, net, skipped, extra, label, result):
               "yield nothing until a method suited to their design is chosen (see docs/METHOD_NOTES.md).",
               file=sys.stderr)
     return 0
+
+
+def _probability(text: str) -> float:
+    """A threshold for --max-adjusted-p: a number above 0 and at most 1."""
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a number") from None
+    if not 0 < value <= 1:
+        raise argparse.ArgumentTypeError(f"{text} is not a p-value threshold (above 0, at most 1)")
+    return value
 
 
 def _style(a):
@@ -349,8 +360,14 @@ def build_parser() -> argparse.ArgumentParser:
                                "its effect is small against its spread, |log2 mean| < K * sd; default 1, the "
                                "mean plus or minus sd crossing zero; 0 marks only a mean of exactly zero absent")
     settings.add_argument("--correction", choices=["bh", "by"], default="bh",
-                          help="multiple testing correction of the reported p-values: bh (Benjamini-Hochberg, "
-                               "default) or by (Benjamini-Yekutieli)")
+                          help="multiple testing correction of the reported p-values (Welch's t-test on the "
+                               "per-replicate log2 values), over every comparison one derivation tests: bh "
+                               "(Benjamini-Hochberg, default) or by (Benjamini-Yekutieli)")
+    settings.add_argument("--max-adjusted-p", type=_probability, default=None, metavar="Q",
+                          help="also leave out interactions whose adjusted p-value is above Q (for example "
+                               "0.05); arcs without a p-value are kept, marked untested. Off by default: with "
+                               "two or three replicates the test misses many real effects, and an adjusted "
+                               "p-value depends on the other comparisons in the same derivation")
     settings.add_argument("--spike-factor", type=float, default=100.0, metavar="F",
                           help="leave out a growth curve with one or two points F times above both neighbors "
                                "(default 100; 0 keeps every curve)")

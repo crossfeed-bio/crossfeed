@@ -392,13 +392,21 @@ rise, and it does not rise again by more than that later in its measured curve, 
 growth phases (a diauxic shift) followed by a measured second rise does not count; a set follows the
 majority of its replicates (register item 27). `zero_at_start` marks an obligate or abolished edge whose
 set without growth is zero from its first time point, so no growth cannot be told from no inoculum or
-counts below detection. Such an edge keeps its `status` and is exported.
+counts below detection. Such an edge keeps its `status` and is exported. With `--max-adjusted-p`, an arc
+with no p-value carries `untested`: the filter kept it without judging it.
 `notes` inform without disqualifying, for example a replicate left out for an implausible spike. Every
 comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2 values:
 `p_value` is the raw value and `significance` the adjusted one (Benjamini-Hochberg by default,
-Benjamini-Yekutieli with `--correction by`) across all comparisons
-tested in the derivation (`meta.statistics`). The test supports an edge when significant and decides
-nothing: with few replicates, any of these results may change with more experiments. Every derived network
+Benjamini-Yekutieli with `--correction by`) across all comparisons tested in the derivation: one study
+with `derive STUDY`, every study a search reads with `--species`, `--all` or the page, absent and
+low-quality arcs included (`meta.statistics`). Single-replicate, obligate, abolished and merged arcs have
+no test. The test supports an edge when significant and decides nothing, by default: with few
+replicates, any of these results may change with more experiments. `--max-adjusted-p Q` (the page's
+"Filter on adjusted p-value") also leaves out interactions whose adjusted p-value is above Q; arcs
+without a p-value are kept with the caution `untested`, and `meta.hidden.not_significant` counts what was
+left out. It is off by default because with two or three replicates the test misses many real effects,
+and because an adjusted p-value depends on the other comparisons in the same derivation, so the same arc
+can pass in one search and fail in another (register item 31). Every derived network
 carries this caution in `meta.provisional` (a graph attribute in GraphML), the paragraph the page shows
 above its result, so a file read without the page still says how to read it. It belongs to derivations:
 `derive --fixture`, which only formats records it is given, does not add it.
@@ -486,10 +494,9 @@ Single-replicate edges are the exception: they are shown, flagged, and marked by
 
 Each comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2
 values, reported as `p_value` and as `significance`, the adjusted value (Benjamini-Hochberg by default)
-over every
-comparison tested in the derivation (`meta.statistics`). The test supports an edge when significant and
-decides nothing: with two or three replicates a real effect often fails to reach significance, and any of
-these results may change with more experiments.
+over every comparison tested in the derivation (`meta.statistics`). The test supports an edge when
+significant and decides nothing unless `--max-adjusted-p` is given: with two or three replicates a real
+effect often fails to reach significance, and any of these results may change with more experiments.
 
 Two things to read before trusting a magnitude. A species is compared only with itself measured by the
 same species-identifying technique: where a study measures monocultures by flow cytometry and co-cultures

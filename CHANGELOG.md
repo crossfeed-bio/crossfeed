@@ -6,6 +6,19 @@ content.
 
 ## [0.1.1] (unreleased)
 
+### Added
+- Filter on adjusted p-value (`--max-adjusted-p Q`), an advanced setting off by default (register item
+  31): interactions whose adjusted p-value is above the threshold (0.05 unless another is given) are left
+  out and counted (`meta.hidden.not_significant`, `meta.statistics.filter`); absent and undetermined arcs
+  stay; arcs without a p-value (obligate, abolished, a single replicate) are kept with the caution
+  `untested`; merging uses only the arcs that passed. The help says why it is off by default: with two or
+  three replicates the test misses many real effects, and an adjusted p-value depends on the other
+  comparisons in the same search.
+- The help page explains how an interaction is decided, in a section of its own: the effect, the absence
+  threshold, Welch's t-test, the multiple testing correction and its family (every comparison of one
+  search), which arcs have no test, and the filter. The correction setting's text on the page, in the help
+  and on the command line says what the correction runs over.
+
 ### Changed
 - Each release's notes on GitHub open with how to start the Windows program and get past the "Windows
   protected your PC" warning: the small More info link, and only then Run anyway (as Karoline found on

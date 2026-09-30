@@ -770,5 +770,21 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    network for fetching." The workflow publishes `all_report.txt` next to the network; its sources list
    cites every study behind an arc, with its title and DOI.
 
+31. **Filtering on the adjusted p-value** (Karoline, 2026-09-30). Found by comparing grownet with an
+   earlier analysis of three studies (a local audit): that analysis called an interaction only when its
+   adjusted p-value was below 0.05, grownet by the absence threshold alone, so grownet reported more. Her
+   words: "we leave p-value computation and correction as is, it just needs to be better documented.
+   Then, please add an advanced option, by default off, that allows filtering arcs on adjusted p-value.
+   the help should motivate why the filter on adjusted p-value is off by default". So the test (Welch's
+   t-test on the per-replicate log2 values), the correction (Benjamini-Hochberg, or Benjamini-Yekutieli)
+   and its family (every comparison of one derivation, rather than per study, which her agent had
+   suggested) stay as they were. Choosing among her agent's options: the threshold is "Settable, 0.05
+   default" (`--max-adjusted-p Q`); an interaction above it is "Left out, counted"
+   (`meta.hidden.not_significant`); arcs without a p-value (obligate, abolished, a single replicate):
+   "Keep them, labeled untested" (the caution `untested`). The filter runs after the adjustment and
+   before merging. Why it is off by default, as the help says: with two or three replicates per side
+   the test misses many real effects, and an adjusted p-value depends on the other comparisons in the
+   same search.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

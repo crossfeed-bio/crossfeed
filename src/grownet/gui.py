@@ -61,7 +61,11 @@ DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window":
             "include_non_batch": False, "studies": "", "exclude_studies": "", "only_entered": True,
             "merge_arcs": False, "min_studies": 1, "merge_genera": False,
             # None: the no-growth rule's own defaults, read when used (grownet.interaction.grew)
-            "no_growth_alpha": None, "no_growth_factor": None}
+            "no_growth_alpha": None, "no_growth_factor": None,
+            # None: the adjusted p-value filter is off (register item 31)
+            "max_adjusted_p": None}
+# the threshold the filter offers when it is switched on (Karoline, 2026-09-30: "Settable, 0.05 default")
+ADJUSTED_P_DEFAULT = 0.05
 MISMATCH = ("Monoculture and co-culture growth were measured by different techniques in some of these "
             "studies, so neither the magnitude nor, near zero, the direction of those interactions is fully "
             "dependable.")
@@ -117,9 +121,12 @@ def _esc(x) -> str:
 HEADING = f"<span class=\"version\">{html.escape(__version__)}</span>"
 
 
-def _settings_block(settings: dict) -> str:
+def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
     """Every setting, collapsed behind one button. The plain page shows species and a submit button."""
     s = {**DEFAULTS, **settings}
+    why = f"/help?token={_esc(token)}{_esc(_job_suffix(job))}#statistics"
+    p_filter = " checked" if s["max_adjusted_p"] is not None else ""
+    p_value = _esc(s["max_adjusted_p"] if s["max_adjusted_p"] is not None else ADJUSTED_P_DEFAULT)
     checked = " checked" if s["only_entered"] else ""
     low = " checked" if s["include_low_quality"] else ""
     dropout = " checked" if s["include_dropout"] else ""
@@ -163,7 +170,15 @@ def _settings_block(settings: dict) -> str:
   zero; 0 marks only a mean of exactly zero absent</span></div>
 <div class="row"><label>Multiple testing correction
   <select name="correction">{corrections}</select></label>
-  <span class="muted">Benjamini-Hochberg (default) or the more conservative Benjamini-Yekutieli</span></div>
+  <span class="muted">how the p-values of Welch's t-test are adjusted, over every comparison this search
+  tests: Benjamini-Hochberg (default) or the more conservative Benjamini-Yekutieli</span></div>
+<div class="row"><label><input type="checkbox" name="filter_adjusted_p" value="1"{p_filter}>
+  Filter on adjusted p-value, at most
+  <input name="max_adjusted_p" type="text" size="6" value="{p_value}"></label>
+  <span class="muted">also leave out interactions whose adjusted p-value is above this; arcs without a p-value
+  are kept, marked untested. Off by default: with two or three replicates the test misses many real effects,
+  and an adjusted p-value depends on the other comparisons in the same search
+  (<a href="{why}">why</a>)</span></div>
 <div class="row"><label>Spike limit
   <input name="spike_factor" type="text" size="6" value="{_esc(s['spike_factor'])}"></label>
   <span class="muted">leave out a curve with one or two points this many times above both neighbors;
@@ -225,7 +240,7 @@ derived from mGrowthDB growth data on this machine; nothing is uploaded.</p>
 <button type="submit" name="all" value="1">All</button>
 <span class="muted">All ignores the box and derives every study in mGrowthDB, with every partner; it reads
 every study, so it takes longer (half a minute or so).</span></div>
-{_settings_block(settings or {})}
+{_settings_block(settings or {}, token, job)}
 </form>{below}""", token, refresh, job)
 
 
@@ -297,10 +312,13 @@ def _arc_rows(net, edges) -> str:
 
 def _hidden_note(hidden: dict) -> str:
     n = hidden.get("low_quality", 0)
-    if not n:
-        return ""
-    return (f"<p class=\"muted\">Hidden by default: {n} low-quality edge(s). Tick them in Advanced settings "
-            "to show them.</p>")
+    note = "" if not n else (f"<p class=\"muted\">Hidden by default: {n} low-quality edge(s). Tick them in "
+                             "Advanced settings to show them.</p>")
+    if hidden.get("not_significant"):
+        note += (f"<p class=\"muted\">Left out by the adjusted p-value filter: {hidden['not_significant']} "
+                 "interaction(s) whose adjusted p-value is above the threshold. Untick it in Advanced settings "
+                 "to see them.</p>")
+    return note
 
 
 def _mean_sd(mean, sd) -> str:
@@ -391,6 +409,10 @@ def _empty_reason(result: dict) -> str:
         return (f"Everything these studies hold for your species involves a species you did not enter "
                 f"({result['partners_only']} co-culture(s) or interaction(s)). Add the partners, or untick Only "
                 "interactions between the species entered.")
+    if result.get("hidden", {}).get("not_significant"):
+        return (f"The adjusted p-value filter left out all {result['hidden']['not_significant']} interaction(s) "
+                "found: none has an adjusted p-value at or below its threshold. Untick it in Advanced settings "
+                "to see them.")
     if result.get("hidden", {}).get("low_quality"):
         return (f"{result['hidden']['low_quality']} low-quality interaction(s) were found and are hidden; tick "
                 "Show low-quality edges to see them.")
@@ -435,11 +457,15 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
     outputs = _outputs(token, result, bool(net.edges))
     if shown:
         table = (f"<h2>{len(shown)} interaction(s)</h2>{outputs}"
-                 f"<p class=\"note\">{PROVISIONAL}" + (f" {MISMATCH}" if mismatch else "") + "</p>"
+                 f"<p class=\"note\">{_esc(net.meta.get('provisional', PROVISIONAL))}"
+                 + (f" {MISMATCH}" if mismatch else "") + "</p>"
                  f"{hidden}<div class=\"scroll\"><table>{HEADER}{_arc_rows(net, shown)}</table></div>")
     elif net.edges:
-        table = (f"<h2>No interactions above the absence threshold</h2>{outputs}"
-                 f"<p class=\"note\">{PROVISIONAL}</p>{hidden}")
+        filtered = result.get("hidden", {}).get("not_significant")
+        heading = ("No interactions pass the adjusted p-value filter" if filtered
+                   else "No interactions above the absence threshold")
+        table = (f"<h2>{heading}</h2>{outputs}"
+                 f"<p class=\"note\">{_esc(net.meta.get('provisional', PROVISIONAL))}</p>{hidden}")
     else:
         table = (f"<h2>No interactions</h2><p class=\"note\">{_empty_reason(result)} "
                  f"<a href=\"/help?token={_esc(token)}{_esc(_job_suffix(result.get('job', '')))}#empty\">What to "
@@ -504,6 +530,13 @@ def parse_settings(form: dict) -> dict:
             settings[key] = abs(float(form.get(key, [""])[0]))
         except ValueError:
             pass
+    settings["max_adjusted_p"] = None
+    if form.get("filter_adjusted_p"):
+        try:
+            value = abs(float(form.get("max_adjusted_p", [""])[0]))
+        except ValueError:
+            value = ADJUSTED_P_DEFAULT
+        settings["max_adjusted_p"] = value if 0 < value <= 1 else ADJUSTED_P_DEFAULT
     correction = form.get("correction", [""])[0]
     if correction in ("bh", "by"):
         settings["correction"] = correction
@@ -640,7 +673,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
                       "search again")
     records, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"],
                                  s["no_growth_alpha"], s["no_growth_factor"], s["merge_arcs"], s["min_studies"],
-                                 s["merge_genera"], support_level(names))
+                                 s["merge_genera"], support_level(names), s["max_adjusted_p"])
     # every setting the search ran with, so a downloaded network says how it was made (#78, #76)
     net = records_to_network(records, meta={
         "source_db": "mGrowthDB (live)", "query": "all" if all_studies else "species", "species": names,
