@@ -7,6 +7,13 @@ content.
 ## [0.1.1] (unreleased)
 
 ### Changed
+- **Arcs below the absence threshold are left out of every output by default** (Karoline, 2026-10-03), so
+  the page, a downloaded file and a network sent to Cytoscape all hold the same arcs: Cytoscape used to
+  count the absences too, which was confusing. They are still reported, in their own section of the result
+  and in the report, with how many and at which k; `meta.hidden.absent` counts them and
+  `meta.absence.absent` still says how many the threshold marked. The new setting **Include arcs below the
+  absence threshold** (`--include-absent`) puts them back in the file, with `effect_over_sd` on each, for
+  moving the threshold inside Cytoscape.
 - The first advanced setting is **Growth property**, not Growth measure (Karoline, 2026-10-03).
 - The help says plainly that the adjusted p-value is the q-value, in the section on how an interaction is
   decided and in the setting that filters on it, and the page, the report and the legend call it the

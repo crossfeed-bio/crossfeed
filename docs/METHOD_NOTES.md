@@ -23,10 +23,13 @@ counts, outcome, metric, `quality` flags and `notes`.
 - **Presence follows the spread, through the absence threshold k** (option B, Karoline, 2026-09-21): a
   comparison's `status` is `absent` when |log2 mean| < k × sd and `present` otherwise, default k = 1 (the
   mean ± sd rule), k = 0 marking nothing absent. There is no "neutral edge", the absence of an edge is
-  what a sub-threshold comparison is; every tested comparison is exported as an edge with `status`,
-  `weight` (|log2 mean|) and `effect_over_sd` (|log2 mean| / sd), so the threshold can be changed later,
-  including in Cytoscape (item 19). Karoline asked for this to be carefully documented; the README's
-  output-format section is the reference.
+  what a sub-threshold comparison is. Every comparison carries `status`, `weight` (|log2 mean|) and
+  `effect_over_sd` (|log2 mean| / sd). A sub-threshold one is reported in the result and the report but
+  **left out of every output** unless `--include-absent` is given (amended 2026-10-03, Karoline: "The arc
+  number reported in Cytoscape is not identical to the arc number we see because of hidden arcs"), so the
+  page, a file and Cytoscape all count the same arcs; with the setting on, `effect_over_sd` still lets a
+  reader move the threshold in Cytoscape (item 19). Karoline asked for this to be carefully documented;
+  the README's output-format section is the reference.
 - **Low-quality edges are computed and hidden**, with `--include-low-quality` to show them and
   `meta.hidden` counting what was left out (item 21). Single-replicate edges are shown by default and
   marked in the Cytoscape style (Karoline, on #62).
@@ -100,8 +103,9 @@ history of how each was decided.
 13. Output format: **JSON canonical, GraphML on demand**, and a report
 14. Query scope: **a species name resolves to all its strains** in mGrowthDB, and only interactions between
     the species entered are shown unless unticked
-15. Absences of interaction: **exported as edges with `status` absent under threshold k, default 1, hidden
-    by the display** (settled 2026-09-21)
+15. Absences of interaction: **decided by threshold k, default 1; reported in the result and the report,
+    and left out of every output unless asked** (settled 2026-09-21 as exported and hidden by the display;
+    amended 2026-10-03 so that one number holds everywhere, `--include-absent` to export them)
 16. Show low-quality edges: **off** (settled 2026-09-21); computed, flagged, and hidden; single-replicate
     edges are shown and marked
 

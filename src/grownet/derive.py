@@ -937,14 +937,23 @@ def is_hidden_by_default(record) -> bool:
     return any(flag in HIDDEN_BY_DEFAULT for flag in record.get("quality", ()))
 
 
-def select_edges(records, include_low_quality: bool = False) -> tuple:
-    """(edges, hidden) at output. Edges with a flag in HIDDEN_BY_DEFAULT are left out unless asked;
-    `hidden` counts them. Single-replicate edges and absent edges stay in: marking or hiding them is the
-    display's job, so a user can see them."""
-    edges, hidden = [], {"low_quality": 0}
+def select_edges(records, include_low_quality: bool = False, include_absent: bool = False) -> tuple:
+    """(edges, hidden) at output: what every file and the Cytoscape push hold.
+
+    Edges with a flag in HIDDEN_BY_DEFAULT are left out unless asked, and so are edges below the absence
+    threshold (Karoline, 2026-10-03: "The arc number reported in Cytoscape is not identical to the arc
+    number we see because of hidden arcs"). Leaving the absences out keeps one number: what the page
+    shows, what a file holds and what Cytoscape counts are the same. `include_absent` puts them back for a
+    reader who wants to move the threshold in Cytoscape on `effect_over_sd` without deriving again, which
+    is why they were exported before (her option B on #54). Single-replicate edges stay: they are
+    interactions whose spread is unknown, shown and marked. `hidden` counts both kinds.
+    """
+    edges, hidden = [], {"low_quality": 0, "absent": 0}
     for record in records:
         if is_hidden_by_default(record) and not include_low_quality:
             hidden["low_quality"] += 1
+        elif record.get("status") == ABSENT and not include_absent:
+            hidden["absent"] += 1
         else:
             edges.append(record)
     return edges, hidden
@@ -1135,7 +1144,7 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
                 absence_threshold: float = ABSENCE_THRESHOLD, no_growth_alpha: float = None,
                 no_growth_factor: float = None, merge_arcs: bool = False, min_studies: int = 1,
                 merge_genera: bool = False, support_level: str = "species",
-                max_adjusted_p: float | None = None) -> tuple:
+                max_adjusted_p: float | None = None, include_absent: bool = False) -> tuple:
     """(edges, meta) for writing a network.
 
     Sets each record's `status` from the absence threshold k (None, undetermined, for a low-quality
@@ -1151,7 +1160,7 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
             record.get("strength"), record.get("sd"), record.get("outcome"), absence_threshold)
     tests = adjust_significance(records, correction)
     records, significance_filter = filter_significance(records, max_adjusted_p)
-    edges, hidden = select_edges(records, include_low_quality)
+    edges, hidden = select_edges(records, include_low_quality, include_absent)
     if max_adjusted_p is not None:
         hidden["not_significant"] = significance_filter["left_out"]
     edges, merge = merge_parallel(edges, merge_arcs, min_studies)
@@ -1162,14 +1171,16 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
         statistics["role"] = (f"presence is decided by the absence threshold, and an interaction whose "
                               f"q-value (the adjusted p-value) is above {max_adjusted_p:g} is left out "
                               "(the q-value filter)")
-    absent = sum(1 for e in edges if e.get("status") == ABSENT)
+    # how many the threshold marked absent, whether or not they are in the file
+    absent = hidden["absent"] + sum(1 for e in edges if e.get("status") == ABSENT)
     provisional = PROVISIONAL + ("" if max_adjusted_p is None else FILTER_NOTE.format(q=max_adjusted_p))
     meta = {"provisional": provisional, "statistics": statistics,
             "absence": {"rule": "absent when |log2 mean| < k * sd", "k": absence_threshold, "absent": absent},
             "no_growth": {**rule_meta(no_growth_alpha, no_growth_factor),
                           "obligate": sum(1 for e in edges if e.get("outcome") == OBLIGATE),
                           "abolished": sum(1 for e in edges if e.get("outcome") == ABOLISHED)},
-            "filters": {"include_low_quality": include_low_quality}, "hidden": hidden, "merge": merge,
+            "filters": {"include_low_quality": include_low_quality, "include_absent": include_absent},
+            "hidden": hidden, "merge": merge,
             "genus": genus}
     return edges, meta
 

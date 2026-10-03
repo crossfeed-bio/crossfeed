@@ -163,6 +163,16 @@ Rules for this file:
   Obligate and abolished edges are the extremes of each direction, always present, with their own style.
   Low-quality edges are not exported by default. This closes the gap that a tested absence did not reach
   GraphML. The three new edge fields replace `meta.absent` and need Craig's acceptance as a format change.
+- 2026-10-03 (Karoline, amending option B): absent arcs are left out of every output by default. Her
+  words: "The arc number reported in Cytoscape is not identical to the arc number we see because of hidden
+  arcs. This can be confusing", then "maybe do not export hidden arcs (in any network) and only report them
+  in the results", and on the three options offered, "OK, please go for 2": one setting, off by default,
+  across all outputs. So `select_edges` drops them and counts them in `meta.hidden.absent`;
+  `meta.absence.absent` still says how many the threshold marked, whether or not they ship; the page keeps
+  its own section for them (built from the records, not the network) and the report says how many were
+  left out. `--include-absent` and the matching checkbox put them back, which is option B's behavior and
+  what lets a reader retune k in Cytoscape on `effect_over_sd`. Tests that are about other rules pass
+  `include_absent=True` so they keep checking what they claim.
 - 2026-09-21 (Karoline, drop-out designs, #47): experiments are pooled only when they are replicates.
   Her words: "if both experiments are replicates (performed with the same medium and settings) then they
   can be treated as such. if not, these would have to be treated as different arcs, since interactions

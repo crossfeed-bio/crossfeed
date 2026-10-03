@@ -107,7 +107,8 @@ def test_the_command_line_species_search_gives_the_pages_network(monkeypatch, ca
     monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", FakeClient)
     out = tmp_path / "net.json"
     names = ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"]
-    assert main(["derive", "--live", "--species", *names, "--out", str(out)]) == 0
+    # both sides keep the absences, so the comparison is about the arcs, not about the new default
+    assert main(["derive", "--live", "--species", *names, "--out", str(out), "--include-absent"]) == 0
     cli = json.loads(out.read_text(encoding="utf-8"))
     page = json.loads(_query(entries=names)["network"].to_json())
     assert cli["edges"] == page["edges"] and cli["nodes"] == page["nodes"]

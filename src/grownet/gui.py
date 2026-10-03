@@ -28,7 +28,7 @@ from . import published as daily
 from .adapter import condensed, unread
 from .attribution import studies_with_edges
 from .cytoscape import CytoscapeError, send, style_xml
-from .derive import ABSENCE_THRESHOLD, PROVISIONAL, derive_interactions, genus_species, output_meta
+from .derive import ABSENCE_THRESHOLD, ABSENT, PROVISIONAL, derive_interactions, genus_species, output_meta
 from .export import to_graphml
 from .growth import SPIKE_FACTOR
 from .legend import legend_svg
@@ -57,7 +57,8 @@ def metric_name(s: dict) -> str:
 INPUT_EXAMPLES = ("Blautia hydrogenotrophica", "Faecalibacterium duncaniae A2-165", "Bacteroides", "411483")
 DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window": rates.DEFAULT_WINDOW,
             "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
-            "include_low_quality": False, "correction": "bh", "include_dropout": True,
+            "include_low_quality": False, "include_absent": False, "correction": "bh",
+            "include_dropout": True,
             "include_non_batch": False, "studies": "", "exclude_studies": "", "only_entered": True,
             "merge_arcs": False, "min_studies": 1, "merge_genera": False,
             # None: the no-growth rule's own defaults, read when used (grownet.interaction.grew)
@@ -132,6 +133,7 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
     p_value = _esc(s["max_adjusted_p"] if s["max_adjusted_p"] is not None else ADJUSTED_P_DEFAULT)
     checked = " checked" if s["only_entered"] else ""
     low = " checked" if s["include_low_quality"] else ""
+    absent = " checked" if s["include_absent"] else ""
     dropout = " checked" if s["include_dropout"] else ""
     non_batch = " checked" if s["include_non_batch"] else ""
     corrections = "".join(f"<option value=\"{c}\"{' selected' if s['correction'] == c else ''}>{label}</option>"
@@ -158,6 +160,11 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   Show low-quality edges</label>
   <span class="muted">pooled strains, a chemostat curve, or a drop-out whose removed member was still detected;
   single-replicate edges are always shown, flagged</span></div>
+<div class="row"><label><input type="checkbox" name="include_absent" value="1"{absent}>
+  Include arcs below the absence threshold</label>
+  <span class="muted">off by default, so the downloads and Cytoscape hold exactly the interactions this
+  page counts; on, they also carry the arcs the threshold marked absent, which lets you move k in
+  Cytoscape on the effect_over_sd column without searching again</span></div>
 <div class="row"><label><input type="checkbox" name="include_dropout" value="1"{dropout}>
   Include drop-out communities</label>
   <span class="muted">arcs from a community compared with the same community without one member; possibly
@@ -342,15 +349,20 @@ def _mean_sd(mean, sd) -> str:
     return f"{mean:+.2f}" + ("" if sd is None else f" &plusmn; {sd:.2f}")
 
 
-def _absent_section(net, absence: dict) -> str:
-    """Edges below the absence threshold: kept and shown on request, apart from the interactions."""
-    absent = [e for e in net.edges if e.status == "absent"]
+def _absent_section(result: dict, absence: dict) -> str:
+    """Arcs below the absence threshold, reported here whether or not a file holds them."""
+    in_file = [e for e in result["network"].edges if e.status == "absent"]
+    left_out = result.get("absent")
+    net = result["network"] if in_file else left_out
+    absent = in_file or (list(left_out.edges) if left_out else [])
     if not absent:
         return ""
     k = absence.get("k", ABSENCE_THRESHOLD)
+    where = ("Kept in the downloads with status absent; the Cytoscape style hides them by default."
+             if in_file else "Left out of the downloads and of Cytoscape, so every count agrees with this "
+             "page; tick Include arcs below the absence threshold to keep them.")
     return (f"<details><summary>{len(absent)} edge(s) below the absence threshold (k = {k:g})</summary>"
-            f"<p class=\"muted\">|log2 mean| &lt; {k:g} &times; sd: no interaction at this threshold. Kept in the "
-            "downloads with status absent; the Cytoscape style hides them by default.</p>"
+            f"<p class=\"muted\">|log2 mean| &lt; {k:g} &times; sd: no interaction at this threshold. {where}</p>"
             f"<div class=\"scroll\"><table>{HEADER}{_arc_rows(net, absent)}</table></div></details>")
 
 
@@ -431,6 +443,12 @@ def _empty_reason(result: dict) -> str:
     if result.get("hidden", {}).get("low_quality"):
         return (f"{result['hidden']['low_quality']} low-quality interaction(s) were found and are hidden; tick "
                 "Show low-quality edges to see them.")
+    if result.get("hidden", {}).get("absent"):
+        # the comparisons ran and none reached the threshold: say that, not that the data could not be used
+        k = result.get("absence", {}).get("k", ABSENCE_THRESHOLD)
+        return (f"All {result['hidden']['absent']} comparison(s) came out below the absence threshold "
+                f"(k = {k:g}): the species do not affect each other by that rule. They are listed below, "
+                "and a lower k or Include arcs below the absence threshold keeps them in the file.")
     reasons = [reason for _, reason in result["skipped"]]
     only_monocultures = [r for r in reasons if r.startswith("only monocultures")]
     if only_monocultures and len(only_monocultures) == len(result["studies"]):
@@ -484,9 +502,13 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
         table = (f"<h2>{heading}</h2>{outputs}"
                  f"<p class=\"note\">{_esc(net.meta.get('provisional', PROVISIONAL))}</p>{hidden}")
     else:
+        # an arc the threshold or the filter removed is no longer in the network (Karoline, 2026-10-03), so
+        # an empty result says which rule emptied it, and the caution says what that rule does
+        why = net.meta.get("provisional", PROVISIONAL) if result.get("hidden", {}).get("not_significant") else ""
         table = (f"<h2>No interactions</h2><p class=\"note\">{_empty_reason(result)} "
                  f"<a href=\"/help?token={_esc(token)}{_esc(_job_suffix(result.get('job', '')))}#empty\">What to "
-                 f"try</a>.</p>{hidden}{outputs}")
+                 f"try</a>.</p>" + (f"<p class=\"note\">{_esc(why)}</p>" if why else "")
+                 + f"{hidden}{outputs}")
     studies = ", ".join(result["studies"]) or "none"
     skipped = ""
     skips = condensed(result["skipped"])
@@ -497,7 +519,7 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
     errors = "".join(f"<p class=\"note\">{_esc(e)}</p>" for e in result["errors"])
     return (f"<section class=\"result\" id=\"result\">{note}{species_heading}<ul>{resolved}</ul>{unresolved}"
             f"<p class=\"muted\">Studies searched: {_esc(studies)}</p>{errors}{table}"
-            f"{_absent_section(net, result.get('absence', {}))}{_sources(net)}{skipped}</section>")
+            f"{_absent_section(result, result.get('absence', {}))}{_sources(net)}{skipped}</section>")
 
 
 def render_result(token: str, result: dict, message: str = "") -> str:
@@ -530,6 +552,7 @@ def parse_settings(form: dict) -> dict:
     except ValueError:
         pass
     settings["include_low_quality"] = bool(form.get("include_low_quality"))
+    settings["include_absent"] = bool(form.get("include_absent"))
     settings["include_dropout"] = bool(form.get("include_dropout"))
     settings["include_non_batch"] = bool(form.get("include_non_batch"))
     settings["merge_arcs"] = bool(form.get("merge_arcs"))
@@ -688,9 +711,14 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         errors.append(f"{len(failed)} replicate(s) or growth curve(s) could not be read from mGrowthDB "
                       f"(for example {failed[0][0]}: {failed[0][1]}); the result is incomplete, so run the "
                       "search again")
-    records, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"],
-                                 s["no_growth_alpha"], s["no_growth_factor"], s["merge_arcs"], s["min_studies"],
-                                 s["merge_genera"], support_level(names), s["max_adjusted_p"])
+    kept, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"],
+                              s["no_growth_alpha"], s["no_growth_factor"], s["merge_arcs"], s["min_studies"],
+                              s["merge_genera"], support_level(names), s["max_adjusted_p"],
+                              s["include_absent"])
+    # output_meta sets each record's status in place, so the arcs it left out below the threshold are still
+    # here to show in their own section: the page reports them, the file holds what the page counts
+    absent_records = [] if s["include_absent"] else [r for r in records if r.get("status") == ABSENT]
+    records = kept
     # every setting the search ran with, so a downloaded network says how it was made (#78, #76)
     net = records_to_network(records, meta={
         "source_db": "mGrowthDB (live)", "query": "all" if all_studies else "species", "species": names,
@@ -703,7 +731,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
             "all": all_studies, "genera": resolved["genera"],
             "partners_only": partners_only,
             "unresolved": resolved["unresolved"], "taxon_ids": resolved["taxon_ids"], "studies": studies,
-            "network": net,
+            "network": net, "absent": records_to_network(absent_records) if absent_records else None,
             "skipped": skipped, "errors": errors, "hidden": extra["hidden"], "absence": extra["absence"]}
 
 

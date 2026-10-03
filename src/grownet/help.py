@@ -47,6 +47,13 @@ SETTINGS = {
                             "drop-out whose removed member was still detected). They are computed but not "
                             "shown by default, and never read as an absence of interaction. Single-replicate "
                             "edges are always shown, flagged."),
+    "include_absent": ("Include arcs below the absence threshold", "--include-absent",
+                       "Off by default, so a downloaded file and a network sent to Cytoscape hold exactly "
+                       "the interactions this page counts: one number everywhere. The arcs the threshold "
+                       "marked absent are reported in their own section of the result and in the report, "
+                       "with how many there were. Tick it to keep them in the file as well, with status "
+                       "absent: each carries effect_over_sd, the quantity k cuts, so you can move the "
+                       "threshold in Cytoscape on that column without searching again."),
     "include_dropout": ("Include drop-out communities", "--no-dropout",
                         "Arcs from a community compared with the same community without one member. On by "
                         "default; --no-dropout leaves them out. Such an arc says the removed member affects "

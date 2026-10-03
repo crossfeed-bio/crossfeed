@@ -378,9 +378,13 @@ and abolished counts depend on these two numbers, so `meta.no_growth` records th
   `null` (undetermined) whatever
   its numbers, since low quality is never read as an absence; an edge with no spread estimate (a single
   replicate) is one such case and also has no `effect_over_sd`.
-- Absent edges stay in the output. Hiding them is the display's job: the Cytoscape style hides `absent`
-  edges by default, and the local page lists them in their own section. `meta.absence` records the rule,
-  the k used, and how many edges it marked absent.
+- **Absent arcs are left out of every output by default**, so a file and a network sent to Cytoscape hold
+  exactly the interactions that are reported: one number everywhere. They are still reported, in their own
+  section of the page and in the report, and `meta.absence` records the rule, the k used and how many the
+  threshold marked absent, while `meta.hidden.absent` says how many were left out.
+  `--include-absent` (or the matching advanced setting) keeps them in the file with `status` absent; each
+  carries `effect_over_sd`, the quantity k cuts, so a reader can move the threshold in Cytoscape on that
+  column without deriving again.
 
 `quality` lists what makes an edge low quality: `single_replicate` (no spread can be estimated, so such an
 edge carries no `sd`, `se` or test), `strains_pooled` (monocultures of different strains of one species were

@@ -258,20 +258,36 @@ def test_effect_over_sd_is_the_quantity_the_threshold_cuts():
     assert effect_over_sd(None, 0.3) is None
 
 
-def test_absent_edges_stay_in_the_output_and_low_quality_is_left_out_by_default():
-    records = [{"strength": 1.0, "sd": 0.3, "outcome": "quantified", "quality": []},
-               {"strength": 0.1, "sd": 0.3, "outcome": "quantified", "quality": []},
-               {"strength": 1.0, "sd": None, "outcome": "quantified", "quality": ["single_replicate"]},
-               {"strength": 1.0, "sd": 0.3, "outcome": "quantified", "quality": ["strains_pooled"]}]
+def _four_records():
+    return [{"strength": 1.0, "sd": 0.3, "outcome": "quantified", "quality": []},
+            {"strength": 0.1, "sd": 0.3, "outcome": "quantified", "quality": []},
+            {"strength": 1.0, "sd": None, "outcome": "quantified", "quality": ["single_replicate"]},
+            {"strength": 1.0, "sd": 0.3, "outcome": "quantified", "quality": ["strains_pooled"]}]
+
+
+def test_an_absent_edge_is_left_out_of_the_file_and_counted():
+    """Karoline, 2026-10-03: "The arc number reported in Cytoscape is not identical to the arc number we
+    see because of hidden arcs", so the file holds what the page counts, and the rest is reported."""
+    records = _four_records()
     edges, meta = output_meta(records)
-    # the absent edge is still an edge, and a single-replicate edge is shown with its status undetermined
-    # (Karoline, on #62); pooled strains stay hidden
-    assert [e["status"] for e in edges] == ["present", "absent", None]
-    assert meta["hidden"] == {"low_quality": 1}
+    # a single-replicate edge is an interaction whose spread is unknown: shown, status undetermined
+    # (Karoline, on #62); the absent one and the pooled-strain one are left out and counted
+    assert [e["status"] for e in edges] == ["present", None]
+    assert meta["hidden"] == {"low_quality": 1, "absent": 1}
     assert meta["absence"] == {"rule": "absent when |log2 mean| < k * sd", "k": 1.0, "absent": 1}
-    edges, meta = output_meta(records, include_low_quality=True, absence_threshold=0.0)
+    assert meta["filters"]["include_absent"] is False
+
+
+def test_asking_for_the_absent_arcs_puts_them_back():
+    records = _four_records()
+    edges, meta = output_meta(records, include_absent=True)
+    assert [e["status"] for e in edges] == ["present", "absent", None]
+    assert meta["hidden"]["absent"] == 0 and meta["absence"]["absent"] == 1
+    assert meta["filters"]["include_absent"] is True
+    # k = 0 marks nothing absent, so there is nothing to leave out either way
+    edges, meta = output_meta(_four_records(), include_low_quality=True, absence_threshold=0.0)
     assert [e["status"] for e in edges] == ["present", "present", None, None]
-    assert meta["absence"]["absent"] == 0
+    assert meta["absence"]["absent"] == 0 and meta["hidden"]["absent"] == 0
 
 
 def test_a_low_quality_edge_is_never_marked_absent():
@@ -315,11 +331,13 @@ def test_the_adjusted_p_filter_leaves_out_interactions_above_it_and_keeps_untest
                 {"strength": None, "sd": None, "outcome": "obligate", "quality": [], "p_value": None},
                 {"strength": 1.0, "sd": None, "outcome": "quantified", "quality": ["single_replicate"],
                  "p_value": None}]
-    edges, meta = output_meta(records())                                  # off by default: nothing moves
+    # include_absent keeps the absent arc in sight: this test is about the q-value filter, not about which
+    # arcs a file holds (that is test_an_absent_edge_is_left_out_of_the_file_and_counted)
+    edges, meta = output_meta(records(), include_absent=True)             # off by default: nothing moves
     assert len(edges) == 5 and not any("untested" in e.get("cautions", []) for e in edges)
     assert "not_significant" not in meta["hidden"] and meta["statistics"]["filter"]["max_adjusted_p"] is None
     assert meta["provisional"] == PROVISIONAL
-    edges, meta = output_meta(records(), max_adjusted_p=0.05)
+    edges, meta = output_meta(records(), max_adjusted_p=0.05, include_absent=True)
     # the non-significant interaction is left out; the absent arc, the obligate arc and the single
     # replicate stay, the last two marked untested
     assert [(e["outcome"], e["status"], e.get("p_value")) for e in edges] == [
@@ -339,16 +357,16 @@ def test_the_adjusted_p_filter_leaves_out_interactions_above_it_and_keeps_untest
 def test_output_meta_records_the_statistics_and_the_absence_rule():
     client, study, exps = _replicate_study()
     records, _ = interactions_from_replicates(client, study, exps)
-    edges, meta = output_meta(records)
+    edges, meta = output_meta(records, include_absent=True)
     status = {e["source_name"]: e["status"] for e in edges}
-    assert status == {B: "present", A: "absent"}                        # both are edges
+    assert status == {B: "present", A: "absent"}                        # both are edges when asked for
     assert meta["statistics"]["tests"] == 2 and "Benjamini-Hochberg" in meta["statistics"]["correction"]
     assert meta["absence"]["absent"] == 1
-    _, conservative = output_meta(records, correction="by")
+    _, conservative = output_meta(records, correction="by", include_absent=True)
     assert "Benjamini-Yekutieli" in conservative["statistics"]["correction"]
     # the no-growth rule's numbers travel with the network, since the obligate count depends on them (#37)
     assert (meta["no_growth"]["alpha"], meta["no_growth"]["obligate"], meta["no_growth"]["abolished"]) == (0.0, 0, 0)
-    _, chosen = output_meta(records, no_growth_alpha=0.01, no_growth_factor=4.0)
+    _, chosen = output_meta(records, no_growth_alpha=0.01, no_growth_factor=4.0, include_absent=True)
     assert (chosen["no_growth"]["alpha"], chosen["no_growth"]["factor"]) == (0.01, 4.0)
 
 
@@ -439,7 +457,7 @@ def test_a_dropout_design_gives_the_hand_computed_arcs():
 def test_dropout_arcs_share_the_absence_rule_and_the_network_contract():
     client, study, exps = _dropout_study()
     records, _ = interactions_from_replicates(client, study, exps)
-    edges, _ = output_meta(records)
+    edges, _ = output_meta(records, include_absent=True)     # the test is about the rule, not the file
     status = {(e["source_name"], e["target_name"]): e["status"] for e in edges}
     # |mean| against k = 1 times sd: C -> A 1 vs 1 is not below, so present; B -> A 0 vs 1 absent;
     # C -> B has mean 0 (absent); B -> C 2 against sd sqrt(0.5 + 0.5) = 1 present
@@ -509,7 +527,7 @@ def test_the_removed_member_is_ignored_when_absent_and_flags_the_arcs_when_detec
         assert arcs[(C, target)]["quality"] == ["removed_member_detected"]
         assert any("without C_1" in note and C in note for note in arcs[(C, target)]["notes"])
     assert arcs[(B, A)]["quality"] == []                        # the other drop-out is unaffected
-    edges, meta = output_meta(records)
+    edges, meta = output_meta(records, include_absent=True)   # about the flag, not which arcs ship
     assert meta["hidden"]["low_quality"] == 2 and len(edges) == 2
 
 
@@ -524,7 +542,7 @@ def test_three_replicates_carry_no_caution_and_a_caution_does_not_hide_an_edge()
     assert all(r["cautions"] == [] for r in records)
     client, study, exps = _replicate_study()
     records, _ = interactions_from_replicates(client, study, exps)
-    edges, meta = output_meta(records)
+    edges, meta = output_meta(records, include_absent=True)
     assert len(edges) == 2 and meta["hidden"]["low_quality"] == 0
     assert {e["status"] for e in edges} == {"present", "absent"}   # cautioned edges keep their status
 
@@ -1018,7 +1036,7 @@ def test_a_chemostat_study_derives_with_max_and_the_arcs_say_so():
         assert "continuous_culture" in record["cautions"]      # shown, with the mode named
         assert record["quality"] == []                         # not low quality: the comparison holds
     assert not any("excluded by default" in reason for _, reason in skipped)
-    edges, meta = output_meta(records)
+    edges, meta = output_meta(records, include_absent=True)
     assert len(edges) == 2 and meta["hidden"]["low_quality"] == 0
 
 

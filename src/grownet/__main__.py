@@ -96,7 +96,8 @@ def _derive(a):
                                                    no_growth_factor=a.no_growth_factor)
             records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold,
                                          a.no_growth_alpha, a.no_growth_factor, a.merge_arcs, a.min_studies,
-                                         a.merge_genera, max_adjusted_p=a.max_adjusted_p)
+                                         a.merge_genera, max_adjusted_p=a.max_adjusted_p,
+                                         include_absent=a.include_absent)
             extra["settings"] = {"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
                                  "merge_arcs": a.merge_arcs, "min_studies": a.min_studies,
                                  "merge_genera": a.merge_genera,
@@ -148,6 +149,7 @@ def _derive_species(a):
     settings = {**DEFAULTS, "metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
                 "spike_factor": a.spike_factor,
                 "absence_threshold": a.absence_threshold, "include_low_quality": a.include_low_quality,
+                "include_absent": a.include_absent,
                 "correction": a.correction, "include_dropout": not a.no_dropout,
                 "include_non_batch": a.include_non_batch, "studies": a.study or "",
                 "only_entered": not a.all_partners, "exclude_studies": a.exclude_studies,
@@ -224,9 +226,12 @@ def _emit(a, net, skipped, extra, label, result):
             print(f"  - {label}: {reason}", file=sys.stderr)
     if extra:
         if extra["absence"]["absent"]:
-            print(f"\n{extra['absence']['absent']} edge(s) have status absent (|log2 mean| < "
-                  f"{extra['absence']['k']:g} * sd); they are in the file, and the Cytoscape style hides them "
-                  "by default.", file=sys.stderr)
+            left_out = extra["hidden"].get("absent", 0)
+            where = ("left out of the network, so the file holds the interactions it reports; keep them with "
+                     "--include-absent" if left_out else "in the file, with status absent")
+            print(f"\n{extra['absence']['absent']} comparison(s) came out below the absence threshold "
+                  f"(|log2 mean| < {extra['absence']['k']:g} * sd): {where}. The report lists them.",
+                  file=sys.stderr)
         if extra["hidden"]["low_quality"]:
             print(f"{extra['hidden']['low_quality']} low-quality edge(s) hidden; show them with "
                   "--include-low-quality.", file=sys.stderr)
@@ -344,6 +349,11 @@ def build_parser() -> argparse.ArgumentParser:
     settings.add_argument("--metric", choices=["auc", "max", "growth_rate"], default="auc",
                           help="the growth property compared: auc, the area under the curve (default); max, the "
                                "maximal abundance; or growth_rate, the maximum specific growth rate")
+    settings.add_argument("--include-absent", action="store_true",
+                          help="also write the arcs below the absence threshold, which are left out so that "
+                               "the file and Cytoscape hold exactly the interactions that are reported; they "
+                               "carry status absent and effect_over_sd, so a reader can move k in Cytoscape "
+                               "without deriving again")
     settings.add_argument("--include-low-quality", action="store_true",
                           help="also show low-quality interactions (pooled strains, a chemostat curve, a "
                                "drop-out whose removed member was still detected); single-replicate ones are "

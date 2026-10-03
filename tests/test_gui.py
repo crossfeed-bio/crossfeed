@@ -94,6 +94,10 @@ class FakeClient:
 
 
 def _query(entries=("Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"), **settings):
+    # the fake study's second arc is absent, and a file holds absences only when asked (Karoline,
+    # 2026-10-03). Tests about everything else keep both arcs in view; the default is checked in
+    # test_the_file_holds_what_the_page_counts.
+    settings = {"include_absent": True, **settings}
     return run_query(FakeClient(), list(entries), settings)
 
 
@@ -167,7 +171,7 @@ def test_form_hides_every_setting_behind_one_button():
       "no_growth_factor": ["4"], "exclude_studies": [" SMGDB00000008 "], "merge_arcs": ["1"], "min_studies": ["2"],
       "merge_genera": ["1"]},
      {"metric": "growth_rate", "rate_method": "baranyi", "rate_window": 7, "spike_factor": 50.0, "studies": "S1",
-      "only_entered": True, "include_low_quality": True,
+      "only_entered": True, "include_low_quality": True, "include_absent": False,
       "correction": "bh", "absence_threshold": 1.0, "include_dropout": True, "include_non_batch": False,
       "no_growth_alpha": 0.01, "no_growth_factor": 4.0, "exclude_studies": "SMGDB00000008", "merge_arcs": True,
       "min_studies": 2, "merge_genera": True, "max_adjusted_p": None}),
@@ -261,7 +265,8 @@ def test_server_serves_the_form_and_runs_a_search(server):
         page = r.read().decode("utf-8")
     assert "interaction(s)" in page and "facilitation" in page
     doc = json.loads(_get(f"{base}/download.json?token={token}"))
-    assert [e["status"] for e in doc["edges"]] == ["present", "absent"]    # the absent edge is kept
+    # the file holds what the page counts: the absent arc is left out and reported (Karoline, 2026-10-03)
+    assert [e["status"] for e in doc["edges"]] == ["present"]
     assert doc["meta"]["absence"]["k"] == 1.0 and doc["meta"]["statistics"]["tests"] == 2
     assert ET.fromstring(_get(f"{base}/download.graphml?token={token}")) is not None
 
@@ -352,7 +357,7 @@ def test_a_species_entered_under_its_new_name_still_matches_the_study_that_uses_
     index = {"faecalibacterium duncaniae": {853: "Faecalibacterium duncaniae A2-165"},
              "blautia hydrogenotrophica": {53443: B}}
     r = run_query(FakeClient(), ["Faecalibacterium duncaniae", "Blautia hydrogenotrophica"],
-                  {"only_entered": True}, index=index)
+                  {"only_entered": True, "include_absent": True}, index=index)
     assert r["taxon_ids"] == [853, 53443]
     assert len(r["network"].edges) == 2          # the study names the strain prausnitzii, the ids agree
 
@@ -373,7 +378,8 @@ def test_the_send_to_cytoscape_button_uses_the_network_already_computed(server, 
     monkeypatch.setattr(gui, "send", fake_send)
     with urllib.request.urlopen(f"{base}/cytoscape?token={token}", data=b"", timeout=10) as r:
         page = r.read().decode("utf-8")
-    assert "Sent to Cytoscape: network 7" in page and sent["edges"] == 2   # not recomputed, the same net
+    # one arc: the page counts one interaction, and Cytoscape gets exactly that (Karoline, 2026-10-03)
+    assert "Sent to Cytoscape: network 7" in page and sent["edges"] == 1
 
 
 def test_cytoscape_not_running_is_explained_on_the_page(server, monkeypatch):
@@ -453,7 +459,8 @@ def test_a_strain_is_named_by_its_current_name():
     from grownet.taxonomy import SpeciesIndex
     index = SpeciesIndex({"faecalibacterium prausnitzii": {853: A}, "blautia hydrogenotrophica": {53443: B}},
                          current={853: "Faecalibacterium duncaniae A2-165"})
-    r = run_query(FakeClient(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"], {}, index=index)
+    r = run_query(FakeClient(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"],
+                  {"include_absent": True}, index=index)
     node = r["network"].nodes["ncbi:853"]
     assert (node.name, node.species) == ("Faecalibacterium duncaniae A2-165", "faecalibacterium duncaniae")
     assert r["resolved"][0] == ("Faecalibacterium prausnitzii", {853: "Faecalibacterium duncaniae A2-165"})
