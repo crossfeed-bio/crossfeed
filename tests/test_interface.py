@@ -12,6 +12,10 @@ And later the same day: "Now that we have an example button, please keep the inp
 above the input field should list the options (Species, strains or NCBI identifiers) and, in a row below in
 smaller font size, give a few examples (but keep the input field empty)."
 
+And on 2026-10-03: "if p & q-values were not computed, they are missing value (probably safer than empty);
+not 0, as discussed. Small change in the header of the Result table: instead of Direction, use Sign, since
+direction is misleading (direction of the arc)."
+
 A test here failing means one of those requirements broke. Change the requirement with Karoline, not the
 test.
 """
@@ -359,3 +363,42 @@ def test_the_help_page_offers_the_cytoscape_style_as_a_download():
         assert body == style_xml()                                    # the same file `grownet style` writes
     finally:
         server.shutdown()
+
+
+def test_the_result_table_says_sign_not_direction(server):
+    """Karoline, 2026-10-03: "instead of Direction, use Sign, since direction is misleading (direction of
+    the arc)". The arc's direction is the arrow from the source to the species it affects."""
+    base, token = server
+    page = _finished(base, token)
+    header = re.search(r"<tr><th>source</th>.*?</tr>", page, re.S).group(0)
+    assert "<th>sign</th>" in header and "direction" not in header
+
+
+def test_a_number_that_was_not_computed_reads_as_missing_not_blank_or_zero(server):
+    """Karoline, 2026-10-03: "if p & q-values were not computed, they are missing value (probably safer
+    than empty); not 0". The fake study's obligate arc has no test and no ratio."""
+    base, token = server
+    _finished(base, token)
+    _, as_json, _ = _open(f"{base}/download?token={token}&format=json")
+    edges = json.loads(as_json)["edges"]
+    for edge in edges:
+        if edge.get("p_value") is None:        # missing, never zero
+            assert edge["q_value"] is None and edge["significance"] is None
+        else:
+            assert edge["q_value"] is not None and edge["significance"] is not None
+    # and the page says so in words rather than leaving the cell blank: an obligate arc has no test
+    row = gui._arc_rows(*_untested_arc())
+    cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)
+    mean, over_sd, q = cells[3], cells[4], cells[6]      # log2 mean, |mean| / sd, q
+    assert "no ratio" in mean and "not computed" in over_sd and "not computed" in q
+    assert all(cell.strip() for cell in (mean, over_sd, q))
+
+
+def _untested_arc():
+    """(network, edges) holding one obligate arc: no test, no ratio, nothing to put in those cells."""
+    from grownet.mgrowthdb import records_to_network
+    records = [{"source": "ncbi:1", "target": "ncbi:2", "source_name": "Alpha one", "target_name": "Beta two",
+                "effect": "facilitation", "strength": None, "weight": None, "status": "present",
+                "outcome": "obligate", "study_id": "S1"}]
+    net = records_to_network(records)
+    return net, net.edges

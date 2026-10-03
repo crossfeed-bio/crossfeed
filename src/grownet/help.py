@@ -449,7 +449,7 @@ refuses curves the model does not describe, such as two growth phases.</dd>
 <a href="#cli">command line</a> section runs the same search.</p>
 
 <h2 id="reading">Reading the result</h2>
-<p>Each row is one directed interaction: a source species, the species it affects, the direction, and the
+<p>Each row is one directed interaction: a source species, the species it affects, the sign, and the
 mean log2 difference with its standard deviation. An interaction counts as present when the effect is at
 least k standard deviations of its own spread, with k the absence threshold. The adjusted p-value is
 shown as support and decides nothing, unless you switch on the filter on it

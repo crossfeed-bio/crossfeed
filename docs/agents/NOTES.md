@@ -432,6 +432,14 @@ or `meta.no_growth` will misstate the rule. The paired test is not uniformly str
 the ratios vary more across replicates than the raw values do, its p is larger (SMGDB00000013, Comamonas
 in co-culture: Welch 0.02, paired 0.07).
 
+## Missing numbers, and the sign column
+
+A number the derivation did not compute is missing everywhere, never 0 and never a blank cell (Karoline,
+2026-10-03): `null` in the neutral JSON, left out of GraphML and of the Cytoscape payload (with the column
+declared, see below), and written as "not computed" on the page. A comparison with no ratio (obligate,
+abolished) reads "no ratio" there. The result table's third column is "sign", since "direction" belongs to
+the arc itself. Both are pinned in `tests/test_interface.py`, which quotes her.
+
 ## The three numbers of the test
 
 `p_value` is Welch's raw value, `q_value` is that value corrected for multiple testing over every

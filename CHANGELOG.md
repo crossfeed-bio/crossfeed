@@ -7,6 +7,12 @@ content.
 ## [0.1.1] (unreleased)
 
 ### Changed
+- The result table's third column is **sign**, not direction: an arc already has a direction, from the
+  source to the species it affects (Karoline, 2026-10-03).
+- A number the derivation never computed reads as **not computed** on the page, and a comparison with no
+  ratio (obligate, abolished) reads as **no ratio**, rather than leaving the cell blank. In the file and in
+  Cytoscape such a number stays missing: null in JSON, left out of GraphML and of what Cytoscape is sent,
+  never 0 (Karoline, 2026-10-03).
 - **`significance` is now -log10 of the q-value, and the corrected p-value has its own field, `q_value`**
   (Karoline, 2026-10-03). Before, `significance` held the corrected p-value itself, so the name ran
   against the number: larger looked stronger and was weaker, and a continuous Cytoscape mapping on it was

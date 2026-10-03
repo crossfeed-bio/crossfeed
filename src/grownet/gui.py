@@ -275,7 +275,9 @@ def render_about(token: str, job: str = "") -> str:
     return _page(_back(token, job, top=True) + help_page.render_about() + _back(token, job), token, job=job)
 
 
-HEADER = ("<tr><th>source</th><th>affects</th><th>direction</th><th>log2 mean &plusmn; sd</th>"
+# "sign" rather than "direction": the arc already has a direction, from the source to the species it
+# affects, so the word was taken (Karoline, 2026-10-03)
+HEADER = ("<tr><th>source</th><th>affects</th><th>sign</th><th>log2 mean &plusmn; sd</th>"
           "<th>|mean| / sd</th><th>replicates with / without</th><th>q</th><th>condition</th>"
           "<th>remarks</th><th>study</th></tr>")
 
@@ -289,8 +291,13 @@ def _direction(e) -> str:
     return e.effect
 
 
-def _number(x, fmt: str) -> str:
-    return "" if x is None else format(x, fmt)
+# A number that was never computed is missing, not zero and not blank: a blank cell reads as an oversight,
+# and zero would read as the strongest possible q-value (Karoline, 2026-10-03). The page says so in words.
+MISSING = "<span class=\"muted\" title=\"not computed for this arc\">not computed</span>"
+
+
+def _number(x, fmt: str, missing: str = "") -> str:
+    return missing if x is None else format(x, fmt)
 
 
 def _arc_rows(net, edges) -> str:
@@ -306,9 +313,9 @@ def _arc_rows(net, edges) -> str:
                     f"<td>{_esc(net.nodes[e.target].name or e.target)}</td>"
                     f"<td class=\"{sign}\">{_esc(_direction(e))}</td>"
                     f"<td class=\"nowrap\">{_mean_sd(e.strength, e.sd)}</td>"
-                    f"<td>{_number(e.effect_over_sd, '.2f')}</td>"
+                    f"<td>{_number(e.effect_over_sd, '.2f', MISSING)}</td>"
                     f"<td>{_esc(_number(e.n_with, 'd'))} / {_esc(_number(e.n_without, 'd'))}</td>"
-                    f"<td>{_number(e.q_value, '.3g')}</td><td>{_esc(e.condition)}</td>"
+                    f"<td>{_number(e.q_value, '.3g', MISSING)}</td><td>{_esc(e.condition)}</td>"
                     f"<td>{remarks}</td><td>{_esc(' '.join(e.study_ids))}</td></tr>")
     return "".join(rows)
 
@@ -326,7 +333,8 @@ def _hidden_note(hidden: dict) -> str:
 
 def _mean_sd(mean, sd) -> str:
     if mean is None:
-        return ""
+        # obligate and abolished arcs have no ratio by construction, which is a result, not a gap
+        return "<span class=\"muted\" title=\"one side did not grow, so there is no ratio\">no ratio</span>"
     return f"{mean:+.2f}" + ("" if sd is None else f" &plusmn; {sd:.2f}")
 
 
