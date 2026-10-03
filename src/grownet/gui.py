@@ -110,7 +110,10 @@ def _page(body: str, token: str = "", refresh: str = "", job: str = "") -> str:
     return ("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
             f"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{TITLE}</title>"
             f"{reload}<link rel=\"icon\" href=\"data:image/svg+xml;utf8,{icon}\">"
-            f"<style>{brand.CSS}</style></head><body><div class=\"app\">{header}<main>{body}</main></div>"
+            f"<style>{brand.CSS}</style></head><body><div class=\"app\">{header}"
+            # the name is all lowercase, so in prose it is marked as a name (Karoline, 2026-10-03); the
+            # header's wordmark, commands and the title are left alone by in_prose
+            f"<main>{brand.in_prose(body)}</main></div>"
             "</body></html>\n")
 
 

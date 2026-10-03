@@ -432,6 +432,16 @@ or `meta.no_growth` will misstate the rule. The paired test is not uniformly str
 the ratios vary more across replicates than the raw values do, its p is larger (SMGDB00000013, Comamonas
 in co-culture: Welch 0.02, paired 0.07).
 
+## The name in running text
+
+`brand.NAME_HTML` and `brand.in_prose` mark the name as a name wherever it stands in a sentence: the
+wordmark's two parts a step lighter, applied by `gui._page` to every page body (Karoline, 2026-10-03:
+"please use a special style for grownet, so sentences starting with it don't look strange"). `in_prose`
+walks the markup and leaves `code`, `pre`, `title`, `script`, `style`, `textarea`, `option` and `a` alone,
+so commands, paths, the document title and link labels stay plain; a link is colored already, and the
+name's green inside one reads as a smudge. In the README the same job is done with bold, in prose only.
+A test in `tests/test_help.py` pins both halves.
+
 ## Continuous culture and the metric
 
 Chemostat and serial dilution experiments are derived when the metric is one that suits them, which today

@@ -8,7 +8,7 @@
 [mGrowthDB](https://mgrowthdb.gbiomed.kuleuven.be/) into directed interaction networks, in a neutral and
 openly citable format that downstream tools (such as Syntropa and microbetag) can consume.
 
-grownet was called crossfeed until 2026-09-27 (#71). The package, the module and the command are
+**grownet** was called crossfeed until 2026-09-27 (#71). The package, the module and the command are
 `grownet`; the repository keeps the old name for now, so its address is still `crossfeed-bio/crossfeed`.
 
 It is a thin client: it pulls from mGrowthDB and emits a network. Nothing to host, nothing to pay for on a
@@ -55,7 +55,7 @@ The zip's `README.txt` says the same, for whoever unzips it.
 ### With uv (macOS, Linux and Windows)
 
 The quickest route is [uv](https://docs.astral.sh/uv/), which fetches a suitable Python by itself. The
-Python that ships with macOS (3.9) is too old for grownet, and uv avoids that. Install uv once:
+Python that ships with macOS (3.9) is too old for **grownet**, and uv avoids that. Install uv once:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -100,7 +100,7 @@ From a clone, with Python 3.10 or newer: the setup and the checks are in
 
 From a clone of the repository, run the first slice offline, from the synthetic fixture in
 `tests/fixtures` (no network), to see a network. The fixture is part of the repository, not of an
-installed grownet, so after an install use the live commands below instead.
+installed **grownet**, so after an install use the live commands below instead.
 
 ```
 python -m grownet derive SMGDB00000004 --fixture tests/fixtures/example_interactions.json
@@ -123,7 +123,7 @@ python -m grownet validate network.json
 
 ## What it does
 
-Given a set of query organisms, grownet builds an interaction network on the fly from mGrowthDB
+Given a set of query organisms, **grownet** builds an interaction network on the fly from mGrowthDB
 co-growth measurements. Each edge is a directed, condition-specific interaction (facilitation, inhibition,
 or neutral) with its strength, its significance, and the experimental condition it holds in. Every edge
 carries its provenance: the study or studies it was derived from, so attribution resolves at the edge
@@ -191,7 +191,7 @@ python -m grownet gui
 The tool version shows next to its name, and a Help page introduces the idea (after Gause, with a figure), explains every advanced setting and arc
 attribute, the main design decisions, the command line, what to do when no network comes back, and where
 to report a problem; an About page says who built it and links this repository. Type species names (or NCBI taxon ids, or a genus for all its species), one per line, and press "Find
-interactions", or press All to derive every study in mGrowthDB. grownet resolves
+interactions", or press All to derive every study in mGrowthDB. **grownet** resolves
 the names to taxon ids from mGrowthDB's own strain records, finds the studies holding them, derives the
 interactions, and shows them as a table with downloads for JSON and GraphML. Every setting sits behind
 "Advanced settings" with the same defaults the command line uses.
@@ -540,7 +540,7 @@ Report it privately (see [SECURITY.md](SECURITY.md)), not in a public issue.
 
 ## Attribution and data governance
 
-mGrowthDB is open, so grownet pulls from it directly. Per-study licenses are respected by citing every
+mGrowthDB is open, so **grownet** pulls from it directly. Per-study licenses are respected by citing every
 study that supports a network at the edge level, rather than bundling. Unpublished collaborator data is
 used only for the agreed analysis and is never ingested into any downstream corpus. See
 [docs/DATA_GOVERNANCE.md](docs/DATA_GOVERNANCE.md).

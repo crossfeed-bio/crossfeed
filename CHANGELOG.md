@@ -7,6 +7,9 @@ content.
 ## [0.1.1] (unreleased)
 
 ### Changed
+- The tool's name is marked as a name in running text, on the page, in the help and in the README, since it
+  is all lowercase and a sentence starting with it read like a typo (Karoline, 2026-10-03). Commands,
+  paths, link labels and the page title keep it plain.
 - The help page explains how a continuous culture is treated, in "Which growth measure": derived with max
   and marked `continuous_culture`, left out with an area under the curve or a growth rate and why, what
   the setting does then, that a comparison never mixes modes, and that no study in mGrowthDB holds such a

@@ -1,6 +1,7 @@
 """The local page: rendering, the query behind it, and the server routes (a fake client, no live calls)."""
 import html
 import json
+import re
 import threading
 import time
 import urllib.error
@@ -241,6 +242,11 @@ def server():
     httpd.shutdown()
 
 
+def visible(page: str) -> str:
+    """The page as a reader sees it: the name carries markup in prose, so assertions on sentences use this."""
+    return re.sub(r"<[^>]+>", "", page)
+
+
 def _get(url):
     with urllib.request.urlopen(url, timeout=10) as r:
         return r.read().decode("utf-8")
@@ -317,8 +323,9 @@ def test_the_about_button_names_the_builders_as_agreed_and_links_the_repository(
     assert f'href="/about?token={token}"' in _get(f"{base}/help?token={token}")    # on every page
     page = _get(f"{base}/about?token={token}")
     # Craig's agreed wording on #80, word for word
+    # the name carries its own markup in prose (brand.in_prose), so the sentence is read as a reader sees it
     assert ("grownet was built by Karoline Faust (KU Leuven) and Craig Heilmann (Syntropa), working through "
-            "their AI coding agents (Claude).") in page
+            "their AI coding agents (Claude).") in visible(page)
     assert '<a href="https://github.com/crossfeed-bio/crossfeed">' in page and f"Version {__version__}" in page
     with pytest.raises(urllib.error.HTTPError) as bad:
         _get(f"{base}/about?token=wrong")
@@ -580,7 +587,9 @@ def test_the_daily_all_network_is_used_when_fresh_and_the_settings_are_the_defau
     from grownet.derive import PROVISIONAL
     from grownet.export import to_graphml
     # escaped on the page: the text comes from a file downloaded from GitHub
-    assert r["network"].meta["provisional"] == PROVISIONAL and html.escape(PROVISIONAL) in render_result("tok", r)
+    assert r["network"].meta["provisional"] == PROVISIONAL
+    # the sentence names the tool, which carries markup in prose, so it is read as a reader sees it
+    assert PROVISIONAL in html.unescape(visible(render_result("tok", r)))
     assert "g_provisional" in to_graphml(r["network"]) and "few replicates" in to_graphml(r["network"])
     assert "derived once a day" in render_result("tok", r)
     # any other setting derives it live, and so does the command line's --no-published
