@@ -503,12 +503,18 @@ def test_without_report_growth_rates_there_are_no_rates_and_no_glv_button(server
     assert "tick Report growth rates" in answer
 
 
-def test_the_growth_rates_are_their_own_download_and_bring_the_glv_button(server, with_rates):
+def test_the_growth_rates_are_their_own_download_and_bring_the_glv_control(server, with_rates):
+    """Karoline, 2026-10-03: the growth rates are "a separate downloadable output item", and the gLV
+    result is "one single drop-down menu ... where the user chooses whether to download or to send to R"."""
     base, token = server
     page = _finished(base, token, report_rates="1")
     outputs = page[page.index('<div class="bar outputs">'):]
     assert "Download the growth rates (.csv)" in outputs
-    assert "Generate gLV parameters (.zip)" in outputs
+    control = outputs[outputs.index(">gLV parameters<"):]
+    control = control[:control.index("</form>")]
+    assert '<option value="zip">Download (.zip)</option>' in control
+    assert '<option value="r">Send to R</option>' in control
+    assert control.count("<select") == 1              # one menu, not two buttons
 
     _, table, headers = _open(f"{base}/rates.csv?token={token}")
     assert headers["Content-Type"].startswith("text/csv")
@@ -587,3 +593,51 @@ def test_the_files_beside_the_network_need_the_rates_and_say_so(monkeypatch, tmp
     assert not list(tmp_path.iterdir())
     assert main(["derive", "SMGDB00000001", "--fixture", "x.json", "--report-rates"]) == 2
     assert "--report-rates reads the monoculture curves, so it needs --live" in capsys.readouterr().err
+
+
+def test_the_glv_menu_sends_to_r_and_the_page_says_what_arrived(server, with_rates, monkeypatch):
+    """Karoline, 2026-10-03: "one more result button to send gLV parameters to R", in "one single
+    drop-down menu for gLV results where the user chooses whether to download or to send to R"."""
+    from grownet import rbridge
+    base, token = server
+    _finished(base, token, report_rates="1")
+    sent = {}
+
+    def fake_send(payload, **kw):
+        sent.update(payload=payload)
+        return {"received": True, "organisms": len(payload["organisms"]),
+                "growth_rates": sum(r is not None for r in payload["growth_rates"]),
+                "placeholders": len(payload["caveats"]["placeholders"]), "without_a_rate": 0}
+
+    monkeypatch.setattr(rbridge, "send", fake_send)
+    _, page, _ = _open(f"{base}/glv?token={token}", b"to=r")
+    assert "Sent to R: 2 organism(s), 2 growth rate(s)" in page
+    assert sent["payload"]["format"] == "grownet.glv/v0"
+    assert sent["payload"]["organisms"] == sorted([A, B])
+
+    # the same menu downloads the zip, so one control covers both
+    with urllib.request.urlopen(f"{base}/glv?token={token}", data=b"to=zip", timeout=10) as answer:
+        assert answer.headers["Content-Type"] == "application/zip"
+        assert answer.read()[:2] == b"PK"
+
+    # and when no R session answers, the page says how to install the package and how to fetch instead
+    def refuse(payload, **kw):
+        raise rbridge.RError(rbridge.unreachable(8793, "Connection refused"))
+
+    monkeypatch.setattr(rbridge, "send", refuse)
+    _, page, _ = _open(f"{base}/glv?token={token}", b"to=r")
+    assert "no R session is listening on port 8793" in page
+    assert "install_github" in page and "grownet_glv(url)" in page
+
+
+def test_r_can_fetch_the_same_parameters_from_the_page(server, with_rates):
+    """The other direction she asked for: when a port cannot be opened, R reads the payload from the page."""
+    base, token = server
+    page = _finished(base, token, report_rates="1")
+    assert "/glv.json?token=" in page                  # the address is printed under the control
+    _, text, headers = _open(f"{base}/glv.json?token={token}")
+    assert headers["Content-Type"].startswith("application/json")
+    payload = json.loads(text)
+    assert payload["format"] == "grownet.glv/v0"
+    assert payload["organisms"] == sorted([A, B])
+    assert "readme" in payload and "caveats" in payload

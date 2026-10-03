@@ -54,6 +54,22 @@ content.
   at all. Checked against Cytoscape 3.10.3.
 
 ### Added
+- **An R companion package and Send to R** (Karoline, 2026-10-03): the result section's gLV control is one
+  drop-down, Download (.zip) or Send to R, and the R package in `r/` receives the parameters over a local
+  port (`grownet_listen()`), or fetches them from the page (`grownet_glv(url)`) when no port can be opened.
+  `grownet derive --report-rates --to-r` does the same from the command line, with `--r-port`. The package
+  installs with `remotes::install_github("crossfeed-bio/crossfeed", subdir = "r")`, needs only jsonlite
+  (the listener uses base R sockets), and assumes no simulator: `as_miasim()` shapes the arguments
+  `miaSim::simulateGLV` takes, and miaSim stays a suggested package.
+  **The caveats travel as data, not as a README to be read first**, which was her open question: the
+  payload (`grownet.glv/v0`, served at `/glv.json`) carries which cells hold the stated extreme, which
+  pairs were left at 0 for disagreeing in sign, which organisms have no growth rate, the absence threshold
+  and grownet's own README text. In R the object prints them every time, `glv_matrix()` warns and names
+  the placeholder cells (with `placeholders = "na"` or `"zero"` to convert them), and `as_miasim()` stops
+  when an organism has no growth rate.
+- `glv_scale()` in the R package, and a line in the gLV README and the help: the cells are often stronger
+  than the -1 on the diagonal, and a simulation run on them unchanged can grow without bound and come back
+  as NA. Measured on SMGDB00000004, where the unscaled matrix diverges and the scaled one settles.
 - **The adjacency matrix as an export format** (`--format matrix`, the page's format menu): the network as
   a square CSV table, a cell holding the log2 mean of the comparison, so `A[i][j]` is the effect of j on i
   (rows affected, columns the actor). Each organism appears once, so arcs of one pair are merged across

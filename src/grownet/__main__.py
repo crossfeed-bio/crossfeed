@@ -83,7 +83,7 @@ def _rate_flags(a) -> str:
     a run never writes a network and then refuses to write the files beside it."""
     if a.report_rates and not a.live:
         return "--report-rates reads the monoculture curves, so it needs --live"
-    for flag, path in (("--rates", a.rates), ("--glv", a.glv)):
+    for flag, path in (("--rates", a.rates), ("--glv", a.glv), ("--to-r", a.to_r)):
         if path and not a.report_rates:
             return f"{flag} writes the growth rates of the run, so it needs --report-rates"
     return ""
@@ -266,6 +266,19 @@ def _emit(a, net, skipped, extra, label, result):
         with open(a.glv, "wb") as f:
             f.write(glv_package(net, organism_rates))
         print(f"wrote the gLV parameters to {a.glv}: the interaction matrix, the growth rates and a README",
+              file=sys.stderr)
+
+    if a.to_r:
+        from .matrix import glv_payload
+        from .rbridge import DEFAULT_PORT, RError, send
+        try:
+            answer = send(glv_payload(net, organism_rates), port=a.r_port or DEFAULT_PORT)
+        except RError as e:
+            print(f"grownet: {e}", file=sys.stderr)
+            return 1
+        print(f"sent to R: {answer.get('organisms', 0)} organism(s), "
+              f"{answer.get('growth_rates', 0)} growth rate(s), "
+              f"{answer.get('placeholders', 0)} placeholder cell(s); the R session printed what it holds",
               file=sys.stderr)
 
     if a.to_cytoscape:
@@ -489,6 +502,11 @@ def build_parser() -> argparse.ArgumentParser:
                          help="write the parameters of a generalized Lotka-Volterra simulation to FILE, a zip "
                               "of the interaction matrix (-1 on the diagonal), the matching growth rates and a "
                               "README (needs --report-rates)")
+    outputs.add_argument("--to-r", action="store_true",
+                         help="also send the gLV parameters into an R session waiting for them (the page's "
+                              "Send to R; in R: library(grownet); grownet_listen()). Needs --report-rates")
+    outputs.add_argument("--r-port", type=int, default=None, metavar="PORT",
+                         help="the port the R session listens on (default 8793, what grownet_listen() uses)")
     outputs.add_argument("--report", metavar="FILE",
                          help="write the report of the search to FILE: every setting, the tool version, every "
                               "interaction, every pair the data did not support, and the sources")
