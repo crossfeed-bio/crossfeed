@@ -248,7 +248,8 @@ date and time as graph attributes.
       "target": "ncbi:476272",
       "effect": "facilitation",
       "strength": 1.305,
-      "significance": 0.0715,
+      "significance": 1.1457,
+      "q_value": 0.0715,
       "p_value": 0.0143,
       "weight": 1.305,
       "effect_over_sd": 6.7714,
@@ -295,7 +296,10 @@ taxon's rank, and a few records still carry a species-level id, which mGrowthDB 
 `effect` is the direction, one of `facilitation`, `inhibition`, `neutral`; the default derivation uses
 `neutral` only for a mean of exactly zero, which has no direction and is always absent (see below), and it
 remains for the retired baseline and existing files. `strength` and `significance` are your
-method's numbers (or `null`). `study_ids` on every edge is the edge-level attribution and must carry at
+method's numbers (or `null`). **The three numbers of the test run in two directions, so read the names:**
+`p_value` is the raw p-value, `q_value` is that value corrected for multiple testing (smaller is stronger
+evidence), and `significance` is `-log10(q_value)` (larger is stronger evidence, 0 at q = 1, capped at 15
+for a q-value of zero), which is the one to map continuously in Cytoscape. `study_ids` on every edge is the edge-level attribution and must carry at
 least one study. `sd` and `se` are the standard deviation and standard error of the strength across
 replicates, with `n_with` and `n_without` the replicate counts behind it, and `metric` the growth property
 compared (`auc` by default; `max`, or a growth rate recorded with its rule, `growth_rate:easylinear:5` or
@@ -396,7 +400,7 @@ counts below detection. Such an edge keeps its `status` and is exported. With `-
 with no p-value carries `untested`: the filter kept it without judging it.
 `notes` inform without disqualifying, for example a replicate left out for an implausible spike. Every
 comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2 values:
-`p_value` is the raw value and `significance` the adjusted one (Benjamini-Hochberg by default,
+`p_value` is the raw value, `q_value` the adjusted one (Benjamini-Hochberg by default,
 Benjamini-Yekutieli with `--correction by`) across all comparisons tested in the derivation: one study
 with `derive STUDY`, every study a search reads with `--species`, `--all` or the page, absent and
 low-quality arcs included (`meta.statistics`). Single-replicate, obligate, abolished and merged arcs have
@@ -436,7 +440,8 @@ class MyDeriver(Deriver):
             "source_name": "Partner sp.", "target_name": "Focal sp.",  # display names   (optional)
             "effect": "facilitation",          # "facilitation" | "inhibition" | "neutral"
             "strength": 1.23,                  # your metric, any float, or None
-            "significance": 0.01,              # a p-value, or None if the method is qualitative
+            "q_value": 0.01,                   # corrected for multiple testing, or None
+            "significance": 2.0,               # -log10 of it, or None if the method is qualitative
             "condition": study.get("name", ""),
             "method": self.method,             # a short note on how the edge was computed
             "study_id": study["id"],           # edge-level attribution              (required)
@@ -493,9 +498,10 @@ to show them; `meta.hidden` says how many were left out, so a network file never
 Single-replicate edges are the exception: they are shown, flagged, and marked by the Cytoscape style.
 
 Each comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2
-values, reported as `p_value` and as `significance`, the adjusted value (Benjamini-Hochberg by default)
-over every comparison tested in the derivation (`meta.statistics`). The test supports an edge when
-significant and decides nothing unless `--max-adjusted-p` is given: with two or three replicates a real
+values, reported as `p_value`, as `q_value` (the correction over every comparison tested in the
+derivation, Benjamini-Hochberg by default, in `meta.statistics`) and as `significance`, which is
+`-log10(q_value)`. The test supports an edge when significant and decides nothing unless
+`--max-adjusted-p` is given: with two or three replicates a real
 effect often fails to reach significance, and any of these results may change with more experiments.
 
 Two things to read before trusting a magnitude. A species is compared only with itself measured by the

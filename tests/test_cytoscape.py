@@ -320,3 +320,22 @@ def test_requests_can_only_go_to_this_machine():
     from grownet.cytoscape import _get
     with pytest.raises(CytoscapeError):
         _get("http://example.org:1234/v1/styles")
+
+
+def test_an_untested_arc_sends_no_empty_numbers():
+    # Cytoscape turns a null number into 0.0, and q = 0 is the strongest possible evidence, so an untested
+    # arc would pass a "q below 0.05" filter there. The key is left out instead (checked against
+    # Cytoscape 3.10.3, 2026-10-03)
+    recs = [{"source": "ncbi:1", "target": "ncbi:2", "effect": "facilitation", "strength": 1.0,
+             "weight": 1.0, "status": "present", "outcome": "quantified", "study_id": "S1"}]
+    data = network_json(records_to_network(recs))["elements"]["edges"][0]["data"]
+    for absent in ("p_value", "q_value", "significance", "sd", "se"):
+        assert absent not in data
+    assert data["strength"] == 1.0 and data["status"] == "present"
+
+
+def test_a_tested_arc_carries_the_three_numbers_of_the_test():
+    recs = [{"source": "ncbi:1", "target": "ncbi:2", "effect": "inhibition", "strength": -1.0, "weight": 1.0,
+             "status": "present", "p_value": 0.004, "q_value": 0.02, "significance": 1.699, "study_id": "S1"}]
+    data = network_json(records_to_network(recs))["elements"]["edges"][0]["data"]
+    assert (data["p_value"], data["q_value"], data["significance"]) == (0.004, 0.02, 1.699)

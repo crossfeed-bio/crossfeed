@@ -6,6 +6,7 @@ import pytest
 from grownet import interaction
 from grownet.derive import (
     PROVISIONAL,
+    SIGNIFICANCE_CAP,
     _gs,
     absence,
     adjust_significance,
@@ -14,6 +15,7 @@ from grownet.derive import (
     interactions_from_experiments,
     interactions_from_replicates,
     output_meta,
+    significance_of,
 )
 from grownet.mgrowthdb import records_to_network
 
@@ -281,10 +283,26 @@ def test_a_low_quality_edge_is_never_marked_absent():
     assert [e["status"] for e in edges] == [None, None] and meta["absence"]["absent"] == 0
 
 
-def test_significance_is_benjamini_hochberg_over_every_tested_comparison():
+def test_the_q_value_is_benjamini_hochberg_over_every_tested_comparison():
     records = [{"p_value": 0.01}, {"p_value": 0.04}, {"p_value": None}, {"p_value": 0.03}, {"p_value": 0.005}]
     assert adjust_significance(records) == 4                # the untested record is not a test
-    assert [r.get("significance") for r in records] == pytest.approx([0.02, 0.04, None, 0.04, 0.02])
+    assert [r.get("q_value") for r in records] == pytest.approx([0.02, 0.04, None, 0.04, 0.02])
+
+
+def test_significance_is_minus_log10_of_the_q_value():
+    # Karoline, 2026-10-03: significance runs the other way from q, so a style can map it continuously
+    records = [{"p_value": 0.01}, {"p_value": 0.04}, {"p_value": None}]
+    adjust_significance(records)
+    assert records[0]["q_value"] == pytest.approx(0.02)
+    assert records[0]["significance"] == pytest.approx(1.699, abs=1e-3)   # -log10(0.02)
+    assert records[1]["significance"] == pytest.approx(1.3979, abs=1e-3)  # -log10(0.04)
+    assert records[2].get("significance") is None and records[2].get("q_value") is None
+    # a q-value of exactly 1 is no evidence at all, and reads as zero
+    assert significance_of(1.0) == 0.0
+    # Welch reports p = 0 when neither side varies and the means differ: -log10(0) is infinite, so it caps
+    assert significance_of(0.0) == SIGNIFICANCE_CAP
+    assert significance_of(1e-30) == SIGNIFICANCE_CAP
+    assert significance_of(None) is None
 
 
 def test_the_adjusted_p_filter_leaves_out_interactions_above_it_and_keeps_untested_arcs():

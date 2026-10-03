@@ -88,8 +88,12 @@ class Edge:
     target: str                   # Node.id of the affected organism
     effect: str                   # one of EFFECTS
     strength: float | None = None       # e.g. a growth log-ratio
-    significance: float | None = None   # e.g. an adjusted p-value
-    p_value: float | None = None        # the unadjusted p-value behind `significance`, when a test ran
+    # The three numbers of the test, in one direction each (Karoline, 2026-10-03): p_value is Welch's raw
+    # value, q_value the same after correction for multiple testing, and significance -log10(q_value), so
+    # that a larger significance means stronger evidence and a continuous style can map it.
+    significance: float | None = None   # -log10(q_value): larger is stronger, 0 at q = 1
+    q_value: float | None = None        # p_value corrected for multiple testing (Benjamini-Hochberg or -Yekutieli)
+    p_value: float | None = None        # the unadjusted p-value the correction started from
     weight: float | None = None         # |strength|, always positive, for widths and layouts
     effect_over_sd: float | None = None  # |strength| / sd, the quantity the absence threshold cuts
     status: str | None = None           # one of STATUSES, or None when undetermined (no spread)

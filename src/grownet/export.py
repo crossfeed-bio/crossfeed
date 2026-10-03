@@ -5,7 +5,8 @@ This module additionally serializes a network as GraphML, the XML format that Cy
 networkx, and Gephi read, so a grownet network drops straight into an existing network workflow.
 
 Dependency-free (standard library xml only). The graph is directed, and every edge keeps its effect,
-strength, significance, condition, method, the space-joined study_ids (the edge-level attribution), and
+strength, significance (-log10 of the q-value), the q-value, condition, method, the space-joined
+study_ids (the edge-level attribution), and
 when known the evidence (biculture or dropout), the space-joined community, the space-joined cautions,
 and the space-joined ids of the experiments the edge compares.
 
@@ -43,6 +44,7 @@ _KEYS = [
     ("e_effect", "edge", "effect", "string"),
     ("e_strength", "edge", "strength", "double"),
     ("e_significance", "edge", "significance", "double"),
+    ("e_q_value", "edge", "q_value", "double"),
     ("e_condition", "edge", "condition", "string"),
     ("e_method", "edge", "method", "string"),
     ("e_study_ids", "edge", "study_ids", "string"),
@@ -121,6 +123,8 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
             _data(ed, "e_strength", e.strength)
         if e.significance is not None:
             _data(ed, "e_significance", e.significance)
+        if e.q_value is not None:
+            _data(ed, "e_q_value", e.q_value)
         _data(ed, "e_condition", e.condition)
         _data(ed, "e_method", e.method)
         _data(ed, "e_study_ids", " ".join(e.study_ids))

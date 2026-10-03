@@ -176,9 +176,9 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   So an arc's adjusted p-value can change with the other studies a search reads (All reads every
   study)</span></div>
 <div class="row"><label><input type="checkbox" name="filter_adjusted_p" value="1"{p_filter}>
-  Filter on adjusted p-value, at most
+  Filter on the q-value, at most
   <input name="max_adjusted_p" type="text" size="6" value="{p_value}"></label>
-  <span class="muted">also leave out interactions whose adjusted p-value is above this; arcs without a p-value
+  <span class="muted">also leave out interactions whose q-value is above this; arcs without a p-value
   are kept, marked untested. Off by default: with two or three replicates the test misses many real effects,
   and an adjusted p-value depends on the other comparisons in the same search
   (<a href="{why}">why</a>)</span></div>
@@ -276,7 +276,7 @@ def render_about(token: str, job: str = "") -> str:
 
 
 HEADER = ("<tr><th>source</th><th>affects</th><th>direction</th><th>log2 mean &plusmn; sd</th>"
-          "<th>|mean| / sd</th><th>replicates with / without</th><th>adjusted p</th><th>condition</th>"
+          "<th>|mean| / sd</th><th>replicates with / without</th><th>q</th><th>condition</th>"
           "<th>remarks</th><th>study</th></tr>")
 
 
@@ -308,7 +308,7 @@ def _arc_rows(net, edges) -> str:
                     f"<td class=\"nowrap\">{_mean_sd(e.strength, e.sd)}</td>"
                     f"<td>{_number(e.effect_over_sd, '.2f')}</td>"
                     f"<td>{_esc(_number(e.n_with, 'd'))} / {_esc(_number(e.n_without, 'd'))}</td>"
-                    f"<td>{_number(e.significance, '.3g')}</td><td>{_esc(e.condition)}</td>"
+                    f"<td>{_number(e.q_value, '.3g')}</td><td>{_esc(e.condition)}</td>"
                     f"<td>{remarks}</td><td>{_esc(' '.join(e.study_ids))}</td></tr>")
     return "".join(rows)
 

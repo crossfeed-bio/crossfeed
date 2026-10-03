@@ -31,9 +31,10 @@ counts, outcome, metric, `quality` flags and `notes`.
   `meta.hidden` counting what was left out (item 21). Single-replicate edges are shown by default and
   marked in the Cytoscape style (Karoline, on #62).
 - **A statistical test is reported, never used to decide** (Karoline, 2026-09-21): Welch's t-test on the
-  per-replicate log2 values, `p_value` raw and `significance` adjusted (Benjamini-Hochberg by default,
-  Benjamini-Yekutieli as a setting) over every
-  comparison tested in one derivation, named in `meta.statistics` (item 10).
+  per-replicate log2 values, `p_value` raw, `q_value` adjusted (Benjamini-Hochberg by default,
+  Benjamini-Yekutieli as a setting) over every comparison tested in one derivation, named in
+  `meta.statistics` (item 10), and `significance` = -log10(`q_value`), so that larger means stronger
+  evidence (Karoline, 2026-10-03).
 - **An implausible spike in a curve is flagged and the curve left out for its species only** (#48),
   recorded on the edge as a note rather than as a quality issue while two replicates remain.
 

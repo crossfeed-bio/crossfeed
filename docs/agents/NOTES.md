@@ -432,6 +432,23 @@ or `meta.no_growth` will misstate the rule. The paired test is not uniformly str
 the ratios vary more across replicates than the raw values do, its p is larger (SMGDB00000013, Comamonas
 in co-culture: Welch 0.02, paired 0.07).
 
+## The three numbers of the test
+
+`p_value` is Welch's raw value, `q_value` is that value corrected for multiple testing over every
+comparison of one search, and `significance` is -log10 of the q-value (Karoline, 2026-10-03: "let's define
+significance as -log10(q) and q-value as the multiple-testing-corrected p-value"). So p and q run one way,
+smaller is stronger, and significance runs the other, larger is stronger, which is the one to map
+continuously in Cytoscape. `derive.significance_of` caps it at `SIGNIFICANCE_CAP` (15), since -log10(0) is
+infinite and Welch reports p = 0 when neither side varies and the means differ. The filter
+(`--max-adjusted-p`, register item 31) acts on `q_value`, unchanged.
+
+Before this, `significance` held the corrected p-value, which read backwards for anyone styling on it.
+`effect_from_logratio` takes the q-value, not `significance`, for the same reason.
+
+**Cytoscape turns a null number into 0.0**, and 0 is the strongest q-value there is, so an untested arc
+would pass a "q below 0.05" filter inside Cytoscape. `cytoscape.network_json` leaves an empty number out
+of the payload instead, which keeps the cell genuinely empty (checked against Cytoscape 3.10.3).
+
 ## Gotchas
 
 - mGrowthDB serves growth curves, not interactions; interactions are derived.

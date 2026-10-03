@@ -500,7 +500,8 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
         "weight": None if mean is None else round(abs(mean), 4),
         "effect_over_sd": None if ratio is None else round(ratio, 4),
         "status": None,                 # present or absent, set at output from the threshold k
-        "significance": None,           # adjusted for multiple testing, set at output
+        "q_value": None,                # p_value corrected for multiple testing, set at output
+        "significance": None,           # -log10(q_value), set at output
         "p_value": None if test is None else test["p"],
         "sd": None if sd is None else round(sd, 4),
         "se": None if c["se"] is None else round(c["se"], 4),
@@ -867,20 +868,37 @@ def is_low_quality(record) -> bool:
     return bool(record.get("quality"))
 
 
-def adjust_significance(records, correction: str = "bh") -> int:
-    """Fill each record's `significance` with its adjusted p-value, in place.
+# -log10 of a q-value of exactly zero is infinite, which no file format carries. Welch reports p = 0 when
+# neither side varies and the means differ, so the case is real but extreme; it is reported as this cap.
+SIGNIFICANCE_CAP = 15.0
 
-    `correction` is "bh" (Benjamini-Hochberg, the default) or "by" (Benjamini-Yekutieli, valid under any
-    dependence between the tests).
+
+def significance_of(q_value) -> float | None:
+    """-log10(q): larger is stronger evidence, 0 at q = 1 (Karoline, 2026-10-03)."""
+    if q_value is None:
+        return None
+    if q_value <= 0:
+        return SIGNIFICANCE_CAP
+    return round(min(SIGNIFICANCE_CAP, -math.log10(q_value)), 4)
+
+
+def adjust_significance(records, correction: str = "bh") -> int:
+    """Fill each record's `q_value` and `significance`, in place.
+
+    `q_value` is the record's p-value corrected for multiple testing, and `significance` is -log10 of it,
+    so a larger significance means stronger evidence and a style can map it continuously. `correction` is
+    "bh" (Benjamini-Hochberg, the default) or "by" (Benjamini-Yekutieli, valid under any dependence
+    between the tests).
 
     The family is every comparison tested in this derivation, edges, absences and low-quality ones alike,
     since all were tested. Returns the number of tests. Records without a p-value (a single replicate on
-    a side) are not tests and keep `significance` None.
+    a side) are not tests and keep both fields None.
     """
     tested = [r for r in records if r.get("p_value") is not None]
     adjust = CORRECTIONS[correction][1]
     for record, adjusted in zip(tested, adjust([r["p_value"] for r in tested]), strict=True):
-        record["significance"] = round(adjusted, 6)
+        record["q_value"] = round(adjusted, 6)
+        record["significance"] = significance_of(record["q_value"])
     return len(tested)
 
 
@@ -937,7 +955,8 @@ def _merged(arcs: list) -> dict:
             studies.append(st)
     conditions = list(dict.fromkeys(a.get("condition", "") for a in arcs))
     return {**arcs[0], "strength": strength, "weight": None if strength is None else round(abs(strength), 4),
-            "sd": None, "se": None, "effect_over_sd": None, "p_value": None, "significance": None,
+            "sd": None, "se": None, "effect_over_sd": None, "p_value": None, "q_value": None,
+            "significance": None,
             "n_with": None, "n_without": None, "outcome": outcome,
             "status": PRESENT if any(a.get("status") == PRESENT for a in arcs) else None,
             "quality": union("quality"), "cautions": union("cautions"), "notes": union("notes"),
@@ -1076,10 +1095,10 @@ def filter_significance(records, max_adjusted_p: float | None = None) -> tuple:
         if record.get("p_value") is None:
             record["cautions"] = [*record.get("cautions", []), UNTESTED]
             info["untested"] += 1
-        # adjust_significance gives every record with a p-value its adjusted value, so `significance` is
-        # None here only if the adjustment was skipped: a guard, not a case (Craig's agent, reviewing #106)
-        elif record.get("status") == PRESENT and (record.get("significance") is None
-                                                  or record["significance"] > max_adjusted_p):
+        # adjust_significance gives every record with a p-value its q-value, so `q_value` is None here
+        # only if the adjustment was skipped: a guard, not a case (Craig's agent, reviewing #106)
+        elif record.get("status") == PRESENT and (record.get("q_value") is None
+                                                  or record["q_value"] > max_adjusted_p):
             info["left_out"] += 1
             continue
         kept.append(record)

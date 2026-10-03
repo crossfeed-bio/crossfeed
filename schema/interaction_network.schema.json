@@ -104,7 +104,16 @@
           "type": [
             "number",
             "null"
-          ]
+          ],
+          "minimum": 0
+        },
+        "q_value": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
         },
         "condition": {
           "type": "string"
@@ -258,3 +267,4 @@
     }
   }
 }
+

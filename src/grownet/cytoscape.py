@@ -104,7 +104,7 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
                 "effect_over_sd": edge.effect_over_sd, "status": edge.status or "undetermined",
                 "outcome": edge.outcome or "", "sd": edge.sd, "se": edge.se,
                 "n_with": edge.n_with, "n_without": edge.n_without,
-                "p_value": edge.p_value, "significance": edge.significance,
+                "p_value": edge.p_value, "q_value": edge.q_value, "significance": edge.significance,
                 "metric": edge.metric, "condition": edge.condition,
                 # cultivation_mode arrives with #42; read it defensively so either order of merge works
                 "cultivation_mode": getattr(edge, "cultivation_mode", ""),
@@ -114,7 +114,10 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
                 "merged_arcs": edge.merged_arcs, "strength_range": " ".join(f"{x:g}" for x in edge.strength_range),
                 "supporting_pairs": edge.supporting_pairs, "merged_pairs": "; ".join(edge.merged_pairs),
                 "line_style": line_style(edge), "display_weight": display_weight(edge)}
-        edges.append({"data": data})
+        # A number sent as null becomes 0.0 in Cytoscape, and 0 is the strongest possible q-value: an
+        # untested arc would then pass a "q below 0.05" filter there. Leaving the key out keeps the cell
+        # genuinely empty (checked against Cytoscape 3.10.3, 2026-10-03).
+        edges.append({"data": {k: v for k, v in data.items() if v is not None}})
     return {"data": {"name": name, "shared_name": name}, "elements": {"nodes": nodes, "edges": edges}}
 
 

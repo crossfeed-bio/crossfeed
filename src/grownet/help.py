@@ -160,8 +160,10 @@ EDGE_ATTRIBUTES = {
     "status": "present, absent (below the absence threshold), or empty when undetermined (a single "
               "replicate or a low-quality edge)",
     "p_value": "Welch's t-test on the per-replicate log2 values, unadjusted",
-    "significance": "the p-value adjusted for multiple testing over every comparison of the search, shown as "
-                    "q (see How an interaction is decided)",
+    "q_value": "that p-value corrected for multiple testing over every comparison of the search, the q "
+               "on the page (see How an interaction is decided)",
+    "significance": "-log10 of the q-value: larger is stronger evidence, 0 at q = 1, and a style can map "
+                    "it continuously. It is capped at 15 for a q-value of zero",
     "outcome": "quantified (a ratio was computed), obligate (the target grows only with the source), "
                "abolished (only without it), or no_growth",
     "metric": "the growth property compared: auc, max, or a growth rate with its rule "
@@ -475,8 +477,10 @@ obligate or abolished when the target did not grow on one side, since there is t
 two-sided t-test on the per-replicate log2 values (<code>p_value</code>). The p-values are adjusted for
 multiple testing over every comparison one search tests: every arc of every study the search reads,
 absent and low-quality ones included, with Benjamini-Hochberg by default or Benjamini-Yekutieli
-(Multiple testing correction). The result is the adjusted p-value (<code>significance</code>, q on the
-page). Arcs without a test have no p-value: a single replicate on a side, obligate and abolished arcs,
+(Multiple testing correction). The result is the q-value (<code>q_value</code>, q on the page), and
+<code>significance</code> is -log10 of it, so a larger significance means stronger evidence and a style
+can map it continuously (0 at q = 1, capped at 15 when the q-value is zero). Arcs without a test have no
+p-value: a single replicate on a side, obligate and abolished arcs,
 and merged arcs (Merge parallel arcs, Merge to genus), which are merged after the adjustment and have no
 test of their own. The file records the test, the correction and the number of tests in
 <code>meta.statistics</code>.</p>

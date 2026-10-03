@@ -6,6 +6,19 @@ content.
 
 ## [0.1.1] (unreleased)
 
+### Changed
+- **`significance` is now -log10 of the q-value, and the corrected p-value has its own field, `q_value`**
+  (Karoline, 2026-10-03). Before, `significance` held the corrected p-value itself, so the name ran
+  against the number: larger looked stronger and was weaker, and a continuous Cytoscape mapping on it was
+  backwards. Now `p_value` is Welch's raw value, `q_value` is that value corrected for multiple testing,
+  and `significance` is -log10 of the q-value: 0 at q = 1, larger is stronger evidence, capped at 15 for a
+  q-value of zero. The page's column is `q`, the viewer shows p, q and significance, and the filter
+  (`--max-adjusted-p`) still acts on the q-value. A reader of an older file gets the old meaning: the
+  change rides with 0.1.1, which has no released files yet.
+- A number that is empty is left out of what is sent to Cytoscape rather than sent as null: Cytoscape turns
+  a null number into 0.0, and a q-value of 0 is the strongest there is, so an untested arc used to pass a
+  "q below 0.05" filter inside Cytoscape. Checked against Cytoscape 3.10.3.
+
 ### Added
 - Filter on adjusted p-value (`--max-adjusted-p Q`), an advanced setting off by default (register item
   31): interactions whose adjusted p-value is above the threshold (0.05 unless another is given) are left
