@@ -31,10 +31,19 @@ import statistics
 import zipfile
 
 from . import brand
+from .interaction import ABOLISHED, OBLIGATE
 from .model import InteractionNetwork, genus_name
 
 DIAGONAL = -1.0           # self-limitation, by convention (Karoline, 2026-10-03)
 RATE_UNIT = "1/h"
+# An obligate comparison (the target grows only with the source) and an abolished one (only without it)
+# have no log2 ratio at all, because one side did not grow, while the interaction they report is the
+# strongest there is. Karoline, 2026-10-03: "obligate and abolished arcs need to carry numbers reflecting
+# the strong effect, how about 10 with the appropriate sign?" So such an arc enters a matrix as +10
+# (obligate, the extreme of facilitation) or -10 (abolished, the extreme of inhibition). It is a stated
+# convention, not a measurement: as a log2 mean, 10 is a thousandfold difference, past anything the
+# quantified arcs reach, and the files say so.
+EXTREME = 10.0
 
 
 def _label(node) -> str:
@@ -46,23 +55,38 @@ def labels(net: InteractionNetwork) -> list:
     return [nid for nid, _ in sorted(net.nodes.items(), key=lambda item: (_label(item[1]).lower(), item[0]))]
 
 
+def _extreme(edge):
+    """+EXTREME, -EXTREME, or None: the convention value of an arc that has no ratio."""
+    if edge.strength is not None or edge.status == "absent":
+        return None
+    if edge.outcome == OBLIGATE:
+        return EXTREME
+    return -EXTREME if edge.outcome == ABOLISHED else None
+
+
 def cells(net: InteractionNetwork) -> tuple:
     """({(affected, actor): value}, conflicts): one value per ordered pair, and the pairs left at 0.
 
-    Arcs of a pair are merged by their median. A pair whose arcs disagree in sign is not merged (register
-    item 14): it stays 0 and is returned in `conflicts`, so the README can name it.
+    Arcs of a pair are merged by their median. An obligate or abolished arc has no ratio, so it carries
+    `EXTREME` with its sign and does not enter the median of the arcs that do have one (register item 14:
+    such arcs "join their direction and count without entering the median"); it decides a cell only when
+    no arc of the pair was quantified. A pair whose arcs disagree in sign is not merged (item 14 again):
+    it stays 0 and is returned in `conflicts`, so the README can name it.
     """
-    gathered: dict = {}
+    measured, extreme = {}, {}
     for edge in net.edges:
-        if edge.status == "absent" or edge.strength is None:
-            continue                      # no interaction at this threshold, or no ratio to put in a cell
-        gathered.setdefault((edge.target, edge.source), []).append(edge.strength)
+        pair = (edge.target, edge.source)
+        if edge.status != "absent" and edge.strength is not None:
+            measured.setdefault(pair, []).append(edge.strength)
+        elif (value := _extreme(edge)) is not None:
+            extreme.setdefault(pair, []).append(value)
     values, conflicts = {}, []
-    for pair, strengths in gathered.items():
-        if any(s > 0 for s in strengths) and any(s < 0 for s in strengths):
+    for pair in list(measured) + [p for p in extreme if p not in measured]:
+        numbers = measured.get(pair, []) + extreme.get(pair, [])
+        if any(v > 0 for v in numbers) and any(v < 0 for v in numbers):
             conflicts.append(pair)
             continue
-        values[pair] = statistics.median(strengths)
+        values[pair] = statistics.median(measured.get(pair) or extreme[pair])
     return values, conflicts
 
 
@@ -72,24 +96,25 @@ def counts(net: InteractionNetwork) -> dict:
     one pair has fewer cells than arcs; the page and the README say so, rather than leaving two counts to
     disagree (the lesson of the hidden arcs, Karoline, 2026-10-03)."""
     values, _ = cells(net)
-    with_a_number = sum(1 for e in net.edges if e.status != "absent" and e.strength is not None)
-    return {"arcs": with_a_number, "cells": len(values), "organisms": len(net.nodes)}
+    in_a_cell = sum(1 for e in net.edges
+                    if (e.status != "absent" and e.strength is not None) or _extreme(e) is not None)
+    return {"arcs": in_a_cell, "cells": len(values), "organisms": len(net.nodes)}
 
 
-def unquantified(net: InteractionNetwork) -> list:
-    """The pairs that have an arc but no number for it, as (affected, actor) labels.
+def by_convention(net: InteractionNetwork) -> list:
+    """The cells that hold `EXTREME` rather than a measured value, as (affected, actor, value) labels.
 
-    An obligate or abolished comparison has no finite log2 ratio (one side did not grow), so its cell is 0
-    like an empty one, while the interaction it reports is the strongest there is. The README names these
-    pairs, since a matrix alone would understate them.
+    These are the pairs whose only arcs are obligate or abolished: no ratio exists, so the cell carries
+    the convention. The README names them, since a reader has to know which numbers were measured.
     """
     values, _ = cells(net)
+    measured = {(e.target, e.source) for e in net.edges if e.status != "absent" and e.strength is not None}
     pairs = []
     for edge in net.edges:
         pair = (edge.target, edge.source)
-        if edge.strength is None and edge.status != "absent" and pair not in values and pair not in pairs:
+        if _extreme(edge) is not None and pair not in measured and pair in values and pair not in pairs:
             pairs.append(pair)
-    return [(_label(net.nodes[a]), _label(net.nodes[b])) for a, b in pairs]
+    return [(_label(net.nodes[a]), _label(net.nodes[b]), values[(a, b)]) for a, b in pairs]
 
 
 def rows(net: InteractionNetwork, diagonal: float | None = None) -> tuple:
@@ -183,7 +208,7 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
     return out.getvalue()
 
 
-def readme(net: InteractionNetwork, rates: dict, conflicts: list, missing: list, without_a_number=()) -> str:
+def readme(net: InteractionNetwork, rates: dict, conflicts: list, missing: list, convention=()) -> str:
     """What a reader has to know before feeding these two files to a simulator."""
     meta = net.meta
     absence = meta.get("absence", {})
@@ -208,23 +233,32 @@ def readme(net: InteractionNetwork, rates: dict, conflicts: list, missing: list,
         "      in absolute units; scale these numbers for your model rather than using them unchanged.",
         f"  An empty cell is 0. An arc below the absence threshold (k = {absence.get('k', '')}) is also 0:",
         "      the threshold judged it no interaction.",
-        f"  One cell per ordered pair: this network's {count['arcs']} arc(s) with a number make "
-        f"{count['cells']} cell(s) over {count['organisms']} organism(s).",
+        f"  One cell per ordered pair: this network's {count['arcs']} arc(s) make {count['cells']} cell(s) "
+        f"over {count['organisms']} organism(s).",
+        f"  An obligate interaction (the affected organism grows only with the actor) is {_number(EXTREME)} "
+        "and an abolished",
+        f"      one (it grows only without the actor) is {_number(-EXTREME)}: no ratio exists for them, "
+        "because one side did not",
+        "      grow at all, so these are stated extremes, not measurements. They do not enter the median "
+        "of the",
+        "      arcs that do have a ratio; they set a cell only when no arc of that pair was quantified.",
         "  A growth rate is the maximum specific growth rate of that organism in monoculture (easylinear,",
         f"      the method mGrowthDB reports), median over replicates and studies, in {RATE_UNIT}.",
         "",
-        "WHAT IS NOT IN HERE",
     ]
+    if convention:
+        lines += ["NUMBERS THAT ARE CONVENTIONS, NOT MEASUREMENTS",
+                  "  These cells hold the stated extreme above, because one side did not grow at all and no",
+                  "  ratio exists (actor on affected):"]
+        lines += [f"      {actor} on {affected}: {_number(value)}" for affected, actor, value in convention]
+        lines.append("")
+    lines.append("WHAT IS NOT IN HERE")
     if conflicts:
-        lines.append("  These pairs have arcs of opposite sign in different studies, so they are left at 0")
-        lines.append("  rather than averaged (actor on affected):")
+        lines.append("  These pairs have arcs of opposite sign, in different conditions or studies, so they")
+        lines.append("  are left at 0 rather than averaged (actor on affected):")
         lines += [f"      {actor} on {affected}" for affected, actor in conflicts]
     else:
-        lines.append("  No pair had arcs of opposite sign across studies.")
-    if without_a_number:
-        lines.append("  These pairs interact but have no number: one side did not grow at all (obligate or")
-        lines.append("  abolished), so there is no log2 ratio and the cell is 0 (actor on affected):")
-        lines += [f"      {actor} on {affected}" for affected, actor in without_a_number]
+        lines.append("  No pair had arcs of opposite sign.")
     if missing:
         lines.append("  These organisms have no growth rate, so a simulation needs one from elsewhere:")
         lines += [f"      {name}" for name in missing]
@@ -244,5 +278,5 @@ def glv_package(net: InteractionNetwork, rates: dict) -> bytes:
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("interaction_matrix.csv", matrix_csv(net, DIAGONAL))
         archive.writestr("growth_rates.csv", rates_csv(rates, net))
-        archive.writestr("README.txt", readme(net, rates, conflicts, missing, unquantified(net)))
+        archive.writestr("README.txt", readme(net, rates, conflicts, missing, by_convention(net)))
     return buffer.getvalue()

@@ -3,7 +3,9 @@
 Karoline's conventions, 2026-10-03: a cell holds the log2 mean as it is; the diagonal is -1 by convention;
 rows are affected and columns are the actor; an empty or absent cell is 0; each organism appears once, so
 arcs of one pair are merged across studies by their median, and a pair whose arcs disagree in sign is left
-at 0 and named.
+at 0 and named. Then, on the first build: "obligate and abolished arcs need to carry numbers reflecting
+the strong effect, how about 10 with the appropriate sign?", so a comparison with no ratio enters the
+matrix as +10 (obligate) or -10 (abolished).
 """
 import csv
 import io
@@ -62,11 +64,41 @@ def test_a_pair_whose_arcs_disagree_in_sign_is_left_at_zero_and_named():
     assert conflicts == [("B", "A")]          # (affected, actor), by their labels
 
 
-def test_an_absent_arc_and_an_arc_without_a_ratio_are_zero():
-    arcs = [_arc("a", "b", -0.2, status="absent"),
-            dict(_arc("a", "c", 1.0), strength=None, outcome="obligate")]
+def test_an_absent_arc_is_zero():
+    _, values = _read(matrix.matrix_csv(_net([_arc("a", "b", -0.2, status="absent")])))
+    assert values[("B", "A")] == 0.0          # the threshold judged it no interaction
+
+
+def test_an_obligate_arc_is_plus_ten_and_an_abolished_one_minus_ten():
+    """Karoline, 2026-10-03: "obligate and abolished arcs need to carry numbers reflecting the strong
+    effect, how about 10 with the appropriate sign?" Neither has a log2 ratio, since one side did not grow
+    at all, so the matrix states the extreme instead of leaving the cell at 0."""
+    arcs = [dict(_arc("a", "b", 1.0), strength=None, outcome="obligate", effect="facilitation"),
+            dict(_arc("a", "c", 1.0), strength=None, outcome="abolished", effect="inhibition")]
     _, values = _read(matrix.matrix_csv(_net(arcs)))
-    assert values[("B", "A")] == 0.0 and values[("C", "A")] == 0.0
+    assert values[("B", "A")] == 10.0 and values[("C", "A")] == -10.0
+    assert matrix.EXTREME == 10.0
+
+
+def test_an_arc_with_no_ratio_does_not_pull_the_median_of_the_arcs_that_have_one():
+    # one study quantified the pair at +1.5, another found the target obligate on the source. The cell
+    # keeps the measured value: an extreme that is a convention must not outvote a measurement
+    # (register item 14: such arcs count without entering the median)
+    arcs = [_arc("a", "b", 1.5, study_id="S1"),
+            dict(_arc("a", "b", 1.0, study_id="S2"), strength=None, outcome="obligate")]
+    _, values = _read(matrix.matrix_csv(_net(arcs)))
+    assert values[("B", "A")] == 1.5
+    assert matrix.by_convention(_net(arcs)) == []     # so the README does not call this cell a convention
+
+
+def test_an_extreme_that_contradicts_a_measured_arc_leaves_the_cell_at_zero():
+    # +10 from an obligate arc against a measured -2.0: the signs disagree, so the pair is not merged
+    arcs = [_arc("a", "b", -2.0, study_id="S1"),
+            dict(_arc("a", "b", 1.0, study_id="S2"), strength=None, outcome="obligate")]
+    net = _net(arcs)
+    _, values = _read(matrix.matrix_csv(net))
+    assert values[("B", "A")] == 0.0
+    assert matrix.rows(net)[2] == [("B", "A")]
 
 
 def test_the_rates_file_says_what_each_median_rests_on():
@@ -114,10 +146,10 @@ def test_a_genus_node_takes_the_median_rate_of_its_strains():
     assert "roseburia" not in aligned            # no monoculture of any Roseburia strain, so no rate
 
 
-def test_a_pair_that_interacts_but_has_no_number_is_named_in_the_readme():
-    # an obligate arc has no log2 ratio (one side did not grow), so its cell is 0 like an empty one: the
-    # README says so, rather than letting a simulator read it as no interaction
+def test_a_cell_that_holds_the_convention_says_so_in_the_readme():
+    # a reader has to know which numbers were measured and which are the stated extreme
     net = _net([dict(_arc("a", "b", 1.0), strength=None, outcome="obligate")])
-    assert matrix.unquantified(net) == [("B", "A")]
-    readme = matrix.readme(net, {}, [], [], matrix.unquantified(net))
-    assert "no number" in readme and "A on B" in readme.split("no number")[1]
+    assert matrix.by_convention(net) == [("B", "A", 10.0)]
+    readme = matrix.readme(net, {}, [], [], matrix.by_convention(net))
+    assert "CONVENTIONS, NOT MEASUREMENTS" in readme
+    assert "A on B: 10" in readme.split("CONVENTIONS, NOT MEASUREMENTS")[1]

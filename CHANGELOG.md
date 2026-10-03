@@ -58,7 +58,11 @@ content.
   a square CSV table, a cell holding the log2 mean of the comparison, so `A[i][j]` is the effect of j on i
   (rows affected, columns the actor). Each organism appears once, so arcs of one pair are merged across
   conditions and studies by their median; a pair whose arcs disagree in sign is left at 0; an empty cell
-  and an arc below the absence threshold are 0. The diagonal is 0 here, and -1 in the gLV package.
+  and an arc below the absence threshold are 0. An obligate interaction carries +10 and an abolished one
+  -10 (Karoline, 2026-10-03: "obligate and abolished arcs need to carry numbers reflecting the strong
+  effect, how about 10 with the appropriate sign?"): neither has a log2 ratio, because one side did not
+  grow at all, so the number is a stated extreme, named cell by cell in the gLV README, and it never enters
+  the median of the arcs that do have a ratio. The diagonal is 0 here, and -1 in the gLV package.
 - **Report growth rates**, a checkbox beside the All button (`--report-rates`), off by default: every
   organism in the network also gets its maximum specific growth rate in monoculture, by the chosen rate
   method, the median over the replicates and studies that have one, with each study's own median beside it

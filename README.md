@@ -166,7 +166,8 @@ python -m grownet schema [--out FILE]
   column, and a cell holding the log2 mean of the comparison, so `A[i][j]` is the effect of j on i. Each
   organism appears once, so arcs of one pair are merged across conditions and studies by their median, a
   pair whose arcs disagree in sign is left at 0, and an empty cell or an arc below the absence threshold
-  is 0.
+  is 0. An obligate interaction carries +10 and an abolished one -10, a stated extreme, since neither has
+  a log2 ratio: one side did not grow at all.
 - `--report-rates` also reports each organism's maximum specific growth rate in monoculture (the median
   over the replicates and studies that have one, batch monocultures only), which `--rates FILE` writes as
   CSV. With it, `--glv FILE` writes the parameters of a generalized Lotka-Volterra simulation: a zip of the

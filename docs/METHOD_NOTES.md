@@ -817,7 +817,14 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    judged it no interaction; rows are affected and columns are the actor, so `A[i][j]` is the effect of j
    on i, the order dx_i/dt = x_i (r_i + sum_j A[i][j] x_j) reads in; arcs of one ordered pair merge by
    their median (item 14), and a pair whose arcs disagree in sign is left at 0 and named in the README,
-   since a simulator should not be handed a number no one stands behind. The -1 diagonal is a convention
+   since a simulator should not be handed a number no one stands behind. AMENDED the same day, after her
+   agent reported that an obligate or abolished arc would then sit at 0 like an empty cell although it is
+   the strongest interaction there is: "obligate and abolished arcs need to carry numbers reflecting the
+   strong effect, how about 10 with the appropriate sign?" So obligate is +10 and abolished -10
+   (`matrix.EXTREME`), a stated extreme rather than a measurement (as a log2 mean it is a thousandfold
+   difference), named cell by cell in the package README. Following item 14, such an arc does not enter
+   the median of the arcs that do have a ratio: it sets a cell only when no arc of that pair was
+   quantified, and a pair whose extreme contradicts a measured arc is a sign conflict like any other. The -1 diagonal is a convention
    for self-limitation, not a normalization of the rest, and the README says a cell is an effect size, not
    a fitted gLV coefficient (a per-capita effect in absolute units). Rates come from batch monocultures
    only: in a continuous culture the rate a curve shows is the dilution rate (item 12), and a rate measured

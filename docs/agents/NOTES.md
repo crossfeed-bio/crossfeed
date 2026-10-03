@@ -503,8 +503,10 @@ simulator takes (register item 32, Karoline 2026-10-03). What a later agent need
   on the diagonal; only the gLV package sets -1, by convention, for self-limitation.
 - One cell per ordered pair, so arcs of one pair merge across conditions and studies by their median,
   register item 14's rule, including its refusal to merge arcs of opposite sign: such a pair stays 0 and
-  the package README names it. An obligate or abolished arc has no ratio, so its cell is 0 too, and the
-  README names those pairs as well. `matrix.counts` gives the page the arc-to-cell numbers, so a 6-arc
+  the package README names it. An obligate or abolished arc has no ratio, so it carries `matrix.EXTREME`
+  with its sign, +10 or -10 (Karoline, 2026-10-03, after the first build left those cells at 0): a stated
+  extreme, not a measurement. It never enters the median of the arcs that do have a ratio, and
+  `matrix.by_convention` is the list the package README prints cell by cell. `matrix.counts` gives the page the arc-to-cell numbers, so a 6-arc
   search that makes 2 cells says so instead of looking like the hidden-arcs mismatch again.
 - A reported growth rate (`derive.monoculture_rates`, `derive.merge_rates`, `derive.growth_rates`) is the
   maximum specific growth rate in monoculture by the chosen rate method, median over every monoculture

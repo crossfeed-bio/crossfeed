@@ -566,9 +566,11 @@ mean of the comparison, so <code>A[i][j]</code> is the effect of j on i: rows ar
 the actor. Each organism appears once, so arcs of one pair from several conditions or studies are merged
 by their median, the same rule the Merge arcs setting uses; a pair whose arcs disagree in sign is left at
 0 rather than averaged. An empty cell is 0, and so is an arc below the absence threshold, which the
-threshold judged no interaction. An obligate or abolished arc has no log2 ratio, because one side did not
-grow at all, so its cell is 0 as well and the gLV README names those pairs. The diagonal of this matrix is
-0; only the gLV package sets it to -1.</p>
+threshold judged no interaction. An obligate interaction (the affected organism grows only with the actor)
+has no log2 ratio at all, because one side did not grow, so it carries +10 and an abolished one -10: a
+stated extreme, past anything a measured comparison reaches, which the gLV README names cell by cell. Such
+an arc never enters the median of the arcs that do have a ratio; it sets a cell only when no arc of that
+pair was quantified. The diagonal of this matrix is 0; only the gLV package sets it to -1.</p>
 <p><strong>The growth rates.</strong> With Report growth rates on, every organism in the network also
 gets its maximum specific growth rate in monoculture: the method the Growth rate method setting names
 (easylinear by default, the one mGrowthDB reports), the median over the replicates and studies that have
