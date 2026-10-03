@@ -22,13 +22,21 @@ import urllib.parse
 import webbrowser
 from collections import Counter
 
-from . import __version__, brand, interaction, rates
+from . import __version__, brand, interaction, matrix, rates
 from . import help as help_page
 from . import published as daily
 from .adapter import condensed, unread
 from .attribution import studies_with_edges
 from .cytoscape import CytoscapeError, send, style_xml
-from .derive import ABSENCE_THRESHOLD, ABSENT, PROVISIONAL, derive_interactions, genus_species, output_meta
+from .derive import (
+    ABSENCE_THRESHOLD,
+    ABSENT,
+    PROVISIONAL,
+    derive_interactions,
+    genus_species,
+    growth_rates,
+    output_meta,
+)
 from .export import to_graphml
 from .growth import SPIKE_FACTOR
 from .legend import legend_svg
@@ -58,6 +66,9 @@ INPUT_EXAMPLES = ("Blautia hydrogenotrophica", "Faecalibacterium duncaniae A2-16
 DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window": rates.DEFAULT_WINDOW,
             "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
             "include_low_quality": False, "include_absent": False, "correction": "bh",
+            # off by default: a rate costs a fit per monoculture curve, and most searches do not need
+            # one (Karoline, 2026-10-03: a checkbox "next to the All button")
+            "report_rates": False,
             "include_dropout": True,
             "include_non_batch": False, "studies": "", "exclude_studies": "", "only_entered": True,
             "merge_arcs": False, "min_studies": 1, "merge_genera": False,
@@ -243,6 +254,7 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
     on the page above it and can be changed and run again.
     """
     note = f"<p class=\"note\">{_esc(message)}</p>" if message else ""
+    rate_box = " checked" if {**DEFAULTS, **(settings or {})}["report_rates"] else ""
     return _page(f"""{note}<form method="post" action="/run?token={_esc(token)}">
 <label class="field" for="species">Species, strains, genera or NCBI taxon ids</label>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in INPUT_EXAMPLES)}</p>
@@ -252,8 +264,11 @@ derived from mGrowthDB growth data on this machine; nothing is uploaded.</p>
 <div class="bar"><button class="primary" type="submit">Find interactions</button>
 <button type="submit" name="example" value="1">Example</button>
 <button type="submit" name="all" value="1">All</button>
+<label class="beside"><input type="checkbox" name="report_rates" value="1"{rate_box}>
+Report growth rates</label>
 <span class="muted">All ignores the box and derives every study in mGrowthDB, with every partner; it reads
-every study, so it takes longer (half a minute or so).</span></div>
+every study, so it takes longer (half a minute or so). Report growth rates adds each organism's growth rate
+in monoculture, as its own download and as the growth rates a gLV simulation needs.</span></div>
 {_settings_block(settings or {}, token, job)}
 </form>{below}""", token, refresh, job)
 
@@ -381,7 +396,8 @@ def _sources(net) -> str:
 
 
 def _outputs(token: str, result: dict, has_edges: bool) -> str:
-    """The three outputs Karoline asked for (#76): the network with a format menu, Cytoscape, the report."""
+    """The outputs Karoline asked for: the network with a format menu, Cytoscape, the report (#76), and,
+    when the search reported growth rates, the rates and the gLV parameters (#108)."""
     t = _esc(token)
     # every output names the search it belongs to, so two tabs never mix their networks up
     job = _esc(result.get("job", ""))
@@ -391,16 +407,47 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
                 + (f"<input type=\"hidden\" name=\"job\" value=\"{job}\">" if job else "") +
                 "<button class=\"primary\" type=\"submit\">Download network</button> "
                 "<select name=\"format\" aria-label=\"Network format\">"
-                "<option value=\"json\">JSON</option><option value=\"graphml\">GraphML</option></select></form>")
+                "<option value=\"json\">JSON</option><option value=\"graphml\">GraphML</option>"
+                "<option value=\"matrix\">Adjacency matrix (CSV)</option></select></form>")
     cytoscape = (f"<form class=\"inline\" method=\"post\" action=\"/cytoscape?token={t}{tail}\">"
                  "<button type=\"submit\">Send to Cytoscape</button></form>")
     report = (f"<details class=\"report\"><summary class=\"btn\">Report</summary>"
               f"<pre>{_esc(report_text(result))}</pre>"
               f"<p><a class=\"btn\" href=\"/report.txt?token={t}{tail}\">Download the report (.txt)</a></p></details>")
+    organism_rates = result.get("rates") or {}
+    rates_file = (f"<a class=\"btn\" href=\"/rates.csv?token={t}{tail}\">Download the growth rates (.csv)</a>"
+                  if organism_rates else "")
+    # the gLV parameters need a growth rate per organism, so the button appears with the rates (Karoline,
+    # 2026-10-03: "another extra button to generate gLV parameters from the current run (when 'Report growth
+    # rates' was enabled)")
+    glv = (f"<a class=\"btn\" href=\"/glv.zip?token={t}{tail}\">Generate gLV parameters (.zip)</a>"
+           if organism_rates and has_edges else "")
+    count = matrix.counts(result["network"])
     hint = ("<p class=\"hint\">Send to Cytoscape needs Cytoscape running on this machine; the network arrives in "
-            "the legend's style. The report holds every setting and every reason a pair gave no edge.</p>")
+            "the legend's style. The report holds every setting and every reason a pair gave no edge. The "
+            f"adjacency matrix holds one cell per ordered pair, so this search's {count['arcs']} arc(s) with a "
+            f"number make {count['cells']} cell(s) over {count['organisms']} organism(s): arcs of one pair from "
+            "different conditions or studies merge by their median.</p>")
+    rate_hint = ("<p class=\"hint\">The growth rates are each organism's maximum specific growth rate in "
+                 "monoculture, the median over the replicates and studies that have one. The gLV package holds "
+                 "the interaction matrix (-1 on the diagonal), the matching growth rates and a README stating "
+                 "what the numbers are.</p>") if organism_rates else ""
+    missing_rate = _without_a_rate(result)
     return (f"<div class=\"bar outputs\">{download if has_edges else ''}{cytoscape if has_edges else ''}"
-            f"{report}</div>{hint if has_edges else ''}")
+            f"{report}{rates_file}{glv}</div>{hint if has_edges else ''}{rate_hint}{missing_rate}")
+
+
+def _without_a_rate(result: dict) -> str:
+    """The organisms of the network that have no growth rate, said on the page, since a gLV simulation
+    needs a rate for each of them from elsewhere."""
+    missing = (result["network"].meta.get("growth_rates") or {}).get("without_a_rate") or []
+    if not missing:
+        return ""
+    shown = ", ".join(_esc(name) for name in missing[:6])
+    more = f" and {len(missing) - 6} more" if len(missing) > 6 else ""
+    return (f"<p class=\"hint\">No monoculture growth rate for {shown}{more}: no batch monoculture of it was "
+            "read, or its curves gave no rate. A gLV simulation needs a rate for each of them from elsewhere; "
+            "the report says why each one has none.</p>")
 
 
 def _unresolved_list(result: dict) -> str:
@@ -583,6 +630,7 @@ def parse_settings(form: dict) -> dict:
     settings["studies"] = form.get("studies", [""])[0].strip()
     settings["exclude_studies"] = form.get("exclude_studies", [""])[0].strip()
     settings["only_entered"] = bool(form.get("only_entered"))
+    settings["report_rates"] = bool(form.get("report_rates"))
     return settings
 
 
@@ -718,6 +766,9 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # output_meta sets each record's status in place, so the arcs it left out below the threshold are still
     # here to show in their own section: the page reports them, the file holds what the page counts
     absent_records = [] if s["include_absent"] else [r for r in records if r.get("status") == ABSENT]
+    # the organisms of the derived arcs, before any merge to the genus: a rate belongs to a strain, and the
+    # monocultures of these organisms are the ones the search already read, so no rate costs a new request
+    rate_nodes = {r[side] for r in records for side in ("source", "target")}
     records = kept
     # every setting the search ran with, so a downloaded network says how it was made (#78, #76)
     net = records_to_network(records, meta={
@@ -725,6 +776,19 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         "studies": studies, "settings": dict(s), **extra})
     net.meta["data"] = data_versions(client, studies, net.meta["derived_at"])
     _current_names(net, current)
+    # the growth rates, when the page asked for them: each organism's maximum specific growth rate in
+    # monoculture, median over replicates and studies (Karoline, 2026-10-03). They travel in the network's
+    # meta, so a downloaded network carries the rates it was reported with.
+    organism_rates = {}
+    if s["report_rates"]:
+        say(len(studies), len(studies), "Reading the monoculture growth rates")
+        found, rate_skips = growth_rates(client, studies, wanted=rate_nodes,
+                                         rate_method=s["rate_method"], window=s["rate_window"],
+                                         spike_factor=s["spike_factor"], progress=say)
+        organism_rates = matrix.for_nodes(net, found)
+        skipped += rate_skips
+        net.meta["growth_rates"] = matrix.rate_meta(
+            net, organism_rates, rates.method_name(s["rate_method"], s["rate_window"]))
     say(len(studies), len(studies), "Preparing the result")
     return {"entries": names, "settings": dict(s), "resolved": resolved["resolved"],
             "reasons": resolved["reasons"], "suggestions": resolved["suggestions"], "excluded": left_out,
@@ -732,6 +796,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
             "partners_only": partners_only,
             "unresolved": resolved["unresolved"], "taxon_ids": resolved["taxon_ids"], "studies": studies,
             "network": net, "absent": records_to_network(absent_records) if absent_records else None,
+            "rates": organism_rates,
             "skipped": skipped, "errors": errors, "hidden": extra["hidden"], "absence": extra["absence"]}
 
 
@@ -764,8 +829,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *_args):
         pass                      # the browser is right there; no access log
 
-    def _send(self, body: str, content_type: str = "text/html; charset=utf-8", filename: str = ""):
-        data = body.encode("utf-8")
+    def _send(self, body, content_type: str = "text/html; charset=utf-8", filename: str = ""):
+        data = body if isinstance(body, bytes) else body.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
@@ -812,6 +877,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(render_form(self.token, message="Nothing to download yet."))
         elif fmt == "graphml":
             self._send(to_graphml(result["network"]), "application/xml", f"{TITLE}_network.graphml")
+        elif fmt == "matrix":
+            # the adjacency matrix: the plain network as a square table, so its diagonal is 0; the gLV
+            # package is where the diagonal is -1 (Karoline, 2026-10-03)
+            self._send(matrix.matrix_csv(result["network"]), "text/csv; charset=utf-8",
+                       f"{TITLE}_matrix.csv")
         else:
             self._send(result["network"].to_json(), "application/json", f"{TITLE}_network.json")
 
@@ -834,6 +904,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._download(query.get("format", ["json"])[0], query)
         elif parsed.path in ("/download.json", "/download.graphml"):
             self._download(parsed.path.rsplit(".", 1)[1], query)
+        elif parsed.path == "/download.matrix":
+            self._download("matrix", query)
+        elif parsed.path in ("/rates.csv", "/glv.zip"):
+            self._rates(parsed.path, query)
         elif parsed.path == "/grownet_style.xml":
             # the Cytoscape style as a file, the same as `grownet style` writes, so a downloaded GraphML can
             # take it without the command line (Karoline, 2026-09-28); XML, the one form Cytoscape imports
@@ -846,6 +920,20 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._send(report_text(result), "text/plain; charset=utf-8", f"{TITLE}_report.txt")
         else:
             self.send_error(404, "no such page")
+
+    def _rates(self, path: str, query: dict):
+        """The growth rates on their own, and the gLV package: both need a search that reported rates."""
+        result = self._result(query)
+        organism_rates = (result or {}).get("rates") or {}
+        if not organism_rates:
+            self._send(render_form(self.token, message="No growth rates yet: tick Report growth rates and "
+                                                       "run the search again."))
+        elif path == "/rates.csv":
+            self._send(matrix.rates_csv(organism_rates, result["network"]), "text/csv; charset=utf-8",
+                       f"{TITLE}_growth_rates.csv")
+        else:
+            self._send(matrix.glv_package(result["network"], organism_rates), "application/zip",
+                       f"{TITLE}_glv_parameters.zip")
 
     def _to_cytoscape(self, query: dict) -> str:
         """Send the network already computed, without deriving it again (#25)."""

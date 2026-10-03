@@ -140,10 +140,21 @@ SETTINGS = {
     "only_entered": ("Only interactions between the species entered", "--all-partners",
                      "On by default: an edge is kept when both ends are species you typed. Untick it, or give "
                      "--all-partners, to see every partner of your species in the studies found."),
+    "report_rates": ("Report growth rates", "--report-rates",
+                     "This one sits beside the All button, not here, because it adds to what a search reports "
+                     "instead of changing how an interaction is decided. Off by default. With it on, every "
+                     "organism in the network also gets its maximum specific growth rate in monoculture, the "
+                     "median over the replicates and studies that have one, downloadable as its own CSV and "
+                     "used by Generate gLV parameters. Batch monocultures only: in a chemostat the rate a "
+                     "curve shows is the dilution rate."),
 }
 
 # command line options of `derive` that are not advanced settings -> what they do
 CLI_ONLY = {
+    "--rates": "write the growth rates to a CSV file, the page's Download the growth rates (needs "
+               "--report-rates)",
+    "--glv": "write the parameters of a generalized Lotka-Volterra simulation to a zip file, the page's "
+             "Generate gLV parameters (needs --report-rates)",
     "--species": "species, strain or genus names, or NCBI taxon ids: search every study holding them, as the page "
                  "does",
     "--all": "every study in mGrowthDB, with every partner, as the page's All button (with --live)",
@@ -371,6 +382,7 @@ def _table(head, rows) -> str:
 SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"), ("measures", "Which growth measure"),
             ("example", "Try the example"), ("reading", "Reading the result"),
             ("statistics", "How an interaction is decided"),
+            ("glv", "The matrix, the growth rates and gLV"),
             ("settings", "Advanced settings"), ("attributes", "Arc and node attributes"),
             ("decisions", "Why it works this way"), ("cli", "The command line"),
             ("empty", "No network came back"), ("qa", "Questions and problems"), ("cite", "How to cite"),
@@ -499,11 +511,14 @@ unless you switch on the filter on it
 replicates, more experiments can change any of them.</p>
 <p>While a search runs, a progress bar shows which study is being read, and the page updates by itself.
 The result then appears under the settings that produced it, so you can change a setting and search
-again. Three buttons sit above the table: <strong>Download network</strong>, with the format (JSON or
-GraphML) in the menu next to it; <strong>Send to Cytoscape</strong>, into a Cytoscape running on this
-machine, in the legend's style; and <strong>Report</strong>, which opens the detailed comments of the
-search (every setting, every interaction, every pair the data did not support, the sources) and
-downloads them as a text file, with the tool version.</p>
+again. Three buttons sit above the table: <strong>Download network</strong>, with the format (JSON,
+GraphML or the adjacency matrix as CSV) in the menu next to it; <strong>Send to Cytoscape</strong>, into a
+Cytoscape running on this machine, in the legend's style; and <strong>Report</strong>, which opens the
+detailed comments of the search (every setting, every interaction, every pair the data did not support,
+the sources) and downloads them as a text file, with the tool version. With <strong>Report growth
+rates</strong> ticked, beside the All button, two more outputs appear beside them: the growth rates as
+their own CSV, and <strong>Generate gLV parameters</strong>
+(<a href="#glv">the matrix, the growth rates and gLV</a>).</p>
 <p><a href="/legend?token={t}{legend_job}">The legend</a> explains every line, arrowhead and flag.</p>
 
 <h2 id="statistics">How an interaction is decided</h2>
@@ -543,6 +558,31 @@ the few replicates cannot confirm. The page and the file say how many interactio
 (<code>meta.hidden</code>, <code>meta.statistics.filter</code>). Absent and undetermined arcs stay as they
 are; arcs without a p-value are kept and marked <code>untested</code>, since the filter cannot judge them;
 merging then uses only the arcs that passed.</p>
+
+<h2 id="glv">The matrix, the growth rates and gLV</h2>
+<p><strong>The adjacency matrix.</strong> The format menu writes the network as a square table of
+comma-separated values, the organisms in the header row and in the first column. A cell holds the log2
+mean of the comparison, so <code>A[i][j]</code> is the effect of j on i: rows are affected, columns are
+the actor. Each organism appears once, so arcs of one pair from several conditions or studies are merged
+by their median, the same rule the Merge arcs setting uses; a pair whose arcs disagree in sign is left at
+0 rather than averaged. An empty cell is 0, and so is an arc below the absence threshold, which the
+threshold judged no interaction. An obligate or abolished arc has no log2 ratio, because one side did not
+grow at all, so its cell is 0 as well and the gLV README names those pairs. The diagonal of this matrix is
+0; only the gLV package sets it to -1.</p>
+<p><strong>The growth rates.</strong> With Report growth rates on, every organism in the network also
+gets its maximum specific growth rate in monoculture: the method the Growth rate method setting names
+(easylinear by default, the one mGrowthDB reports), the median over the replicates and studies that have
+one, with each study's own median kept beside it in the network's meta. Batch monocultures only: in a
+chemostat or a serial dilution the rate a curve shows is the dilution rate, and a rate from a co-culture
+would be growth with a partner, which is the comparison, not the organism's own rate. An organism whose
+curves give no rate is named on the page and in the report, never given a substitute number.</p>
+<p><strong>The gLV parameters.</strong> Generate gLV parameters writes a zip for a generalized
+Lotka-Volterra simulator: <code>interaction_matrix.csv</code> (the matrix above, with -1 on the diagonal
+by convention, for self-limitation), <code>growth_rates.csv</code> (one rate per organism, in the same
+order, with how many values it rests on) and <code>README.txt</code>, which states the conventions in the
+files themselves, names any pair left at 0 for disagreeing in sign, and names every organism without a
+rate. The numbers are effect sizes, not fitted gLV coefficients: a gLV coefficient is a per-capita effect
+in absolute units, so scale them for your model rather than using them unchanged.</p>
 
 <h2 id="settings">Advanced settings</h2>
 <p>Every setting has a default that suits most searches. The command line takes the same settings.</p>

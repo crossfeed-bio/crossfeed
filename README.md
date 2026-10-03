@@ -138,7 +138,7 @@ concrete demonstration of the seam.
 ## The command line
 
 ```
-python -m grownet derive STUDY [--live | --fixture FILE] [--deriver MODULE:CLASS] [--format json|graphml] [--out FILE]
+python -m grownet derive STUDY [--live | --fixture FILE] [--deriver MODULE:CLASS] [--format json|graphml|matrix] [--out FILE]
 python -m grownet derive --live --species NAME [NAME ...] [--all-partners] [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
 python -m grownet derive --live --all [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
 python -m grownet validate FILE
@@ -162,6 +162,16 @@ python -m grownet schema [--out FILE]
   same report the page shows. `grownet derive --help` lists every option in the page's words, with
   examples.
 - `--format graphml` emits GraphML (for Cytoscape, igraph, networkx, Gephi) instead of the neutral JSON.
+- `--format matrix` emits the adjacency matrix as CSV: the organisms in the header row and in the first
+  column, and a cell holding the log2 mean of the comparison, so `A[i][j]` is the effect of j on i. Each
+  organism appears once, so arcs of one pair are merged across conditions and studies by their median, a
+  pair whose arcs disagree in sign is left at 0, and an empty cell or an arc below the absence threshold
+  is 0.
+- `--report-rates` also reports each organism's maximum specific growth rate in monoculture (the median
+  over the replicates and studies that have one, batch monocultures only), which `--rates FILE` writes as
+  CSV. With it, `--glv FILE` writes the parameters of a generalized Lotka-Volterra simulation: a zip of the
+  interaction matrix with -1 on the diagonal, the matching growth rates and a README stating the
+  conventions. The numbers are effect sizes, not fitted gLV coefficients.
 - `--out FILE` writes the network to a file instead of stdout; attribution and skipped pairs print to
   stderr.
 - `validate FILE` checks a network document against the neutral-format schema and exits non-zero if it
@@ -193,8 +203,11 @@ attribute, the main design decisions, the command line, what to do when no netwo
 to report a problem; an About page says who built it and links this repository. Type species names (or NCBI taxon ids, or a genus for all its species), one per line, and press "Find
 interactions", or press All to derive every study in mGrowthDB. **grownet** resolves
 the names to taxon ids from mGrowthDB's own strain records, finds the studies holding them, derives the
-interactions, and shows them as a table with downloads for JSON and GraphML. Every setting sits behind
-"Advanced settings" with the same defaults the command line uses.
+interactions, and shows them as a table with downloads for JSON, GraphML and the adjacency matrix. Every
+setting sits behind "Advanced settings" with the same defaults the command line uses, except **Report
+growth rates**, which sits beside the All button: it adds each organism's growth rate in monoculture as its
+own download and turns on **Generate gLV parameters**, the zip a generalized Lotka-Volterra simulator
+takes.
 
 The page is served from the standard library on 127.0.0.1 with a token in its URL, renders in Python with
 no JavaScript, and uploads nothing: the data is pulled from mGrowthDB to your machine, and the results

@@ -493,6 +493,30 @@ arc carries it, so `cytoscape._declare_columns` creates the ones an arc may lack
 significance, empty where there was no test (Karoline, 2026-10-03; checked against Cytoscape 3.10.3, where
 a network of untested arcs had no such column before).
 
+## The matrix, the growth rates and the gLV package (#108)
+
+`grownet.matrix` turns a network into a square table and into the parameters a generalized Lotka-Volterra
+simulator takes (register item 32, Karoline 2026-10-03). What a later agent needs to know:
+
+- A cell holds the log2 mean as it is, not a fitted coefficient, and `A[i][j]` is the effect of j on i, so
+  rows are affected and columns are the actor. The plain matrix (the format menu, `--format matrix`) has 0
+  on the diagonal; only the gLV package sets -1, by convention, for self-limitation.
+- One cell per ordered pair, so arcs of one pair merge across conditions and studies by their median,
+  register item 14's rule, including its refusal to merge arcs of opposite sign: such a pair stays 0 and
+  the package README names it. An obligate or abolished arc has no ratio, so its cell is 0 too, and the
+  README names those pairs as well. `matrix.counts` gives the page the arc-to-cell numbers, so a 6-arc
+  search that makes 2 cells says so instead of looking like the hidden-arcs mismatch again.
+- A reported growth rate (`derive.monoculture_rates`, `derive.merge_rates`, `derive.growth_rates`) is the
+  maximum specific growth rate in monoculture by the chosen rate method, median over every monoculture
+  replicate of every study, with each study's own median beside it. Batch monocultures only: in a
+  continuous culture the rate is the dilution rate, and a co-culture rate is growth with a partner, which
+  is the comparison itself. The rates ride in `meta.growth_rates` (with `without_a_rate`), so a downloaded
+  network says what it was reported with.
+- Rates are keyed by node id, which is a strain. `matrix.for_nodes` maps them onto the network's own nodes,
+  so a genus-merged network takes the median of its strains' rates.
+- The rates are read from the studies the search already read, with `wanted` set to the organisms of the
+  derived arcs, so no rate costs an extra request to mGrowthDB.
+
 ## Gotchas
 
 - mGrowthDB serves growth curves, not interactions; interactions are derived.

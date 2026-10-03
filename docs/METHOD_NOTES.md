@@ -802,5 +802,26 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    the test misses many real effects, and an adjusted p-value depends on the other comparisons in the
    same search.
 
+32. **The adjacency matrix, the reported growth rates and the gLV parameters** (Karoline, 2026-10-03).
+   Her words: "The next job is supporting another network export format: the adjacency matrix. In
+   addition, grownet should be able to provide parameters for generalized Lotka-Volterra (gLV) simulation
+   tools ... building an adjacency matrix with negative (-1) entries on the diagonal in which each strain
+   (or species or genus) only appears once (so merge across studies) and where the same is true for the
+   growth rates that are delivered together with the interaction matrix. Both should be package such that
+   they can easily be parsed to gLV simulators." Her three choices, from the options her agent put to her:
+   a cell holds the "log2 mean as-is", the effect size the comparison measured, not a rescaled or fitted
+   coefficient; a reported growth rate is the "Maximum specific growth rate in monoculture (easylinear, as
+   mGrowthDB reports), median across replicates and studies, with the per-study values kept beside it";
+   the package is a "Zip of two CSVs + README". The conventions her agent set and recorded on #108, none
+   contradicted: an empty cell is 0 and so is an arc below the absence threshold, since the threshold
+   judged it no interaction; rows are affected and columns are the actor, so `A[i][j]` is the effect of j
+   on i, the order dx_i/dt = x_i (r_i + sum_j A[i][j] x_j) reads in; arcs of one ordered pair merge by
+   their median (item 14), and a pair whose arcs disagree in sign is left at 0 and named in the README,
+   since a simulator should not be handed a number no one stands behind. The -1 diagonal is a convention
+   for self-limitation, not a normalization of the rest, and the README says a cell is an effect size, not
+   a fitted gLV coefficient (a per-capita effect in absolute units). Rates come from batch monocultures
+   only: in a continuous culture the rate a curve shows is the dilution rate (item 12), and a rate measured
+   in a co-culture is growth with a partner, which is the comparison itself.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

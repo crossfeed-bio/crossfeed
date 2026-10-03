@@ -29,8 +29,9 @@ import re
 from collections import Counter
 from statistics import median
 
+from . import rates
 from .adapter import replicates_for_experiment
-from .growth import SPIKE_FACTOR, GrowthCurve, Replicate
+from .growth import SPIKE_FACTOR, GrowthCurve, Replicate, spike
 from .interaction import (
     ABOLISHED,
     NO_GROWTH,
@@ -42,7 +43,7 @@ from .interaction import (
     rule_meta,
 )
 from .interaction import DROPOUT as DROPOUT_EVIDENCE
-from .mgrowthdb import MGrowthDBClient
+from .mgrowthdb import MGrowthDBClient, MGrowthDBError
 from .model import genus_name
 from .stats import CORRECTIONS, welch
 
@@ -367,6 +368,125 @@ def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, ident
                 skipped.append((f"monocultures of {key}", f"{len(strains)} strains pooled into one monoculture set "
                                 f"({', '.join(sorted(strains))}); edges using it are flagged {STRAINS_POOLED}"))
     return index
+
+
+# ---- growth rates beside a network (#108) --------------------------------------------------------
+
+# A reported growth rate is an absolute quantity, not a comparison: the maximum specific growth rate of
+# one organism in monoculture, which is what a generalized Lotka-Volterra simulator takes as r_i (Karoline,
+# 2026-10-03: "report growth rates (main reason would be gLV support, but it could also be of interest for
+# other reasons)", and the rate is the "Maximum specific growth rate in monoculture (easylinear, as
+# mGrowthDB reports), median across replicates and studies, with the per-study values kept beside it").
+#
+# Monocultures only, and batch monocultures only: a rate from a co-culture is the organism's growth with a
+# partner, which is the comparison, not the organism's own rate; and under dilution the rate a curve shows
+# is the dilution rate (`METRICS_FOR_CONTINUOUS_CULTURE`).
+def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window: int = None,
+                      spike_factor: float = SPIKE_FACTOR, identities=None) -> tuple:
+    """({node id: {"name", "values", "unit", "replicates"}}, skipped): a rate per monoculture replicate.
+
+    `wanted`, when given, is the node ids to read, so a search reads the rates of the organisms in its
+    network and nothing else. A replicate whose curve carries an implausible spike, whose curve has no
+    rate by this method, or whose rate is not positive is left out and reported, as in the derivation:
+    nothing is replaced by another number. A value whose time unit differs from the first value of that
+    organism is left out and reported too, since rates in different units are not one set.
+    """
+    method = rates.method_name(rate_method or rates.DEFAULT_METHOD,
+                               window if window is not None else rates.DEFAULT_WINDOW)
+    feature = rates.feature(method)
+    skipped, found = [], {}
+    identities = identities if identities is not None else strain_identities(exps, [])
+    for exp in _batch_only(exps, False, skipped, method):
+        members = _members(exp)
+        if len(members) != 1:
+            continue
+        name = members[0]
+        node = _identity(identities, name)
+        if wanted is not None and node["id"] not in wanted:
+            continue
+        replicates, skips = replicates_for_experiment(client, exp, spike_factor)
+        skipped += skips
+        entry = found.setdefault(node["id"], {"name": name, "values": [], "unit": "", "replicates": []})
+        for i, rep in enumerate(replicates):
+            label = f"{name} monoculture [{exp.get('name', '') or _exp_id(exp)}], replicate {rep.name or i}"
+            curve = rep.curve(name)
+            if curve is None:
+                skipped.append((label, "no growth curve for this strain; no growth rate from it"))
+                continue
+            if spike(curve, spike_factor):
+                skipped.append((label, "implausible spike in the curve; no growth rate from it"))
+                continue
+            try:
+                value = feature(curve.times, curve.values)
+            except rates.RateUnavailable as e:
+                skipped.append((label, f"no growth rate: {e}"))
+                continue
+            if value <= 0:
+                skipped.append((label, f"non-positive growth rate ({value:g})"))
+                continue
+            unit = f"1/{curve.time_unit}"
+            if not entry["unit"]:
+                entry["unit"] = unit
+            if unit != entry["unit"]:
+                skipped.append((label, f"growth rate in {unit}, and this organism's other rates are in "
+                                       f"{entry['unit']}; left out rather than converted"))
+                continue
+            entry["values"].append(value)
+            entry["replicates"].append(rep.name or str(i))
+    return {nid: e for nid, e in found.items() if e["values"]}, skipped
+
+
+def growth_rates(client, study_ids, wanted=None, rate_method: str = None, window: int = None,
+                 spike_factor: float = SPIKE_FACTOR, progress=None) -> tuple:
+    """(rates, skipped) over several studies: each study's monoculture rates, merged by `merge_rates`.
+
+    The studies are the ones the search read, so their experiments and curves are already cached and no
+    rate costs a new request. A study that cannot be read is reported and the others still give rates.
+    """
+    per_study, skipped = [], []
+    for i, study_id in enumerate(study_ids):
+        if progress:
+            progress(i, len(study_ids), f"Reading growth rates from {study_id}")
+        try:
+            study = client.get_study(study_id)
+            exps = [client.get_experiment(e["id"]) for e in study.get("experiments", [])]
+        except MGrowthDBError as e:
+            skipped.append((f"growth rates of {study_id}", f"could not be read: {e}"))
+            continue
+        found, skips = monoculture_rates(client, exps, wanted, rate_method, window, spike_factor)
+        per_study.append((study_id, found))
+        skipped += skips
+    return merge_rates(per_study), skipped
+
+
+def merge_rates(per_study) -> dict:
+    """{node id: {"name", "rate", "unit", "n", "studies", "per_study"}}: one growth rate per organism.
+
+    `per_study` is (study id, what `monoculture_rates` found) for each study. The rate is the median over
+    every monoculture replicate of every study, Karoline's "median across replicates and studies", with
+    each study's own median kept beside it in `per_study` and the number of replicates behind it in `n`.
+    A study whose rates for an organism are in another time unit is left out of its median and named in
+    `other_units`.
+    """
+    merged: dict = {}
+    for study_id, found in per_study:
+        for nid, entry in found.items():
+            at = merged.setdefault(nid, {"name": entry["name"], "unit": entry["unit"], "values": [],
+                                         "studies": [], "per_study": {}, "other_units": []})
+            if entry["unit"] != at["unit"]:
+                at["other_units"].append(f"{study_id} ({entry['unit']})")
+                continue
+            at["values"] += list(entry["values"])
+            at["studies"].append(study_id)
+            at["per_study"][study_id] = median(entry["values"])
+    out = {}
+    for nid, at in merged.items():
+        if not at["values"]:
+            continue
+        out[nid] = {"name": at["name"], "rate": median(at["values"]), "unit": at["unit"],
+                    "n": len(at["values"]), "studies": at["studies"], "per_study": at["per_study"],
+                    "other_units": at["other_units"]}
+    return out
 
 
 _QUOTED = re.compile(r'["\u201c\u201d\']([^"\u201c\u201d\']+)["\u201c\u201d\']')
