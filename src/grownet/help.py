@@ -178,8 +178,10 @@ EDGE_ATTRIBUTES = {
                 "other did not, so its maximum may still be rising), stationary_unchecked (with max: too few "
                 "time points, under 6, to tell), zero_at_start (an obligate or abolished arc whose set without "
                 "growth is zero from its first time point, so no growth cannot be told from no inoculum or "
-                "counts below detection), untested (with the adjusted p-value filter on: the arc has no "
-                "p-value, so the filter kept it without judging it)",
+                "counts below detection), continuous_culture (a chemostat or serial dilution arc, compared "
+                "on max: the level a culture settles at is comparable with and without a partner, while an "
+                "area under the curve or a growth rate of such a run is not), untested (with the adjusted "
+                "p-value filter on: the arc has no p-value, so the filter kept it without judging it)",
     "notes": "other remarks, for example a replicate left out for a spike",
     "evidence": "biculture (monoculture against a two-member co-culture: a direct interaction) or dropout "
                 "(a community against the same community without the source: direct or indirect)",

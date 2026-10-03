@@ -7,6 +7,12 @@ content.
 ## [0.1.1] (unreleased)
 
 ### Changed
+- **Continuous culture is derived with the growth measure `max`** (Karoline, 2026-10-03): the level a
+  chemostat or serial dilution settles at is comparable with and without a partner, while the area under
+  its curve and its growth rate are not. Such arcs carry the caution `continuous_culture` and are shown.
+  With `auc` or a growth rate they are still left out unless `--include-non-batch` is given, and then they
+  keep the `non_batch` quality flag and stay hidden by default. A comparison never mixes modes. No network
+  changes today: no study in mGrowthDB has a non-batch pairwise or drop-out design.
 - The result table's third column is **sign**, not direction: an arc already has a direction, from the
   source to the species it affects (Karoline, 2026-10-03).
 - A number the derivation never computed reads as **not computed** on the page, and a comparison with no

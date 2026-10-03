@@ -161,8 +161,9 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   indirect, so labeled as such</span></div>
 <div class="row"><label><input type="checkbox" name="include_non_batch" value="1"{non_batch}>
   Include chemostat and serial dilution experiments</label>
-  <span class="muted">excluded by default: a continuous-culture curve is not comparable with a batch
-  one</span></div>
+  <span class="muted">with the growth measure max they are derived anyway, since the level a continuous
+  culture settles at is comparable with and without a partner; with auc or a growth rate they are left out
+  unless this is ticked, and such arcs are then marked low quality</span></div>
 <div class="row"><label>Absence threshold k
   <input name="absence_threshold" type="text" size="6" value="{_esc(s['absence_threshold'])}"></label>
   <span class="muted">an interaction counts as absent (the species do not affect each other) when its
@@ -432,10 +433,12 @@ def _empty_reason(result: dict) -> str:
     if only_monocultures and len(only_monocultures) == len(result["studies"]):
         return ("The studies holding these species grew them only alone, in monocultures, so there is no "
                 "co-culture or community to compare with.")
-    non_batch = [r for r in reasons if "a non-batch curve is not comparable" in r]
+    non_batch = [r for r in reasons if "excluded by default with the growth measure" in r]
     if non_batch and len(non_batch) == len(reasons) and not s.get("include_non_batch"):
-        return ("These studies are chemostat or serial dilution experiments, which are left out by default; "
-                "tick Include chemostat and serial dilution experiments to derive from them.")
+        return ("These studies are chemostat or serial dilution experiments. Their area under the curve and "
+                "growth rate are not comparable with a batch run, so they are left out; set the growth "
+                "measure to max, which that mode suits, or tick Include chemostat and serial dilution "
+                "experiments.")
     top = Counter(r.split(";")[0].strip() for r in reasons).most_common(1)
     why = f" The most common reason: {_esc(top[0][0])}." if top else ""
     return (f"The studies holding these species gave no usable comparison.{why} {EMPTY_HELP} The report lists "

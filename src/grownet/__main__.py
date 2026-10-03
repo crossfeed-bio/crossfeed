@@ -353,8 +353,9 @@ def build_parser() -> argparse.ArgumentParser:
                                "community without one member); included by default, labeled as possibly "
                                "indirect")
     settings.add_argument("--include-non-batch", action="store_true",
-                          help="also derive from chemostat and serial dilution experiments (excluded by "
-                               "default: a continuous-culture curve is not comparable with a batch one)")
+                          help="also derive from chemostat and serial dilution experiments with a growth "
+                               "measure that does not suit them (auc, growth_rate), flagged non_batch. With "
+                               "--metric max they are derived anyway, marked continuous_culture")
     settings.add_argument("--absence-threshold", type=float, default=1.0, metavar="K",
                           help="an interaction counts as absent (the species do not affect each other) when "
                                "its effect is small against its spread, |log2 mean| < K * sd; default 1, the "

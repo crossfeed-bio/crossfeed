@@ -230,7 +230,8 @@
               "stationary_phase_differs",
               "stationary_unchecked",
               "zero_at_start",
-              "untested"
+              "untested",
+              "continuous_culture"
             ]
           }
         },

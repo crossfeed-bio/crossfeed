@@ -177,6 +177,8 @@ SINGLE_REPLICATE = "single_replicate"
 STRAINS_POOLED = "strains_pooled"
 REMOVED_MEMBER_DETECTED = "removed_member_detected"
 NON_BATCH = "non_batch"
+# a continuous culture compared on a metric that suits it: shown, with the mode named (Karoline, 2026-10-03)
+CONTINUOUS_CULTURE = "continuous_culture"
 BATCH = "batch"           # the only cultivation mode derived by default (Karoline, #42)
 
 
@@ -234,9 +236,26 @@ def conditions(exp: dict) -> str:
     return json.dumps([exp.get("cultivationMode"), exp.get("compartments", [])], sort_keys=True)
 
 
-def _batch_only(exps, include_non_batch: bool, skipped) -> list:
-    """The experiments a derivation may use, reporting each one left out with its mode."""
-    if include_non_batch:
+# The maximal abundance of a continuous culture is a quantity a comparison can use: the culture settles at
+# a level, and the level with a partner against the level without it is the same comparison as in batch.
+# An area under the curve and a growth rate are not: under dilution the area says how long the run was, and
+# the rate is the dilution rate (Karoline, 2026-10-03: "we don't use data when they are from chemostat. But
+# we can, when the growth curve property is max ... the no-chemostat filter is too harsh").
+METRICS_FOR_CONTINUOUS_CULTURE = ("max",)
+
+
+def keeps_continuous_culture(metric: str, include_non_batch: bool = False) -> bool:
+    return include_non_batch or metric in METRICS_FOR_CONTINUOUS_CULTURE
+
+
+def _batch_only(exps, include_non_batch: bool, skipped, metric: str = "auc") -> list:
+    """The experiments a derivation may use, reporting each one left out with its mode.
+
+    Continuous culture (chemostat, serial dilution) is kept when the metric is one it suits, and when the
+    user asks for it with the advanced setting. A comparison never mixes modes: `conditions` carries the
+    cultivation mode, so a chemostat co-culture is compared only with chemostat monocultures.
+    """
+    if keeps_continuous_culture(metric, include_non_batch):
         return list(exps)
     kept = []
     for exp in exps:
@@ -245,8 +264,10 @@ def _batch_only(exps, include_non_batch: bool, skipped) -> list:
             kept.append(exp)
         else:
             skipped.append((exp.get("name", "") or _exp_id(exp),
-                            f"{mode}, excluded by default; a non-batch curve is not comparable with a batch "
-                            "one (include it with the advanced setting)"))
+                            f"{mode}, excluded by default with the growth measure {metric}: an area under "
+                            "the curve or a growth rate of a continuous culture is not comparable with a "
+                            f"batch one. Use the growth measure max, which it suits, or the advanced "
+                            "setting"))
     return kept
 
 
@@ -586,7 +607,10 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
             quality.append(STRAINS_POOLED)
         mode = cultivation(exp)
         if mode != BATCH:
-            quality.append(NON_BATCH)
+            # with a metric the mode suits, the comparison holds and the arc is shown with a caution;
+            # otherwise it was asked for with the advanced setting and stays low quality
+            (cautions if method in METRICS_FOR_CONTINUOUS_CULTURE else quality).append(
+                CONTINUOUS_CULTURE if method in METRICS_FOR_CONTINUOUS_CULTURE else NON_BATCH)
         records.append(_record(source, target, c, method, quality, cautions,
                                _spike_notes(result["flagged"], target), cond, "biculture", (a, b),
                                [_exp_id(exp), *origin[target]], study_id, study_meta, identities, mode))
@@ -755,7 +779,8 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
                 notes.append(_detected_note(f"community without {removed}", detected[removed]))
         mode = cultivation(full_exps[0])
         if mode != BATCH:
-            quality.append(NON_BATCH)
+            (cautions if method in METRICS_FOR_CONTINUOUS_CULTURE else quality).append(
+                CONTINUOUS_CULTURE if method in METRICS_FOR_CONTINUOUS_CULTURE else NON_BATCH)
         # the full community or this drop-out comes in variants told apart only by their descriptions, so
         # which drop-out goes with which full community is not recorded (Karoline, 2026-09-27)
         key = conditions(full_exps[0])
@@ -836,7 +861,7 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
         # SMGDB00000015 holds 91 monocultures and nothing else: say so first, not only per replicate
         skipped.append((f"study {study_id}", f"only monocultures ({len(exps)} experiments of one strain each): "
                         "an interaction needs a co-culture or a community to compare with"))
-    exps = _batch_only(exps, include_non_batch, skipped)
+    exps = _batch_only(exps, include_non_batch, skipped, method)
     identities = strain_identities(exps, skipped)
     # with `keep`, only what can give an interaction between kept strains is read (a search with "only the
     # species entered"); identities and variants still come from every experiment, so matching is unchanged

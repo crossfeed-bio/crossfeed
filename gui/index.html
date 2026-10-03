@@ -415,7 +415,8 @@ const isHiddenByDefault=e=>flagsOf(e).some(f=>HIDDEN_BY_DEFAULT.includes(f));
 // "two_replicates", "conditions_unverified" (experiments told apart only by their descriptions),
 // "stationary_phase_differs" and "stationary_unchecked" (with max: one set reached stationary phase and the
 // other did not, or too few points to tell), "zero_at_start" (a set without growth that is zero from its
-// first point) and "untested" (with the adjusted p-value filter on: an arc without a p-value, which the
+// first point), "continuous_culture" (a chemostat or serial dilution arc compared on max, the measure that
+// mode suits; with auc or a growth rate such an arc is low quality instead) and "untested" (with the adjusted p-value filter on: an arc without a p-value, which the
 // filter kept unjudged): all are worth knowing and none disqualifies, so every caution
 // is listed with the edge and none hides it
 const cautionsOf=e=>Array.isArray(e.cautions)?e.cautions:[];

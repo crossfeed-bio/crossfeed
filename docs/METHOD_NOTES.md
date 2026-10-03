@@ -94,8 +94,9 @@ history of how each was decided.
     minimum-supporting-studies filter applies to merged arcs (item 14)
 11. Minimum time points: **a curve needs its points for the metric** (easylinear: window plus one); no
     fit-quality gate on mGrowthDB's values, which are not read
-12. Chemostats and serial dilutions: **left out by default**, included with a setting and flagged `non_batch`
-    (#42)
+12. Chemostats and serial dilutions: **left out by default with auc or a growth rate** (flagged
+    `non_batch` when asked for anyway), **derived with max**, which that mode suits, marked
+    `continuous_culture` (#42, amended 2026-10-03)
 13. Output format: **JSON canonical, GraphML on demand**, and a report
 14. Query scope: **a species name resolves to all its strains** in mGrowthDB, and only interactions between
     the species entered are shown unless unticked
@@ -255,6 +256,16 @@ BUILT 2026-09-27 (#42, Karoline): only batch is derived by default; other modes,
 reported with the mode and left out. `--include-non-batch` derives them with the edges flagged
 `non_batch`, which is hidden by default like the other quality flags. Every edge carries
 `cultivation_mode`.
+
+AMENDED 2026-10-03 (Karoline): "right now, we don't use data when they are from chemostat. But we can, when
+the growth curve property is max. I think the no-chemostat filter is too harsh, we should allow it when max
+is the growth property being compared." So continuous culture is derived by default with `--metric max`,
+and those arcs carry the caution `continuous_culture` and are shown; with `auc` or a growth rate they are
+still left out unless `--include-non-batch` is given, and then they keep the `non_batch` quality flag. The
+reason a run gives names the way out. A comparison never mixes modes, since `conditions` carries the
+cultivation mode. Measured when it was built: no study in mGrowthDB today has a non-batch pairwise or
+drop-out design, so this changes no current network; SMGDB00000001, 5 and 11 are single large communities
+with no leave-one-out partners.
 
 ## 13. Output format
 

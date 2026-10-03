@@ -432,6 +432,18 @@ or `meta.no_growth` will misstate the rule. The paired test is not uniformly str
 the ratios vary more across replicates than the raw values do, its p is larger (SMGDB00000013, Comamonas
 in co-culture: Welch 0.02, paired 0.07).
 
+## Continuous culture and the metric
+
+Chemostat and serial dilution experiments are derived when the metric is one that suits them, which today
+is `max` alone (`derive.METRICS_FOR_CONTINUOUS_CULTURE`): the level such a culture settles at compares with
+and without a partner, an area under the curve says how long the run was, and a growth rate is the dilution
+rate (Karoline, 2026-10-03: "the no-chemostat filter is too harsh, we should allow it when max is the
+growth property being compared"). Those arcs carry the caution `continuous_culture` and are shown; with
+another metric they are left out unless `--include-non-batch` is given, and then they keep the `non_batch`
+quality flag and stay hidden. The cultivation mode is part of `conditions`, so no comparison mixes modes.
+Measured when it was built: no study in mGrowthDB has a non-batch pairwise or drop-out design (1, 5 and 11
+are single large communities), so no current network changes.
+
 ## Missing numbers, and the sign column
 
 A number the derivation did not compute is missing everywhere, never 0 and never a blank cell (Karoline,

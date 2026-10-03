@@ -1002,3 +1002,53 @@ def test_skipping_uncompared_monocultures_changes_no_arc():
     assert filtered == everything and filtered                     # the same arcs, and there are some
     assert not any(b.startswith("mono C/") for b in read_filtered)  # C has no co-culture: not read
     assert any(b.startswith("mono C/") for b in read_everything) and len(read_filtered) < len(read_everything)
+
+
+# ---- continuous culture with the metric it suits (Karoline, 2026-10-03) --------------------------
+
+def test_a_chemostat_study_derives_with_max_and_the_arcs_say_so():
+    """Karoline: "we don't use data when they are from chemostat. But we can, when the growth curve
+    property is max ... the no-chemostat filter is too harsh, we should allow it when max is the growth
+    property being compared"."""
+    client, study, exps = _replicate_study()
+    records, skipped = interactions_from_replicates(client, study, _mode(exps, "chemostat"), method="max")
+    assert len(records) == 2
+    for record in records:
+        assert record["cultivation_mode"] == "chemostat"
+        assert "continuous_culture" in record["cautions"]      # shown, with the mode named
+        assert record["quality"] == []                         # not low quality: the comparison holds
+    assert not any("excluded by default" in reason for _, reason in skipped)
+    edges, meta = output_meta(records)
+    assert len(edges) == 2 and meta["hidden"]["low_quality"] == 0
+
+
+@pytest.mark.parametrize("metric", ["auc", "growth_rate"])
+def test_a_chemostat_study_is_still_left_out_for_a_metric_it_does_not_suit(metric):
+    client, study, exps = _replicate_study()
+    records, skipped = interactions_from_replicates(client, study, _mode(exps, "chemostat"), method=metric)
+    assert records == []
+    excluded = [reason for _, reason in skipped if "excluded by default" in reason]
+    assert excluded and all("chemostat" in reason and metric in reason for reason in excluded)
+    assert all("max" in reason for reason in excluded)          # the reason names the way out
+
+
+def test_asking_for_non_batch_with_another_metric_still_marks_it_low_quality():
+    client, study, exps = _replicate_study()
+    records, _ = interactions_from_replicates(client, study, _mode(exps, "chemostat"), method="auc",
+                                              include_non_batch=True)
+    assert len(records) == 2
+    for record in records:
+        assert record["quality"] == ["non_batch"] and "continuous_culture" not in record["cautions"]
+    edges, meta = output_meta(records)                          # hidden by default, as before
+    assert edges == [] and meta["hidden"]["low_quality"] == 2
+
+
+def test_a_comparison_never_mixes_a_chemostat_with_a_batch_culture():
+    # the cultivation mode is part of the conditions key, so the sets cannot be pooled across modes
+    client, study, exps = _replicate_study()
+    for exp in exps:
+        if exp["name"] == "mono B":
+            exp["cultivationMode"] = "chemostat"
+    records, skipped = interactions_from_replicates(client, study, exps, method="max")
+    assert not [r for r in records if r["target_name"] == B]
+    assert any("no monoculture replicates for " + B in reason for _, reason in skipped)

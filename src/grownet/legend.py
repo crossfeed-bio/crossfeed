@@ -60,7 +60,9 @@ NOTES = [
                               "monocultures match is not recorded. stationary_phase_differs and "
                               "stationary_unchecked (max only): one set reached stationary phase and the "
                               "other did not, or too few points to tell. zero_at_start: an obligate or "
-                              "abolished arc whose set without growth is zero from its first point. untested: "
+                              "abolished arc whose set without growth is zero from its first point. "
+                              "continuous_culture: a chemostat or serial dilution, compared on max, which "
+                              "that mode suits. untested: "
                               "with the adjusted p-value filter on, an arc without a p-value, kept unjudged. "
                               "The edge keeps its status and is drawn."),
     ("Not drawn by default", "the quality flags strains_pooled, removed_member_detected and non_batch. The "

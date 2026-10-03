@@ -337,12 +337,14 @@ need every drop-out. mGrowthDB still measures the removed member in a drop-out e
 not used, and if it shows a positive signal the drop-out may not be clean, so its arcs are flagged
 `removed_member_detected`. A larger community with no drop-out experiment is skipped, with a reason.
 
-**Batch only, by default.** A chemostat or serial dilution curve does not mean what a batch curve means:
-an area under the curve is meaningless under dilution, and a continuous-culture growth rate is a different
-quantity. So only experiments whose `cultivationMode` is batch are derived. Anything else, including an
-experiment with no mode recorded, is reported with its mode and left out. `--include-non-batch` (or the
-matching advanced setting) derives them anyway, with their edges flagged `non_batch`. Every edge records
-its `cultivation_mode`.
+**The cultivation mode and the measure go together.** A chemostat or serial dilution curve does not mean
+what a batch curve means, so what can be compared depends on the measure. With `--metric max` such an
+experiment is derived: the level a continuous culture settles at is comparable with and without a partner,
+and its arcs carry the caution `continuous_culture`. With `auc` or a growth rate it is left out and
+reported with its mode, since the area under a diluted run says how long it ran and its growth rate is the
+dilution rate; `--include-non-batch` (or the matching advanced setting) derives it anyway, with the edges
+flagged `non_batch` and hidden by default. An experiment with no recorded mode counts as not batch. A
+comparison never mixes modes, and every edge records its `cultivation_mode`.
 
 **Growth comes first.** Before any ratio, each replicate set is checked for growth. Each replicate gives
 one rise, log2(maximum / abundance at the first time point), with the maximum taken wherever that
