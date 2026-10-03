@@ -42,7 +42,8 @@ SETTINGS = {
                     "Used with easylinear: how many consecutive points each fitted line spans. 5, the default, "
                     "is what mGrowthDB uses; fewer points follow noise, more flatten the steepest part."),
     "include_low_quality": ("Show low-quality edges", "--include-low-quality",
-                            "Low-quality edges carry a quality flag (pooled strains, a chemostat curve, a "
+                            "Low-quality edges carry a quality flag (pooled strains, a continuous culture "
+                            "compared on a measure that does not suit it, a "
                             "drop-out whose removed member was still detected). They are computed but not "
                             "shown by default, and never read as an absence of interaction. Single-replicate "
                             "edges are always shown, flagged."),
@@ -51,9 +52,14 @@ SETTINGS = {
                         "default; --no-dropout leaves them out. Such an arc says the removed member affects "
                         "the target, directly or through other members, so it is labeled evidence dropout."),
     "include_non_batch": ("Include chemostat and serial dilution experiments", "--include-non-batch",
-                          "Off by default: under continuous dilution an area under the curve means something "
-                          "else, so these curves are not comparable with batch curves. When included, their "
-                          "edges carry the non_batch flag."),
+                          "What a continuous culture can be compared on depends on the growth measure. With "
+                          "max it is derived without this setting: the level such a culture settles at is "
+                          "comparable with and without a partner, and those arcs are shown with the caution "
+                          "continuous_culture. With auc or a growth rate it is left out, because the area "
+                          "under a diluted run says how long it ran and its growth rate is the dilution "
+                          "rate; this setting derives it anyway, and then the edges carry the non_batch "
+                          "flag and are hidden with the other low-quality ones. A comparison never mixes "
+                          "modes: a chemostat co-culture is compared only with chemostat monocultures."),
     "absence_threshold": ("Absence threshold k", "--absence-threshold K",
                           "Decides when an interaction counts as absent, that is, when the data show the "
                           "species do not affect each other: its effect is small against its own spread, "
@@ -253,8 +259,10 @@ DECISIONS = (
     ("Experiments are pooled only when they are replicates.",
      "Interactions depend on the environment, so experiments with different conditions give parallel "
      "arcs, one each (#47)."),
-    ("Batch culture only, by default.",
-     "Chemostat and serial dilution curves measure a different quantity (#42)."),
+    ("A culture is compared on a measure its mode supports.",
+     "Chemostat and serial dilution runs are derived with max, the level they settle at, and left out with "
+     "an area under the curve or a growth rate, which measure something else under dilution (#42, amended "
+     "2026-10-03)."),
     ("Suspect curves are flagged, never silently dropped or replaced.",
      "A replicate with an implausible spike is left out and reported, with the other techniques measured "
      "on it named (#39)."),
@@ -433,10 +441,11 @@ to noise in any one of them, and it is defined for any curve with two points. Ag
 of lag, rate or yield changed; it needs the same time window on both sides, which grownet ensures; and it
 counts the starting abundance too, so a larger inoculum raises it.</dd>
 <dt>Maximal abundance (max)</dt>
-<dd>For: the simplest to read, the yield a species reaches, and unaffected by a decline after the peak.
-Against: it rests on one point, so one noisy measurement moves it, and it ignores timing, so a slow and a
-fast grower reaching the same level look alike. It is misleading when one curve reached stationary phase
-and the other did not; grownet then marks the arc <code>stationary_phase_differs</code>.</dd>
+<dd>For: the simplest to read, the yield a species reaches, unaffected by a decline after the peak, and
+the only measure that suits a continuous culture (see below). Against: it rests on one point, so one noisy
+measurement moves it, and it ignores timing, so a slow and a fast grower reaching the same level look
+alike. It is misleading when one curve reached stationary phase and the other did not; grownet then marks
+the arc <code>stationary_phase_differs</code>.</dd>
 <dt>Growth rate (growth_rate)</dt>
 <dd>For: the speed of growth, independent of yield and of the unit of abundance, and with easylinear the
 same method mGrowthDB uses for the rates it reports. Against: it ignores yield and lag; it needs densely
@@ -445,6 +454,26 @@ sensitive to noise in the steepest part of the curve. easylinear takes the steep
 log abundance and depends on its window; baranyi fits a growth model up to the end of the plateau, and
 refuses curves the model does not describe, such as two growth phases.</dd>
 </dl>
+
+<h3>Chemostats and serial dilutions</h3>
+<p>A continuous culture is diluted while it grows, so what its curve means depends on the measure, and
+grownet uses it only where the comparison holds.</p>
+<ul>
+<li><strong>With max it is derived</strong>, without any setting: such a culture settles at a level, and
+that level with a partner against the level without it is the same comparison as in batch. Those arcs are
+shown, with the caution <code>continuous_culture</code>, so a reader can tell them from batch arcs.</li>
+<li><strong>With the area under the curve or a growth rate it is left out</strong> and reported with its
+mode: under dilution the area says mostly how long the run lasted, and the growth rate of a culture held
+in steady state is the dilution rate the experimenter chose, not a property of the species. Ticking
+"Include chemostat and serial dilution experiments" derives it anyway; those arcs then carry the
+<code>non_batch</code> quality flag and are hidden with the other low-quality ones.</li>
+<li><strong>A comparison never mixes modes.</strong> The cultivation mode is part of the conditions an
+experiment must share to be compared, so a chemostat co-culture is compared only with chemostat
+monocultures, never with a batch one.</li>
+</ul>
+<p>An experiment whose mode mGrowthDB does not record counts as not batch. No study in mGrowthDB holds a
+continuous culture that forms a pair or a drop-out design today, so this changes no network yet; it
+decides what happens when one arrives.</p>
 
 <h2 id="example">Try the example</h2>
 <p>The Example button fills the box with {_e(pair)}, a pair with enough data to show a result: the
@@ -549,7 +578,8 @@ see <a href="#qa">the first question</a>.</li>
 <li>the study grows the species only in a community that is neither a two-member co-culture nor a
 drop-out design: grownet has no method for it yet;</li>
 <li>no monoculture was grown under the same conditions: nothing to compare with;</li>
-<li>the experiments are chemostats: tick "Include chemostat and serial dilution experiments";</li>
+<li>the experiments are chemostats or serial dilutions: set the growth measure to max, which that mode
+supports, or tick "Include chemostat and serial dilution experiments" to use them with another measure;</li>
 <li>every edge is low quality: tick "Show low-quality edges";</li>
 <li>every edge is below the absence threshold: open that section of the result, or set k to 0;</li>
 <li>the partners are species you did not type: untick "Only interactions between the species

@@ -7,6 +7,10 @@ content.
 ## [0.1.1] (unreleased)
 
 ### Changed
+- The help page explains how a continuous culture is treated, in "Which growth measure": derived with max
+  and marked `continuous_culture`, left out with an area under the curve or a growth rate and why, what
+  the setting does then, that a comparison never mixes modes, and that no study in mGrowthDB holds such a
+  design today.
 - **Continuous culture is derived with the growth measure `max`** (Karoline, 2026-10-03): the level a
   chemostat or serial dilution settles at is comparable with and without a partner, while the area under
   its curve and its growth rate are not. Such arcs carry the caution `continuous_culture` and are shown.

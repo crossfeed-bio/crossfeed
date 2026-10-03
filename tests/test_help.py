@@ -181,3 +181,18 @@ def test_the_marked_stretch_holds_the_steepest_rise_of_log_abundance():
     slopes = [(math.log(b[1]) - math.log(a[1])) / (b[0] - a[0]) for a, b in zip(points[:-1], points[1:], strict=True)]
     steepest = points[slopes.index(max(slopes))]
     assert steepest in idea._steep_stretch(points)
+
+
+def test_the_help_explains_how_a_chemostat_is_treated():
+    """Karoline, 2026-10-03, after the rule changed: "please document the new way of treating chemostat
+    data". The rule depends on the growth measure, so the help has to say both halves."""
+    html = help.render_help("tok", gui.DEFAULTS, gui.EXAMPLE)
+    section = html[html.index("Chemostats and serial dilutions"):]
+    section = section[:section.index("Try the example")]
+    assert "with max it is derived" in section.lower()
+    assert "continuous_culture" in section                 # what such an arc is marked with
+    assert "left out" in section and "non_batch" in section  # and what happens with the other measures
+    assert "never mixes modes" in section
+    # the setting's own text says the same, so the two cannot drift apart
+    setting = help.SETTINGS["include_non_batch"][2]
+    assert "max" in setting and "continuous_culture" in setting and "non_batch" in setting
