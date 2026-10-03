@@ -209,6 +209,9 @@ attributes become columns, so effect, weight, status, quality, the study ids and
 for filtering; the evidence (biculture or dropout) is Cytoscape's `interaction` column, and nodes carry a
 `genus` column.
 
+Every arc carries `p_value`, `q_value` and `significance` as columns, empty where there was no test: an
+empty number is never sent as 0, which Cytoscape would read as the strongest possible evidence.
+
 No edge labels are drawn, so a network stays readable. The sign is on every edge as a column instead:
 `strength` holds the signed log2 mean (`-2.66`), `effect` the word, and `weight` its magnitude. To show it,
 map Label to `strength` in Cytoscape's Style tab; to filter on direction, filter on `effect`.

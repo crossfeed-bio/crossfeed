@@ -43,6 +43,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     seen = []
     fail_style = False
     styles = []
+    columns = []        # the edge columns Cytoscape already holds
 
     def log_message(self, *_args):
         pass
@@ -64,6 +65,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         _Handler.seen.append(("GET", self.path, {}))
         if self.path == "/v1/styles":
             self._reply(_Handler.styles)
+        elif self.path.endswith("/tables/defaultedge/columns"):
+            self._reply([{"name": name} for name in _Handler.columns])
         elif self.path.endswith("/mappings"):        # an older style: two mappings, one no longer drawn
             self._reply([{"visualProperty": "EDGE_TARGET_ARROW_SHAPE"}, {"visualProperty": "NODE_SIZE"}])
         else:
@@ -94,7 +97,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
 @pytest.fixture
 def cyrest():
-    _Handler.seen, _Handler.fail_style, _Handler.styles = [], False, []
+    _Handler.seen, _Handler.fail_style, _Handler.styles, _Handler.columns = [], False, [], []
     httpd = http.server.HTTPServer(("127.0.0.1", 0), _Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     yield httpd.server_address[1], _Handler.seen
@@ -339,3 +342,30 @@ def test_a_tested_arc_carries_the_three_numbers_of_the_test():
              "status": "present", "p_value": 0.004, "q_value": 0.02, "significance": 1.699, "study_id": "S1"}]
     data = network_json(records_to_network(recs))["elements"]["edges"][0]["data"]
     assert (data["p_value"], data["q_value"], data["significance"]) == (0.004, 0.02, 1.699)
+
+
+def test_every_arc_carries_the_three_numbers_of_the_test_as_columns(cyrest):
+    # Karoline, 2026-10-03: arcs carry p-value, q-value and significance. An arc without a test sends no
+    # empty number (Cytoscape would read it as 0), so the columns are declared instead and its cells stay
+    # empty. Without this, a network whose arcs are all untested has no such column at all.
+    port, seen = cyrest
+    recs = [{"source": "ncbi:1", "target": "ncbi:2", "effect": "facilitation", "strength": 1.0,
+             "weight": 1.0, "status": "present", "outcome": "obligate", "study_id": "S1"}]
+    sent = send(records_to_network(recs), port=port)
+    declared = [body["name"] for path, body in
+                [(p, b) for verb, p, b in seen if verb == "POST" and p.endswith("/tables/defaultedge/columns")]]
+    for column in ("p_value", "q_value", "significance"):
+        assert column in declared
+    assert sent["columns"] == declared
+    # the arc itself still sends no empty number
+    posted = next(b for verb, p, b in seen if verb == "POST" and p.startswith("/v1/networks?"))
+    assert "q_value" not in posted["elements"]["edges"][0]["data"]
+
+
+def test_a_column_cytoscape_already_has_is_not_declared_again(cyrest):
+    port, seen = cyrest
+    _Handler.columns = ["p_value", "q_value", "significance", "sd", "se", "strength", "weight",
+                        "effect_over_sd", "n_with", "n_without", "merged_arcs", "supporting_pairs"]
+    sent = send(_net(), port=port)
+    assert sent["columns"] == []
+    assert not [p for verb, p, _ in seen if verb == "POST" and p.endswith("/tables/defaultedge/columns")]

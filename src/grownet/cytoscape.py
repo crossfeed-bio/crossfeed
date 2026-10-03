@@ -248,9 +248,43 @@ def _post(url: str, payload, timeout: float = 30.0):
     return json.loads(text) if text.strip() else {}
 
 
+# Numbers an arc may not have: an untested arc has no test, an obligate one no ratio, a merged one no
+# spread. They are left out of the payload rather than sent as null, because Cytoscape reads a null number
+# as 0.0 and 0 is the strongest q-value there is. The column is then declared here instead, so every arc
+# carries all of them and a reader can style or filter on any one, with the cells of the arcs that have no
+# value genuinely empty (Karoline, 2026-10-03; checked against Cytoscape 3.10.3).
+OPTIONAL_EDGE_COLUMNS = (("p_value", "Double"), ("q_value", "Double"), ("significance", "Double"),
+                         ("strength", "Double"), ("weight", "Double"), ("effect_over_sd", "Double"),
+                         ("sd", "Double"), ("se", "Double"), ("n_with", "Integer"),
+                         ("n_without", "Integer"), ("merged_arcs", "Integer"),
+                         ("supporting_pairs", "Integer"))
+
+
+def _declare_columns(root: str, suid, timeout: float) -> list:
+    """Create the edge columns an arc may not carry, so the table holds every one. Returns their names."""
+    table = f"{root}/networks/{suid}/tables/defaultedge"
+    try:
+        listed = _get(f"{table}/columns", timeout)
+    except (urllib.error.URLError, http.client.HTTPException, ValueError):
+        return []                      # the network is in; a missing column is not worth failing over
+    if not isinstance(listed, list):
+        listed = []                    # anything else is not a column list, so take none as present
+    present = {column.get("name") for column in listed if isinstance(column, dict)}
+    declared = []
+    for column, kind in OPTIONAL_EDGE_COLUMNS:
+        if column in present:
+            continue
+        try:
+            _post(f"{table}/columns", {"name": column, "type": kind, "immutable": False}, timeout)
+            declared.append(column)
+        except (urllib.error.URLError, http.client.HTTPException, ValueError):
+            continue
+    return declared
+
+
 def send(net: InteractionNetwork, port: int = PORT, name: str = "grownet",
          apply_style: bool = True, layout: str = "force-directed", timeout: float = 30.0) -> dict:
-    """Post `net` into a running Cytoscape and return {"suid", "style", "warning", "url"}.
+    """Post `net` into a running Cytoscape and return {"suid", "style", "warning", "columns", "url"}.
 
     Raises CytoscapeError with what to do when Cytoscape is not running, the port is wrong, or CyREST
     refuses the request. Nothing is sent anywhere but this port on the loopback interface.
@@ -273,6 +307,7 @@ def send(net: InteractionNetwork, port: int = PORT, name: str = "grownet",
     if suid is None:
         raise CytoscapeError(f"Cytoscape accepted the network but reported no network id: {created!r}")
 
+    declared = _declare_columns(root, suid, timeout)
     applied, warning = "", ""
     if apply_style:
         try:
@@ -287,7 +322,8 @@ def send(net: InteractionNetwork, port: int = PORT, name: str = "grownet",
             warning = f"the network is in Cytoscape, but its style could not be applied ({e.code} {e.reason})"
         except WIRE_ERRORS as e:
             warning = f"the network is in Cytoscape, but its style could not be applied ({getattr(e, 'reason', e)})"
-    return {"suid": suid, "style": applied, "warning": warning, "url": f"{root}/networks/{suid}"}
+    return {"suid": suid, "style": applied, "warning": warning, "columns": declared,
+            "url": f"{root}/networks/{suid}"}
 
 
 def _unreachable(port: int, reason) -> str:

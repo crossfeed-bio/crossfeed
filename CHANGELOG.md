@@ -17,7 +17,11 @@ content.
   change rides with 0.1.1, which has no released files yet.
 - A number that is empty is left out of what is sent to Cytoscape rather than sent as null: Cytoscape turns
   a null number into 0.0, and a q-value of 0 is the strongest there is, so an untested arc used to pass a
-  "q below 0.05" filter inside Cytoscape. Checked against Cytoscape 3.10.3.
+  "q below 0.05" filter inside Cytoscape. The columns an arc may not carry (`p_value`, `q_value`,
+  `significance`, `strength`, `weight`, `effect_over_sd`, `sd`, `se`, the replicate counts and the merge
+  counts) are declared on the edge table instead, so every arc carries all of them and the cells of the
+  arcs without a value stay empty. Without that, a network whose arcs are all untested had no such column
+  at all. Checked against Cytoscape 3.10.3.
 
 ### Added
 - Filter on adjusted p-value (`--max-adjusted-p Q`), an advanced setting off by default (register item

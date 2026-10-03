@@ -447,7 +447,11 @@ Before this, `significance` held the corrected p-value, which read backwards for
 
 **Cytoscape turns a null number into 0.0**, and 0 is the strongest q-value there is, so an untested arc
 would pass a "q below 0.05" filter inside Cytoscape. `cytoscape.network_json` leaves an empty number out
-of the payload instead, which keeps the cell genuinely empty (checked against Cytoscape 3.10.3).
+of the payload instead, which keeps the cell genuinely empty. A column only exists in Cytoscape once some
+arc carries it, so `cytoscape._declare_columns` creates the ones an arc may lack
+(`OPTIONAL_EDGE_COLUMNS`) after the network is posted: every arc then carries p_value, q_value and
+significance, empty where there was no test (Karoline, 2026-10-03; checked against Cytoscape 3.10.3, where
+a network of untested arcs had no such column before).
 
 ## Gotchas
 
