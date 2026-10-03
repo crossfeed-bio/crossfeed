@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import html
 
-from . import __version__
+from . import __version__, rbridge
 from .brand import COMMAND, NAME
 from .idea import idea_figure
 
 REPOSITORY = "https://github.com/crossfeed-bio/crossfeed"
+R_INSTALL = rbridge.INSTALL_R
 ISSUES = f"{REPOSITORY}/issues"
 NEW_ISSUE = f"{ISSUES}/new/choose"
 MGROWTHDB = "https://mgrowthdb.gbiomed.kuleuven.be"
@@ -154,7 +155,10 @@ CLI_ONLY = {
     "--rates": "write the growth rates to a CSV file, the page's Download the growth rates (needs "
                "--report-rates)",
     "--glv": "write the parameters of a generalized Lotka-Volterra simulation to a zip file, the page's "
-             "Generate gLV parameters (needs --report-rates)",
+             "gLV parameters, Download (needs --report-rates)",
+    "--to-r": "send those parameters into an R session waiting for them, the page's gLV parameters, Send "
+              "to R (needs --report-rates; in R: library(grownet); grownet_listen())",
+    "--r-port": "the port that R session listens on (default 8793, what grownet_listen() uses)",
     "--species": "species, strain or genus names, or NCBI taxon ids: search every study holding them, as the page "
                  "does",
     "--all": "every study in mGrowthDB, with every partner, as the page's All button (with --live)",
@@ -578,13 +582,37 @@ one, with each study's own median kept beside it in the network's meta. Batch mo
 chemostat or a serial dilution the rate a curve shows is the dilution rate, and a rate from a co-culture
 would be growth with a partner, which is the comparison, not the organism's own rate. An organism whose
 curves give no rate is named on the page and in the report, never given a substitute number.</p>
-<p><strong>The gLV parameters.</strong> Generate gLV parameters writes a zip for a generalized
+<p><strong>The gLV parameters.</strong> The gLV control writes a zip for a generalized
 Lotka-Volterra simulator: <code>interaction_matrix.csv</code> (the matrix above, with -1 on the diagonal
 by convention, for self-limitation), <code>growth_rates.csv</code> (one rate per organism, in the same
 order, with how many values it rests on) and <code>README.txt</code>, which states the conventions in the
 files themselves, names any pair left at 0 for disagreeing in sign, and names every organism without a
 rate. The numbers are effect sizes, not fitted gLV coefficients: a gLV coefficient is a per-capita effect
-in absolute units, so scale them for your model rather than using them unchanged.</p>
+in absolute units, so scale them for your model rather than using them unchanged. Cells are often
+stronger than the -1 on the diagonal, a partner outweighing an organism's own self-limitation, and a
+simulation run on them unchanged can grow without bound and come back as NA; the R package below has
+<code>glv_scale()</code> for that.</p>
+
+<p><strong>In R, with the companion package.</strong> The same control sends the parameters straight into
+a running R session, which is what the R package in this project is for. It assumes no simulator: it
+hands over a plain matrix and a plain vector, with a helper that shapes them for
+<a href="https://bioconductor.org/packages/release/bioc/html/miaSim.html">miaSim</a>, whose
+<code>simulateGLV</code> solves dx/dt = x(b + Ax), the order this matrix is written in.</p>
+<pre>install.packages("remotes")
+{_e(R_INSTALL)}
+library(grownet)
+glv &lt;- grownet_listen()        # then press gLV parameters, Send to R
+glv                            # prints what it holds and what to read before simulating
+A &lt;- glv_matrix(glv)           # warns about any cell that is a stated extreme
+r &lt;- glv_rates(glv)
+tse &lt;- do.call(miaSim::simulateGLV, as_miasim(glv_scale(glv)))</pre>
+<p>The caveats travel as data, not as text to be read first: the object prints them every time,
+<code>glv_matrix()</code> warns and names the cells that hold +10 or -10 and takes
+<code>placeholders = "na"</code> or <code>"zero"</code> to convert them, and
+<code>as_miasim()</code> stops when an organism has no growth rate, since a simulation cannot invent one.
+<code>glv_readme()</code> prints grownet's own README, and <code>glv_write()</code> saves the three files
+the download holds. When a port cannot be opened, <code>grownet_glv(url)</code> reads the same parameters
+from the address the page shows under its gLV control.</p>
 
 <h2 id="settings">Advanced settings</h2>
 <p>Every setting has a default that suits most searches. The command line takes the same settings.</p>

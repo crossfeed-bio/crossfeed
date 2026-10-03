@@ -830,5 +830,21 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    only: in a continuous culture the rate a curve shows is the dilution rate (item 12), and a rate measured
    in a co-culture is growth with a partner, which is the comparison itself.
 
+33. **How the gLV parameters reach R, and how their caveats reach the user** (Karoline, 2026-10-03). Her
+   words: "Now I'd like a companion plugin for R that would allow sending gLV parameters directly to R via
+   REST. The target simulator I have in mind is miaSim ... but it could also be another one or user code
+   (the plugin should not assume the presence of any particular simulator) ... I propose to have one
+   single drop-down menu for gLV results where the user chooses whether to download or to send to R. The
+   problem is the README: caveats such as the placeholders for obligates/abolished taxa have to reach the
+   user; any suggestions?" Settled, choosing among her agent's options: both directions (the R package
+   opens a local port for the page's Send to R, and can fetch the same payload from the page when no port
+   can be opened); the caveats travel as data, the object prints them every time, taking the matrix warns
+   and names the placeholder cells, and a missing growth rate stops a simulation; the package lives in
+   `r/` of this repository and is installed from GitHub. The payload is its own format,
+   `grownet.glv/v0`, served at the page's `/glv.json`: the numbers of the zip, the caveats as fields, and
+   grownet's README text, so neither route loses what the other carries. Measured while building it: an
+   unscaled matrix diverges in miaSim (cells outweigh the -1 diagonal), so both the README and the R
+   package say so and `glv_scale()` is offered, which is a modeling choice and never applied by itself.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

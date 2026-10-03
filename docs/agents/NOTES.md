@@ -519,6 +519,29 @@ simulator takes (register item 32, Karoline 2026-10-03). What a later agent need
 - The rates are read from the studies the search already read, with `wanted` set to the organisms of the
   derived arcs, so no rate costs an extra request to mGrowthDB.
 
+## The R companion package (#110)
+
+`r/` holds an R package called `grownet`, the other end of Send to R. What a later agent needs to know:
+
+- **The wire format is `grownet.glv/v0`** (`matrix.glv_payload`), served at the page's `/glv.json` and
+  posted by `rbridge.send` to the port the R package listens on (8793 by default). It holds the same
+  numbers as the zip, the caveats as fields, and grownet's README text, so neither route loses what the
+  other carries. Change the format id when the fields change; the R package warns on an id it does not
+  know and reads it anyway.
+- **The caveats are enforced in R, not explained**: `print` shows them every time, `glv_matrix` warns and
+  names the cells holding the stated extreme (`placeholders = "na"` or `"zero"` converts them), and
+  `as_miasim` stops when an organism has no growth rate. That was Karoline's answer to her own question
+  about the README (register item 33).
+- **The listener is base R sockets** (`serverSocket`, `socketAccept`), so installing the package pulls in
+  only jsonlite. It answers one request and closes the port; a GET gets a line saying what the port is.
+- **miaSim is suggested, never imported.** `as_miasim` returns the argument list for
+  `miaSim::simulateGLV`, which solves dx/dt = x(b + Ax), the order the matrix is written in.
+- **An unscaled matrix diverges**: on SMGDB00000004 the cells outweigh the -1 diagonal and deSolve returns
+  NA. `glv_scale()` divides the off-diagonal by one factor; it is a modeling choice, so nothing applies
+  it by itself, and the printout and both READMEs say so.
+- Checking the R side: `R CMD build r && R CMD check --no-manual grownet_0.1.0.tar.gz`, or `make r-check`.
+  The tests live in `r/tests/testthat` and include a real POST into the listener.
+
 ## Gotchas
 
 - mGrowthDB serves growth curves, not interactions; interactions are derived.

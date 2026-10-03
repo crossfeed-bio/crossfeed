@@ -244,6 +244,10 @@ def readme(net: InteractionNetwork, rates: dict, conflicts: list, missing: list,
         "      grow at all, so these are stated extremes, not measurements. They do not enter the median "
         "of the",
         "      arcs that do have a ratio; they set a cell only when no arc of that pair was quantified.",
+        f"  Cells are often stronger than the {_number(DIAGONAL)} on the diagonal, a partner outweighing "
+        "an organism's own",
+        "      self-limitation. A simulation run on them unchanged can grow without bound (deSolve returns",
+        "      NA). Scale the off-diagonal cells for your model; the R companion package has glv_scale().",
         "  A growth rate is the maximum specific growth rate of that organism in monoculture (easylinear,",
         f"      the method mGrowthDB reports), median over replicates and studies, in {RATE_UNIT}.",
         "",
@@ -269,6 +273,64 @@ def readme(net: InteractionNetwork, rates: dict, conflicts: list, missing: list,
     lines += ["", "Interactions are derived, not measured: see the report beside this file for what was",
               "skipped and why."]
     return "\n".join(lines) + "\n"
+
+
+# The same parameters as the zip, for a program rather than a reader: the caveats travel as data beside
+# the numbers, so code can act on them instead of a person having to read the README first (Karoline,
+# 2026-10-03: "The problem is the README: caveats such as the placeholders for obligates/abolished taxa
+# have to reach the user"). The README text travels with it, so nothing is lost either way.
+GLV_FORMAT = "grownet.glv/v0"
+
+
+def glv_payload(net: InteractionNetwork, rates: dict) -> dict:
+    """The gLV parameters as one JSON-ready document (`GLV_FORMAT`).
+
+    `organisms` names the rows and the columns of `interactions` (-1 on the diagonal), and
+    `growth_rates` runs in the same order, with null where an organism has none. `caveats` holds, as
+    data: the cells that carry the stated extreme rather than a measured ratio, the pairs left at 0 for
+    disagreeing in sign, the organisms without a rate, the absence threshold, and the standing note that
+    a cell is an effect size and not a fitted coefficient.
+    """
+    order = labels(net)
+    names, matrix, conflicts = rows(net, DIAGONAL)
+    missing = [_label(net.nodes[nid]) for nid in order if nid not in rates]
+    units = {rates[nid].get("unit", RATE_UNIT) for nid in order if nid in rates}
+    meta = net.meta
+    return {
+        "format": GLV_FORMAT,
+        "tool": meta.get("tool", brand.NAME),
+        "tool_version": meta.get("tool_version", ""),
+        "derived_at": meta.get("derived_at", ""),
+        "source_db": meta.get("source_db", "mGrowthDB"),
+        "organisms": names,
+        "interactions": matrix,
+        "growth_rates": [rates[nid]["rate"] if nid in rates else None for nid in order],
+        "growth_rate_unit": units.pop() if len(units) == 1 else "",
+        "growth_rate_detail": [
+            {"organism": _label(net.nodes[nid]), "rate": rates[nid]["rate"],
+             "unit": rates[nid].get("unit", RATE_UNIT), "replicates": rates[nid].get("n"),
+             "studies": list(rates[nid].get("studies", ())),
+             "per_study": dict(rates[nid].get("per_study", {}))}
+            for nid in order if nid in rates],
+        "caveats": {
+            "diagonal": DIAGONAL,
+            "extreme": EXTREME,
+            "absence_k": meta.get("absence", {}).get("k"),
+            "placeholders": [{"affected": affected, "actor": actor, "value": value,
+                              "outcome": "obligate" if value > 0 else "abolished"}
+                             for affected, actor, value in by_convention(net)],
+            "sign_conflicts": [{"affected": affected, "actor": actor} for affected, actor in conflicts],
+            "without_a_rate": missing,
+            "effect_size": "a cell is the log2 mean of a growth comparison, an effect size, not a fitted "
+                           "gLV coefficient (a per-capita effect in absolute units); scale these numbers "
+                           "for your model rather than using them unchanged",
+            "counts": counts(net),
+        },
+        "readme": readme(net, rates, conflicts, missing, by_convention(net)),
+        "studies": [{"id": sid, "citation": study.citation or sid, "url": study.url,
+                     "license": study.license} for sid, study in sorted(net.studies.items())],
+        "settings": dict(meta.get("settings", {})),
+    }
 
 
 def glv_package(net: InteractionNetwork, rates: dict) -> bytes:

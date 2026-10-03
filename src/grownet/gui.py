@@ -14,6 +14,7 @@ from __future__ import annotations
 import dataclasses
 import html
 import http.server
+import json
 import secrets
 import socketserver
 import threading
@@ -22,7 +23,7 @@ import urllib.parse
 import webbrowser
 from collections import Counter
 
-from . import __version__, brand, interaction, matrix, rates
+from . import __version__, brand, interaction, matrix, rates, rbridge
 from . import help as help_page
 from . import published as daily
 from .adapter import condensed, unread
@@ -420,7 +421,13 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
     # the gLV parameters need a growth rate per organism, so the button appears with the rates (Karoline,
     # 2026-10-03: "another extra button to generate gLV parameters from the current run (when 'Report growth
     # rates' was enabled)")
-    glv = (f"<a class=\"btn\" href=\"/glv.zip?token={t}{tail}\">Generate gLV parameters (.zip)</a>"
+    # one control with a menu, not two buttons (Karoline, 2026-10-03: "one single drop-down menu for gLV
+    # results where the user chooses whether to download or to send to R")
+    glv = (f"<form class=\"inline\" method=\"post\" action=\"/glv?token={t}{tail}\">"
+           "<button type=\"submit\">gLV parameters</button> "
+           "<select name=\"to\" aria-label=\"What to do with the gLV parameters\">"
+           "<option value=\"zip\">Download (.zip)</option>"
+           "<option value=\"r\">Send to R</option></select></form>"
            if organism_rates and has_edges else "")
     count = matrix.counts(result["network"])
     hint = ("<p class=\"hint\">Send to Cytoscape needs Cytoscape running on this machine; the network arrives in "
@@ -432,9 +439,25 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
                  "monoculture, the median over the replicates and studies that have one. The gLV package holds "
                  "the interaction matrix (-1 on the diagonal), the matching growth rates and a README stating "
                  "what the numbers are.</p>") if organism_rates else ""
+    r_hint = (f"<p class=\"hint\">Send to R needs an R session waiting for it: install the companion package "
+              f"once with <code>{_esc(rbridge.INSTALL_R)}</code>, then run "
+              f"<code>library(grownet); glv &lt;- grownet_listen()</code> and "
+              f"press this. What arrives prints its own caveats, warns when the matrix holds a stated extreme, "
+              f"and refuses to build a simulation for an organism with no growth rate "
+              f"(<a href=\"/help?token={t}{tail}#glv\">the help explains it</a>). Without a listener, read the "
+              f"same parameters in R with <code>glv &lt;- grownet_glv(&quot;{_esc(_glv_url(token, result))}"
+              f"&quot;)</code>.</p>") if organism_rates and has_edges else ""
     missing_rate = _without_a_rate(result)
     return (f"<div class=\"bar outputs\">{download if has_edges else ''}{cytoscape if has_edges else ''}"
-            f"{report}{rates_file}{glv}</div>{hint if has_edges else ''}{rate_hint}{missing_rate}")
+            f"{report}{rates_file}{glv}</div>{hint if has_edges else ''}{rate_hint}{r_hint}{missing_rate}")
+
+
+def _glv_url(token: str, result: dict) -> str:
+    """The address the R package fetches the same parameters from, with the session token, so a user who
+    cannot open a port is not stuck (`grownet.rbridge.unreachable` says the same)."""
+    port = result.get("port") or ""
+    job = result.get("job", "")
+    return (f"http://127.0.0.1:{port}/glv.json?token={token}" + (f"&job={job}" if job else "")) if port else ""
 
 
 def _without_a_rate(result: dict) -> str:
@@ -861,15 +884,18 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if job["status"] == "failed":
             return render_form(self.token, "\n".join(job["entries"]), job["settings"], job["error"])
         job["result"]["job"] = job["id"]
+        job["result"]["port"] = self.server.server_address[1]
         self.state["result"] = job["result"]
         return render_result(self.token, job["result"])
 
     def _result(self, query: dict):
         """The search a request names with job=, or the latest one when it names none."""
         job = self.state.get("jobs", {}).get(query.get("job", [""])[0])
-        if job and job.get("status") == "done":
-            return job["result"]
-        return self.state.get("result")
+        result = job["result"] if job and job.get("status") == "done" else self.state.get("result")
+        if result is not None:
+            # the port this page is served from, so the result can print the address R fetches from
+            result["port"] = self.server.server_address[1]
+        return result
 
     def _download(self, fmt: str, query: dict):
         result = self._result(query)
@@ -906,7 +932,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._download(parsed.path.rsplit(".", 1)[1], query)
         elif parsed.path == "/download.matrix":
             self._download("matrix", query)
-        elif parsed.path in ("/rates.csv", "/glv.zip"):
+        elif parsed.path in ("/rates.csv", "/glv.zip", "/glv.json"):
             self._rates(parsed.path, query)
         elif parsed.path == "/grownet_style.xml":
             # the Cytoscape style as a file, the same as `grownet style` writes, so a downloaded GraphML can
@@ -931,9 +957,39 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/rates.csv":
             self._send(matrix.rates_csv(organism_rates, result["network"]), "text/csv; charset=utf-8",
                        f"{TITLE}_growth_rates.csv")
+        elif path == "/glv.json":
+            # what the R package fetches, and what Send to R posts: the same numbers as the zip, with the
+            # caveats as data and the README text (#110)
+            self._send(json.dumps(matrix.glv_payload(result["network"], organism_rates), indent=1),
+                       "application/json; charset=utf-8")
         else:
             self._send(matrix.glv_package(result["network"], organism_rates), "application/zip",
                        f"{TITLE}_glv_parameters.zip")
+
+    def _glv(self, query: dict, form: dict) -> None:
+        """The page's one gLV control: the zip, or the parameters posted into a listening R session."""
+        result = self._result(query)
+        organism_rates = (result or {}).get("rates") or {}
+        if not organism_rates:
+            self._send(render_form(self.token, message="No gLV parameters yet: tick Report growth rates "
+                                                       "and run the search again."))
+            return
+        if form.get("to", ["zip"])[0] != "r":
+            self._send(matrix.glv_package(result["network"], organism_rates), "application/zip",
+                       f"{TITLE}_glv_parameters.zip")
+            return
+        payload = matrix.glv_payload(result["network"], organism_rates)
+        try:
+            answer = rbridge.send(payload)
+        except rbridge.RError as e:
+            self._send(render_result(self.token, result, message=str(e)))
+            return
+        caveats = payload["caveats"]
+        note = (f"Sent to R: {answer.get('organisms', 0)} organism(s), "
+                f"{answer.get('growth_rates', 0)} growth rate(s), "
+                f"{len(caveats['placeholders'])} placeholder cell(s). The R session printed what it holds "
+                "and what to read before simulating.")
+        self._send(render_result(self.token, result, message=note))
 
     def _to_cytoscape(self, query: dict) -> str:
         """Send the network already computed, without deriving it again (#25)."""
@@ -998,6 +1054,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         length = int(self.headers.get("Content-Length") or 0)
         form = urllib.parse.parse_qs(self.rfile.read(length).decode("utf-8"))
+        if parsed.path == "/glv":
+            self._glv(urllib.parse.parse_qs(parsed.query), form)
+            return
         entries = form.get("species", [""])[0].splitlines()
         settings = parse_settings(form)
         if form.get("example"):
