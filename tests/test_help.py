@@ -203,6 +203,24 @@ def test_the_help_explains_how_a_chemostat_is_treated():
     assert "max" in setting and "continuous_culture" in setting and "non_batch" in setting
 
 
+def test_the_help_explains_the_matrix_the_growth_rates_and_the_glv_package():
+    """Karoline, 2026-10-03: "please make sure all of this is in the CLI and documented". Every convention
+    a reader of those files needs is on the help page, in the words the files themselves use."""
+    from grownet import matrix
+    html = help.render_help("tok", gui.DEFAULTS, gui.EXAMPLE)
+    section = html[html.index("The matrix, the growth rates and gLV"):]
+    section = section[section.index("<h2 id=\"glv\">"):section.index("<h2 id=\"settings\">")]
+    assert "A[i][j]" in section.replace("&#x27;", "'") and "rows are affected" in section
+    assert "median" in section and "disagree in sign" in section      # how arcs of one pair are merged
+    assert "+10" in section and "-10" in section                      # the obligate and abolished extremes
+    assert f"{matrix._number(matrix.DIAGONAL)} on the diagonal" in section or "-1" in section
+    assert "monoculture" in section and "chemostat" in section        # where a rate comes from, and not
+    assert "not fitted gLV coefficients" in section
+    # the command line section shows both new outputs, so the page and the terminal say the same
+    cli = html[html.index("<h2 id=\"cli\">"):]
+    assert "--format matrix" in cli and "--report-rates" in cli and "--glv" in cli
+
+
 def test_the_name_is_marked_as_a_name_in_prose_but_left_alone_in_commands():
     """Karoline, 2026-10-03: "please use a special style for grownet, so sentences starting with it don't
     look strange". It is all lowercase, so in prose it carries the wordmark's two parts."""

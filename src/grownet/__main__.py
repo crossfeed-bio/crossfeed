@@ -38,6 +38,13 @@ DERIVE_EXAMPLES = """examples:
   every species in one study, stricter about what counts as an interaction:
     grownet derive SMGDB00000004 --live --absence-threshold 2 --out study4.json
 
+  the adjacency matrix of one study, as CSV:
+    grownet derive SMGDB00000004 --live --format matrix --out study4_matrix.csv
+
+  the parameters of a generalized Lotka-Volterra simulation, with the growth rates beside them:
+    grownet derive SMGDB00000004 --live --report-rates --glv study4_glv.zip \\
+        --rates study4_rates.csv --report study4_report.txt
+
 """
 
 
@@ -71,7 +78,22 @@ def _metric(a) -> str:
     return metric_name({"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window})
 
 
+def _rate_flags(a) -> str:
+    """Why the growth-rate options cannot be used as given, or "": checked before anything is derived, so
+    a run never writes a network and then refuses to write the files beside it."""
+    if a.report_rates and not a.live:
+        return "--report-rates reads the monoculture curves, so it needs --live"
+    for flag, path in (("--rates", a.rates), ("--glv", a.glv)):
+        if path and not a.report_rates:
+            return f"{flag} writes the growth rates of the run, so it needs --report-rates"
+    return ""
+
+
 def _derive(a):
+    problem = _rate_flags(a)
+    if problem:
+        print(problem, file=sys.stderr)
+        return 2
     if a.species or a.all_studies:
         return _derive_species(a)
     if not a.study:
@@ -106,7 +128,8 @@ def _derive(a):
                                  "include_low_quality": a.include_low_quality, "correction": a.correction,
                                  "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
                                  "no_growth_alpha": a.no_growth_alpha, "no_growth_factor": a.no_growth_factor,
-                                 "max_adjusted_p": a.max_adjusted_p, "deriver": a.deriver or ""}
+                                 "max_adjusted_p": a.max_adjusted_p, "report_rates": a.report_rates,
+                                 "deriver": a.deriver or ""}
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
             return 1
@@ -127,7 +150,11 @@ def _derive(a):
         errors.append(f"{len(failed)} replicate(s) or growth curve(s) could not be read from mGrowthDB (for "
                       f"example {failed[0][0]}: {failed[0][1]}); the result is incomplete, so run it again")
         print(f"warning: {errors[0]}", file=sys.stderr)
+    organism_rates = {}
+    if a.report_rates:
+        organism_rates, skipped = _rates_of(a, client, [a.study], net, skipped)
     result = {"study": a.study, "entries": [], "resolved": [], "unresolved": [], "studies": [a.study],
+              "rates": organism_rates,
               "skipped": skipped, "errors": errors, "network": net}
     return _emit(a, net, skipped, extra, a.study, result)
 
@@ -154,7 +181,7 @@ def _derive_species(a):
                 "include_non_batch": a.include_non_batch, "studies": a.study or "",
                 "only_entered": not a.all_partners, "exclude_studies": a.exclude_studies,
                 "merge_arcs": a.merge_arcs, "min_studies": a.min_studies, "merge_genera": a.merge_genera,
-                "no_growth_alpha": a.no_growth_alpha,
+                "report_rates": a.report_rates, "no_growth_alpha": a.no_growth_alpha,
                 "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p}
     try:
         result = run_query(MGrowthDBClient(), a.species or [], settings, all_studies=a.all_studies,
@@ -186,11 +213,28 @@ def _derive_species(a):
     return _emit(a, net, result["skipped"], extra, label, result)
 
 
+def _rates_of(a, client, study_ids, net, skipped):
+    """(rates by node id, skipped): the monoculture growth rates of these studies, keyed by the network's
+    own nodes, with the network's meta recording them as the page does."""
+    from . import matrix, rates
+    from .derive import growth_rates
+    found, rate_skips = growth_rates(client, study_ids, wanted=set(net.nodes),
+                                     rate_method=a.rate_method, window=a.rate_window,
+                                     spike_factor=a.spike_factor)
+    organism_rates = matrix.for_nodes(net, found)
+    net.meta["growth_rates"] = matrix.rate_meta(net, organism_rates,
+                                                rates.method_name(a.rate_method, a.rate_window))
+    return organism_rates, skipped + rate_skips
+
+
 def _emit(a, net, skipped, extra, label, result):
     """Write the network, and the report when asked, and say what it holds, skipped and hid."""
     if a.format == "graphml":
         from .export import to_graphml
         payload = to_graphml(net)
+    elif a.format == "matrix":
+        from .matrix import matrix_csv
+        payload = matrix_csv(net)        # the plain adjacency matrix: its diagonal is 0, the gLV one is -1
     else:
         payload = net.to_json()
     if a.out:
@@ -206,6 +250,23 @@ def _emit(a, net, skipped, extra, label, result):
         with open(a.report, "w", encoding="utf-8") as f:
             f.write(report_text(result))
         print(f"wrote the report to {a.report}", file=sys.stderr)
+
+    organism_rates = result.get("rates") or {}
+    if (a.rates or a.glv) and not organism_rates:
+        print("no growth rate could be computed for any organism of this network; the report says why "
+              "each one has none", file=sys.stderr)
+        return 1
+    if a.rates:
+        from .matrix import rates_csv
+        with open(a.rates, "w", encoding="utf-8") as f:
+            f.write(rates_csv(organism_rates, net))
+        print(f"wrote the growth rates to {a.rates}: {len(organism_rates)} organism(s)", file=sys.stderr)
+    if a.glv:
+        from .matrix import glv_package
+        with open(a.glv, "wb") as f:
+            f.write(glv_package(net, organism_rates))
+        print(f"wrote the gLV parameters to {a.glv}: the interaction matrix, the growth rates and a README",
+              file=sys.stderr)
 
     if a.to_cytoscape:
         from .cytoscape import CytoscapeError, send
@@ -392,6 +453,10 @@ def build_parser() -> argparse.ArgumentParser:
                                "replicates) count as growth whatever the test says (default 1.5; 2 is "
                                "stricter; 0 leaves the test alone)")
 
+    settings.add_argument("--report-rates", action="store_true",
+                          help="also report each organism's maximum specific growth rate in monoculture, the "
+                               "median over replicates and studies (the page's Report growth rates); needed "
+                               "for --glv")
     settings.add_argument("--merge-arcs", action="store_true",
                           help="merge the arcs of each source and target, across conditions and studies, into "
                                "one with the median log2 mean and its range; arcs whose signs disagree are not "
@@ -404,9 +469,13 @@ def build_parser() -> argparse.ArgumentParser:
     settings.add_argument("--min-studies", type=int, default=1, metavar="N",
                           help="keep arcs resting on at least N studies (default 1; above 1 it needs merged arcs)")
 
-    outputs = d.add_argument_group("outputs (the local page's three buttons)")
-    outputs.add_argument("--format", choices=["json", "graphml"], default="json",
-                         help="the network format: json (the neutral format, default) or graphml (Cytoscape, "
+    outputs = d.add_argument_group("outputs (what the local page's result section offers)")
+    outputs.add_argument("--format", choices=["json", "graphml", "matrix"], default="json",
+                         help="the network format: json (the neutral format, default), matrix (the adjacency "
+                              "matrix as CSV: one cell per ordered pair, holding the effect of the column on "
+                              "the row, arcs of a pair merged by their median, +10 for an obligate "
+                              "interaction and -10 for an abolished one) or graphml "
+                              "(Cytoscape, "
                               "Gephi, igraph, networkx)")
     outputs.add_argument("--out", metavar="FILE", help="write the network to FILE (default: the screen)")
     outputs.add_argument("--to-cytoscape", action="store_true",
@@ -414,6 +483,12 @@ def build_parser() -> argparse.ArgumentParser:
                               "the legend")
     outputs.add_argument("--cytoscape-port", type=int, default=1234, metavar="PORT",
                          help="the port Cytoscape's CyREST listens on (default 1234)")
+    outputs.add_argument("--rates", metavar="FILE",
+                         help="write the growth rates to FILE as CSV (needs --report-rates)")
+    outputs.add_argument("--glv", metavar="FILE",
+                         help="write the parameters of a generalized Lotka-Volterra simulation to FILE, a zip "
+                              "of the interaction matrix (-1 on the diagonal), the matching growth rates and a "
+                              "README (needs --report-rates)")
     outputs.add_argument("--report", metavar="FILE",
                          help="write the report of the search to FILE: every setting, the tool version, every "
                               "interaction, every pair the data did not support, and the sources")

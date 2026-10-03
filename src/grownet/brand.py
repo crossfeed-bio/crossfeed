@@ -130,6 +130,7 @@ textarea:focus, input:focus, select:focus, button:focus, .btn:focus {{ outline: 
 .btn.primary, button.primary {{ background: var(--grow); border-color: var(--grow); color: #fff; font-weight: 600; }}
 .btn.quiet {{ background: transparent; padding: .3rem .7rem; }}
 .bar {{ display: flex; gap: .6rem; margin-top: .9rem; flex-wrap: wrap; align-items: center; }}
+.beside {{ display: inline-flex; gap: .35rem; align-items: center; white-space: nowrap; }}
 .backtop {{ justify-content: flex-end; margin: 0 0 -.4rem; }}
 details {{ margin-top: 1.1rem; border-top: 1px solid var(--line); padding-top: .8rem; }}
 summary {{ cursor: pointer; font-weight: 600; }}

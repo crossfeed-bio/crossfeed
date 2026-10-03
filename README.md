@@ -138,7 +138,7 @@ concrete demonstration of the seam.
 ## The command line
 
 ```
-python -m grownet derive STUDY [--live | --fixture FILE] [--deriver MODULE:CLASS] [--format json|graphml] [--out FILE]
+python -m grownet derive STUDY [--live | --fixture FILE] [--deriver MODULE:CLASS] [--format json|graphml|matrix] [--out FILE]
 python -m grownet derive --live --species NAME [NAME ...] [--all-partners] [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
 python -m grownet derive --live --all [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
 python -m grownet validate FILE
@@ -157,11 +157,22 @@ python -m grownet schema [--out FILE]
   less than a day old, and derives live otherwise; `--no-published` always derives live.
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the baseline (see below).
-- The command line does everything the local page does: every advanced setting has its option, and
-  the page's three outputs are `--out FILE` (with `--format`), `--to-cytoscape` and `--report FILE`, the
-  same report the page shows. `grownet derive --help` lists every option in the page's words, with
-  examples.
+- The command line does everything the local page does: every advanced setting has its option, and the
+  page's outputs are `--out FILE` (with `--format`), `--to-cytoscape`, `--report FILE` (the same report the
+  page shows), and, with `--report-rates`, `--rates FILE` and `--glv FILE`. `grownet derive --help` lists
+  every option in the page's words, with examples.
 - `--format graphml` emits GraphML (for Cytoscape, igraph, networkx, Gephi) instead of the neutral JSON.
+- `--format matrix` emits the adjacency matrix as CSV: the organisms in the header row and in the first
+  column, and a cell holding the log2 mean of the comparison, so `A[i][j]` is the effect of j on i. Each
+  organism appears once, so arcs of one pair are merged across conditions and studies by their median, a
+  pair whose arcs disagree in sign is left at 0, and an empty cell or an arc below the absence threshold
+  is 0. An obligate interaction carries +10 and an abolished one -10, a stated extreme, since neither has
+  a log2 ratio: one side did not grow at all.
+- `--report-rates` also reports each organism's maximum specific growth rate in monoculture (the median
+  over the replicates and studies that have one, batch monocultures only), which `--rates FILE` writes as
+  CSV. With it, `--glv FILE` writes the parameters of a generalized Lotka-Volterra simulation: a zip of the
+  interaction matrix with -1 on the diagonal, the matching growth rates and a README stating the
+  conventions. The numbers are effect sizes, not fitted gLV coefficients.
 - `--out FILE` writes the network to a file instead of stdout; attribution and skipped pairs print to
   stderr.
 - `validate FILE` checks a network document against the neutral-format schema and exits non-zero if it
@@ -193,8 +204,11 @@ attribute, the main design decisions, the command line, what to do when no netwo
 to report a problem; an About page says who built it and links this repository. Type species names (or NCBI taxon ids, or a genus for all its species), one per line, and press "Find
 interactions", or press All to derive every study in mGrowthDB. **grownet** resolves
 the names to taxon ids from mGrowthDB's own strain records, finds the studies holding them, derives the
-interactions, and shows them as a table with downloads for JSON and GraphML. Every setting sits behind
-"Advanced settings" with the same defaults the command line uses.
+interactions, and shows them as a table with downloads for JSON, GraphML and the adjacency matrix. Every
+setting sits behind "Advanced settings" with the same defaults the command line uses, except **Report
+growth rates**, which sits beside the All button: it adds each organism's growth rate in monoculture as its
+own download and turns on **Generate gLV parameters**, the zip a generalized Lotka-Volterra simulator
+takes.
 
 The page is served from the standard library on 127.0.0.1 with a token in its URL, renders in Python with
 no JavaScript, and uploads nothing: the data is pulled from mGrowthDB to your machine, and the results
@@ -231,7 +245,9 @@ read, and it is pinned by a JSON Schema at
 the tool, `tool_version` and `derived_on` (the date: mGrowthDB changes, so the same version can derive a
 different network later), `derived_at` (the date and time), the data read (`meta.data`: the API, when,
 and each study's upload and publication dates) and every setting used; GraphML carries the tool, version,
-date and time as graph attributes.
+date and time as graph attributes. A run with `--report-rates` also carries `meta.growth_rates`: the rule
+the rates follow, a rate per organism with its unit, the number of monoculture replicates behind it, the
+studies and each study's own median, and `without_a_rate`, the organisms that have none.
 
 ```json
 {
@@ -321,6 +337,21 @@ kept as an arc), or `null` when unknown; `community` lists the node ids of the c
 `experiments` lists the ids of the mGrowthDB experiments whose replicates the edge compares, so edges that
 share replicates (every drop-out arc of one design shares the full community) can be recognized.
 These fields are optional, so documents without them stay valid.
+
+**The adjacency matrix and the gLV package.** `--format matrix` writes the same network as a square CSV
+table: the organisms in the header row and in the first column, and `A[i][j]` the effect of j on i (rows
+affected, columns the actor), so `dx_i/dt = x_i (r_i + sum_j A[i][j] x_j)` reads in that order. A matrix
+holds one cell per ordered pair, so arcs of one pair merge across conditions and studies by their median,
+and a pair whose arcs disagree in sign is left at 0. An empty cell and an arc below the absence threshold
+are 0; an obligate interaction is +10 and an abolished one -10, a stated extreme rather than a measured
+ratio, since one side did not grow at all. The diagonal is 0 here.
+`--glv FILE` (with `--report-rates`) writes the parameters of a generalized Lotka-Volterra simulation as a
+zip: `interaction_matrix.csv`, the same matrix with -1 on the diagonal by convention for self-limitation;
+`growth_rates.csv`, one rate per organism in the same order with how many values it rests on; and
+`README.txt`, which states every convention, names the pairs left at 0 for disagreeing in sign, the cells
+that hold the stated extreme, and the organisms without a rate. The numbers are effect sizes, not fitted
+gLV coefficients: a gLV coefficient is a per-capita effect in absolute units, so scale them for your
+model.
 
 **Drop-out designs.** A community of three or more members, together with experiments holding the same
 community without one member under the same conditions, gives an arc from each removed member to each
