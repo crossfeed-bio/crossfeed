@@ -214,3 +214,22 @@ def test_the_name_is_marked_as_a_name_in_prose_but_left_alone_in_commands():
     # the served page carries it: the body is styled, the header's own wordmark is untouched
     page = gui.render_help("tok", "")
     assert page.count(brand.NAME_HTML) > 5 and "<code>grownet" in page.replace("</code>", "")
+
+
+def test_the_help_says_the_adjusted_p_value_is_the_q_value():
+    """Karoline, 2026-10-03: "make sure the reader in the help knows that the adjusted p-value is the
+    q-value". The page heads that column q, so the two names have to meet somewhere."""
+    text = visible(PAGE)
+    decided = text[text.index("How an interaction is decided"):]
+    assert "adjusted p-value, which is what a q-value is" in decided
+    assert "q_value" in decided and "column is headed q" in decided
+    # and the setting that filters on it says the same, since a reader may start there
+    assert "the p-value adjusted for multiple testing: the two names mean the same number" in \
+        help.SETTINGS["max_adjusted_p"][2]
+    assert help.SETTINGS["max_adjusted_p"][0] == "Filter on the q-value"
+
+
+def test_the_first_advanced_setting_is_called_growth_property():
+    """Karoline, 2026-10-03: "Growth measure (the first entry) should be Growth property"."""
+    assert help.SETTINGS["metric"][0] == "Growth property"
+    assert "Growth property" in gui.render_form("tok") and "Growth measure" not in gui.render_form("tok")

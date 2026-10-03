@@ -202,7 +202,7 @@ STATIONARY_DIFFERS, STATIONARY_UNCHECKED = "stationary_phase_differs", "stationa
 # an obligate or abolished arc whose set without growth is zero from its first time point: no growth cannot
 # be told from no inoculum or counts below detection (Karoline, 2026-09-28: "Obligate, with a caution")
 ZERO_AT_START = "zero_at_start"
-# With the adjusted p-value filter on, an arc that has no p-value (obligate or abolished: no finite ratio;
+# With the q-value filter on, an arc that has no p-value (obligate or abolished: no finite ratio;
 # a single replicate on one side: no spread) cannot be judged by it; it is kept and says so (Karoline,
 # 2026-09-30: "Keep them, labeled untested")
 UNTESTED = "untested"
@@ -1099,8 +1099,9 @@ PROVISIONAL = ("Each interaction compares a species' growth with and without its
 
 # Appended to the caution when the filter is on, since the caution then no longer holds: the adjusted p-value
 # decides too
-FILTER_NOTE = (" With the adjusted p-value filter on, an interaction is also left out when its adjusted "
-               "p-value is above {q:g}; arcs without a p-value are kept and marked untested.")
+FILTER_NOTE = (" With the q-value filter on (the q-value is the p-value adjusted for multiple testing), an "
+               "interaction is also left out when its q-value is above {q:g}; arcs without a p-value are "
+               "kept and marked untested.")
 
 
 def filter_significance(records, max_adjusted_p: float | None = None) -> tuple:
@@ -1158,8 +1159,9 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
     statistics = {**STATISTICS, "correction": STATISTICS["correction"].format(name=CORRECTIONS[correction][0]),
                   "tests": tests, "filter": significance_filter}
     if max_adjusted_p is not None:
-        statistics["role"] = (f"presence is decided by the absence threshold, and an interaction whose adjusted "
-                              f"p-value is above {max_adjusted_p:g} is left out (the adjusted p-value filter)")
+        statistics["role"] = (f"presence is decided by the absence threshold, and an interaction whose "
+                              f"q-value (the adjusted p-value) is above {max_adjusted_p:g} is left out "
+                              "(the q-value filter)")
     absent = sum(1 for e in edges if e.get("status") == ABSENT)
     provisional = PROVISIONAL + ("" if max_adjusted_p is None else FILTER_NOTE.format(q=max_adjusted_p))
     meta = {"provisional": provisional, "statistics": statistics,

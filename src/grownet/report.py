@@ -107,7 +107,8 @@ def report_text(result: dict) -> str:
                  f"(k = {meta.get('absence', {}).get('k', '')}), {hidden} low-quality edge(s) hidden")
     applied = meta.get("statistics", {}).get("filter", {})
     if applied.get("max_adjusted_p") is not None:
-        lines.append(f"adjusted p-value filter: interactions above {applied['max_adjusted_p']:g} left out: "
+        lines.append(f"q-value filter (q is the adjusted p-value): interactions above "
+                     f"{applied['max_adjusted_p']:g} left out: "
                      f"{applied.get('left_out', 0)}; kept untested (no p-value): {applied.get('untested', 0)}")
     if rule:
         lines.append(f"no-growth rule: {rule.get('test', '')}; alpha {rule.get('alpha')}, factor "

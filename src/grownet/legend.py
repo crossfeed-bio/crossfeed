@@ -63,7 +63,7 @@ NOTES = [
                               "abolished arc whose set without growth is zero from its first point. "
                               "continuous_culture: a chemostat or serial dilution, compared on max, which "
                               "that mode suits. untested: "
-                              "with the adjusted p-value filter on, an arc without a p-value, kept unjudged. "
+                              "with the q-value filter on, an arc without a p-value, kept unjudged. "
                               "The edge keeps its status and is drawn."),
     ("Not drawn by default", "the quality flags strains_pooled, removed_member_detected and non_batch. The "
                              "comparison itself is in doubt, so such an edge is never read as an absence of "

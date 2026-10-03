@@ -26,7 +26,7 @@ ABOUT = (f"{NAME} was built by Karoline Faust (KU Leuven) and Craig Heilmann (Sy
 
 # key in gui.DEFAULTS -> (label on the page, command line flag, what it does and when to change it)
 SETTINGS = {
-    "metric": ("Growth measure", "--metric auc|max|growth_rate",
+    "metric": ("Growth property", "--metric auc|max|growth_rate",
                "The growth property compared with and without the partner. The area under the curve (auc, "
                "the default) combines lag, rate and yield in one number; the maximal abundance (max) keeps "
                "yield only; growth_rate is the maximum specific growth rate, set by the two settings below."),
@@ -72,16 +72,19 @@ SETTINGS = {
                    "comparison one search tests (every arc of every study it reads, absent and low-quality "
                    "ones included): Benjamini-Hochberg (default) or the more conservative "
                    "Benjamini-Yekutieli, which holds under any dependence between tests. The adjusted "
-                   "p-values support an interaction and decide nothing, unless the filter below is on (see "
-                   "How an interaction is decided, above)."),
-    "max_adjusted_p": ("Filter on adjusted p-value", "--max-adjusted-p Q",
-                       "Off by default. When ticked, an interaction whose adjusted p-value is above the "
+                   "p-value is the q-value, the number the result table heads q. It supports an "
+                   "interaction and decides nothing, unless the filter below is on (see How an interaction "
+                   "is decided, above)."),
+    "max_adjusted_p": ("Filter on the q-value", "--max-adjusted-p Q",
+                       "The q-value is the p-value adjusted for multiple testing: the two names mean the "
+                       "same number, and the result table heads that column q. "
+                       "Off by default. When ticked, an interaction whose q-value is above the "
                        "threshold (0.05 unless you type another) is left out as well, and the page and the "
                        "file count how many. Absent and undetermined arcs are not interactions and stay as "
                        "they are; an arc without a p-value (obligate, abolished, a single replicate) is kept "
                        "and marked untested; merging uses only the arcs that passed. It is off by default for "
                        "two reasons: with two or three replicates per side, as in most of mGrowthDB, the test "
-                       "misses many real effects, and an adjusted p-value depends on the other comparisons "
+                       "misses many real effects, and a q-value depends on the other comparisons "
                        "in the same search, so the same arc can pass in one search and fail in another. "
                        "Turn it on for a network whose false discovery rate is controlled, at the cost of "
                        "missing effects (see How an interaction is decided, above)."),
@@ -433,7 +436,7 @@ Gause GF (1934) The Struggle for Existence. Williams and Wilkins, Baltimore.</p>
 <p>Each measure answers a different question, so an arc can differ between them: on all of mGrowthDB (September 2026)
 the area and the maximum agree on the sign of every arc both find, while the area and the growth rate agree on
 18 of 23, since a partner can, for example, lower a species' final yield while speeding up its early growth.
-Choose it under Growth measure in the <a href="#settings">advanced settings</a>.</p>
+Choose it under Growth property in the <a href="#settings">advanced settings</a>.</p>
 <dl class="settings">
 <dt>Area under the curve (auc, the default)</dt>
 <dd>For: it combines lag, rate and yield in one number and uses every point of the curve, so it is robust
@@ -482,8 +485,9 @@ decides what happens when one arrives.</p>
 <h2 id="reading">Reading the result</h2>
 <p>Each row is one directed interaction: a source species, the species it affects, the sign, and the
 mean log2 difference with its standard deviation. An interaction counts as present when the effect is at
-least k standard deviations of its own spread, with k the absence threshold. The adjusted p-value is
-shown as support and decides nothing, unless you switch on the filter on it
+least k standard deviations of its own spread, with k the absence threshold. The q-value, which is the
+p-value adjusted for multiple testing, is shown in the column headed q; it is support and decides nothing,
+unless you switch on the filter on it
 (<a href="#statistics">How an interaction is decided</a>). Results are provisional: with two or three
 replicates, more experiments can change any of them.</p>
 <p>While a search runs, a progress bar shows which study is being read, and the page updates by itself.
@@ -508,7 +512,9 @@ obligate or abolished when the target did not grow on one side, since there is t
 two-sided t-test on the per-replicate log2 values (<code>p_value</code>). The p-values are adjusted for
 multiple testing over every comparison one search tests: every arc of every study the search reads,
 absent and low-quality ones included, with Benjamini-Hochberg by default or Benjamini-Yekutieli
-(Multiple testing correction). The result is the q-value (<code>q_value</code>, q on the page), and
+(Multiple testing correction). The result is the <strong>adjusted p-value, which is what a q-value is</strong>:
+the file calls it <code>q_value</code> and the result table's column is headed q. The two names mean the
+same number here, and
 <code>significance</code> is -log10 of it, so a larger significance means stronger evidence and a style
 can map it continuously (0 at q = 1, capped at 15 when the q-value is zero). Arcs without a test have no
 p-value: a single replicate on a side, obligate and abolished arcs,
@@ -518,13 +524,13 @@ test of their own. The file records the test, the correction and the number of t
 <p><strong>Why the p-value does not decide, by default.</strong> First, with two or three replicates per
 side, as in most of mGrowthDB, the test has little power: a large and consistent effect can miss 0.05.
 In September 2026, for example, removing Bacteroides ovatus from the SMGDB00000008 community lowered
-Lachnoclostridium symbiosum about 29-fold (log2 mean -4.85), with an adjusted p-value of 0.052 when the
+Lachnoclostridium symbiosum about 29-fold (log2 mean -4.85), with a q-value of 0.052 when the
 study was derived alone. Second, an adjusted p-value depends on the other comparisons in the same search:
 the same arc gets another value when other studies are read alongside it. Deriving all of mGrowthDB
 together, two arcs of SMGDB00000004 passed 0.05 that did not when the study was derived alone, and two of
 SMGDB00000007 failed that passed. The absence threshold judges each arc on its own data only.</p>
-<p><strong>The filter.</strong> Filter on adjusted p-value, in Advanced settings and off by default,
-also leaves out every interaction whose adjusted p-value is above a threshold (0.05 unless you type
+<p><strong>The filter.</strong> Filter on the q-value, in Advanced settings and off by default,
+also leaves out every interaction whose q-value is above a threshold (0.05 unless you type
 another). Use it for a network whose false discovery rate is controlled, knowing that it misses effects
 the few replicates cannot confirm. The page and the file say how many interactions it left out
 (<code>meta.hidden</code>, <code>meta.statistics.filter</code>). Absent and undetermined arcs stay as they

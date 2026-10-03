@@ -631,9 +631,9 @@ def test_the_page_offers_the_adjusted_p_filter_off_and_says_what_it_left_out():
     assert r["network"].meta["statistics"]["filter"]["left_out"] == len(tested)
     from grownet.report import report_text
     page = render_result("tok", r)
-    assert f"Left out by the adjusted p-value filter: {len(tested)} interaction(s)" in page
-    assert "With the adjusted p-value filter on" in page                  # the caution says it decides too
-    assert "adjusted p-value filter: interactions above 1e-12 left out" in report_text(r)
+    assert f"Left out by the q-value filter: {len(tested)} interaction(s)" in page
+    assert "With the q-value filter on" in page                           # the caution says it decides too
+    assert "interactions above 1e-12 left out" in report_text(r) and "q-value filter" in report_text(r)
 
 
 def test_a_result_the_filter_emptied_says_so_rather_than_blaming_the_threshold():
@@ -643,6 +643,6 @@ def test_a_result_the_filter_emptied_says_so_rather_than_blaming_the_threshold()
     doc = result["network"].to_dict()
     absent_only = InteractionNetwork.from_dict({**doc, "edges": [{**e, "status": "absent"} for e in doc["edges"]]})
     page = render_result("tok", {**result, "network": absent_only})
-    assert "<h2>No interactions pass the adjusted p-value filter</h2>" in page
+    assert "<h2>No interactions pass the q-value filter</h2>" in page
     empty = render_result("tok", {**result, "network": InteractionNetwork.from_dict({**doc, "edges": []})})
-    assert "The adjusted p-value filter left out all 3 interaction(s)" in empty
+    assert "The q-value filter left out all 3 interaction(s)" in empty

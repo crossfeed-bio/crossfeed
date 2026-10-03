@@ -7,6 +7,10 @@ content.
 ## [0.1.1] (unreleased)
 
 ### Changed
+- The first advanced setting is **Growth property**, not Growth measure (Karoline, 2026-10-03).
+- The help says plainly that the adjusted p-value is the q-value, in the section on how an interaction is
+  decided and in the setting that filters on it, and the page, the report and the legend call it the
+  q-value throughout, since the result table heads that column q.
 - The tool's name is marked as a name in running text, on the page, in the help and in the README, since it
   is all lowercase and a sentence starting with it read like a typo (Karoline, 2026-10-03). Commands,
   paths, link labels and the page title keep it plain.

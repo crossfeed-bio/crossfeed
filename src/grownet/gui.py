@@ -62,7 +62,7 @@ DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window":
             "merge_arcs": False, "min_studies": 1, "merge_genera": False,
             # None: the no-growth rule's own defaults, read when used (grownet.interaction.grew)
             "no_growth_alpha": None, "no_growth_factor": None,
-            # None: the adjusted p-value filter is off (register item 31)
+            # None: the q-value filter is off (register item 31)
             "max_adjusted_p": None}
 # the threshold the filter offers when it is switched on (Karoline, 2026-09-30: "Settable, 0.05 default")
 ADJUSTED_P_DEFAULT = 0.05
@@ -142,7 +142,7 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
                            for m in rates.METHODS)
     return f"""<details>
 <summary>Advanced settings</summary>
-<div class="row"><label>Growth measure
+<div class="row"><label>Growth property
   <select name="metric">{options}</select></label>
   <span class="muted">the growth property compared: auc, the area under the curve (default); max, the maximal
   abundance; or growth_rate, the maximum specific growth rate</span></div>
@@ -177,14 +177,14 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   <span class="muted">how the p-values of Welch's t-test are adjusted: Benjamini-Hochberg (default) or the
   more conservative Benjamini-Yekutieli. The adjustment runs across every comparison of this search
   together: all arcs of all the studies it reads, absent and low-quality ones included, not study by study.
-  So an arc's adjusted p-value can change with the other studies a search reads (All reads every
+  So an arc's q-value can change with the other studies a search reads (All reads every
   study)</span></div>
 <div class="row"><label><input type="checkbox" name="filter_adjusted_p" value="1"{p_filter}>
   Filter on the q-value, at most
   <input name="max_adjusted_p" type="text" size="6" value="{p_value}"></label>
   <span class="muted">also leave out interactions whose q-value is above this; arcs without a p-value
   are kept, marked untested. Off by default: with two or three replicates the test misses many real effects,
-  and an adjusted p-value depends on the other comparisons in the same search
+  and a q-value depends on the other comparisons in the same search
   (<a href="{why}">why</a>)</span></div>
 <div class="row"><label>Spike limit
   <input name="spike_factor" type="text" size="6" value="{_esc(s['spike_factor'])}"></label>
@@ -329,8 +329,8 @@ def _hidden_note(hidden: dict) -> str:
     note = "" if not n else (f"<p class=\"muted\">Hidden by default: {n} low-quality edge(s). Tick them in "
                              "Advanced settings to show them.</p>")
     if hidden.get("not_significant"):
-        note += (f"<p class=\"muted\">Left out by the adjusted p-value filter: {hidden['not_significant']} "
-                 "interaction(s) whose adjusted p-value is above the threshold. Untick it in Advanced settings "
+        note += (f"<p class=\"muted\">Left out by the q-value filter: {hidden['not_significant']} "
+                 "interaction(s) whose q-value is above the threshold. Untick it in Advanced settings "
                  "to see them.</p>")
     return note
 
@@ -425,8 +425,8 @@ def _empty_reason(result: dict) -> str:
                 f"({result['partners_only']} co-culture(s) or interaction(s)). Add the partners, or untick Only "
                 "interactions between the species entered.")
     if result.get("hidden", {}).get("not_significant"):
-        return (f"The adjusted p-value filter left out all {result['hidden']['not_significant']} interaction(s) "
-                "found: none has an adjusted p-value at or below its threshold. Untick it in Advanced settings "
+        return (f"The q-value filter left out all {result['hidden']['not_significant']} interaction(s) "
+                "found: none has a q-value at or below its threshold. Untick it in Advanced settings "
                 "to see them.")
     if result.get("hidden", {}).get("low_quality"):
         return (f"{result['hidden']['low_quality']} low-quality interaction(s) were found and are hidden; tick "
@@ -479,7 +479,7 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
                  f"{hidden}<div class=\"scroll\"><table>{HEADER}{_arc_rows(net, shown)}</table></div>")
     elif net.edges:
         filtered = result.get("hidden", {}).get("not_significant")
-        heading = ("No interactions pass the adjusted p-value filter" if filtered
+        heading = ("No interactions pass the q-value filter" if filtered
                    else "No interactions above the absence threshold")
         table = (f"<h2>{heading}</h2>{outputs}"
                  f"<p class=\"note\">{_esc(net.meta.get('provisional', PROVISIONAL))}</p>{hidden}")
