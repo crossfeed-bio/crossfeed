@@ -32,6 +32,14 @@ test_that("the README and the files travel with the numbers", {
                  c("interaction_matrix.csv", "growth_rates.csv", "README.txt"))
 })
 
+test_that("nothing scales the matrix by itself", {
+    # Karoline, 2026-10-03: "keep glv_scale off by default". What arrives is what grownet derived.
+    glv <- example_glv()
+    expect_null(glv$scaled_by)
+    expect_equal(suppressWarnings(glv_matrix(glv))["B", "C"], 10)
+    expect_equal(suppressWarnings(as_miasim(glv, missing_rate = 0.3))$A["B", "C"], 10)
+})
+
 test_that("scaling brings the strongest cell down without changing signs or relative sizes", {
     glv <- example_glv()
     scaled <- glv_scale(glv, max_effect = 1)

@@ -844,7 +844,9 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    `grownet.glv/v0`, served at the page's `/glv.json`: the numbers of the zip, the caveats as fields, and
    grownet's README text, so neither route loses what the other carries. Measured while building it: an
    unscaled matrix diverges in miaSim (cells outweigh the -1 diagonal), so both the README and the R
-   package say so and `glv_scale()` is offered, which is a modeling choice and never applied by itself.
+   package say so and `glv_scale()` is offered, which is a modeling choice and never applied by itself:
+   "keep glv_scale off by default" (Karoline, 2026-10-03, asked whether it should become the default).
+   What arrives in R is therefore always the numbers grownet derived, and scaling is the user's own step.
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

@@ -21,8 +21,9 @@ off-diagonal cell by one factor keeps their signs and their relative sizes and b
 to \code{max_effect}.
 }
 \details{
-This is a modeling choice, so nothing here does it for you: the object arrives unscaled, and this
-function returns a copy that remembers the factor it used.
+This is a modeling choice, so nothing here does it for you (Karoline, 2026-10-03: "keep glv_scale off by
+default"): the object arrives unscaled, carrying the numbers grownet derived, and this function returns a
+copy that remembers the factor it used.
 }
 \examples{
 \dontrun{

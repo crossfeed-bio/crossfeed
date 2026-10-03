@@ -160,8 +160,9 @@ as_miasim <- function(x, x0 = NULL, missing_rate = NULL, placeholders = c("keep"
 #' off-diagonal cell by one factor keeps their signs and their relative sizes and brings the strongest
 #' one to `max_effect`.
 #'
-#' This is a modeling choice, so nothing here does it for you: the object arrives unscaled, and this
-#' function returns a copy that remembers the factor it used.
+#' This is a modeling choice, so nothing here does it for you (Karoline, 2026-10-03: "keep glv_scale off
+#' by default"): the object arrives unscaled, carrying the numbers grownet derived, and this function
+#' returns a copy that remembers the factor it used.
 #'
 #' @param x gLV parameters from [grownet_listen()] or [grownet_glv()].
 #' @param max_effect The size the strongest off-diagonal cell should have. 1 makes no partner stronger
