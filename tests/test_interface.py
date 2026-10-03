@@ -539,3 +539,51 @@ def test_the_glv_package_holds_a_matrix_with_minus_one_on_the_diagonal_and_the_r
     assert A in archive.read("growth_rates.csv").decode()
     readme = archive.read("README.txt").decode()
     assert "A[i][j] is the effect of j on i" in readme and "not a fitted glv coefficient" in readme.lower()
+
+
+def test_the_command_line_writes_the_matrix_the_rates_and_the_glv_package(monkeypatch, tmp_path, capsys):
+    """Karoline, 2026-10-03: "please make sure all of this is in the CLI and documented". So the page's
+    new outputs have their options, they write the same files, and the report records the rates."""
+    import io
+    import zipfile
+
+    from grownet import gui as gui_module
+    from grownet.__main__ import build_parser, main
+    derive = next(a for a in build_parser()._actions if a.dest == "cmd").choices["derive"]
+    options = {o for action in derive._actions for o in action.option_strings}
+    assert {"--report-rates", "--rates", "--glv"} <= options
+    assert "matrix" in next(a for a in derive._actions if a.dest == "format").choices
+
+    monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", FakeClient)
+    monkeypatch.setattr(gui_module, "growth_rates", lambda *a, **kw: (dict(RATES), []))
+    table, rates_file, package, report = (tmp_path / n for n in
+                                          ("m.csv", "rates.csv", "glv.zip", "report.txt"))
+    assert main(["derive", "--live", "--species", A, B, "--report-rates", "--format", "matrix",
+                 "--out", str(table), "--rates", str(rates_file), "--glv", str(package),
+                 "--report", str(report)]) == 0
+
+    rows = [line.split(",") for line in table.read_text(encoding="utf-8").strip().splitlines()]
+    names = rows[0][1:]
+    assert len(rows) == len(names) + 1
+    assert float(rows[1 + names.index(A)][1 + names.index(B)]) > 0      # B facilitates A, as on the page
+    assert rates_file.read_text(encoding="utf-8").splitlines()[0] == (
+        "organism,growth_rate,unit,replicates,studies")
+    with zipfile.ZipFile(io.BytesIO(package.read_bytes())) as archive:
+        assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv", "interaction_matrix.csv"]
+        matrix_rows = archive.read("interaction_matrix.csv").decode().strip().splitlines()
+    assert [r.split(",")[1 + i] for i, r in enumerate(matrix_rows[1:])] == ["-1", "-1"]
+    text = report.read_text(encoding="utf-8")
+    assert "Report growth rates (--report-rates): on" in text
+    assert "growth rates (growth_rate:easylinear:5 in monoculture" in text
+    assert f"  - {A}: 0.4 1/h, median of 4 monoculture replicate(s)" in text
+
+
+def test_the_files_beside_the_network_need_the_rates_and_say_so(monkeypatch, tmp_path, capsys):
+    from grownet.__main__ import main
+    monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", FakeClient)
+    # the check runs before anything is derived, so no network is written and then refused its files
+    assert main(["derive", "--live", "--species", A, "--glv", str(tmp_path / "glv.zip")]) == 2
+    assert "--glv writes the growth rates of the run, so it needs --report-rates" in capsys.readouterr().err
+    assert not list(tmp_path.iterdir())
+    assert main(["derive", "SMGDB00000001", "--fixture", "x.json", "--report-rates"]) == 2
+    assert "--report-rates reads the monoculture curves, so it needs --live" in capsys.readouterr().err

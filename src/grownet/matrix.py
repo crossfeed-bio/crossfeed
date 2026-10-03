@@ -149,7 +149,9 @@ def for_nodes(net: InteractionNetwork, rates: dict) -> dict:
     out = {}
     for nid, node in net.nodes.items():
         if nid in rates:
-            out[nid] = rates[nid]
+            # the node's own name, which is the strain's current one (#24), so the rates file, the report
+            # and the network all call it the same thing
+            out[nid] = {**rates[nid], "name": _label(node)}
             continue
         label = _label(node)
         members = [r for r in rates.values() if genus_name(r.get("name", "")) == genus_name(label)]

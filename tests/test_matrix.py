@@ -153,3 +153,13 @@ def test_a_cell_that_holds_the_convention_says_so_in_the_readme():
     readme = matrix.readme(net, {}, [], [], matrix.by_convention(net))
     assert "CONVENTIONS, NOT MEASUREMENTS" in readme
     assert "A on B: 10" in readme.split("CONVENTIONS, NOT MEASUREMENTS")[1]
+
+
+def test_a_rate_is_reported_under_the_name_the_network_uses():
+    # a strain renamed after a reclassification (411483) carries its current name in the network; the rates
+    # must not fall back to the name the study that measured them used (#24)
+    net = _net([_arc("ncbi:411483", "b", 1.0, source_name="Faecalibacterium duncaniae")])
+    rates = {"ncbi:411483": {"name": "Faecalibacterium prausnitzii A2-165", "rate": 0.7, "unit": "1/h",
+                             "n": 3, "studies": ["S1"]}}
+    assert matrix.for_nodes(net, rates)["ncbi:411483"]["name"] == "Faecalibacterium duncaniae"
+    assert "Faecalibacterium duncaniae" in matrix.rates_csv(matrix.for_nodes(net, rates), net)

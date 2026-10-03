@@ -595,7 +595,10 @@ in absolute units, so scale them for your model rather than using them unchanged
 itself records the tool, <code>tool_version</code>, the date and time it was derived (<code>derived_on</code>,
 <code>derived_at</code>), every setting used, and the version of the data: mGrowthDB publishes no version of
 the whole database, so <code>meta.data</code> holds when it was read and each study's upload and
-publication dates, which change when a study is corrected.</p>
+publication dates, which change when a study is corrected. A search run with Report growth rates also
+carries <code>meta.growth_rates</code>: the rule the rates follow, a rate per organism with its unit, how
+many monoculture replicates it rests on, the studies behind it and each study's own median, and
+<code>without_a_rate</code>, the organisms that have none.</p>
 {edges}
 {nodes}
 
@@ -605,21 +608,24 @@ publication dates, which change when a study is corrected.</p>
 <ul class="decisions">{decisions}</ul>
 
 <h2 id="cli">The command line</h2>
-<p>The same search as the Example button, with the page's three outputs: the network written to a file,
+<p>The same search as the Example button, with three of the page's outputs: the network written to a file,
 its report, and the network sent to Cytoscape:</p>
 <pre>{_e(EXAMPLE_CLI)}</pre>
 <p>Without installing anything, <code>uvx --from git+{REPOSITORY} {COMMAND} ...</code> runs the same
 command. Other uses:</p>
 <pre>{COMMAND} derive SMGDB00000004 --live --format graphml --out study4.graphml
+{COMMAND} derive SMGDB00000004 --live --format matrix --out study4_matrix.csv
+{COMMAND} derive SMGDB00000004 --live --report-rates --rates study4_rates.csv --glv study4_glv.zip
 {COMMAND} derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
 {COMMAND} derive --live --all --merge-arcs --merge-genera --out all_genera.json
 {COMMAND} gui
 {COMMAND} validate example.json</pre>
-<p>The first derives one whole study; the second a genus, every species of it with every partner, one
-node per genus; the third all of mGrowthDB, as the All button does, merged across studies and then to
-genus; the fourth opens this page, and the last checks a file against the format. Every advanced setting
-has its flag (see the list above), and <code>{COMMAND} derive --help</code>
-lists them all. Besides those:</p>
+<p>The first derives one whole study; the second writes it as the adjacency matrix; the third adds the
+growth rates and the gLV parameters (<a href="#glv">the matrix, the growth rates and gLV</a>); the fourth
+a genus, every species of it with every partner, one node per genus; the fifth all of mGrowthDB, as the
+All button does, merged across studies and then to genus; the sixth opens this page, and the last checks
+a file against the format. Every advanced setting has its flag (see the list above), and
+<code>{COMMAND} derive --help</code> lists them all. Besides those:</p>
 <ul>{cli_only}</ul>
 
 <h2 id="empty">No network came back</h2>
