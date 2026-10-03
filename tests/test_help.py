@@ -3,10 +3,11 @@ import argparse
 import dataclasses
 import datetime
 import json
+import re
 from xml.etree import ElementTree as ET
 
 import pytest
-from test_gui import FakeClient, _query
+from test_gui import FakeClient, _query, visible
 
 from grownet import __version__, gui, help, interaction, model
 from grownet.__main__ import build_parser, main
@@ -58,7 +59,10 @@ def test_the_attribute_list_names_every_value_an_edge_can_take():
 
 def test_the_page_has_every_section_its_contents_list_names():
     for key, title in help.SECTIONS:
-        assert f'href="#{key}"' in PAGE and f'<h2 id="{key}">{title}</h2>' in PAGE
+        # a title may hold the name, which carries markup in prose, so the heading is read as text
+        assert f'href="#{key}"' in PAGE
+        assert re.search(rf'<h2 id="{key}">(.*?)</h2>', PAGE) and \
+            title in visible(re.search(rf'<h2 id="{key}">.*?</h2>', PAGE).group(0))
 
 
 def test_the_command_line_example_is_the_pages_example():
@@ -77,7 +81,7 @@ def test_the_version_is_shown_next_to_the_name():
     heading = f'<span class="word">grow<b>net</b></span></h1></a><span class="version">{__version__}</span>'
     for page in (gui.render_form("tok"), gui.render_result("tok", _query()), PAGE):
         assert heading in page and "<svg" in page.split(heading)[0]
-    assert f"grownet {__version__}" in PAGE
+    assert f"grownet {__version__}" in visible(PAGE)
 
 
 def test_every_network_records_the_tool_its_version_and_the_date():
@@ -103,7 +107,8 @@ def test_the_command_line_species_search_gives_the_pages_network(monkeypatch, ca
     monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", FakeClient)
     out = tmp_path / "net.json"
     names = ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"]
-    assert main(["derive", "--live", "--species", *names, "--out", str(out)]) == 0
+    # both sides keep the absences, so the comparison is about the arcs, not about the new default
+    assert main(["derive", "--live", "--species", *names, "--out", str(out), "--include-absent"]) == 0
     cli = json.loads(out.read_text(encoding="utf-8"))
     page = json.loads(_query(entries=names)["network"].to_json())
     assert cli["edges"] == page["edges"] and cli["nodes"] == page["nodes"]
@@ -181,3 +186,51 @@ def test_the_marked_stretch_holds_the_steepest_rise_of_log_abundance():
     slopes = [(math.log(b[1]) - math.log(a[1])) / (b[0] - a[0]) for a, b in zip(points[:-1], points[1:], strict=True)]
     steepest = points[slopes.index(max(slopes))]
     assert steepest in idea._steep_stretch(points)
+
+
+def test_the_help_explains_how_a_chemostat_is_treated():
+    """Karoline, 2026-10-03, after the rule changed: "please document the new way of treating chemostat
+    data". The rule depends on the growth measure, so the help has to say both halves."""
+    html = help.render_help("tok", gui.DEFAULTS, gui.EXAMPLE)
+    section = html[html.index("Chemostats and serial dilutions"):]
+    section = section[:section.index("Try the example")]
+    assert "with max it is derived" in section.lower()
+    assert "continuous_culture" in section                 # what such an arc is marked with
+    assert "left out" in section and "non_batch" in section  # and what happens with the other measures
+    assert "never mixes modes" in section
+    # the setting's own text says the same, so the two cannot drift apart
+    setting = help.SETTINGS["include_non_batch"][2]
+    assert "max" in setting and "continuous_culture" in setting and "non_batch" in setting
+
+
+def test_the_name_is_marked_as_a_name_in_prose_but_left_alone_in_commands():
+    """Karoline, 2026-10-03: "please use a special style for grownet, so sentences starting with it don't
+    look strange". It is all lowercase, so in prose it carries the wordmark's two parts."""
+    from grownet import brand
+    assert brand.in_prose("<p>grownet reads mGrowthDB.</p>") == f"<p>{brand.NAME_HTML} reads mGrowthDB.</p>"
+    for untouched in ("<code>grownet gui</code>", "<title>grownet</title>",
+                      "<pre>python -m grownet gui</pre>", '<a href="/x">What grownet does</a>',
+                      "<p>github.com/crossfeed-bio/grownet</p>", "<p>grownet-bio</p>"):
+        assert brand.in_prose(untouched) == untouched
+    # the served page carries it: the body is styled, the header's own wordmark is untouched
+    page = gui.render_help("tok", "")
+    assert page.count(brand.NAME_HTML) > 5 and "<code>grownet" in page.replace("</code>", "")
+
+
+def test_the_help_says_the_adjusted_p_value_is_the_q_value():
+    """Karoline, 2026-10-03: "make sure the reader in the help knows that the adjusted p-value is the
+    q-value". The page heads that column q, so the two names have to meet somewhere."""
+    text = visible(PAGE)
+    decided = text[text.index("How an interaction is decided"):]
+    assert "adjusted p-value, which is what a q-value is" in decided
+    assert "q_value" in decided and "column is headed q" in decided
+    # and the setting that filters on it says the same, since a reader may start there
+    assert "the p-value adjusted for multiple testing: the two names mean the same number" in \
+        help.SETTINGS["max_adjusted_p"][2]
+    assert help.SETTINGS["max_adjusted_p"][0] == "Filter on the q-value"
+
+
+def test_the_first_advanced_setting_is_called_growth_property():
+    """Karoline, 2026-10-03: "Growth measure (the first entry) should be Growth property"."""
+    assert help.SETTINGS["metric"][0] == "Growth property"
+    assert "Growth property" in gui.render_form("tok") and "Growth measure" not in gui.render_form("tok")

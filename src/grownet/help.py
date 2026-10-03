@@ -26,7 +26,7 @@ ABOUT = (f"{NAME} was built by Karoline Faust (KU Leuven) and Craig Heilmann (Sy
 
 # key in gui.DEFAULTS -> (label on the page, command line flag, what it does and when to change it)
 SETTINGS = {
-    "metric": ("Growth measure", "--metric auc|max|growth_rate",
+    "metric": ("Growth property", "--metric auc|max|growth_rate",
                "The growth property compared with and without the partner. The area under the curve (auc, "
                "the default) combines lag, rate and yield in one number; the maximal abundance (max) keeps "
                "yield only; growth_rate is the maximum specific growth rate, set by the two settings below."),
@@ -42,18 +42,31 @@ SETTINGS = {
                     "Used with easylinear: how many consecutive points each fitted line spans. 5, the default, "
                     "is what mGrowthDB uses; fewer points follow noise, more flatten the steepest part."),
     "include_low_quality": ("Show low-quality edges", "--include-low-quality",
-                            "Low-quality edges carry a quality flag (pooled strains, a chemostat curve, a "
+                            "Low-quality edges carry a quality flag (pooled strains, a continuous culture "
+                            "compared on a measure that does not suit it, a "
                             "drop-out whose removed member was still detected). They are computed but not "
                             "shown by default, and never read as an absence of interaction. Single-replicate "
                             "edges are always shown, flagged."),
+    "include_absent": ("Include arcs below the absence threshold", "--include-absent",
+                       "Off by default, so a downloaded file and a network sent to Cytoscape hold exactly "
+                       "the interactions this page counts: one number everywhere. The arcs the threshold "
+                       "marked absent are reported in their own section of the result and in the report, "
+                       "with how many there were. Tick it to keep them in the file as well, with status "
+                       "absent: each carries effect_over_sd, the quantity k cuts, so you can move the "
+                       "threshold in Cytoscape on that column without searching again."),
     "include_dropout": ("Include drop-out communities", "--no-dropout",
                         "Arcs from a community compared with the same community without one member. On by "
                         "default; --no-dropout leaves them out. Such an arc says the removed member affects "
                         "the target, directly or through other members, so it is labeled evidence dropout."),
     "include_non_batch": ("Include chemostat and serial dilution experiments", "--include-non-batch",
-                          "Off by default: under continuous dilution an area under the curve means something "
-                          "else, so these curves are not comparable with batch curves. When included, their "
-                          "edges carry the non_batch flag."),
+                          "What a continuous culture can be compared on depends on the growth measure. With "
+                          "max it is derived without this setting: the level such a culture settles at is "
+                          "comparable with and without a partner, and those arcs are shown with the caution "
+                          "continuous_culture. With auc or a growth rate it is left out, because the area "
+                          "under a diluted run says how long it ran and its growth rate is the dilution "
+                          "rate; this setting derives it anyway, and then the edges carry the non_batch "
+                          "flag and are hidden with the other low-quality ones. A comparison never mixes "
+                          "modes: a chemostat co-culture is compared only with chemostat monocultures."),
     "absence_threshold": ("Absence threshold k", "--absence-threshold K",
                           "Decides when an interaction counts as absent, that is, when the data show the "
                           "species do not affect each other: its effect is small against its own spread, "
@@ -66,16 +79,19 @@ SETTINGS = {
                    "comparison one search tests (every arc of every study it reads, absent and low-quality "
                    "ones included): Benjamini-Hochberg (default) or the more conservative "
                    "Benjamini-Yekutieli, which holds under any dependence between tests. The adjusted "
-                   "p-values support an interaction and decide nothing, unless the filter below is on (see "
-                   "How an interaction is decided, above)."),
-    "max_adjusted_p": ("Filter on adjusted p-value", "--max-adjusted-p Q",
-                       "Off by default. When ticked, an interaction whose adjusted p-value is above the "
+                   "p-value is the q-value, the number the result table heads q. It supports an "
+                   "interaction and decides nothing, unless the filter below is on (see How an interaction "
+                   "is decided, above)."),
+    "max_adjusted_p": ("Filter on the q-value", "--max-adjusted-p Q",
+                       "The q-value is the p-value adjusted for multiple testing: the two names mean the "
+                       "same number, and the result table heads that column q. "
+                       "Off by default. When ticked, an interaction whose q-value is above the "
                        "threshold (0.05 unless you type another) is left out as well, and the page and the "
                        "file count how many. Absent and undetermined arcs are not interactions and stay as "
                        "they are; an arc without a p-value (obligate, abolished, a single replicate) is kept "
                        "and marked untested; merging uses only the arcs that passed. It is off by default for "
                        "two reasons: with two or three replicates per side, as in most of mGrowthDB, the test "
-                       "misses many real effects, and an adjusted p-value depends on the other comparisons "
+                       "misses many real effects, and a q-value depends on the other comparisons "
                        "in the same search, so the same arc can pass in one search and fail in another. "
                        "Turn it on for a network whose false discovery rate is controlled, at the cost of "
                        "missing effects (see How an interaction is decided, above)."),
@@ -160,8 +176,10 @@ EDGE_ATTRIBUTES = {
     "status": "present, absent (below the absence threshold), or empty when undetermined (a single "
               "replicate or a low-quality edge)",
     "p_value": "Welch's t-test on the per-replicate log2 values, unadjusted",
-    "significance": "the p-value adjusted for multiple testing over every comparison of the search, shown as "
-                    "q (see How an interaction is decided)",
+    "q_value": "that p-value corrected for multiple testing over every comparison of the search, the q "
+               "on the page (see How an interaction is decided)",
+    "significance": "-log10 of the q-value: larger is stronger evidence, 0 at q = 1, and a style can map "
+                    "it continuously. It is capped at 15 for a q-value of zero",
     "outcome": "quantified (a ratio was computed), obligate (the target grows only with the source), "
                "abolished (only without it), or no_growth",
     "metric": "the growth property compared: auc, max, or a growth rate with its rule "
@@ -176,8 +194,10 @@ EDGE_ATTRIBUTES = {
                 "other did not, so its maximum may still be rising), stationary_unchecked (with max: too few "
                 "time points, under 6, to tell), zero_at_start (an obligate or abolished arc whose set without "
                 "growth is zero from its first time point, so no growth cannot be told from no inoculum or "
-                "counts below detection), untested (with the adjusted p-value filter on: the arc has no "
-                "p-value, so the filter kept it without judging it)",
+                "counts below detection), continuous_culture (a chemostat or serial dilution arc, compared "
+                "on max: the level a culture settles at is comparable with and without a partner, while an "
+                "area under the curve or a growth rate of such a run is not), untested (with the adjusted "
+                "p-value filter on: the arc has no p-value, so the filter kept it without judging it)",
     "notes": "other remarks, for example a replicate left out for a spike",
     "evidence": "biculture (monoculture against a two-member co-culture: a direct interaction) or dropout "
                 "(a community against the same community without the source: direct or indirect)",
@@ -249,8 +269,10 @@ DECISIONS = (
     ("Experiments are pooled only when they are replicates.",
      "Interactions depend on the environment, so experiments with different conditions give parallel "
      "arcs, one each (#47)."),
-    ("Batch culture only, by default.",
-     "Chemostat and serial dilution curves measure a different quantity (#42)."),
+    ("A culture is compared on a measure its mode supports.",
+     "Chemostat and serial dilution runs are derived with max, the level they settle at, and left out with "
+     "an area under the curve or a growth rate, which measure something else under dilution (#42, amended "
+     "2026-10-03)."),
     ("Suspect curves are flagged, never silently dropped or replaced.",
      "A replicate with an implausible spike is left out and reported, with the other techniques measured "
      "on it named (#39)."),
@@ -421,7 +443,7 @@ Gause GF (1934) The Struggle for Existence. Williams and Wilkins, Baltimore.</p>
 <p>Each measure answers a different question, so an arc can differ between them: on all of mGrowthDB (September 2026)
 the area and the maximum agree on the sign of every arc both find, while the area and the growth rate agree on
 18 of 23, since a partner can, for example, lower a species' final yield while speeding up its early growth.
-Choose it under Growth measure in the <a href="#settings">advanced settings</a>.</p>
+Choose it under Growth property in the <a href="#settings">advanced settings</a>.</p>
 <dl class="settings">
 <dt>Area under the curve (auc, the default)</dt>
 <dd>For: it combines lag, rate and yield in one number and uses every point of the curve, so it is robust
@@ -429,10 +451,11 @@ to noise in any one of them, and it is defined for any curve with two points. Ag
 of lag, rate or yield changed; it needs the same time window on both sides, which grownet ensures; and it
 counts the starting abundance too, so a larger inoculum raises it.</dd>
 <dt>Maximal abundance (max)</dt>
-<dd>For: the simplest to read, the yield a species reaches, and unaffected by a decline after the peak.
-Against: it rests on one point, so one noisy measurement moves it, and it ignores timing, so a slow and a
-fast grower reaching the same level look alike. It is misleading when one curve reached stationary phase
-and the other did not; grownet then marks the arc <code>stationary_phase_differs</code>.</dd>
+<dd>For: the simplest to read, the yield a species reaches, unaffected by a decline after the peak, and
+the only measure that suits a continuous culture (see below). Against: it rests on one point, so one noisy
+measurement moves it, and it ignores timing, so a slow and a fast grower reaching the same level look
+alike. It is misleading when one curve reached stationary phase and the other did not; grownet then marks
+the arc <code>stationary_phase_differs</code>.</dd>
 <dt>Growth rate (growth_rate)</dt>
 <dd>For: the speed of growth, independent of yield and of the unit of abundance, and with easylinear the
 same method mGrowthDB uses for the rates it reports. Against: it ignores yield and lag; it needs densely
@@ -442,15 +465,36 @@ log abundance and depends on its window; baranyi fits a growth model up to the e
 refuses curves the model does not describe, such as two growth phases.</dd>
 </dl>
 
+<h3>Chemostats and serial dilutions</h3>
+<p>A continuous culture is diluted while it grows, so what its curve means depends on the measure, and
+grownet uses it only where the comparison holds.</p>
+<ul>
+<li><strong>With max it is derived</strong>, without any setting: such a culture settles at a level, and
+that level with a partner against the level without it is the same comparison as in batch. Those arcs are
+shown, with the caution <code>continuous_culture</code>, so a reader can tell them from batch arcs.</li>
+<li><strong>With the area under the curve or a growth rate it is left out</strong> and reported with its
+mode: under dilution the area says mostly how long the run lasted, and the growth rate of a culture held
+in steady state is the dilution rate the experimenter chose, not a property of the species. Ticking
+"Include chemostat and serial dilution experiments" derives it anyway; those arcs then carry the
+<code>non_batch</code> quality flag and are hidden with the other low-quality ones.</li>
+<li><strong>A comparison never mixes modes.</strong> The cultivation mode is part of the conditions an
+experiment must share to be compared, so a chemostat co-culture is compared only with chemostat
+monocultures, never with a batch one.</li>
+</ul>
+<p>An experiment whose mode mGrowthDB does not record counts as not batch. No study in mGrowthDB holds a
+continuous culture that forms a pair or a drop-out design today, so this changes no network yet; it
+decides what happens when one arrives.</p>
+
 <h2 id="example">Try the example</h2>
 <p>The Example button fills the box with {_e(pair)}, a pair with enough data to show a result: the
 <a href="#cli">command line</a> section runs the same search.</p>
 
 <h2 id="reading">Reading the result</h2>
-<p>Each row is one directed interaction: a source species, the species it affects, the direction, and the
+<p>Each row is one directed interaction: a source species, the species it affects, the sign, and the
 mean log2 difference with its standard deviation. An interaction counts as present when the effect is at
-least k standard deviations of its own spread, with k the absence threshold. The adjusted p-value is
-shown as support and decides nothing, unless you switch on the filter on it
+least k standard deviations of its own spread, with k the absence threshold. The q-value, which is the
+p-value adjusted for multiple testing, is shown in the column headed q; it is support and decides nothing,
+unless you switch on the filter on it
 (<a href="#statistics">How an interaction is decided</a>). Results are provisional: with two or three
 replicates, more experiments can change any of them.</p>
 <p>While a search runs, a progress bar shows which study is being read, and the page updates by itself.
@@ -475,21 +519,25 @@ obligate or abolished when the target did not grow on one side, since there is t
 two-sided t-test on the per-replicate log2 values (<code>p_value</code>). The p-values are adjusted for
 multiple testing over every comparison one search tests: every arc of every study the search reads,
 absent and low-quality ones included, with Benjamini-Hochberg by default or Benjamini-Yekutieli
-(Multiple testing correction). The result is the adjusted p-value (<code>significance</code>, q on the
-page). Arcs without a test have no p-value: a single replicate on a side, obligate and abolished arcs,
+(Multiple testing correction). The result is the <strong>adjusted p-value, which is what a q-value is</strong>:
+the file calls it <code>q_value</code> and the result table's column is headed q. The two names mean the
+same number here, and
+<code>significance</code> is -log10 of it, so a larger significance means stronger evidence and a style
+can map it continuously (0 at q = 1, capped at 15 when the q-value is zero). Arcs without a test have no
+p-value: a single replicate on a side, obligate and abolished arcs,
 and merged arcs (Merge parallel arcs, Merge to genus), which are merged after the adjustment and have no
 test of their own. The file records the test, the correction and the number of tests in
 <code>meta.statistics</code>.</p>
 <p><strong>Why the p-value does not decide, by default.</strong> First, with two or three replicates per
 side, as in most of mGrowthDB, the test has little power: a large and consistent effect can miss 0.05.
 In September 2026, for example, removing Bacteroides ovatus from the SMGDB00000008 community lowered
-Lachnoclostridium symbiosum about 29-fold (log2 mean -4.85), with an adjusted p-value of 0.052 when the
+Lachnoclostridium symbiosum about 29-fold (log2 mean -4.85), with a q-value of 0.052 when the
 study was derived alone. Second, an adjusted p-value depends on the other comparisons in the same search:
 the same arc gets another value when other studies are read alongside it. Deriving all of mGrowthDB
 together, two arcs of SMGDB00000004 passed 0.05 that did not when the study was derived alone, and two of
 SMGDB00000007 failed that passed. The absence threshold judges each arc on its own data only.</p>
-<p><strong>The filter.</strong> Filter on adjusted p-value, in Advanced settings and off by default,
-also leaves out every interaction whose adjusted p-value is above a threshold (0.05 unless you type
+<p><strong>The filter.</strong> Filter on the q-value, in Advanced settings and off by default,
+also leaves out every interaction whose q-value is above a threshold (0.05 unless you type
 another). Use it for a network whose false discovery rate is controlled, knowing that it misses effects
 the few replicates cannot confirm. The page and the file say how many interactions it left out
 (<code>meta.hidden</code>, <code>meta.statistics.filter</code>). Absent and undetermined arcs stay as they
@@ -543,7 +591,8 @@ see <a href="#qa">the first question</a>.</li>
 <li>the study grows the species only in a community that is neither a two-member co-culture nor a
 drop-out design: grownet has no method for it yet;</li>
 <li>no monoculture was grown under the same conditions: nothing to compare with;</li>
-<li>the experiments are chemostats: tick "Include chemostat and serial dilution experiments";</li>
+<li>the experiments are chemostats or serial dilutions: set the growth measure to max, which that mode
+supports, or tick "Include chemostat and serial dilution experiments" to use them with another measure;</li>
 <li>every edge is low quality: tick "Show low-quality edges";</li>
 <li>every edge is below the absence threshold: open that section of the result, or set k to 0;</li>
 <li>the partners are species you did not type: untick "Only interactions between the species

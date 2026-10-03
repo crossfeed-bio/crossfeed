@@ -6,6 +6,53 @@ content.
 
 ## [0.1.1] (unreleased)
 
+### Changed
+- **Arcs below the absence threshold are left out of every output by default** (Karoline, 2026-10-03), so
+  the page, a downloaded file and a network sent to Cytoscape all hold the same arcs: Cytoscape used to
+  count the absences too, which was confusing. They are still reported, in their own section of the result
+  and in the report, with how many and at which k; `meta.hidden.absent` counts them and
+  `meta.absence.absent` still says how many the threshold marked. The new setting **Include arcs below the
+  absence threshold** (`--include-absent`) puts them back in the file, with `effect_over_sd` on each, for
+  moving the threshold inside Cytoscape.
+- The first advanced setting is **Growth property**, not Growth measure (Karoline, 2026-10-03).
+- The help says plainly that the adjusted p-value is the q-value, in the section on how an interaction is
+  decided and in the setting that filters on it, and the page, the report and the legend call it the
+  q-value throughout, since the result table heads that column q.
+- The tool's name is marked as a name in running text, on the page, in the help and in the README, since it
+  is all lowercase and a sentence starting with it read like a typo (Karoline, 2026-10-03). Commands,
+  paths, link labels and the page title keep it plain.
+- The help page explains how a continuous culture is treated, in "Which growth measure": derived with max
+  and marked `continuous_culture`, left out with an area under the curve or a growth rate and why, what
+  the setting does then, that a comparison never mixes modes, and that no study in mGrowthDB holds such a
+  design today.
+- **Continuous culture is derived with the growth measure `max`** (Karoline, 2026-10-03): the level a
+  chemostat or serial dilution settles at is comparable with and without a partner, while the area under
+  its curve and its growth rate are not. Such arcs carry the caution `continuous_culture` and are shown.
+  With `auc` or a growth rate they are still left out unless `--include-non-batch` is given, and then they
+  keep the `non_batch` quality flag and stay hidden by default. A comparison never mixes modes. No network
+  changes today: no study in mGrowthDB has a non-batch pairwise or drop-out design.
+- The result table's third column is **sign**, not direction: an arc already has a direction, from the
+  source to the species it affects (Karoline, 2026-10-03).
+- A number the derivation never computed reads as **not computed** on the page, and a comparison with no
+  ratio (obligate, abolished) reads as **no ratio**, rather than leaving the cell blank. In the file and in
+  Cytoscape such a number stays missing: null in JSON, left out of GraphML and of what Cytoscape is sent,
+  never 0 (Karoline, 2026-10-03).
+- **`significance` is now -log10 of the q-value, and the corrected p-value has its own field, `q_value`**
+  (Karoline, 2026-10-03). Before, `significance` held the corrected p-value itself, so the name ran
+  against the number: larger looked stronger and was weaker, and a continuous Cytoscape mapping on it was
+  backwards. Now `p_value` is Welch's raw value, `q_value` is that value corrected for multiple testing,
+  and `significance` is -log10 of the q-value: 0 at q = 1, larger is stronger evidence, capped at 15 for a
+  q-value of zero. The page's column is `q`, the viewer shows p, q and significance, and the filter
+  (`--max-adjusted-p`) still acts on the q-value. A reader of an older file gets the old meaning: the
+  change rides with 0.1.1, which has no released files yet.
+- A number that is empty is left out of what is sent to Cytoscape rather than sent as null: Cytoscape turns
+  a null number into 0.0, and a q-value of 0 is the strongest there is, so an untested arc used to pass a
+  "q below 0.05" filter inside Cytoscape. The columns an arc may not carry (`p_value`, `q_value`,
+  `significance`, `strength`, `weight`, `effect_over_sd`, `sd`, `se`, the replicate counts and the merge
+  counts) are declared on the edge table instead, so every arc carries all of them and the cells of the
+  arcs without a value stay empty. Without that, a network whose arcs are all untested had no such column
+  at all. Checked against Cytoscape 3.10.3.
+
 ### Added
 - Filter on adjusted p-value (`--max-adjusted-p Q`), an advanced setting off by default (register item
   31): interactions whose adjusted p-value is above the threshold (0.05 unless another is given) are left

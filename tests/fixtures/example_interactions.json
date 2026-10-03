@@ -2,7 +2,7 @@
   {
     "source": "fp", "source_name": "Faecalibacterium prausnitzii",
     "target": "bh", "target_name": "Blautia hydrogenotrophica",
-    "strength": 0.31, "significance": 0.02,
+    "strength": 0.31, "q_value": 0.02, "significance": 1.699,
     "condition": "batch, N2 atmosphere (illustrative)",
     "method": "mono vs co-culture growth log-ratio (illustrative)",
     "study_id": "SYNTHETIC-EXAMPLE",
@@ -12,7 +12,7 @@
   {
     "source": "ri", "source_name": "Roseburia intestinalis",
     "target": "bh", "target_name": "Blautia hydrogenotrophica",
-    "strength": 0.18, "significance": 0.20,
+    "strength": 0.18, "q_value": 0.2, "significance": 0.699,
     "condition": "batch, N2 atmosphere (illustrative)",
     "method": "mono vs co-culture growth log-ratio (illustrative)",
     "study_id": "SYNTHETIC-EXAMPLE",

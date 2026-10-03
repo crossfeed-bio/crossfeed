@@ -177,6 +177,8 @@ SINGLE_REPLICATE = "single_replicate"
 STRAINS_POOLED = "strains_pooled"
 REMOVED_MEMBER_DETECTED = "removed_member_detected"
 NON_BATCH = "non_batch"
+# a continuous culture compared on a metric that suits it: shown, with the mode named (Karoline, 2026-10-03)
+CONTINUOUS_CULTURE = "continuous_culture"
 BATCH = "batch"           # the only cultivation mode derived by default (Karoline, #42)
 
 
@@ -200,7 +202,7 @@ STATIONARY_DIFFERS, STATIONARY_UNCHECKED = "stationary_phase_differs", "stationa
 # an obligate or abolished arc whose set without growth is zero from its first time point: no growth cannot
 # be told from no inoculum or counts below detection (Karoline, 2026-09-28: "Obligate, with a caution")
 ZERO_AT_START = "zero_at_start"
-# With the adjusted p-value filter on, an arc that has no p-value (obligate or abolished: no finite ratio;
+# With the q-value filter on, an arc that has no p-value (obligate or abolished: no finite ratio;
 # a single replicate on one side: no spread) cannot be judged by it; it is kept and says so (Karoline,
 # 2026-09-30: "Keep them, labeled untested")
 UNTESTED = "untested"
@@ -234,9 +236,26 @@ def conditions(exp: dict) -> str:
     return json.dumps([exp.get("cultivationMode"), exp.get("compartments", [])], sort_keys=True)
 
 
-def _batch_only(exps, include_non_batch: bool, skipped) -> list:
-    """The experiments a derivation may use, reporting each one left out with its mode."""
-    if include_non_batch:
+# The maximal abundance of a continuous culture is a quantity a comparison can use: the culture settles at
+# a level, and the level with a partner against the level without it is the same comparison as in batch.
+# An area under the curve and a growth rate are not: under dilution the area says how long the run was, and
+# the rate is the dilution rate (Karoline, 2026-10-03: "we don't use data when they are from chemostat. But
+# we can, when the growth curve property is max ... the no-chemostat filter is too harsh").
+METRICS_FOR_CONTINUOUS_CULTURE = ("max",)
+
+
+def keeps_continuous_culture(metric: str, include_non_batch: bool = False) -> bool:
+    return include_non_batch or metric in METRICS_FOR_CONTINUOUS_CULTURE
+
+
+def _batch_only(exps, include_non_batch: bool, skipped, metric: str = "auc") -> list:
+    """The experiments a derivation may use, reporting each one left out with its mode.
+
+    Continuous culture (chemostat, serial dilution) is kept when the metric is one it suits, and when the
+    user asks for it with the advanced setting. A comparison never mixes modes: `conditions` carries the
+    cultivation mode, so a chemostat co-culture is compared only with chemostat monocultures.
+    """
+    if keeps_continuous_culture(metric, include_non_batch):
         return list(exps)
     kept = []
     for exp in exps:
@@ -245,8 +264,10 @@ def _batch_only(exps, include_non_batch: bool, skipped) -> list:
             kept.append(exp)
         else:
             skipped.append((exp.get("name", "") or _exp_id(exp),
-                            f"{mode}, excluded by default; a non-batch curve is not comparable with a batch "
-                            "one (include it with the advanced setting)"))
+                            f"{mode}, excluded by default with the growth measure {metric}: an area under "
+                            "the curve or a growth rate of a continuous culture is not comparable with a "
+                            f"batch one. Use the growth measure max, which it suits, or the advanced "
+                            "setting"))
     return kept
 
 
@@ -500,7 +521,8 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
         "weight": None if mean is None else round(abs(mean), 4),
         "effect_over_sd": None if ratio is None else round(ratio, 4),
         "status": None,                 # present or absent, set at output from the threshold k
-        "significance": None,           # adjusted for multiple testing, set at output
+        "q_value": None,                # p_value corrected for multiple testing, set at output
+        "significance": None,           # -log10(q_value), set at output
         "p_value": None if test is None else test["p"],
         "sd": None if sd is None else round(sd, 4),
         "se": None if c["se"] is None else round(c["se"], 4),
@@ -585,7 +607,10 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
             quality.append(STRAINS_POOLED)
         mode = cultivation(exp)
         if mode != BATCH:
-            quality.append(NON_BATCH)
+            # with a metric the mode suits, the comparison holds and the arc is shown with a caution;
+            # otherwise it was asked for with the advanced setting and stays low quality
+            (cautions if method in METRICS_FOR_CONTINUOUS_CULTURE else quality).append(
+                CONTINUOUS_CULTURE if method in METRICS_FOR_CONTINUOUS_CULTURE else NON_BATCH)
         records.append(_record(source, target, c, method, quality, cautions,
                                _spike_notes(result["flagged"], target), cond, "biculture", (a, b),
                                [_exp_id(exp), *origin[target]], study_id, study_meta, identities, mode))
@@ -754,7 +779,8 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
                 notes.append(_detected_note(f"community without {removed}", detected[removed]))
         mode = cultivation(full_exps[0])
         if mode != BATCH:
-            quality.append(NON_BATCH)
+            (cautions if method in METRICS_FOR_CONTINUOUS_CULTURE else quality).append(
+                CONTINUOUS_CULTURE if method in METRICS_FOR_CONTINUOUS_CULTURE else NON_BATCH)
         # the full community or this drop-out comes in variants told apart only by their descriptions, so
         # which drop-out goes with which full community is not recorded (Karoline, 2026-09-27)
         key = conditions(full_exps[0])
@@ -835,7 +861,7 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
         # SMGDB00000015 holds 91 monocultures and nothing else: say so first, not only per replicate
         skipped.append((f"study {study_id}", f"only monocultures ({len(exps)} experiments of one strain each): "
                         "an interaction needs a co-culture or a community to compare with"))
-    exps = _batch_only(exps, include_non_batch, skipped)
+    exps = _batch_only(exps, include_non_batch, skipped, method)
     identities = strain_identities(exps, skipped)
     # with `keep`, only what can give an interaction between kept strains is read (a search with "only the
     # species entered"); identities and variants still come from every experiment, so matching is unchanged
@@ -867,20 +893,37 @@ def is_low_quality(record) -> bool:
     return bool(record.get("quality"))
 
 
-def adjust_significance(records, correction: str = "bh") -> int:
-    """Fill each record's `significance` with its adjusted p-value, in place.
+# -log10 of a q-value of exactly zero is infinite, which no file format carries. Welch reports p = 0 when
+# neither side varies and the means differ, so the case is real but extreme; it is reported as this cap.
+SIGNIFICANCE_CAP = 15.0
 
-    `correction` is "bh" (Benjamini-Hochberg, the default) or "by" (Benjamini-Yekutieli, valid under any
-    dependence between the tests).
+
+def significance_of(q_value) -> float | None:
+    """-log10(q): larger is stronger evidence, 0 at q = 1 (Karoline, 2026-10-03)."""
+    if q_value is None:
+        return None
+    if q_value <= 0:
+        return SIGNIFICANCE_CAP
+    return round(min(SIGNIFICANCE_CAP, -math.log10(q_value)), 4)
+
+
+def adjust_significance(records, correction: str = "bh") -> int:
+    """Fill each record's `q_value` and `significance`, in place.
+
+    `q_value` is the record's p-value corrected for multiple testing, and `significance` is -log10 of it,
+    so a larger significance means stronger evidence and a style can map it continuously. `correction` is
+    "bh" (Benjamini-Hochberg, the default) or "by" (Benjamini-Yekutieli, valid under any dependence
+    between the tests).
 
     The family is every comparison tested in this derivation, edges, absences and low-quality ones alike,
     since all were tested. Returns the number of tests. Records without a p-value (a single replicate on
-    a side) are not tests and keep `significance` None.
+    a side) are not tests and keep both fields None.
     """
     tested = [r for r in records if r.get("p_value") is not None]
     adjust = CORRECTIONS[correction][1]
     for record, adjusted in zip(tested, adjust([r["p_value"] for r in tested]), strict=True):
-        record["significance"] = round(adjusted, 6)
+        record["q_value"] = round(adjusted, 6)
+        record["significance"] = significance_of(record["q_value"])
     return len(tested)
 
 
@@ -894,14 +937,23 @@ def is_hidden_by_default(record) -> bool:
     return any(flag in HIDDEN_BY_DEFAULT for flag in record.get("quality", ()))
 
 
-def select_edges(records, include_low_quality: bool = False) -> tuple:
-    """(edges, hidden) at output. Edges with a flag in HIDDEN_BY_DEFAULT are left out unless asked;
-    `hidden` counts them. Single-replicate edges and absent edges stay in: marking or hiding them is the
-    display's job, so a user can see them."""
-    edges, hidden = [], {"low_quality": 0}
+def select_edges(records, include_low_quality: bool = False, include_absent: bool = False) -> tuple:
+    """(edges, hidden) at output: what every file and the Cytoscape push hold.
+
+    Edges with a flag in HIDDEN_BY_DEFAULT are left out unless asked, and so are edges below the absence
+    threshold (Karoline, 2026-10-03: "The arc number reported in Cytoscape is not identical to the arc
+    number we see because of hidden arcs"). Leaving the absences out keeps one number: what the page
+    shows, what a file holds and what Cytoscape counts are the same. `include_absent` puts them back for a
+    reader who wants to move the threshold in Cytoscape on `effect_over_sd` without deriving again, which
+    is why they were exported before (her option B on #54). Single-replicate edges stay: they are
+    interactions whose spread is unknown, shown and marked. `hidden` counts both kinds.
+    """
+    edges, hidden = [], {"low_quality": 0, "absent": 0}
     for record in records:
         if is_hidden_by_default(record) and not include_low_quality:
             hidden["low_quality"] += 1
+        elif record.get("status") == ABSENT and not include_absent:
+            hidden["absent"] += 1
         else:
             edges.append(record)
     return edges, hidden
@@ -937,7 +989,8 @@ def _merged(arcs: list) -> dict:
             studies.append(st)
     conditions = list(dict.fromkeys(a.get("condition", "") for a in arcs))
     return {**arcs[0], "strength": strength, "weight": None if strength is None else round(abs(strength), 4),
-            "sd": None, "se": None, "effect_over_sd": None, "p_value": None, "significance": None,
+            "sd": None, "se": None, "effect_over_sd": None, "p_value": None, "q_value": None,
+            "significance": None,
             "n_with": None, "n_without": None, "outcome": outcome,
             "status": PRESENT if any(a.get("status") == PRESENT for a in arcs) else None,
             "quality": union("quality"), "cautions": union("cautions"), "notes": union("notes"),
@@ -1055,8 +1108,9 @@ PROVISIONAL = ("Each interaction compares a species' growth with and without its
 
 # Appended to the caution when the filter is on, since the caution then no longer holds: the adjusted p-value
 # decides too
-FILTER_NOTE = (" With the adjusted p-value filter on, an interaction is also left out when its adjusted "
-               "p-value is above {q:g}; arcs without a p-value are kept and marked untested.")
+FILTER_NOTE = (" With the q-value filter on (the q-value is the p-value adjusted for multiple testing), an "
+               "interaction is also left out when its q-value is above {q:g}; arcs without a p-value are "
+               "kept and marked untested.")
 
 
 def filter_significance(records, max_adjusted_p: float | None = None) -> tuple:
@@ -1076,10 +1130,10 @@ def filter_significance(records, max_adjusted_p: float | None = None) -> tuple:
         if record.get("p_value") is None:
             record["cautions"] = [*record.get("cautions", []), UNTESTED]
             info["untested"] += 1
-        # adjust_significance gives every record with a p-value its adjusted value, so `significance` is
-        # None here only if the adjustment was skipped: a guard, not a case (Craig's agent, reviewing #106)
-        elif record.get("status") == PRESENT and (record.get("significance") is None
-                                                  or record["significance"] > max_adjusted_p):
+        # adjust_significance gives every record with a p-value its q-value, so `q_value` is None here
+        # only if the adjustment was skipped: a guard, not a case (Craig's agent, reviewing #106)
+        elif record.get("status") == PRESENT and (record.get("q_value") is None
+                                                  or record["q_value"] > max_adjusted_p):
             info["left_out"] += 1
             continue
         kept.append(record)
@@ -1090,7 +1144,7 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
                 absence_threshold: float = ABSENCE_THRESHOLD, no_growth_alpha: float = None,
                 no_growth_factor: float = None, merge_arcs: bool = False, min_studies: int = 1,
                 merge_genera: bool = False, support_level: str = "species",
-                max_adjusted_p: float | None = None) -> tuple:
+                max_adjusted_p: float | None = None, include_absent: bool = False) -> tuple:
     """(edges, meta) for writing a network.
 
     Sets each record's `status` from the absence threshold k (None, undetermined, for a low-quality
@@ -1106,7 +1160,7 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
             record.get("strength"), record.get("sd"), record.get("outcome"), absence_threshold)
     tests = adjust_significance(records, correction)
     records, significance_filter = filter_significance(records, max_adjusted_p)
-    edges, hidden = select_edges(records, include_low_quality)
+    edges, hidden = select_edges(records, include_low_quality, include_absent)
     if max_adjusted_p is not None:
         hidden["not_significant"] = significance_filter["left_out"]
     edges, merge = merge_parallel(edges, merge_arcs, min_studies)
@@ -1114,16 +1168,19 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
     statistics = {**STATISTICS, "correction": STATISTICS["correction"].format(name=CORRECTIONS[correction][0]),
                   "tests": tests, "filter": significance_filter}
     if max_adjusted_p is not None:
-        statistics["role"] = (f"presence is decided by the absence threshold, and an interaction whose adjusted "
-                              f"p-value is above {max_adjusted_p:g} is left out (the adjusted p-value filter)")
-    absent = sum(1 for e in edges if e.get("status") == ABSENT)
+        statistics["role"] = (f"presence is decided by the absence threshold, and an interaction whose "
+                              f"q-value (the adjusted p-value) is above {max_adjusted_p:g} is left out "
+                              "(the q-value filter)")
+    # how many the threshold marked absent, whether or not they are in the file
+    absent = hidden["absent"] + sum(1 for e in edges if e.get("status") == ABSENT)
     provisional = PROVISIONAL + ("" if max_adjusted_p is None else FILTER_NOTE.format(q=max_adjusted_p))
     meta = {"provisional": provisional, "statistics": statistics,
             "absence": {"rule": "absent when |log2 mean| < k * sd", "k": absence_threshold, "absent": absent},
             "no_growth": {**rule_meta(no_growth_alpha, no_growth_factor),
                           "obligate": sum(1 for e in edges if e.get("outcome") == OBLIGATE),
                           "abolished": sum(1 for e in edges if e.get("outcome") == ABOLISHED)},
-            "filters": {"include_low_quality": include_low_quality}, "hidden": hidden, "merge": merge,
+            "filters": {"include_low_quality": include_low_quality, "include_absent": include_absent},
+            "hidden": hidden, "merge": merge,
             "genus": genus}
     return edges, meta
 

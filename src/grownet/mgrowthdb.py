@@ -242,12 +242,13 @@ class MGrowthDBClient:
 
 # ---- record -> network (the neutral mapping) -----------------------------------------------------
 
-def effect_from_logratio(strength, significance, alpha: float = 0.05) -> str:
-    """Facilitation / inhibition / neutral. A None significance is treated as qualitative (decide by
-    sign); a significance above alpha is neutral."""
+def effect_from_logratio(strength, q_value, alpha: float = 0.05) -> str:
+    """Facilitation / inhibition / neutral. A None q-value is treated as qualitative (decide by sign); a
+    q-value above alpha is neutral. It takes the q-value, not `significance`, which is -log10 of it and
+    runs the other way (Karoline, 2026-10-03)."""
     if strength is None:
         return "neutral"
-    if significance is not None and significance > alpha:
+    if q_value is not None and q_value > alpha:
         return "neutral"
     return "facilitation" if strength > 0 else "inhibition"
 
@@ -286,7 +287,7 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
 
     Each record:
       {source, target, source_name?, target_name?, source_taxon_id?, source_species?, source_identity?
-       (and the same for target), strength, significance, condition, method?, effect?,
+       (and the same for target), strength, significance (-log10 q), q_value, condition, method?, effect?,
        evidence?, community?, p_value?, weight?, effect_over_sd?, status?, sd?, se?, n_with?,
        n_without?, outcome?, metric?, quality?, notes?, cautions?, experiments?, cultivation_mode?,
        merged_arcs?, strength_range?, supporting_pairs?, merged_pairs?,
@@ -310,10 +311,10 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
                 net.add_study(Study(id=st["id"], citation=st.get("citation", ""),
                                     license=st.get("license", ""), url=st.get("url", "")))
         sid = r.get("study_id", studies[0]["id"])
-        effect = r.get("effect") or effect_from_logratio(r.get("strength"), r.get("significance"))
+        effect = r.get("effect") or effect_from_logratio(r.get("strength"), r.get("q_value"))
         net.add_edge(Edge(
             source=r["source"], target=r["target"], effect=effect,
-            strength=r.get("strength"), significance=r.get("significance"),
+            strength=r.get("strength"), significance=r.get("significance"), q_value=r.get("q_value"),
             condition=r.get("condition", ""), method=r.get("method", ""),
             study_ids=tuple(st["id"] for st in studies) if r.get("studies") else (sid,),
             evidence=r.get("evidence"), community=tuple(r.get("community", ())),

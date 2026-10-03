@@ -23,17 +23,21 @@ counts, outcome, metric, `quality` flags and `notes`.
 - **Presence follows the spread, through the absence threshold k** (option B, Karoline, 2026-09-21): a
   comparison's `status` is `absent` when |log2 mean| < k × sd and `present` otherwise, default k = 1 (the
   mean ± sd rule), k = 0 marking nothing absent. There is no "neutral edge", the absence of an edge is
-  what a sub-threshold comparison is; every tested comparison is exported as an edge with `status`,
-  `weight` (|log2 mean|) and `effect_over_sd` (|log2 mean| / sd), so the threshold can be changed later,
-  including in Cytoscape (item 19). Karoline asked for this to be carefully documented; the README's
-  output-format section is the reference.
+  what a sub-threshold comparison is. Every comparison carries `status`, `weight` (|log2 mean|) and
+  `effect_over_sd` (|log2 mean| / sd). A sub-threshold one is reported in the result and the report but
+  **left out of every output** unless `--include-absent` is given (amended 2026-10-03, Karoline: "The arc
+  number reported in Cytoscape is not identical to the arc number we see because of hidden arcs"), so the
+  page, a file and Cytoscape all count the same arcs; with the setting on, `effect_over_sd` still lets a
+  reader move the threshold in Cytoscape (item 19). Karoline asked for this to be carefully documented;
+  the README's output-format section is the reference.
 - **Low-quality edges are computed and hidden**, with `--include-low-quality` to show them and
   `meta.hidden` counting what was left out (item 21). Single-replicate edges are shown by default and
   marked in the Cytoscape style (Karoline, on #62).
 - **A statistical test is reported, never used to decide** (Karoline, 2026-09-21): Welch's t-test on the
-  per-replicate log2 values, `p_value` raw and `significance` adjusted (Benjamini-Hochberg by default,
-  Benjamini-Yekutieli as a setting) over every
-  comparison tested in one derivation, named in `meta.statistics` (item 10).
+  per-replicate log2 values, `p_value` raw, `q_value` adjusted (Benjamini-Hochberg by default,
+  Benjamini-Yekutieli as a setting) over every comparison tested in one derivation, named in
+  `meta.statistics` (item 10), and `significance` = -log10(`q_value`), so that larger means stronger
+  evidence (Karoline, 2026-10-03).
 - **An implausible spike in a curve is flagged and the curve left out for its species only** (#48),
   recorded on the edge as a note rather than as a quality issue while two replicates remain.
 
@@ -93,13 +97,15 @@ history of how each was decided.
     minimum-supporting-studies filter applies to merged arcs (item 14)
 11. Minimum time points: **a curve needs its points for the metric** (easylinear: window plus one); no
     fit-quality gate on mGrowthDB's values, which are not read
-12. Chemostats and serial dilutions: **left out by default**, included with a setting and flagged `non_batch`
-    (#42)
+12. Chemostats and serial dilutions: **left out by default with auc or a growth rate** (flagged
+    `non_batch` when asked for anyway), **derived with max**, which that mode suits, marked
+    `continuous_culture` (#42, amended 2026-10-03)
 13. Output format: **JSON canonical, GraphML on demand**, and a report
 14. Query scope: **a species name resolves to all its strains** in mGrowthDB, and only interactions between
     the species entered are shown unless unticked
-15. Absences of interaction: **exported as edges with `status` absent under threshold k, default 1, hidden
-    by the display** (settled 2026-09-21)
+15. Absences of interaction: **decided by threshold k, default 1; reported in the result and the report,
+    and left out of every output unless asked** (settled 2026-09-21 as exported and hidden by the display;
+    amended 2026-10-03 so that one number holds everywhere, `--include-absent` to export them)
 16. Show low-quality edges: **off** (settled 2026-09-21); computed, flagged, and hidden; single-replicate
     edges are shown and marked
 
@@ -254,6 +260,16 @@ BUILT 2026-09-27 (#42, Karoline): only batch is derived by default; other modes,
 reported with the mode and left out. `--include-non-batch` derives them with the edges flagged
 `non_batch`, which is hidden by default like the other quality flags. Every edge carries
 `cultivation_mode`.
+
+AMENDED 2026-10-03 (Karoline): "right now, we don't use data when they are from chemostat. But we can, when
+the growth curve property is max. I think the no-chemostat filter is too harsh, we should allow it when max
+is the growth property being compared." So continuous culture is derived by default with `--metric max`,
+and those arcs carry the caution `continuous_culture` and are shown; with `auc` or a growth rate they are
+still left out unless `--include-non-batch` is given, and then they keep the `non_batch` quality flag. The
+reason a run gives names the way out. A comparison never mixes modes, since `conditions` carries the
+cultivation mode. Measured when it was built: no study in mGrowthDB today has a non-batch pairwise or
+drop-out design, so this changes no current network; SMGDB00000001, 5 and 11 are single large communities
+with no leave-one-out partners.
 
 ## 13. Output format
 
