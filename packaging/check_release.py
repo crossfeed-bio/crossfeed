@@ -2,9 +2,13 @@
 
 Usage: python packaging/check_release.py v0.1.0 notes.md
 
-The tag must be v plus the version in pyproject.toml, the package's __version__ must be the same, and
-CHANGELOG.md must hold a section for it that is no longer marked unreleased. The notes file gets that
-section, for the GitHub release, after a paragraph on starting the Windows program.
+The tag must be v plus the version in pyproject.toml, the package's __version__ must be the same,
+CITATION.cff must name that version, and CHANGELOG.md must hold a section for it that is no longer marked
+unreleased. The notes file gets that section, for the GitHub release, after a paragraph on starting the
+Windows program.
+
+CITATION.cff is checked because 0.1.0 shipped while it still said 0.0.2: nothing read it, so nothing
+caught it, and a citation that misstates the version is exactly the kind of thing a reader trusts.
 """
 import re
 import sys
@@ -24,6 +28,15 @@ def check(tag: str, root: Path = ROOT) -> tuple:
         problems.append(f"the tag {tag} does not match pyproject.toml's version {version} (expected v{version})")
     if code_version != version:
         problems.append(f"__version__ is {code_version}, pyproject.toml says {version}")
+    citation = (root / "CITATION.cff").read_text(encoding="utf-8")
+    cited = re.search(r"^version: *\"?([^\"\n]+)\"?$", citation, re.M)
+    if not cited:
+        problems.append("CITATION.cff has no version")
+    elif cited.group(1).strip() != version:
+        problems.append(f"CITATION.cff says version {cited.group(1).strip()}, pyproject.toml says {version}")
+    dated = re.search(r"^date-released: *\"?([0-9]{4}-[0-9]{2}-[0-9]{2})\"?$", citation, re.M)
+    if not dated:
+        problems.append("CITATION.cff has no date-released")
     changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
     section = re.search(rf"^## \[{re.escape(version)}\](.*?)$(.*?)(?=^## \[|\Z)", changelog, re.M | re.S)
     if not section:

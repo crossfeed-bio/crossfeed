@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grownet"
-version = "0.1.0"
+version = "0.2.0"
 description = "Build experimentally grounded microbial interaction networks from mGrowthDB data, in a neutral format that Syntropa, microbetag, and other tools can consume."
 readme = "README.md"
 requires-python = ">=3.10"

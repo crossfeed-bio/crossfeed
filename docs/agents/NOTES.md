@@ -553,6 +553,19 @@ simulator takes (register item 32, Karoline 2026-10-03). What a later agent need
 - Checking the R side: `R CMD build r && R CMD check --no-manual grownet_0.1.0.tar.gz`, or `make r-check`.
   The tests live in `r/tests/testthat` and include a real POST into the listener.
 
+## Releasing 0.2.0
+
+`packaging/check_release.py` now also checks `CITATION.cff`, because 0.1.0 shipped while that file still
+said version 0.0.2: nothing read it, so nothing caught it. The 0.2.0 changelog section is the release
+notes, so it is ordered as a reader wants it, Added before Changed and the headline items first, with one
+heading of each kind (it had grown two "Changed" groups).
+
+Open for the collaboration, and the one thing a release should not decide quietly: **`significance`
+changed meaning in this release** (the corrected p-value became -log10 of it) while the schema id stayed
+`grownet.interaction_network/v0`. Craig's own rule on #71 is that a version is a promise about content, so
+a reader branching on the id would read 0.2.0 numbers as 0.1.0 ones. His question on #107 about moving to
+`/v1` is still unanswered.
+
 ## House style for the tool's name
 
 In prose the name carries the wordmark's two parts: `brand.in_prose` does it on the page, and the README
