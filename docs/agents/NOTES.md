@@ -539,6 +539,11 @@ simulator takes (register item 32, Karoline 2026-10-03). What a later agent need
 - **An unscaled matrix diverges**: on SMGDB00000004 the cells outweigh the -1 diagonal and deSolve returns
   NA. `glv_scale()` divides the off-diagonal by one factor; it is a modeling choice, so nothing applies
   it by itself, and the printout and both READMEs say so.
+- **The install line carries `ref = "media-and-experiments"`** (`rbridge.R_BRANCH`) because `r/` is not on
+  `main` yet; drop the ref from `rbridge.INSTALL_R` and from the three texts that quote it (the help page,
+  the page hint, both READMEs) once it merges. A plain `install_github` on a public repository can still
+  answer 404 when git has stored a token that cannot see it, which is what `rbridge.INSTALL_TROUBLE` says
+  (Karoline hit both on 2026-10-04).
 - Checking the R side: `R CMD build r && R CMD check --no-manual grownet_0.1.0.tar.gz`, or `make r-check`.
   The tests live in `r/tests/testthat` and include a real POST into the listener.
 

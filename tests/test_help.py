@@ -232,6 +232,10 @@ def test_the_help_links_the_r_package_and_says_how_to_install_it():
     assert html_module.escape(rbridge.INSTALL_R, quote=True) in section   # the one install line
     assert "grownet_listen()" in section and "grownet_glv(url)" in section
     assert "miaSim" in section and "simulateGLV" in section
+    # the line has to work as written: the package is not on main yet, and a stored token can hide a
+    # public repository (Karoline hit both, 2026-10-04)
+    assert 'ref = &quot;' in section and rbridge.R_BRANCH in section
+    assert "404" in section and "GITHUB_PAT" in section
     assert "glv_matrix()" in section and "as_miasim()" in section and "glv_scale()" in section
     assert "assumes no simulator" in section            # it works with other simulators and with own code
 

@@ -6,10 +6,22 @@ simulator or to your own code.
 
 ```r
 install.packages("remotes")
-remotes::install_github("crossfeed-bio/crossfeed", subdir = "r")
+remotes::install_github("crossfeed-bio/crossfeed", subdir = "r", ref = "media-and-experiments")
 ```
 
-It needs R 4.1 or later and jsonlite. Nothing else: the listener uses base R sockets.
+The `ref` names the branch the package is on until it is merged; after that it can be left out. It needs
+R 4.1 or later and jsonlite. Nothing else: the listener uses base R sockets.
+
+**If the install answers `HTTP error 404`** on this public repository, a GitHub token stored on the machine
+is being used and cannot see it (a fine-grained token answers 404 for everything outside its scope). Either
+way around it works:
+
+```r
+Sys.setenv(GITHUB_PAT = "")                      # then run the install_github line again
+remotes::install_local("<the repository>/r")     # or install from a clone you already have
+```
+
+From a terminal, in a clone, `R CMD INSTALL r` does the same without remotes.
 
 ## Receiving the parameters
 

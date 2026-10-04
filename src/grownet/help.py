@@ -14,6 +14,7 @@ from .idea import idea_figure
 
 REPOSITORY = "https://github.com/crossfeed-bio/crossfeed"
 R_INSTALL = rbridge.INSTALL_R
+R_TROUBLE = rbridge.INSTALL_TROUBLE
 ISSUES = f"{REPOSITORY}/issues"
 NEW_ISSUE = f"{ISSUES}/new/choose"
 MGROWTHDB = "https://mgrowthdb.gbiomed.kuleuven.be"
@@ -639,6 +640,8 @@ glv                            # prints what it holds and what to read before si
 A &lt;- glv_matrix(glv)           # warns about any cell that is a stated extreme
 r &lt;- glv_rates(glv)
 tse &lt;- do.call(miaSim::simulateGLV, as_miasim(glv_scale(glv)))</pre>
+<p class="hint">{_e(R_TROUBLE)} The <code>ref</code> names the branch the package is on until it is
+merged; after that it can be left out.</p>
 <p>The caveats travel as data, not as text to be read first: the object prints them every time,
 <code>glv_matrix()</code> warns and names the cells that hold +10 or -10 and takes
 <code>placeholders = "na"</code> or <code>"zero"</code> to convert them, and

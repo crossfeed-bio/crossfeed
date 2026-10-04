@@ -26,7 +26,15 @@ PATH = "/grownet/glv"
 # where the companion package lives and how it is installed, in one place, so the page, the help and the
 # error below say the same line
 REPOSITORY_SLUG = "crossfeed-bio/crossfeed"
-INSTALL_R = f'remotes::install_github("{REPOSITORY_SLUG}", subdir = "r")'
+# The branch the package lives on until it is merged. Remove the ref, here and in the three texts that
+# quote INSTALL_R, once it is on main (Karoline hit the 404 this causes on 2026-10-04).
+R_BRANCH = "media-and-experiments"
+INSTALL_R = f'remotes::install_github("{REPOSITORY_SLUG}", subdir = "r", ref = "{R_BRANCH}")'
+# Why an install can still fail on a public repository: a token git stored for another account or scope
+# makes GitHub answer 404 rather than serving it anonymously.
+INSTALL_TROUBLE = ('If that fails with "HTTP error 404", a GitHub token stored on this machine is being '
+                   'used and cannot see the repository: run Sys.setenv(GITHUB_PAT = "") and try again, or '
+                   'install from a clone with remotes::install_local("<the repository>/r").')
 
 
 

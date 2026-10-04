@@ -468,7 +468,7 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
                  "the interaction matrix (-1 on the diagonal), the matching growth rates and a README stating "
                  "what the numbers are.</p>") if organism_rates else ""
     r_hint = (f"<p class=\"hint\">Send to R needs an R session waiting for it: install the companion package "
-              f"once with <code>{_esc(rbridge.INSTALL_R)}</code>, then run "
+              f"once with <code>{_esc(rbridge.INSTALL_R)}</code> (if that answers 404, see the help), then run "
               f"<code>library(grownet); glv &lt;- grownet_listen()</code> and "
               f"press this. What arrives prints its own caveats, warns when the matrix holds a stated extreme, "
               f"and refuses to build a simulation for an organism with no growth rate "
