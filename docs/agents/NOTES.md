@@ -571,8 +571,10 @@ simulator takes (register item 32, Karoline 2026-10-03). What a later agent need
   the README and the R printout say the count, or that there is none. Both gLV settings are ordinary
   advanced settings; the **gLV mode** button (`gui.glv_mode`, `gui.glv_mode_on`, `--glv-mode`) sets them
   together and says so, which is what Karoline asked for after two checkboxes in the bar read as "quite
-  complex" (2026-10-04). It toggles: pressing it again restores both defaults, and the button carries
-  `class="on"` and `aria-pressed` so its state is visible.
+  complex" (2026-10-04). It toggles: pressing it again restores both defaults, and it is drawn as a
+  switch (`button.switch` with a track and a knob in `brand.CSS`), green when on and white when off, with
+  `aria-pressed` for anyone who cannot see it. It stays a submit button, so the page keeps its no-JavaScript
+  rule: the server re-renders the switch the other way.
 - `matrix.media(net)` feeds the gLV README, the payload's caveats and the R printout: a package built from
   several media says so in capitals, because a simulation is of one environment. The All network spans six.
 

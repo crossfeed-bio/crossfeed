@@ -14,8 +14,9 @@ content.
   collection and disable drop-out communities?"). A drop-out arc may act through a third species, while a
   gLV coefficient is meant to be the direct effect of one organism on another. The text beside the buttons
   is two sentences now, and the gLV package and the R object count the drop-out arcs they hold, or say that
-  none is there. Pressing the button again puts both back to their defaults, and the button shows which way
-  it stands. The result section's control is **Get gLV parameters**, the two input boxes line up whether or
+  none is there. Pressing it again puts both back to their defaults, and it is drawn as a switch: the slider
+  is green when the mode is on and white when the settings are the defaults (Karoline, 2026-10-04). It is
+  still a submit button, so the page needs no JavaScript for it. The result section's control is **Get gLV parameters**, the two input boxes line up whether or
   not their examples wrap, and the help's R example plots the simulation with `matplot` and says that every
   arrival prints in R and that `grownet_listen()` takes one parameter set per call.
 - Opening the page's address without its token, by hand or from a tab left over from an earlier run, shows

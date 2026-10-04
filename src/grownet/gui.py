@@ -260,7 +260,7 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
     """
     note = f"<p class=\"note\">{_esc(message)}</p>" if message else ""
     on = glv_mode_on(settings or {})
-    glv_class, glv_pressed, glv_tick = ("on" if on else ""), ("true" if on else "false"), (" on" if on else "")
+    glv_on, glv_pressed = (" on" if on else ""), ("true" if on else "false")
     return _page(f"""{note}<form method="post" action="/run?token={_esc(token)}">
 <div class="boxes">
 <div class="box">
@@ -281,8 +281,8 @@ Wilkins-Chalgren; an id (SMGDB..., EMGDB...) picks that study or experiment. Emp
 <div class="bar"><button class="primary" type="submit">Find interactions</button>
 <button type="submit" name="example" value="1">Example</button>
 <button type="submit" name="all" value="1">All</button>
-<button type="submit" name="glv_mode" value="1" class="{glv_class}" aria-pressed="{glv_pressed}">gLV
-mode{glv_tick}</button>
+<button type="submit" name="glv_mode" value="1" class="switch{glv_on}" aria-pressed="{glv_pressed}"
+><span class="track"><span class="knob"></span></span>gLV mode</button>
 <span class="muted">All derives every study in mGrowthDB, ignoring the boxes (half a minute or so).
 gLV mode sets what a simulation needs, growth rates on and drop-out communities off; press it again to
 switch back.</span></div>

@@ -478,7 +478,9 @@ def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
     _, page, _ = _open(f"{base}/?token={token}")
     bar = page[page.index('<div class="bar">'):]
     bar = bar[:bar.index("</div>")]
-    assert 'name="glv_mode" value="1"' in bar and "gLV\nmode" in bar
+    assert 'name="glv_mode" value="1"' in bar and ">gLV mode</button>" in bar
+    assert 'class="switch"' in bar and 'aria-pressed="false"' in bar      # a switch, standing at off
+    assert '<span class="track"><span class="knob">' in bar               # drawn, not described
     assert bar.index('name="glv_mode"') > bar.index('name="all"')        # next to All
     assert not re.findall(r'<input[^>]*name="([^"]+)"', bar)             # and no checkboxes in the bar
     assert len(bar) < 700                                                # the text beside it stays short
@@ -494,7 +496,7 @@ def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
     assert 'name="include_dropout" value="1">' in settings               # off
     assert "gLV mode on: growth rates on, drop-out communities off" in pressed
     assert f">{A}</textarea>" in pressed                                 # and what was typed stays
-    assert 'name="glv_mode" value="1" class="on"' in pressed             # the button shows it is on
+    assert 'class="switch on"' in pressed and 'aria-pressed="true"' in pressed   # the switch is on
 
     # Karoline, 2026-10-04: "Do I click a 2nd time to switch it off?" Pressing it again restores both
     # defaults, and says so
@@ -502,7 +504,8 @@ def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
     back = again[again.index("<details>"):]
     assert 'name="report_rates" value="1">' in back                      # off, its default
     assert 'name="include_dropout" value="1" checked' in back            # on, its default
-    assert "gLV mode off" in again and 'class="on"' not in again
+    assert "gLV mode off" in again and 'class="switch on"' not in again
+    assert 'class="switch"' in again and 'aria-pressed="false"' in again
 
 
 def test_the_download_menu_offers_the_adjacency_matrix(server):
