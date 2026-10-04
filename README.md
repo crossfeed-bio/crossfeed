@@ -163,6 +163,8 @@ python -m grownet schema [--out FILE]
   page shows), and, with `--report-rates`, `--rates FILE` and `--glv FILE`. `grownet derive --help` lists
   every option in the page's words, with examples.
 - `--format graphml` emits GraphML (for Cytoscape, igraph, networkx, Gephi) instead of the neutral JSON.
+- `--conditions NAME ...` is the page's second box: media, experiment ids or study ids. A study id given
+  this way replaces the old study argument for `--species` searches.
 - `--format matrix` emits the adjacency matrix as CSV: the organisms in the header row and in the first
   column, and a cell holding the log2 mean of the comparison, so `A[i][j]` is the effect of j on i. Each
   organism appears once, so arcs of one pair are merged across conditions and studies by their median, a
@@ -205,7 +207,11 @@ attribute, the main design decisions, the command line, what to do when no netwo
 to report a problem; an About page says who built it and links this repository. Type species names (or NCBI taxon ids, or a genus for all its species), one per line, and press "Find
 interactions", or press All to derive every study in mGrowthDB. **grownet** resolves
 the names to taxon ids from mGrowthDB's own strain records, finds the studies holding them, derives the
-interactions, and shows them as a table with downloads for JSON, GraphML and the adjacency matrix. Every
+interactions, and shows them as a table with downloads for JSON, GraphML and the adjacency matrix. A
+second box beside the species says **where** to look, and is optional: a medium (matched as text against
+the medium name mGrowthDB records, the experiment description and its name, so `wilkins` finds every
+spelling of Wilkins-Chalgren), an experiment id or a study id. Naming a comparison keeps the monocultures
+it is made against. Every arc records its `medium`, so a network says which environments it came from. Every
 setting sits behind "Advanced settings" with the same defaults the command line uses, except **Report
 growth rates**, which sits beside the All button: it adds each organism's growth rate in monoculture as its
 own download and turns on **Generate gLV parameters**, the zip a generalized Lotka-Volterra simulator

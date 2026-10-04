@@ -243,6 +243,9 @@
         },
         "cultivation_mode": {
           "type": "string"
+        },
+        "medium": {
+          "type": "string"
         }
       }
     },
@@ -268,4 +271,3 @@
     }
   }
 }
-

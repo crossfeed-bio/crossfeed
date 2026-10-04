@@ -30,6 +30,7 @@ from collections import Counter
 from statistics import median
 
 from . import rates
+from . import selection as selecting
 from .adapter import replicates_for_experiment
 from .growth import SPIKE_FACTOR, GrowthCurve, Replicate, spike
 from .interaction import (
@@ -270,6 +271,37 @@ def _batch_only(exps, include_non_batch: bool, skipped, metric: str = "auc") -> 
                             f"batch one. Use the growth measure max, which it suits, or the advanced "
                             "setting"))
     return kept
+
+
+def select_experiments(exps, selection, skipped) -> list:
+    """The experiments a selection asks for, with the monocultures a kept comparison needs.
+
+    Karoline, 2026-10-04, choosing between a literal reading and this one: naming a co-culture also keeps
+    the monocultures it is compared against, "chosen by the existing matching rules", because one id alone
+    would otherwise give no arc at all. Those monocultures are the ones under the same conditions
+    (`conditions`), from which `_choose_monocultures` picks as it always does; what came along is reported.
+
+    An empty selection keeps everything.
+    """
+    if selecting.empty(selection):
+        return list(exps)
+    kept = [e for e in exps if selecting.matches(e, selection)]
+    wanted_conditions = {conditions(e) for e in kept if len(_members(e)) > 1}
+    added = [e for e in exps
+             if e not in kept and len(_members(e)) == 1 and conditions(e) in wanted_conditions]
+    if added:
+        skipped.append(("monocultures kept alongside the experiments named",
+                        ", ".join(sorted(_exp_id(e) for e in added))
+                        + ": the comparisons you named are made against them"))
+    if not kept:
+        skipped.append((f"study {study_ids_of(exps)}",
+                        "no experiment of this study matches the media, experiments or studies entered"))
+    return kept + added
+
+
+def study_ids_of(exps) -> str:
+    """The studies a list of experiments belongs to, for a message."""
+    return ", ".join(sorted({str(e.get("studyId", "")) for e in exps if e.get("studyId")})) or "this study"
 
 
 def _replicate_flags(n_with: int, n_without: int) -> tuple:
@@ -623,7 +655,7 @@ def absence(mean, sd, outcome: str, k: float = ABSENCE_THRESHOLD):
 
 def _record(source: str, target: str, c: dict, method: str, quality: list, cautions: list, notes: list,
             cond: str, evidence: str, community, experiments, study_id, study_meta, identities=None,
-            mode: str = BATCH) -> dict:
+            mode: str = BATCH, medium: str = "") -> dict:
     """One edge record from a comparison `c` (mean, sd, se, n_with, n_without, outcome, with_log2,
     without_log2), the shape `records_to_network` reads."""
     mean, sd = c["mean"], c["sd"]
@@ -649,6 +681,7 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
         "n_with": c["n_with"], "n_without": c["n_without"],
         "outcome": c["outcome"], "metric": method,
         "quality": quality, "cautions": cautions, "notes": notes, "cultivation_mode": mode,
+        "medium": medium,
         "condition": cond, "method": REPLICATE_METHOD.format(metric=method),
         "evidence": evidence, "community": sorted(_identity(identities, m)["id"] for m in community),
         "experiments": list(experiments),
@@ -733,7 +766,8 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
                 CONTINUOUS_CULTURE if method in METRICS_FOR_CONTINUOUS_CULTURE else NON_BATCH)
         records.append(_record(source, target, c, method, quality, cautions,
                                _spike_notes(result["flagged"], target), cond, "biculture", (a, b),
-                               [_exp_id(exp), *origin[target]], study_id, study_meta, identities, mode))
+                               [_exp_id(exp), *origin[target]], study_id, study_meta, identities, mode,
+                               selecting.medium_of(exp)))
 
 
 def run_group(exp: dict) -> str:
@@ -910,7 +944,8 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
         cond = ", ".join(e.get("name", "") for e in drops[removed])
         experiments = [_exp_id(e) for e in [*full_exps, *drops[removed]]]
         records.append(_record(removed, target, arc, method, quality, cautions, notes, cond, arc["evidence"],
-                               members, experiments, study_id, study_meta, identities, mode))
+                               members, experiments, study_id, study_meta, identities, mode,
+                               selecting.medium_of(full_exps[0])))
 
 
 def _wanted(exps, keep) -> set:
@@ -950,7 +985,8 @@ def relevant_experiments(exps, keep, dropout: bool = True) -> list:
 def interactions_from_replicates(client, study: dict, exps: list, study_id: str = None,
                                  method: str = "auc", spike_factor: float = SPIKE_FACTOR,
                                  dropout: bool = True, include_non_batch: bool = False,
-                                 no_growth_alpha: float = None, no_growth_factor: float = None, keep=None):
+                                 no_growth_alpha: float = None, no_growth_factor: float = None, keep=None,
+                                 selection=None):
     """The specified comparison, run on a study: (records, skipped).
 
     Two designs give edges. Each two-member co-culture is compared with the monoculture replicates of
@@ -967,7 +1003,8 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
     happens at output (`select_edges`), so nothing computed is lost. Only batch experiments are derived
     unless `include_non_batch` is set; every edge records its `cultivation_mode`, and a non-batch edge is
     flagged `non_batch` (Karoline, #42). `no_growth_alpha` and `no_growth_factor` set the no-growth rule
-    (`grownet.interaction.grew`; None means the defaults there).
+    (`grownet.interaction.grew`; None means the defaults there). `selection` is what the page's second box
+    asks for, media, experiments or studies (`grownet.selection`, #113); None looks at everything.
     """
     no_growth = (no_growth_alpha, no_growth_factor)
     study_id = study_id or study.get("id")
@@ -982,7 +1019,10 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
         skipped.append((f"study {study_id}", f"only monocultures ({len(exps)} experiments of one strain each): "
                         "an interaction needs a co-culture or a community to compare with"))
     exps = _batch_only(exps, include_non_batch, skipped, method)
+    # the second box: media, experiments or studies (#113). Identities and variants are still read from
+    # every experiment, so matching a strain to its monocultures is unchanged by what is selected.
     identities = strain_identities(exps, skipped)
+    exps = select_experiments(exps, selection, skipped)
     # with `keep`, only what can give an interaction between kept strains is read (a search with "only the
     # species entered"); identities and variants still come from every experiment, so matching is unchanged
     relevant = {id(e) for e in relevant_experiments(exps, keep, dropout)}
@@ -1119,6 +1159,7 @@ def _merged(arcs: list) -> dict:
                          else arcs[0].get("evidence")),
             "condition": "; ".join(c for c in conditions if c),
             "cultivation_mode": "; ".join(dict.fromkeys(a.get("cultivation_mode", "") for a in arcs)),
+            "medium": "; ".join(dict.fromkeys(a.get("medium", "") for a in arcs if a.get("medium"))),
             "method": f"{arcs[0].get('method', '')}; merged: the median of {len(arcs)} arcs",
             "merged_arcs": len(arcs),
             "strength_range": [min(numeric), max(numeric)] if numeric else [],
@@ -1341,8 +1382,9 @@ class ReplicateDeriver(Deriver):
 
     def __init__(self, method: str = "auc", spike_factor: float = SPIKE_FACTOR, client=None,
                  dropout: bool = True, include_non_batch: bool = False, no_growth_alpha: float = None,
-                 no_growth_factor: float = None, keep=None):
+                 no_growth_factor: float = None, keep=None, selection=None):
         self.keep = keep
+        self.selection = selection
         self.method = method
         self.spike_factor = spike_factor
         self.client = client
@@ -1357,7 +1399,7 @@ class ReplicateDeriver(Deriver):
         return interactions_from_replicates(self.client, study, exps, study.get("id"),
                                             self.method, self.spike_factor, self.dropout,
                                             self.include_non_batch, self.no_growth_alpha,
-                                            self.no_growth_factor, self.keep)
+                                            self.no_growth_factor, self.keep, self.selection)
 
 
 class BaselineDeriver(Deriver):
@@ -1379,13 +1421,13 @@ class BaselineDeriver(Deriver):
 def derive_interactions(client: MGrowthDBClient, study_id: str, deriver: Deriver = None,
                         metric: str = "auc", spike_factor: float = SPIKE_FACTOR, dropout: bool = True,
                         include_non_batch: bool = False, no_growth_alpha: float = None,
-                        no_growth_factor: float = None, keep=None):
+                        no_growth_factor: float = None, keep=None, selection=None):
     """Fetch a study and its experiments from the API, then derive interactions with `deriver`
     (default: ReplicateDeriver, the specified comparison). `metric`, `spike_factor` and `dropout` configure
     the default deriver only. A deriver that reads measured series says so with `needs_client`."""
     deriver = deriver or ReplicateDeriver(method=metric, spike_factor=spike_factor, dropout=dropout,
                                          include_non_batch=include_non_batch, no_growth_alpha=no_growth_alpha,
-                                         no_growth_factor=no_growth_factor, keep=keep)
+                                         no_growth_factor=no_growth_factor, keep=keep, selection=selection)
     if getattr(deriver, "needs_client", False) and getattr(deriver, "client", None) is None:
         deriver.client = client
     if getattr(deriver, "needs_client", False):

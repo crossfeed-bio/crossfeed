@@ -144,7 +144,7 @@ def test_only_entered_species_filters_other_pairs():
 
 
 def test_a_study_that_fails_is_reported_not_raised():
-    r = run_query(FakeClient(), ["853"], {"studies": "SMGDB99999999"})
+    r = run_query(FakeClient(), ["853"], {"conditions": "SMGDB99999999"})
     assert r["errors"] and "SMGDB99999999" in r["errors"][0]
     assert r["network"].edges == []
 
@@ -166,11 +166,11 @@ def test_form_hides_every_setting_behind_one_button():
     # an unticked checkbox is simply absent from a post
     ({}, {**DEFAULTS, "only_entered": False, "include_dropout": False}),
     ({"metric": ["growth_rate"], "rate_method": ["baranyi"], "rate_window": ["7"], "spike_factor": ["50"],
-      "studies": [" S1 "], "only_entered": ["1"],
+      "conditions": [" S1 "], "only_entered": ["1"],
       "include_low_quality": ["1"], "include_dropout": ["1"], "no_growth_alpha": ["0.01"],
       "no_growth_factor": ["4"], "exclude_studies": [" SMGDB00000008 "], "merge_arcs": ["1"], "min_studies": ["2"],
       "merge_genera": ["1"]},
-     {"metric": "growth_rate", "rate_method": "baranyi", "rate_window": 7, "spike_factor": 50.0, "studies": "S1",
+     {"metric": "growth_rate", "rate_method": "baranyi", "rate_window": 7, "spike_factor": 50.0, "conditions": "S1",
       "only_entered": True, "include_low_quality": True, "include_absent": False,
       "correction": "bh", "absence_threshold": 1.0, "include_dropout": True, "include_non_batch": False,
       "no_growth_alpha": 0.01, "no_growth_factor": 4.0, "exclude_studies": "SMGDB00000008", "merge_arcs": True,
@@ -653,3 +653,22 @@ def test_a_result_the_filter_emptied_says_so_rather_than_blaming_the_threshold()
     assert "<h2>No interactions pass the q-value filter</h2>" in page
     empty = render_result("tok", {**result, "network": InteractionNetwork.from_dict({**doc, "edges": []})})
     assert "The q-value filter left out all 3 interaction(s)" in empty
+
+
+def test_an_empty_result_says_what_the_second_box_left_out():
+    """With a medium that only some studies carry, the page says the box's part before the rest, so a
+    user is not sent looking for a data problem that is really a filter (#113)."""
+    from grownet.gui import _empty_reason
+    result = {"settings": {**DEFAULTS, "conditions": "mucin"}, "studies": ["S1", "S2", "S3"],
+              "resolved": [("x", {1: "x"})], "errors": [], "network": None, "hidden": {},
+              "skipped": [("study S2", "no experiment of this study matches the media, experiments or "
+                           "studies entered"),
+                          ("study S3", "no experiment of this study matches the media, experiments or "
+                           "studies entered"),
+                          ("a pair", "no usable per-strain series")]}
+    reason = _empty_reason(result)
+    assert reason.startswith("The second box left out 2 of the 3 study(ies) searched")
+    assert "mucin" in reason
+    # with the box empty, nothing is said about it
+    result["settings"] = {**DEFAULTS}
+    assert "second box" not in _empty_reason(result)

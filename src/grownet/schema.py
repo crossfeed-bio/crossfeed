@@ -91,6 +91,7 @@ SCHEMA_DOC = {
                 "cautions": {"type": "array", "items": {"enum": list(CAUTIONS)}},
                 "experiments": {"type": "array", "items": {"type": "string"}},
                 "cultivation_mode": {"type": "string"},
+                "medium": {"type": "string"},
             },
         },
         "study": {

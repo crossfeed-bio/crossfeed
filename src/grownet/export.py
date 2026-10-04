@@ -65,6 +65,7 @@ _KEYS = [
     ("e_cautions", "edge", "cautions", "string"),
     ("e_experiments", "edge", "experiments", "string"),
     ("e_cultivation_mode", "edge", "cultivation_mode", "string"),
+    ("e_medium", "edge", "medium", "string"),
     ("e_merged_arcs", "edge", "merged_arcs", "int"),
     ("e_strength_range", "edge", "strength_range", "string"),
     ("e_supporting_pairs", "edge", "supporting_pairs", "int"),
@@ -154,6 +155,7 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(ed, "e_line_style", line_style(e))
         _data(ed, "e_display_weight", display_weight(e))
         _data(ed, "e_cultivation_mode", e.cultivation_mode)
+        _data(ed, "e_medium", e.medium)
 
     if pretty:
         ET.indent(root)

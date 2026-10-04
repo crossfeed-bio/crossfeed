@@ -542,6 +542,25 @@ simulator takes (register item 32, Karoline 2026-10-03). What a later agent need
 - Checking the R side: `R CMD build r && R CMD check --no-manual grownet_0.1.0.tar.gz`, or `make r-check`.
   The tests live in `r/tests/testthat` and include a real POST into the listener.
 
+## The second box: media, experiments or studies (#113)
+
+`grownet.selection` parses the box and matches experiments; `derive.select_experiments` applies it.
+
+- **Media are structured after all.** Every experiment carries `compartments[].mediumName` (559 of 559 on
+  2026-10-04), so a medium is matched there first, and against the description and the experiment name as
+  well, since what tells experiments of one study apart lives only there. The match is a case-insensitive
+  substring because the spellings differ: Wilkins-Chalgren appears four ways, one misspelled "Anerobe".
+- **An entry is an id by its shape** (`EMGDB\d+`, `SMGDB\d+`) and a medium otherwise. Study ids narrow
+  which studies are read, the way the retired "Only these studies" setting did; media and experiment ids
+  are applied per experiment inside the derivation.
+- **Naming a comparison keeps its monocultures** (Karoline's choice): `select_experiments` adds the
+  monoculture experiments under the same `conditions()` and reports them, since one id alone would give no
+  arc. `_choose_monocultures` then picks among them as always.
+- **Arcs carry `medium`** (`selection.medium_of`), in the model, the schema, GraphML, Cytoscape and the
+  report. Merged arcs join the media of their parts.
+- Selecting is not a method change: the medium is part of the conditions key, so comparisons never mixed
+  media. Register item 8 carries this.
+
 ## Gotchas
 
 - mGrowthDB serves growth curves, not interactions; interactions are derived.

@@ -130,10 +130,15 @@ SETTINGS = {
     "min_studies": ("Minimum supporting studies", "--min-studies N",
                     "Keeps arcs resting on at least this many studies. Above 1 it needs merged arcs, since an "
                     "arc as derived rests on one study."),
-    "studies": ("Only these studies", "STUDY",
-                "Comma separated mGrowthDB study ids to search, instead of every study holding the species; "
-                "on the command line, the study argument given with --species. "
-                "Use it to speed up a search or to reproduce one study's network."),
+    "conditions": ("Media, experiments or studies", "--conditions NAME [NAME ...]",
+                   "This one is the second box beside the species, not an advanced setting, because it says "
+                   "where to look rather than how to decide an interaction. Empty by default, which looks "
+                   "at every medium. A medium is matched as text, case-insensitively, against the medium "
+                   "name mGrowthDB records on the experiment's compartments, its description and its name, "
+                   "so \"wilkins\" finds every spelling of Wilkins-Chalgren and \"mucin\" finds the "
+                   "experiments that mention it; an id picks one study (SMGDB...) or one experiment "
+                   "(EMGDB...), and naming a comparison keeps the monocultures it is made against. On the "
+                   "command line a study id given this way replaces the study argument."),
     "exclude_studies": ("Exclude these studies", "--exclude-studies IDS",
                         "Comma separated mGrowthDB study ids that are never searched, for example a study "
                         "you know to be unsuitable. Empty by default. It applies after Only these studies, "
@@ -220,6 +225,8 @@ EDGE_ATTRIBUTES = {
                  "community for a drop-out arc",
     "condition": "the experiment the edge comes from; interactions are condition-specific",
     "cultivation_mode": "batch, chemostat, and so on, as mGrowthDB records it",
+    "medium": "the growth medium the comparison ran in, as mGrowthDB names it on the experiment's "
+              "compartments; empty when it names none",
     "experiments": "the mGrowthDB experiments whose replicates the edge compares",
     "study_ids": "the studies supporting this edge; cite them (see Sources)",
     "merged_arcs": "with Merge parallel arcs: how many arcs of this source and target were merged into this one; "
@@ -384,6 +391,7 @@ def _table(head, rows) -> str:
 
 
 SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"), ("measures", "Which growth measure"),
+            ("where", "Choosing where to look"),
             ("example", "Try the example"), ("reading", "Reading the result"),
             ("statistics", "How an interaction is decided"),
             ("glv", "The matrix, the growth rates and gLV"),
@@ -424,6 +432,28 @@ network the grownet repository derives from mGrowthDB once a day, when it is les
 spares mGrowthDB about 1,300 requests; the result says when it was derived. Any other setting, or GitHub
 out of reach, derives it live. Nothing is uploaded, and nothing is written outside the file you
 download.</p>
+
+<h2 id="where">Choosing where to look</h2>
+<p>The second box beside the species is optional and says <strong>where</strong> to look, not how to decide
+an interaction. Leave it empty and every medium is used, which is what grownet did before. One entry per
+line:</p>
+<ul>
+<li>a <strong>medium</strong>, matched as text and case-insensitively against the medium name mGrowthDB
+records on an experiment's compartments, its description and its name. The spellings differ between
+studies, so a short word finds more: <code>wilkins</code> finds all four spellings of Wilkins-Chalgren,
+one of which is misspelled in the database, and <code>mucin</code> finds the experiments that add mucin
+beads to the same medium.</li>
+<li>an <strong>experiment id</strong> (<code>EMGDB000000024</code>) or a <strong>study id</strong>
+(<code>SMGDB00000002</code>). Naming a co-culture or a community also keeps the monocultures it is
+compared against, chosen by the usual matching rules, since one id alone would otherwise give no arc; the
+report names what came along.</li>
+</ul>
+<p>Why it matters more than it used to: a network of interactions can carry arcs from several media and
+say so on each arc, while a <a href="#glv">gLV simulation</a> takes one matrix of numbers, and numbers from
+different environments do not belong in one simulation (Karoline, 2026-10-04). Nothing about the method
+changes: a comparison never mixed media, because the medium is part of the conditions two replicate sets
+must share. Every arc now records its <code>medium</code>, so a network says which environments it came
+from.</p>
 
 <h2 id="idea">The idea behind it</h2>
 <p>How one species affects another can be read from growth alone: grow each species by itself, grow the

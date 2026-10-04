@@ -48,6 +48,8 @@ def _edge_line(net, e) -> str:
     if e.significance is not None:
         parts.append(f"adjusted p {e.significance:.3g}")
     parts.append(f"condition {e.condition}")
+    if e.medium:
+        parts.append(f"medium {e.medium}")
     parts.append("study " + " ".join(e.study_ids))
     if e.evidence == "dropout":
         parts.append("drop-out community, possibly indirect")

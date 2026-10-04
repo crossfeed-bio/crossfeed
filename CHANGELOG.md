@@ -54,6 +54,19 @@ content.
   at all. Checked against Cytoscape 3.10.3.
 
 ### Added
+- **A second input box: media, experiments or studies** (Karoline, 2026-10-04, weakening her stance against
+  environment filtering now that gLV parameters are exported: "it's one thing to export a network of known
+  interactions and another to do a gLV simulation"). Optional, beside the species box, with its own
+  examples. A medium is matched as text, case-insensitively, against the medium name mGrowthDB records on
+  the experiment's compartments, its description and its name, so one word finds the four spellings of
+  Wilkins-Chalgren in the database; an id picks one study (SMGDB...) or one experiment (EMGDB...), and
+  naming a comparison keeps the monocultures it is made against, which the report lists. On the command
+  line it is `--conditions NAME ...`. **"Only these studies" has left Advanced settings**: a study id typed
+  in the box does its job, and the study argument of a `--species` search still works.
+- **Every arc records its `medium`**, the growth medium the comparison ran in, in the neutral format, in
+  GraphML, in what Cytoscape receives and in the report. The schema gained the optional field. Nothing
+  about the method changed: a comparison never mixed media, because the medium is part of the conditions
+  two replicate sets must share.
 - **An R companion package and Send to R** (Karoline, 2026-10-03): the result section's gLV control is one
   drop-down, Download (.zip) or Send to R, and the R package in `r/` receives the parameters over a local
   port (`grownet_listen()`), or fetches them from the page (`grownet_glv(url)`) when no port can be opened.

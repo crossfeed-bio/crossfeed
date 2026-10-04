@@ -26,6 +26,7 @@ from collections import Counter
 from . import __version__, brand, interaction, matrix, rates, rbridge
 from . import help as help_page
 from . import published as daily
+from . import selection as selecting
 from .adapter import condensed, unread
 from .attribution import studies_with_edges
 from .cytoscape import CytoscapeError, send, style_xml
@@ -71,7 +72,7 @@ DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window":
             # one (Karoline, 2026-10-03: a checkbox "next to the All button")
             "report_rates": False,
             "include_dropout": True,
-            "include_non_batch": False, "studies": "", "exclude_studies": "", "only_entered": True,
+            "include_non_batch": False, "conditions": "", "exclude_studies": "", "only_entered": True,
             "merge_arcs": False, "min_studies": 1, "merge_genera": False,
             # None: the no-growth rule's own defaults, read when used (grownet.interaction.grew)
             "no_growth_alpha": None, "no_growth_factor": None,
@@ -235,9 +236,6 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   <input name="min_studies" type="text" size="6" value="{_esc(s['min_studies'])}"></label>
   <span class="muted">keep arcs resting on at least this many studies; above 1 it needs merged arcs, since an
   unmerged arc rests on one study</span></div>
-<div class="row"><label>Only these studies
-  <input name="studies" type="text" size="40" value="{_esc(s['studies'])}"></label>
-  <span class="muted">comma separated study ids; empty means every study holding the species</span></div>
 <div class="row"><label>Exclude these studies
   <input name="exclude_studies" type="text" size="40" value="{_esc(s['exclude_studies'])}"></label>
   <span class="muted">comma separated study ids never searched, for example a study you know to be
@@ -248,7 +246,7 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
 
 
 def render_form(token: str, entries: str = "", settings: dict | None = None, message: str = "",
-                below: str = "", refresh: str = "", job: str = "") -> str:
+                below: str = "", refresh: str = "", job: str = "", conditions: str = "") -> str:
     """The one page (#74): the species box, the settings, and under them whatever the search produced.
 
     `below` is the progress of a running search or its result, so the settings that produced a result stay
@@ -257,11 +255,24 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
     note = f"<p class=\"note\">{_esc(message)}</p>" if message else ""
     rate_box = " checked" if {**DEFAULTS, **(settings or {})}["report_rates"] else ""
     return _page(f"""{note}<form method="post" action="/run?token={_esc(token)}">
+<div class="boxes">
+<div class="box">
 <label class="field" for="species">Species, strains, genera or NCBI taxon ids</label>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in INPUT_EXAMPLES)}</p>
 <textarea id="species" name="species" rows="5">{_esc(entries)}</textarea>
 <p class="hint">One per line (a genus alone stands for all its species), or press Example. Interactions are
 derived from mGrowthDB growth data on this machine; nothing is uploaded.</p>
+</div>
+<div class="box">
+<label class="field" for="conditions">Media, experiments or studies (optional)</label>
+<p class="examples">For example: {" &middot; ".join(_esc(x) for x in selecting.EXAMPLES)}</p>
+<textarea id="conditions" name="conditions" rows="5">{_esc(conditions)}</textarea>
+<p class="hint">One per line. A medium is matched as text against the medium name mGrowthDB records, the
+experiment description and its name, so "wilkins" finds every spelling of Wilkins-Chalgren and "mucin"
+finds the experiments that mention it. An id (SMGDB..., EMGDB...) picks that study or experiment, and a
+named comparison keeps the monocultures it is made against. Empty means every medium.</p>
+</div>
+</div>
 <div class="bar"><button class="primary" type="submit">Find interactions</button>
 <button type="submit" name="example" value="1">Example</button>
 <button type="submit" name="all" value="1">All</button>
@@ -284,6 +295,7 @@ def render_progress(token: str, job: dict) -> str:
              f"<p class=\"hint\">{_esc(job.get('message', ''))}</p>"
              "<p class=\"hint\">This page updates by itself until the result is ready.</p></section>")
     return render_form(token, "\n".join(job["entries"]), job["settings"], below=below,
+                       conditions=(job["settings"] or {}).get("conditions", ""),
                        refresh=f"/?token={token}&job={job['id']}", job=job["id"])
 
 
@@ -487,6 +499,18 @@ def _unresolved_list(result: dict) -> str:
 
 
 def _empty_reason(result: dict) -> str:
+    """Why a search came back empty, with what the second box left out said first (#113)."""
+    reason = _empty_reason_core(result)
+    s = result.get("settings", {})
+    unmatched = len([r for _, r in result.get("skipped", ()) if "no experiment of this study matches" in r])
+    if s.get("conditions") and unmatched and "second box" not in reason:
+        studies = len(result.get("studies", ()))
+        return (f"The second box left out {unmatched} of the {studies} study(ies) searched: no experiment "
+                f"there matches {_esc(s['conditions'])}. " + reason)
+    return reason
+
+
+def _empty_reason_core(result: dict) -> str:
     """Why a search came back empty: the first step, or the setting, that left nothing."""
     s = result.get("settings", {})
     if result.get("all") and not result["studies"]:
@@ -499,8 +523,9 @@ def _empty_reason(result: dict) -> str:
         if result.get("excluded"):
             return ("The only studies holding these species are in Exclude these studies ("
                     + _esc(", ".join(result["excluded"])) + "); remove them from that setting to search them.")
-        if s.get("studies"):
-            return "None of the studies under Only these studies holds these species; empty that setting."
+        if s.get("conditions"):
+            return ("None of the studies in the second box (media, experiments or studies) holds these "
+                    "species; empty that box or name another study.")
         return "mGrowthDB holds these strains, but no study grows them, so there is nothing to compare."
     if result.get("partners_only"):
         return (f"Everything these studies hold for your species involves a species you did not enter "
@@ -520,6 +545,12 @@ def _empty_reason(result: dict) -> str:
                 f"(k = {k:g}): the species do not affect each other by that rule. They are listed below, "
                 "and a lower k or Include arcs below the absence threshold keeps them in the file.")
     reasons = [reason for _, reason in result["skipped"]]
+    unmatched = [r for r in reasons if "no experiment of this study matches" in r]
+    if unmatched and len(unmatched) == len(result["studies"]):
+        # the second box named a medium or an id that nothing in these studies carries (#113)
+        return ("No experiment of the studies holding these species matches the second box ("
+                + _esc(s.get("conditions", "")) + "). A medium is matched as text, so a shorter word finds "
+                "more spellings; the report lists every study it looked at.")
     only_monocultures = [r for r in reasons if r.startswith("only monocultures")]
     if only_monocultures and len(only_monocultures) == len(result["studies"]):
         return ("The studies holding these species grew them only alone, in monocultures, so there is no "
@@ -594,8 +625,10 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
 
 def render_result(token: str, result: dict, message: str = "") -> str:
     """The page with the result under the settings that produced it (#74)."""
-    return render_form(token, "\n".join(result.get("entries", [])), result.get("settings"),
-                       below=_result_section(token, result, message), job=result.get("job", ""))
+    settings = result.get("settings") or {}
+    return render_form(token, "\n".join(result.get("entries", [])), settings,
+                       below=_result_section(token, result, message), job=result.get("job", ""),
+                       conditions=settings.get("conditions", ""))
 
 
 def _no_growth(s: dict, which: str) -> float:
@@ -650,7 +683,7 @@ def parse_settings(form: dict) -> dict:
     correction = form.get("correction", [""])[0]
     if correction in ("bh", "by"):
         settings["correction"] = correction
-    settings["studies"] = form.get("studies", [""])[0].strip()
+    settings["conditions"] = form.get("conditions", [""])[0].strip()
     settings["exclude_studies"] = form.get("exclude_studies", [""])[0].strip()
     settings["only_entered"] = bool(form.get("only_entered"))
     settings["report_rates"] = bool(form.get("report_rates"))
@@ -717,11 +750,16 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
                             for entry, matches in resolved["resolved"]]
     errors, skipped, records = [], [], []
 
-    studies = [sid.strip() for sid in s["studies"].split(",") if sid.strip()]
+    # the second box: study ids in it narrow the search as "Only these studies" used to, media and
+    # experiment ids are matched per experiment inside the derivation (#113)
+    selection = selecting.parse(s["conditions"])
+    studies = list(selection["studies"])
     if all_studies and not studies:
         studies = list(getattr(index, "studies", []))       # every study the species list was read from
     only_entered = s["only_entered"] and not all_studies
     if resolved["taxon_ids"] and not studies:
+        # with media or experiment ids and no study id, every study holding the species is read and the
+        # selection is applied to their experiments
         try:
             found = client.search(strain_ncbi_ids=",".join(str(t) for t in resolved["taxon_ids"]))
             studies = list(found.get("studies", []))
@@ -758,7 +796,8 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
                                               spike_factor=s["spike_factor"], dropout=s["include_dropout"],
                                               include_non_batch=s["include_non_batch"],
                                               no_growth_alpha=s["no_growth_alpha"],
-                                              no_growth_factor=s["no_growth_factor"], keep=narrowed)
+                                              no_growth_factor=s["no_growth_factor"], keep=narrowed,
+                                              selection=selection)
         except MGrowthDBError as e:
             errors.append(f"{study_id}: {e}")
             continue
@@ -796,7 +835,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # every setting the search ran with, so a downloaded network says how it was made (#78, #76)
     net = records_to_network(records, meta={
         "source_db": "mGrowthDB (live)", "query": "all" if all_studies else "species", "species": names,
-        "studies": studies, "settings": dict(s), **extra})
+        "studies": studies, "settings": dict(s), "selection": selection, **extra})
     net.meta["data"] = data_versions(client, studies, net.meta["derived_at"])
     _current_names(net, current)
     # the growth rates, when the page asked for them: each organism's maximum specific growth rate in
@@ -882,7 +921,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if job["status"] == "running":
             return render_progress(self.token, job)
         if job["status"] == "failed":
-            return render_form(self.token, "\n".join(job["entries"]), job["settings"], job["error"])
+            return render_form(self.token, "\n".join(job["entries"]), job["settings"], job["error"],
+                               conditions=(job["settings"] or {}).get("conditions", ""))
         job["result"]["job"] = job["id"]
         job["result"]["port"] = self.server.server_address[1]
         self.state["result"] = job["result"]
@@ -1060,7 +1100,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         entries = form.get("species", [""])[0].splitlines()
         settings = parse_settings(form)
         if form.get("example"):
-            self._send(render_form(self.token, "\n".join(EXAMPLE), settings))
+            self._send(render_form(self.token, "\n".join(EXAMPLE), settings,
+                                   conditions=settings.get("conditions", "")))
             return
         if form.get("all"):
             job = self._start([], settings, all_studies=True)
@@ -1068,7 +1109,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._redirect(f"/?token={self.token}&job={job['id']}#result")
             return
         if not [e for e in entries if e.strip()]:
-            self._send(render_form(self.token, settings=settings, message="Type at least one species."))
+            self._send(render_form(self.token, settings=settings, message="Type at least one species.",
+                                   conditions=settings.get("conditions", "")))
             return
         job = self._start(entries, settings)
         job["thread"].join(self.wait)

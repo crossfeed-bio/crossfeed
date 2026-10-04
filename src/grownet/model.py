@@ -113,6 +113,7 @@ class Edge:
     cautions: tuple = ()          # CAUTIONS: shown to the reader, without making the edge low quality
     experiments: tuple = ()       # ids of the experiments whose replicates the edge compares (its origin)
     cultivation_mode: str = ""    # batch, chemostat, and so on, as mGrowthDB records it
+    medium: str = ""              # the growth medium the comparison ran in, as mGrowthDB names it (#113)
     merged_arcs: int | None = None  # arcs merged into this one (register item 14), None when not merged
     strength_range: tuple = ()    # (lowest, highest) log2 mean of the merged arcs
     supporting_pairs: int | None = None  # with genus merging: the distinct species (or strain) pairs behind it

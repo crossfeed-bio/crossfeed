@@ -110,12 +110,14 @@ def _derive(a):
         deriver = _load_deriver(a.deriver) if a.deriver else None
         client = MGrowthDBClient()
         try:
+            from .selection import parse as parse_selection
             records, skipped = derive_interactions(client, a.study, deriver=deriver,
                                                    metric=_metric(a), spike_factor=a.spike_factor,
                                                    dropout=not a.no_dropout,
                                                    include_non_batch=a.include_non_batch,
                                                    no_growth_alpha=a.no_growth_alpha,
-                                                   no_growth_factor=a.no_growth_factor)
+                                                   no_growth_factor=a.no_growth_factor,
+                                                   selection=parse_selection(a.conditions))
             records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold,
                                          a.no_growth_alpha, a.no_growth_factor, a.merge_arcs, a.min_studies,
                                          a.merge_genera, max_adjusted_p=a.max_adjusted_p,
@@ -129,6 +131,7 @@ def _derive(a):
                                  "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
                                  "no_growth_alpha": a.no_growth_alpha, "no_growth_factor": a.no_growth_factor,
                                  "max_adjusted_p": a.max_adjusted_p, "report_rates": a.report_rates,
+                                 "conditions": " ".join(a.conditions),
                                  "deriver": a.deriver or ""}
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
@@ -178,7 +181,8 @@ def _derive_species(a):
                 "absence_threshold": a.absence_threshold, "include_low_quality": a.include_low_quality,
                 "include_absent": a.include_absent,
                 "correction": a.correction, "include_dropout": not a.no_dropout,
-                "include_non_batch": a.include_non_batch, "studies": a.study or "",
+                "include_non_batch": a.include_non_batch,
+                "conditions": "\n".join([*a.conditions, *(a.study or "").split(",")]).strip(),
                 "only_entered": not a.all_partners, "exclude_studies": a.exclude_studies,
                 "merge_arcs": a.merge_arcs, "min_studies": a.min_studies, "merge_genera": a.merge_genera,
                 "report_rates": a.report_rates, "no_growth_alpha": a.no_growth_alpha,
@@ -400,6 +404,11 @@ def build_parser() -> argparse.ArgumentParser:
     what.add_argument("--no-published", action="store_true",
                       help="with --all, derive live even when the network derived once a day in the grownet "
                            "repository is less than a day old (it is used only with the default settings)")
+    what.add_argument("--conditions", nargs="+", default=[], metavar="NAME",
+                      help="media, experiment ids or study ids to look at (the page's second box): a medium "
+                           "is matched as text against the medium name, the description and the experiment "
+                           "name, an id picks that study (SMGDB...) or experiment (EMGDB...), and naming a "
+                           "comparison keeps the monocultures it is made against. Empty looks at every medium")
     what.add_argument("--exclude-studies", default="", metavar="IDS",
                       help="with --species or --all, comma separated study ids never to search (default: none)")
     what.add_argument("--all-partners", action="store_true",

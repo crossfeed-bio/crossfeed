@@ -289,7 +289,7 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
       {source, target, source_name?, target_name?, source_taxon_id?, source_species?, source_identity?
        (and the same for target), strength, significance (-log10 q), q_value, condition, method?, effect?,
        evidence?, community?, p_value?, weight?, effect_over_sd?, status?, sd?, se?, n_with?,
-       n_without?, outcome?, metric?, quality?, notes?, cautions?, experiments?, cultivation_mode?,
+       n_without?, outcome?, metric?, quality?, notes?, cautions?, experiments?, cultivation_mode?, medium?,
        merged_arcs?, strength_range?, supporting_pairs?, merged_pairs?,
        study_id, study_citation?, study_license?, study_url?,
        studies? (a merged arc: [{id, citation, license, url}], one per study it rests on)}
@@ -325,6 +325,7 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             quality=tuple(r.get("quality", ())), notes=tuple(r.get("notes", ())),
             cautions=tuple(r.get("cautions", ())), experiments=tuple(r.get("experiments", ())),
             cultivation_mode=r.get("cultivation_mode", ""),
+            medium=r.get("medium", ""),
             merged_arcs=r.get("merged_arcs"), strength_range=tuple(r.get("strength_range", ())),
             supporting_pairs=r.get("supporting_pairs"), merged_pairs=tuple(r.get("merged_pairs", ())),
         ))

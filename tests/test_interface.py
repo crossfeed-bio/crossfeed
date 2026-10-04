@@ -250,7 +250,8 @@ def test_the_page_and_the_command_line_start_from_the_same_defaults():
            "spike_factor": a.spike_factor, "absence_threshold": a.absence_threshold,
            "include_low_quality": a.include_low_quality, "include_absent": a.include_absent,
            "correction": a.correction,
-           "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch, "studies": a.study,
+           "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
+           "conditions": " ".join(a.conditions),
            "exclude_studies": a.exclude_studies, "only_entered": not a.all_partners, "merge_arcs": a.merge_arcs,
            "min_studies": a.min_studies, "merge_genera": a.merge_genera, "no_growth_alpha": a.no_growth_alpha,
            "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p,
@@ -641,3 +642,44 @@ def test_r_can_fetch_the_same_parameters_from_the_page(server, with_rates):
     assert payload["format"] == "grownet.glv/v0"
     assert payload["organisms"] == sorted([A, B])
     assert "readme" in payload and "caveats" in payload
+
+
+# ---- the second input box: media, experiments or studies (#113) ----------------------------------
+#
+# Karoline, 2026-10-04: "I propose a second, optional, input field next to the first one with the taxa.
+# Users can either specify names of media or a list of experiment identifiers there (so this last item can
+# then be removed from the advanced options) ... The text above the second input field should also provide
+# examples, like for the first input field."
+
+def test_a_second_box_sits_beside_the_species_box_with_its_own_examples(server):
+    base, token = server
+    _, page, _ = _open(f"{base}/?token={token}")
+    boxes = page[page.index('<div class="boxes">'):page.index("<div class=\"bar\">")]
+    assert boxes.count("<textarea") == 2                     # the two boxes, side by side
+    species = boxes[boxes.index('for="species"'):boxes.index('for="conditions"')]
+    conditions = boxes[boxes.index('for="conditions"'):]
+    assert "Media, experiments or studies (optional)" in conditions
+    for part in (species, conditions):
+        assert '<p class="examples">For example:' in part    # examples above both boxes
+    from grownet.selection import EXAMPLES
+    for example in EXAMPLES:
+        assert example in conditions
+    # and the study list is no longer an advanced setting, since the box took it over
+    assert 'name="studies"' not in page
+    assert "Only these studies" not in page
+
+
+def test_what_is_typed_in_the_second_box_stays_there_and_in_the_report(server):
+    base, token = server
+    page = _finished(base, token, conditions="SMGDB00000001")
+    assert ">SMGDB00000001</textarea>" in page
+    _, report, _ = _open(f"{base}/report.txt?token={token}")
+    assert "Media, experiments or studies (--conditions): SMGDB00000001" in report
+
+
+def test_a_medium_that_matches_nothing_leaves_a_result_that_explains_itself(server):
+    base, token = server
+    page = _finished(base, token, conditions="a medium nobody used")
+    assert "0 interaction(s)" in page or "no interactions" in page.lower()
+    _, report, _ = _open(f"{base}/report.txt?token={token}")
+    assert "no experiment of this study matches" in report
