@@ -679,7 +679,11 @@ from the address the page shows under its gLV control.</p>
 {settings}
 
 <h2 id="attributes">Arc and node attributes</h2>
-<p>Every downloaded network, JSON or GraphML, carries these for each arc (edge) and node. The network
+<p>Every downloaded network, JSON or GraphML, carries these for each arc (edge) and node. A network
+names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v1</code>
+since 0.2.0: the version moved because <code>significance</code> changed meaning, from the corrected
+p-value to -log10 of it. A file from 0.1.x says <code>/v0</code> and is still valid, read with the older
+meaning. The network
 itself records the tool, <code>tool_version</code>, the date and time it was derived (<code>derived_on</code>,
 <code>derived_at</code>), every setting used, and the version of the data: mGrowthDB publishes no version of
 the whole database, so <code>meta.data</code> holds when it was read and each study's upload and

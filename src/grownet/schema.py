@@ -18,9 +18,9 @@ from .model import (
     EFFECTS,
     EVIDENCE,
     IDENTITIES,
+    KNOWN_SCHEMAS,
     OUTCOMES,
     QUALITY_FLAGS,
-    SCHEMA,
     STATUSES,
     InteractionNetwork,
 )
@@ -41,7 +41,7 @@ SCHEMA_DOC = {
     "required": ["schema", "nodes", "edges", "studies"],
     "additionalProperties": False,
     "properties": {
-        "schema": {"const": SCHEMA},
+        "schema": {"enum": list(KNOWN_SCHEMAS)},
         "meta": {"type": "object"},
         "nodes": {"type": "array", "items": {"$ref": "#/definitions/node"}},
         "edges": {"type": "array", "items": {"$ref": "#/definitions/edge"}},
@@ -127,8 +127,8 @@ def validate_document(doc) -> list:
         return ["document is not a JSON object"]
 
     problems = []
-    if doc.get("schema") != SCHEMA:
-        problems.append(f"schema is {doc.get('schema')!r}, expected {SCHEMA!r}")
+    if doc.get("schema") not in KNOWN_SCHEMAS:
+        problems.append(f"schema is {doc.get('schema')!r}, expected one of {list(KNOWN_SCHEMAS)}")
     if "meta" in doc and not isinstance(doc["meta"], dict):
         problems.append("meta must be an object")
 

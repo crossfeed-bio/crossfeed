@@ -125,3 +125,36 @@ def test_node_identity_fields_validate_and_a_wrong_identity_is_rejected():
     assert validate_document(doc) == []
     doc["nodes"][0]["identity"] = "guessed"
     assert any("identity" in p for p in validate_document(doc))
+
+
+def test_a_document_from_the_previous_version_is_still_valid_and_named():
+    """Karoline, 2026-10-04, taking the recommendation: the id moves to v1 because `significance` changed
+    meaning. A file written by 0.1.x stays valid, since nothing about its own content changed; what it
+    must not do is pass for a v1 file, which is what the id now tells a reader."""
+    from grownet.model import KNOWN_SCHEMAS, PREVIOUS_SCHEMAS, SCHEMA
+    from grownet.schema import validate_document
+    assert SCHEMA == "grownet.interaction_network/v1"
+    assert PREVIOUS_SCHEMAS == ("grownet.interaction_network/v0",)
+    assert KNOWN_SCHEMAS == (SCHEMA, *PREVIOUS_SCHEMAS)
+
+    doc = {"schema": SCHEMA, "nodes": [], "edges": [], "studies": []}
+    assert validate_document(doc) == []
+    assert validate_document({**doc, "schema": PREVIOUS_SCHEMAS[0]}) == []
+    problems = validate_document({**doc, "schema": "grownet.interaction_network/v2"})
+    assert problems and "expected one of" in problems[0]
+
+
+def test_the_daily_all_network_is_used_only_when_it_speaks_this_version():
+    """A published file from 0.1.x holds the old meaning of `significance`, so a 0.2.0 page derives live
+    rather than showing those numbers as if they were the new ones."""
+    import datetime
+
+    from grownet import published
+    from grownet.model import PREVIOUS_SCHEMAS, SCHEMA
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    payload = {"format": published.FORMAT,
+               "network": {"schema": SCHEMA, "meta": {"derived_at": now}}}
+    assert published.fresh(payload)
+    old = {"format": published.FORMAT,
+           "network": {"schema": PREVIOUS_SCHEMAS[0], "meta": {"derived_at": now}}}
+    assert not published.fresh(old)

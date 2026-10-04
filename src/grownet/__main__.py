@@ -369,7 +369,11 @@ def _validate(a):
         for p in problems:
             print(f"  - {p}", file=sys.stderr)
         return 1
-    print(f"valid: {a.file}")
+    from .model import SCHEMA
+    read = doc.get("schema")
+    older = "" if read == SCHEMA else (
+        f" (schema {read}: `significance` there is the corrected p-value, not -log10 of it)")
+    print(f"valid: {a.file}{older}")
     return 0
 
 
