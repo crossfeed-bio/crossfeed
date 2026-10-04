@@ -52,6 +52,7 @@ as_grownet_glv <- function(payload) {
                  placeholders = pairs_frame(caveats$placeholders, value = TRUE),
                  sign_conflicts = pairs_frame(caveats$sign_conflicts, value = FALSE),
                  media = vapply(caveats$media, as.character, character(1)),
+                 dropout_arcs = as_number(caveats$dropout_arcs),
                  without_a_rate = vapply(caveats$without_a_rate, as.character, character(1)),
                  effect_size = chr(caveats$effect_size)),
              readme = chr(payload$readme),
@@ -133,6 +134,13 @@ print.grownet_glv <- function(x, ...) {
     }
     cat("   * the cells are effect sizes (log2 means), not fitted gLV coefficients: scale them for\n")
     cat("     your model rather than using them unchanged.\n")
+    dropout <- x$caveats$dropout_arcs
+    if (!is.na(dropout) && dropout > 0) {
+        cat(sprintf(paste0("   * %d arc(s) come from drop-out designs, where the effect may run through a ",
+                           "third\n       species; a gLV coefficient is meant to be the direct effect of ",
+                           "one organism on\n       another. grownet's Include drop-out communities leaves ",
+                           "them out.\n"), dropout))
+    }
     if (length(x$caveats$media) > 1) {
         cat(sprintf(paste0("   * these arcs come from %d media, and a simulation is of one environment:\n",
                            "       %s\n       grownet's second box (media, experiments or studies) keeps ",

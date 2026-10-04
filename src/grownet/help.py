@@ -57,9 +57,13 @@ SETTINGS = {
                        "absent: each carries effect_over_sd, the quantity k cuts, so you can move the "
                        "threshold in Cytoscape on that column without searching again."),
     "include_dropout": ("Include drop-out communities", "--no-dropout",
-                        "Arcs from a community compared with the same community without one member. On by "
-                        "default; --no-dropout leaves them out. Such an arc says the removed member affects "
-                        "the target, directly or through other members, so it is labeled evidence dropout."),
+                        "This one sits beside the All button, not here, so that it is visible that it is on "
+                        "(Karoline, 2026-10-04). Arcs from a community compared with the same community "
+                        "without one member, on by default; --no-dropout leaves them out. Such an arc says "
+                        "the removed member affects the target, directly or through other members, so it is "
+                        "labeled evidence dropout. Untick it for gLV parameters: a coefficient there is "
+                        "meant to be the direct effect of one organism on another, and an arc that may act "
+                        "through a third species is not that."),
     "include_non_batch": ("Include chemostat and serial dilution experiments", "--include-non-batch",
                           "What a continuous culture can be compared on depends on the growth measure. With "
                           "max it is derived without this setting: the level such a culture settles at is "
@@ -613,6 +617,14 @@ one, with each study's own median kept beside it in the network's meta. Batch mo
 chemostat or a serial dilution the rate a curve shows is the dilution rate, and a rate from a co-culture
 would be growth with a partner, which is the comparison, not the organism's own rate. An organism whose
 curves give no rate is named on the page and in the report, never given a substitute number.</p>
+<p><strong>Before you simulate, two switches.</strong> Both sit beside the All button. <strong>Report
+growth rates</strong> has to be on, since a simulation needs a rate per organism. <strong>Include drop-out
+communities</strong> is on by default and is better off here: a drop-out arc compares a community with the
+same community without one member, so the effect may run through a third species, while a gLV coefficient
+is meant to be the direct effect of one organism on another. The gLV README counts the drop-out arcs that
+are in a package, and the second box
+(<a href="#where">choosing where to look</a>) keeps the numbers to one environment.</p>
+
 <p><strong>The gLV parameters.</strong> The gLV control writes a zip for a generalized
 Lotka-Volterra simulator: <code>interaction_matrix.csv</code> (the matrix above, with -1 on the diagonal
 by convention, for self-limitation), <code>growth_rates.csv</code> (one rate per organism, in the same

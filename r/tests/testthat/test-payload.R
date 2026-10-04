@@ -33,6 +33,16 @@ test_that("printing says every caveat without being asked", {
     expect_match(text, "rows are affected, columns are the actor")
 })
 
+test_that("printing says how many arcs are from drop-out designs, which gLV should not use", {
+    text <- paste(capture.output(print(example_glv())), collapse = "\n")
+    expect_match(text, "2 arc\\(s\\) come from drop-out designs")
+    expect_match(text, "direct effect of one organism")
+    none <- example_payload()
+    none$caveats$dropout_arcs <- 0
+    quiet <- paste(capture.output(print(grownet:::as_grownet_glv(none))), collapse = "\n")
+    expect_false(grepl("drop-out designs", quiet))
+})
+
 test_that("printing says which media the arcs come from, since a simulation is of one environment", {
     text <- paste(capture.output(print(example_glv())), collapse = "\n")
     expect_match(text, "these arcs come from 2 media")

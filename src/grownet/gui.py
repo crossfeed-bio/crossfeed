@@ -147,7 +147,6 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
     checked = " checked" if s["only_entered"] else ""
     low = " checked" if s["include_low_quality"] else ""
     absent = " checked" if s["include_absent"] else ""
-    dropout = " checked" if s["include_dropout"] else ""
     non_batch = " checked" if s["include_non_batch"] else ""
     corrections = "".join(f"<option value=\"{c}\"{' selected' if s['correction'] == c else ''}>{label}</option>"
                           for c, label in (("bh", "Benjamini-Hochberg"), ("by", "Benjamini-Yekutieli")))
@@ -178,10 +177,6 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   <span class="muted">off by default, so the downloads and Cytoscape hold exactly the interactions this
   page counts; on, they also carry the arcs the threshold marked absent, which lets you move k in
   Cytoscape on the effect_over_sd column without searching again</span></div>
-<div class="row"><label><input type="checkbox" name="include_dropout" value="1"{dropout}>
-  Include drop-out communities</label>
-  <span class="muted">arcs from a community compared with the same community without one member; possibly
-  indirect, so labeled as such</span></div>
 <div class="row"><label><input type="checkbox" name="include_non_batch" value="1"{non_batch}>
   Include chemostat and serial dilution experiments</label>
   <span class="muted">with the growth measure max they are derived anyway, since the level a continuous
@@ -253,7 +248,9 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
     on the page above it and can be changed and run again.
     """
     note = f"<p class=\"note\">{_esc(message)}</p>" if message else ""
-    rate_box = " checked" if {**DEFAULTS, **(settings or {})}["report_rates"] else ""
+    chosen = {**DEFAULTS, **(settings or {})}
+    rate_box = " checked" if chosen["report_rates"] else ""
+    dropout_box = " checked" if chosen["include_dropout"] else ""
     return _page(f"""{note}<form method="post" action="/run?token={_esc(token)}">
 <div class="boxes">
 <div class="box">
@@ -278,9 +275,14 @@ named comparison keeps the monocultures it is made against. Empty means every me
 <button type="submit" name="all" value="1">All</button>
 <label class="beside"><input type="checkbox" name="report_rates" value="1"{rate_box}>
 Report growth rates</label>
+<label class="beside"><input type="checkbox" name="include_dropout" value="1"{dropout_box}>
+Include drop-out communities</label>
 <span class="muted">All ignores the box and derives every study in mGrowthDB, with every partner; it reads
 every study, so it takes longer (half a minute or so). Report growth rates adds each organism's growth rate
-in monoculture, as its own download and as the growth rates a gLV simulation needs.</span></div>
+in monoculture, as its own download and as the growth rates a gLV simulation needs. Drop-out communities,
+a community compared with the same community without one member, are included by default and labeled
+evidence dropout; such an arc may act through a third species, so untick it for gLV parameters, where a
+coefficient is meant to be the direct effect of one organism on another.</span></div>
 {_settings_block(settings or {}, token, job)}
 </form>{below}""", token, refresh, job)
 

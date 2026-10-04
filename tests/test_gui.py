@@ -153,13 +153,20 @@ def test_form_hides_every_setting_behind_one_button():
     page = render_form("tok")
     assert page.count("<details>") == 1 and "Advanced settings" in page
     head, _, tail = page.partition("<details>")
-    assert "<select" not in head and "<input name=" not in head    # nothing but the species box is visible
+    # the two boxes and three buttons are visible, and of the settings only the two checkboxes Karoline
+    # asked to have in plain sight; everything else sits behind the button
+    assert "<select" not in head
+    visible_inputs = set(re.findall(r'<input[^>]*name="([^"]+)"', head))
+    assert visible_inputs == {"report_rates", "include_dropout"}
     assert 'name="metric"' in tail and 'name="spike_factor"' in tail
     # the no-growth rule's two numbers are advanced settings, shown with the rule's own defaults (#37)
     assert 'name="no_growth_alpha"' in tail and 'name="no_growth_factor"' in tail
     assert 'name="include_low_quality"' in tail and 'name="include_neutral"' not in page
-    # drop-out communities are included by default, so the box starts ticked (#47)
-    assert 'name="include_dropout" value="1" checked' in tail
+    # drop-out communities are included by default and the box is in plain sight, not behind the button
+    # (Karoline, 2026-10-04: "I'd like to keep them by default ... moving this out of advanced options and
+    # next to Report growth rates, so people see it's enabled")
+    assert 'name="include_dropout" value="1" checked' in head
+    assert 'name="include_dropout"' not in tail
 
 
 @pytest.mark.parametrize("form, expected", [

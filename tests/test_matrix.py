@@ -181,3 +181,18 @@ def test_the_files_name_the_media_the_arcs_came_from():
     assert "THESE ARCS COME FROM 2 MEDIA" in text and "second box" in text
     # and a program reading the payload sees the same, as data
     assert matrix.glv_payload(mixed, {})["caveats"]["media"] == ["mMCB", "Wilkins-Chalgren"]
+
+
+def test_the_package_counts_the_arcs_a_glv_simulation_should_not_use():
+    """Karoline, 2026-10-04: drop-out arcs may act through a third species, so a package that holds them
+    says how many and which switch leaves them out."""
+    net = _net([_arc("a", "b", 1.5, evidence="dropout"), _arc("b", "a", 1.0, evidence="biculture")])
+    net.meta.update({"tool_version": "9.9.9", "absence": {"k": 1.0}})
+    assert matrix.dropout_arcs(net) == 1
+    text = matrix.readme(net, {}, [], [])
+    assert "1 ARC(S) COME FROM DROP-OUT DESIGNS" in text and "Include drop-out communities" in text
+    assert matrix.glv_payload(net, {})["caveats"]["dropout_arcs"] == 1
+    # a package without any says so plainly, so a reader knows the question was asked
+    direct = _net([_arc("a", "b", 1.5, evidence="biculture")])
+    direct.meta.update({"tool_version": "9.9.9", "absence": {"k": 1.0}})
+    assert "none comes from a drop-out design" in matrix.readme(direct, {}, [], [])

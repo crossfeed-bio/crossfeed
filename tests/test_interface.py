@@ -683,3 +683,18 @@ def test_a_medium_that_matches_nothing_leaves_a_result_that_explains_itself(serv
     assert "0 interaction(s)" in page or "no interactions" in page.lower()
     _, report, _ = _open(f"{base}/report.txt?token={token}")
     assert "no experiment of this study matches" in report
+
+
+def test_drop_out_communities_are_visible_and_on_beside_the_growth_rates(server):
+    """Karoline, 2026-10-04: "for gLV, including drop-out communities are not a good idea, but they are
+    enabled by default. I'd like to keep them by default. I suggest moving this out of advanced options
+    and next to 'Report growth rates', so people see it's enabled. The GUI text can mention that it's
+    better disabled for gLV."""
+    base, token = server
+    _, page, _ = _open(f"{base}/?token={token}")
+    bar = page[page.index('<div class="bar">'):]
+    bar = bar[:bar.index("</div>")]
+    assert 'name="include_dropout" value="1" checked' in bar     # on by default, in plain sight
+    assert bar.index('name="include_dropout"') > bar.index('name="report_rates"')   # next to it
+    assert "untick it for gLV parameters" in bar
+    assert 'name="include_dropout"' not in page[page.index("<details>"):]   # and out of Advanced settings
