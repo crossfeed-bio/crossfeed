@@ -557,8 +557,11 @@ simulator takes (register item 32, Karoline 2026-10-03). What a later agent need
   cannot see it, which is what `rbridge.INSTALL_TROUBLE` says. It points at `install_local` from a clone
   and **never at clearing the token**: "it alters their system settings in ways that can affect them
   negatively" (Karoline, same day). A test in `tests/test_help.py` keeps that advice off the help page.
-- Checking the R side: `R CMD build r && R CMD check --no-manual grownet_0.1.0.tar.gz`, or `make r-check`.
-  The tests live in `r/tests/testthat` and include a real POST into the listener.
+- Checking the R side: `R CMD build r && R CMD check --no-manual grownet_*.tar.gz`, or `make r-check`.
+  The tests live in `r/tests/testthat` and include a real POST into the listener. CI runs the same thing in
+  the `r-package` job (#112), with R, jsonlite and testthat from Ubuntu's own packages so that no
+  third-party action is added and nothing is compiled, and `_R_CHECK_FORCE_SUGGESTS_=false` because miaSim
+  is only named in examples that do not run.
 
 ## Releasing 0.2.0
 

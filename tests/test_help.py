@@ -283,3 +283,21 @@ def test_the_first_advanced_setting_is_called_growth_property():
     """Karoline, 2026-10-03: "Growth measure (the first entry) should be Growth property"."""
     assert help.SETTINGS["metric"][0] == "Growth property"
     assert "Growth property" in gui.render_form("tok") and "Growth measure" not in gui.render_form("tok")
+
+
+def test_the_about_page_logs_what_each_release_brought():
+    """Karoline, 2026-10-04: the About page "can have a small log of what happened in each new release".
+    The newest entry is this version, so a release cannot forget its line, and the full record is linked."""
+    from grownet import __version__
+    from grownet.help import RELEASES, render_about
+    assert RELEASES[0][0] == __version__, "the About page's log does not name this version"
+    assert [v for v, _, _ in RELEASES] == sorted({v for v, _, _ in RELEASES}, reverse=True)  # newest first
+    for version, date, lines in RELEASES:
+        assert re.fullmatch(r"\d+\.\d+\.\d+", version) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", date)
+        assert lines and all(len(line) < 400 for line in lines)       # a summary, not the changelog
+
+    page = render_about()
+    assert "What changed" in page and "CHANGELOG.md" in page
+    for version, _, lines in RELEASES:
+        assert f">{version} <" in page
+        assert lines[0][:40] in page

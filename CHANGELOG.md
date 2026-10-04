@@ -7,6 +7,12 @@ content.
 ## [0.2.0] (2026-10-04)
 
 ### Added
+- **The About page logs what each release brought**, a few lines each, newest first, with the changelog
+  linked for the full record (Karoline, 2026-10-04). A test requires the newest entry to name the current
+  version, so a release cannot forget its line.
+- CI builds and checks the R companion package on every push (`R CMD check`, the `r-package` job, #112),
+  with R and its two dependencies from Ubuntu's own packages, so no third-party action is added and
+  nothing is compiled.
 - **An R companion package and Send to R** (Karoline, 2026-10-03): the result section's gLV control is one
   drop-down, Download (.zip) or Send to R, and the R package in `r/` receives the parameters over a local
   port (`grownet_listen()`), or fetches them from the page (`grownet_glv(url)`) when no port can be opened.
