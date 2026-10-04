@@ -63,6 +63,8 @@ content.
   naming a comparison keeps the monocultures it is made against, which the report lists. On the command
   line it is `--conditions NAME ...`. **"Only these studies" has left Advanced settings**: a study id typed
   in the box does its job, and the study argument of a `--species` search still works.
+- The gLV package and the R object **name the media their numbers come from**, and say in capitals when
+  there is more than one, since a simulation is of one environment: the All network's package reports six.
 - **Every arc records its `medium`**, the growth medium the comparison ran in, in the neutral format, in
   GraphML, in what Cytoscape receives and in the report. The schema gained the optional field. Nothing
   about the method changed: a comparison never mixed media, because the medium is part of the conditions

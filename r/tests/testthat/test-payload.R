@@ -33,6 +33,17 @@ test_that("printing says every caveat without being asked", {
     expect_match(text, "rows are affected, columns are the actor")
 })
 
+test_that("printing says which media the arcs come from, since a simulation is of one environment", {
+    text <- paste(capture.output(print(example_glv())), collapse = "\n")
+    expect_match(text, "these arcs come from 2 media")
+    expect_match(text, "mMCB")
+    expect_match(text, "second box")
+    one <- example_payload()
+    one$caveats$media <- list("mMCB")
+    single <- paste(capture.output(print(grownet:::as_grownet_glv(one))), collapse = "\n")
+    expect_match(single, "every arc was measured in one medium: mMCB")
+})
+
 test_that("a payload of another format is read but says so", {
     payload <- example_payload()
     payload$format <- "grownet.glv/v9"

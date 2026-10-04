@@ -15,6 +15,7 @@ example_payload <- function() {
             diagonal = -1, extreme = 10, absence_k = 1,
             placeholders = list(list(affected = "B", actor = "C", value = 10, outcome = "obligate")),
             sign_conflicts = list(list(affected = "C", actor = "A")),
+            media = list("Wilkins-Chalgren Anaerobe Broth (WC)", "mMCB"),
             without_a_rate = list("C"),
             effect_size = "a cell is an effect size, not a fitted gLV coefficient",
             counts = list(arcs = 3, cells = 2, organisms = 3)),

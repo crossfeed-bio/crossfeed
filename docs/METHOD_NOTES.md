@@ -720,8 +720,8 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
 25. **All of mGrowthDB** (Karoline, 2026-09-28). Her words: "a button next to 'Example' that says: 'All'.
    If this button is pushed, the input field is ignored and instead, the entire interaction network is
    fetched from mGrowthDB (there can be a short explainer next to the button)." Every study the species
-   list is read from is derived, with every partner kept; Only these studies and Exclude these studies
-   still apply. `derive --live --all` does the same from the command line.
+   list is read from is derived, with every partner kept; the second box (media, experiments or studies,
+   item 8) and Exclude these studies still apply. `derive --live --all` does the same from the command line.
 
 26. **The time window of a bi-culture arc** (open; found by the audit of 2026-09-28). Curves are compared
    over the window they share, so none is extrapolated. For a drop-out arc that window is the target's own

@@ -560,6 +560,8 @@ simulator takes (register item 32, Karoline 2026-10-03). What a later agent need
   report. Merged arcs join the media of their parts.
 - Selecting is not a method change: the medium is part of the conditions key, so comparisons never mixed
   media. Register item 8 carries this.
+- `matrix.media(net)` feeds the gLV README, the payload's caveats and the R printout: a package built from
+  several media says so in capitals, because a simulation is of one environment. The All network spans six.
 
 ## Gotchas
 

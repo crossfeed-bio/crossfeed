@@ -38,12 +38,21 @@ DERIVE_EXAMPLES = """examples:
   every species in one study, stricter about what counts as an interaction:
     grownet derive SMGDB00000004 --live --absence-threshold 2 --out study4.json
 
+  one medium only, which is what a gLV simulation wants (the page's second box):
+    grownet derive --live --species Blautia --conditions "Wilkins-Chalgren" --out wc.json
+
+  one named comparison, with the monocultures it is made against:
+    grownet derive --live --species Bacteroides Roseburia --conditions EMGDB000000024 --out one_arc.json
+
   the adjacency matrix of one study, as CSV:
     grownet derive SMGDB00000004 --live --format matrix --out study4_matrix.csv
 
   the parameters of a generalized Lotka-Volterra simulation, with the growth rates beside them:
     grownet derive SMGDB00000004 --live --report-rates --glv study4_glv.zip \\
         --rates study4_rates.csv --report study4_report.txt
+
+  the same parameters sent into a waiting R session (in R: library(grownet); grownet_listen()):
+    grownet derive SMGDB00000004 --live --report-rates --to-r
 
 """
 
@@ -393,7 +402,7 @@ def build_parser() -> argparse.ArgumentParser:
     what.add_argument("study", nargs="?", default="",
                       help="an mGrowthDB study id (e.g. SMGDB00000004) to derive every species in it; with "
                            "--species, comma separated study ids to search instead of every study holding "
-                           "them (the page's Only these studies)")
+                           "them, the same as naming them in --conditions (the page's second box)")
     what.add_argument("--species", nargs="+", metavar="NAME",
                       help="species or strain names, NCBI taxon ids, or a genus (all its species): every study "
                            "holding them is searched and one network returned, as on the local page (needs "

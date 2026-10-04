@@ -51,6 +51,7 @@ as_grownet_glv <- function(payload) {
                  absence_k = as_number(caveats$absence_k),
                  placeholders = pairs_frame(caveats$placeholders, value = TRUE),
                  sign_conflicts = pairs_frame(caveats$sign_conflicts, value = FALSE),
+                 media = vapply(caveats$media, as.character, character(1)),
                  without_a_rate = vapply(caveats$without_a_rate, as.character, character(1)),
                  effect_size = chr(caveats$effect_size)),
              readme = chr(payload$readme),
@@ -132,6 +133,14 @@ print.grownet_glv <- function(x, ...) {
     }
     cat("   * the cells are effect sizes (log2 means), not fitted gLV coefficients: scale them for\n")
     cat("     your model rather than using them unchanged.\n")
+    if (length(x$caveats$media) > 1) {
+        cat(sprintf(paste0("   * these arcs come from %d media, and a simulation is of one environment:\n",
+                           "       %s\n       grownet's second box (media, experiments or studies) keeps ",
+                           "one.\n"),
+                    length(x$caveats$media), paste(x$caveats$media, collapse = ", ")))
+    } else if (length(x$caveats$media) == 1) {
+        cat(sprintf("   * every arc was measured in one medium: %s\n", x$caveats$media))
+    }
     steep <- stronger_than_self(x)
     if (steep) {
         cat(sprintf(paste0("   * %d cell(s) are stronger than the %s on the diagonal, so a simulation on ",

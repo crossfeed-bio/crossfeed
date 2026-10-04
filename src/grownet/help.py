@@ -141,7 +141,7 @@ SETTINGS = {
                    "command line a study id given this way replaces the study argument."),
     "exclude_studies": ("Exclude these studies", "--exclude-studies IDS",
                         "Comma separated mGrowthDB study ids that are never searched, for example a study "
-                        "you know to be unsuitable. Empty by default. It applies after Only these studies, "
+                        "you know to be unsuitable. Empty by default. It applies after the second box, "
                         "so a study named in both is left out."),
     "only_entered": ("Only interactions between the species entered", "--all-partners",
                      "On by default: an edge is kept when both ends are species you typed. Untick it, or give "
@@ -334,8 +334,8 @@ QA = (
      "when it imports a file; the GraphML keeps every arc, and each carries its condition and study. Use "
      "Merge parallel arcs or Merge to genus to condense them on purpose, or read the arcs in the JSON."),
     ("The search is slow.",
-     "Every study holding your species is fetched live from mGrowthDB. Name the studies you need under "
-     "Only these studies."),
+     "Every study holding your species is fetched live from mGrowthDB. Name the studies you need in the "
+     "second box, beside the species: a study id there (SMGDB...) reads that study and no other."),
     ("\"mGrowthDB is not reachable\" or \"search failed\".",
      "The machine cannot reach mGrowthDB. Check the internet connection, or open "
      f"<a href=\"{MGROWTHDB}\">mGrowthDB</a> in the browser to see whether it is up, then try again."),
@@ -616,9 +616,12 @@ curves give no rate is named on the page and in the report, never given a substi
 Lotka-Volterra simulator: <code>interaction_matrix.csv</code> (the matrix above, with -1 on the diagonal
 by convention, for self-limitation), <code>growth_rates.csv</code> (one rate per organism, in the same
 order, with how many values it rests on) and <code>README.txt</code>, which states the conventions in the
-files themselves, names any pair left at 0 for disagreeing in sign, and names every organism without a
-rate. The numbers are effect sizes, not fitted gLV coefficients: a gLV coefficient is a per-capita effect
-in absolute units, so scale them for your model rather than using them unchanged. Cells are often
+files themselves, names any pair left at 0 for disagreeing in sign, names every organism without a rate,
+and names the media the arcs were measured in: a simulation is of one environment, so a package built from
+several media says so in capitals and points at the second box
+(<a href="#where">choosing where to look</a>). The numbers are effect sizes, not fitted gLV coefficients:
+a gLV coefficient is a per-capita effect in absolute units, so scale them for your model rather than using
+them unchanged. Cells are often
 stronger than the -1 on the diagonal, a partner outweighing an organism's own self-limitation, and a
 simulation run on them unchanged can grow without bound and come back as NA; the R package below has
 <code>glv_scale()</code> for that.</p>
@@ -672,17 +675,19 @@ its report, and the network sent to Cytoscape:</p>
 <p>Without installing anything, <code>uvx --from git+{REPOSITORY} {COMMAND} ...</code> runs the same
 command. Other uses:</p>
 <pre>{COMMAND} derive SMGDB00000004 --live --format graphml --out study4.graphml
+{COMMAND} derive --live --species Blautia --conditions "Wilkins-Chalgren" --out wc.json
 {COMMAND} derive SMGDB00000004 --live --format matrix --out study4_matrix.csv
 {COMMAND} derive SMGDB00000004 --live --report-rates --rates study4_rates.csv --glv study4_glv.zip
 {COMMAND} derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
 {COMMAND} derive --live --all --merge-arcs --merge-genera --out all_genera.json
 {COMMAND} gui
 {COMMAND} validate example.json</pre>
-<p>The first derives one whole study; the second writes it as the adjacency matrix; the third adds the
-growth rates and the gLV parameters (<a href="#glv">the matrix, the growth rates and gLV</a>); the fourth
-a genus, every species of it with every partner, one node per genus; the fifth all of mGrowthDB, as the
-All button does, merged across studies and then to genus; the sixth opens this page, and the last checks
-a file against the format. Every advanced setting has its flag (see the list above), and
+<p>The first derives one whole study; the second searches a genus in one medium (the second box, from
+the command line); the third writes a study as the adjacency matrix; the fourth adds the growth rates and
+the gLV parameters (<a href="#glv">the matrix, the growth rates and gLV</a>); the fifth a genus, every
+species of it with every partner, one node per genus; the sixth all of mGrowthDB, as the All button does,
+merged across studies and then to genus; the seventh opens this page, and the last checks a file against
+the format. Every advanced setting has its flag (see the list above), and
 <code>{COMMAND} derive --help</code> lists them all. Besides those:</p>
 <ul>{cli_only}</ul>
 
@@ -702,7 +707,10 @@ supports, or tick "Include chemostat and serial dilution experiments" to use the
 <li>every edge is low quality: tick "Show low-quality edges";</li>
 <li>every edge is below the absence threshold: open that section of the result, or set k to 0;</li>
 <li>the partners are species you did not type: untick "Only interactions between the species
-entered".</li>
+entered";</li>
+<li>the second box is holding the search to a medium, an experiment or a study that these species were
+not grown in: empty it, or try a shorter word, since a medium is matched as text (the result says how
+many studies it left out).</li>
 </ul></li>
 </ol>
 
