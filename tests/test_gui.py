@@ -672,3 +672,27 @@ def test_an_empty_result_says_what_the_second_box_left_out():
     # with the box empty, nothing is said about it
     result["settings"] = {**DEFAULTS}
     assert "second box" not in _empty_reason(result)
+
+
+def test_opening_the_page_without_the_token_explains_itself(server):
+    """Karoline, 2026-10-04: "localhost:8791 shows an error". Opening the port by hand, or an old tab from
+    a previous run, used to give a bare server error page. It still refuses, in grownet's own words."""
+    import urllib.error
+    import urllib.request
+
+    from grownet.gui import render_token_page
+    page = visible(render_token_page(had_token=False, port=8791))
+    assert "grownet is running on this machine" in page
+    assert "http://127.0.0.1:8791/?token=" in page          # where to find the real link
+    assert "grownet gui" in page
+    assert "from an earlier run" in visible(render_token_page(had_token=True, port=8791))
+
+    base, token = server
+    try:
+        urllib.request.urlopen(f"{base}/", timeout=5)
+        raise AssertionError("the page opened without a token")
+    except urllib.error.HTTPError as refused:
+        assert refused.code == 403                           # still refused, just not bare
+        body = refused.read().decode("utf-8")
+    assert "grownet is running on this machine" in visible(body)
+    assert token not in body                                 # never the token itself

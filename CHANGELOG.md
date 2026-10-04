@@ -7,6 +7,9 @@ content.
 ## [0.1.1] (unreleased)
 
 ### Changed
+- Opening the page's address without its token, by hand or from a tab left over from an earlier run, shows
+  grownet's own page saying where to find the link, instead of a bare server error (Karoline, 2026-10-04:
+  "localhost:8791 shows an error"). It is still refused, with 403, and the page never shows the token.
 - **Arcs below the absence threshold are left out of every output by default** (Karoline, 2026-10-03), so
   the page, a downloaded file and a network sent to Cytoscape all hold the same arcs: Cytoscape used to
   count the absences too, which was confusing. They are still reported, in their own section of the result

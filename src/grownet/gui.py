@@ -285,6 +285,22 @@ in monoculture, as its own download and as the growth rates a gLV simulation nee
 </form>{below}""", token, refresh, job)
 
 
+def render_token_page(had_token: bool, port: int) -> str:
+    """What someone sees who opens the page without the token, or with one from an earlier run."""
+    what = ("That link carries a token from an earlier run of grownet, so it no longer opens this one."
+            if had_token else
+            "This page opens from the link grownet printed when it started, which carries a one-time "
+            "token for this run.")
+    return _page(f"""<h2 class="page">grownet is running on this machine</h2>
+<p>{what}</p>
+<p class="hint">Where to find the link: the terminal window where grownet was started prints
+<code>grownet is at http://127.0.0.1:{int(port)}/?token=...</code>. Copy that whole line into the browser.
+If the window is gone, stop grownet there with Ctrl+C and run <code>{_esc(brand.COMMAND)} gui</code>
+again, which opens the browser for you.</p>
+<p class="hint">The token is what keeps another program on this machine from driving the tool, so this
+page does not show it.</p>""")
+
+
 def render_progress(token: str, job: dict) -> str:
     """A search still running (#75): a progress bar, and a page that reloads itself until the result is
     ready. No JavaScript: the refresh is a meta element, the bar the native progress element."""
@@ -891,9 +907,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *_args):
         pass                      # the browser is right there; no access log
 
-    def _send(self, body, content_type: str = "text/html; charset=utf-8", filename: str = ""):
+    def _send(self, body, content_type: str = "text/html; charset=utf-8", filename: str = "",
+              status: int = 200):
         data = body if isinstance(body, bytes) else body.encode("utf-8")
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
         if filename:
@@ -908,10 +925,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
 
     def _authorized(self, query: dict) -> bool:
+        """The session token, which is what keeps another program on this machine from driving the tool.
+
+        Without it the answer is still 403, but it is grownet's own page saying what to do: opening
+        http://127.0.0.1:PORT by hand, or an old tab from a previous run, used to show a bare server error
+        (Karoline, 2026-10-04: "localhost:8791 shows an error"). The page never shows the token itself,
+        since anything that could read it here could use it.
+        """
         given = query.get("token", [""])[0]
         if secrets.compare_digest(given, self.token):
             return True
-        self.send_error(403, "missing or wrong token; open the URL grownet printed")
+        self._send(render_token_page(bool(given), self.server.server_address[1]), status=403)
         return False
 
     def _job_page(self, job_id: str) -> str:
