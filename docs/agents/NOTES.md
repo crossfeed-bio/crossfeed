@@ -549,6 +549,14 @@ simulator takes (register item 32, Karoline 2026-10-03). What a later agent need
 - Checking the R side: `R CMD build r && R CMD check --no-manual grownet_0.1.0.tar.gz`, or `make r-check`.
   The tests live in `r/tests/testthat` and include a real POST into the listener.
 
+## House style for the tool's name
+
+In prose the name carries the wordmark's two parts: `brand.in_prose` does it on the page, and the README
+and `r/README.md` write it as `grow**net**` (Karoline, 2026-10-04: "The README of the repo does not yet
+reflect the style change for grownet sentences that we have in the help"). Commands, paths, code spans,
+link targets and headings keep it plain, and a test in `tests/test_interface.py` fails on a bare "grownet"
+in README prose. The title is lowercase throughout.
+
 ## The second box: media, experiments or studies (#113)
 
 `grownet.selection` parses the box and matches experiments; `derive.select_experiments` applies it.

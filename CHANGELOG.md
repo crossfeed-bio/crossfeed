@@ -7,6 +7,10 @@ content.
 ## [0.1.1] (unreleased)
 
 ### Changed
+- The README carries the name the way the help does, grow**net** in running prose, its title is lowercase
+  throughout (Karoline, 2026-10-04), and the sections that had grown by accretion were rewritten: what the
+  local page offers is now two boxes, four buttons and the result, "What it does" names the medium and the
+  shapes a network can leave in, and the derivation section says that a comparison never mixes media.
 - **A gLV mode button beside All** (`--glv-mode`), which toggles what a simulation needs: Report growth rates
   on and Include drop-out communities off, both left in sight in Advanced settings with their defaults
   unchanged (Karoline, 2026-10-04: "how about moving both options back to advanced parameters, with their
