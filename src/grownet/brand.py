@@ -131,9 +131,14 @@ textarea:focus, input:focus, select:focus, button:focus, .btn:focus {{ outline: 
 .btn.quiet {{ background: transparent; padding: .3rem .7rem; }}
 .bar {{ display: flex; gap: .6rem; margin-top: .9rem; flex-wrap: wrap; align-items: center; }}
 .beside {{ display: inline-flex; gap: .35rem; align-items: center; white-space: nowrap; }}
+/* a button that stands for a mode shows which way it stands */
+button.on {{ background: var(--grow); border-color: var(--grow); color: #fff; font-weight: 600; }}
 /* the two input boxes side by side on a wide screen, one above the other on a narrow one */
-.boxes {{ display: flex; gap: 1.2rem; flex-wrap: wrap; }}
-.box {{ flex: 1 1 22rem; min-width: 0; }}
+.boxes {{ display: flex; gap: 1.2rem; flex-wrap: wrap; align-items: start; }}
+.box {{ flex: 1 1 22rem; min-width: 0; display: flex; flex-direction: column; }}
+/* the examples above one box may wrap where the other's do not, so the line keeps room for two either
+   way and both text areas start at the same height */
+.box .examples {{ min-height: 3.1em; }}
 .backtop {{ justify-content: flex-end; margin: 0 0 -.4rem; }}
 details {{ margin-top: 1.1rem; border-top: 1px solid var(--line); padding-top: .8rem; }}
 summary {{ cursor: pointer; font-weight: 600; }}

@@ -245,8 +245,8 @@ def _dropout_lines(net: InteractionNetwork) -> list:
         return ["  Every arc compares two organisms directly; none comes from a drop-out design."]
     return [f"  {n} ARC(S) COME FROM DROP-OUT DESIGNS, a community against the same community without one",
             "      member, so the effect may run through a third species, which a gLV coefficient is not",
-            "      meant to include. Untick Include drop-out communities beside the All button and derive",
-            "      again to leave them out."]
+            "      meant to include. Press gLV mode on the page, or untick Include drop-out communities in",
+            "      Advanced settings, and derive again to leave them out."]
 
 
 def _media_lines(net: InteractionNetwork) -> list:

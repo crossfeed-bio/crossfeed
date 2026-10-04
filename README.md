@@ -213,9 +213,9 @@ the medium name mGrowthDB records, the experiment description and its name, so `
 spelling of Wilkins-Chalgren), an experiment id or a study id. Naming a comparison keeps the monocultures
 it is made against. Every arc records its `medium`, so a network says which environments it came from. Every
 setting sits behind "Advanced settings" with the same defaults the command line uses, except **Report
-growth rates**, which sits beside the All button: it adds each organism's growth rate in monoculture as its
-own download and turns on **Generate gLV parameters**, the zip a generalized Lotka-Volterra simulator
-takes.
+growth rates**: it adds each organism's growth rate in monoculture as its own download and turns on **Get
+gLV parameters**, the zip a generalized Lotka-Volterra simulator takes. The **gLV mode** button beside All
+sets it, together with leaving out drop-out communities.
 
 The page is served from the standard library on 127.0.0.1 with a token in its URL, renders in Python with
 no JavaScript, and uploads nothing: the data is pulled from mGrowthDB to your machine, and the results
@@ -233,10 +233,16 @@ assumes no simulator: it hands over a plain matrix and a plain vector, with a he
 install.packages("remotes")
 remotes::install_github("crossfeed-bio/crossfeed", subdir = "r", ref = "media-and-experiments")
 library(grownet)
-glv <- grownet_listen()                 # then press gLV parameters, Send to R
+glv <- grownet_listen()                 # then press Get gLV parameters, Send to R
 glv                                     # prints what it holds and what to read before simulating
-tse <- do.call(miaSim::simulateGLV, as_miasim(glv_scale(glv)))
+args <- as_miasim(glv_scale(glv))
+tse <- do.call(miaSim::simulateGLV, c(args, list(x0 = rep(0.1, args$n_species))))
+x <- SummarizedExperiment::assay(tse)
+matplot(t(x), type = "l", lty = 1, xlab = "time", ylab = "abundance")
 ```
+
+`grownet_listen()` takes one parameter set, prints a summary of it on arrival and returns, so run it again
+before each send, including after restarting grownet.
 
 The `ref` names the branch the package is on until it is merged; after that it can be left out. If the
 install answers `HTTP error 404` on this public repository, a GitHub token stored on the machine is being

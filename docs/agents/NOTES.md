@@ -569,8 +569,10 @@ simulator takes (register item 32, Karoline 2026-10-03). What a later agent need
   media. Register item 8 carries this.
 - `matrix.dropout_arcs(net)` counts the arcs a gLV package holds that may act through a third species;
   the README and the R printout say the count, or that there is none. Both gLV settings are ordinary
-  advanced settings; the **gLV mode** button (`gui.glv_mode`, `--glv-mode`) sets them together and says so,
-  which is what Karoline asked for after two checkboxes in the bar read as "quite complex" (2026-10-04).
+  advanced settings; the **gLV mode** button (`gui.glv_mode`, `gui.glv_mode_on`, `--glv-mode`) sets them
+  together and says so, which is what Karoline asked for after two checkboxes in the bar read as "quite
+  complex" (2026-10-04). It toggles: pressing it again restores both defaults, and the button carries
+  `class="on"` and `aria-pressed` so its state is visible.
 - `matrix.media(net)` feeds the gLV README, the payload's caveats and the R printout: a package built from
   several media says so in capitals, because a simulation is of one environment. The All network spans six.
 

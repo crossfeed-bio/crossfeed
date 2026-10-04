@@ -69,7 +69,7 @@ DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window":
             "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
             "include_low_quality": False, "include_absent": False, "correction": "bh",
             # off by default: a rate costs a fit per monoculture curve, and most searches do not need
-            # one (Karoline, 2026-10-03: a checkbox "next to the All button")
+            # one. The gLV mode button turns it on (Karoline, 2026-10-04)
             "report_rates": False,
             "include_dropout": True,
             "include_non_batch": False, "conditions": "", "exclude_studies": "", "only_entered": True,
@@ -259,7 +259,8 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
     on the page above it and can be changed and run again.
     """
     note = f"<p class=\"note\">{_esc(message)}</p>" if message else ""
-
+    on = glv_mode_on(settings or {})
+    glv_class, glv_pressed, glv_tick = ("on" if on else ""), ("true" if on else "false"), (" on" if on else "")
     return _page(f"""{note}<form method="post" action="/run?token={_esc(token)}">
 <div class="boxes">
 <div class="box">
@@ -273,18 +274,18 @@ derived from mGrowthDB growth data on this machine; nothing is uploaded.</p>
 <label class="field" for="conditions">Media, experiments or studies (optional)</label>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in selecting.EXAMPLES)}</p>
 <textarea id="conditions" name="conditions" rows="5">{_esc(conditions)}</textarea>
-<p class="hint">One per line. A medium is matched as text against the medium name mGrowthDB records, the
-experiment description and its name, so "wilkins" finds every spelling of Wilkins-Chalgren and "mucin"
-finds the experiments that mention it. An id (SMGDB..., EMGDB...) picks that study or experiment, and a
-named comparison keeps the monocultures it is made against. Empty means every medium.</p>
+<p class="hint">One per line. A medium is matched as text, so "wilkins" finds every spelling of
+Wilkins-Chalgren; an id (SMGDB..., EMGDB...) picks that study or experiment. Empty means every medium.</p>
 </div>
 </div>
 <div class="bar"><button class="primary" type="submit">Find interactions</button>
 <button type="submit" name="example" value="1">Example</button>
 <button type="submit" name="all" value="1">All</button>
-<button type="submit" name="glv_mode" value="1">gLV mode</button>
+<button type="submit" name="glv_mode" value="1" class="{glv_class}" aria-pressed="{glv_pressed}">gLV
+mode{glv_tick}</button>
 <span class="muted">All derives every study in mGrowthDB, ignoring the boxes (half a minute or so).
-gLV mode sets what a simulation needs: growth rates on, drop-out communities off.</span></div>
+gLV mode sets what a simulation needs, growth rates on and drop-out communities off; press it again to
+switch back.</span></div>
 {_settings_block(settings or {}, token, job)}
 </form>{below}""", token, refresh, job)
 
@@ -456,7 +457,7 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
     # one control with a menu, not two buttons (Karoline, 2026-10-03: "one single drop-down menu for gLV
     # results where the user chooses whether to download or to send to R")
     glv = (f"<form class=\"inline\" method=\"post\" action=\"/glv?token={t}{tail}\">"
-           "<button type=\"submit\">gLV parameters</button> "
+           "<button type=\"submit\">Get gLV parameters</button> "
            "<select name=\"to\" aria-label=\"What to do with the gLV parameters\">"
            "<option value=\"zip\">Download (.zip)</option>"
            "<option value=\"r\">Send to R</option></select></form>"
@@ -657,15 +658,29 @@ def _no_growth(s: dict, which: str) -> float:
     return value if value is not None else getattr(interaction, f"NO_GROWTH_{which.upper()}")
 
 
-# What gLV mode sets, and what the page says when it is pressed.
-GLV_MODE_MESSAGE = ("gLV mode: growth rates on, drop-out communities off. Both are in Advanced settings; "
-                    "name one medium in the second box to keep a simulation to one environment.")
+# What the page says when the mode is switched on and off.
+GLV_MODE_MESSAGE = ("gLV mode on: growth rates on, drop-out communities off. Both are in Advanced "
+                    "settings, and pressing gLV mode again switches them back. Name one medium in the "
+                    "second box to keep a simulation to one environment.")
+GLV_MODE_OFF_MESSAGE = ("gLV mode off: growth rates off and drop-out communities included again, which "
+                        "are the defaults.")
 
 
-def glv_mode(settings: dict) -> dict:
+def glv_mode_on(settings: dict) -> bool:
+    """Whether the settings are the ones gLV mode sets."""
+    s = {**DEFAULTS, **(settings or {})}
+    return bool(s["report_rates"]) and not s["include_dropout"]
+
+
+def glv_mode(settings: dict, on: bool = True) -> dict:
     """The settings a gLV simulation needs: a growth rate per organism, and no arc that may act through a
-    third species (Karoline, 2026-10-04)."""
-    return {**settings, "report_rates": True, "include_dropout": False}
+    third species (Karoline, 2026-10-04). `on` False puts both back to their defaults, since the button
+    toggles ("Do I click a 2nd time to switch it off?").
+    """
+    if on:
+        return {**settings, "report_rates": True, "include_dropout": False}
+    return {**settings, "report_rates": DEFAULTS["report_rates"],
+            "include_dropout": DEFAULTS["include_dropout"]}
 
 
 def parse_settings(form: dict) -> dict:
@@ -1140,10 +1155,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         settings = parse_settings(form)
         if form.get("glv_mode"):
             # Karoline, 2026-10-04: a button "which will enable growth rate collection and disable drop-out
-            # communities". It sets them and shows them in Advanced settings, so nothing is hidden and the
-            # search is still the user's to start.
-            settings = glv_mode(settings)
-            self._send(render_form(self.token, "\n".join(entries), settings, message=GLV_MODE_MESSAGE,
+            # communities", and then: "Do I click a 2nd time to switch it off?" Yes. It sets or clears the
+            # two settings, shows them in Advanced settings, and leaves the search for the user to start.
+            turning_on = not glv_mode_on(settings)
+            settings = glv_mode(settings, turning_on)
+            self._send(render_form(self.token, "\n".join(entries), settings,
+                                   message=GLV_MODE_MESSAGE if turning_on else GLV_MODE_OFF_MESSAGE,
                                    conditions=settings.get("conditions", "")))
             return
         if form.get("example"):

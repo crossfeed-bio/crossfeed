@@ -555,8 +555,8 @@ GraphML or the adjacency matrix as CSV) in the menu next to it; <strong>Send to 
 Cytoscape running on this machine, in the legend's style; and <strong>Report</strong>, which opens the
 detailed comments of the search (every setting, every interaction, every pair the data did not support,
 the sources) and downloads them as a text file, with the tool version. With <strong>Report growth
-rates</strong> ticked, beside the All button, two more outputs appear beside them: the growth rates as
-their own CSV, and <strong>Generate gLV parameters</strong>
+rates</strong> on, which is what gLV mode sets, two more outputs appear beside them: the growth rates as
+their own CSV, and <strong>Get gLV parameters</strong>
 (<a href="#glv">the matrix, the growth rates and gLV</a>).</p>
 <p><a href="/legend?token={t}{legend_job}">The legend</a> explains every line, arrowhead and flag.</p>
 
@@ -648,13 +648,25 @@ hands over a plain matrix and a plain vector, with a helper that shapes them for
 <pre>install.packages("remotes")
 {_e(R_INSTALL)}
 library(grownet)
-glv &lt;- grownet_listen()        # then press gLV parameters, Send to R
+glv &lt;- grownet_listen()        # then press Get gLV parameters, Send to R
 glv                            # prints what it holds and what to read before simulating
 A &lt;- glv_matrix(glv)           # warns about any cell that is a stated extreme
 r &lt;- glv_rates(glv)
-tse &lt;- do.call(miaSim::simulateGLV, as_miasim(glv_scale(glv)))</pre>
+
+args &lt;- as_miasim(glv_scale(glv))
+tse &lt;- do.call(miaSim::simulateGLV, c(args, list(x0 = rep(0.1, args$n_species))))
+
+x &lt;- SummarizedExperiment::assay(tse)          # one row per organism, one column per time point
+matplot(t(x), type = "l", lty = 1, xlab = "time", ylab = "abundance")
+legend("topleft", legend = rownames(x), lty = 1, col = seq_len(nrow(x)), bty = "n")</pre>
 <p class="hint">{_e(R_TROUBLE)} The <code>ref</code> names the branch the package is on until it is
 merged; after that it can be left out.</p>
+<p><strong>One set per listen, and R says when it arrives.</strong> Every arrival prints the summary
+above in the R session, so you can see that a new set came in and which one you are now holding: nothing
+is replaced silently. <code>grownet_listen()</code> takes one parameter set and returns it, so run it
+again before each send, including after restarting {NAME}, whose new run has its own address and token.
+Sending while nothing is listening changes nothing in R; the page says so and shows the line that fetches
+the same parameters instead.</p>
 <p>The caveats travel as data, not as text to be read first: the object prints them every time,
 <code>glv_matrix()</code> warns and names the cells that hold +10 or -10 and takes
 <code>placeholders = "na"</code> or <code>"zero"</code> to convert them, and

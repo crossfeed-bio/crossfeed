@@ -24,13 +24,16 @@ From a terminal, in a clone, `R CMD INSTALL r` does the same without remotes.
 
 ## Receiving the parameters
 
-Run grownet's local page (`grownet gui`), tick **Report growth rates** beside the All button, search, and
-then, in R:
+Run grownet's local page (`grownet gui`), press **gLV mode** beside All, search, and then, in R:
 
 ```r
 library(grownet)
-glv <- grownet_listen()     # then choose gLV parameters, Send to R on the page
+glv <- grownet_listen()     # then choose Get gLV parameters, Send to R on the page
 ```
+
+`grownet_listen()` takes one parameter set and returns it, printing a summary of what arrived, so you
+always see when a new set has come in and superseded the one before. Run it again before each send,
+including after restarting grownet, whose new run has its own address and token.
 
 When a port cannot be opened, read the same parameters from the page instead, at the address it shows
 under the gLV control:
@@ -73,6 +76,10 @@ miaSim is suggested, never required; any simulator takes the same pieces.
 ```r
 args <- as_miasim(glv_scale(glv))
 tse <- do.call(miaSim::simulateGLV, c(args, list(x0 = rep(0.1, args$n_species))))
+
+x <- SummarizedExperiment::assay(tse)          # one row per organism, one column per time point
+matplot(t(x), type = "l", lty = 1, xlab = "time", ylab = "abundance")
+legend("topleft", legend = rownames(x), lty = 1, col = seq_len(nrow(x)), bty = "n")
 ```
 
 `simulateGLV` solves dx/dt = x(b + Ax), which is the order this matrix is written in: `A[i, j]` is the

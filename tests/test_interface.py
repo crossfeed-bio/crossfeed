@@ -478,19 +478,31 @@ def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
     _, page, _ = _open(f"{base}/?token={token}")
     bar = page[page.index('<div class="bar">'):]
     bar = bar[:bar.index("</div>")]
-    assert 'name="glv_mode" value="1">gLV mode' in bar
+    assert 'name="glv_mode" value="1"' in bar and "gLV\nmode" in bar
     assert bar.index('name="glv_mode"') > bar.index('name="all"')        # next to All
     assert not re.findall(r'<input[^>]*name="([^"]+)"', bar)             # and no checkboxes in the bar
-    assert len(bar) < 600                                                # the text beside it stays short
+    assert len(bar) < 700                                                # the text beside it stays short
 
     # pressing it ticks growth rates and unticks drop-out communities, in Advanced settings where they live
-    _, pressed, _ = _open(f"{base}/run?token={token}", urllib.parse.urlencode(
-        {"species": A, "glv_mode": "1", "include_dropout": "1", "only_entered": "1"}).encode())
+    def press(form):
+        _, page, _ = _open(f"{base}/run?token={token}", urllib.parse.urlencode(form).encode())
+        return page
+
+    pressed = press({"species": A, "glv_mode": "1", "include_dropout": "1", "only_entered": "1"})
     settings = pressed[pressed.index("<details>"):]
     assert 'name="report_rates" value="1" checked' in settings
     assert 'name="include_dropout" value="1">' in settings               # off
-    assert "gLV mode: growth rates on, drop-out communities off" in pressed
+    assert "gLV mode on: growth rates on, drop-out communities off" in pressed
     assert f">{A}</textarea>" in pressed                                 # and what was typed stays
+    assert 'name="glv_mode" value="1" class="on"' in pressed             # the button shows it is on
+
+    # Karoline, 2026-10-04: "Do I click a 2nd time to switch it off?" Pressing it again restores both
+    # defaults, and says so
+    again = press({"species": A, "glv_mode": "1", "report_rates": "1", "only_entered": "1"})
+    back = again[again.index("<details>"):]
+    assert 'name="report_rates" value="1">' in back                      # off, its default
+    assert 'name="include_dropout" value="1" checked' in back            # on, its default
+    assert "gLV mode off" in again and 'class="on"' not in again
 
 
 def test_the_download_menu_offers_the_adjacency_matrix(server):
@@ -511,7 +523,7 @@ def test_the_download_menu_offers_the_adjacency_matrix(server):
 def test_without_report_growth_rates_there_are_no_rates_and_no_glv_button(server):
     base, token = server
     page = _finished(base, token)
-    assert "Download the growth rates" not in page and "Generate gLV parameters" not in page
+    assert "Download the growth rates" not in page and "Get gLV parameters" not in page
     # and asking for the files anyway says what to do, rather than writing an empty one
     _, answer, _ = _open(f"{base}/rates.csv?token={token}")
     assert "tick Report growth rates" in answer
@@ -524,7 +536,7 @@ def test_the_growth_rates_are_their_own_download_and_bring_the_glv_control(serve
     page = _finished(base, token, report_rates="1")
     outputs = page[page.index('<div class="bar outputs">'):]
     assert "Download the growth rates (.csv)" in outputs
-    control = outputs[outputs.index(">gLV parameters<"):]
+    control = outputs[outputs.index(">Get gLV parameters<"):]
     control = control[:control.index("</form>")]
     assert '<option value="zip">Download (.zip)</option>' in control
     assert '<option value="r">Send to R</option>' in control

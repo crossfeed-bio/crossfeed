@@ -236,6 +236,11 @@ def test_the_help_links_the_r_package_and_says_how_to_install_it():
     # public repository (Karoline hit both, 2026-10-04)
     assert 'ref = &quot;' in section and rbridge.R_BRANCH in section
     assert "404" in section and "install_local" in section       # the way out needs no GitHub access
+    # Karoline, 2026-10-04: the example shows how to look at a simulation, and the help says that an
+    # arrival always prints in R and that the listener takes one set at a time
+    assert "matplot" in section and "legend(" in section
+    assert "prints the summary" in section and "one parameter set" in section
+    assert "run it\nagain before each send" in section or "again before each send" in section
     # Karoline, 2026-10-04: "Sys.setenv(GITHUB_PAT = \"\") was not necessary for me and I don't think we
     # should recommend it for users, as it alters their system settings in ways that can affect them
     # negatively." So the help never tells a reader to change their environment to install the package.
