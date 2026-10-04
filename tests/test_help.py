@@ -242,6 +242,9 @@ def test_the_help_links_the_r_package_and_says_how_to_install_it():
     # Karoline, 2026-10-04: the example shows how to look at a simulation, and the help says that an
     # arrival always prints in R and that the listener takes one set at a time
     assert "matplot" in section and "legend(" in section
+    # Karoline, 2026-10-04: miaSim runs with migration and stochasticity on by default, so the example
+    # says how to switch them off without changing the call itself
+    assert "stochastic = FALSE" in section and "migration_p = 0" in section
     assert "prints the summary" in section and "one parameter set" in section
     assert "run it\nagain before each send" in section or "again before each send" in section
     # Karoline, 2026-10-04: "Sys.setenv(GITHUB_PAT = \"\") was not necessary for me and I don't think we

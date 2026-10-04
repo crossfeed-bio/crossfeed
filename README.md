@@ -244,6 +244,8 @@ library(grownet)
 glv <- grownet_listen()                 # then press Get gLV parameters, Send to R
 glv                                     # prints what it holds and what to read before simulating
 args <- as_miasim(glv_scale(glv))
+# miaSim simulates with stochasticity and migration on; for the deterministic model, call it
+# yourself with stochastic = FALSE and migration_p = 0
 tse <- do.call(miaSim::simulateGLV, c(args, list(x0 = rep(0.1, args$n_species))))
 x <- SummarizedExperiment::assay(tse)
 matplot(t(x), type = "l", lty = 1, xlab = "time", ylab = "abundance")
