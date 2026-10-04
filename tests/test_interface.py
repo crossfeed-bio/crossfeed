@@ -791,3 +791,19 @@ def test_the_name_is_never_styled_where_a_command_is_meant():
         assert not before.search(text[max(0, m.start() - 20):m.start()]), around
         assert not after.match(text[m.end():m.end() + 12]), around
         assert text[max(0, m.start() - 1):m.start()] != "`", around      # never inside a code span
+
+
+def test_marking_the_name_cannot_be_made_slow():
+    """CodeQL, on the release pull request (2026-10-04): the two patterns behind the name styling were
+    polynomial on a long run of "<" or of spaces. Nothing a user types reaches them unescaped, and now
+    the patterns are bounded as well, so a pathological string is still linear."""
+    import time
+
+    from grownet import brand
+    for text in ("<" * 40000, "<" + " " * 40000 + "p>grownet", "<p>" * 10000):
+        started = time.perf_counter()
+        brand.in_prose(text)
+        assert time.perf_counter() - started < 1.0, f"slow on {text[:12]!r}..."
+    # and it still marks a name in prose and leaves commands alone
+    assert brand.in_prose("<p>grownet reads it.</p>") == f"<p>{brand.NAME_HTML} reads it.</p>"
+    assert brand.in_prose("<code>grownet gui</code>") == "<code>grownet gui</code>"

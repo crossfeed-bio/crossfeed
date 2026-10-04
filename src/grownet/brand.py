@@ -60,8 +60,12 @@ NAME_HTML = '<span class="name">grow<b>net</b></span>'
 # elements whose text is a command, a path, a document title or a link label: the name stays plain there.
 # A link is already colored, so the name's own green inside one reads as a smudge rather than a name.
 _LITERAL = ("code", "pre", "title", "script", "style", "textarea", "option", "a")
-_PIECES = re.compile(r"(<[^>]+>)")
-_TAG_NAME = re.compile(r"<\s*(/?)\s*([a-zA-Z0-9]+)")
+# Both patterns are bounded so that neither can be made slow by a long run of "<" or of spaces: a tag
+# cannot contain another "<", and the whitespace a tag may carry before its name is a few characters at
+# most (CodeQL flagged the unbounded forms as polynomial on uncontrolled data, 2026-10-04). The page
+# escapes everything a user types, so no "<" of theirs reaches this, and bounding it costs nothing.
+_PIECES = re.compile(r"(<[^<>]*>)")
+_TAG_NAME = re.compile(r"<\s{0,8}(/?)\s{0,8}([a-zA-Z0-9]+)")
 _THE_NAME = re.compile(r"(?<![\w/.-])" + NAME + r"(?![\w/.-])")
 
 
