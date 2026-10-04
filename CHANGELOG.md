@@ -73,6 +73,13 @@ content.
   and on the command line says what the correction runs over.
 
 ### Changed
+- **The format id moved to `grownet.interaction_network/v1`** (Karoline, 2026-10-04, on her agent's
+  recommendation; Craig's question on #107), because `significance` changed meaning in this release and a
+  version is the one signal that says so: a reader branching on the id would otherwise read these numbers
+  as 0.1.x ones, silently. The namespace is unchanged, nothing else about the format moved, and the fields
+  added since v0 are optional. A v0 document is still valid, read with the older meaning, and
+  `grownet validate` names the version it read. The daily All network is used only when it speaks this
+  version, so the page derives live until the workflow republishes it, about a day.
 - **`significance` is now -log10 of the q-value, and the corrected p-value has its own field, `q_value`**
   (Karoline, 2026-10-03). Before, `significance` held the corrected p-value itself, so the name ran
   against the number: larger looked stronger and was weaker, and a continuous Cytoscape mapping on it was
