@@ -234,7 +234,10 @@ def test_the_help_links_the_r_package_and_says_how_to_install_it():
     assert "miaSim" in section and "simulateGLV" in section
     # the line has to work as written: the package is not on main yet, and a stored token can hide a
     # public repository (Karoline hit both, 2026-10-04)
-    assert 'ref = &quot;' in section and rbridge.R_BRANCH in section
+    # Karoline, 2026-10-04: "The help should refer to the stage the tool is in when released." So the
+    # install line is the one a release's reader runs, with no branch of ours in it.
+    assert "ref =" not in section and "install_github" in section
+    assert "branch" not in section
     assert "404" in section and "install_local" in section       # the way out needs no GitHub access
     # Karoline, 2026-10-04: the example shows how to look at a simulation, and the help says that an
     # arrival always prints in R and that the listener takes one set at a time

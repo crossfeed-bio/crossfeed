@@ -24,6 +24,18 @@ pre-commit install            # optional: run the checks on every commit (pip in
 The page then opens with `python -m grownet gui`. How a version is released (PyPI and the Windows
 program) is in [RELEASING.md](RELEASING.md).
 
+The R companion package in [`r/`](r) is built and checked with `make r-check`, where R is installed. To
+try it against a working copy, install it from the clone rather than from GitHub, since what is on a
+branch is not what `install_github` reads:
+
+```r
+remotes::install_local("<this clone>/r")       # or, in a terminal: R CMD INSTALL r
+```
+
+The texts that ship with the tool, the help page and both READMEs, describe the released state, so they
+give the plain `install_github(...)` line and never a branch of ours; `tests/test_release.py` fails if
+work in progress creeps into them.
+
 ## Before you open a pull request
 
 Run the same checks CI runs, and make sure all pass. `make check` runs all three:

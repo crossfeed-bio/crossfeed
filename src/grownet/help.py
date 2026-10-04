@@ -167,7 +167,7 @@ CLI_ONLY = {
     "--glv": "write the parameters of a generalized Lotka-Volterra simulation to a zip file, the page's "
              "gLV parameters, Download (needs --report-rates)",
     "--to-r": "send those parameters into an R session waiting for them, the page's gLV parameters, Send "
-              "to R (needs --report-rates; in R: library(grownet); grownet_listen())",
+              "to R (needs --report-rates; the companion package's grownet_listen() is what waits there)",
     "--r-port": "the port that R session listens on (default 8793, what grownet_listen() uses)",
     "--species": "species, strain or genus names, or NCBI taxon ids: search every study holding them, as the page "
                  "does",
@@ -659,8 +659,7 @@ tse &lt;- do.call(miaSim::simulateGLV, c(args, list(x0 = rep(0.1, args$n_species
 x &lt;- SummarizedExperiment::assay(tse)          # one row per organism, one column per time point
 matplot(t(x), type = "l", lty = 1, xlab = "time", ylab = "abundance")
 legend("topleft", legend = rownames(x), lty = 1, col = seq_len(nrow(x)), bty = "n")</pre>
-<p class="hint">{_e(R_TROUBLE)} The <code>ref</code> names the branch the package is on until it is
-merged; after that it can be left out.</p>
+<p class="hint">{_e(R_TROUBLE)}</p>
 <p><strong>One set per listen, and R says when it arrives.</strong> Every arrival prints the summary
 above in the R session, so you can see that a new set came in and which one you are now holding: nothing
 is replaced silently. <code>grownet_listen()</code> takes one parameter set and returns it, so run it

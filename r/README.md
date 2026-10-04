@@ -6,11 +6,10 @@ simulator or to your own code.
 
 ```r
 install.packages("remotes")
-remotes::install_github("crossfeed-bio/crossfeed", subdir = "r", ref = "media-and-experiments")
+remotes::install_github("crossfeed-bio/crossfeed", subdir = "r")
 ```
 
-The `ref` names the branch the package is on until it is merged; after that it can be left out. It needs
-R 4.1 or later and jsonlite. Nothing else: the listener uses base R sockets.
+It needs R 4.1 or later and jsonlite. Nothing else: the listener uses base R sockets.
 
 **If the install answers `HTTP error 404`** on this public repository, a GitHub token stored on the machine
 is being used and cannot see it (a fine-grained token answers 404 for everything outside its scope).

@@ -539,13 +539,17 @@ simulator takes (register item 32, Karoline 2026-10-03). What a later agent need
 - **An unscaled matrix diverges**: on SMGDB00000004 the cells outweigh the -1 diagonal and deSolve returns
   NA. `glv_scale()` divides the off-diagonal by one factor; it is a modeling choice, so nothing applies
   it by itself, and the printout and both READMEs say so.
-- **The install line carries `ref = "media-and-experiments"`** (`rbridge.R_BRANCH`) because `r/` is not on
-  `main` yet; drop the ref from `rbridge.INSTALL_R` and from the three texts that quote it (the help page,
-  the page hint, both READMEs) once it merges. A plain `install_github` on a public repository can still
-  answer 404 when git has stored a token that cannot see it, which is what `rbridge.INSTALL_TROUBLE` says
-  (Karoline hit both on 2026-10-04). It points at `install_local` from a clone and **never at clearing the
-  token**: "it alters their system settings in ways that can affect them negatively" (Karoline, same day).
-  A test in `tests/test_help.py` keeps the help page free of that advice.
+- **What ships describes a release, not our branches.** `rbridge.INSTALL_R` is the plain
+  `install_github("crossfeed-bio/crossfeed", subdir = "r")`, which is right for a released version and
+  wrong for an unmerged branch; to install the package from work in progress, use a clone
+  (`remotes::install_local("<clone>/r")`, or `R CMD INSTALL r`), which is what CONTRIBUTING.md says.
+  `tests/test_release.py` refuses a `ref =` install line, wording about work in progress, or this branch's
+  name in the help, both READMEs or any page the server renders (Karoline, 2026-10-04: "The help should
+  refer to the stage the tool is in when released", then "please check the GUI also for the same problem").
+  A plain `install_github` on a public repository can still answer 404 when git has stored a token that
+  cannot see it, which is what `rbridge.INSTALL_TROUBLE` says. It points at `install_local` from a clone
+  and **never at clearing the token**: "it alters their system settings in ways that can affect them
+  negatively" (Karoline, same day). A test in `tests/test_help.py` keeps that advice off the help page.
 - Checking the R side: `R CMD build r && R CMD check --no-manual grownet_0.1.0.tar.gz`, or `make r-check`.
   The tests live in `r/tests/testthat` and include a real POST into the listener.
 
@@ -555,7 +559,9 @@ In prose the name carries the wordmark's two parts: `brand.in_prose` does it on 
 and `r/README.md` write it as `grow**net**` (Karoline, 2026-10-04: "The README of the repo does not yet
 reflect the style change for grownet sentences that we have in the help"). Commands, paths, code spans,
 link targets and headings keep it plain, and a test in `tests/test_interface.py` fails on a bare "grownet"
-in README prose. The title is lowercase throughout.
+in README prose. The title is lowercase throughout. A second test refuses the styled name where a reader
+would type a command (`library(grownet)`, `python -m grownet`, `grownet derive`), in the help, the pages
+and the README: that is the one mistake this style can make.
 
 ## The second box: media, experiments or studies (#113)
 

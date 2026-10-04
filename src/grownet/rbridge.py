@@ -26,10 +26,11 @@ PATH = "/grownet/glv"
 # where the companion package lives and how it is installed, in one place, so the page, the help and the
 # error below say the same line
 REPOSITORY_SLUG = "crossfeed-bio/crossfeed"
-# The branch the package lives on until it is merged. Remove the ref, here and in the three texts that
-# quote INSTALL_R, once it is on main (Karoline hit the 404 this causes on 2026-10-04).
-R_BRANCH = "media-and-experiments"
-INSTALL_R = f'remotes::install_github("{REPOSITORY_SLUG}", subdir = "r", ref = "{R_BRANCH}")'
+# What a reader of a release should run. The help ships with the tool, so it says what holds for the
+# released version and never for the branch it was written on (Karoline, 2026-10-04: "The help should
+# refer to the stage the tool is in when released"). Installing from an unmerged branch is a development
+# step; it is in docs/agents/NOTES.md and in CONTRIBUTING.md, not here.
+INSTALL_R = f'remotes::install_github("{REPOSITORY_SLUG}", subdir = "r")'
 # Why an install can fail on a public repository: a GitHub token stored on the machine, for another
 # account or scope, makes GitHub answer 404 instead of serving it anonymously. The way around it is a
 # local install, which needs no GitHub access; clearing the token is not suggested, since that changes

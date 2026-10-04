@@ -763,3 +763,31 @@ def test_the_page_and_the_command_line_mean_the_same_by_glv_mode():
     assert applied["report_rates"] is True and applied["include_dropout"] is False
     assert {k: v for k, v in applied.items() if DEFAULTS[k] != v} == {"report_rates": True,
                                                                      "include_dropout": False}
+
+
+def test_the_name_is_never_styled_where_a_command_is_meant():
+    """Karoline, 2026-10-04: "please make sure that command line calls in the help and README don't apply
+    the grownet style (I found 1 case in the CLI description)". The name carries the wordmark in prose, so
+    anything a reader would type has to stay plain, whether it sits in a code span or in a sentence."""
+    import re
+    from pathlib import Path
+
+    from grownet import brand, gui
+    mark = re.escape(brand.NAME_HTML)
+    before = re.compile(r"(library\(|python -m |uvx |pip install |pipx install |-m )\s*$")
+    after = re.compile(r"\s*(derive|gui|validate|schema|style)\b")
+    pages = {"the help": gui.render_help("tok"), "the page": gui.render_form("tok"),
+             "the about page": gui.render_about("tok"), "the legend page": gui.render_legend("tok")}
+    for what, page in pages.items():
+        for m in re.finditer(mark, page):
+            around = page[max(0, m.start() - 70):m.end() + 50].replace("\n", " ")
+            assert not before.search(page[max(0, m.start() - 20):m.start()]), f"{what}: {around}"
+            assert not after.match(page[m.end():m.end() + 12]), f"{what}: {around}"
+
+    # and the same in the README, where the name is written grow**net**
+    text = Path(__file__).resolve().parents[1].joinpath("README.md").read_text(encoding="utf-8")
+    for m in re.finditer(re.escape("grow**net**"), text):
+        around = text[max(0, m.start() - 70):m.end() + 50].replace("\n", " ")
+        assert not before.search(text[max(0, m.start() - 20):m.start()]), around
+        assert not after.match(text[m.end():m.end() + 12]), around
+        assert text[max(0, m.start() - 1):m.start()] != "`", around      # never inside a code span

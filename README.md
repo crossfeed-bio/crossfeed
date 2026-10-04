@@ -239,7 +239,7 @@ assumes no simulator: it hands over a plain matrix and a plain vector, with a he
 
 ```r
 install.packages("remotes")
-remotes::install_github("crossfeed-bio/crossfeed", subdir = "r", ref = "media-and-experiments")
+remotes::install_github("crossfeed-bio/crossfeed", subdir = "r")
 library(grownet)
 glv <- grownet_listen()                 # then press Get gLV parameters, Send to R
 glv                                     # prints what it holds and what to read before simulating
@@ -252,9 +252,8 @@ matplot(t(x), type = "l", lty = 1, xlab = "time", ylab = "abundance")
 `grownet_listen()` takes one parameter set, prints a summary of it on arrival and returns, so run it again
 before each send, including after restarting grownet.
 
-The `ref` names the branch the package is on until it is merged; after that it can be left out. If the
-install answers `HTTP error 404` on this public repository, a GitHub token stored on the machine is being
-used and cannot see it; installing from a clone needs no GitHub access at all:
+If the install answers `HTTP error 404` on this public repository, a GitHub token stored on the machine is
+being used and cannot see it; installing from a clone needs no GitHub access at all:
 `remotes::install_local("<the repository>/r")`, or `R CMD INSTALL r` in a terminal.
 
 The caveats travel as data rather than as text to be read first: the object prints them every time,

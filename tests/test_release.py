@@ -47,3 +47,45 @@ def test_the_release_notes_start_with_how_to_get_past_the_windows_warning(tmp_pa
     out = tmp_path / "notes.md"
     assert main(["v0.1.0", str(out)]) == 0
     assert out.read_text(encoding="utf-8") == notes + "\n"
+
+
+def test_what_a_user_reads_describes_a_release_not_our_branches():
+    """Karoline, 2026-10-04, on the R install line in the help: "Will this still be valid after the
+    release? The help should refer to the stage the tool is in when released."
+
+    So the texts that ship with the tool, the help page and both READMEs, give what a reader of a release
+    runs. Installing from a branch or a clone is a development step, and lives in CONTRIBUTING.md and in
+    the agent notes instead.
+    """
+    import re
+    from pathlib import Path
+
+    from grownet import gui
+    from grownet import help as help_page
+
+    root = Path(__file__).resolve().parents[1]
+    shipped = {
+        "the help page": help_page.render_help("tok", gui.DEFAULTS, gui.EXAMPLE),
+        "README.md": root.joinpath("README.md").read_text(encoding="utf-8"),
+        "r/README.md": root.joinpath("r", "README.md").read_text(encoding="utf-8"),
+        # the page itself, which quotes the same lines (Karoline, 2026-10-04: "please check the GUI also
+        # for the same problem")
+        "the page": gui.render_form("tok"),
+        "the page in gLV mode": gui.render_form("tok", settings=gui.glv_mode(dict(gui.DEFAULTS))),
+        "the about page": gui.render_about("tok"),
+        "the page without a token": gui.render_token_page(False, 8791),
+    }
+    # a branch of ours in an install line, or a promise about what happens "after it is merged"
+    unreleased = re.compile(r"(?i)install_github\([^)]*\bref\s*=|until it is merged|once it is merged|"
+                            r"on the branch|unreleased|not yet released|work in progress")
+    for what, text in shipped.items():
+        found = unreleased.search(text)
+        assert not found, f"{what} describes work in progress, not a release: {found.group(0)!r}"
+
+    # and no text names the branch this is being written on, when that is not main
+    import subprocess
+    branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True,
+                            cwd=root).stdout.strip()
+    if branch and branch != "main" and branch != "HEAD":
+        for what, text in shipped.items():
+            assert branch not in text, f"{what} names the branch {branch!r}, which no release will have"

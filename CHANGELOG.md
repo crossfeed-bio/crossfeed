@@ -7,6 +7,15 @@ content.
 ## [0.1.1] (unreleased)
 
 ### Changed
+- **What ships with the tool describes the released state**, not the branch it was written on (Karoline,
+  2026-10-04: "The help should refer to the stage the tool is in when released"): the R install line in the
+  help, the page and both READMEs is the plain `install_github("crossfeed-bio/crossfeed", subdir = "r")`,
+  and installing from a branch or a clone is a development step, in CONTRIBUTING.md. A test refuses an
+  install line pointing at one of our branches, or wording about work in progress, in anything a reader
+  sees, including every page the local server renders.
+- Commands keep the name plain, in the help and in the README: the styling that marks grow**net** as a name
+  in prose never touches something a reader would type (it had reached `library(grownet)` in one command
+  line entry).
 - The README carries the name the way the help does, grow**net** in running prose, its title is lowercase
   throughout (Karoline, 2026-10-04), and the sections that had grown by accretion were rewritten: what the
   local page offers is now two boxes, four buttons and the result, "What it does" names the medium and the
