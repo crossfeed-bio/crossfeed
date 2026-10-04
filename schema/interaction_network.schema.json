@@ -13,7 +13,10 @@
   "additionalProperties": false,
   "properties": {
     "schema": {
-      "const": "grownet.interaction_network/v0"
+      "enum": [
+        "grownet.interaction_network/v1",
+        "grownet.interaction_network/v0"
+      ]
     },
     "meta": {
       "type": "object"

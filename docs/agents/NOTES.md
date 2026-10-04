@@ -15,6 +15,13 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-04 (Karoline, taking her agent's recommendation after Craig's question on #107): the id is
+  **`grownet.interaction_network/v1`** from 0.2.0. The namespace was Craig's call below and is unchanged;
+  what moved is the version, because `significance` changed meaning (the corrected p-value became -log10
+  of it), which is what his own rule says a version is for. `model.PREVIOUS_SCHEMAS` keeps v0 readable,
+  `schema.validate_document` accepts both, `published.fresh` accepts only the current one (a v0 daily
+  network holds the old meaning, so the page derives live until the workflow republishes), and
+  `grownet validate` names the version it read.
 - 2026-09-28 (Craig, #71): the schema id is `grownet.interaction_network/v0`. A new namespace at the SAME
   version, because the format is not changing and a version is a promise about content, not about naming.
   Done before 0.1.0 deliberately: the id is written into every network grownet saves, so this is the last
