@@ -297,10 +297,19 @@ def test_the_help_weighs_each_growth_measure():
 def test_the_readme_names_the_tool_grownet():
     # Karoline (2026-09-28): "readme in the repo still talks about crossfeed instead of grownet", and "The
     # README can have a subtitle or title extension that shows where the tool name comes from: Growth-curve
-    # derived interaction networks."
+    # derived interaction networks." Then (2026-10-04): "the title would be more pretty when words only
+    # start with lower case", and the name carries the wordmark's two parts in prose, as it does on the
+    # page ("The README of the repo does not yet reflect the style change for grownet sentences").
     from pathlib import Path
     text = Path(__file__).resolve().parents[1].joinpath("README.md").read_text(encoding="utf-8")
-    assert text.startswith("# grownet: Growth-curve derived interaction networks\n") and "**grownet** turns" in text
+    assert text.startswith("# grownet: growth-curve derived interaction networks\n")
+    assert "grow**net** turns" in text
+    body = text.split("\n", 1)[1]
+    prose_lines = [line for line in re.sub(r"```.*?```", "", body, flags=re.S).splitlines()
+                   if not line.startswith("#")]
+    for line in prose_lines:
+        outside_code = re.sub(r"`[^`]*`|\(https?://[^)]*\)|https?://\S+", "", line)
+        assert not re.search(r"(?<![\w/.*-])grownet(?![\w/.*-])", outside_code), line
     prose = re.sub(r"`[^`]*`|\(https?://[^)]*\)|https?://\S+|```.*?```", "", text, flags=re.S)
     # outside code and links, crossfeed appears only where the README explains the old name
     leftover = [line for line in prose.splitlines() if "crossfeed" in line]

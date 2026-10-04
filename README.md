@@ -1,14 +1,14 @@
-# grownet: Growth-curve derived interaction networks
+# grownet: growth-curve derived interaction networks
 
 [![ci](https://github.com/crossfeed-bio/crossfeed/actions/workflows/ci.yml/badge.svg)](https://github.com/crossfeed-bio/crossfeed/actions/workflows/ci.yml)
 [![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![python: 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
-**grownet** turns experimentally grounded microbial co-growth data from
+grow**net** turns experimentally grounded microbial co-growth data from
 [mGrowthDB](https://mgrowthdb.gbiomed.kuleuven.be/) into directed interaction networks, in a neutral and
 openly citable format that downstream tools (such as Syntropa and microbetag) can consume.
 
-**grownet** was called crossfeed until 2026-09-27 (#71). The package, the module and the command are
+grow**net** was called crossfeed until 2026-09-27 (#71). The package, the module and the command are
 `grownet`; the repository keeps the old name for now, so its address is still `crossfeed-bio/crossfeed`.
 
 It is a thin client: it pulls from mGrowthDB and emits a network. Nothing to host, nothing to pay for on a
@@ -56,7 +56,7 @@ The zip's `README.txt` says the same, for whoever unzips it.
 ### With uv (macOS, Linux and Windows)
 
 The quickest route is [uv](https://docs.astral.sh/uv/), which fetches a suitable Python by itself. The
-Python that ships with macOS (3.9) is too old for **grownet**, and uv avoids that. Install uv once:
+Python that ships with macOS (3.9) is too old for grow**net**, and uv avoids that. Install uv once:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -99,9 +99,9 @@ From a clone, with Python 3.10 or newer: the setup and the checks are in
 
 ## Quickstart
 
-From a clone of the repository, run the first slice offline, from the synthetic fixture in
+From a clone of the repository, run it offline first, from the synthetic fixture in
 `tests/fixtures` (no network), to see a network. The fixture is part of the repository, not of an
-installed **grownet**, so after an install use the live commands below instead.
+installed grow**net**, so after an install use the live commands below instead.
 
 ```
 python -m grownet derive SMGDB00000004 --fixture tests/fixtures/example_interactions.json
@@ -113,7 +113,7 @@ Run it live against mGrowthDB:
 python -m grownet derive SMGDB00000004 --live
 ```
 
-On the published study SMGDB00000004 the provisional baseline recovers Blautia hydrogenotrophica
+On the published study SMGDB00000004 the default derivation recovers Blautia hydrogenotrophica
 facilitating Faecalibacterium prausnitzii, consistent with hydrogen and formate cross-feeding. Write the
 result to a file and check it against the format:
 
@@ -124,17 +124,21 @@ python -m grownet validate network.json
 
 ## What it does
 
-Given a set of query organisms, **grownet** builds an interaction network on the fly from mGrowthDB
-co-growth measurements. Each edge is a directed, condition-specific interaction (facilitation, inhibition,
-or neutral) with its strength, its significance, and the experimental condition it holds in. Every edge
-carries its provenance: the study or studies it was derived from, so attribution resolves at the edge
-level.
+Given a set of query organisms, grow**net** builds an interaction network on the fly from mGrowthDB
+co-growth measurements. Each edge is a directed interaction, facilitation or inhibition, with its
+strength, the evidence behind it (p-value, q-value, significance) and the condition and `medium` it holds
+in. An edge is specific to that condition: comparisons never mix media. Every edge carries its
+provenance, the study or studies it was derived from, so attribution resolves at the edge level.
+
+A network can leave in several shapes: the neutral JSON, GraphML for Cytoscape and friends, the adjacency
+matrix, and the parameters of a generalized Lotka-Volterra simulation, which the companion R package
+receives over a local port.
 
 The pipeline has three seams: a client that pulls raw growth from mGrowthDB (`grownet.mgrowthdb`), a
-derivation step that turns growth into interaction records (`grownet.derive`, the part you will
-replace), and the neutral network model the records map into (`grownet.model`). A first slice targets
-the Faecalibacterium prausnitzii and Blautia hydrogenotrophica pair, shown feeding Syntropa, as the
-concrete demonstration of the seam.
+derivation step that turns growth into interaction records (`grownet.derive`, the part you would
+replace), and the neutral network model the records map into (`grownet.model`). The Faecalibacterium
+prausnitzii and Blautia hydrogenotrophica pair, shown feeding Syntropa, is the worked example of that
+seam.
 
 ## The command line
 
@@ -202,20 +206,23 @@ opens it in the browser:
 python -m grownet gui
 ```
 
-The tool version shows next to its name, and a Help page introduces the idea (after Gause, with a figure), explains every advanced setting and arc
-attribute, the main design decisions, the command line, what to do when no network comes back, and where
-to report a problem; an About page says who built it and links this repository. Type species names (or NCBI taxon ids, or a genus for all its species), one per line, and press "Find
-interactions", or press All to derive every study in mGrowthDB. **grownet** resolves
-the names to taxon ids from mGrowthDB's own strain records, finds the studies holding them, derives the
-interactions, and shows them as a table with downloads for JSON, GraphML and the adjacency matrix. A
-second box beside the species says **where** to look, and is optional: a medium (matched as text against
-the medium name mGrowthDB records, the experiment description and its name, so `wilkins` finds every
-spelling of Wilkins-Chalgren), an experiment id or a study id. Naming a comparison keeps the monocultures
-it is made against. Every arc records its `medium`, so a network says which environments it came from. Every
-setting sits behind "Advanced settings" with the same defaults the command line uses, except **Report
-growth rates**: it adds each organism's growth rate in monoculture as its own download and turns on **Get
-gLV parameters**, the zip a generalized Lotka-Volterra simulator takes. The **gLV mode** button beside All
-sets it, together with leaving out drop-out communities.
+**Two boxes.** In the first, species names, strains, genera or NCBI taxon ids, one per line; grow**net**
+resolves them to taxon ids from mGrowthDB's own strain records, finds the studies holding them, derives
+the interactions, and shows them as a table. The second is optional and says **where** to look: a medium,
+matched as text against the medium name mGrowthDB records, the experiment description and its name (so
+`wilkins` finds every spelling of Wilkins-Chalgren), an experiment id or a study id. Naming a comparison
+keeps the monocultures it is made against, and every arc records its `medium`.
+
+**Four buttons.** Find interactions; Example, which fills the first box with a pair that gives a result;
+All, which derives every study in mGrowthDB; and the gLV mode switch, which sets what a simulation needs
+(growth rates on, drop-out communities off) and switches back when pressed again. Every setting sits
+behind "Advanced settings", with the same defaults the command line uses.
+
+**The result** carries the network in JSON, GraphML or the adjacency matrix, Send to Cytoscape, the
+report, and, with growth rates on, their own CSV and Get gLV parameters. A Help page introduces the idea
+(after Gause, with a figure) and explains the boxes, every setting and arc attribute, the gLV files and
+the R package, the main design decisions, the command line, and what to do when no network comes back; an
+About page says who built it and links this repository.
 
 The page is served from the standard library on 127.0.0.1 with a token in its URL, renders in Python with
 no JavaScript, and uploads nothing: the data is pulled from mGrowthDB to your machine, and the results
@@ -223,8 +230,9 @@ stay there.
 
 ## Simulate it in R
 
-Press **gLV mode** beside All and the two settings a simulation needs are set: growth rates on, drop-out
-communities off (`--glv-mode` on the command line). The result section's **gLV parameters** control then
+Press the **gLV mode** switch beside All and the two settings a simulation needs are set in Advanced
+settings: **Report growth rates** on and **Include drop-out communities** off, since a drop-out arc may act
+through a third species (`--glv-mode` on the command line, or `--report-rates --no-dropout`). The result section's **gLV parameters** control then
 either downloads the zip or sends the parameters straight into a running R session. The companion package is in [`r/`](r), and it
 assumes no simulator: it hands over a plain matrix and a plain vector, with a helper that shapes them for
 [miaSim](https://bioconductor.org/packages/release/bioc/html/miaSim.html).
@@ -253,8 +261,7 @@ The caveats travel as data rather than as text to be read first: the object prin
 `glv_matrix()` warns and names the cells that hold the stated extreme (+10 obligate, -10 abolished) and
 takes `placeholders = "na"` or `"zero"` to convert them, `glv_scale()` brings off-diagonal cells that
 outweigh the self-limitation down to a size a simulation survives, and `as_miasim()` stops when an
-organism has no growth rate, since a simulation cannot invent one. `grownet derive ... --report-rates
---to-r` does the same from the command line, and `grownet_glv(url)` reads the parameters from the page
+organism has no growth rate, since a simulation cannot invent one. `grownet derive ... --report-rates --to-r` does the same from the command line, and `grownet_glv(url)` reads the parameters from the page
 when no port can be opened. The R package's own README is [`r/README.md`](r/README.md).
 
 ## Send it to Cytoscape
@@ -404,7 +411,9 @@ remaining one. The arc is labeled `evidence: dropout` because the removed member
 species. Drop-out arcs are included by default; `--no-dropout` (or the matching advanced setting) leaves
 them out. Experiments are pooled into one replicate set only when their conditions (cultivation mode and
 the compartment records: medium, pH, temperature, gases, and so on) are identical, since interactions are
-usually environmentally specific; under different conditions they give separate arcs. Because mGrowthDB
+usually environmentally specific; under different conditions they give separate arcs. The medium is part
+of those conditions, so a comparison never mixes media, and the second box on the page (`--conditions`) is
+how you look at one of them rather than all. Because mGrowthDB
 does not detail medium components well, their descriptions must also agree, apart from a trailing run
 number ("All 1" and "All 2" pool; "with initial acetate" and "without initial acetate" do not).
 Each arc is compared over its own window, the target's curves in the two sets, so one short curve
@@ -612,15 +621,16 @@ choices, and who settled each, are in [docs/METHOD_NOTES.md](docs/METHOD_NOTES.m
 
 Discipline is a feature here. Every commit and every CI run passes the same self-contained gate
 (`checks/gate.py`): no committed secrets, no raw or pulled data (only the synthetic fixtures under
-`tests/fixtures/`), no local-machine paths, imports that resolve to the standard library or the package itself
+`tests/fixtures/`), no local-machine paths, imports that resolve to the standard library or the package
 itself, a documented house style, and a schema contract that keeps the shipped schema in step with the
-code. The tests run on Python 3.10 to 3.12 on Linux, and on Windows and macOS. Get the same checks locally with `make check`, or run them on
-every commit with `pre-commit install`. See [CONTRIBUTING.md](CONTRIBUTING.md). Found a security issue?
+code. The tests run on Python 3.10 to 3.12 on Linux, and on Windows and macOS. Get the same checks locally
+with `make check`, or run them on every commit with `pre-commit install`. The R companion package has its
+own checks, `make r-check` where R is installed, which CI does not run yet. See [CONTRIBUTING.md](CONTRIBUTING.md). Found a security issue?
 Report it privately (see [SECURITY.md](SECURITY.md)), not in a public issue.
 
 ## Attribution and data governance
 
-mGrowthDB is open, so **grownet** pulls from it directly. Per-study licenses are respected by citing every
+mGrowthDB is open, so grow**net** pulls from it directly. Per-study licenses are respected by citing every
 study that supports a network at the edge level, rather than bundling. Unpublished collaborator data is
 used only for the agreed analysis and is never ingested into any downstream corpus. See
 [docs/DATA_GOVERNANCE.md](docs/DATA_GOVERNANCE.md).
