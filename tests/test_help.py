@@ -235,7 +235,11 @@ def test_the_help_links_the_r_package_and_says_how_to_install_it():
     # the line has to work as written: the package is not on main yet, and a stored token can hide a
     # public repository (Karoline hit both, 2026-10-04)
     assert 'ref = &quot;' in section and rbridge.R_BRANCH in section
-    assert "404" in section and "GITHUB_PAT" in section
+    assert "404" in section and "install_local" in section       # the way out needs no GitHub access
+    # Karoline, 2026-10-04: "Sys.setenv(GITHUB_PAT = \"\") was not necessary for me and I don't think we
+    # should recommend it for users, as it alters their system settings in ways that can affect them
+    # negatively." So the help never tells a reader to change their environment to install the package.
+    assert "GITHUB_PAT" not in html and "Sys.setenv" not in html
     assert "glv_matrix()" in section and "as_miasim()" in section and "glv_scale()" in section
     assert "assumes no simulator" in section            # it works with other simulators and with own code
 

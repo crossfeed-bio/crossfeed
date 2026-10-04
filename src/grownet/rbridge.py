@@ -30,11 +30,14 @@ REPOSITORY_SLUG = "crossfeed-bio/crossfeed"
 # quote INSTALL_R, once it is on main (Karoline hit the 404 this causes on 2026-10-04).
 R_BRANCH = "media-and-experiments"
 INSTALL_R = f'remotes::install_github("{REPOSITORY_SLUG}", subdir = "r", ref = "{R_BRANCH}")'
-# Why an install can still fail on a public repository: a token git stored for another account or scope
-# makes GitHub answer 404 rather than serving it anonymously.
+# Why an install can fail on a public repository: a GitHub token stored on the machine, for another
+# account or scope, makes GitHub answer 404 instead of serving it anonymously. The way around it is a
+# local install, which needs no GitHub access; clearing the token is not suggested, since that changes
+# the session for everything else in it (Karoline, 2026-10-04: "I don't think we should recommend it for
+# users, as it alters their system settings in ways that can affect them negatively").
 INSTALL_TROUBLE = ('If that fails with "HTTP error 404", a GitHub token stored on this machine is being '
-                   'used and cannot see the repository: run Sys.setenv(GITHUB_PAT = "") and try again, or '
-                   'install from a clone with remotes::install_local("<the repository>/r").')
+                   'used and cannot see the repository. Installing from a clone needs no GitHub access: '
+                   'remotes::install_local("<the repository>/r"), or R CMD INSTALL r in a terminal.')
 
 
 

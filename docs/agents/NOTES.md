@@ -543,7 +543,9 @@ simulator takes (register item 32, Karoline 2026-10-03). What a later agent need
   `main` yet; drop the ref from `rbridge.INSTALL_R` and from the three texts that quote it (the help page,
   the page hint, both READMEs) once it merges. A plain `install_github` on a public repository can still
   answer 404 when git has stored a token that cannot see it, which is what `rbridge.INSTALL_TROUBLE` says
-  (Karoline hit both on 2026-10-04).
+  (Karoline hit both on 2026-10-04). It points at `install_local` from a clone and **never at clearing the
+  token**: "it alters their system settings in ways that can affect them negatively" (Karoline, same day).
+  A test in `tests/test_help.py` keeps the help page free of that advice.
 - Checking the R side: `R CMD build r && R CMD check --no-manual grownet_0.1.0.tar.gz`, or `make r-check`.
   The tests live in `r/tests/testthat` and include a real POST into the listener.
 

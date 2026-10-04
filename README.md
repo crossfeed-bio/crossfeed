@@ -239,8 +239,8 @@ tse <- do.call(miaSim::simulateGLV, as_miasim(glv_scale(glv)))
 
 The `ref` names the branch the package is on until it is merged; after that it can be left out. If the
 install answers `HTTP error 404` on this public repository, a GitHub token stored on the machine is being
-used and cannot see it: run `Sys.setenv(GITHUB_PAT = "")` and try again, or install from a clone with
-`remotes::install_local("<the repository>/r")`.
+used and cannot see it; installing from a clone needs no GitHub access at all:
+`remotes::install_local("<the repository>/r")`, or `R CMD INSTALL r` in a terminal.
 
 The caveats travel as data rather than as text to be read first: the object prints them every time,
 `glv_matrix()` warns and names the cells that hold the stated extreme (+10 obligate, -10 abolished) and
