@@ -223,8 +223,9 @@ stay there.
 
 ## Simulate it in R
 
-With Report growth rates on, the result section's **gLV parameters** control either downloads the zip or
-sends the parameters straight into a running R session. The companion package is in [`r/`](r), and it
+Press **gLV mode** beside All and the two settings a simulation needs are set: growth rates on, drop-out
+communities off (`--glv-mode` on the command line). The result section's **gLV parameters** control then
+either downloads the zip or sends the parameters straight into a running R session. The companion package is in [`r/`](r), and it
 assumes no simulator: it hands over a plain matrix and a plain vector, with a helper that shapes them for
 [miaSim](https://bioconductor.org/packages/release/bioc/html/miaSim.html).
 

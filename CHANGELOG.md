@@ -7,13 +7,14 @@ content.
 ## [0.1.1] (unreleased)
 
 ### Changed
-- **Include drop-out communities moved out of Advanced settings**, beside the All button and Report growth
-  rates, so it is visible that it is on (Karoline, 2026-10-04: "for gLV, including drop-out communities are
-  not a good idea, but they are enabled by default. I'd like to keep them by default. I suggest moving this
-  out of advanced options and next to 'Report growth rates', so people see it's enabled"). The default is
-  unchanged, and the text beside it says to untick it for gLV parameters, where a coefficient is meant to be
-  the direct effect of one organism on another. The gLV package and the R object now count the drop-out arcs
-  they hold, or say that none is there.
+- **A gLV mode button beside All** (`--glv-mode`), which sets what a simulation needs: Report growth rates
+  on and Include drop-out communities off, both left in sight in Advanced settings with their defaults
+  unchanged (Karoline, 2026-10-04: "how about moving both options back to advanced parameters, with their
+  default settings, and instead introduce a button 'gLV mode' next to 'All', which will enable growth rate
+  collection and disable drop-out communities?"). A drop-out arc may act through a third species, while a
+  gLV coefficient is meant to be the direct effect of one organism on another. The text beside the buttons
+  is two sentences now, and the gLV package and the R object count the drop-out arcs they hold, or say that
+  none is there.
 - Opening the page's address without its token, by hand or from a tab left over from an earlier run, shows
   grownet's own page saying where to find the link, instead of a bare server error (Karoline, 2026-10-04:
   "localhost:8791 shows an error"). It is still refused, with 403, and the page never shows the token.

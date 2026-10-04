@@ -469,15 +469,28 @@ def with_rates(monkeypatch):
     monkeypatch.setattr(gui, "growth_rates", lambda *a, **kw: (dict(RATES), []))
 
 
-def test_report_growth_rates_is_a_checkbox_next_to_the_all_button(server):
+def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
+    """Karoline, 2026-10-04, after a first attempt put two checkboxes in the bar: "this is now quite
+    complex. So how about moving both options back to advanced parameters, with their default settings,
+    and instead introduce a button 'gLV mode' next to 'All', which will enable growth rate collection and
+    disable drop-out communities? The GUI text can then be simplified somewhat."""
     base, token = server
     _, page, _ = _open(f"{base}/?token={token}")
     bar = page[page.index('<div class="bar">'):]
     bar = bar[:bar.index("</div>")]
-    assert 'name="all"' in bar and 'name="report_rates"' in bar     # the same row as All
-    assert bar.index('name="report_rates"') > bar.index('name="all"')
-    assert "Report growth rates" in bar
-    assert 'name="report_rates"' not in page[page.index("<details"):]   # not in Advanced settings
+    assert 'name="glv_mode" value="1">gLV mode' in bar
+    assert bar.index('name="glv_mode"') > bar.index('name="all"')        # next to All
+    assert not re.findall(r'<input[^>]*name="([^"]+)"', bar)             # and no checkboxes in the bar
+    assert len(bar) < 600                                                # the text beside it stays short
+
+    # pressing it ticks growth rates and unticks drop-out communities, in Advanced settings where they live
+    _, pressed, _ = _open(f"{base}/run?token={token}", urllib.parse.urlencode(
+        {"species": A, "glv_mode": "1", "include_dropout": "1", "only_entered": "1"}).encode())
+    settings = pressed[pressed.index("<details>"):]
+    assert 'name="report_rates" value="1" checked' in settings
+    assert 'name="include_dropout" value="1">' in settings               # off
+    assert "gLV mode: growth rates on, drop-out communities off" in pressed
+    assert f">{A}</textarea>" in pressed                                 # and what was typed stays
 
 
 def test_the_download_menu_offers_the_adjacency_matrix(server):
@@ -685,16 +698,44 @@ def test_a_medium_that_matches_nothing_leaves_a_result_that_explains_itself(serv
     assert "no experiment of this study matches" in report
 
 
-def test_drop_out_communities_are_visible_and_on_beside_the_growth_rates(server):
-    """Karoline, 2026-10-04: "for gLV, including drop-out communities are not a good idea, but they are
-    enabled by default. I'd like to keep them by default. I suggest moving this out of advanced options
-    and next to 'Report growth rates', so people see it's enabled. The GUI text can mention that it's
-    better disabled for gLV."""
+def test_drop_out_communities_stay_on_by_default_in_advanced_settings(server):
+    """She kept the default: "I'd like to keep them by default." What gLV mode changes, it changes there,
+    in sight, rather than behind the button."""
     base, token = server
     _, page, _ = _open(f"{base}/?token={token}")
-    bar = page[page.index('<div class="bar">'):]
-    bar = bar[:bar.index("</div>")]
-    assert 'name="include_dropout" value="1" checked' in bar     # on by default, in plain sight
-    assert bar.index('name="include_dropout"') > bar.index('name="report_rates"')   # next to it
-    assert "untick it for gLV parameters" in bar
-    assert 'name="include_dropout"' not in page[page.index("<details>"):]   # and out of Advanced settings
+    settings = page[page.index("<details>"):]
+    assert 'name="include_dropout" value="1" checked' in settings
+    assert "gLV mode unticks it" in settings                     # the setting says which button touches it
+
+
+def test_glv_mode_on_the_command_line_sets_the_same_two_settings(capsys, monkeypatch, tmp_path):
+    """The button has its flag, so the command line still does everything the page does."""
+    from grownet import gui as gui_module
+    from grownet.__main__ import build_parser, main
+    derive = next(a for a in build_parser()._actions if a.dest == "cmd").choices["derive"]
+    assert "--glv-mode" in {o for action in derive._actions for o in action.option_strings}
+
+    monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", FakeClient)
+    monkeypatch.setattr(gui_module, "growth_rates", lambda *a, **kw: (dict(RATES), []))
+    captured = {}
+    original = gui_module.run_query
+
+    def remember(client, entries, settings=None, *args, **kw):
+        captured["settings"] = settings
+        return original(client, entries, settings, *args, **kw)
+
+    monkeypatch.setattr(gui_module, "run_query", remember)
+    out = tmp_path / "net.json"
+    assert main(["derive", "--live", "--species", A, "--glv-mode", "--out", str(out)]) == 0
+    assert "gLV mode: growth rates on, drop-out communities off" in capsys.readouterr().err
+    assert captured["settings"]["report_rates"] is True
+    assert captured["settings"]["include_dropout"] is False
+
+
+def test_the_page_and_the_command_line_mean_the_same_by_glv_mode():
+    """One definition of the mode, used by both."""
+    from grownet.gui import DEFAULTS, glv_mode
+    applied = glv_mode(dict(DEFAULTS))
+    assert applied["report_rates"] is True and applied["include_dropout"] is False
+    assert {k: v for k, v in applied.items() if DEFAULTS[k] != v} == {"report_rates": True,
+                                                                     "include_dropout": False}

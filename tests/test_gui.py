@@ -153,20 +153,20 @@ def test_form_hides_every_setting_behind_one_button():
     page = render_form("tok")
     assert page.count("<details>") == 1 and "Advanced settings" in page
     head, _, tail = page.partition("<details>")
-    # the two boxes and three buttons are visible, and of the settings only the two checkboxes Karoline
-    # asked to have in plain sight; everything else sits behind the button
+    # only the two boxes and the four buttons are visible; every setting sits behind the button
+    # (Karoline, 2026-10-04, after a first attempt put two of them in the bar: "this is now quite complex.
+    # So how about moving both options back to advanced parameters ... and instead introduce a button
+    # 'gLV mode' next to 'All'")
     assert "<select" not in head
-    visible_inputs = set(re.findall(r'<input[^>]*name="([^"]+)"', head))
-    assert visible_inputs == {"report_rates", "include_dropout"}
+    assert not re.findall(r'<input[^>]*name="([^"]+)"', head)
     assert 'name="metric"' in tail and 'name="spike_factor"' in tail
     # the no-growth rule's two numbers are advanced settings, shown with the rule's own defaults (#37)
     assert 'name="no_growth_alpha"' in tail and 'name="no_growth_factor"' in tail
     assert 'name="include_low_quality"' in tail and 'name="include_neutral"' not in page
-    # drop-out communities are included by default and the box is in plain sight, not behind the button
-    # (Karoline, 2026-10-04: "I'd like to keep them by default ... moving this out of advanced options and
-    # next to Report growth rates, so people see it's enabled")
-    assert 'name="include_dropout" value="1" checked' in head
-    assert 'name="include_dropout"' not in tail
+    # drop-out communities are included by default, and both gLV settings are advanced settings again
+    assert 'name="include_dropout" value="1" checked' in tail
+    assert 'name="report_rates" value="1">' in tail            # off by default
+    assert "gLV mode" in head                                   # the button that sets them both
 
 
 @pytest.mark.parametrize("form, expected", [
@@ -510,7 +510,7 @@ def test_the_all_button_sits_next_to_example_with_its_explainer(server):
     base, token = server
     form = _get(f"{base}/?token={token}")
     assert '<button type="submit" name="example" value="1">Example</button>\n<button type="submit" name="all"' in form
-    assert "All ignores the box and derives every study in mGrowthDB" in form
+    assert "All derives every study in mGrowthDB, ignoring the boxes" in form
     with urllib.request.urlopen(f"{base}/run?token={token}", data=b"all=1&species=", timeout=10) as r:
         page = r.read().decode("utf-8")
     assert "All of mGrowthDB" in page or "Searching" in page             # a quick fake search, or its progress

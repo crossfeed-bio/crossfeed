@@ -146,6 +146,8 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
     p_value = _esc(s["max_adjusted_p"] if s["max_adjusted_p"] is not None else ADJUSTED_P_DEFAULT)
     checked = " checked" if s["only_entered"] else ""
     low = " checked" if s["include_low_quality"] else ""
+    rates_on = " checked" if s["report_rates"] else ""
+    dropout = " checked" if s["include_dropout"] else ""
     absent = " checked" if s["include_absent"] else ""
     non_batch = " checked" if s["include_non_batch"] else ""
     corrections = "".join(f"<option value=\"{c}\"{' selected' if s['correction'] == c else ''}>{label}</option>"
@@ -168,6 +170,15 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
 <div class="row"><label>Growth rate window
   <input name="rate_window" type="text" size="6" value="{_esc(s['rate_window'])}"></label>
   <span class="muted">with easylinear: the points in each fitted window (default 5, as mGrowthDB)</span></div>
+<div class="row"><label><input type="checkbox" name="report_rates" value="1"{rates_on}>
+  Report growth rates</label>
+  <span class="muted">each organism's maximum specific growth rate in monoculture, as its own download and
+  as the rates a gLV simulation takes; off by default, since a rate costs a fit per curve. gLV mode turns
+  it on</span></div>
+<div class="row"><label><input type="checkbox" name="include_dropout" value="1"{dropout}>
+  Include drop-out communities</label>
+  <span class="muted">arcs from a community compared with the same community without one member, labeled
+  evidence dropout; on by default. Such an arc may act through a third species, so gLV mode unticks it</span></div>
 <div class="row"><label><input type="checkbox" name="include_low_quality" value="1"{low}>
   Show low-quality edges</label>
   <span class="muted">pooled strains, a chemostat curve, or a drop-out whose removed member was still detected;
@@ -248,9 +259,7 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
     on the page above it and can be changed and run again.
     """
     note = f"<p class=\"note\">{_esc(message)}</p>" if message else ""
-    chosen = {**DEFAULTS, **(settings or {})}
-    rate_box = " checked" if chosen["report_rates"] else ""
-    dropout_box = " checked" if chosen["include_dropout"] else ""
+
     return _page(f"""{note}<form method="post" action="/run?token={_esc(token)}">
 <div class="boxes">
 <div class="box">
@@ -273,16 +282,9 @@ named comparison keeps the monocultures it is made against. Empty means every me
 <div class="bar"><button class="primary" type="submit">Find interactions</button>
 <button type="submit" name="example" value="1">Example</button>
 <button type="submit" name="all" value="1">All</button>
-<label class="beside"><input type="checkbox" name="report_rates" value="1"{rate_box}>
-Report growth rates</label>
-<label class="beside"><input type="checkbox" name="include_dropout" value="1"{dropout_box}>
-Include drop-out communities</label>
-<span class="muted">All ignores the box and derives every study in mGrowthDB, with every partner; it reads
-every study, so it takes longer (half a minute or so). Report growth rates adds each organism's growth rate
-in monoculture, as its own download and as the growth rates a gLV simulation needs. Drop-out communities,
-a community compared with the same community without one member, are included by default and labeled
-evidence dropout; such an arc may act through a third species, so untick it for gLV parameters, where a
-coefficient is meant to be the direct effect of one organism on another.</span></div>
+<button type="submit" name="glv_mode" value="1">gLV mode</button>
+<span class="muted">All derives every study in mGrowthDB, ignoring the boxes (half a minute or so).
+gLV mode sets what a simulation needs: growth rates on, drop-out communities off.</span></div>
 {_settings_block(settings or {}, token, job)}
 </form>{below}""", token, refresh, job)
 
@@ -653,6 +655,17 @@ def _no_growth(s: dict, which: str) -> float:
     """A no-growth setting as the form shows it: the value chosen, or the rule's default."""
     value = s.get(f"no_growth_{which}")
     return value if value is not None else getattr(interaction, f"NO_GROWTH_{which.upper()}")
+
+
+# What gLV mode sets, and what the page says when it is pressed.
+GLV_MODE_MESSAGE = ("gLV mode: growth rates on, drop-out communities off. Both are in Advanced settings; "
+                    "name one medium in the second box to keep a simulation to one environment.")
+
+
+def glv_mode(settings: dict) -> dict:
+    """The settings a gLV simulation needs: a growth rate per organism, and no arc that may act through a
+    third species (Karoline, 2026-10-04)."""
+    return {**settings, "report_rates": True, "include_dropout": False}
 
 
 def parse_settings(form: dict) -> dict:
@@ -1125,6 +1138,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         entries = form.get("species", [""])[0].splitlines()
         settings = parse_settings(form)
+        if form.get("glv_mode"):
+            # Karoline, 2026-10-04: a button "which will enable growth rate collection and disable drop-out
+            # communities". It sets them and shows them in Advanced settings, so nothing is hidden and the
+            # search is still the user's to start.
+            settings = glv_mode(settings)
+            self._send(render_form(self.token, "\n".join(entries), settings, message=GLV_MODE_MESSAGE,
+                                   conditions=settings.get("conditions", "")))
+            return
         if form.get("example"):
             self._send(render_form(self.token, "\n".join(EXAMPLE), settings,
                                    conditions=settings.get("conditions", "")))

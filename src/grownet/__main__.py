@@ -99,6 +99,10 @@ def _rate_flags(a) -> str:
 
 
 def _derive(a):
+    if a.glv_mode:
+        # the button sets both, and says so, rather than leaving a reader to remember them (#113)
+        a.report_rates, a.no_dropout = True, True
+        print("gLV mode: growth rates on, drop-out communities off", file=sys.stderr)
     problem = _rate_flags(a)
     if problem:
         print(problem, file=sys.stderr)
@@ -484,6 +488,9 @@ def build_parser() -> argparse.ArgumentParser:
                                "replicates) count as growth whatever the test says (default 1.5; 2 is "
                                "stricter; 0 leaves the test alone)")
 
+    settings.add_argument("--glv-mode", action="store_true",
+                          help="the page's gLV mode button: report growth rates and leave out drop-out "
+                               "communities, which is what a generalized Lotka-Volterra simulation needs")
     settings.add_argument("--report-rates", action="store_true",
                           help="also report each organism's maximum specific growth rate in monoculture, the "
                                "median over replicates and studies (the page's Report growth rates); needed "
