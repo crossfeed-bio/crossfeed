@@ -66,6 +66,9 @@ content.
 - `glv_scale()` in the R package, and a line in the gLV README and the help: the cells are often stronger
   than the -1 on the diagonal, and a simulation run on them unchanged can grow without bound and come back
   as NA. Measured on SMGDB00000004, where the unscaled matrix diverges and the scaled one settles.
+  **The factor is a free parameter, not a calibration** (Craig, reviewing 0.2.0): nothing in the growth
+  data fixes the scale, so whoever simulates chooses it, and that choice, not the measurements, sets where
+  the simulation settles. Report the factor you used with any result that depends on it.
 - Filter on adjusted p-value (`--max-adjusted-p Q`), an advanced setting off by default (register item
   31): interactions whose adjusted p-value is above the threshold (0.05 unless another is given) are left
   out and counted (`meta.hidden.not_significant`, `meta.statistics.filter`); absent and undetermined arcs

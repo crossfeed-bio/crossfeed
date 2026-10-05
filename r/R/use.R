@@ -160,6 +160,10 @@ as_miasim <- function(x, x0 = NULL, missing_rate = NULL, placeholders = c("keep"
 #' off-diagonal cell by one factor keeps their signs and their relative sizes and brings the strongest
 #' one to `max_effect`.
 #'
+#' The factor is a free parameter, not a calibration: nothing in the growth data fixes the scale, so
+#' whoever simulates chooses it, and that choice, rather than the measurements, sets where the simulation
+#' settles. Report the factor you used with any result that depends on it (Craig, reviewing 0.2.0).
+#'
 #' This is a modeling choice, so nothing here does it for you (Karoline, 2026-10-03: "keep glv_scale off
 #' by default"): the object arrives unscaled, carrying the numbers grownet derived, and this function
 #' returns a copy that remembers the factor it used.

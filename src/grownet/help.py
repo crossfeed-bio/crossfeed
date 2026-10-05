@@ -663,7 +663,10 @@ a gLV coefficient is a per-capita effect in absolute units, so scale them for yo
 them unchanged. Cells are often
 stronger than the -1 on the diagonal, a partner outweighing an organism's own self-limitation, and a
 simulation run on them unchanged can grow without bound and come back as NA; the R package below has
-<code>glv_scale()</code> for that.</p>
+<code>glv_scale()</code> for that. That factor is a free parameter, not a calibration: nothing in the
+growth data fixes the scale, so whoever simulates chooses it, and that choice, rather than the
+measurements, sets where the simulation settles. Report the factor you used with any result that depends
+on it.</p>
 
 <p><strong>In R, with the companion package.</strong> The same control sends the parameters straight into
 a running R session, which is what the R package in this project is for. It assumes no simulator: it
