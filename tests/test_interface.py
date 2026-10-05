@@ -253,7 +253,8 @@ def test_the_page_and_the_command_line_start_from_the_same_defaults():
            "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch, "studies": a.study,
            "exclude_studies": a.exclude_studies, "only_entered": not a.all_partners, "merge_arcs": a.merge_arcs,
            "min_studies": a.min_studies, "merge_genera": a.merge_genera, "no_growth_alpha": a.no_growth_alpha,
-           "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p}
+           "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p,
+           "report_rates": a.report_rates}
     assert set(cli) == set(gui.DEFAULTS)
     assert {k: v for k, v in cli.items() if v != gui.DEFAULTS[k]} == {}
 
@@ -443,3 +444,146 @@ def test_asking_for_the_absent_arcs_puts_them_in_the_file(server):
     doc = json.loads(as_json)
     assert len(doc["edges"]) > headline and [e for e in doc["edges"] if e["status"] == "absent"]
     assert doc["meta"]["filters"]["include_absent"] is True
+
+
+# ---- the adjacency matrix, the growth rates and the gLV parameters (#108) -------------------------
+#
+# Karoline, 2026-10-03: "The next job is supporting another network export format: the adjacency matrix.
+# In addition, grownet should be able to provide parameters for generalized Lotka-Volterra (gLV) simulation
+# tools. I think this requires another input checkbox, next to the All button: report growth rates ...
+# Growth rates, when enabled, should also be a separate downloadable output item. Then, in the Result
+# section, we need another extra button to generate gLV parameters from the current run (when 'Report
+# growth rates' was enabled)."
+
+RATES = {"ncbi:853": {"name": A, "rate": 0.4, "unit": "1/h", "n": 4, "studies": ["SMGDB00000001"],
+                      "per_study": {"SMGDB00000001": 0.4}, "other_units": []},
+         "ncbi:53443": {"name": B, "rate": 0.2, "unit": "1/h", "n": 4, "studies": ["SMGDB00000001"],
+                        "per_study": {"SMGDB00000001": 0.2}, "other_units": []}}
+
+
+@pytest.fixture
+def with_rates(monkeypatch):
+    """The fake study's curves are two points long, too short for a fitted rate, so the rates themselves
+    are given here; `tests/test_growth_rates.py` checks how they are computed."""
+    monkeypatch.setattr(gui, "growth_rates", lambda *a, **kw: (dict(RATES), []))
+
+
+def test_report_growth_rates_is_a_checkbox_next_to_the_all_button(server):
+    base, token = server
+    _, page, _ = _open(f"{base}/?token={token}")
+    bar = page[page.index('<div class="bar">'):]
+    bar = bar[:bar.index("</div>")]
+    assert 'name="all"' in bar and 'name="report_rates"' in bar     # the same row as All
+    assert bar.index('name="report_rates"') > bar.index('name="all"')
+    assert "Report growth rates" in bar
+    assert 'name="report_rates"' not in page[page.index("<details"):]   # not in Advanced settings
+
+
+def test_the_download_menu_offers_the_adjacency_matrix(server):
+    base, token = server
+    page = _finished(base, token)
+    outputs = page[page.index('<div class="bar outputs">'):]
+    assert '<option value="matrix">Adjacency matrix (CSV)</option>' in outputs
+    _, table, headers = _open(f"{base}/download?token={token}&format=matrix")
+    assert headers["Content-Type"].startswith("text/csv")
+    rows = [line.split(",") for line in table.strip().splitlines()]
+    names = rows[0][1:]
+    assert names == sorted(names) and len(rows) == len(names) + 1     # square, one row per organism
+    # the one interaction of the fake study is B facilitating A, so A's row holds it in B's column
+    cell = rows[1 + names.index(A)][1 + names.index(B)]
+    assert float(cell) > 0 and float(rows[1 + names.index(B)][1 + names.index(A)]) == 0
+
+
+def test_without_report_growth_rates_there_are_no_rates_and_no_glv_button(server):
+    base, token = server
+    page = _finished(base, token)
+    assert "Download the growth rates" not in page and "Generate gLV parameters" not in page
+    # and asking for the files anyway says what to do, rather than writing an empty one
+    _, answer, _ = _open(f"{base}/rates.csv?token={token}")
+    assert "tick Report growth rates" in answer
+
+
+def test_the_growth_rates_are_their_own_download_and_bring_the_glv_button(server, with_rates):
+    base, token = server
+    page = _finished(base, token, report_rates="1")
+    outputs = page[page.index('<div class="bar outputs">'):]
+    assert "Download the growth rates (.csv)" in outputs
+    assert "Generate gLV parameters (.zip)" in outputs
+
+    _, table, headers = _open(f"{base}/rates.csv?token={token}")
+    assert headers["Content-Type"].startswith("text/csv")
+    rows = [line.split(",") for line in table.strip().splitlines()]
+    assert rows[0] == ["organism", "growth_rate", "unit", "replicates", "studies"]
+    assert [row[0] for row in rows[1:]] == sorted([A, B])
+    assert dict(zip([r[0] for r in rows[1:]], [r[1] for r in rows[1:]], strict=True))[A] == "0.4"
+
+    # the rates travel with the network too, so a downloaded network says what it was reported with
+    _, as_json, _ = _open(f"{base}/download?token={token}&format=json")
+    reported = json.loads(as_json)["meta"]["growth_rates"]
+    assert reported["organisms"]["ncbi:853"]["rate"] == 0.4 and reported["without_a_rate"] == []
+    assert "median over replicates and studies" in reported["rule"]
+
+
+def test_the_glv_package_holds_a_matrix_with_minus_one_on_the_diagonal_and_the_rates(server, with_rates):
+    import io
+    import zipfile
+    base, token = server
+    _finished(base, token, report_rates="1")
+    with urllib.request.urlopen(f"{base}/glv.zip?token={token}", timeout=10) as r:
+        assert r.headers["Content-Type"] == "application/zip"
+        archive = zipfile.ZipFile(io.BytesIO(r.read()))
+    assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv", "interaction_matrix.csv"]
+    rows = [line.split(",") for line in archive.read("interaction_matrix.csv").decode().strip().splitlines()]
+    names = rows[0][1:]
+    assert [rows[1 + i][1 + i] for i in range(len(names))] == ["-1"] * len(names)
+    assert A in archive.read("growth_rates.csv").decode()
+    readme = archive.read("README.txt").decode()
+    assert "A[i][j] is the effect of j on i" in readme and "not a fitted glv coefficient" in readme.lower()
+
+
+def test_the_command_line_writes_the_matrix_the_rates_and_the_glv_package(monkeypatch, tmp_path, capsys):
+    """Karoline, 2026-10-03: "please make sure all of this is in the CLI and documented". So the page's
+    new outputs have their options, they write the same files, and the report records the rates."""
+    import io
+    import zipfile
+
+    from grownet import gui as gui_module
+    from grownet.__main__ import build_parser, main
+    derive = next(a for a in build_parser()._actions if a.dest == "cmd").choices["derive"]
+    options = {o for action in derive._actions for o in action.option_strings}
+    assert {"--report-rates", "--rates", "--glv"} <= options
+    assert "matrix" in next(a for a in derive._actions if a.dest == "format").choices
+
+    monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", FakeClient)
+    monkeypatch.setattr(gui_module, "growth_rates", lambda *a, **kw: (dict(RATES), []))
+    table, rates_file, package, report = (tmp_path / n for n in
+                                          ("m.csv", "rates.csv", "glv.zip", "report.txt"))
+    assert main(["derive", "--live", "--species", A, B, "--report-rates", "--format", "matrix",
+                 "--out", str(table), "--rates", str(rates_file), "--glv", str(package),
+                 "--report", str(report)]) == 0
+
+    rows = [line.split(",") for line in table.read_text(encoding="utf-8").strip().splitlines()]
+    names = rows[0][1:]
+    assert len(rows) == len(names) + 1
+    assert float(rows[1 + names.index(A)][1 + names.index(B)]) > 0      # B facilitates A, as on the page
+    assert rates_file.read_text(encoding="utf-8").splitlines()[0] == (
+        "organism,growth_rate,unit,replicates,studies")
+    with zipfile.ZipFile(io.BytesIO(package.read_bytes())) as archive:
+        assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv", "interaction_matrix.csv"]
+        matrix_rows = archive.read("interaction_matrix.csv").decode().strip().splitlines()
+    assert [r.split(",")[1 + i] for i, r in enumerate(matrix_rows[1:])] == ["-1", "-1"]
+    text = report.read_text(encoding="utf-8")
+    assert "Report growth rates (--report-rates): on" in text
+    assert "growth rates (growth_rate:easylinear:5 in monoculture" in text
+    assert f"  - {A}: 0.4 1/h, median of 4 monoculture replicate(s)" in text
+
+
+def test_the_files_beside_the_network_need_the_rates_and_say_so(monkeypatch, tmp_path, capsys):
+    from grownet.__main__ import main
+    monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", FakeClient)
+    # the check runs before anything is derived, so no network is written and then refused its files
+    assert main(["derive", "--live", "--species", A, "--glv", str(tmp_path / "glv.zip")]) == 2
+    assert "--glv writes the growth rates of the run, so it needs --report-rates" in capsys.readouterr().err
+    assert not list(tmp_path.iterdir())
+    assert main(["derive", "SMGDB00000001", "--fixture", "x.json", "--report-rates"]) == 2
+    assert "--report-rates reads the monoculture curves, so it needs --live" in capsys.readouterr().err

@@ -144,6 +144,21 @@ def report_text(result: dict) -> str:
         lines += [_edge_line(absent_net, e) for e in absent]
     lines.append("")
 
+    rates = meta.get("growth_rates") or {}
+    if rates:
+        organisms = rates.get("organisms", {})
+        lines.append(f"growth rates ({rates.get('rule', '')}):" if organisms
+                     else "growth rates: asked for, none could be computed")
+        for nid, rate in sorted(organisms.items(), key=lambda kv: str(kv[1].get("name", kv[0])).lower()):
+            per_study = "; ".join(f"{sid} {value:.4g}" for sid, value in sorted(rate.get("per_study", {}).items()))
+            lines.append(f"  - {rate.get('name', nid)}: {rate['rate']:.4g} {rate.get('unit', '')}, median of "
+                         f"{rate.get('n', 0)} monoculture replicate(s)"
+                         + (f" ({per_study})" if per_study else ""))
+        missing = rates.get("without_a_rate") or []
+        if missing:
+            lines.append("  no growth rate (a gLV simulation needs one from elsewhere): " + ", ".join(missing))
+        lines.append("")
+
     skips = condensed(result["skipped"])
     lines.append(f"pairs the data did not support ({len(skips)}):" if skips
                  else "pairs the data did not support: none")

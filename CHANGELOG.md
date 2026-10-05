@@ -54,6 +54,27 @@ content.
   at all. Checked against Cytoscape 3.10.3.
 
 ### Added
+- **The adjacency matrix as an export format** (`--format matrix`, the page's format menu): the network as
+  a square CSV table, a cell holding the log2 mean of the comparison, so `A[i][j]` is the effect of j on i
+  (rows affected, columns the actor). Each organism appears once, so arcs of one pair are merged across
+  conditions and studies by their median; a pair whose arcs disagree in sign is left at 0; an empty cell
+  and an arc below the absence threshold are 0. An obligate interaction carries +10 and an abolished one
+  -10 (Karoline, 2026-10-03: "obligate and abolished arcs need to carry numbers reflecting the strong
+  effect, how about 10 with the appropriate sign?"): neither has a log2 ratio, because one side did not
+  grow at all, so the number is a stated extreme, named cell by cell in the gLV README, and it never enters
+  the median of the arcs that do have a ratio. The diagonal is 0 here, and -1 in the gLV package.
+- **Report growth rates**, a checkbox beside the All button (`--report-rates`), off by default: every
+  organism in the network also gets its maximum specific growth rate in monoculture, by the chosen rate
+  method, the median over the replicates and studies that have one, with each study's own median beside it
+  in `meta.growth_rates`. Batch monocultures only (in a chemostat the rate is the dilution rate, and a rate
+  from a co-culture is growth with a partner). The rates download as their own CSV (`--rates FILE`), and an
+  organism whose curves give no rate is named on the page and in the report, never given a substitute.
+- **Generate gLV parameters** in the result section, with the rates (`--glv FILE`): a zip holding
+  `interaction_matrix.csv` (the matrix with -1 on the diagonal, by convention, for self-limitation),
+  `growth_rates.csv` in the same order, and a `README.txt` that states the conventions, names any pair left
+  at 0 for disagreeing in sign, and names every organism without a rate. The README says plainly that a
+  cell is an effect size, not a fitted gLV coefficient, which is a per-capita effect in absolute units
+  (Karoline, 2026-10-03).
 - Filter on adjusted p-value (`--max-adjusted-p Q`), an advanced setting off by default (register item
   31): interactions whose adjusted p-value is above the threshold (0.05 unless another is given) are left
   out and counted (`meta.hidden.not_significant`, `meta.statistics.filter`); absent and undetermined arcs
