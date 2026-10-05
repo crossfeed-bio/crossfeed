@@ -202,11 +202,25 @@ ratios). This is the setting that unlocks the STRING-style overlay, so it is wor
 - **keep all conditions, tag each edge with its condition** [baseline]: every edge carries its `condition`.
 - **restrict to one medium or condition**: a single-environment network.
 
-Restriction is not available yet: mGrowthDB does not carry structured enough environment metadata to select
-on, as Karoline noted. The viewer shows this control disabled for that reason.
+**Proposed default (Craig): keep all conditions and tag each edge; do not average across media.**
 
-**Proposed default (Craig): keep all conditions and tag each edge; do not average across media.** Add the
-restriction when the metadata supports it.
+SETTLED 2026-10-04 (Karoline), when gLV export made the question concrete: "Now that we support gLV
+parameter export, I have to weaken my stance on environmental filtering, since it's one thing to export a
+network of known interactions and another to do a gLV simulation. Concretely, I propose a second, optional,
+input field next to the first one with the taxa. Users can either specify names of media or a list of
+experiment identifiers there (so this last item can then be removed from the advanced options)." So the
+default is unchanged, every condition kept and every arc tagged, and restriction is now a selection the
+user makes in a second box: a medium matched as text, an experiment id, or a study id ("Only these studies"
+left Advanced settings). Choosing among her agent's options: naming a comparison also keeps the
+monocultures it is made against, and every arc now carries its `medium`.
+
+Her premise that media are "not systematically provided by mGrowthDB" turned out to be too pessimistic:
+every one of the 559 experiments carries a structured `mediumName` on its compartments. The spellings are
+free text though (Wilkins-Chalgren appears four ways, one misspelled "Anerobe"), and what tells experiments
+of one study apart lives only in their descriptions (study 2: BT_WC and BT_MUCIN on one medium), so the
+match is a case-insensitive substring over the medium name, the description and the experiment name.
+Selecting changes no derivation rule: the medium is part of the conditions key, so a comparison never mixed
+media in the first place.
 
 ## 9. Drop-out (leave-one-out) communities
 
@@ -706,8 +720,8 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
 25. **All of mGrowthDB** (Karoline, 2026-09-28). Her words: "a button next to 'Example' that says: 'All'.
    If this button is pushed, the input field is ignored and instead, the entire interaction network is
    fetched from mGrowthDB (there can be a short explainer next to the button)." Every study the species
-   list is read from is derived, with every partner kept; Only these studies and Exclude these studies
-   still apply. `derive --live --all` does the same from the command line.
+   list is read from is derived, with every partner kept; the second box (media, experiments or studies,
+   item 8) and Exclude these studies still apply. `derive --live --all` does the same from the command line.
 
 26. **The time window of a bi-culture arc** (open; found by the audit of 2026-09-28). Curves are compared
    over the window they share, so none is extrapolated. For a drop-out arc that window is the target's own

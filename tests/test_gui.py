@@ -144,7 +144,7 @@ def test_only_entered_species_filters_other_pairs():
 
 
 def test_a_study_that_fails_is_reported_not_raised():
-    r = run_query(FakeClient(), ["853"], {"studies": "SMGDB99999999"})
+    r = run_query(FakeClient(), ["853"], {"conditions": "SMGDB99999999"})
     assert r["errors"] and "SMGDB99999999" in r["errors"][0]
     assert r["network"].edges == []
 
@@ -153,24 +153,31 @@ def test_form_hides_every_setting_behind_one_button():
     page = render_form("tok")
     assert page.count("<details>") == 1 and "Advanced settings" in page
     head, _, tail = page.partition("<details>")
-    assert "<select" not in head and "<input name=" not in head    # nothing but the species box is visible
+    # only the two boxes and the four buttons are visible; every setting sits behind the button
+    # (Karoline, 2026-10-04, after a first attempt put two of them in the bar: "this is now quite complex.
+    # So how about moving both options back to advanced parameters ... and instead introduce a button
+    # 'gLV mode' next to 'All'")
+    assert "<select" not in head
+    assert not re.findall(r'<input[^>]*name="([^"]+)"', head)
     assert 'name="metric"' in tail and 'name="spike_factor"' in tail
     # the no-growth rule's two numbers are advanced settings, shown with the rule's own defaults (#37)
     assert 'name="no_growth_alpha"' in tail and 'name="no_growth_factor"' in tail
     assert 'name="include_low_quality"' in tail and 'name="include_neutral"' not in page
-    # drop-out communities are included by default, so the box starts ticked (#47)
+    # drop-out communities are included by default, and both gLV settings are advanced settings again
     assert 'name="include_dropout" value="1" checked' in tail
+    assert 'name="report_rates" value="1">' in tail            # off by default
+    assert "gLV mode" in head                                   # the button that sets them both
 
 
 @pytest.mark.parametrize("form, expected", [
     # an unticked checkbox is simply absent from a post
     ({}, {**DEFAULTS, "only_entered": False, "include_dropout": False}),
     ({"metric": ["growth_rate"], "rate_method": ["baranyi"], "rate_window": ["7"], "spike_factor": ["50"],
-      "studies": [" S1 "], "only_entered": ["1"],
+      "conditions": [" S1 "], "only_entered": ["1"],
       "include_low_quality": ["1"], "include_dropout": ["1"], "no_growth_alpha": ["0.01"],
       "no_growth_factor": ["4"], "exclude_studies": [" SMGDB00000008 "], "merge_arcs": ["1"], "min_studies": ["2"],
       "merge_genera": ["1"]},
-     {"metric": "growth_rate", "rate_method": "baranyi", "rate_window": 7, "spike_factor": 50.0, "studies": "S1",
+     {"metric": "growth_rate", "rate_method": "baranyi", "rate_window": 7, "spike_factor": 50.0, "conditions": "S1",
       "only_entered": True, "include_low_quality": True, "include_absent": False,
       "correction": "bh", "absence_threshold": 1.0, "include_dropout": True, "include_non_batch": False,
       "no_growth_alpha": 0.01, "no_growth_factor": 4.0, "exclude_studies": "SMGDB00000008", "merge_arcs": True,
@@ -503,7 +510,7 @@ def test_the_all_button_sits_next_to_example_with_its_explainer(server):
     base, token = server
     form = _get(f"{base}/?token={token}")
     assert '<button type="submit" name="example" value="1">Example</button>\n<button type="submit" name="all"' in form
-    assert "All ignores the box and derives every study in mGrowthDB" in form
+    assert "All derives every study in mGrowthDB, ignoring the boxes" in form
     with urllib.request.urlopen(f"{base}/run?token={token}", data=b"all=1&species=", timeout=10) as r:
         page = r.read().decode("utf-8")
     assert "All of mGrowthDB" in page or "Searching" in page             # a quick fake search, or its progress
@@ -653,3 +660,46 @@ def test_a_result_the_filter_emptied_says_so_rather_than_blaming_the_threshold()
     assert "<h2>No interactions pass the q-value filter</h2>" in page
     empty = render_result("tok", {**result, "network": InteractionNetwork.from_dict({**doc, "edges": []})})
     assert "The q-value filter left out all 3 interaction(s)" in empty
+
+
+def test_an_empty_result_says_what_the_second_box_left_out():
+    """With a medium that only some studies carry, the page says the box's part before the rest, so a
+    user is not sent looking for a data problem that is really a filter (#113)."""
+    from grownet.gui import _empty_reason
+    result = {"settings": {**DEFAULTS, "conditions": "mucin"}, "studies": ["S1", "S2", "S3"],
+              "resolved": [("x", {1: "x"})], "errors": [], "network": None, "hidden": {},
+              "skipped": [("study S2", "no experiment of this study matches the media, experiments or "
+                           "studies entered"),
+                          ("study S3", "no experiment of this study matches the media, experiments or "
+                           "studies entered"),
+                          ("a pair", "no usable per-strain series")]}
+    reason = _empty_reason(result)
+    assert reason.startswith("The second box left out 2 of the 3 study(ies) searched")
+    assert "mucin" in reason
+    # with the box empty, nothing is said about it
+    result["settings"] = {**DEFAULTS}
+    assert "second box" not in _empty_reason(result)
+
+
+def test_opening_the_page_without_the_token_explains_itself(server):
+    """Karoline, 2026-10-04: "localhost:8791 shows an error". Opening the port by hand, or an old tab from
+    a previous run, used to give a bare server error page. It still refuses, in grownet's own words."""
+    import urllib.error
+    import urllib.request
+
+    from grownet.gui import render_token_page
+    page = visible(render_token_page(had_token=False, port=8791))
+    assert "grownet is running on this machine" in page
+    assert "http://127.0.0.1:8791/?token=" in page          # where to find the real link
+    assert "grownet gui" in page
+    assert "from an earlier run" in visible(render_token_page(had_token=True, port=8791))
+
+    base, token = server
+    try:
+        urllib.request.urlopen(f"{base}/", timeout=5)
+        raise AssertionError("the page opened without a token")
+    except urllib.error.HTTPError as refused:
+        assert refused.code == 403                           # still refused, just not bare
+        body = refused.read().decode("utf-8")
+    assert "grownet is running on this machine" in visible(body)
+    assert token not in body                                 # never the token itself

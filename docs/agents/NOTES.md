@@ -15,6 +15,13 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-04 (Karoline, taking her agent's recommendation after Craig's question on #107): the id is
+  **`grownet.interaction_network/v1`** from 0.2.0. The namespace was Craig's call below and is unchanged;
+  what moved is the version, because `significance` changed meaning (the corrected p-value became -log10
+  of it), which is what his own rule says a version is for. `model.PREVIOUS_SCHEMAS` keeps v0 readable,
+  `schema.validate_document` accepts both, `published.fresh` accepts only the current one (a v0 daily
+  network holds the old meaning, so the page derives live until the workflow republishes), and
+  `grownet validate` names the version it read.
 - 2026-09-28 (Craig, #71): the schema id is `grownet.interaction_network/v0`. A new namespace at the SAME
   version, because the format is not changing and a version is a promise about content, not about naming.
   Done before 0.1.0 deliberately: the id is written into every network grownet saves, so this is the last
@@ -539,8 +546,58 @@ simulator takes (register item 32, Karoline 2026-10-03). What a later agent need
 - **An unscaled matrix diverges**: on SMGDB00000004 the cells outweigh the -1 diagonal and deSolve returns
   NA. `glv_scale()` divides the off-diagonal by one factor; it is a modeling choice, so nothing applies
   it by itself, and the printout and both READMEs say so.
+- **What ships describes a release, not our branches.** `rbridge.INSTALL_R` is the plain
+  `install_github("crossfeed-bio/crossfeed", subdir = "r")`, which is right for a released version and
+  wrong for an unmerged branch; to install the package from work in progress, use a clone
+  (`remotes::install_local("<clone>/r")`, or `R CMD INSTALL r`), which is what CONTRIBUTING.md says.
+  `tests/test_release.py` refuses a `ref =` install line, wording about work in progress, or this branch's
+  name in the help, both READMEs or any page the server renders (Karoline, 2026-10-04: "The help should
+  refer to the stage the tool is in when released", then "please check the GUI also for the same problem").
+  A plain `install_github` on a public repository can still answer 404 when git has stored a token that
+  cannot see it, which is what `rbridge.INSTALL_TROUBLE` says. It points at `install_local` from a clone
+  and **never at clearing the token**: "it alters their system settings in ways that can affect them
+  negatively" (Karoline, same day). A test in `tests/test_help.py` keeps that advice off the help page.
 - Checking the R side: `R CMD build r && R CMD check --no-manual grownet_0.1.0.tar.gz`, or `make r-check`.
   The tests live in `r/tests/testthat` and include a real POST into the listener.
+
+## House style for the tool's name
+
+In prose the name carries the wordmark's two parts: `brand.in_prose` does it on the page, and the README
+and `r/README.md` write it as `grow**net**` (Karoline, 2026-10-04: "The README of the repo does not yet
+reflect the style change for grownet sentences that we have in the help"). Commands, paths, code spans,
+link targets and headings keep it plain, and a test in `tests/test_interface.py` fails on a bare "grownet"
+in README prose. The title is lowercase throughout. A second test refuses the styled name where a reader
+would type a command (`library(grownet)`, `python -m grownet`, `grownet derive`), in the help, the pages
+and the README: that is the one mistake this style can make.
+
+## The second box: media, experiments or studies (#113)
+
+`grownet.selection` parses the box and matches experiments; `derive.select_experiments` applies it.
+
+- **Media are structured after all.** Every experiment carries `compartments[].mediumName` (559 of 559 on
+  2026-10-04), so a medium is matched there first, and against the description and the experiment name as
+  well, since what tells experiments of one study apart lives only there. The match is a case-insensitive
+  substring because the spellings differ: Wilkins-Chalgren appears four ways, one misspelled "Anerobe".
+- **An entry is an id by its shape** (`EMGDB\d+`, `SMGDB\d+`) and a medium otherwise. Study ids narrow
+  which studies are read, the way the retired "Only these studies" setting did; media and experiment ids
+  are applied per experiment inside the derivation.
+- **Naming a comparison keeps its monocultures** (Karoline's choice): `select_experiments` adds the
+  monoculture experiments under the same `conditions()` and reports them, since one id alone would give no
+  arc. `_choose_monocultures` then picks among them as always.
+- **Arcs carry `medium`** (`selection.medium_of`), in the model, the schema, GraphML, Cytoscape and the
+  report. Merged arcs join the media of their parts.
+- Selecting is not a method change: the medium is part of the conditions key, so comparisons never mixed
+  media. Register item 8 carries this.
+- `matrix.dropout_arcs(net)` counts the arcs a gLV package holds that may act through a third species;
+  the README and the R printout say the count, or that there is none. Both gLV settings are ordinary
+  advanced settings; the **gLV mode** button (`gui.glv_mode`, `gui.glv_mode_on`, `--glv-mode`) sets them
+  together and says so, which is what Karoline asked for after two checkboxes in the bar read as "quite
+  complex" (2026-10-04). It toggles: pressing it again restores both defaults, and it is drawn as a
+  switch (`button.switch` with a track and a knob in `brand.CSS`), green when on and white when off, with
+  `aria-pressed` for anyone who cannot see it. It stays a submit button, so the page keeps its no-JavaScript
+  rule: the server re-renders the switch the other way.
+- `matrix.media(net)` feeds the gLV README, the payload's caveats and the R printout: a package built from
+  several media says so in capitals, because a simulation is of one environment. The All network spans six.
 
 ## Gotchas
 

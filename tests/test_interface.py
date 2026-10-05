@@ -250,7 +250,8 @@ def test_the_page_and_the_command_line_start_from_the_same_defaults():
            "spike_factor": a.spike_factor, "absence_threshold": a.absence_threshold,
            "include_low_quality": a.include_low_quality, "include_absent": a.include_absent,
            "correction": a.correction,
-           "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch, "studies": a.study,
+           "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
+           "conditions": " ".join(a.conditions),
            "exclude_studies": a.exclude_studies, "only_entered": not a.all_partners, "merge_arcs": a.merge_arcs,
            "min_studies": a.min_studies, "merge_genera": a.merge_genera, "no_growth_alpha": a.no_growth_alpha,
            "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p,
@@ -296,10 +297,19 @@ def test_the_help_weighs_each_growth_measure():
 def test_the_readme_names_the_tool_grownet():
     # Karoline (2026-09-28): "readme in the repo still talks about crossfeed instead of grownet", and "The
     # README can have a subtitle or title extension that shows where the tool name comes from: Growth-curve
-    # derived interaction networks."
+    # derived interaction networks." Then (2026-10-04): "the title would be more pretty when words only
+    # start with lower case", and the name carries the wordmark's two parts in prose, as it does on the
+    # page ("The README of the repo does not yet reflect the style change for grownet sentences").
     from pathlib import Path
     text = Path(__file__).resolve().parents[1].joinpath("README.md").read_text(encoding="utf-8")
-    assert text.startswith("# grownet: Growth-curve derived interaction networks\n") and "**grownet** turns" in text
+    assert text.startswith("# grownet: growth-curve derived interaction networks\n")
+    assert "grow**net** turns" in text
+    body = text.split("\n", 1)[1]
+    prose_lines = [line for line in re.sub(r"```.*?```", "", body, flags=re.S).splitlines()
+                   if not line.startswith("#")]
+    for line in prose_lines:
+        outside_code = re.sub(r"`[^`]*`|\(https?://[^)]*\)|https?://\S+", "", line)
+        assert not re.search(r"(?<![\w/.*-])grownet(?![\w/.*-])", outside_code), line
     prose = re.sub(r"`[^`]*`|\(https?://[^)]*\)|https?://\S+|```.*?```", "", text, flags=re.S)
     # outside code and links, crossfeed appears only where the README explains the old name
     leftover = [line for line in prose.splitlines() if "crossfeed" in line]
@@ -468,15 +478,43 @@ def with_rates(monkeypatch):
     monkeypatch.setattr(gui, "growth_rates", lambda *a, **kw: (dict(RATES), []))
 
 
-def test_report_growth_rates_is_a_checkbox_next_to_the_all_button(server):
+def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
+    """Karoline, 2026-10-04, after a first attempt put two checkboxes in the bar: "this is now quite
+    complex. So how about moving both options back to advanced parameters, with their default settings,
+    and instead introduce a button 'gLV mode' next to 'All', which will enable growth rate collection and
+    disable drop-out communities? The GUI text can then be simplified somewhat."""
     base, token = server
     _, page, _ = _open(f"{base}/?token={token}")
     bar = page[page.index('<div class="bar">'):]
     bar = bar[:bar.index("</div>")]
-    assert 'name="all"' in bar and 'name="report_rates"' in bar     # the same row as All
-    assert bar.index('name="report_rates"') > bar.index('name="all"')
-    assert "Report growth rates" in bar
-    assert 'name="report_rates"' not in page[page.index("<details"):]   # not in Advanced settings
+    assert 'name="glv_mode" value="1"' in bar and ">gLV mode</button>" in bar
+    assert 'class="switch"' in bar and 'aria-pressed="false"' in bar      # a switch, standing at off
+    assert '<span class="track"><span class="knob">' in bar               # drawn, not described
+    assert bar.index('name="glv_mode"') > bar.index('name="all"')        # next to All
+    assert not re.findall(r'<input[^>]*name="([^"]+)"', bar)             # and no checkboxes in the bar
+    assert len(bar) < 700                                                # the text beside it stays short
+
+    # pressing it ticks growth rates and unticks drop-out communities, in Advanced settings where they live
+    def press(form):
+        _, page, _ = _open(f"{base}/run?token={token}", urllib.parse.urlencode(form).encode())
+        return page
+
+    pressed = press({"species": A, "glv_mode": "1", "include_dropout": "1", "only_entered": "1"})
+    settings = pressed[pressed.index("<details>"):]
+    assert 'name="report_rates" value="1" checked' in settings
+    assert 'name="include_dropout" value="1">' in settings               # off
+    assert "gLV mode on: growth rates on, drop-out communities off" in pressed
+    assert f">{A}</textarea>" in pressed                                 # and what was typed stays
+    assert 'class="switch on"' in pressed and 'aria-pressed="true"' in pressed   # the switch is on
+
+    # Karoline, 2026-10-04: "Do I click a 2nd time to switch it off?" Pressing it again restores both
+    # defaults, and says so
+    again = press({"species": A, "glv_mode": "1", "report_rates": "1", "only_entered": "1"})
+    back = again[again.index("<details>"):]
+    assert 'name="report_rates" value="1">' in back                      # off, its default
+    assert 'name="include_dropout" value="1" checked' in back            # on, its default
+    assert "gLV mode off" in again and 'class="switch on"' not in again
+    assert 'class="switch"' in again and 'aria-pressed="false"' in again
 
 
 def test_the_download_menu_offers_the_adjacency_matrix(server):
@@ -497,7 +535,7 @@ def test_the_download_menu_offers_the_adjacency_matrix(server):
 def test_without_report_growth_rates_there_are_no_rates_and_no_glv_button(server):
     base, token = server
     page = _finished(base, token)
-    assert "Download the growth rates" not in page and "Generate gLV parameters" not in page
+    assert "Download the growth rates" not in page and "Get gLV parameters" not in page
     # and asking for the files anyway says what to do, rather than writing an empty one
     _, answer, _ = _open(f"{base}/rates.csv?token={token}")
     assert "tick Report growth rates" in answer
@@ -510,7 +548,7 @@ def test_the_growth_rates_are_their_own_download_and_bring_the_glv_control(serve
     page = _finished(base, token, report_rates="1")
     outputs = page[page.index('<div class="bar outputs">'):]
     assert "Download the growth rates (.csv)" in outputs
-    control = outputs[outputs.index(">gLV parameters<"):]
+    control = outputs[outputs.index(">Get gLV parameters<"):]
     control = control[:control.index("</form>")]
     assert '<option value="zip">Download (.zip)</option>' in control
     assert '<option value="r">Send to R</option>' in control
@@ -641,3 +679,131 @@ def test_r_can_fetch_the_same_parameters_from_the_page(server, with_rates):
     assert payload["format"] == "grownet.glv/v0"
     assert payload["organisms"] == sorted([A, B])
     assert "readme" in payload and "caveats" in payload
+
+
+# ---- the second input box: media, experiments or studies (#113) ----------------------------------
+#
+# Karoline, 2026-10-04: "I propose a second, optional, input field next to the first one with the taxa.
+# Users can either specify names of media or a list of experiment identifiers there (so this last item can
+# then be removed from the advanced options) ... The text above the second input field should also provide
+# examples, like for the first input field."
+
+def test_a_second_box_sits_beside_the_species_box_with_its_own_examples(server):
+    base, token = server
+    _, page, _ = _open(f"{base}/?token={token}")
+    boxes = page[page.index('<div class="boxes">'):page.index("<div class=\"bar\">")]
+    assert boxes.count("<textarea") == 2                     # the two boxes, side by side
+    species = boxes[boxes.index('for="species"'):boxes.index('for="conditions"')]
+    conditions = boxes[boxes.index('for="conditions"'):]
+    assert "Media, experiments or studies (optional)" in conditions
+    for part in (species, conditions):
+        assert '<p class="examples">For example:' in part    # examples above both boxes
+    from grownet.selection import EXAMPLES
+    for example in EXAMPLES:
+        assert example in conditions
+    # and the study list is no longer an advanced setting, since the box took it over
+    assert 'name="studies"' not in page
+    assert "Only these studies" not in page
+
+
+def test_what_is_typed_in_the_second_box_stays_there_and_in_the_report(server):
+    base, token = server
+    page = _finished(base, token, conditions="SMGDB00000001")
+    assert ">SMGDB00000001</textarea>" in page
+    _, report, _ = _open(f"{base}/report.txt?token={token}")
+    assert "Media, experiments or studies (--conditions): SMGDB00000001" in report
+
+
+def test_a_medium_that_matches_nothing_leaves_a_result_that_explains_itself(server):
+    base, token = server
+    page = _finished(base, token, conditions="a medium nobody used")
+    assert "0 interaction(s)" in page or "no interactions" in page.lower()
+    _, report, _ = _open(f"{base}/report.txt?token={token}")
+    assert "no experiment of this study matches" in report
+
+
+def test_drop_out_communities_stay_on_by_default_in_advanced_settings(server):
+    """She kept the default: "I'd like to keep them by default." What gLV mode changes, it changes there,
+    in sight, rather than behind the button."""
+    base, token = server
+    _, page, _ = _open(f"{base}/?token={token}")
+    settings = page[page.index("<details>"):]
+    assert 'name="include_dropout" value="1" checked' in settings
+    assert "gLV mode unticks it" in settings                     # the setting says which button touches it
+
+
+def test_glv_mode_on_the_command_line_sets_the_same_two_settings(capsys, monkeypatch, tmp_path):
+    """The button has its flag, so the command line still does everything the page does."""
+    from grownet import gui as gui_module
+    from grownet.__main__ import build_parser, main
+    derive = next(a for a in build_parser()._actions if a.dest == "cmd").choices["derive"]
+    assert "--glv-mode" in {o for action in derive._actions for o in action.option_strings}
+
+    monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", FakeClient)
+    monkeypatch.setattr(gui_module, "growth_rates", lambda *a, **kw: (dict(RATES), []))
+    captured = {}
+    original = gui_module.run_query
+
+    def remember(client, entries, settings=None, *args, **kw):
+        captured["settings"] = settings
+        return original(client, entries, settings, *args, **kw)
+
+    monkeypatch.setattr(gui_module, "run_query", remember)
+    out = tmp_path / "net.json"
+    assert main(["derive", "--live", "--species", A, "--glv-mode", "--out", str(out)]) == 0
+    assert "gLV mode: growth rates on, drop-out communities off" in capsys.readouterr().err
+    assert captured["settings"]["report_rates"] is True
+    assert captured["settings"]["include_dropout"] is False
+
+
+def test_the_page_and_the_command_line_mean_the_same_by_glv_mode():
+    """One definition of the mode, used by both."""
+    from grownet.gui import DEFAULTS, glv_mode
+    applied = glv_mode(dict(DEFAULTS))
+    assert applied["report_rates"] is True and applied["include_dropout"] is False
+    assert {k: v for k, v in applied.items() if DEFAULTS[k] != v} == {"report_rates": True,
+                                                                     "include_dropout": False}
+
+
+def test_the_name_is_never_styled_where_a_command_is_meant():
+    """Karoline, 2026-10-04: "please make sure that command line calls in the help and README don't apply
+    the grownet style (I found 1 case in the CLI description)". The name carries the wordmark in prose, so
+    anything a reader would type has to stay plain, whether it sits in a code span or in a sentence."""
+    import re
+    from pathlib import Path
+
+    from grownet import brand, gui
+    mark = re.escape(brand.NAME_HTML)
+    before = re.compile(r"(library\(|python -m |uvx |pip install |pipx install |-m )\s*$")
+    after = re.compile(r"\s*(derive|gui|validate|schema|style)\b")
+    pages = {"the help": gui.render_help("tok"), "the page": gui.render_form("tok"),
+             "the about page": gui.render_about("tok"), "the legend page": gui.render_legend("tok")}
+    for what, page in pages.items():
+        for m in re.finditer(mark, page):
+            around = page[max(0, m.start() - 70):m.end() + 50].replace("\n", " ")
+            assert not before.search(page[max(0, m.start() - 20):m.start()]), f"{what}: {around}"
+            assert not after.match(page[m.end():m.end() + 12]), f"{what}: {around}"
+
+    # and the same in the README, where the name is written grow**net**
+    text = Path(__file__).resolve().parents[1].joinpath("README.md").read_text(encoding="utf-8")
+    for m in re.finditer(re.escape("grow**net**"), text):
+        around = text[max(0, m.start() - 70):m.end() + 50].replace("\n", " ")
+        assert not before.search(text[max(0, m.start() - 20):m.start()]), around
+        assert not after.match(text[m.end():m.end() + 12]), around
+        assert text[max(0, m.start() - 1):m.start()] != "`", around      # never inside a code span
+
+
+def test_marking_the_name_cannot_be_made_slow():
+    """CodeQL, on the release pull request (2026-10-04): the two patterns behind the name styling were
+    polynomial on a long run of "<" or of spaces. Nothing a user types reaches them unescaped, and now
+    the patterns are bounded as well, so a pathological string is still linear."""
+    import time
+
+    from grownet import brand
+    for text in ("<" * 40000, "<" + " " * 40000 + "p>grownet", "<p>" * 10000):
+        started = time.perf_counter()
+        brand.in_prose(text)
+        assert time.perf_counter() - started < 1.0, f"slow on {text[:12]!r}..."
+    # and it still marks a name in prose and leaves commands alone
+    assert brand.in_prose("<p>grownet reads it.</p>") == f"<p>{brand.NAME_HTML} reads it.</p>"
+    assert brand.in_prose("<code>grownet gui</code>") == "<code>grownet gui</code>"

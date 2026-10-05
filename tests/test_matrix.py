@@ -163,3 +163,36 @@ def test_a_rate_is_reported_under_the_name_the_network_uses():
                              "n": 3, "studies": ["S1"]}}
     assert matrix.for_nodes(net, rates)["ncbi:411483"]["name"] == "Faecalibacterium duncaniae"
     assert "Faecalibacterium duncaniae" in matrix.rates_csv(matrix.for_nodes(net, rates), net)
+
+
+def test_the_files_name_the_media_the_arcs_came_from():
+    """Karoline, 2026-10-04: a gLV simulation is of one environment, so the package says which media its
+    numbers were measured in, and says it loudly when there is more than one."""
+    one = _net([dict(_arc("a", "b", 1.5), medium="mMCB")])
+    one.meta.update({"tool_version": "9.9.9", "absence": {"k": 1.0}})
+    assert matrix.media(one) == ["mMCB"]
+    assert "Every arc was measured in one medium: mMCB." in matrix.readme(one, {}, [], [])
+
+    mixed = _net([dict(_arc("a", "b", 1.5), medium="mMCB"),
+                  dict(_arc("b", "a", -0.5, study_id="S2"), medium="Wilkins-Chalgren")])
+    mixed.meta.update({"tool_version": "9.9.9", "absence": {"k": 1.0}})
+    assert matrix.media(mixed) == ["mMCB", "Wilkins-Chalgren"]
+    text = matrix.readme(mixed, {}, [], [])
+    assert "THESE ARCS COME FROM 2 MEDIA" in text and "second box" in text
+    # and a program reading the payload sees the same, as data
+    assert matrix.glv_payload(mixed, {})["caveats"]["media"] == ["mMCB", "Wilkins-Chalgren"]
+
+
+def test_the_package_counts_the_arcs_a_glv_simulation_should_not_use():
+    """Karoline, 2026-10-04: drop-out arcs may act through a third species, so a package that holds them
+    says how many and which switch leaves them out."""
+    net = _net([_arc("a", "b", 1.5, evidence="dropout"), _arc("b", "a", 1.0, evidence="biculture")])
+    net.meta.update({"tool_version": "9.9.9", "absence": {"k": 1.0}})
+    assert matrix.dropout_arcs(net) == 1
+    text = matrix.readme(net, {}, [], [])
+    assert "1 ARC(S) COME FROM DROP-OUT DESIGNS" in text and "Include drop-out communities" in text
+    assert matrix.glv_payload(net, {})["caveats"]["dropout_arcs"] == 1
+    # a package without any says so plainly, so a reader knows the question was asked
+    direct = _net([_arc("a", "b", 1.5, evidence="biculture")])
+    direct.meta.update({"tool_version": "9.9.9", "absence": {"k": 1.0}})
+    assert "none comes from a drop-out design" in matrix.readme(direct, {}, [], [])

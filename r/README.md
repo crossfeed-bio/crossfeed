@@ -11,15 +11,28 @@ remotes::install_github("crossfeed-bio/crossfeed", subdir = "r")
 
 It needs R 4.1 or later and jsonlite. Nothing else: the listener uses base R sockets.
 
+**If the install answers `HTTP error 404`** on this public repository, a GitHub token stored on the machine
+is being used and cannot see it (a fine-grained token answers 404 for everything outside its scope).
+Installing from a clone needs no GitHub access at all:
+
+```r
+remotes::install_local("<the repository>/r")
+```
+
+From a terminal, in a clone, `R CMD INSTALL r` does the same without remotes.
+
 ## Receiving the parameters
 
-Run grownet's local page (`grownet gui`), tick **Report growth rates** beside the All button, search, and
-then, in R:
+Run grow**net**'s local page (`grownet gui`), press **gLV mode** beside All, search, and then, in R:
 
 ```r
 library(grownet)
-glv <- grownet_listen()     # then choose gLV parameters, Send to R on the page
+glv <- grownet_listen()     # then choose Get gLV parameters, Send to R on the page
 ```
+
+`grownet_listen()` takes one parameter set and returns it, printing a summary of what arrived, so you
+always see when a new set has come in and superseded the one before. Run it again before each send,
+including after restarting grow**net**, whose new run has its own address and token.
 
 When a port cannot be opened, read the same parameters from the page instead, at the address it shows
 under the gLV control:
@@ -49,10 +62,10 @@ gLV parameters from grownet 0.1.1, derived 2026-10-03T22:35:36+02:00 from mGrowt
 | Function | What it does |
 | --- | --- |
 | `glv_matrix(x)` | the interaction matrix, warning about and naming the cells that hold a stated extreme (+10 obligate, -10 abolished); `placeholders = "na"` or `"zero"` converts them |
-| `glv_rates(x)` | the growth rates, `NA` where grownet has none; `missing =` fills them with a number of yours |
+| `glv_rates(x)` | the growth rates, `NA` where grow**net** has none; `missing =` fills them with a number of yours |
 | `glv_scale(x)` | one factor over the off-diagonal cells, so the strongest is no stronger than the self-limitation on the diagonal |
 | `as_miasim(x)` | the arguments `miaSim::simulateGLV` takes, stopping when an organism has no growth rate |
-| `glv_readme(x)` | grownet's own README, every convention in its own words |
+| `glv_readme(x)` | grow**net**'s own README, every convention in its own words |
 | `glv_write(x, dir)` | the three files the download holds, written beside your analysis |
 
 ## Simulating
@@ -62,6 +75,10 @@ miaSim is suggested, never required; any simulator takes the same pieces.
 ```r
 args <- as_miasim(glv_scale(glv))
 tse <- do.call(miaSim::simulateGLV, c(args, list(x0 = rep(0.1, args$n_species))))
+
+x <- SummarizedExperiment::assay(tse)          # one row per organism, one column per time point
+matplot(t(x), type = "l", lty = 1, xlab = "time", ylab = "abundance")
+legend("topleft", legend = rownames(x), lty = 1, col = seq_len(nrow(x)), bty = "n")
 ```
 
 `simulateGLV` solves dx/dt = x(b + Ax), which is the order this matrix is written in: `A[i, j]` is the

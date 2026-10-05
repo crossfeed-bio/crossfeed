@@ -60,8 +60,12 @@ NAME_HTML = '<span class="name">grow<b>net</b></span>'
 # elements whose text is a command, a path, a document title or a link label: the name stays plain there.
 # A link is already colored, so the name's own green inside one reads as a smudge rather than a name.
 _LITERAL = ("code", "pre", "title", "script", "style", "textarea", "option", "a")
-_PIECES = re.compile(r"(<[^>]+>)")
-_TAG_NAME = re.compile(r"<\s*(/?)\s*([a-zA-Z0-9]+)")
+# Both patterns are bounded so that neither can be made slow by a long run of "<" or of spaces: a tag
+# cannot contain another "<", and the whitespace a tag may carry before its name is a few characters at
+# most (CodeQL flagged the unbounded forms as polynomial on uncontrolled data, 2026-10-04). The page
+# escapes everything a user types, so no "<" of theirs reaches this, and bounding it costs nothing.
+_PIECES = re.compile(r"(<[^<>]*>)")
+_TAG_NAME = re.compile(r"<\s{0,8}(/?)\s{0,8}([a-zA-Z0-9]+)")
 _THE_NAME = re.compile(r"(?<![\w/.-])" + NAME + r"(?![\w/.-])")
 
 
@@ -131,6 +135,21 @@ textarea:focus, input:focus, select:focus, button:focus, .btn:focus {{ outline: 
 .btn.quiet {{ background: transparent; padding: .3rem .7rem; }}
 .bar {{ display: flex; gap: .6rem; margin-top: .9rem; flex-wrap: wrap; align-items: center; }}
 .beside {{ display: inline-flex; gap: .35rem; align-items: center; white-space: nowrap; }}
+/* a mode is a switch: the track is green when it is on, white when the settings are the defaults. It is
+   a submit button, so the page needs no JavaScript for it; the server re-renders it the other way. */
+button.switch {{ display: inline-flex; align-items: center; gap: .5rem; }}
+button.switch .track {{ position: relative; width: 2.1rem; height: 1.15rem; border-radius: 999px;
+                        border: 1px solid var(--line); background: #fff; flex: none; }}
+button.switch .knob {{ position: absolute; top: 1px; left: 1px; width: .95rem; height: .95rem;
+                       border-radius: 50%; background: var(--muted); }}
+button.switch.on .track {{ background: var(--grow); border-color: var(--grow); }}
+button.switch.on .knob {{ left: auto; right: 1px; background: #fff; }}
+/* the two input boxes side by side on a wide screen, one above the other on a narrow one */
+.boxes {{ display: flex; gap: 1.2rem; flex-wrap: wrap; align-items: start; }}
+.box {{ flex: 1 1 22rem; min-width: 0; display: flex; flex-direction: column; }}
+/* the examples above one box may wrap where the other's do not, so the line keeps room for two either
+   way and both text areas start at the same height */
+.box .examples {{ min-height: 3.1em; }}
 .backtop {{ justify-content: flex-end; margin: 0 0 -.4rem; }}
 details {{ margin-top: 1.1rem; border-top: 1px solid var(--line); padding-top: .8rem; }}
 summary {{ cursor: pointer; font-weight: 600; }}

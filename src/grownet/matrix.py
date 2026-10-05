@@ -90,6 +90,34 @@ def cells(net: InteractionNetwork) -> tuple:
     return values, conflicts
 
 
+def media(net: InteractionNetwork) -> list:
+    """The media the arcs of this matrix come from, in order, as mGrowthDB names them.
+
+    A gLV simulation is of one environment, so a matrix built from several media mixes things that were
+    never measured together (Karoline, 2026-10-04, on why she now wants environment filtering: "it's one
+    thing to export a network of known interactions and another to do a gLV simulation"). The files say
+    which media they hold, and the page's second box is how a reader keeps one.
+    """
+    seen = []
+    for edge in net.edges:
+        for name in (edge.medium or "").split("; "):
+            if name and name not in seen:
+                seen.append(name)
+    return seen
+
+
+def dropout_arcs(net: InteractionNetwork) -> int:
+    """How many arcs of this matrix come from a drop-out design.
+
+    Such an arc compares a community with the same community without one member, so the effect may run
+    through a third species, while a gLV coefficient is meant to be the direct effect of one organism on
+    another (Karoline, 2026-10-04: "for gLV, including drop-out communities are not a good idea"). They are
+    derived by default, so the files say how many are in them and which switch leaves them out.
+    """
+    return sum(1 for e in net.edges
+               if (e.evidence == "dropout" or "dropout" in (e.evidence or "")) and e.status != "absent")
+
+
 def counts(net: InteractionNetwork) -> dict:
     """{"arcs", "cells", "organisms"}: how many arcs carry a number, how many cells they make, and how many
     organisms the matrix has. A matrix holds one cell per ordered pair, so a network with several arcs for
@@ -210,6 +238,30 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
     return out.getvalue()
 
 
+def _dropout_lines(net: InteractionNetwork) -> list:
+    """What the README says about arcs that may act through a third species."""
+    n = dropout_arcs(net)
+    if not n:
+        return ["  Every arc compares two organisms directly; none comes from a drop-out design."]
+    return [f"  {n} ARC(S) COME FROM DROP-OUT DESIGNS, a community against the same community without one",
+            "      member, so the effect may run through a third species, which a gLV coefficient is not",
+            "      meant to include. Press gLV mode on the page, or untick Include drop-out communities in",
+            "      Advanced settings, and derive again to leave them out."]
+
+
+def _media_lines(net: InteractionNetwork) -> list:
+    """What the README says about the environments behind the numbers."""
+    names = media(net)
+    if not names:
+        return ["  The media these arcs were measured in are not recorded in this network."]
+    if len(names) == 1:
+        return [f"  Every arc was measured in one medium: {names[0]}."]
+    return [f"  THESE ARCS COME FROM {len(names)} MEDIA, and a gLV simulation is of one environment:",
+            *[f"      {name}" for name in names],
+            "      Select one in grownet's second box (media, experiments or studies) and derive again to",
+            "      keep a single environment."]
+
+
 def readme(net: InteractionNetwork, rates: dict, conflicts: list, missing: list, convention=()) -> str:
     """What a reader has to know before feeding these two files to a simulator."""
     meta = net.meta
@@ -237,6 +289,8 @@ def readme(net: InteractionNetwork, rates: dict, conflicts: list, missing: list,
         "      the threshold judged it no interaction.",
         f"  One cell per ordered pair: this network's {count['arcs']} arc(s) make {count['cells']} cell(s) "
         f"over {count['organisms']} organism(s).",
+        *_media_lines(net),
+        *_dropout_lines(net),
         f"  An obligate interaction (the affected organism grows only with the actor) is {_number(EXTREME)} "
         "and an abolished",
         f"      one (it grows only without the actor) is {_number(-EXTREME)}: no ratio exists for them, "
@@ -313,6 +367,8 @@ def glv_payload(net: InteractionNetwork, rates: dict) -> dict:
              "per_study": dict(rates[nid].get("per_study", {}))}
             for nid in order if nid in rates],
         "caveats": {
+            "media": media(net),
+            "dropout_arcs": dropout_arcs(net),
             "diagonal": DIAGONAL,
             "extreme": EXTREME,
             "absence_k": meta.get("absence", {}).get("k"),

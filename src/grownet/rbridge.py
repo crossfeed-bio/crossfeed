@@ -26,7 +26,19 @@ PATH = "/grownet/glv"
 # where the companion package lives and how it is installed, in one place, so the page, the help and the
 # error below say the same line
 REPOSITORY_SLUG = "crossfeed-bio/crossfeed"
+# What a reader of a release should run. The help ships with the tool, so it says what holds for the
+# released version and never for the branch it was written on (Karoline, 2026-10-04: "The help should
+# refer to the stage the tool is in when released"). Installing from an unmerged branch is a development
+# step; it is in docs/agents/NOTES.md and in CONTRIBUTING.md, not here.
 INSTALL_R = f'remotes::install_github("{REPOSITORY_SLUG}", subdir = "r")'
+# Why an install can fail on a public repository: a GitHub token stored on the machine, for another
+# account or scope, makes GitHub answer 404 instead of serving it anonymously. The way around it is a
+# local install, which needs no GitHub access; clearing the token is not suggested, since that changes
+# the session for everything else in it (Karoline, 2026-10-04: "I don't think we should recommend it for
+# users, as it alters their system settings in ways that can affect them negatively").
+INSTALL_TROUBLE = ('If that fails with "HTTP error 404", a GitHub token stored on this machine is being '
+                   'used and cannot see the repository. Installing from a clone needs no GitHub access: '
+                   'remotes::install_local("<the repository>/r"), or R CMD INSTALL r in a terminal.')
 
 
 

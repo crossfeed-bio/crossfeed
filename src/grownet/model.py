@@ -16,7 +16,16 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass, field
 
-SCHEMA = "grownet.interaction_network/v0"
+# The format a network declares. It moved to v1 with 0.2.0, because `significance` changed meaning:
+# it was the corrected p-value, and it is now -log10 of that, so the same field holds a different quantity
+# and runs the other way. A version is a promise about content (Craig, on #71), and this is the one signal
+# that says the meaning of a field moved; without it a reader of a v0 file would misread a 0.2.0 network
+# silently. Nothing else about the format changed, and the fields added since v0 are optional.
+SCHEMA = "grownet.interaction_network/v1"
+# Older ids a reader still accepts, newest first. A v0 document is valid: its `significance` means what v0
+# said it means, which is why `grownet validate` names the version it read.
+PREVIOUS_SCHEMAS = ("grownet.interaction_network/v0",)
+KNOWN_SCHEMAS = (SCHEMA, *PREVIOUS_SCHEMAS)
 EFFECTS = ("facilitation", "inhibition", "neutral")
 # what an edge was derived from: a mono versus bi-culture comparison (a direct interaction), or a full
 # versus drop-out community comparison (not necessarily direct: strictly a hyper-arc, kept as an arc)
@@ -113,6 +122,7 @@ class Edge:
     cautions: tuple = ()          # CAUTIONS: shown to the reader, without making the edge low quality
     experiments: tuple = ()       # ids of the experiments whose replicates the edge compares (its origin)
     cultivation_mode: str = ""    # batch, chemostat, and so on, as mGrowthDB records it
+    medium: str = ""              # the growth medium the comparison ran in, as mGrowthDB names it (#113)
     merged_arcs: int | None = None  # arcs merged into this one (register item 14), None when not merged
     strength_range: tuple = ()    # (lowest, highest) log2 mean of the merged arcs
     supporting_pairs: int | None = None  # with genus merging: the distinct species (or strain) pairs behind it

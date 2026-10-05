@@ -50,7 +50,9 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
    - sets the version in `pyproject.toml` and in `src/grownet/__init__.py` (`__version__`);
    - turns `## [x.y.z] (unreleased)` in `CHANGELOG.md` into `## [x.y.z] (YYYY-MM-DD)`, and starts a new
      unreleased section above it if work continues.
-   `python packaging/check_release.py vX.Y.Z` must say the tag is ready.
+   `python packaging/check_release.py vX.Y.Z` must say the tag is ready, and `make check` must pass:
+   among other things it refuses texts that describe work in progress rather than the released state (an
+   install line pointing at one of our branches, for example).
 2. **Merge it, then tag `main`:**
 
    ```bash

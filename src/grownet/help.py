@@ -14,6 +14,7 @@ from .idea import idea_figure
 
 REPOSITORY = "https://github.com/crossfeed-bio/crossfeed"
 R_INSTALL = rbridge.INSTALL_R
+R_TROUBLE = rbridge.INSTALL_TROUBLE
 ISSUES = f"{REPOSITORY}/issues"
 NEW_ISSUE = f"{ISSUES}/new/choose"
 MGROWTHDB = "https://mgrowthdb.gbiomed.kuleuven.be"
@@ -58,7 +59,10 @@ SETTINGS = {
     "include_dropout": ("Include drop-out communities", "--no-dropout",
                         "Arcs from a community compared with the same community without one member. On by "
                         "default; --no-dropout leaves them out. Such an arc says the removed member affects "
-                        "the target, directly or through other members, so it is labeled evidence dropout."),
+                        "the target, directly or through other members, so it is labeled evidence dropout, "
+                        "and the gLV mode button unticks it: a gLV coefficient is meant to be the direct "
+                        "effect of one organism on another, which an arc that may act through a third "
+                        "species is not."),
     "include_non_batch": ("Include chemostat and serial dilution experiments", "--include-non-batch",
                           "What a continuous culture can be compared on depends on the growth measure. With "
                           "max it is derived without this setting: the level such a culture settles at is "
@@ -130,34 +134,40 @@ SETTINGS = {
     "min_studies": ("Minimum supporting studies", "--min-studies N",
                     "Keeps arcs resting on at least this many studies. Above 1 it needs merged arcs, since an "
                     "arc as derived rests on one study."),
-    "studies": ("Only these studies", "STUDY",
-                "Comma separated mGrowthDB study ids to search, instead of every study holding the species; "
-                "on the command line, the study argument given with --species. "
-                "Use it to speed up a search or to reproduce one study's network."),
+    "conditions": ("Media, experiments or studies", "--conditions NAME [NAME ...]",
+                   "This one is the second box beside the species, not an advanced setting, because it says "
+                   "where to look rather than how to decide an interaction. Empty by default, which looks "
+                   "at every medium. A medium is matched as text, case-insensitively, against the medium "
+                   "name mGrowthDB records on the experiment's compartments, its description and its name, "
+                   "so \"wilkins\" finds every spelling of Wilkins-Chalgren and \"mucin\" finds the "
+                   "experiments that mention it; an id picks one study (SMGDB...) or one experiment "
+                   "(EMGDB...), and naming a comparison keeps the monocultures it is made against. On the "
+                   "command line a study id given this way replaces the study argument."),
     "exclude_studies": ("Exclude these studies", "--exclude-studies IDS",
                         "Comma separated mGrowthDB study ids that are never searched, for example a study "
-                        "you know to be unsuitable. Empty by default. It applies after Only these studies, "
+                        "you know to be unsuitable. Empty by default. It applies after the second box, "
                         "so a study named in both is left out."),
     "only_entered": ("Only interactions between the species entered", "--all-partners",
                      "On by default: an edge is kept when both ends are species you typed. Untick it, or give "
                      "--all-partners, to see every partner of your species in the studies found."),
     "report_rates": ("Report growth rates", "--report-rates",
-                     "This one sits beside the All button, not here, because it adds to what a search reports "
-                     "instead of changing how an interaction is decided. Off by default. With it on, every "
-                     "organism in the network also gets its maximum specific growth rate in monoculture, the "
-                     "median over the replicates and studies that have one, downloadable as its own CSV and "
-                     "used by Generate gLV parameters. Batch monocultures only: in a chemostat the rate a "
-                     "curve shows is the dilution rate."),
+                     "Off by default, since a rate costs a fit per curve. With it on, every organism in the "
+                     "network also gets its maximum specific growth rate in monoculture, the median over the "
+                     "replicates and studies that have one, downloadable as its own CSV and used by the gLV "
+                     "parameters. Batch monocultures only: in a chemostat the rate a curve shows is the "
+                     "dilution rate. The gLV mode button turns it on."),
 }
 
 # command line options of `derive` that are not advanced settings -> what they do
 CLI_ONLY = {
+    "--glv-mode": "the page's gLV mode button, from the command line: --report-rates and --no-dropout "
+                  "together, which is what a simulation needs",
     "--rates": "write the growth rates to a CSV file, the page's Download the growth rates (needs "
                "--report-rates)",
     "--glv": "write the parameters of a generalized Lotka-Volterra simulation to a zip file, the page's "
              "gLV parameters, Download (needs --report-rates)",
     "--to-r": "send those parameters into an R session waiting for them, the page's gLV parameters, Send "
-              "to R (needs --report-rates; in R: library(grownet); grownet_listen())",
+              "to R (needs --report-rates; the companion package's grownet_listen() is what waits there)",
     "--r-port": "the port that R session listens on (default 8793, what grownet_listen() uses)",
     "--species": "species, strain or genus names, or NCBI taxon ids: search every study holding them, as the page "
                  "does",
@@ -220,6 +230,8 @@ EDGE_ATTRIBUTES = {
                  "community for a drop-out arc",
     "condition": "the experiment the edge comes from; interactions are condition-specific",
     "cultivation_mode": "batch, chemostat, and so on, as mGrowthDB records it",
+    "medium": "the growth medium the comparison ran in, as mGrowthDB names it on the experiment's "
+              "compartments; empty when it names none",
     "experiments": "the mGrowthDB experiments whose replicates the edge compares",
     "study_ids": "the studies supporting this edge; cite them (see Sources)",
     "merged_arcs": "with Merge parallel arcs: how many arcs of this source and target were merged into this one; "
@@ -327,8 +339,8 @@ QA = (
      "when it imports a file; the GraphML keeps every arc, and each carries its condition and study. Use "
      "Merge parallel arcs or Merge to genus to condense them on purpose, or read the arcs in the JSON."),
     ("The search is slow.",
-     "Every study holding your species is fetched live from mGrowthDB. Name the studies you need under "
-     "Only these studies."),
+     "Every study holding your species is fetched live from mGrowthDB. Name the studies you need in the "
+     "second box, beside the species: a study id there (SMGDB...) reads that study and no other."),
     ("\"mGrowthDB is not reachable\" or \"search failed\".",
      "The machine cannot reach mGrowthDB. Check the internet connection, or open "
      f"<a href=\"{MGROWTHDB}\">mGrowthDB</a> in the browser to see whether it is up, then try again."),
@@ -384,6 +396,7 @@ def _table(head, rows) -> str:
 
 
 SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"), ("measures", "Which growth measure"),
+            ("where", "Choosing where to look"),
             ("example", "Try the example"), ("reading", "Reading the result"),
             ("statistics", "How an interaction is decided"),
             ("glv", "The matrix, the growth rates and gLV"),
@@ -424,6 +437,28 @@ network the grownet repository derives from mGrowthDB once a day, when it is les
 spares mGrowthDB about 1,300 requests; the result says when it was derived. Any other setting, or GitHub
 out of reach, derives it live. Nothing is uploaded, and nothing is written outside the file you
 download.</p>
+
+<h2 id="where">Choosing where to look</h2>
+<p>The second box beside the species is optional and says <strong>where</strong> to look, not how to decide
+an interaction. Leave it empty and every medium is used, which is what grownet did before. One entry per
+line:</p>
+<ul>
+<li>a <strong>medium</strong>, matched as text and case-insensitively against the medium name mGrowthDB
+records on an experiment's compartments, its description and its name. The spellings differ between
+studies, so a short word finds more: <code>wilkins</code> finds all four spellings of Wilkins-Chalgren,
+one of which is misspelled in the database, and <code>mucin</code> finds the experiments that add mucin
+beads to the same medium.</li>
+<li>an <strong>experiment id</strong> (<code>EMGDB000000024</code>) or a <strong>study id</strong>
+(<code>SMGDB00000002</code>). Naming a co-culture or a community also keeps the monocultures it is
+compared against, chosen by the usual matching rules, since one id alone would otherwise give no arc; the
+report names what came along.</li>
+</ul>
+<p>Why it matters more than it used to: a network of interactions can carry arcs from several media and
+say so on each arc, while a <a href="#glv">gLV simulation</a> takes one matrix of numbers, and numbers from
+different environments do not belong in one simulation (Karoline, 2026-10-04). Nothing about the method
+changes: a comparison never mixed media, because the medium is part of the conditions two replicate sets
+must share. Every arc now records its <code>medium</code>, so a network says which environments it came
+from.</p>
 
 <h2 id="idea">The idea behind it</h2>
 <p>How one species affects another can be read from growth alone: grow each species by itself, grow the
@@ -520,8 +555,8 @@ GraphML or the adjacency matrix as CSV) in the menu next to it; <strong>Send to 
 Cytoscape running on this machine, in the legend's style; and <strong>Report</strong>, which opens the
 detailed comments of the search (every setting, every interaction, every pair the data did not support,
 the sources) and downloads them as a text file, with the tool version. With <strong>Report growth
-rates</strong> ticked, beside the All button, two more outputs appear beside them: the growth rates as
-their own CSV, and <strong>Generate gLV parameters</strong>
+rates</strong> on, which is what gLV mode sets, two more outputs appear beside them: the growth rates as
+their own CSV, and <strong>Get gLV parameters</strong>
 (<a href="#glv">the matrix, the growth rates and gLV</a>).</p>
 <p><a href="/legend?token={t}{legend_job}">The legend</a> explains every line, arrowhead and flag.</p>
 
@@ -582,13 +617,25 @@ one, with each study's own median kept beside it in the network's meta. Batch mo
 chemostat or a serial dilution the rate a curve shows is the dilution rate, and a rate from a co-culture
 would be growth with a partner, which is the comparison, not the organism's own rate. An organism whose
 curves give no rate is named on the page and in the report, never given a substitute number.</p>
+<p><strong>Start with the gLV mode button</strong>, beside All. It sets the two settings a simulation
+needs and leaves them in sight in Advanced settings: <strong>Report growth rates</strong> on, since a
+simulation needs a rate per organism, and <strong>Include drop-out communities</strong> off, since such an
+arc compares a community with the same community without one member and the effect may run through a third
+species, while a gLV coefficient is meant to be the direct effect of one organism on another. Name one
+medium in the second box as well (<a href="#where">choosing where to look</a>), because a simulation is of
+one environment. The package's README says which of these hold for the numbers in it: how many arcs came
+from drop-out designs, and which media they were measured in.</p>
+
 <p><strong>The gLV parameters.</strong> The gLV control writes a zip for a generalized
 Lotka-Volterra simulator: <code>interaction_matrix.csv</code> (the matrix above, with -1 on the diagonal
 by convention, for self-limitation), <code>growth_rates.csv</code> (one rate per organism, in the same
 order, with how many values it rests on) and <code>README.txt</code>, which states the conventions in the
-files themselves, names any pair left at 0 for disagreeing in sign, and names every organism without a
-rate. The numbers are effect sizes, not fitted gLV coefficients: a gLV coefficient is a per-capita effect
-in absolute units, so scale them for your model rather than using them unchanged. Cells are often
+files themselves, names any pair left at 0 for disagreeing in sign, names every organism without a rate,
+and names the media the arcs were measured in: a simulation is of one environment, so a package built from
+several media says so in capitals and points at the second box
+(<a href="#where">choosing where to look</a>). The numbers are effect sizes, not fitted gLV coefficients:
+a gLV coefficient is a per-capita effect in absolute units, so scale them for your model rather than using
+them unchanged. Cells are often
 stronger than the -1 on the diagonal, a partner outweighing an organism's own self-limitation, and a
 simulation run on them unchanged can grow without bound and come back as NA; the R package below has
 <code>glv_scale()</code> for that.</p>
@@ -601,11 +648,24 @@ hands over a plain matrix and a plain vector, with a helper that shapes them for
 <pre>install.packages("remotes")
 {_e(R_INSTALL)}
 library(grownet)
-glv &lt;- grownet_listen()        # then press gLV parameters, Send to R
+glv &lt;- grownet_listen()        # then press Get gLV parameters, Send to R
 glv                            # prints what it holds and what to read before simulating
 A &lt;- glv_matrix(glv)           # warns about any cell that is a stated extreme
 r &lt;- glv_rates(glv)
-tse &lt;- do.call(miaSim::simulateGLV, as_miasim(glv_scale(glv)))</pre>
+
+args &lt;- as_miasim(glv_scale(glv))
+tse &lt;- do.call(miaSim::simulateGLV, c(args, list(x0 = rep(0.1, args$n_species))))
+
+x &lt;- SummarizedExperiment::assay(tse)          # one row per organism, one column per time point
+matplot(t(x), type = "l", lty = 1, xlab = "time", ylab = "abundance")
+legend("topleft", legend = rownames(x), lty = 1, col = seq_len(nrow(x)), bty = "n")</pre>
+<p class="hint">{_e(R_TROUBLE)}</p>
+<p><strong>One set per listen, and R says when it arrives.</strong> Every arrival prints the summary
+above in the R session, so you can see that a new set came in and which one you are now holding: nothing
+is replaced silently. <code>grownet_listen()</code> takes one parameter set and returns it, so run it
+again before each send, including after restarting {NAME}, whose new run has its own address and token.
+Sending while nothing is listening changes nothing in R; the page says so and shows the line that fetches
+the same parameters instead.</p>
 <p>The caveats travel as data, not as text to be read first: the object prints them every time,
 <code>glv_matrix()</code> warns and names the cells that hold +10 or -10 and takes
 <code>placeholders = "na"</code> or <code>"zero"</code> to convert them, and
@@ -619,7 +679,11 @@ from the address the page shows under its gLV control.</p>
 {settings}
 
 <h2 id="attributes">Arc and node attributes</h2>
-<p>Every downloaded network, JSON or GraphML, carries these for each arc (edge) and node. The network
+<p>Every downloaded network, JSON or GraphML, carries these for each arc (edge) and node. A network
+names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v1</code>
+since 0.2.0: the version moved because <code>significance</code> changed meaning, from the corrected
+p-value to -log10 of it. A file from 0.1.x says <code>/v0</code> and is still valid, read with the older
+meaning. The network
 itself records the tool, <code>tool_version</code>, the date and time it was derived (<code>derived_on</code>,
 <code>derived_at</code>), every setting used, and the version of the data: mGrowthDB publishes no version of
 the whole database, so <code>meta.data</code> holds when it was read and each study's upload and
@@ -642,17 +706,19 @@ its report, and the network sent to Cytoscape:</p>
 <p>Without installing anything, <code>uvx --from git+{REPOSITORY} {COMMAND} ...</code> runs the same
 command. Other uses:</p>
 <pre>{COMMAND} derive SMGDB00000004 --live --format graphml --out study4.graphml
+{COMMAND} derive --live --species Blautia --conditions "Wilkins-Chalgren" --out wc.json
 {COMMAND} derive SMGDB00000004 --live --format matrix --out study4_matrix.csv
 {COMMAND} derive SMGDB00000004 --live --report-rates --rates study4_rates.csv --glv study4_glv.zip
 {COMMAND} derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
 {COMMAND} derive --live --all --merge-arcs --merge-genera --out all_genera.json
 {COMMAND} gui
 {COMMAND} validate example.json</pre>
-<p>The first derives one whole study; the second writes it as the adjacency matrix; the third adds the
-growth rates and the gLV parameters (<a href="#glv">the matrix, the growth rates and gLV</a>); the fourth
-a genus, every species of it with every partner, one node per genus; the fifth all of mGrowthDB, as the
-All button does, merged across studies and then to genus; the sixth opens this page, and the last checks
-a file against the format. Every advanced setting has its flag (see the list above), and
+<p>The first derives one whole study; the second searches a genus in one medium (the second box, from
+the command line); the third writes a study as the adjacency matrix; the fourth adds the growth rates and
+the gLV parameters (<a href="#glv">the matrix, the growth rates and gLV</a>); the fifth a genus, every
+species of it with every partner, one node per genus; the sixth all of mGrowthDB, as the All button does,
+merged across studies and then to genus; the seventh opens this page, and the last checks a file against
+the format. Every advanced setting has its flag (see the list above), and
 <code>{COMMAND} derive --help</code> lists them all. Besides those:</p>
 <ul>{cli_only}</ul>
 
@@ -672,7 +738,10 @@ supports, or tick "Include chemostat and serial dilution experiments" to use the
 <li>every edge is low quality: tick "Show low-quality edges";</li>
 <li>every edge is below the absence threshold: open that section of the result, or set k to 0;</li>
 <li>the partners are species you did not type: untick "Only interactions between the species
-entered".</li>
+entered";</li>
+<li>the second box is holding the search to a medium, an experiment or a study that these species were
+not grown in: empty it, or try a shorter word, since a medium is matched as text (the result says how
+many studies it left out).</li>
 </ul></li>
 </ol>
 

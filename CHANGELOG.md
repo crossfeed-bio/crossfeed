@@ -7,6 +7,34 @@ content.
 ## [0.1.1] (unreleased)
 
 ### Changed
+- **What ships with the tool describes the released state**, not the branch it was written on (Karoline,
+  2026-10-04: "The help should refer to the stage the tool is in when released"): the R install line in the
+  help, the page and both READMEs is the plain `install_github("crossfeed-bio/crossfeed", subdir = "r")`,
+  and installing from a branch or a clone is a development step, in CONTRIBUTING.md. A test refuses an
+  install line pointing at one of our branches, or wording about work in progress, in anything a reader
+  sees, including every page the local server renders.
+- Commands keep the name plain, in the help and in the README: the styling that marks grow**net** as a name
+  in prose never touches something a reader would type (it had reached `library(grownet)` in one command
+  line entry).
+- The README carries the name the way the help does, grow**net** in running prose, its title is lowercase
+  throughout (Karoline, 2026-10-04), and the sections that had grown by accretion were rewritten: what the
+  local page offers is now two boxes, four buttons and the result, "What it does" names the medium and the
+  shapes a network can leave in, and the derivation section says that a comparison never mixes media.
+- **A gLV mode button beside All** (`--glv-mode`), which toggles what a simulation needs: Report growth rates
+  on and Include drop-out communities off, both left in sight in Advanced settings with their defaults
+  unchanged (Karoline, 2026-10-04: "how about moving both options back to advanced parameters, with their
+  default settings, and instead introduce a button 'gLV mode' next to 'All', which will enable growth rate
+  collection and disable drop-out communities?"). A drop-out arc may act through a third species, while a
+  gLV coefficient is meant to be the direct effect of one organism on another. The text beside the buttons
+  is two sentences now, and the gLV package and the R object count the drop-out arcs they hold, or say that
+  none is there. Pressing it again puts both back to their defaults, and it is drawn as a switch: the slider
+  is green when the mode is on and white when the settings are the defaults (Karoline, 2026-10-04). It is
+  still a submit button, so the page needs no JavaScript for it. The result section's control is **Get gLV parameters**, the two input boxes line up whether or
+  not their examples wrap, and the help's R example plots the simulation with `matplot` and says that every
+  arrival prints in R and that `grownet_listen()` takes one parameter set per call.
+- Opening the page's address without its token, by hand or from a tab left over from an earlier run, shows
+  grownet's own page saying where to find the link, instead of a bare server error (Karoline, 2026-10-04:
+  "localhost:8791 shows an error"). It is still refused, with 403, and the page never shows the token.
 - **Arcs below the absence threshold are left out of every output by default** (Karoline, 2026-10-03), so
   the page, a downloaded file and a network sent to Cytoscape all hold the same arcs: Cytoscape used to
   count the absences too, which was confusing. They are still reported, in their own section of the result
@@ -54,6 +82,21 @@ content.
   at all. Checked against Cytoscape 3.10.3.
 
 ### Added
+- **A second input box: media, experiments or studies** (Karoline, 2026-10-04, weakening her stance against
+  environment filtering now that gLV parameters are exported: "it's one thing to export a network of known
+  interactions and another to do a gLV simulation"). Optional, beside the species box, with its own
+  examples. A medium is matched as text, case-insensitively, against the medium name mGrowthDB records on
+  the experiment's compartments, its description and its name, so one word finds the four spellings of
+  Wilkins-Chalgren in the database; an id picks one study (SMGDB...) or one experiment (EMGDB...), and
+  naming a comparison keeps the monocultures it is made against, which the report lists. On the command
+  line it is `--conditions NAME ...`. **"Only these studies" has left Advanced settings**: a study id typed
+  in the box does its job, and the study argument of a `--species` search still works.
+- The gLV package and the R object **name the media their numbers come from**, and say in capitals when
+  there is more than one, since a simulation is of one environment: the All network's package reports six.
+- **Every arc records its `medium`**, the growth medium the comparison ran in, in the neutral format, in
+  GraphML, in what Cytoscape receives and in the report. The schema gained the optional field. Nothing
+  about the method changed: a comparison never mixed media, because the medium is part of the conditions
+  two replicate sets must share.
 - **An R companion package and Send to R** (Karoline, 2026-10-03): the result section's gLV control is one
   drop-down, Download (.zip) or Send to R, and the R package in `r/` receives the parameters over a local
   port (`grownet_listen()`), or fetches them from the page (`grownet_glv(url)`) when no port can be opened.
