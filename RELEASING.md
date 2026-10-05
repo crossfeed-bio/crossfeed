@@ -50,6 +50,8 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
    - sets the version in `pyproject.toml` and in `src/grownet/__init__.py` (`__version__`);
    - turns `## [x.y.z] (unreleased)` in `CHANGELOG.md` into `## [x.y.z] (YYYY-MM-DD)`, and starts a new
      unreleased section above it if work continues.
+   - bumps `Version:` in `r/DESCRIPTION` when anything in `r/` changed, since the R package is installed
+     from GitHub and its version is the only signal an installed copy is out of date.
    `python packaging/check_release.py vX.Y.Z` must say the tag is ready, and `make check` must pass:
    among other things it refuses texts that describe work in progress rather than the released state (an
    install line pointing at one of our branches, for example).
@@ -65,7 +67,11 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
    Windows and macOS, builds and starts the Windows program, then waits for approval of the `pypi`
    environment. Approve it; it publishes to PyPI and creates the GitHub release, with the notes taken from
    the changelog and the wheel, the source archive and `grownet-vX.Y.Z-windows.zip` attached.
-4. **Check as a user would:** `uv tool install grownet` then `grownet gui` on a clean machine, and the zip on
+4. **Refresh the daily All network** (Actions, "all-network", Run workflow). The page and `derive --all`
+   read the published network only when it is less than a day old and speaks the current format, so until a
+   run on the new code replaces it, All derives live instead. One click, and it matters most after a
+   release that changes the format id.
+5. **Check as a user would:** `uv tool install grownet` then `grownet gui` on a clean machine, and the zip on
    a Windows machine. A version on PyPI cannot be replaced: a mistake is fixed with a new version.
 
 ## After the first release: signing the Windows program

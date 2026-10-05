@@ -26,6 +26,31 @@ STYLE_LINK = "/grownet_style.xml?token=__TOKEN__"
 ABOUT = (f"{NAME} was built by Karoline Faust (KU Leuven) and Craig Heilmann (Syntropa), working through "
          "their AI coding agents (Claude).")
 
+# What changed in each release, a few lines each, newest first (Karoline, 2026-10-04: "a small log of what
+# happened in each new release"). The changelog in the repository is the full record; this is the summary a
+# user of the page wants, so each line says what they can now do rather than what moved in the code. A test
+# requires the newest entry to be this version, so a release cannot forget it.
+RELEASES = (
+    ("0.2.0", "2026-10-04", (
+        "Export a network as an adjacency matrix, and as the parameters a generalized Lotka-Volterra "
+        "simulation takes: the interaction matrix, the growth rates beside it and a README of what the "
+        "numbers are and are not.",
+        "Send those parameters straight into R, with the companion package in the repository's r folder; "
+        "it hands them to miaSim or to your own code, and it carries their caveats with them.",
+        "A second box beside the species says where to look: a medium, an experiment or a study. Every arc "
+        "now records the medium it was measured in.",
+        "The gLV mode switch sets what a simulation needs: growth rates on, drop-out communities off.",
+        "significance is now -log10 of the q-value, so larger means stronger evidence, and the q-value has "
+        "its own column. A network says it speaks grownet.interaction_network/v1 because of it.",
+        "Arcs below the absence threshold are left out of the downloads and of Cytoscape, so the page, the "
+        "files and Cytoscape all count the same interactions.",
+    )),
+    ("0.1.0", "2026-09-29", (
+        "The first release: the local page, the command line, networks as JSON or GraphML, Send to "
+        "Cytoscape with the legend's style, and the report that says how every arc was derived.",
+    )),
+)
+
 # key in gui.DEFAULTS -> (label on the page, command line flag, what it does and when to change it)
 SETTINGS = {
     "metric": ("Growth property", "--metric auc|max|growth_rate",
@@ -638,7 +663,10 @@ a gLV coefficient is a per-capita effect in absolute units, so scale them for yo
 them unchanged. Cells are often
 stronger than the -1 on the diagonal, a partner outweighing an organism's own self-limitation, and a
 simulation run on them unchanged can grow without bound and come back as NA; the R package below has
-<code>glv_scale()</code> for that.</p>
+<code>glv_scale()</code> for that. That factor is a free parameter, not a calibration: nothing in the
+growth data fixes the scale, so whoever simulates chooses it, and that choice, rather than the
+measurements, sets where the simulation settles. Report the factor you used with any result that depends
+on it.</p>
 
 <p><strong>In R, with the companion package.</strong> The same control sends the parameters straight into
 a running R session, which is what the R package in this project is for. It assumes no simulator: it
@@ -654,6 +682,8 @@ A &lt;- glv_matrix(glv)           # warns about any cell that is a stated extrem
 r &lt;- glv_rates(glv)
 
 args &lt;- as_miasim(glv_scale(glv))
+# miaSim simulates with stochasticity and migration on (stochastic = TRUE, migration_p = 0.01).
+# For the deterministic model, call it yourself with stochastic = FALSE and migration_p = 0.
 tse &lt;- do.call(miaSim::simulateGLV, c(args, list(x0 = rep(0.1, args$n_species))))
 
 x &lt;- SummarizedExperiment::assay(tse)          # one row per organism, one column per time point
@@ -776,7 +806,14 @@ def _default(value, key: str = "") -> str:
 
 
 def render_about() -> str:
-    """Who built the tool, and where its source, issues and license are (#80)."""
+    """Who built the tool, where its source is, and what each release brought (#80, #112)."""
+    log = "".join(
+        f"<h3>{_e(version)} <span class=\"muted\">{_e(date)}</span></h3><ul>"
+        + "".join(f"<li>{_e(line)}</li>" for line in lines) + "</ul>"
+        for version, date, lines in RELEASES)
     return (f"<h2 class=\"page\">About {_e(NAME)}</h2><p>{_e(ABOUT)}</p>"
             f"<p>Source code, issues and license: <a href=\"{REPOSITORY}\">{REPOSITORY}</a></p>"
-            f"<p>Version {_e(__version__)}.</p>")
+            f"<p>Version {_e(__version__)}.</p>"
+            f"<h2>What changed</h2><p class=\"hint\">The short version. The full record is "
+            f"<a href=\"{REPOSITORY}/blob/main/CHANGELOG.md\">CHANGELOG.md</a> in the repository.</p>"
+            f"{log}")

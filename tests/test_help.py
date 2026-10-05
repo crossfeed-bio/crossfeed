@@ -242,6 +242,9 @@ def test_the_help_links_the_r_package_and_says_how_to_install_it():
     # Karoline, 2026-10-04: the example shows how to look at a simulation, and the help says that an
     # arrival always prints in R and that the listener takes one set at a time
     assert "matplot" in section and "legend(" in section
+    # Karoline, 2026-10-04: miaSim runs with migration and stochasticity on by default, so the example
+    # says how to switch them off without changing the call itself
+    assert "stochastic = FALSE" in section and "migration_p = 0" in section
     assert "prints the summary" in section and "one parameter set" in section
     assert "run it\nagain before each send" in section or "again before each send" in section
     # Karoline, 2026-10-04: "Sys.setenv(GITHUB_PAT = \"\") was not necessary for me and I don't think we
@@ -283,3 +286,21 @@ def test_the_first_advanced_setting_is_called_growth_property():
     """Karoline, 2026-10-03: "Growth measure (the first entry) should be Growth property"."""
     assert help.SETTINGS["metric"][0] == "Growth property"
     assert "Growth property" in gui.render_form("tok") and "Growth measure" not in gui.render_form("tok")
+
+
+def test_the_about_page_logs_what_each_release_brought():
+    """Karoline, 2026-10-04: the About page "can have a small log of what happened in each new release".
+    The newest entry is this version, so a release cannot forget its line, and the full record is linked."""
+    from grownet import __version__
+    from grownet.help import RELEASES, render_about
+    assert RELEASES[0][0] == __version__, "the About page's log does not name this version"
+    assert [v for v, _, _ in RELEASES] == sorted({v for v, _, _ in RELEASES}, reverse=True)  # newest first
+    for version, date, lines in RELEASES:
+        assert re.fullmatch(r"\d+\.\d+\.\d+", version) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", date)
+        assert lines and all(len(line) < 400 for line in lines)       # a summary, not the changelog
+
+    page = render_about()
+    assert "What changed" in page and "CHANGELOG.md" in page
+    for version, _, lines in RELEASES:
+        assert f">{version} <" in page
+        assert lines[0][:40] in page

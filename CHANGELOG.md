@@ -4,99 +4,15 @@ All notable changes to grownet (called crossfeed before 0.1.0) are recorded here
 a Changelog. A released version is a promise about content: a tagged version is never reused for changed
 content.
 
-## [0.1.1] (unreleased)
-
-### Changed
-- **What ships with the tool describes the released state**, not the branch it was written on (Karoline,
-  2026-10-04: "The help should refer to the stage the tool is in when released"): the R install line in the
-  help, the page and both READMEs is the plain `install_github("crossfeed-bio/crossfeed", subdir = "r")`,
-  and installing from a branch or a clone is a development step, in CONTRIBUTING.md. A test refuses an
-  install line pointing at one of our branches, or wording about work in progress, in anything a reader
-  sees, including every page the local server renders.
-- Commands keep the name plain, in the help and in the README: the styling that marks grow**net** as a name
-  in prose never touches something a reader would type (it had reached `library(grownet)` in one command
-  line entry).
-- The README carries the name the way the help does, grow**net** in running prose, its title is lowercase
-  throughout (Karoline, 2026-10-04), and the sections that had grown by accretion were rewritten: what the
-  local page offers is now two boxes, four buttons and the result, "What it does" names the medium and the
-  shapes a network can leave in, and the derivation section says that a comparison never mixes media.
-- **A gLV mode button beside All** (`--glv-mode`), which toggles what a simulation needs: Report growth rates
-  on and Include drop-out communities off, both left in sight in Advanced settings with their defaults
-  unchanged (Karoline, 2026-10-04: "how about moving both options back to advanced parameters, with their
-  default settings, and instead introduce a button 'gLV mode' next to 'All', which will enable growth rate
-  collection and disable drop-out communities?"). A drop-out arc may act through a third species, while a
-  gLV coefficient is meant to be the direct effect of one organism on another. The text beside the buttons
-  is two sentences now, and the gLV package and the R object count the drop-out arcs they hold, or say that
-  none is there. Pressing it again puts both back to their defaults, and it is drawn as a switch: the slider
-  is green when the mode is on and white when the settings are the defaults (Karoline, 2026-10-04). It is
-  still a submit button, so the page needs no JavaScript for it. The result section's control is **Get gLV parameters**, the two input boxes line up whether or
-  not their examples wrap, and the help's R example plots the simulation with `matplot` and says that every
-  arrival prints in R and that `grownet_listen()` takes one parameter set per call.
-- Opening the page's address without its token, by hand or from a tab left over from an earlier run, shows
-  grownet's own page saying where to find the link, instead of a bare server error (Karoline, 2026-10-04:
-  "localhost:8791 shows an error"). It is still refused, with 403, and the page never shows the token.
-- **Arcs below the absence threshold are left out of every output by default** (Karoline, 2026-10-03), so
-  the page, a downloaded file and a network sent to Cytoscape all hold the same arcs: Cytoscape used to
-  count the absences too, which was confusing. They are still reported, in their own section of the result
-  and in the report, with how many and at which k; `meta.hidden.absent` counts them and
-  `meta.absence.absent` still says how many the threshold marked. The new setting **Include arcs below the
-  absence threshold** (`--include-absent`) puts them back in the file, with `effect_over_sd` on each, for
-  moving the threshold inside Cytoscape.
-- The first advanced setting is **Growth property**, not Growth measure (Karoline, 2026-10-03).
-- The help says plainly that the adjusted p-value is the q-value, in the section on how an interaction is
-  decided and in the setting that filters on it, and the page, the report and the legend call it the
-  q-value throughout, since the result table heads that column q.
-- The tool's name is marked as a name in running text, on the page, in the help and in the README, since it
-  is all lowercase and a sentence starting with it read like a typo (Karoline, 2026-10-03). Commands,
-  paths, link labels and the page title keep it plain.
-- The help page explains how a continuous culture is treated, in "Which growth measure": derived with max
-  and marked `continuous_culture`, left out with an area under the curve or a growth rate and why, what
-  the setting does then, that a comparison never mixes modes, and that no study in mGrowthDB holds such a
-  design today.
-- **Continuous culture is derived with the growth measure `max`** (Karoline, 2026-10-03): the level a
-  chemostat or serial dilution settles at is comparable with and without a partner, while the area under
-  its curve and its growth rate are not. Such arcs carry the caution `continuous_culture` and are shown.
-  With `auc` or a growth rate they are still left out unless `--include-non-batch` is given, and then they
-  keep the `non_batch` quality flag and stay hidden by default. A comparison never mixes modes. No network
-  changes today: no study in mGrowthDB has a non-batch pairwise or drop-out design.
-- The result table's third column is **sign**, not direction: an arc already has a direction, from the
-  source to the species it affects (Karoline, 2026-10-03).
-- A number the derivation never computed reads as **not computed** on the page, and a comparison with no
-  ratio (obligate, abolished) reads as **no ratio**, rather than leaving the cell blank. In the file and in
-  Cytoscape such a number stays missing: null in JSON, left out of GraphML and of what Cytoscape is sent,
-  never 0 (Karoline, 2026-10-03).
-- **`significance` is now -log10 of the q-value, and the corrected p-value has its own field, `q_value`**
-  (Karoline, 2026-10-03). Before, `significance` held the corrected p-value itself, so the name ran
-  against the number: larger looked stronger and was weaker, and a continuous Cytoscape mapping on it was
-  backwards. Now `p_value` is Welch's raw value, `q_value` is that value corrected for multiple testing,
-  and `significance` is -log10 of the q-value: 0 at q = 1, larger is stronger evidence, capped at 15 for a
-  q-value of zero. The page's column is `q`, the viewer shows p, q and significance, and the filter
-  (`--max-adjusted-p`) still acts on the q-value. A reader of an older file gets the old meaning: the
-  change rides with 0.1.1, which has no released files yet.
-- A number that is empty is left out of what is sent to Cytoscape rather than sent as null: Cytoscape turns
-  a null number into 0.0, and a q-value of 0 is the strongest there is, so an untested arc used to pass a
-  "q below 0.05" filter inside Cytoscape. The columns an arc may not carry (`p_value`, `q_value`,
-  `significance`, `strength`, `weight`, `effect_over_sd`, `sd`, `se`, the replicate counts and the merge
-  counts) are declared on the edge table instead, so every arc carries all of them and the cells of the
-  arcs without a value stay empty. Without that, a network whose arcs are all untested had no such column
-  at all. Checked against Cytoscape 3.10.3.
+## [0.2.0] (2026-10-04)
 
 ### Added
-- **A second input box: media, experiments or studies** (Karoline, 2026-10-04, weakening her stance against
-  environment filtering now that gLV parameters are exported: "it's one thing to export a network of known
-  interactions and another to do a gLV simulation"). Optional, beside the species box, with its own
-  examples. A medium is matched as text, case-insensitively, against the medium name mGrowthDB records on
-  the experiment's compartments, its description and its name, so one word finds the four spellings of
-  Wilkins-Chalgren in the database; an id picks one study (SMGDB...) or one experiment (EMGDB...), and
-  naming a comparison keeps the monocultures it is made against, which the report lists. On the command
-  line it is `--conditions NAME ...`. **"Only these studies" has left Advanced settings**: a study id typed
-  in the box does its job, and the study argument of a `--species` search still works.
-- The gLV package and the R object **name the media their numbers come from**, and say in capitals when
-  there is more than one, since a simulation is of one environment: the All network's package reports six.
-- **Every arc records its `medium`**, the growth medium the comparison ran in, in the neutral format, in
-  GraphML, in what Cytoscape receives and in the report. The schema gained the optional field. Nothing
-  about the method changed: a comparison never mixed media, because the medium is part of the conditions
-  two replicate sets must share.
+- **The About page logs what each release brought**, a few lines each, newest first, with the changelog
+  linked for the full record (Karoline, 2026-10-04). A test requires the newest entry to name the current
+  version, so a release cannot forget its line.
+- CI builds and checks the R companion package on every push (`R CMD check`, the `r-package` job, #112),
+  with R and its two dependencies from Ubuntu's own packages, so no third-party action is added and
+  nothing is compiled.
 - **An R companion package and Send to R** (Karoline, 2026-10-03): the result section's gLV control is one
   drop-down, Download (.zip) or Send to R, and the R package in `r/` receives the parameters over a local
   port (`grownet_listen()`), or fetches them from the page (`grownet_glv(url)`) when no port can be opened.
@@ -110,9 +26,12 @@ content.
   and grownet's own README text. In R the object prints them every time, `glv_matrix()` warns and names
   the placeholder cells (with `placeholders = "na"` or `"zero"` to convert them), and `as_miasim()` stops
   when an organism has no growth rate.
-- `glv_scale()` in the R package, and a line in the gLV README and the help: the cells are often stronger
-  than the -1 on the diagonal, and a simulation run on them unchanged can grow without bound and come back
-  as NA. Measured on SMGDB00000004, where the unscaled matrix diverges and the scaled one settles.
+- **Get gLV parameters** in the result section, with the rates (`--glv FILE`): a zip holding
+  `interaction_matrix.csv` (the matrix with -1 on the diagonal, by convention, for self-limitation),
+  `growth_rates.csv` in the same order, and a `README.txt` that states the conventions, names any pair left
+  at 0 for disagreeing in sign, and names every organism without a rate. The README says plainly that a
+  cell is an effect size, not a fitted gLV coefficient, which is a per-capita effect in absolute units
+  (Karoline, 2026-10-03).
 - **The adjacency matrix as an export format** (`--format matrix`, the page's format menu): the network as
   a square CSV table, a cell holding the log2 mean of the comparison, so `A[i][j]` is the effect of j on i
   (rows affected, columns the actor). Each organism appears once, so arcs of one pair are merged across
@@ -122,18 +41,34 @@ content.
   effect, how about 10 with the appropriate sign?"): neither has a log2 ratio, because one side did not
   grow at all, so the number is a stated extreme, named cell by cell in the gLV README, and it never enters
   the median of the arcs that do have a ratio. The diagonal is 0 here, and -1 in the gLV package.
-- **Report growth rates**, a checkbox beside the All button (`--report-rates`), off by default: every
+- **Report growth rates**, an advanced setting (`--report-rates`) that the gLV mode button turns on, off
+  by default: every
   organism in the network also gets its maximum specific growth rate in monoculture, by the chosen rate
   method, the median over the replicates and studies that have one, with each study's own median beside it
   in `meta.growth_rates`. Batch monocultures only (in a chemostat the rate is the dilution rate, and a rate
   from a co-culture is growth with a partner). The rates download as their own CSV (`--rates FILE`), and an
   organism whose curves give no rate is named on the page and in the report, never given a substitute.
-- **Generate gLV parameters** in the result section, with the rates (`--glv FILE`): a zip holding
-  `interaction_matrix.csv` (the matrix with -1 on the diagonal, by convention, for self-limitation),
-  `growth_rates.csv` in the same order, and a `README.txt` that states the conventions, names any pair left
-  at 0 for disagreeing in sign, and names every organism without a rate. The README says plainly that a
-  cell is an effect size, not a fitted gLV coefficient, which is a per-capita effect in absolute units
-  (Karoline, 2026-10-03).
+- **A second input box: media, experiments or studies** (Karoline, 2026-10-04, weakening her stance against
+  environment filtering now that gLV parameters are exported: "it's one thing to export a network of known
+  interactions and another to do a gLV simulation"). Optional, beside the species box, with its own
+  examples. A medium is matched as text, case-insensitively, against the medium name mGrowthDB records on
+  the experiment's compartments, its description and its name, so one word finds the four spellings of
+  Wilkins-Chalgren in the database; an id picks one study (SMGDB...) or one experiment (EMGDB...), and
+  naming a comparison keeps the monocultures it is made against, which the report lists. On the command
+  line it is `--conditions NAME ...`. **"Only these studies" has left Advanced settings**: a study id typed
+  in the box does its job, and the study argument of a `--species` search still works.
+- **Every arc records its `medium`**, the growth medium the comparison ran in, in the neutral format, in
+  GraphML, in what Cytoscape receives and in the report. The schema gained the optional field. Nothing
+  about the method changed: a comparison never mixed media, because the medium is part of the conditions
+  two replicate sets must share.
+- The gLV package and the R object **name the media their numbers come from**, and say in capitals when
+  there is more than one, since a simulation is of one environment: the All network's package reports six.
+- `glv_scale()` in the R package, and a line in the gLV README and the help: the cells are often stronger
+  than the -1 on the diagonal, and a simulation run on them unchanged can grow without bound and come back
+  as NA. Measured on SMGDB00000004, where the unscaled matrix diverges and the scaled one settles.
+  **The factor is a free parameter, not a calibration** (Craig, reviewing 0.2.0): nothing in the growth
+  data fixes the scale, so whoever simulates chooses it, and that choice, not the measurements, sets where
+  the simulation settles. Report the factor you used with any result that depends on it.
 - Filter on adjusted p-value (`--max-adjusted-p Q`), an advanced setting off by default (register item
   31): interactions whose adjusted p-value is above the threshold (0.05 unless another is given) are left
   out and counted (`meta.hidden.not_significant`, `meta.statistics.filter`); absent and undetermined arcs
@@ -147,6 +82,86 @@ content.
   and on the command line says what the correction runs over.
 
 ### Changed
+- **The format id moved to `grownet.interaction_network/v1`** (Karoline, 2026-10-04, on her agent's
+  recommendation; Craig's question on #107), because `significance` changed meaning in this release and a
+  version is the one signal that says so: a reader branching on the id would otherwise read these numbers
+  as 0.1.x ones, silently. The namespace is unchanged, nothing else about the format moved, and the fields
+  added since v0 are optional. A v0 document is still valid, read with the older meaning, and
+  `grownet validate` names the version it read. The daily All network is used only when it speaks this
+  version, so the page derives live until the workflow republishes it, about a day.
+- **`significance` is now -log10 of the q-value, and the corrected p-value has its own field, `q_value`**
+  (Karoline, 2026-10-03). Before, `significance` held the corrected p-value itself, so the name ran
+  against the number: larger looked stronger and was weaker, and a continuous Cytoscape mapping on it was
+  backwards. Now `p_value` is Welch's raw value, `q_value` is that value corrected for multiple testing,
+  and `significance` is -log10 of the q-value: 0 at q = 1, larger is stronger evidence, capped at 15 for a
+  q-value of zero. The page's column is `q`, the viewer shows p, q and significance, and the filter
+  (`--max-adjusted-p`) still acts on the q-value. A reader of an older file gets the old meaning: the
+  change rides with 0.1.1, which has no released files yet.
+- **Arcs below the absence threshold are left out of every output by default** (Karoline, 2026-10-03), so
+  the page, a downloaded file and a network sent to Cytoscape all hold the same arcs: Cytoscape used to
+  count the absences too, which was confusing. They are still reported, in their own section of the result
+  and in the report, with how many and at which k; `meta.hidden.absent` counts them and
+  `meta.absence.absent` still says how many the threshold marked. The new setting **Include arcs below the
+  absence threshold** (`--include-absent`) puts them back in the file, with `effect_over_sd` on each, for
+  moving the threshold inside Cytoscape.
+- **Continuous culture is derived with the growth measure `max`** (Karoline, 2026-10-03): the level a
+  chemostat or serial dilution settles at is comparable with and without a partner, while the area under
+  its curve and its growth rate are not. Such arcs carry the caution `continuous_culture` and are shown.
+  With `auc` or a growth rate they are still left out unless `--include-non-batch` is given, and then they
+  keep the `non_batch` quality flag and stay hidden by default. A comparison never mixes modes. No network
+  changes today: no study in mGrowthDB has a non-batch pairwise or drop-out design.
+- **A gLV mode button beside All** (`--glv-mode`), which toggles what a simulation needs: Report growth rates
+  on and Include drop-out communities off, both left in sight in Advanced settings with their defaults
+  unchanged (Karoline, 2026-10-04: "how about moving both options back to advanced parameters, with their
+  default settings, and instead introduce a button 'gLV mode' next to 'All', which will enable growth rate
+  collection and disable drop-out communities?"). A drop-out arc may act through a third species, while a
+  gLV coefficient is meant to be the direct effect of one organism on another. The text beside the buttons
+  is two sentences now, and the gLV package and the R object count the drop-out arcs they hold, or say that
+  none is there. Pressing it again puts both back to their defaults, and it is drawn as a switch: the slider
+  is green when the mode is on and white when the settings are the defaults (Karoline, 2026-10-04). It is
+  still a submit button, so the page needs no JavaScript for it. The result section's control is **Get gLV parameters**, the two input boxes line up whether or
+  not their examples wrap, and the help's R example plots the simulation with `matplot` and says that every
+  arrival prints in R and that `grownet_listen()` takes one parameter set per call.
+- The result table's third column is **sign**, not direction: an arc already has a direction, from the
+  source to the species it affects (Karoline, 2026-10-03).
+- A number the derivation never computed reads as **not computed** on the page, and a comparison with no
+  ratio (obligate, abolished) reads as **no ratio**, rather than leaving the cell blank. In the file and in
+  Cytoscape such a number stays missing: null in JSON, left out of GraphML and of what Cytoscape is sent,
+  never 0 (Karoline, 2026-10-03).
+- A number that is empty is left out of what is sent to Cytoscape rather than sent as null: Cytoscape turns
+  a null number into 0.0, and a q-value of 0 is the strongest there is, so an untested arc used to pass a
+  "q below 0.05" filter inside Cytoscape. The columns an arc may not carry (`p_value`, `q_value`,
+  `significance`, `strength`, `weight`, `effect_over_sd`, `sd`, `se`, the replicate counts and the merge
+  counts) are declared on the edge table instead, so every arc carries all of them and the cells of the
+  arcs without a value stay empty. Without that, a network whose arcs are all untested had no such column
+  at all. Checked against Cytoscape 3.10.3.
+- Opening the page's address without its token, by hand or from a tab left over from an earlier run, shows
+  grownet's own page saying where to find the link, instead of a bare server error (Karoline, 2026-10-04:
+  "localhost:8791 shows an error"). It is still refused, with 403, and the page never shows the token.
+- The first advanced setting is **Growth property**, not Growth measure (Karoline, 2026-10-03).
+- The help says plainly that the adjusted p-value is the q-value, in the section on how an interaction is
+  decided and in the setting that filters on it, and the page, the report and the legend call it the
+  q-value throughout, since the result table heads that column q.
+- The help page explains how a continuous culture is treated, in "Which growth measure": derived with max
+  and marked `continuous_culture`, left out with an area under the curve or a growth rate and why, what
+  the setting does then, that a comparison never mixes modes, and that no study in mGrowthDB holds such a
+  design today.
+- The tool's name is marked as a name in running text, on the page, in the help and in the README, since it
+  is all lowercase and a sentence starting with it read like a typo (Karoline, 2026-10-03). Commands,
+  paths, link labels and the page title keep it plain.
+- The README carries the name the way the help does, grow**net** in running prose, its title is lowercase
+  throughout (Karoline, 2026-10-04), and the sections that had grown by accretion were rewritten: what the
+  local page offers is now two boxes, four buttons and the result, "What it does" names the medium and the
+  shapes a network can leave in, and the derivation section says that a comparison never mixes media.
+- Commands keep the name plain, in the help and in the README: the styling that marks grow**net** as a name
+  in prose never touches something a reader would type (it had reached `library(grownet)` in one command
+  line entry).
+- **What ships with the tool describes the released state**, not the branch it was written on (Karoline,
+  2026-10-04: "The help should refer to the stage the tool is in when released"): the R install line in the
+  help, the page and both READMEs is the plain `install_github("crossfeed-bio/crossfeed", subdir = "r")`,
+  and installing from a branch or a clone is a development step, in CONTRIBUTING.md. A test refuses an
+  install line pointing at one of our branches, or wording about work in progress, in anything a reader
+  sees, including every page the local server renders.
 - Each release's notes on GitHub open with how to start the Windows program and get past the "Windows
   protected your PC" warning: the small More info link, and only then Run anyway (as Karoline found on
   Windows). The README and the zip's README.txt say the same, more precisely than before. Signing through

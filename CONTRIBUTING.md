@@ -24,7 +24,8 @@ pre-commit install            # optional: run the checks on every commit (pip in
 The page then opens with `python -m grownet gui`. How a version is released (PyPI and the Windows
 program) is in [RELEASING.md](RELEASING.md).
 
-The R companion package in [`r/`](r) is built and checked with `make r-check`, where R is installed. To
+The R companion package in [`r/`](r) is built and checked with `make r-check`, where R is installed, and
+CI runs the same build and `R CMD check` on every push (the `r-package` job). To
 try it against a working copy, install it from the clone rather than from GitHub, since what is on a
 branch is not what `install_github` reads:
 

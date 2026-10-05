@@ -9,10 +9,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packaging"))
 from check_release import check, main, release_notes  # noqa: E402
 
 
-def _repo(tmp_path, version="0.1.0", code="0.1.0", heading="## [0.1.0] (2026-10-01)"):
+def _repo(tmp_path, version="0.1.0", code="0.1.0", heading="## [0.1.0] (2026-10-01)", cited=None):
     (tmp_path / "src" / "grownet").mkdir(parents=True)
     (tmp_path / "pyproject.toml").write_text(f'[project]\nname = "grownet"\nversion = "{version}"\n')
     (tmp_path / "src" / "grownet" / "__init__.py").write_text(f'__version__ = "{code}"\n')
+    # the citation names the version too: 0.1.0 shipped while CITATION.cff still said 0.0.2
+    (tmp_path / "CITATION.cff").write_text(f'cff-version: 1.2.0\ntitle: grownet\n'
+                                           f'version: {cited or version}\ndate-released: "2026-10-01"\n')
     (tmp_path / "CHANGELOG.md").write_text(f"# Changelog\n\n{heading}\n\n### Added\n- the first release\n\n"
                                            "## [0.0.2] (2026-09-01)\n\n- older\n")
     return tmp_path
@@ -28,6 +31,7 @@ def test_a_consistent_release_is_ready_and_its_notes_are_its_changelog_section(t
     ({"code": "0.0.2"}, "v0.1.0", "__version__ is 0.0.2"),
     ({"heading": "## [0.1.0] (unreleased)"}, "v0.1.0", "still marks 0.1.0 unreleased"),
     ({"heading": "## [0.0.9] (2026-10-01)"}, "v0.1.0", "no section for 0.1.0"),
+    ({"cited": "0.0.2"}, "v0.1.0", "CITATION.cff says version 0.0.2"),
 ])
 def test_an_inconsistent_release_is_refused(tmp_path, repo, tag, says):
     problems, _ = check(tag, _repo(tmp_path, **repo))

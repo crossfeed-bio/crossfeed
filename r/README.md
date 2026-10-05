@@ -74,6 +74,8 @@ miaSim is suggested, never required; any simulator takes the same pieces.
 
 ```r
 args <- as_miasim(glv_scale(glv))
+# miaSim simulates with stochasticity and migration on (stochastic = TRUE, migration_p = 0.01).
+# For the deterministic model, call it yourself with stochastic = FALSE and migration_p = 0.
 tse <- do.call(miaSim::simulateGLV, c(args, list(x0 = rep(0.1, args$n_species))))
 
 x <- SummarizedExperiment::assay(tse)          # one row per organism, one column per time point

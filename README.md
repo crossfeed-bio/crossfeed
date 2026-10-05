@@ -244,6 +244,8 @@ library(grownet)
 glv <- grownet_listen()                 # then press Get gLV parameters, Send to R
 glv                                     # prints what it holds and what to read before simulating
 args <- as_miasim(glv_scale(glv))
+# miaSim simulates with stochasticity and migration on; for the deterministic model, call it
+# yourself with stochastic = FALSE and migration_p = 0
 tse <- do.call(miaSim::simulateGLV, c(args, list(x0 = rep(0.1, args$n_species))))
 x <- SummarizedExperiment::assay(tse)
 matplot(t(x), type = "l", lty = 1, xlab = "time", ylab = "abundance")
@@ -628,7 +630,8 @@ Discipline is a feature here. Every commit and every CI run passes the same self
 itself, a documented house style, and a schema contract that keeps the shipped schema in step with the
 code. The tests run on Python 3.10 to 3.12 on Linux, and on Windows and macOS. Get the same checks locally
 with `make check`, or run them on every commit with `pre-commit install`. The R companion package has its
-own checks, `make r-check` where R is installed, which CI does not run yet. See [CONTRIBUTING.md](CONTRIBUTING.md). Found a security issue?
+own checks, `make r-check` where R is installed, and CI runs the same build and `R CMD check` on every
+push. See [CONTRIBUTING.md](CONTRIBUTING.md). Found a security issue?
 Report it privately (see [SECURITY.md](SECURITY.md)), not in a public issue.
 
 ## Attribution and data governance

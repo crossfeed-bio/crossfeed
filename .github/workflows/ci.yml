@@ -53,6 +53,30 @@ jobs:
           /tmp/clean/bin/grownet --help
           python packaging/smoke.py /tmp/clean/bin/grownet gui --no-browser
 
+  r-package:
+    # the R companion package in r/, checked the way CRAN does (#112). R and its two dependencies come from
+    # Ubuntu's own packages, so this adds no third-party action and nothing is compiled: r-cran-jsonlite is
+    # what the package imports, r-cran-testthat is what runs its tests inside the check.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: install R, jsonlite and testthat
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends r-base-core r-cran-jsonlite r-cran-testthat
+          R --version | head -1
+      - name: build and check the package
+        # the suggested packages (miaSim) are not installed here: it is only named in examples that do not
+        # run, so the check must not demand it
+        env:
+          _R_CHECK_FORCE_SUGGESTS_: "false"
+        run: |
+          R CMD build r
+          R CMD check --no-manual grownet_*.tar.gz
+      - name: show the check log when it fails
+        if: failure()
+        run: cat grownet.Rcheck/00check.log || true
+
   windows-app:
     # the self-contained Windows program: a one-folder build in a zip (Karoline, on #63), built and started
     # on a Windows machine, so every change proves it still works (#26)
