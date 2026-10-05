@@ -8,7 +8,7 @@
 [mGrowthDB](https://mgrowthdb.gbiomed.kuleuven.be/) into directed interaction networks, in a neutral and
 openly citable format that downstream tools (such as Syntropa and microbetag) can consume.
 
-grownet was called crossfeed until 2026-09-27 (#71). The package, the module and the command are
+**grownet** was called crossfeed until 2026-09-27 (#71). The package, the module and the command are
 `grownet`; the repository keeps the old name for now, so its address is still `crossfeed-bio/crossfeed`.
 
 It is a thin client: it pulls from mGrowthDB and emits a network. Nothing to host, nothing to pay for on a
@@ -55,7 +55,7 @@ The zip's `README.txt` says the same, for whoever unzips it.
 ### With uv (macOS, Linux and Windows)
 
 The quickest route is [uv](https://docs.astral.sh/uv/), which fetches a suitable Python by itself. The
-Python that ships with macOS (3.9) is too old for grownet, and uv avoids that. Install uv once:
+Python that ships with macOS (3.9) is too old for **grownet**, and uv avoids that. Install uv once:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -100,7 +100,7 @@ From a clone, with Python 3.10 or newer: the setup and the checks are in
 
 From a clone of the repository, run the first slice offline, from the synthetic fixture in
 `tests/fixtures` (no network), to see a network. The fixture is part of the repository, not of an
-installed grownet, so after an install use the live commands below instead.
+installed **grownet**, so after an install use the live commands below instead.
 
 ```
 python -m grownet derive SMGDB00000004 --fixture tests/fixtures/example_interactions.json
@@ -123,7 +123,7 @@ python -m grownet validate network.json
 
 ## What it does
 
-Given a set of query organisms, grownet builds an interaction network on the fly from mGrowthDB
+Given a set of query organisms, **grownet** builds an interaction network on the fly from mGrowthDB
 co-growth measurements. Each edge is a directed, condition-specific interaction (facilitation, inhibition,
 or neutral) with its strength, its significance, and the experimental condition it holds in. Every edge
 carries its provenance: the study or studies it was derived from, so attribution resolves at the edge
@@ -191,7 +191,7 @@ python -m grownet gui
 The tool version shows next to its name, and a Help page introduces the idea (after Gause, with a figure), explains every advanced setting and arc
 attribute, the main design decisions, the command line, what to do when no network comes back, and where
 to report a problem; an About page says who built it and links this repository. Type species names (or NCBI taxon ids, or a genus for all its species), one per line, and press "Find
-interactions", or press All to derive every study in mGrowthDB. grownet resolves
+interactions", or press All to derive every study in mGrowthDB. **grownet** resolves
 the names to taxon ids from mGrowthDB's own strain records, finds the studies holding them, derives the
 interactions, and shows them as a table with downloads for JSON and GraphML. Every setting sits behind
 "Advanced settings" with the same defaults the command line uses.
@@ -208,6 +208,9 @@ local page has a "Send to Cytoscape" button that sends the network it already co
 attributes become columns, so effect, weight, status, quality, the study ids and the experiments are there
 for filtering; the evidence (biculture or dropout) is Cytoscape's `interaction` column, and nodes carry a
 `genus` column.
+
+Every arc carries `p_value`, `q_value` and `significance` as columns, empty where there was no test: an
+empty number is never sent as 0, which Cytoscape would read as the strongest possible evidence.
 
 No edge labels are drawn, so a network stays readable. The sign is on every edge as a column instead:
 `strength` holds the signed log2 mean (`-2.66`), `effect` the word, and `weight` its magnitude. To show it,
@@ -248,7 +251,8 @@ date and time as graph attributes.
       "target": "ncbi:476272",
       "effect": "facilitation",
       "strength": 1.305,
-      "significance": 0.0715,
+      "significance": 1.1457,
+      "q_value": 0.0715,
       "p_value": 0.0143,
       "weight": 1.305,
       "effect_over_sd": 6.7714,
@@ -295,7 +299,10 @@ taxon's rank, and a few records still carry a species-level id, which mGrowthDB 
 `effect` is the direction, one of `facilitation`, `inhibition`, `neutral`; the default derivation uses
 `neutral` only for a mean of exactly zero, which has no direction and is always absent (see below), and it
 remains for the retired baseline and existing files. `strength` and `significance` are your
-method's numbers (or `null`). `study_ids` on every edge is the edge-level attribution and must carry at
+method's numbers (or `null`). **The three numbers of the test run in two directions, so read the names:**
+`p_value` is the raw p-value, `q_value` is that value corrected for multiple testing (smaller is stronger
+evidence), and `significance` is `-log10(q_value)` (larger is stronger evidence, 0 at q = 1, capped at 15
+for a q-value of zero), which is the one to map continuously in Cytoscape. `study_ids` on every edge is the edge-level attribution and must carry at
 least one study. `sd` and `se` are the standard deviation and standard error of the strength across
 replicates, with `n_with` and `n_without` the replicate counts behind it, and `metric` the growth property
 compared (`auc` by default; `max`, or a growth rate recorded with its rule, `growth_rate:easylinear:5` or
@@ -330,12 +337,14 @@ need every drop-out. mGrowthDB still measures the removed member in a drop-out e
 not used, and if it shows a positive signal the drop-out may not be clean, so its arcs are flagged
 `removed_member_detected`. A larger community with no drop-out experiment is skipped, with a reason.
 
-**Batch only, by default.** A chemostat or serial dilution curve does not mean what a batch curve means:
-an area under the curve is meaningless under dilution, and a continuous-culture growth rate is a different
-quantity. So only experiments whose `cultivationMode` is batch are derived. Anything else, including an
-experiment with no mode recorded, is reported with its mode and left out. `--include-non-batch` (or the
-matching advanced setting) derives them anyway, with their edges flagged `non_batch`. Every edge records
-its `cultivation_mode`.
+**The cultivation mode and the measure go together.** A chemostat or serial dilution curve does not mean
+what a batch curve means, so what can be compared depends on the measure. With `--metric max` such an
+experiment is derived: the level a continuous culture settles at is comparable with and without a partner,
+and its arcs carry the caution `continuous_culture`. With `auc` or a growth rate it is left out and
+reported with its mode, since the area under a diluted run says how long it ran and its growth rate is the
+dilution rate; `--include-non-batch` (or the matching advanced setting) derives it anyway, with the edges
+flagged `non_batch` and hidden by default. An experiment with no recorded mode counts as not batch. A
+comparison never mixes modes, and every edge records its `cultivation_mode`.
 
 **Growth comes first.** Before any ratio, each replicate set is checked for growth. Each replicate gives
 one rise, log2(maximum / abundance at the first time point), with the maximum taken wherever that
@@ -369,9 +378,13 @@ and abolished counts depend on these two numbers, so `meta.no_growth` records th
   `null` (undetermined) whatever
   its numbers, since low quality is never read as an absence; an edge with no spread estimate (a single
   replicate) is one such case and also has no `effect_over_sd`.
-- Absent edges stay in the output. Hiding them is the display's job: the Cytoscape style hides `absent`
-  edges by default, and the local page lists them in their own section. `meta.absence` records the rule,
-  the k used, and how many edges it marked absent.
+- **Absent arcs are left out of every output by default**, so a file and a network sent to Cytoscape hold
+  exactly the interactions that are reported: one number everywhere. They are still reported, in their own
+  section of the page and in the report, and `meta.absence` records the rule, the k used and how many the
+  threshold marked absent, while `meta.hidden.absent` says how many were left out.
+  `--include-absent` (or the matching advanced setting) keeps them in the file with `status` absent; each
+  carries `effect_over_sd`, the quantity k cuts, so a reader can move the threshold in Cytoscape on that
+  column without deriving again.
 
 `quality` lists what makes an edge low quality: `single_replicate` (no spread can be estimated, so such an
 edge carries no `sd`, `se` or test), `strains_pooled` (monocultures of different strains of one species were
@@ -396,7 +409,7 @@ counts below detection. Such an edge keeps its `status` and is exported. With `-
 with no p-value carries `untested`: the filter kept it without judging it.
 `notes` inform without disqualifying, for example a replicate left out for an implausible spike. Every
 comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2 values:
-`p_value` is the raw value and `significance` the adjusted one (Benjamini-Hochberg by default,
+`p_value` is the raw value, `q_value` the adjusted one (Benjamini-Hochberg by default,
 Benjamini-Yekutieli with `--correction by`) across all comparisons tested in the derivation: one study
 with `derive STUDY`, every study a search reads with `--species`, `--all` or the page, absent and
 low-quality arcs included (`meta.statistics`). Single-replicate, obligate, abolished and merged arcs have
@@ -436,7 +449,8 @@ class MyDeriver(Deriver):
             "source_name": "Partner sp.", "target_name": "Focal sp.",  # display names   (optional)
             "effect": "facilitation",          # "facilitation" | "inhibition" | "neutral"
             "strength": 1.23,                  # your metric, any float, or None
-            "significance": 0.01,              # a p-value, or None if the method is qualitative
+            "q_value": 0.01,                   # corrected for multiple testing, or None
+            "significance": 2.0,               # -log10 of it, or None if the method is qualitative
             "condition": study.get("name", ""),
             "method": self.method,             # a short note on how the edge was computed
             "study_id": study["id"],           # edge-level attribution              (required)
@@ -493,9 +507,10 @@ to show them; `meta.hidden` says how many were left out, so a network file never
 Single-replicate edges are the exception: they are shown, flagged, and marked by the Cytoscape style.
 
 Each comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2
-values, reported as `p_value` and as `significance`, the adjusted value (Benjamini-Hochberg by default)
-over every comparison tested in the derivation (`meta.statistics`). The test supports an edge when
-significant and decides nothing unless `--max-adjusted-p` is given: with two or three replicates a real
+values, reported as `p_value`, as `q_value` (the correction over every comparison tested in the
+derivation, Benjamini-Hochberg by default, in `meta.statistics`) and as `significance`, which is
+`-log10(q_value)`. The test supports an edge when significant and decides nothing unless
+`--max-adjusted-p` is given: with two or three replicates a real
 effect often fails to reach significance, and any of these results may change with more experiments.
 
 Two things to read before trusting a magnitude. A species is compared only with itself measured by the
@@ -529,7 +544,7 @@ Report it privately (see [SECURITY.md](SECURITY.md)), not in a public issue.
 
 ## Attribution and data governance
 
-mGrowthDB is open, so grownet pulls from it directly. Per-study licenses are respected by citing every
+mGrowthDB is open, so **grownet** pulls from it directly. Per-study licenses are respected by citing every
 study that supports a network at the edge level, rather than bundling. Unpublished collaborator data is
 used only for the agreed analysis and is never ingested into any downstream corpus. See
 [docs/DATA_GOVERNANCE.md](docs/DATA_GOVERNANCE.md).

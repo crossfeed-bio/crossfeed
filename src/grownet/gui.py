@@ -28,7 +28,7 @@ from . import published as daily
 from .adapter import condensed, unread
 from .attribution import studies_with_edges
 from .cytoscape import CytoscapeError, send, style_xml
-from .derive import ABSENCE_THRESHOLD, PROVISIONAL, derive_interactions, genus_species, output_meta
+from .derive import ABSENCE_THRESHOLD, ABSENT, PROVISIONAL, derive_interactions, genus_species, output_meta
 from .export import to_graphml
 from .growth import SPIKE_FACTOR
 from .legend import legend_svg
@@ -57,12 +57,13 @@ def metric_name(s: dict) -> str:
 INPUT_EXAMPLES = ("Blautia hydrogenotrophica", "Faecalibacterium duncaniae A2-165", "Bacteroides", "411483")
 DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window": rates.DEFAULT_WINDOW,
             "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
-            "include_low_quality": False, "correction": "bh", "include_dropout": True,
+            "include_low_quality": False, "include_absent": False, "correction": "bh",
+            "include_dropout": True,
             "include_non_batch": False, "studies": "", "exclude_studies": "", "only_entered": True,
             "merge_arcs": False, "min_studies": 1, "merge_genera": False,
             # None: the no-growth rule's own defaults, read when used (grownet.interaction.grew)
             "no_growth_alpha": None, "no_growth_factor": None,
-            # None: the adjusted p-value filter is off (register item 31)
+            # None: the q-value filter is off (register item 31)
             "max_adjusted_p": None}
 # the threshold the filter offers when it is switched on (Karoline, 2026-09-30: "Settable, 0.05 default")
 ADJUSTED_P_DEFAULT = 0.05
@@ -110,7 +111,10 @@ def _page(body: str, token: str = "", refresh: str = "", job: str = "") -> str:
     return ("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
             f"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{TITLE}</title>"
             f"{reload}<link rel=\"icon\" href=\"data:image/svg+xml;utf8,{icon}\">"
-            f"<style>{brand.CSS}</style></head><body><div class=\"app\">{header}<main>{body}</main></div>"
+            f"<style>{brand.CSS}</style></head><body><div class=\"app\">{header}"
+            # the name is all lowercase, so in prose it is marked as a name (Karoline, 2026-10-03); the
+            # header's wordmark, commands and the title are left alone by in_prose
+            f"<main>{brand.in_prose(body)}</main></div>"
             "</body></html>\n")
 
 
@@ -129,6 +133,7 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
     p_value = _esc(s["max_adjusted_p"] if s["max_adjusted_p"] is not None else ADJUSTED_P_DEFAULT)
     checked = " checked" if s["only_entered"] else ""
     low = " checked" if s["include_low_quality"] else ""
+    absent = " checked" if s["include_absent"] else ""
     dropout = " checked" if s["include_dropout"] else ""
     non_batch = " checked" if s["include_non_batch"] else ""
     corrections = "".join(f"<option value=\"{c}\"{' selected' if s['correction'] == c else ''}>{label}</option>"
@@ -139,7 +144,7 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
                            for m in rates.METHODS)
     return f"""<details>
 <summary>Advanced settings</summary>
-<div class="row"><label>Growth measure
+<div class="row"><label>Growth property
   <select name="metric">{options}</select></label>
   <span class="muted">the growth property compared: auc, the area under the curve (default); max, the maximal
   abundance; or growth_rate, the maximum specific growth rate</span></div>
@@ -155,14 +160,20 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   Show low-quality edges</label>
   <span class="muted">pooled strains, a chemostat curve, or a drop-out whose removed member was still detected;
   single-replicate edges are always shown, flagged</span></div>
+<div class="row"><label><input type="checkbox" name="include_absent" value="1"{absent}>
+  Include arcs below the absence threshold</label>
+  <span class="muted">off by default, so the downloads and Cytoscape hold exactly the interactions this
+  page counts; on, they also carry the arcs the threshold marked absent, which lets you move k in
+  Cytoscape on the effect_over_sd column without searching again</span></div>
 <div class="row"><label><input type="checkbox" name="include_dropout" value="1"{dropout}>
   Include drop-out communities</label>
   <span class="muted">arcs from a community compared with the same community without one member; possibly
   indirect, so labeled as such</span></div>
 <div class="row"><label><input type="checkbox" name="include_non_batch" value="1"{non_batch}>
   Include chemostat and serial dilution experiments</label>
-  <span class="muted">excluded by default: a continuous-culture curve is not comparable with a batch
-  one</span></div>
+  <span class="muted">with the growth measure max they are derived anyway, since the level a continuous
+  culture settles at is comparable with and without a partner; with auc or a growth rate they are left out
+  unless this is ticked, and such arcs are then marked low quality</span></div>
 <div class="row"><label>Absence threshold k
   <input name="absence_threshold" type="text" size="6" value="{_esc(s['absence_threshold'])}"></label>
   <span class="muted">an interaction counts as absent (the species do not affect each other) when its
@@ -173,14 +184,14 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   <span class="muted">how the p-values of Welch's t-test are adjusted: Benjamini-Hochberg (default) or the
   more conservative Benjamini-Yekutieli. The adjustment runs across every comparison of this search
   together: all arcs of all the studies it reads, absent and low-quality ones included, not study by study.
-  So an arc's adjusted p-value can change with the other studies a search reads (All reads every
+  So an arc's q-value can change with the other studies a search reads (All reads every
   study)</span></div>
 <div class="row"><label><input type="checkbox" name="filter_adjusted_p" value="1"{p_filter}>
-  Filter on adjusted p-value, at most
+  Filter on the q-value, at most
   <input name="max_adjusted_p" type="text" size="6" value="{p_value}"></label>
-  <span class="muted">also leave out interactions whose adjusted p-value is above this; arcs without a p-value
+  <span class="muted">also leave out interactions whose q-value is above this; arcs without a p-value
   are kept, marked untested. Off by default: with two or three replicates the test misses many real effects,
-  and an adjusted p-value depends on the other comparisons in the same search
+  and a q-value depends on the other comparisons in the same search
   (<a href="{why}">why</a>)</span></div>
 <div class="row"><label>Spike limit
   <input name="spike_factor" type="text" size="6" value="{_esc(s['spike_factor'])}"></label>
@@ -275,8 +286,10 @@ def render_about(token: str, job: str = "") -> str:
     return _page(_back(token, job, top=True) + help_page.render_about() + _back(token, job), token, job=job)
 
 
-HEADER = ("<tr><th>source</th><th>affects</th><th>direction</th><th>log2 mean &plusmn; sd</th>"
-          "<th>|mean| / sd</th><th>replicates with / without</th><th>adjusted p</th><th>condition</th>"
+# "sign" rather than "direction": the arc already has a direction, from the source to the species it
+# affects, so the word was taken (Karoline, 2026-10-03)
+HEADER = ("<tr><th>source</th><th>affects</th><th>sign</th><th>log2 mean &plusmn; sd</th>"
+          "<th>|mean| / sd</th><th>replicates with / without</th><th>q</th><th>condition</th>"
           "<th>remarks</th><th>study</th></tr>")
 
 
@@ -289,8 +302,13 @@ def _direction(e) -> str:
     return e.effect
 
 
-def _number(x, fmt: str) -> str:
-    return "" if x is None else format(x, fmt)
+# A number that was never computed is missing, not zero and not blank: a blank cell reads as an oversight,
+# and zero would read as the strongest possible q-value (Karoline, 2026-10-03). The page says so in words.
+MISSING = "<span class=\"muted\" title=\"not computed for this arc\">not computed</span>"
+
+
+def _number(x, fmt: str, missing: str = "") -> str:
+    return missing if x is None else format(x, fmt)
 
 
 def _arc_rows(net, edges) -> str:
@@ -306,9 +324,9 @@ def _arc_rows(net, edges) -> str:
                     f"<td>{_esc(net.nodes[e.target].name or e.target)}</td>"
                     f"<td class=\"{sign}\">{_esc(_direction(e))}</td>"
                     f"<td class=\"nowrap\">{_mean_sd(e.strength, e.sd)}</td>"
-                    f"<td>{_number(e.effect_over_sd, '.2f')}</td>"
+                    f"<td>{_number(e.effect_over_sd, '.2f', MISSING)}</td>"
                     f"<td>{_esc(_number(e.n_with, 'd'))} / {_esc(_number(e.n_without, 'd'))}</td>"
-                    f"<td>{_number(e.significance, '.3g')}</td><td>{_esc(e.condition)}</td>"
+                    f"<td>{_number(e.q_value, '.3g', MISSING)}</td><td>{_esc(e.condition)}</td>"
                     f"<td>{remarks}</td><td>{_esc(' '.join(e.study_ids))}</td></tr>")
     return "".join(rows)
 
@@ -318,27 +336,33 @@ def _hidden_note(hidden: dict) -> str:
     note = "" if not n else (f"<p class=\"muted\">Hidden by default: {n} low-quality edge(s). Tick them in "
                              "Advanced settings to show them.</p>")
     if hidden.get("not_significant"):
-        note += (f"<p class=\"muted\">Left out by the adjusted p-value filter: {hidden['not_significant']} "
-                 "interaction(s) whose adjusted p-value is above the threshold. Untick it in Advanced settings "
+        note += (f"<p class=\"muted\">Left out by the q-value filter: {hidden['not_significant']} "
+                 "interaction(s) whose q-value is above the threshold. Untick it in Advanced settings "
                  "to see them.</p>")
     return note
 
 
 def _mean_sd(mean, sd) -> str:
     if mean is None:
-        return ""
+        # obligate and abolished arcs have no ratio by construction, which is a result, not a gap
+        return "<span class=\"muted\" title=\"one side did not grow, so there is no ratio\">no ratio</span>"
     return f"{mean:+.2f}" + ("" if sd is None else f" &plusmn; {sd:.2f}")
 
 
-def _absent_section(net, absence: dict) -> str:
-    """Edges below the absence threshold: kept and shown on request, apart from the interactions."""
-    absent = [e for e in net.edges if e.status == "absent"]
+def _absent_section(result: dict, absence: dict) -> str:
+    """Arcs below the absence threshold, reported here whether or not a file holds them."""
+    in_file = [e for e in result["network"].edges if e.status == "absent"]
+    left_out = result.get("absent")
+    net = result["network"] if in_file else left_out
+    absent = in_file or (list(left_out.edges) if left_out else [])
     if not absent:
         return ""
     k = absence.get("k", ABSENCE_THRESHOLD)
+    where = ("Kept in the downloads with status absent; the Cytoscape style hides them by default."
+             if in_file else "Left out of the downloads and of Cytoscape, so every count agrees with this "
+             "page; tick Include arcs below the absence threshold to keep them.")
     return (f"<details><summary>{len(absent)} edge(s) below the absence threshold (k = {k:g})</summary>"
-            f"<p class=\"muted\">|log2 mean| &lt; {k:g} &times; sd: no interaction at this threshold. Kept in the "
-            "downloads with status absent; the Cytoscape style hides them by default.</p>"
+            f"<p class=\"muted\">|log2 mean| &lt; {k:g} &times; sd: no interaction at this threshold. {where}</p>"
             f"<div class=\"scroll\"><table>{HEADER}{_arc_rows(net, absent)}</table></div></details>")
 
 
@@ -413,21 +437,29 @@ def _empty_reason(result: dict) -> str:
                 f"({result['partners_only']} co-culture(s) or interaction(s)). Add the partners, or untick Only "
                 "interactions between the species entered.")
     if result.get("hidden", {}).get("not_significant"):
-        return (f"The adjusted p-value filter left out all {result['hidden']['not_significant']} interaction(s) "
-                "found: none has an adjusted p-value at or below its threshold. Untick it in Advanced settings "
+        return (f"The q-value filter left out all {result['hidden']['not_significant']} interaction(s) "
+                "found: none has a q-value at or below its threshold. Untick it in Advanced settings "
                 "to see them.")
     if result.get("hidden", {}).get("low_quality"):
         return (f"{result['hidden']['low_quality']} low-quality interaction(s) were found and are hidden; tick "
                 "Show low-quality edges to see them.")
+    if result.get("hidden", {}).get("absent"):
+        # the comparisons ran and none reached the threshold: say that, not that the data could not be used
+        k = result.get("absence", {}).get("k", ABSENCE_THRESHOLD)
+        return (f"All {result['hidden']['absent']} comparison(s) came out below the absence threshold "
+                f"(k = {k:g}): the species do not affect each other by that rule. They are listed below, "
+                "and a lower k or Include arcs below the absence threshold keeps them in the file.")
     reasons = [reason for _, reason in result["skipped"]]
     only_monocultures = [r for r in reasons if r.startswith("only monocultures")]
     if only_monocultures and len(only_monocultures) == len(result["studies"]):
         return ("The studies holding these species grew them only alone, in monocultures, so there is no "
                 "co-culture or community to compare with.")
-    non_batch = [r for r in reasons if "a non-batch curve is not comparable" in r]
+    non_batch = [r for r in reasons if "excluded by default with the growth measure" in r]
     if non_batch and len(non_batch) == len(reasons) and not s.get("include_non_batch"):
-        return ("These studies are chemostat or serial dilution experiments, which are left out by default; "
-                "tick Include chemostat and serial dilution experiments to derive from them.")
+        return ("These studies are chemostat or serial dilution experiments. Their area under the curve and "
+                "growth rate are not comparable with a batch run, so they are left out; set the growth "
+                "measure to max, which that mode suits, or tick Include chemostat and serial dilution "
+                "experiments.")
     top = Counter(r.split(";")[0].strip() for r in reasons).most_common(1)
     why = f" The most common reason: {_esc(top[0][0])}." if top else ""
     return (f"The studies holding these species gave no usable comparison.{why} {EMPTY_HELP} The report lists "
@@ -465,14 +497,18 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
                  f"{hidden}<div class=\"scroll\"><table>{HEADER}{_arc_rows(net, shown)}</table></div>")
     elif net.edges:
         filtered = result.get("hidden", {}).get("not_significant")
-        heading = ("No interactions pass the adjusted p-value filter" if filtered
+        heading = ("No interactions pass the q-value filter" if filtered
                    else "No interactions above the absence threshold")
         table = (f"<h2>{heading}</h2>{outputs}"
                  f"<p class=\"note\">{_esc(net.meta.get('provisional', PROVISIONAL))}</p>{hidden}")
     else:
+        # an arc the threshold or the filter removed is no longer in the network (Karoline, 2026-10-03), so
+        # an empty result says which rule emptied it, and the caution says what that rule does
+        why = net.meta.get("provisional", PROVISIONAL) if result.get("hidden", {}).get("not_significant") else ""
         table = (f"<h2>No interactions</h2><p class=\"note\">{_empty_reason(result)} "
                  f"<a href=\"/help?token={_esc(token)}{_esc(_job_suffix(result.get('job', '')))}#empty\">What to "
-                 f"try</a>.</p>{hidden}{outputs}")
+                 f"try</a>.</p>" + (f"<p class=\"note\">{_esc(why)}</p>" if why else "")
+                 + f"{hidden}{outputs}")
     studies = ", ".join(result["studies"]) or "none"
     skipped = ""
     skips = condensed(result["skipped"])
@@ -483,7 +519,7 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
     errors = "".join(f"<p class=\"note\">{_esc(e)}</p>" for e in result["errors"])
     return (f"<section class=\"result\" id=\"result\">{note}{species_heading}<ul>{resolved}</ul>{unresolved}"
             f"<p class=\"muted\">Studies searched: {_esc(studies)}</p>{errors}{table}"
-            f"{_absent_section(net, result.get('absence', {}))}{_sources(net)}{skipped}</section>")
+            f"{_absent_section(result, result.get('absence', {}))}{_sources(net)}{skipped}</section>")
 
 
 def render_result(token: str, result: dict, message: str = "") -> str:
@@ -516,6 +552,7 @@ def parse_settings(form: dict) -> dict:
     except ValueError:
         pass
     settings["include_low_quality"] = bool(form.get("include_low_quality"))
+    settings["include_absent"] = bool(form.get("include_absent"))
     settings["include_dropout"] = bool(form.get("include_dropout"))
     settings["include_non_batch"] = bool(form.get("include_non_batch"))
     settings["merge_arcs"] = bool(form.get("merge_arcs"))
@@ -674,9 +711,14 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         errors.append(f"{len(failed)} replicate(s) or growth curve(s) could not be read from mGrowthDB "
                       f"(for example {failed[0][0]}: {failed[0][1]}); the result is incomplete, so run the "
                       "search again")
-    records, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"],
-                                 s["no_growth_alpha"], s["no_growth_factor"], s["merge_arcs"], s["min_studies"],
-                                 s["merge_genera"], support_level(names), s["max_adjusted_p"])
+    kept, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"],
+                              s["no_growth_alpha"], s["no_growth_factor"], s["merge_arcs"], s["min_studies"],
+                              s["merge_genera"], support_level(names), s["max_adjusted_p"],
+                              s["include_absent"])
+    # output_meta sets each record's status in place, so the arcs it left out below the threshold are still
+    # here to show in their own section: the page reports them, the file holds what the page counts
+    absent_records = [] if s["include_absent"] else [r for r in records if r.get("status") == ABSENT]
+    records = kept
     # every setting the search ran with, so a downloaded network says how it was made (#78, #76)
     net = records_to_network(records, meta={
         "source_db": "mGrowthDB (live)", "query": "all" if all_studies else "species", "species": names,
@@ -689,7 +731,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
             "all": all_studies, "genera": resolved["genera"],
             "partners_only": partners_only,
             "unresolved": resolved["unresolved"], "taxon_ids": resolved["taxon_ids"], "studies": studies,
-            "network": net,
+            "network": net, "absent": records_to_network(absent_records) if absent_records else None,
             "skipped": skipped, "errors": errors, "hidden": extra["hidden"], "absence": extra["absence"]}
 
 

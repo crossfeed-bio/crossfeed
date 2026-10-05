@@ -104,7 +104,16 @@
           "type": [
             "number",
             "null"
-          ]
+          ],
+          "minimum": 0
+        },
+        "q_value": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
         },
         "condition": {
           "type": "string"
@@ -221,7 +230,8 @@
               "stationary_phase_differs",
               "stationary_unchecked",
               "zero_at_start",
-              "untested"
+              "untested",
+              "continuous_culture"
             ]
           }
         },
@@ -258,3 +268,4 @@
     }
   }
 }
+

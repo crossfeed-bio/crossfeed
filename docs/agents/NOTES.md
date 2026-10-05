@@ -163,6 +163,16 @@ Rules for this file:
   Obligate and abolished edges are the extremes of each direction, always present, with their own style.
   Low-quality edges are not exported by default. This closes the gap that a tested absence did not reach
   GraphML. The three new edge fields replace `meta.absent` and need Craig's acceptance as a format change.
+- 2026-10-03 (Karoline, amending option B): absent arcs are left out of every output by default. Her
+  words: "The arc number reported in Cytoscape is not identical to the arc number we see because of hidden
+  arcs. This can be confusing", then "maybe do not export hidden arcs (in any network) and only report them
+  in the results", and on the three options offered, "OK, please go for 2": one setting, off by default,
+  across all outputs. So `select_edges` drops them and counts them in `meta.hidden.absent`;
+  `meta.absence.absent` still says how many the threshold marked, whether or not they ship; the page keeps
+  its own section for them (built from the records, not the network) and the report says how many were
+  left out. `--include-absent` and the matching checkbox put them back, which is option B's behavior and
+  what lets a reader retune k in Cytoscape on `effect_over_sd`. Tests that are about other rules pass
+  `include_absent=True` so they keep checking what they claim.
 - 2026-09-21 (Karoline, drop-out designs, #47): experiments are pooled only when they are replicates.
   Her words: "if both experiments are replicates (performed with the same medium and settings) then they
   can be treated as such. if not, these would have to be treated as different arcs, since interactions
@@ -431,6 +441,57 @@ monkeypatching the constants. Tests that predate the rule do that through an aut
 or `meta.no_growth` will misstate the rule. The paired test is not uniformly stronger than Welch: where
 the ratios vary more across replicates than the raw values do, its p is larger (SMGDB00000013, Comamonas
 in co-culture: Welch 0.02, paired 0.07).
+
+## The name in running text
+
+`brand.NAME_HTML` and `brand.in_prose` mark the name as a name wherever it stands in a sentence: the
+wordmark's two parts a step lighter, applied by `gui._page` to every page body (Karoline, 2026-10-03:
+"please use a special style for grownet, so sentences starting with it don't look strange"). `in_prose`
+walks the markup and leaves `code`, `pre`, `title`, `script`, `style`, `textarea`, `option` and `a` alone,
+so commands, paths, the document title and link labels stay plain; a link is colored already, and the
+name's green inside one reads as a smudge. In the README the same job is done with bold, in prose only.
+A test in `tests/test_help.py` pins both halves.
+
+## Continuous culture and the metric
+
+Chemostat and serial dilution experiments are derived when the metric is one that suits them, which today
+is `max` alone (`derive.METRICS_FOR_CONTINUOUS_CULTURE`): the level such a culture settles at compares with
+and without a partner, an area under the curve says how long the run was, and a growth rate is the dilution
+rate (Karoline, 2026-10-03: "the no-chemostat filter is too harsh, we should allow it when max is the
+growth property being compared"). Those arcs carry the caution `continuous_culture` and are shown; with
+another metric they are left out unless `--include-non-batch` is given, and then they keep the `non_batch`
+quality flag and stay hidden. The cultivation mode is part of `conditions`, so no comparison mixes modes.
+Measured when it was built: no study in mGrowthDB has a non-batch pairwise or drop-out design (1, 5 and 11
+are single large communities), so no current network changes.
+
+## Missing numbers, and the sign column
+
+A number the derivation did not compute is missing everywhere, never 0 and never a blank cell (Karoline,
+2026-10-03): `null` in the neutral JSON, left out of GraphML and of the Cytoscape payload (with the column
+declared, see below), and written as "not computed" on the page. A comparison with no ratio (obligate,
+abolished) reads "no ratio" there. The result table's third column is "sign", since "direction" belongs to
+the arc itself. Both are pinned in `tests/test_interface.py`, which quotes her.
+
+## The three numbers of the test
+
+`p_value` is Welch's raw value, `q_value` is that value corrected for multiple testing over every
+comparison of one search, and `significance` is -log10 of the q-value (Karoline, 2026-10-03: "let's define
+significance as -log10(q) and q-value as the multiple-testing-corrected p-value"). So p and q run one way,
+smaller is stronger, and significance runs the other, larger is stronger, which is the one to map
+continuously in Cytoscape. `derive.significance_of` caps it at `SIGNIFICANCE_CAP` (15), since -log10(0) is
+infinite and Welch reports p = 0 when neither side varies and the means differ. The filter
+(`--max-adjusted-p`, register item 31) acts on `q_value`, unchanged.
+
+Before this, `significance` held the corrected p-value, which read backwards for anyone styling on it.
+`effect_from_logratio` takes the q-value, not `significance`, for the same reason.
+
+**Cytoscape turns a null number into 0.0**, and 0 is the strongest q-value there is, so an untested arc
+would pass a "q below 0.05" filter inside Cytoscape. `cytoscape.network_json` leaves an empty number out
+of the payload instead, which keeps the cell genuinely empty. A column only exists in Cytoscape once some
+arc carries it, so `cytoscape._declare_columns` creates the ones an arc may lack
+(`OPTIONAL_EDGE_COLUMNS`) after the network is posted: every arc then carries p_value, q_value and
+significance, empty where there was no test (Karoline, 2026-10-03; checked against Cytoscape 3.10.3, where
+a network of untested arcs had no such column before).
 
 ## Gotchas
 

@@ -1,6 +1,7 @@
 """The local page: rendering, the query behind it, and the server routes (a fake client, no live calls)."""
 import html
 import json
+import re
 import threading
 import time
 import urllib.error
@@ -93,6 +94,10 @@ class FakeClient:
 
 
 def _query(entries=("Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"), **settings):
+    # the fake study's second arc is absent, and a file holds absences only when asked (Karoline,
+    # 2026-10-03). Tests about everything else keep both arcs in view; the default is checked in
+    # test_the_file_holds_what_the_page_counts.
+    settings = {"include_absent": True, **settings}
     return run_query(FakeClient(), list(entries), settings)
 
 
@@ -166,7 +171,7 @@ def test_form_hides_every_setting_behind_one_button():
       "no_growth_factor": ["4"], "exclude_studies": [" SMGDB00000008 "], "merge_arcs": ["1"], "min_studies": ["2"],
       "merge_genera": ["1"]},
      {"metric": "growth_rate", "rate_method": "baranyi", "rate_window": 7, "spike_factor": 50.0, "studies": "S1",
-      "only_entered": True, "include_low_quality": True,
+      "only_entered": True, "include_low_quality": True, "include_absent": False,
       "correction": "bh", "absence_threshold": 1.0, "include_dropout": True, "include_non_batch": False,
       "no_growth_alpha": 0.01, "no_growth_factor": 4.0, "exclude_studies": "SMGDB00000008", "merge_arcs": True,
       "min_studies": 2, "merge_genera": True, "max_adjusted_p": None}),
@@ -241,6 +246,11 @@ def server():
     httpd.shutdown()
 
 
+def visible(page: str) -> str:
+    """The page as a reader sees it: the name carries markup in prose, so assertions on sentences use this."""
+    return re.sub(r"<[^>]+>", "", page)
+
+
 def _get(url):
     with urllib.request.urlopen(url, timeout=10) as r:
         return r.read().decode("utf-8")
@@ -255,7 +265,8 @@ def test_server_serves_the_form_and_runs_a_search(server):
         page = r.read().decode("utf-8")
     assert "interaction(s)" in page and "facilitation" in page
     doc = json.loads(_get(f"{base}/download.json?token={token}"))
-    assert [e["status"] for e in doc["edges"]] == ["present", "absent"]    # the absent edge is kept
+    # the file holds what the page counts: the absent arc is left out and reported (Karoline, 2026-10-03)
+    assert [e["status"] for e in doc["edges"]] == ["present"]
     assert doc["meta"]["absence"]["k"] == 1.0 and doc["meta"]["statistics"]["tests"] == 2
     assert ET.fromstring(_get(f"{base}/download.graphml?token={token}")) is not None
 
@@ -317,8 +328,9 @@ def test_the_about_button_names_the_builders_as_agreed_and_links_the_repository(
     assert f'href="/about?token={token}"' in _get(f"{base}/help?token={token}")    # on every page
     page = _get(f"{base}/about?token={token}")
     # Craig's agreed wording on #80, word for word
+    # the name carries its own markup in prose (brand.in_prose), so the sentence is read as a reader sees it
     assert ("grownet was built by Karoline Faust (KU Leuven) and Craig Heilmann (Syntropa), working through "
-            "their AI coding agents (Claude).") in page
+            "their AI coding agents (Claude).") in visible(page)
     assert '<a href="https://github.com/crossfeed-bio/crossfeed">' in page and f"Version {__version__}" in page
     with pytest.raises(urllib.error.HTTPError) as bad:
         _get(f"{base}/about?token=wrong")
@@ -345,7 +357,7 @@ def test_a_species_entered_under_its_new_name_still_matches_the_study_that_uses_
     index = {"faecalibacterium duncaniae": {853: "Faecalibacterium duncaniae A2-165"},
              "blautia hydrogenotrophica": {53443: B}}
     r = run_query(FakeClient(), ["Faecalibacterium duncaniae", "Blautia hydrogenotrophica"],
-                  {"only_entered": True}, index=index)
+                  {"only_entered": True, "include_absent": True}, index=index)
     assert r["taxon_ids"] == [853, 53443]
     assert len(r["network"].edges) == 2          # the study names the strain prausnitzii, the ids agree
 
@@ -366,7 +378,8 @@ def test_the_send_to_cytoscape_button_uses_the_network_already_computed(server, 
     monkeypatch.setattr(gui, "send", fake_send)
     with urllib.request.urlopen(f"{base}/cytoscape?token={token}", data=b"", timeout=10) as r:
         page = r.read().decode("utf-8")
-    assert "Sent to Cytoscape: network 7" in page and sent["edges"] == 2   # not recomputed, the same net
+    # one arc: the page counts one interaction, and Cytoscape gets exactly that (Karoline, 2026-10-03)
+    assert "Sent to Cytoscape: network 7" in page and sent["edges"] == 1
 
 
 def test_cytoscape_not_running_is_explained_on_the_page(server, monkeypatch):
@@ -446,7 +459,8 @@ def test_a_strain_is_named_by_its_current_name():
     from grownet.taxonomy import SpeciesIndex
     index = SpeciesIndex({"faecalibacterium prausnitzii": {853: A}, "blautia hydrogenotrophica": {53443: B}},
                          current={853: "Faecalibacterium duncaniae A2-165"})
-    r = run_query(FakeClient(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"], {}, index=index)
+    r = run_query(FakeClient(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"],
+                  {"include_absent": True}, index=index)
     node = r["network"].nodes["ncbi:853"]
     assert (node.name, node.species) == ("Faecalibacterium duncaniae A2-165", "faecalibacterium duncaniae")
     assert r["resolved"][0] == ("Faecalibacterium prausnitzii", {853: "Faecalibacterium duncaniae A2-165"})
@@ -580,7 +594,9 @@ def test_the_daily_all_network_is_used_when_fresh_and_the_settings_are_the_defau
     from grownet.derive import PROVISIONAL
     from grownet.export import to_graphml
     # escaped on the page: the text comes from a file downloaded from GitHub
-    assert r["network"].meta["provisional"] == PROVISIONAL and html.escape(PROVISIONAL) in render_result("tok", r)
+    assert r["network"].meta["provisional"] == PROVISIONAL
+    # the sentence names the tool, which carries markup in prose, so it is read as a reader sees it
+    assert PROVISIONAL in html.unescape(visible(render_result("tok", r)))
     assert "g_provisional" in to_graphml(r["network"]) and "few replicates" in to_graphml(r["network"])
     assert "derived once a day" in render_result("tok", r)
     # any other setting derives it live, and so does the command line's --no-published
@@ -622,9 +638,9 @@ def test_the_page_offers_the_adjusted_p_filter_off_and_says_what_it_left_out():
     assert r["network"].meta["statistics"]["filter"]["left_out"] == len(tested)
     from grownet.report import report_text
     page = render_result("tok", r)
-    assert f"Left out by the adjusted p-value filter: {len(tested)} interaction(s)" in page
-    assert "With the adjusted p-value filter on" in page                  # the caution says it decides too
-    assert "adjusted p-value filter: interactions above 1e-12 left out" in report_text(r)
+    assert f"Left out by the q-value filter: {len(tested)} interaction(s)" in page
+    assert "With the q-value filter on" in page                           # the caution says it decides too
+    assert "interactions above 1e-12 left out" in report_text(r) and "q-value filter" in report_text(r)
 
 
 def test_a_result_the_filter_emptied_says_so_rather_than_blaming_the_threshold():
@@ -634,6 +650,6 @@ def test_a_result_the_filter_emptied_says_so_rather_than_blaming_the_threshold()
     doc = result["network"].to_dict()
     absent_only = InteractionNetwork.from_dict({**doc, "edges": [{**e, "status": "absent"} for e in doc["edges"]]})
     page = render_result("tok", {**result, "network": absent_only})
-    assert "<h2>No interactions pass the adjusted p-value filter</h2>" in page
+    assert "<h2>No interactions pass the q-value filter</h2>" in page
     empty = render_result("tok", {**result, "network": InteractionNetwork.from_dict({**doc, "edges": []})})
-    assert "The adjusted p-value filter left out all 3 interaction(s)" in empty
+    assert "The q-value filter left out all 3 interaction(s)" in empty

@@ -10,6 +10,8 @@ color is the only cue and green against red is the hardest pair for color vision
 """
 from __future__ import annotations
 
+import re
+
 NAME = "grownet"
 COMMAND = "grownet"            # the installed command
 
@@ -51,6 +53,42 @@ LOGO = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="{siz
 # the wordmark: all lowercase in the system font, with "net" in the growth green
 WORDMARK = '<span class="word">grow<b>net</b></span>'
 
+# The name in running text. It is all lowercase, so a sentence that starts with it reads like a typo unless
+# it is marked as a name (Karoline, 2026-10-03: "please use a special style for grownet, so sentences
+# starting with it don't look strange"). The wordmark's two parts, a step lighter, so prose stays prose.
+NAME_HTML = '<span class="name">grow<b>net</b></span>'
+# elements whose text is a command, a path, a document title or a link label: the name stays plain there.
+# A link is already colored, so the name's own green inside one reads as a smudge rather than a name.
+_LITERAL = ("code", "pre", "title", "script", "style", "textarea", "option", "a")
+_PIECES = re.compile(r"(<[^>]+>)")
+_TAG_NAME = re.compile(r"<\s*(/?)\s*([a-zA-Z0-9]+)")
+_THE_NAME = re.compile(r"(?<![\w/.-])" + NAME + r"(?![\w/.-])")
+
+
+def in_prose(html: str) -> str:
+    """`html` with the name styled wherever it stands as a word in a sentence.
+
+    Only the text between tags is touched, and not inside the elements that hold commands, paths or the
+    document title, so `grownet gui` in a code block and the page's own title stay as they are.
+    """
+    out, literal = [], []
+    for piece in _PIECES.split(html):
+        tag = _TAG_NAME.match(piece)
+        if tag:
+            closing, name = tag.group(1), tag.group(2).lower()
+            if name in _LITERAL:
+                if closing:
+                    if literal and literal[-1] == name:
+                        literal.pop()
+                elif not piece.rstrip().endswith("/>"):
+                    literal.append(name)
+            out.append(piece)
+        elif literal:
+            out.append(piece)
+        else:
+            out.append(_THE_NAME.sub(NAME_HTML, piece))
+    return "".join(out)
+
 
 def logo_svg(size: int = 64) -> str:
     """The mark at `size` pixels."""
@@ -70,6 +108,7 @@ body {{ font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; color:
 .brand {{ display: flex; align-items: center; gap: .55rem; margin: 0; font-size: 1.15rem;
          color: inherit; text-decoration: none; }}
 .word {{ font-weight: 650; letter-spacing: -.01em; }} .word b {{ font-weight: 650; color: var(--grow); }}
+.name {{ font-weight: 600; }} .name b {{ font-weight: 600; color: var(--grow); }}
 .version {{ font-size: .8rem; color: var(--muted); border: 1px solid var(--line); border-radius: 999px;
            padding: .05rem .5rem; background: #fff; }}
 .app > header nav {{ margin-left: auto; display: flex; gap: .4rem; }}

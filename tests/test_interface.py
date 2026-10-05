@@ -12,6 +12,10 @@ And later the same day: "Now that we have an example button, please keep the inp
 above the input field should list the options (Species, strains or NCBI identifiers) and, in a row below in
 smaller font size, give a few examples (but keep the input field empty)."
 
+And on 2026-10-03: "if p & q-values were not computed, they are missing value (probably safer than empty);
+not 0, as discussed. Small change in the header of the Result table: instead of Direction, use Sign, since
+direction is misleading (direction of the arc)."
+
 A test here failing means one of those requirements broke. Change the requirement with Karoline, not the
 test.
 """
@@ -147,7 +151,8 @@ def test_send_to_cytoscape_sends_the_network_already_computed(server, monkeypatc
     sent = {}
     monkeypatch.setattr(gui, "send", lambda net, **kw: sent.update(edges=len(net.edges)) or {"suid": 9})
     _, page, _ = _open(f"{base}/cytoscape?token={token}", b"")
-    assert "Sent to Cytoscape: network 9" in page and sent["edges"] == 2
+    # the page counts one interaction, and Cytoscape gets exactly that: one number (Karoline, 2026-10-03)
+    assert "Sent to Cytoscape: network 9" in page and sent["edges"] == 1
 
 
 def test_the_report_holds_the_comments_every_setting_and_the_version_and_downloads_as_text(server):
@@ -196,13 +201,15 @@ def test_the_command_line_gives_everything_the_page_does(monkeypatch, tmp_path, 
     monkeypatch.setattr("grownet.cytoscape.send", lambda net, **kw: sent.update(n=len(net.edges)) or
                         {"suid": 3, "style": "grownet", "warning": ""})
     out, report = tmp_path / "net.graphml", tmp_path / "report.txt"
+    # with k = 2 both arcs fall below the threshold, so --include-absent keeps them in what is written
     assert main(["derive", "--live", "--species", A, B, "--format", "graphml", "--out", str(out),
-                 "--report", str(report), "--to-cytoscape", "--absence-threshold", "2"]) == 0
+                 "--report", str(report), "--to-cytoscape", "--absence-threshold", "2",
+                 "--include-absent"]) == 0
     assert ET.fromstring(out.read_text(encoding="utf-8")).tag.endswith("graphml") and sent["n"] == 2
     text = report.read_text(encoding="utf-8")
     assert f"tool: grownet {__version__}" in text and "Absence threshold k (--absence-threshold): 2.0" in text
     # the report is the page's own, for the same search
-    page = gui.run_query(FakeClient(), [A, B], {"absence_threshold": 2.0})
+    page = gui.run_query(FakeClient(), [A, B], {"absence_threshold": 2.0, "include_absent": True})
     from grownet.report import report_text
     def without_times(t):                  # the two runs are seconds apart; the rest must be identical
         return [line for line in t.splitlines() if not line.startswith(("run:", "data: "))]
@@ -241,7 +248,8 @@ def test_the_page_and_the_command_line_start_from_the_same_defaults():
     a = build_parser().parse_args(["derive", "--live", "--species", "x"])
     cli = {"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
            "spike_factor": a.spike_factor, "absence_threshold": a.absence_threshold,
-           "include_low_quality": a.include_low_quality, "correction": a.correction,
+           "include_low_quality": a.include_low_quality, "include_absent": a.include_absent,
+           "correction": a.correction,
            "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch, "studies": a.study,
            "exclude_studies": a.exclude_studies, "only_entered": not a.all_partners, "merge_arcs": a.merge_arcs,
            "min_studies": a.min_studies, "merge_genera": a.merge_genera, "no_growth_alpha": a.no_growth_alpha,
@@ -359,3 +367,79 @@ def test_the_help_page_offers_the_cytoscape_style_as_a_download():
         assert body == style_xml()                                    # the same file `grownet style` writes
     finally:
         server.shutdown()
+
+
+def test_the_result_table_says_sign_not_direction(server):
+    """Karoline, 2026-10-03: "instead of Direction, use Sign, since direction is misleading (direction of
+    the arc)". The arc's direction is the arrow from the source to the species it affects."""
+    base, token = server
+    page = _finished(base, token)
+    header = re.search(r"<tr><th>source</th>.*?</tr>", page, re.S).group(0)
+    assert "<th>sign</th>" in header and "direction" not in header
+
+
+def test_a_number_that_was_not_computed_reads_as_missing_not_blank_or_zero(server):
+    """Karoline, 2026-10-03: "if p & q-values were not computed, they are missing value (probably safer
+    than empty); not 0". The fake study's obligate arc has no test and no ratio."""
+    base, token = server
+    _finished(base, token)
+    _, as_json, _ = _open(f"{base}/download?token={token}&format=json")
+    edges = json.loads(as_json)["edges"]
+    for edge in edges:
+        if edge.get("p_value") is None:        # missing, never zero
+            assert edge["q_value"] is None and edge["significance"] is None
+        else:
+            assert edge["q_value"] is not None and edge["significance"] is not None
+    # and the page says so in words rather than leaving the cell blank: an obligate arc has no test
+    row = gui._arc_rows(*_untested_arc())
+    cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)
+    mean, over_sd, q = cells[3], cells[4], cells[6]      # log2 mean, |mean| / sd, q
+    assert "no ratio" in mean and "not computed" in over_sd and "not computed" in q
+    assert all(cell.strip() for cell in (mean, over_sd, q))
+
+
+def _untested_arc():
+    """(network, edges) holding one obligate arc: no test, no ratio, nothing to put in those cells."""
+    from grownet.mgrowthdb import records_to_network
+    records = [{"source": "ncbi:1", "target": "ncbi:2", "source_name": "Alpha one", "target_name": "Beta two",
+                "effect": "facilitation", "strength": None, "weight": None, "status": "present",
+                "outcome": "obligate", "study_id": "S1"}]
+    net = records_to_network(records)
+    return net, net.edges
+
+
+def test_the_file_holds_what_the_page_counts(server):
+    """Karoline, 2026-10-03: "The arc number reported in Cytoscape is not identical to the arc number we
+    see because of hidden arcs ... maybe do not export hidden arcs (in any network) and only report them
+    in the results". So one number: the page, the downloads and Cytoscape agree."""
+    base, token = server
+    page = _finished(base, token)
+    headline = int(re.search(r"<h2>(\d+) interaction\(s\)</h2>", page).group(1))
+    _, as_json, _ = _open(f"{base}/download?token={token}&format=json")
+    doc = json.loads(as_json)
+    assert len(doc["edges"]) == headline
+    assert not [e for e in doc["edges"] if e.get("status") == "absent"]
+    assert doc["meta"]["filters"]["include_absent"] is False
+
+    sent = {}
+    monkeypatch_send = lambda net, **kw: sent.update(edges=len(net.edges)) or {"suid": 5}   # noqa: E731
+    gui_send, gui.send = gui.send, monkeypatch_send
+    try:
+        _open(f"{base}/cytoscape?token={token}", b"")
+    finally:
+        gui.send = gui_send
+    assert sent["edges"] == headline                      # Cytoscape counts what the page counts
+
+    # the arcs below the threshold are still reported: on the page, and in the report with their number
+    absent = int(re.search(r"(\d+) edge\(s\) below the absence threshold", page).group(1))
+    assert absent and "left out of the network" in _open(f"{base}/report.txt?token={token}")[1]
+
+
+def test_asking_for_the_absent_arcs_puts_them_in_the_file(server):
+    base, token = server
+    page = _finished(base, token, include_absent="1")
+    headline = int(re.search(r"<h2>(\d+) interaction\(s\)</h2>", page).group(1))
+    _, as_json, _ = _open(f"{base}/download?token={token}&format=json")
+    doc = json.loads(as_json)
+    assert len(doc["edges"]) > headline and [e for e in doc["edges"] if e["status"] == "absent"]
+    assert doc["meta"]["filters"]["include_absent"] is True

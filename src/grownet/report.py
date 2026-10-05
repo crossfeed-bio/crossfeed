@@ -32,7 +32,9 @@ def _mean_sd(e) -> str:
 
 
 def _edge_line(net, e) -> str:
+    # an arc left out of the network is listed from its own network, so its nodes are looked up there
     name = {nid: node.name or nid for nid, node in net.nodes.items()}
+    name.update({nid: nid for nid in (e.source, e.target) if nid not in name})
     direction = e.effect if e.outcome in (None, "quantified") else f"{e.effect} ({e.outcome})"
     parts = [f"{name[e.source]} -> {name[e.target]}: {direction}", _mean_sd(e)]
     if e.merged_arcs:
@@ -100,14 +102,23 @@ def report_text(result: dict) -> str:
     lines.append("")
 
     shown = [e for e in net.edges if e.status != "absent"]
-    absent = [e for e in net.edges if e.status == "absent"]
+    # the arcs the threshold marked absent are left out of the file by default, so the report says both
+    # what the file holds and what was left out, and the two numbers always add up (Karoline, 2026-10-03)
+    in_file = [e for e in net.edges if e.status == "absent"]
+    left_out = meta.get("hidden", {}).get("absent", 0)
+    absent_net = net if in_file else result.get("absent")
+    absent = in_file or (list(absent_net.edges) if absent_net else [])
     hidden = meta.get("hidden", {}).get("low_quality", 0)
     rule = meta.get("no_growth", {})
-    lines.append(f"result: {len(shown)} interaction(s), {len(absent)} below the absence threshold "
-                 f"(k = {meta.get('absence', {}).get('k', '')}), {hidden} low-quality edge(s) hidden")
+    k = meta.get("absence", {}).get("k", "")
+    lines.append(f"result: {len(shown)} interaction(s) written, {len(in_file) + left_out} below the absence "
+                 f"threshold (k = {k})"
+                 + (", left out of the network" if left_out else ", kept in the network")
+                 + f", {hidden} low-quality edge(s) hidden")
     applied = meta.get("statistics", {}).get("filter", {})
     if applied.get("max_adjusted_p") is not None:
-        lines.append(f"adjusted p-value filter: interactions above {applied['max_adjusted_p']:g} left out: "
+        lines.append(f"q-value filter (q is the adjusted p-value): interactions above "
+                     f"{applied['max_adjusted_p']:g} left out: "
                      f"{applied.get('left_out', 0)}; kept untested (no p-value): {applied.get('untested', 0)}")
     if rule:
         lines.append(f"no-growth rule: {rule.get('test', '')}; alpha {rule.get('alpha')}, factor "
@@ -128,8 +139,9 @@ def report_text(result: dict) -> str:
     lines.append("interactions:" if shown else "interactions: none")
     lines += [_edge_line(net, e) for e in shown]
     if absent:
-        lines.append("below the absence threshold (no interaction found):")
-        lines += [_edge_line(net, e) for e in absent]
+        lines.append("below the absence threshold (no interaction found"
+                     + (", left out of the network):" if left_out else "):"))
+        lines += [_edge_line(absent_net, e) for e in absent]
     lines.append("")
 
     skips = condensed(result["skipped"])
