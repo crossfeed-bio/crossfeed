@@ -221,6 +221,21 @@ def test_the_help_explains_the_matrix_the_growth_rates_and_the_glv_package():
     assert "--format matrix" in cli and "--report-rates" in cli and "--glv" in cli
 
 
+def test_the_help_links_the_r_package_and_says_how_to_install_it():
+    """Karoline, 2026-10-03: the R plugin "should be linked to/available from grownet's help and easy to
+    install in R". One install line, one way to receive, and what the package enforces about the
+    caveats."""
+    from grownet import rbridge
+    html = help.render_help("tok", gui.DEFAULTS, gui.EXAMPLE)
+    section = html[html.index("<h2 id=\"glv\">"):html.index("<h2 id=\"settings\">")]
+    import html as html_module
+    assert html_module.escape(rbridge.INSTALL_R, quote=True) in section   # the one install line
+    assert "grownet_listen()" in section and "grownet_glv(url)" in section
+    assert "miaSim" in section and "simulateGLV" in section
+    assert "glv_matrix()" in section and "as_miasim()" in section and "glv_scale()" in section
+    assert "assumes no simulator" in section            # it works with other simulators and with own code
+
+
 def test_the_name_is_marked_as_a_name_in_prose_but_left_alone_in_commands():
     """Karoline, 2026-10-03: "please use a special style for grownet, so sentences starting with it don't
     look strange". It is all lowercase, so in prose it carries the wordmark's two parts."""

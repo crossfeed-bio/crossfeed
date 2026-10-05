@@ -17,3 +17,7 @@ dist/
 /data/
 *.csv
 !tests/fixtures/*.csv
+
+# the R companion package, built by `make r-check`
+grownet_*.tar.gz
+grownet.Rcheck/

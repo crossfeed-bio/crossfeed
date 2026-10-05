@@ -27,6 +27,7 @@ own derivation method. Nothing here needs another document to follow.
 - [The legend](#the-legend)
 - [The local page](#the-local-page)
 - [Send it to Cytoscape](#send-it-to-cytoscape)
+- [Simulate it in R](#simulate-it-in-r)
 - [The output format](#the-output-format)
 - [Plug in your own method](#plug-in-your-own-method)
 - [How the derivation works](#how-the-derivation-works)
@@ -213,6 +214,30 @@ takes.
 The page is served from the standard library on 127.0.0.1 with a token in its URL, renders in Python with
 no JavaScript, and uploads nothing: the data is pulled from mGrowthDB to your machine, and the results
 stay there.
+
+## Simulate it in R
+
+With Report growth rates on, the result section's **gLV parameters** control either downloads the zip or
+sends the parameters straight into a running R session. The companion package is in [`r/`](r), and it
+assumes no simulator: it hands over a plain matrix and a plain vector, with a helper that shapes them for
+[miaSim](https://bioconductor.org/packages/release/bioc/html/miaSim.html).
+
+```r
+install.packages("remotes")
+remotes::install_github("crossfeed-bio/crossfeed", subdir = "r")
+library(grownet)
+glv <- grownet_listen()                 # then press gLV parameters, Send to R
+glv                                     # prints what it holds and what to read before simulating
+tse <- do.call(miaSim::simulateGLV, as_miasim(glv_scale(glv)))
+```
+
+The caveats travel as data rather than as text to be read first: the object prints them every time,
+`glv_matrix()` warns and names the cells that hold the stated extreme (+10 obligate, -10 abolished) and
+takes `placeholders = "na"` or `"zero"` to convert them, `glv_scale()` brings off-diagonal cells that
+outweigh the self-limitation down to a size a simulation survives, and `as_miasim()` stops when an
+organism has no growth rate, since a simulation cannot invent one. `grownet derive ... --report-rates
+--to-r` does the same from the command line, and `grownet_glv(url)` reads the parameters from the page
+when no port can be opened. The R package's own README is [`r/README.md`](r/README.md).
 
 ## Send it to Cytoscape
 
