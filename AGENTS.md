@@ -161,6 +161,14 @@ them as a dated bullet with who gave them. Keep one-off requests out.
   human). Before calling a feature done, check every acceptance criterion of its feature issue against
   the running tool and say which are still open. When a human is to test, give them one branch that
   holds all the work they asked for, not several open pull requests.
+- 2026-10-06 (Karoline): **Scope.** "grownet's core philosophy is growth curves in, network out. We're
+  not feeding MDSINE2, it's the job of a dedicated converter." So a proposal is in scope when it turns
+  growth curves into a network, or expresses that network in a form a reader takes away (the neutral
+  format, GraphML, the adjacency matrix, the gLV parameters a simulator reads). It is out of scope when it
+  prepares raw growth data for another inference tool, or re-implements what tools built for community
+  time series already do. Said while declining two of her agent's suggestions, on #127: fitting an arc
+  inside a community of three or more, and exporting mGrowthDB's community time series for seqtime or
+  MDSINE2.
 - 2026-09-21 (Craig): The reviewer approves and the author merges (see step 8). Proposed after Craig's
   agent merged two of Karoline's agent's pull requests while it was still committing to them, reading a
   green check as readiness to merge. Nothing was lost either time, and the rule exists so that it cannot

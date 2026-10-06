@@ -167,6 +167,14 @@ Rules for this file:
 
 ## Decisions
 
+- 2026-10-06 (Karoline), **scope**: "grownet's core philosophy is growth curves in, network out. We're not
+  feeding MDSINE2, it's the job of a dedicated converter." In AGENTS.md as a standing instruction. It
+  closed open decision 39 (an arc fitted inside a community of three or more) and declined an export of
+  community time series for tools like seqtime or MDSINE2. Note what it does **not** say: the gLV
+  package, the adjacency matrix and Send to R are the network expressed in a form a reader takes away, and
+  they stay. What is out of scope is preparing raw growth data for another inference tool, or
+  re-implementing what tools built for community time series already do.
+
 - 2026-09-14: Attribution is at the edge level (each edge cites its supporting studies) rather than
   bundling licenses. See [docs/DATA_GOVERNANCE.md](../DATA_GOVERNANCE.md).
 - 2026-09-17: Agent workflow set up: instructions in `AGENTS.md`, shared memory in this file. Features

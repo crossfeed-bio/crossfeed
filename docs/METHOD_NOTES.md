@@ -1008,7 +1008,12 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
      Bayesian treatment and relative-abundance handling that this tool has no intention of matching.
    * (c) **beside, labeled and never merged**: a third evidence value, filterable, with no blending. It
      avoids (a)'s problem and still has grownet doing inference it is not the right tool for.
-   RECOMMENDED, taking her point: **none of the three.** What grownet contributes is the per-pair
+   SETTLED 2026-10-06 (Karoline), closing this item: none of the three, and no export of community time
+   series either. Her words: "grownet's core philosophy is growth curves in, network out. We're not
+   feeding MDSINE2, it's the job of a dedicated converter." The scope rule is now in AGENTS.md as a
+   standing instruction. So the integrated form stays inside the designed comparisons, where it earns its
+   place, and a community of three or more is reported rather than derived.
+   The agent's reasoning, which her decision agrees with: **none of the three.** What grownet contributes is the per-pair
    derivation from *designed* comparisons, with the provenance and the refusals that go with it, and the
    integrated form is worth having inside those designs (on SMGDB00000007 it scored 0.41, 0.73 and 2.69
    times the observed chemostat steady state where the specified comparison lost an organism). Community
