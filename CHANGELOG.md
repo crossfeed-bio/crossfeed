@@ -45,6 +45,11 @@ content.
   corpus simulates in miaSim with no scaling and settles exactly at the solution of `A x = -r`.
 
 ### Added
+- **The page says before the download when a package will hold several matrices** (#130, Karoline's
+  decision of 2026-10-06 on the unit question): how many matrices, which abundance units, and that no
+  effect between them was measured, since organisms counted differently were never grown together. No
+  conversion between units is applied, by her decision, and the result section's text about the package
+  now describes the fitted coefficients it holds rather than the convention it used to.
 - **A gLV package can be scored against mGrowthDB's chemostat steady states** (#125, from Karoline's
   suggestion of 2026-10-06 and her go-ahead on the shortlist of #124). A continuous culture satisfies
   `A x = -(r - D)` at steady state with the dilution rate it records, and those numbers were never used to

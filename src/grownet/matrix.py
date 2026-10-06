@@ -492,6 +492,20 @@ def obligate_partners(net: InteractionNetwork) -> dict:
     return out
 
 
+def abundance_units(net: InteractionNetwork, rates: dict = None) -> list:
+    """The abundance units a package of this network would partition by, in order (#130).
+
+    The units the organisms' own carrying capacities were measured in, and the units their partners were
+    counted in, which are the two numbers a coefficient divides by. More than one means the package holds
+    one matrix per unit, which the page says before a reader downloads it, since nothing is ever
+    converted between them.
+    """
+    units = {rate.get("capacity_unit") for rate in (rates or {}).values() if rate.get("capacity")}
+    units |= {edge.partner_abundance_unit for edge in net.edges
+              if edge.partner_abundance is not None and edge.partner_abundance_unit}
+    return sorted(u for u in units if u)
+
+
 def coefficient_unit(rate_unit: str, abundance_unit: str) -> str:
     """The unit of a coefficient: 1/(time x abundance), from the rate's "1/h" and the abundance unit."""
     time = (rate_unit or RATE_UNIT).removeprefix("1/") or "h"

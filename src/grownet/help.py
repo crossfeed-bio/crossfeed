@@ -706,7 +706,11 @@ one environment, so a package built from several media says so in capitals and p
 (<a href="#where">choosing where to look</a>). Every cell is a per-capita effect in 1/(time x abundance),
 so nothing in the package is a convention and nothing needs scaling to match the rest. Abundances are
 never converted between units, which is why each unit has its own matrix: a cell mass conversion would
-have to be invented, while the dynamics are the same in any unit. A simulation of these numbers can still
+have to be invented, while the dynamics are the same in any unit. The result section says before the
+download when a search spans several units, and how many matrices that means. It is not a loss: organisms
+counted differently were never grown together in mGrowthDB, so no effect between them was measured, and
+the matrices are separate systems rather than one matrix with corners missing. If you do want them in one
+matrix, the factor is yours to apply and to report, as a scaling factor is. A simulation of these numbers can still
 grow without bound and come back as NA, which now says something about the measurements, two organisms
 fitted as facilitating each other more than each limits itself, rather than about a convention; the
 equilibrium of a fit is the solution of A x = -r, and a negative entry there means the fit has no positive

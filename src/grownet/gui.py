@@ -477,9 +477,20 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
             f"number make {count['cells']} cell(s) over {count['organisms']} organism(s): arcs of one pair from "
             "different conditions or studies merge by their median.</p>")
     rate_hint = ("<p class=\"hint\">The growth rates are each organism's maximum specific growth rate in "
-                 "monoculture, the median over the replicates and studies that have one. The gLV package holds "
-                 "the interaction matrix (-1 on the diagonal), the matching growth rates and a README stating "
-                 "what the numbers are.</p>") if organism_rates else ""
+                 "monoculture, the median over the replicates and studies that have one, with the lag and the "
+                 "carrying capacity beside each. The gLV package holds fitted per-capita coefficients, one "
+                 "matrix per abundance unit, the matching growth rates and a README stating every formula "
+                 "and naming whatever could not be fitted.</p>") if organism_rates else ""
+    units = matrix.abundance_units(result["network"], organism_rates)
+    # nothing is converted between abundance units, so a search spanning several writes several matrices,
+    # and the page says so before the download rather than only in the package (Karoline, 2026-10-06)
+    unit_hint = (f"<p class=\"hint\">These organisms are counted in {len(units)} abundance units "
+                 f"({_esc(', '.join(units))}), so the package will hold {len(units)} matrices, one per "
+                 "unit: a cell is per-capita, in 1/(time x abundance), and nothing is converted between "
+                 "units because a cell mass conversion would have to be invented. No effect between them "
+                 "was measured either, since organisms counted differently were never grown together, so "
+                 "they are separate systems rather than one matrix with corners missing.</p>"
+                 if len(units) > 1 else "")
     r_hint = (f"<p class=\"hint\">Send to R needs an R session waiting for it: install the companion package "
               f"once with <code>{_esc(rbridge.INSTALL_R)}</code> (if that answers 404, see the help), then run "
               f"<code>library(grownet); glv &lt;- grownet_listen()</code> and "
@@ -490,7 +501,8 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
               f"&quot;)</code>.</p>") if organism_rates and has_edges else ""
     missing_rate = _without_a_rate(result)
     return (f"<div class=\"bar outputs\">{download if has_edges else ''}{cytoscape if has_edges else ''}"
-            f"{report}{rates_file}{glv}</div>{hint if has_edges else ''}{rate_hint}{r_hint}{missing_rate}")
+            f"{report}{rates_file}{glv}</div>{hint if has_edges else ''}{rate_hint}{unit_hint}{r_hint}"
+            f"{missing_rate}")
 
 
 def _glv_url(token: str, result: dict) -> str:

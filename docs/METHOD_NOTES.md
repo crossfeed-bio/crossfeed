@@ -937,6 +937,17 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    difference between a partner's window mean and its own plateau); and an optional unit bridge supplied by
    the reader. Order proposed there: #123, then the chemostat validation, then the threshold, then the
    integrated form.
+   SETTLED 2026-10-06 (Karoline), item by item:
+   * item 1, **the absence threshold inside a matrix**: "yes, 2 is fine: we keep the absence threshold
+     filter for the gLV mode", so a comparison the threshold judged absent stays out and its cell stays
+     0, as the package already states. No code change; the measurement behind the choice (the corpus
+     matrix gains one cell and loses another at k = 0, the full community's equilibrium moves about 2.5
+     times, and the chemostat check cannot tell the two apart) is in the comment of 2026-10-06 on #124.
+   * item 7, **a unit bridge**: no default factor, on the measurement that no arc in mGrowthDB crosses
+     abundance units, plus one line in the result section saying when a package will hold several
+     matrices (#130).
+   * items 2, 5 and 6 (a capacity from another experiment, one matrix per medium, how `x_j_star` is
+     taken) are still open; item 6 may dissolve with the integrated form of #127.
    PARTLY SETTLED 2026-10-06 (Karoline): the **chemostat validation** is built (#125, item 4a: a package
    is scored against the unperturbed steady states of SMGDB00000005 and SMGDB00000011, reporting only),
    and the **integrated form** is approved "as an advanced option", so it becomes a second `Deriver`
