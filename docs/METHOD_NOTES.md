@@ -915,7 +915,16 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    floor, and such an organism's row becomes `r_i = 0` with `A_ii` from its plateau in the co-culture.
    It needs two more quantities on each arc (the target's absolute rate in each set, and its co-culture
    plateau) and it also removes a mixed source: today L comes from one experiment while r_i is a median
-   over every study. Options and the recommendation are on #123; nothing is built until this is settled.
+   over every study.
+   SETTLED 2026-10-06 (Karoline): "yes, please go ahead with #123 if there are no conflicts with the
+   ongoing discussion", option (b). Built: every cell is `(r_with - r_without) / x_j_star` from one arc's
+   own rates, an organism that grows only with a partner gets `r_i = 0` and a self-limitation fitted at
+   its plateau beside that partner, and the floor and the stated extreme are both gone from the package.
+   **One consequence to note:** a censored arc now carries a measurement, so it enters the median of its
+   pair like any other arc, which register item 14 kept it out of while it was a convention. On
+   SMGDB00000013 that moves the one censored cell in the matrix from 1.5e-9 to 9.2e-9. Measured on the
+   corpus: the cells move by up to a third and the chemostat check of #125 stays in the same range, so
+   what this buys is the censored pairs and one source per cell rather than accuracy.
 37. **The rest of the gLV parameterisation shortlist** (#124, Karoline and Craig). Her question
    of 2026-10-06, "anything else to do for a better parameterisation of gLV from the data in mGrowthDB?",
    answered as seven separate decisions with what each was measured to change: the absence threshold means

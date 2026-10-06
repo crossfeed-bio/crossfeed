@@ -15,6 +15,17 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-06 (#123, Karoline's decision): **every cell of the gLV package comes from absolute rates.**
+  `A_ij = (r_with - r_without) / x_j_star`, the same formula as a difference, so a pair where one side did
+  not grow is a measurement: `matrix.floor_magnitude` is gone, `EXTREME` stays in the plain adjacency
+  matrix only, and a censored arc now enters the median of its pair (register item 14 kept it out while
+  it was a convention). `derive.absolute_values` takes the geometric mean of each set, 0 for a set that
+  did not grow; `derive.target_capacity` takes the target's own certified plateau in the co-culture; and
+  `matrix.obligate_partners` turns those into a whole row for an organism that grows only with a partner
+  (`r_i = 0`, `A_ii` from the plateau balance). Five new Edge fields carry it all. A network saved before
+  this change has no absolute rates and still converts through the ratio form, with the README naming
+  those cells, so the published daily network keeps working until the workflow re-derives it.
+
 - 2026-10-06 (#125, Karoline's go-ahead on #124 item 4a): **a gLV package can be scored against
   mGrowthDB's chemostat steady states.** `grownet.steady` reads the steady states of the continuous
   cultures that hold a network's organisms (through the API's own search, so studies the search never
