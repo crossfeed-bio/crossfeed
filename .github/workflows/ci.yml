@@ -52,6 +52,14 @@ jobs:
           /tmp/clean/bin/pip install dist/*.whl
           /tmp/clean/bin/grownet --help
           python packaging/smoke.py /tmp/clean/bin/grownet gui --no-browser
+      - name: the source distribution carries what its own tests read
+        # the sdist ships tests/, and it shipped without the schema, the fixtures and the page, so its
+        # suite could not pass for anyone building from it (a distribution, conda-forge). The wheel is
+        # what every other step installs, so nothing here caught it (found 2026-10-06).
+        run: |
+          python -m pip install pytest
+          mkdir -p /tmp/sdist && tar xzf dist/*.tar.gz -C /tmp/sdist --strip-components=1
+          cd /tmp/sdist && python -m pytest -q
 
   r-package:
     # the R companion package in r/, checked the way CRAN does (#112). R and its two dependencies come from

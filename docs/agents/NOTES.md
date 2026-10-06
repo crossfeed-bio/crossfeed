@@ -136,7 +136,13 @@ Rules for this file:
   Which growth feature the ratio L
   compares does move it: the growth rate and `auc` each land two of the three organisms within a factor 2
   to 4, and `max` is the worst of the four.
-- 2026-10-04 (Karoline, taking her agent's recommendation after Craig's question on #107): the id is
+- 2026-10-06: the id is **`grownet.interaction_network/v2`** from 0.3.0, and the entry below is why it
+  was `/v1`. It moved again for a reason about readers rather than fields: 0.3.0 adds optional edge
+  fields, an installed 0.2.0 builds its edges with `Edge(**e)` and raises on a field it does not know,
+  and `published.fresh` would have accepted the daily artifact under the unchanged id and then failed on
+  it. Under a new id that copy derives live, which is exactly what the sentence below says the check is
+  for. `from_dict` now also drops fields it does not know, which helps every later reader.
+- 2026-10-04 (Karoline, taking her agent's recommendation after Craig's question on #107): the id was
   **`grownet.interaction_network/v1`** from 0.2.0. The namespace was Craig's call below and is unchanged;
   what moved is the version, because `significance` changed meaning (the corrected p-value became -log10
   of it), which is what his own rule says a version is for. `model.PREVIOUS_SCHEMAS` keeps v0 readable,

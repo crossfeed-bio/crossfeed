@@ -130,18 +130,33 @@ def test_node_identity_fields_validate_and_a_wrong_identity_is_rejected():
 def test_a_document_from_the_previous_version_is_still_valid_and_named():
     """Karoline, 2026-10-04, taking the recommendation: the id moves to v1 because `significance` changed
     meaning. A file written by 0.1.x stays valid, since nothing about its own content changed; what it
-    must not do is pass for a v1 file, which is what the id now tells a reader."""
+    must not do is pass for a current file, which is what the id tells a reader.
+
+    It moved again to v2 with 0.3.0, for a reason about readers rather than fields: `published.fresh`
+    checks the id before an installed copy uses the daily All network, and an installed 0.2.0 builds its
+    edges with Edge(**e), so a 0.3.0 artifact under the old id was accepted and then raised. Moving the
+    id makes that copy derive live, which is what the check is for (found 2026-10-06)."""
     from grownet.model import KNOWN_SCHEMAS, PREVIOUS_SCHEMAS, SCHEMA
     from grownet.schema import validate_document
-    assert SCHEMA == "grownet.interaction_network/v1"
-    assert PREVIOUS_SCHEMAS == ("grownet.interaction_network/v0",)
+    assert SCHEMA == "grownet.interaction_network/v2"
+    assert PREVIOUS_SCHEMAS == ("grownet.interaction_network/v1", "grownet.interaction_network/v0")
     assert KNOWN_SCHEMAS == (SCHEMA, *PREVIOUS_SCHEMAS)
 
     doc = {"schema": SCHEMA, "nodes": [], "edges": [], "studies": []}
     assert validate_document(doc) == []
-    assert validate_document({**doc, "schema": PREVIOUS_SCHEMAS[0]}) == []
-    problems = validate_document({**doc, "schema": "grownet.interaction_network/v2"})
+    for older in PREVIOUS_SCHEMAS:
+        assert validate_document({**doc, "schema": older}) == []
+    problems = validate_document({**doc, "schema": "grownet.interaction_network/v3"})
     assert problems and "expected one of" in problems[0]
+
+    # and a document from a later version is read as far as it goes rather than raising on a field this
+    # reader does not know, which is how a 0.3.0 network reached an installed 0.2.0
+    from grownet.model import InteractionNetwork
+    net = InteractionNetwork.from_dict({
+        "schema": SCHEMA, "nodes": [{"id": "a", "name": "A"}, {"id": "b", "name": "B"}],
+        "edges": [{"source": "a", "target": "b", "effect": "facilitation", "study_ids": ["S1"],
+                   "something_a_later_version_added": 1.0}], "studies": []})
+    assert len(net.edges) == 1 and net.edges[0].effect == "facilitation"
 
 
 def test_the_daily_all_network_is_used_only_when_it_speaks_this_version():

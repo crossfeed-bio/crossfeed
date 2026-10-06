@@ -14,17 +14,23 @@ Design notes (from the KU Leuven collaboration, 2026-09):
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 
 # The format a network declares. It moved to v1 with 0.2.0, because `significance` changed meaning:
 # it was the corrected p-value, and it is now -log10 of that, so the same field holds a different quantity
 # and runs the other way. A version is a promise about content (Craig, on #71), and this is the one signal
 # that says the meaning of a field moved; without it a reader of a v0 file would misread a 0.2.0 network
 # silently. Nothing else about the format changed, and the fields added since v0 are optional.
-SCHEMA = "grownet.interaction_network/v1"
+# It moved to v2 with 0.3.0, for a reason about readers rather than about fields. The id is what
+# `published.fresh` checks before an installed copy uses the daily All network, so that "a v0 daily
+# network holds the old meaning, and the page derives live until the workflow republishes" (Karoline,
+# 2026-10-04). 0.3.0 adds optional edge fields, and an installed 0.2.0 builds its edges with Edge(**e),
+# which raises on a field it does not know: keeping the id would have let 0.2.0 accept the artifact and
+# then fail on it, where moving the id makes it derive live as designed (found 2026-10-06).
+SCHEMA = "grownet.interaction_network/v2"
 # Older ids a reader still accepts, newest first. A v0 document is valid: its `significance` means what v0
 # said it means, which is why `grownet validate` names the version it read.
-PREVIOUS_SCHEMAS = ("grownet.interaction_network/v0",)
+PREVIOUS_SCHEMAS = ("grownet.interaction_network/v1", "grownet.interaction_network/v0")
 KNOWN_SCHEMAS = (SCHEMA, *PREVIOUS_SCHEMAS)
 EFFECTS = ("facilitation", "inhibition", "neutral")
 # what an edge was derived from: a mono versus bi-culture comparison (a direct interaction), or a full
@@ -226,8 +232,11 @@ class InteractionNetwork:
             net.add_study(Study(**s))
         for n in d.get("nodes", []):
             net.add_node(Node(**n))
+        known = {f.name for f in fields(Edge)}
         for e in d.get("edges", []):
-            e = dict(e)
+            # a field this reader does not know is dropped rather than raising, so a newer document is
+            # read as far as it can be: Edge(**e) is what made 0.2.0 fail on a 0.3.0 network
+            e = {k: v for k, v in e.items() if k in known}
             e["study_ids"] = tuple(e.get("study_ids", ()))
             e["community"] = tuple(e.get("community", ()))
             e["quality"] = tuple(e.get("quality", ()))

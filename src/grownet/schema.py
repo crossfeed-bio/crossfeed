@@ -25,6 +25,10 @@ from .model import (
     InteractionNetwork,
 )
 
+# The committed copy of the schema, inside a checkout. It is for the repository's own tools, the gate
+# and the tests: an installed copy has no such file (the path would land above site-packages), and
+# nothing in `src/` reads it, because `schema_json()` writes the same document from the code. The sdist
+# carries it through MANIFEST.in so a packager can run the tests (found missing 2026-10-06).
 SCHEMA_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "schema", "interaction_network.schema.json",

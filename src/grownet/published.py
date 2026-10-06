@@ -75,6 +75,8 @@ def fetch_from(opener, now: datetime.datetime | None = None) -> dict | None:
     try:
         with opener(URL, timeout=TIMEOUT) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except (OSError, ValueError):
+    # any failure to read the published network is a reason to derive live, never to end the run:
+    # a 0.3.0 artifact reached an installed 0.2.0 through an uncaught TypeError (found 2026-10-06)
+    except Exception:  # noqa: BLE001 - see above
         return None
     return from_payload(payload) if fresh(payload, now) else None

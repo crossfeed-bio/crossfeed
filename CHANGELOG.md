@@ -8,6 +8,20 @@ content.
 
 ## [0.3.0] (2026-10-06)
 
+### Upgrading
+- **The network format id moves to `grownet.interaction_network/v2`.** Files from 0.1.x (`/v0`) and 0.2.x
+  (`/v1`) stay valid and `grownet validate` names the version it read. The id moved so that an installed
+  0.2.0 does not try to read a 0.3.0 network: it builds each arc from every field the document carries and
+  stops on a field it does not know, and the daily All network is republished from `main`. Under the new
+  id that copy derives live instead, which is what the check was built for. A reader of its own is
+  unaffected: nothing an older field means has changed, and the new fields are optional.
+- **Reinstall the R companion package** when you upgrade: `remotes::install_github("crossfeed-bio/crossfeed", subdir = "r")`.
+  A 0.2.0 R package reads no organisms out of a 0.3.0 payload. Send to R now says so and names that
+  command rather than reporting a successful send into an empty matrix.
+- **A gLV package now states where its matrix settles**, and says plainly when it settles nowhere with
+  every organism above zero. Nothing about the coefficients changed because of it; the equilibrium was
+  always the solution of `A x = -r` and the reader had to work it out.
+
 ### Changed
 - **Send to R and `/glv.json` carry the same numbers as the zip** (#120): the payload is
   `grownet.glv/v1`, with `matrices`, one per abundance unit, holding fitted coefficients, the rates with
