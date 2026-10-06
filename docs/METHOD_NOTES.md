@@ -1006,7 +1006,7 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    * (b) **on their own**: a community-only derivation, which is gLV inference from community time series,
      the field her remark points at. seqtime, LIMITS, MDSINE2 and BEEM already do it, with regularization,
      Bayesian treatment and relative-abundance handling that this tool has no intention of matching.
-   * (c) **beside, labelled and never merged**: a third evidence value, filterable, with no blending. It
+   * (c) **beside, labeled and never merged**: a third evidence value, filterable, with no blending. It
      avoids (a)'s problem and still has grownet doing inference it is not the right tool for.
    RECOMMENDED, taking her point: **none of the three.** What grownet contributes is the per-pair
    derivation from *designed* comparisons, with the provenance and the refusals that go with it, and the
