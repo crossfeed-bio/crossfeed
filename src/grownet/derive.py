@@ -32,7 +32,15 @@ from statistics import median
 from . import rates
 from . import selection as selecting
 from .adapter import replicates_for_experiment
-from .growth import SPIKE_FACTOR, GrowthCurve, Replicate, spike
+from .growth import (
+    SPIKE_FACTOR,
+    GrowthCurve,
+    Replicate,
+    curve_features,
+    mean_over,
+    reached_stationary,
+    spike,
+)
 from .interaction import (
     ABOLISHED,
     NO_GROWTH,
@@ -402,6 +410,71 @@ def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, ident
     return index
 
 
+# ---- what a gLV coefficient is made of (#118) -----------------------------------------------------
+
+# A gLV coefficient is an effect per unit of partner, so it needs the partner's abundance while the target
+# was growing: `A_ij = r_i * (2^L - 1) / x_j_star`. Karoline chose `x_j_star` to be the partner's mean over
+# the window the target's rate was fitted in (2026-10-06, on #116), because the coefficient is
+# instantaneous and that window is the stretch the comparison's rate came from. Nothing here changes an
+# arc: it adds a number beside it, and says why when there is none.
+def partner_abundance(replicate, target: str, partner: str, rate_method: str = None,
+                      window: int = None) -> dict:
+    """{"value", "unit", "window", "reason"}: the partner's mean abundance over the target's rate window.
+
+    `value` is None with a `reason` when the target has no fitted window (a curve that never rises), when
+    the partner was not measured in this replicate, or when the window reaches outside the partner's
+    curve.
+    """
+    target_curve, partner_curve = replicate.curve(target), replicate.curve(partner)
+    if target_curve is None:
+        return {"value": None, "unit": "", "window": None, "reason": f"{target} was not measured here"}
+    if partner_curve is None:
+        return {"value": None, "unit": "", "window": None,
+                "reason": f"the partner {partner} was not measured in this replicate"}
+    method = rate_method or rates.DEFAULT_METHOD
+    try:
+        if method == "baranyi":
+            fit = rates.baranyi_fit(target_curve.times, target_curve.values)
+        else:
+            fit = rates.easylinear_fit(target_curve.times, target_curve.values,
+                                       window if window is not None else rates.DEFAULT_WINDOW)
+    except rates.RateUnavailable as e:
+        return {"value": None, "unit": "", "window": None, "reason": f"no rate window for {target}: {e}"}
+    start, end = fit.get("start"), fit.get("end")
+    if start is None or end is None or end <= start:
+        return {"value": None, "unit": "", "window": None,
+                "reason": f"{target} has no window that rises, so there is nothing to average over"}
+    value = mean_over(partner_curve, start, end)
+    if value is None:
+        return {"value": None, "unit": partner_curve.abundance_unit, "window": (start, end),
+                "reason": f"the partner's curve does not cover {start:g} to {end:g} "
+                          f"{partner_curve.time_unit}"}
+    return {"value": value, "unit": partner_curve.abundance_unit, "window": (start, end), "reason": ""}
+
+
+def partner_abundances(replicates, target: str, partner: str, rate_method: str = None,
+                       window: int = None) -> dict:
+    """The same over a replicate set: the median of the replicates that have one, with the rest reported.
+
+    {"value", "unit", "n", "skipped"}: `value` is None when no replicate gave one, and `skipped` holds a
+    (label, reason) for each that did not, so the report says why rather than leaving a blank.
+    """
+    values, unit, skipped = [], "", []
+    for i, replicate in enumerate(replicates):
+        got = partner_abundance(replicate, target, partner, rate_method, window)
+        if got["value"] is None:
+            skipped.append((f"{partner} beside {target}: replicate {replicate.name or i}", got["reason"]))
+            continue
+        values.append(got["value"])
+        unit = unit or got["unit"]
+        if got["unit"] != unit:
+            skipped.append((f"{partner} beside {target}: replicate {replicate.name or i}",
+                            f"measured in {got['unit']}, and the others in {unit}; left out rather than "
+                            "converted"))
+            values.pop()
+    return {"value": median(values) if values else None, "unit": unit, "n": len(values), "skipped": skipped}
+
+
 # ---- growth rates beside a network (#108) --------------------------------------------------------
 
 # A reported growth rate is an absolute quantity, not a comparison: the maximum specific growth rate of
@@ -438,7 +511,9 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
             continue
         replicates, skips = replicates_for_experiment(client, exp, spike_factor)
         skipped += skips
-        entry = found.setdefault(node["id"], {"name": name, "values": [], "unit": "", "replicates": []})
+        entry = found.setdefault(node["id"], {"name": name, "values": [], "unit": "", "replicates": [],
+                                              "method": method, "lags": [], "capacities": [],
+                                              "capacity_unit": "", "capacity_left_out": []})
         for i, rep in enumerate(replicates):
             label = f"{name} monoculture [{exp.get('name', '') or _exp_id(exp)}], replicate {rep.name or i}"
             curve = rep.curve(name)
@@ -465,6 +540,28 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
                 continue
             entry["values"].append(value)
             entry["replicates"].append(rep.name or str(i))
+            # the lag, when the method has one: gLV has no lag, so the integrated form starts where it ends
+            if method.startswith("growth_rate:baranyi"):
+                try:
+                    entry["lags"].append(rates.baranyi_fit(curve.times, curve.values)["lag"])
+                except rates.RateUnavailable:
+                    pass
+            # the carrying capacity: the plateau, and only where the curve is certified to have reached one
+            settled = reached_stationary(curve, curve.times[-1])
+            if settled is not True:
+                entry["capacity_left_out"].append(
+                    (label, "the curve is too sparse or does not rise, so stationary phase cannot be judged"
+                     if settled is None else "the curve had not reached stationary phase"))
+                continue
+            capacity = curve_features(curve)["max"]
+            if not entry["capacity_unit"]:
+                entry["capacity_unit"] = curve.abundance_unit
+            if curve.abundance_unit != entry["capacity_unit"]:
+                entry["capacity_left_out"].append(
+                    (label, f"the plateau is in {curve.abundance_unit}, and this organism's others in "
+                            f"{entry['capacity_unit']}; left out rather than converted"))
+                continue
+            entry["capacities"].append(capacity)
     return {nid: e for nid, e in found.items() if e["values"]}, skipped
 
 
@@ -492,32 +589,62 @@ def growth_rates(client, study_ids, wanted=None, rate_method: str = None, window
 
 
 def merge_rates(per_study) -> dict:
-    """{node id: {"name", "rate", "unit", "n", "studies", "per_study"}}: one growth rate per organism.
+    """{node id: {"name", "rate", "unit", "n", "studies", "per_study", ...}}: one growth rate per organism.
 
     `per_study` is (study id, what `monoculture_rates` found) for each study. The rate is the median over
     every monoculture replicate of every study, Karoline's "median across replicates and studies", with
     each study's own median kept beside it in `per_study` and the number of replicates behind it in `n`.
     A study whose rates for an organism are in another time unit is left out of its median and named in
     `other_units`.
+
+    Beside the rate, and merged the same way, come the three numbers a gLV coefficient is made of (#118):
+    `capacity` with `capacity_unit`, `capacity_n` and `capacity_per_study` (the monoculture plateau, only
+    from curves certified to have reached stationary phase, left out rather than converted across
+    abundance units, with every curve left out and why in `capacity_left_out`; a curve can give a rate
+    and no capacity, so these stay out of `skipped`, where the rate itself was not left out), `lag` with
+    `lag_n` (from the Baranyi fit, absent for a method that has none), and `method`, the estimator the
+    rate came from. Each is None when nothing qualified.
     """
     merged: dict = {}
     for study_id, found in per_study:
         for nid, entry in found.items():
             at = merged.setdefault(nid, {"name": entry["name"], "unit": entry["unit"], "values": [],
-                                         "studies": [], "per_study": {}, "other_units": []})
+                                         "studies": [], "per_study": {}, "other_units": [],
+                                         "method": entry.get("method", ""), "lags": [], "capacities": [],
+                                         "capacity_unit": "", "capacity_per_study": {},
+                                         "other_capacity_units": [], "capacity_left_out": []})
             if entry["unit"] != at["unit"]:
                 at["other_units"].append(f"{study_id} ({entry['unit']})")
                 continue
             at["values"] += list(entry["values"])
             at["studies"].append(study_id)
             at["per_study"][study_id] = median(entry["values"])
+            at["lags"] += list(entry.get("lags") or [])
+            at["capacity_left_out"] += list(entry.get("capacity_left_out") or [])
+            capacities = list(entry.get("capacities") or [])
+            if capacities:
+                unit = entry.get("capacity_unit") or ""
+                if not at["capacity_unit"]:
+                    at["capacity_unit"] = unit
+                if unit != at["capacity_unit"]:
+                    at["other_capacity_units"].append(f"{study_id} ({unit})")
+                else:
+                    at["capacities"] += capacities
+                    at["capacity_per_study"][study_id] = median(capacities)
     out = {}
     for nid, at in merged.items():
         if not at["values"]:
             continue
         out[nid] = {"name": at["name"], "rate": median(at["values"]), "unit": at["unit"],
                     "n": len(at["values"]), "studies": at["studies"], "per_study": at["per_study"],
-                    "other_units": at["other_units"]}
+                    "other_units": at["other_units"], "method": at["method"],
+                    "lag": median(at["lags"]) if at["lags"] else None, "lag_n": len(at["lags"]),
+                    "capacity": median(at["capacities"]) if at["capacities"] else None,
+                    "capacity_unit": at["capacity_unit"] if at["capacities"] else "",
+                    "capacity_n": len(at["capacities"]),
+                    "capacity_per_study": at["capacity_per_study"],
+                    "other_capacity_units": at["other_capacity_units"],
+                    "capacity_left_out": at["capacity_left_out"]}
     return out
 
 
@@ -655,9 +782,14 @@ def absence(mean, sd, outcome: str, k: float = ABSENCE_THRESHOLD):
 
 def _record(source: str, target: str, c: dict, method: str, quality: list, cautions: list, notes: list,
             cond: str, evidence: str, community, experiments, study_id, study_meta, identities=None,
-            mode: str = BATCH, medium: str = "") -> dict:
+            mode: str = BATCH, medium: str = "", partner: dict = None) -> dict:
     """One edge record from a comparison `c` (mean, sd, se, n_with, n_without, outcome, with_log2,
-    without_log2), the shape `records_to_network` reads."""
+    without_log2), the shape `records_to_network` reads.
+
+    `partner`, when given, is what `partner_abundances` found for the source beside the target: the
+    abundance x_j* a gLV coefficient divides by (#118). It is an extra number about the same comparison,
+    so a comparison whose partner was not measured keeps its arc, with the reason beside it.
+    """
     mean, sd = c["mean"], c["sd"]
     test = welch(c["with_log2"], c["without_log2"])
     ratio = effect_over_sd(mean, sd)
@@ -682,6 +814,10 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
         "outcome": c["outcome"], "metric": method,
         "quality": quality, "cautions": cautions, "notes": notes, "cultivation_mode": mode,
         "medium": medium,
+        "partner_abundance": (partner or {}).get("value"),
+        "partner_abundance_unit": (partner or {}).get("unit", ""),
+        "partner_abundance_n": (partner or {}).get("n"),
+        "partner_abundance_left_out": list((partner or {}).get("skipped", ())),
         "condition": cond, "method": REPLICATE_METHOD.format(metric=method),
         "evidence": evidence, "community": sorted(_identity(identities, m)["id"] for m in community),
         "experiments": list(experiments),
@@ -764,10 +900,12 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
             # otherwise it was asked for with the advanced setting and stays low quality
             (cautions if method in METRICS_FOR_CONTINUOUS_CULTURE else quality).append(
                 CONTINUOUS_CULTURE if method in METRICS_FOR_CONTINUOUS_CULTURE else NON_BATCH)
+        kind, window = rates.fit_parts(method)
+        partner = partner_abundances(co_reps, target, source, kind, window)
         records.append(_record(source, target, c, method, quality, cautions,
                                _spike_notes(result["flagged"], target), cond, "biculture", (a, b),
                                [_exp_id(exp), *origin[target]], study_id, study_meta, identities, mode,
-                               selecting.medium_of(exp)))
+                               selecting.medium_of(exp), partner))
 
 
 def run_group(exp: dict) -> str:
@@ -1160,10 +1298,31 @@ def _merged(arcs: list) -> dict:
             "condition": "; ".join(c for c in conditions if c),
             "cultivation_mode": "; ".join(dict.fromkeys(a.get("cultivation_mode", "") for a in arcs)),
             "medium": "; ".join(dict.fromkeys(a.get("medium", "") for a in arcs if a.get("medium"))),
+            **_merged_partner(arcs),
             "method": f"{arcs[0].get('method', '')}; merged: the median of {len(arcs)} arcs",
             "merged_arcs": len(arcs),
             "strength_range": [min(numeric), max(numeric)] if numeric else [],
             "studies": studies, "study_id": studies[0]["id"]}
+
+
+def _merged_partner(arcs: list) -> dict:
+    """The partner abundance of a merged arc: the median over the arcs that carry one, and only over one
+    abundance unit, since abundances in different units are not one set (#118)."""
+    units = {a.get("partner_abundance_unit") for a in arcs
+             if a.get("partner_abundance") is not None and a.get("partner_abundance_unit")}
+    unit = units.pop() if len(units) == 1 else ""
+    values = [a["partner_abundance"] for a in arcs
+              if a.get("partner_abundance") is not None and a.get("partner_abundance_unit") == unit] if unit else []
+    left_out = [x for a in arcs for x in a.get("partner_abundance_left_out") or []]
+    if not unit:
+        left_out = left_out + [(f"{arcs[0].get('source_name', '')} beside "
+                                f"{arcs[0].get('target_name', '')}", "the merged arcs measure the partner "
+                                "in different abundance units; left out rather than converted")
+                               ] if len(units) > 1 else left_out
+    return {"partner_abundance": median(values) if values else None,
+            "partner_abundance_unit": unit if values else "",
+            "partner_abundance_n": sum(a.get("partner_abundance_n") or 0 for a in arcs) if values else 0,
+            "partner_abundance_left_out": left_out}
 
 
 def merge_parallel(edges: list, merge: bool = True, min_studies: int = 1) -> tuple:

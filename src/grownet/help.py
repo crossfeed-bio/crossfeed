@@ -257,6 +257,10 @@ EDGE_ATTRIBUTES = {
     "cultivation_mode": "batch, chemostat, and so on, as mGrowthDB records it",
     "medium": "the growth medium the comparison ran in, as mGrowthDB names it on the experiment's "
               "compartments; empty when it names none",
+    "partner_abundance": "the source's own abundance in the co-cultures, averaged over the window the "
+                         "target's growth rate was fitted in; the x_j a gLV coefficient divides by",
+    "partner_abundance_unit": "the abundance unit that number is in, as measured; never converted",
+    "partner_abundance_n": "co-culture replicates behind that median",
     "experiments": "the mGrowthDB experiments whose replicates the edge compares",
     "study_ids": "the studies supporting this edge; cite them (see Sources)",
     "merged_arcs": "with Merge parallel arcs: how many arcs of this source and target were merged into this one; "
@@ -642,6 +646,15 @@ one, with each study's own median kept beside it in the network's meta. Batch mo
 chemostat or a serial dilution the rate a curve shows is the dilution rate, and a rate from a co-culture
 would be growth with a partner, which is the comparison, not the organism's own rate. An organism whose
 curves give no rate is named on the page and in the report, never given a substitute number.</p>
+<p><strong>Three more quantities travel with a rate</strong>, for the gLV coefficients being built on
+#118 and #119: which estimator produced it, the lag the Baranyi fit estimated (empty for an estimator
+that fits none), and the organism's monoculture carrying capacity, the plateau of its curves, taken only
+from curves certified to have reached stationary phase and left in the abundance unit they were measured
+in. They are in <code>growth_rates.csv</code>, in the network's meta and in the report, with every curve
+that gave no capacity named and why. Each arc also carries
+<code>partner_abundance</code>, the actor's own abundance in the co-cultures averaged over the window the
+target's growth rate was fitted in. The matrix and the package still hold effect sizes and the convention
+on the diagonal: these numbers are reported, not yet applied.</p>
 <p><strong>Start with the gLV mode button</strong>, beside All. It sets the two settings a simulation
 needs and leaves them in sight in Advanced settings: <strong>Report growth rates</strong> on, since a
 simulation needs a rate per organism, and <strong>Include drop-out communities</strong> off, since such an
@@ -654,7 +667,8 @@ from drop-out designs, and which media they were measured in.</p>
 <p><strong>The gLV parameters.</strong> The gLV control writes a zip for a generalized
 Lotka-Volterra simulator: <code>interaction_matrix.csv</code> (the matrix above, with -1 on the diagonal
 by convention, for self-limitation), <code>growth_rates.csv</code> (one rate per organism, in the same
-order, with how many values it rests on) and <code>README.txt</code>, which states the conventions in the
+order, with how many values it rests on, and beside it the estimator, the lag and the monoculture
+carrying capacity) and <code>README.txt</code>, which states the conventions in the
 files themselves, names any pair left at 0 for disagreeing in sign, names every organism without a rate,
 and names the media the arcs were measured in: a simulation is of one environment, so a package built from
 several media says so in capitals and points at the second box

@@ -557,7 +557,9 @@ def test_the_growth_rates_are_their_own_download_and_bring_the_glv_control(serve
     _, table, headers = _open(f"{base}/rates.csv?token={token}")
     assert headers["Content-Type"].startswith("text/csv")
     rows = [line.split(",") for line in table.strip().splitlines()]
-    assert rows[0] == ["organism", "growth_rate", "unit", "replicates", "studies"]
+    assert rows[0][:5] == ["organism", "growth_rate", "unit", "replicates", "studies"]
+    # and the quantities a gLV coefficient is made of, beside them (#118)
+    assert rows[0][5:] == ["method", "lag", "carrying_capacity", "capacity_unit", "capacity_curves"]
     assert [row[0] for row in rows[1:]] == sorted([A, B])
     assert dict(zip([r[0] for r in rows[1:]], [r[1] for r in rows[1:]], strict=True))[A] == "0.4"
 
@@ -611,7 +613,8 @@ def test_the_command_line_writes_the_matrix_the_rates_and_the_glv_package(monkey
     assert len(rows) == len(names) + 1
     assert float(rows[1 + names.index(A)][1 + names.index(B)]) > 0      # B facilitates A, as on the page
     assert rates_file.read_text(encoding="utf-8").splitlines()[0] == (
-        "organism,growth_rate,unit,replicates,studies")
+        "organism,growth_rate,unit,replicates,studies,method,lag,carrying_capacity,capacity_unit,"
+        "capacity_curves")
     with zipfile.ZipFile(io.BytesIO(package.read_bytes())) as archive:
         assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv", "interaction_matrix.csv"]
         matrix_rows = archive.read("interaction_matrix.csv").decode().strip().splitlines()

@@ -109,6 +109,9 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
                 # cultivation_mode arrives with #42; read it defensively so either order of merge works
                 "cultivation_mode": getattr(edge, "cultivation_mode", ""),
                 "medium": getattr(edge, "medium", ""),   # the environment it was derived in (#113)
+                # the partner's abundance over the target's growth window, for a gLV coefficient (#118)
+                "partner_abundance": getattr(edge, "partner_abundance", None),
+                "partner_abundance_unit": getattr(edge, "partner_abundance_unit", ""),
                 "quality": " ".join(edge.quality), "cautions": " ".join(edge.cautions),
                 "notes": "; ".join(edge.notes), "community": " ".join(edge.community),
                 "experiments": " ".join(edge.experiments), "study_ids": " ".join(edge.study_ids),

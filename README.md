@@ -402,7 +402,8 @@ are 0; an obligate interaction is +10 and an abolished one -10, a stated extreme
 ratio, since one side did not grow at all. The diagonal is 0 here.
 `--glv FILE` (with `--report-rates`) writes the parameters of a generalized Lotka-Volterra simulation as a
 zip: `interaction_matrix.csv`, the same matrix with -1 on the diagonal by convention for self-limitation;
-`growth_rates.csv`, one rate per organism in the same order with how many values it rests on; and
+`growth_rates.csv`, one rate per organism in the same order with how many values it rests on, and beside
+it the estimator, the Baranyi lag and the monoculture carrying capacity with its abundance unit; and
 `README.txt`, which states every convention, names the pairs left at 0 for disagreeing in sign, the cells
 that hold the stated extreme, the organisms without a rate, and the media the arcs were measured in. A
 simulation is of one environment, so a package built from several media says so and points at the second

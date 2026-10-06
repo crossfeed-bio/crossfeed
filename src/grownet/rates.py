@@ -73,6 +73,16 @@ def _line(xs, ys):
 
 def easylinear(times, values, window: int = DEFAULT_WINDOW, quota: float = QUOTA) -> float:
     """The maximum specific growth rate by growthrates' fit_easylinear (see the module docstring)."""
+    return easylinear_fit(times, values, window, quota)["rate"]
+
+
+def easylinear_fit(times, values, window: int = DEFAULT_WINDOW, quota: float = QUOTA) -> dict:
+    """{"rate", "start", "end", "points"}: the rate, and the window it was fitted over.
+
+    The window is what a gLV coefficient needs beside the rate: the partner's abundance is averaged over
+    exactly the stretch the target's rate came from (Karoline, 2026-10-06, on #116). `start` and `end` are
+    times in the curve's own unit, and are None when no window rises (the rate is then not positive).
+    """
     if window < 2:
         raise ValueError(f"the growth rate window must hold at least 2 points, not {window}")
     xs, ys = _positive_logs(times, values)
@@ -89,15 +99,16 @@ def easylinear(times, values, window: int = DEFAULT_WINDOW, quota: float = QUOTA
     if best == float("-inf"):
         raise RateUnavailable("no window with varying times")
     if best <= 0:
-        # no window rises: the steepest slope is itself not positive, and the quota below would select no
-        # window at all (0.95 of a negative slope lies above it). Returned as it is, so the caller treats it
-        # as any non-positive property (code review of 2026-09-28: it raised a bare ValueError that dropped
-        # the whole comparison, SMGDB00000014)
-        return best
+        # No window rises: the steepest slope is itself not positive, and the quota below would select no
+        # window at all (0.95 of a negative slope lies above it). The rate is returned as it is, so the
+        # caller treats it as any non-positive property (code review of 2026-09-28: it raised a bare
+        # ValueError that dropped the whole comparison, SMGDB00000014), and there is no stretch of growth
+        # for a partner to be averaged over.
+        return {"rate": best, "start": None, "end": None, "points": 0}
     candidates = [i for i, s in enumerate(slopes) if s >= quota * best]
     first, last = min(candidates), max(candidates) + window
     fit = _line(xs[first:last], ys[first:last])
-    return fit[0]
+    return {"rate": fit[0], "start": xs[first], "end": xs[last - 1], "points": last - first}
 
 
 # ---- Baranyi-Roberts --------------------------------------------------------------------------------
@@ -199,6 +210,20 @@ def _fit_once(times, logs, params, max_iter=200):
 def baranyi(times, values) -> float:
     """The Baranyi-Roberts maximum specific growth rate, guarded, fitted up to the end of the plateau after the
     curve's maximum (see the module docstring)."""
+    return baranyi_fit(times, values)["rate"]
+
+
+def baranyi_fit(times, values) -> dict:
+    """{"rate", "lag", "r2", "start", "end"}: the fitted rate and the lag that comes with it.
+
+    The model has a lag parameter (h0 = mu * lag) which the fit already estimates and which was thrown
+    away. gLV has no lag, so the integrated form starts where lag ends, and a reader of a rate wants to
+    know whether the culture grew from its first point (Karoline, 2026-10-06: "what if Baranyi is used to
+    determine r? It accounts for lag phase"). Measured on this database: 11 of 15 monoculture curves carry
+    a lag above 0.01 h. `lag` is in the curve's own time unit, and the guards are unchanged: a rate far
+    from the steepest observed slope, or a fit explaining less than BARANYI_MIN_R2, is refused rather than
+    returned.
+    """
     xs, ys = _positive_logs(times, values)
     xs, ys = _until_decline(xs, ys)
     if len(xs) < BARANYI_MIN_POINTS:
@@ -235,7 +260,9 @@ def baranyi(times, values) -> float:
     if not r2 >= BARANYI_MIN_R2:
         raise RateUnavailable(f"Baranyi fit rejected: R2 {r2:.2f} below {BARANYI_MIN_R2}; the model does not "
                               "describe this curve up to the end of its plateau (for example two growth phases)")
-    return math.exp(best[0][1])
+    rate = math.exp(best[0][1])
+    lag = math.exp(best[0][3]) / rate if rate > 0 else 0.0     # h0 = mu * lag, the model's own parameters
+    return {"rate": rate, "lag": lag, "r2": r2, "start": xs[0], "end": xs[-1]}
 
 
 def method_name(rate_method: str = DEFAULT_METHOD, window: int = DEFAULT_WINDOW) -> str:
@@ -243,6 +270,17 @@ def method_name(rate_method: str = DEFAULT_METHOD, window: int = DEFAULT_WINDOW)
     if rate_method not in METHODS:
         raise ValueError(f"unknown growth rate method {rate_method!r}; choose one of {METHODS}")
     return f"growth_rate:easylinear:{int(window)}" if rate_method == "easylinear" else "growth_rate:baranyi"
+
+
+def fit_parts(name: str) -> tuple:
+    """(kind, window) behind a metric name: the rate fit whose window the name stands for. A metric that
+    is not a rate ("auc", "max") has no fit of its own, so the default fit gives the window (#118)."""
+    parts = (name or "").split(":")
+    if parts[0] != "growth_rate":
+        return DEFAULT_METHOD, DEFAULT_WINDOW
+    kind = parts[1] if len(parts) > 1 else DEFAULT_METHOD
+    window = int(parts[2]) if kind == "easylinear" and len(parts) == 3 else DEFAULT_WINDOW
+    return kind, window
 
 
 def feature(name: str):
