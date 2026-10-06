@@ -664,10 +664,17 @@ has no log2 ratio at all, because one side did not grow, so its cell holds a <st
 instead of the stated extreme it used to carry: the no-growth rule allows that side at most its factor
 (1.5 by default) over its own measured start, which bounds the ratio from below for an obligate pair and
 from above for an abolished one. The report prints each bound with the rule behind it, and the arc says it
-is a bound (<code>strength_bound</code>). Where the rule bounds nothing away from zero, which happens with
-the area under the curve, because a culture that did not grow still carries the area of its own inoculum,
-the cell stays 0 and the report says which growth property bounds it tightly. Such an arc sets a cell only
-when no arc of that pair was quantified. The diagonal of this matrix is 0; only the gLV package fits it.</p>
+is a bound (<code>strength_bound</code>). Such an arc sets a cell only when no arc of that pair was
+quantified. The diagonal of this matrix is 0; only the gLV package fits it.</p>
+<p><strong>A bound on an area is weaker than a bound on a rate</strong>, which matters when the growth
+property is the default area under the curve rather than the growth rate gLV mode sets. A culture that
+did not grow still carries the area of its own inoculum for the whole window, so the area the rule allows
+it can be as large as the area the growing side reached, and the bound then says nothing beyond zero: that
+cell stays 0 and the report says so, naming the growth rate and the maximum as the properties that bound
+such a comparison tightly. On the maximum the bound is the factor times the measured start, and on a
+growth rate it is the rate that would produce the allowed rise over the window, both far under what a
+growing side reaches. So a search meant to size an obligate or abolished interaction is better run on the
+growth rate or on the maximum, and gLV mode already uses the growth rate.</p>
 <p><strong>The growth rates.</strong> With Report growth rates on, every organism in the network also
 gets its maximum specific growth rate in monoculture: the method the Growth rate method setting names
 (easylinear by default, the one mGrowthDB reports), the median over the replicates and studies that have
@@ -732,7 +739,8 @@ them. <strong>Check against chemostat steady states</strong> in Advanced setting
 in the package: predicted against observed, per organism, with every chemostat it could not use and why
 (a run with no dilution rate recorded, a perturbed run, another abundance unit, another medium, or no
 organism in common). It is off by default, because it reads the curves of chemostats a search does not
-otherwise need. Two runs in mGrowthDB qualify today, in SMGDB00000005 and SMGDB00000011.</p>
+otherwise need. The check's own output names every continuous culture it found and what it did with
+each, so which ones qualify is read from the run rather than from this page.</p>
 <p>So a package needs the comparison to be on the <strong>growth rate</strong>: the area under the curve
 and the maximum cannot produce the ratio L. gLV mode sets that, and without it the page says which
 setting to change rather than converting the wrong quantity. Every cell of a row carries the factor
