@@ -152,7 +152,7 @@
 // ---- a clearly-synthetic example so the page works standalone (no mGrowthDB data ships in git). Strength
 // is a signed log2 ratio, the same convention the engine emits: sign gives the effect, |value| the width. ----
 const EXAMPLE = {
-  schema:"grownet.interaction_network/v1",
+  schema:"grownet.interaction_network/v2",
   meta:{source_db:"synthetic illustration (not real data)"},
   studies:[{id:"EXAMPLE",citation:"Synthetic illustration",license:"",url:""}],
   nodes:[
@@ -630,7 +630,7 @@ function toGraphML(net){
 function loadNetwork(d){
   if(!d||typeof d!=="object")throw new Error("not a JSON object");
   if(!Array.isArray(d.nodes)||!Array.isArray(d.edges))throw new Error("a grownet network needs a nodes array and an edges array");
-  if(d.schema&&!/crossfeed\.interaction_network/.test(d.schema))throw new Error("unexpected schema "+d.schema);
+  if(d.schema&&!/^(grownet|crossfeed)\.interaction_network\//.test(d.schema))throw new Error("unexpected schema "+d.schema);
   const ids=new Set(d.nodes.map(n=>n&&n.id));
   const dangling=d.edges.filter(e=>!ids.has(e.source)||!ids.has(e.target)).length;
   NET=d; POS={}; selected=null; userAdjusted=false; reindex();

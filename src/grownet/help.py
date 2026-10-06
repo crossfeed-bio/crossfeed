@@ -328,12 +328,19 @@ EDGE_ATTRIBUTES = {
                    "it fitted, a per-capita effect in 1/(time x abundance)",
     "coefficient_unit": "the unit of that coefficient",
     "fit_r2": "how much of the organism's own log abundance change that fit explains",
-    "coefficient_sd": "the spread of the fitted coefficient: its standard deviation over the co-culture "
-                      "replicates and over leaving out each monoculture replicate the rate stage rests "
-                      "on, so it carries both stages' uncertainty",
-    "coefficient_n": "how many estimates of the coefficient that spread rests on",
-    "coefficient_sd_from_rate_stage": "the part of coefficient_sd that comes from the monoculture stage "
-                                      "alone, measured by leaving out each of its replicates in turn",
+    "coefficient_sd": "the spread of the fitted coefficient over the estimates behind it: one per "
+                      "co-culture replicate, and one per replicate for each monoculture replicate left "
+                      "out of the rate stage. It is being rebuilt: the leave-one-out half is a jackknife "
+                      "of a median, which is not a consistent estimator of that spread, and the statistics "
+                      "that decide an arc (sd, se, p_value, q_value, status) use the co-culture "
+                      "replicates only, so they do not carry it",
+    "coefficient_n": "how many estimates of the coefficient that spread rests on, which is the number of "
+                     "co-culture replicates times the number of rate-stage variants, not a count of "
+                     "cultures: do not read it as a sample size",
+    "coefficient_sd_from_rate_stage": "being rebuilt and not to be read: it was meant to be the part of "
+                                      "coefficient_sd from the monoculture stage, and it is that same set "
+                                      "with one value per replicate removed, so it is near the whole "
+                                      "spread whatever the stage contributes",
     "fit_condition": "how well the fit was determined: the condition number of the normal equations of "
                      "its design, every column scaled, so a large number means the columns were too "
                      "close to tell apart. It is the square of the design's own condition number, and "

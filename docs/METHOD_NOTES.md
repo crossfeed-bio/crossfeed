@@ -332,10 +332,20 @@ important to ship something good". Three were structural rather than inherent, a
    An arc now carries the mean and sd of its per-replicate log2 strengths, a one-sample t-test against
    no effect, and so a q-value and a status from the same machinery as the specified comparison. Live on
    the whole database: 20 of 23 arcs tested, 2 at q < 0.05, 5 comparisons dropped by the threshold.
-2. **Stage 1's error reached the partner coefficient unannounced.** It is now inside that spread, and
-   reported separately as `coefficient_sd_from_rate_stage`. Measured, it **dominates**: on most arcs the
-   monoculture stage accounts for nearly all of the coefficient's uncertainty, which says where the next
-   improvement is (more monoculture replicates, not more co-culture ones).
+2. **Stage 1's error reached the partner coefficient unannounced.** It is inside `coefficient_sd`, and
+   `coefficient_sd_from_rate_stage` was meant to report its share.
+   **WITHDRAWN 2026-10-06, the same day: that field is not a share of anything, and the conclusion drawn
+   from it here was wrong.** The leave-one-out set is the total set minus one value per co-culture
+   replicate (the central variant), so it is a subset of what it is compared against and its ratio sits
+   just above 1 whatever the data does: shown three ways, including a case where the monoculture stage
+   contributes exactly zero variance and the field still reports about 102 per cent. Computed properly, as
+   the variance across stage-1 variants within a fixed replicate, the true share runs from 0.26 to 1.06
+   across the arcs of one study. The sentence this entry carried, that the monoculture stage dominates and
+   that the next improvement is more monoculture replicates, was read off that artifact and is not
+   supported. Worse, the spread the field belongs to is a delete-one jackknife of a median, which is not a
+   consistent variance estimator for that statistic (Efron 1979), and it is not jackknife-scaled.
+   And `sd`, `se`, `p_value`, `q_value`, `effect_over_sd` and `status` are all computed from the central
+   variant alone, so stage 1 is still treated as exact in the place that decides which arcs ship.
 3. **The reported R2 answered a smaller question than its words.** It was stage 2's fit against stage
    1's residual; it is now the whole fit against the measured `ln(x_i(t) / x_i(0))`, computed about zero
    because the model has no intercept and y is zero at the start by construction. With that number in
@@ -346,7 +356,12 @@ important to ship something good". Three were structural rather than inherent, a
 What this does to the comparison, measured the same day. Coverage: the default derivation gives 30 arcs,
 8 organism rows and 10 off-diagonal cells, every block with a positive equilibrium; the integrated form
 gives 23 arcs, 6 organism rows and 9 cells, with one block settling nowhere with every organism above
-zero. Out of sample against SMGDB00000005's control, with the interaction-free null beside each:
+zero. Out of sample against SMGDB00000005's control, with the interaction-free null beside each. **The
+command matters and was missing here, which made this table read as unreproducible:** these are
+`derive SMGDB00000007 --live --glv-mode --derivation <either> --steady-check`, that study alone. A
+corpus-wide run (`--all`) builds a different package from six studies and gives different numbers, and
+two independent readers took this table for a fabrication because of the omission. The ratios are
+predicted over observed, so 1.0 is right and both directions are wrong.
 
 | organism | default | integrated | no interactions at all |
 | --- | --- | --- | --- |
@@ -354,10 +369,12 @@ zero. Out of sample against SMGDB00000005's control, with the interaction-free n
 | B. hydrogenotrophica | washed out, wrong | 0.83x | 33x |
 | R. intestinalis | 3.26x | 3.22x | 2.97x to 3.42x |
 
-So the integrated form lands all three within a factor of 3 and is the only one that holds B.
-hydrogenotrophica, which is the organism the default washes out; its interactions earn a fortyfold
-improvement there and cost accuracy on B. thetaiotaomicron. The default's interactions move two
-predictions by 5 to 10 percent against discarding them and break the third.
+So on that study the integrated form holds B. hydrogenotrophica, which the comparison washes out, and
+its interactions earn a large improvement there while costing accuracy on B. thetaiotaomicron. Read
+paired against the null, they buy nothing on R. intestinalis. **Corrected 2026-10-06: this entry said
+"within a factor of 3", which its own 3.22 contradicts, and it quoted no observed column or convention.**
+The comparison's interactions move two predictions by 5 to 10 percent against discarding them and break
+the third.
 
 What is still true of the integrated form: fewer organisms reach a matrix, partly because it now refuses
 rows it cannot fit; a cell is a regression output rather than a division a reader can check on paper; and
@@ -384,7 +401,12 @@ uses all the data at once. Measured against the median, over the whole corpus in
 | on the arcs both produce: coefficients that change sign | | 3 |
 
 So pooling halves the worst spread and adds arcs, and it leaves the typical spread where it was, fits the
-co-culture rows slightly worse, and flips three signs. That is what one outlying replicate does to a
+co-culture rows slightly worse, and flips three signs. **Qualified 2026-10-06: the spread and R2 rows above
+compare 23 arcs with 28, five of which only the pooled arm produces, while the sign row is restricted to
+the arcs both produce. On the paired subset the median spread is unchanged (0.361 against 0.359) and the
+worst falls from 3.49 to 1.64, so the conclusion stands and these two rows are not evidence for it as laid
+out.** The spread column is also the quantity withdrawn in the entry above, so it needs recomputing once
+that is fixed. That is what one outlying replicate does to a
 regression and not to a median, and this data has such replicates (one monoculture rate of 3.09 /h beside
 two of 0.36 and 0.37). The median is also the project's merge rule for replicates. **Decision: the median
 stays the estimate, and pooling is the fallback where no single replicate identifies the row at all.** On

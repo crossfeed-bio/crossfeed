@@ -431,8 +431,7 @@ once, with no growth property, no log2 ratio, no plateau to certify and no partn
 The monocultures identify `r_i` and `A_ii` and are held fixed while the co-cultures give the partners. The
 model has no lag term and no death term, so the rows start where growth starts and stop where it ends.
 Every arc carries the coefficient, the residual and the condition number of its fit; a row the design
-cannot identify, and a community of three or more members, are reported rather than derived. The default
-derivation is unchanged.
+cannot identify, and a community of three or more members, are reported rather than derived.
 
 **Scoring the package against a chemostat.** `--steady-check` (with `--report-rates --live`) scores the
 gLV parameters against the steady states mGrowthDB holds for these organisms in continuous culture: a
