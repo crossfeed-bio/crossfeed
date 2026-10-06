@@ -15,6 +15,19 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-06 (#127, started): **the integrated form fits a row from the whole time course.**
+  `grownet.integrated` holds the arithmetic:
+  `ln(x_i(T)/x_i(0)) = r_i T + sum_j A_ij integral(x_j dt)` is linear in the parameters, so `design`
+  builds the rows (the elapsed time and each partner's trapezoidal integral), `fit_row` solves them by
+  least squares on a column-scaled design, and `two_stage` fits `r_i` and `A_ii` from the monocultures
+  and then the partners from the co-cultures with those held fixed, which is what #116 measured as
+  necessary. Every fit carries its condition number and its r2, and one above `MAX_CONDITION` (1e4 on the
+  scaled design) is named rather than returned. **Verified live on SMGDB00000004**: the three FP
+  monocultures fit at r = 0.59, 0.51 and 0.39 /h with conditions 13 to 21, and the two-stage fit gives
+  r_FP = 0.511 /h, A_FP,FP = -4.44e-10 and A_FP,BH = +9.83e-11, inside the +6.8e-11 to +1.0e-10 range
+  measured by hand on #116. Still to build: the `IntegratedDeriver` and its wiring (Advanced settings and
+  `--deriver`), the package path, and the report lines.
+
 - 2026-10-06 (#124 items 2 and 5, her "complete #124"): **an organism with no certified monoculture
   plateau is fitted at its co-culture plateau** through `matrix.plateaus`, the balance #123 introduced for
   an obligate organism, now used for any organism with a rate. One whose balance comes out at or above
