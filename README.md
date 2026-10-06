@@ -296,7 +296,8 @@ When Cytoscape is not running, the command says so and names the port instead of
 `grownet.interaction_network/v1` since 0.2.0: the version moved because `significance` changed meaning,
 from the corrected p-value to -log10 of it, and a reader that branches on the id would otherwise misread
 those numbers. A file from 0.1.x says `/v0`, is still valid, and `grownet validate` names the version it
-read. It is the contract downstream tools
+read. 0.3.0 keeps the same id: it adds fields and declares what `meta` holds, and nothing it already had
+changed meaning. It is the contract downstream tools
 read, and it is pinned by a JSON Schema at
 [`schema/interaction_network.schema.json`](schema/interaction_network.schema.json). Its `meta` records
 the tool, `tool_version` and `derived_on` (the date: mGrowthDB changes, so the same version can derive a

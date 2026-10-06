@@ -854,7 +854,8 @@ from the address the page shows under its gLV control.</p>
 names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v1</code>
 since 0.2.0: the version moved because <code>significance</code> changed meaning, from the corrected
 p-value to -log10 of it. A file from 0.1.x says <code>/v0</code> and is still valid, read with the older
-meaning. The network
+meaning. 0.3.0 keeps the same id: it adds fields and declares what <code>meta</code> holds, and no field
+it already had changed meaning, which is what moving the id is for. The network
 itself records the tool, <code>tool_version</code>, the date and time it was derived (<code>derived_on</code>,
 <code>derived_at</code>), every setting used, and the version of the data: mGrowthDB publishes no version of
 the whole database, so <code>meta.data</code> holds when it was read and each study's upload and
