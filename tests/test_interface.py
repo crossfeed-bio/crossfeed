@@ -255,7 +255,8 @@ def test_the_page_and_the_command_line_start_from_the_same_defaults():
            "exclude_studies": a.exclude_studies, "only_entered": not a.all_partners, "merge_arcs": a.merge_arcs,
            "min_studies": a.min_studies, "merge_genera": a.merge_genera, "no_growth_alpha": a.no_growth_alpha,
            "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p,
-           "report_rates": a.report_rates, "steady_check": a.steady_check}
+           "report_rates": a.report_rates, "steady_check": a.steady_check,
+           "derivation": a.derivation}
     assert set(cli) == set(gui.DEFAULTS)
     assert {k: v for k, v in cli.items() if v != gui.DEFAULTS[k]} == {}
 

@@ -996,6 +996,25 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    such communities instead and derives nothing from them. What it would buy: SMGDB00000004's trio and
    SMGDB00000007's trio each give three more rows, and the drop-out designs of SMGDB00000008 could be
    fitted directly rather than as drop-outs.
+   **What exactly would happen**, which Karoline asked on 2026-10-06 ("would community data be used in
+   addition to drop-out/bi-cultures or on their own? There is a whole bunch of tools for gLV inference
+   from community time series data already"):
+   * (a) **in addition**: a community arc would enter the same network, and for a pair that also has a
+     biculture or a drop-out arc the cell would be the median of both, by register item 14. That blends
+     two designs in one number: a biculture holds two organisms and nothing else, while a community arc
+     is conditional on every other member being present at its own abundance. Not recommended.
+   * (b) **on their own**: a community-only derivation, which is gLV inference from community time series,
+     the field her remark points at. seqtime, LIMITS, MDSINE2 and BEEM already do it, with regularization,
+     Bayesian treatment and relative-abundance handling that this tool has no intention of matching.
+   * (c) **beside, labelled and never merged**: a third evidence value, filterable, with no blending. It
+     avoids (a)'s problem and still has grownet doing inference it is not the right tool for.
+   RECOMMENDED, taking her point: **none of the three.** What grownet contributes is the per-pair
+   derivation from *designed* comparisons, with the provenance and the refusals that go with it, and the
+   integrated form is worth having inside those designs (on SMGDB00000007 it scored 0.41, 0.73 and 2.69
+   times the observed chemostat steady state where the specified comparison lost an organism). Community
+   time series are better served by the tools that specialize in them. What would help a reader who wants
+   that route is an **export of mGrowthDB's community time series** in the shape those tools read, which
+   is complementary rather than duplicative, and would be a small task of its own.
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

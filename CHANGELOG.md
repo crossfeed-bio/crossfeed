@@ -66,6 +66,23 @@ content.
   corpus simulates in miaSim with no scaling and settles exactly at the solution of `A x = -r`.
 
 ### Added
+- **A second derivation, from the whole time course** (#127, Karoline's "OK for 3, as an advanced option"
+  of 2026-10-06). `--derivation integrated`, or Derivation in Advanced settings, fits each organism's row
+  instead of comparing replicate sets: `ln(x_i(T)/x_i(0)) = r_i T + sum_j A_ij integral(x_j dt)` is linear
+  in the parameters, so one least-squares fit per organism gives its rate, its own limitation and every
+  partner's coefficient at once, with no growth property, no log2 ratio, no plateau to certify and no
+  partner abundance to divide by. The monocultures identify `r_i` and `A_ii` and are held fixed while the
+  co-cultures give the partners, since inside one experiment those columns rise too nearly together. The
+  model has no lag term and no death term, so the rows start where growth starts (the Baranyi lag of #118)
+  and stop where it ends (the plateau rule of register item 29). Every arc carries the coefficient, the
+  residual and the condition number of its fit, and the growth rates and capacities of such a run come
+  from the same fit, the capacity being the plateau it implies. A row the design cannot identify, and a
+  community of three or more members, are reported rather than derived. The default derivation is
+  unchanged. Measured on SMGDB00000007 against the steady state of SMGDB00000005's control: the integrated
+  fit lands all three organisms at 0.41, 0.73 and 2.69 times the observed abundance, where the specified
+  comparison gives 1.60 and 3.26 and fits B. hydrogenotrophica to wash out although the chemostat holds
+  it; its implied plateaus (8.9e8, 1.2e9, 8.6e8 cells/mL) sit within about 15 percent of the measured
+  ones, which never enter the fit.
 - **The page says before the download when a package will hold several matrices** (#130, Karoline's
   decision of 2026-10-06 on the unit question): how many matrices, which abundance units, and that no
   effect between them was measured, since organisms counted differently were never grown together. No

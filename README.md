@@ -418,6 +418,17 @@ environment, so a package built from several media says so and points at the sec
 per-capita effect in 1/(time x abundance), so nothing in the package is a convention and nothing needs
 scaling; abundances are never converted between units, which is why each unit has its own matrix.
 
+**A second derivation, from the whole time course.** `--derivation integrated` (the page's Derivation
+setting) fits each organism's row rather than comparing replicate sets:
+`ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt)` is linear in the parameters, so one
+least-squares fit per organism gives its rate, its own limitation and every partner's coefficient at
+once, with no growth property, no log2 ratio, no plateau to certify and no partner abundance to divide by.
+The monocultures identify `r_i` and `A_ii` and are held fixed while the co-cultures give the partners. The
+model has no lag term and no death term, so the rows start where growth starts and stop where it ends.
+Every arc carries the coefficient, the residual and the condition number of its fit; a row the design
+cannot identify, and a community of three or more members, are reported rather than derived. The default
+derivation is unchanged.
+
 **Scoring the package against a chemostat.** `--steady-check` (with `--report-rates --live`) scores the
 gLV parameters against the steady states mGrowthDB holds for these organisms in continuous culture: a
 chemostat satisfies `A x = -(r - D)` at steady state with D the dilution rate it records, and those

@@ -23,7 +23,7 @@ import urllib.parse
 import webbrowser
 from collections import Counter
 
-from . import __version__, brand, interaction, matrix, rates, rbridge, steady
+from . import __version__, brand, integrated, interaction, matrix, rates, rbridge, steady
 from . import help as help_page
 from . import published as daily
 from . import selection as selecting
@@ -51,6 +51,7 @@ TITLE = brand.NAME
 # taxon 411483, which mGrowthDB holds under both its names after the 2022 reclassification.
 EXAMPLE = ("Faecalibacterium duncaniae", "Blautia hydrogenotrophica")
 METRICS = ("auc", "max", "growth_rate")
+DERIVATIONS = ("replicate", "integrated")
 
 
 def metric_name(s: dict) -> str:
@@ -73,6 +74,8 @@ DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window":
             "report_rates": False,
             # off by default too: the check reads the curves of chemostats the search never needed (#125)
             "steady_check": False,
+            # the specified comparison, with the integrated form of #127 as the advanced alternative
+            "derivation": "replicate",
             "include_dropout": True,
             "include_non_batch": False, "conditions": "", "exclude_studies": "", "only_entered": True,
             "merge_arcs": False, "min_studies": 1, "merge_genera": False,
@@ -157,6 +160,8 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
                           for c, label in (("bh", "Benjamini-Hochberg"), ("by", "Benjamini-Yekutieli")))
     options = "".join(f"<option value=\"{m}\"{' selected' if s['metric'] == m else ''}>{m}</option>"
                       for m in METRICS)
+    derivations = "".join(f"<option value=\"{d}\"{' selected' if s.get('derivation', 'replicate') == d else ''}>"
+                          f"{d}</option>" for d in DERIVATIONS)
     rate_methods = "".join(f"<option value=\"{m}\"{' selected' if s['rate_method'] == m else ''}>{m}</option>"
                            for m in rates.METHODS)
     return f"""<details>
@@ -170,6 +175,13 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   <span class="muted">with growth_rate: easylinear (default), the steepest part of the log curve, as mGrowthDB
   computes the rates it reports; or baranyi, a fitted growth model, where a curve the model does not describe
   is left out and reported</span></div>
+<div class="row"><label>Derivation
+  <select name="derivation">{derivations}</select></label>
+  <span class="muted">replicate, the specified comparison: a growth property of the replicates with the
+  partner against those without it. Or integrated, which fits each organism's row from the whole time
+  course, ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt), over its growth phase; it needs no
+  growth property and gives the gLV coefficients directly, and it reports every row its design cannot
+  identify</span></div>
 <div class="row"><label>Growth rate window
   <input name="rate_window" type="text" size="6" value="{_esc(s['rate_window'])}"></label>
   <span class="muted">with easylinear: the points in each fitted window (default 5, as mGrowthDB)</span></div>
@@ -687,6 +699,16 @@ GLV_MODE_OFF_MESSAGE = ("gLV mode off: growth rates off, drop-out communities in
                         "comparison back on the area under the curve, which are the defaults.")
 
 
+def chosen_deriver(settings: dict, client=None):
+    """The derivation a search runs, or None for the specified comparison, which `derive_interactions`
+    builds itself. The integrated form of #127 is the advanced alternative Karoline approved."""
+    if (settings or {}).get("derivation") != "integrated":
+        return None
+    from .integrated import IntegratedDeriver
+    return IntegratedDeriver(client=client, spike_factor=settings.get("spike_factor"),
+                             include_non_batch=settings.get("include_non_batch", False))
+
+
 def glv_mode_on(settings: dict) -> bool:
     """Whether the settings are the ones gLV mode sets."""
     s = {**DEFAULTS, **(settings or {})}
@@ -759,6 +781,9 @@ def parse_settings(form: dict) -> dict:
     settings["only_entered"] = bool(form.get("only_entered"))
     settings["report_rates"] = bool(form.get("report_rates"))
     settings["steady_check"] = bool(form.get("steady_check"))
+    derivation = form.get("derivation", [""])[0]
+    if derivation in DERIVATIONS:
+        settings["derivation"] = derivation
     return settings
 
 
@@ -864,7 +889,8 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     for i, study_id in enumerate(studies):
         say(i, len(studies), f"Reading {study_id} ({i + 1} of {len(studies)})")
         try:
-            recs, skips = derive_interactions(client, study_id, metric=metric_name(s),
+            recs, skips = derive_interactions(client, study_id, deriver=chosen_deriver(s, client),
+                                              metric=metric_name(s),
                                               spike_factor=s["spike_factor"], dropout=s["include_dropout"],
                                               include_non_batch=s["include_non_batch"],
                                               no_growth_alpha=s["no_growth_alpha"],
@@ -914,7 +940,13 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # monoculture, median over replicates and studies (Karoline, 2026-10-03). They travel in the network's
     # meta, so a downloaded network carries the rates it was reported with.
     organism_rates = {}
-    if s["report_rates"]:
+    fitted = integrated.fitted_rates(records) if s.get("derivation") == "integrated" else {}
+    if fitted:
+        # the derivation fitted a rate and a self-limitation per organism, and those are the parameters
+        # that go with its coefficients (#127)
+        organism_rates = {nid: entry for nid, entry in fitted.items() if nid in net.nodes}
+        net.meta["growth_rates"] = matrix.rate_meta(net, organism_rates, integrated.METRIC)
+    elif s["report_rates"]:
         say(len(studies), len(studies), "Reading the monoculture growth rates")
         found, rate_skips = growth_rates(client, studies, wanted=rate_nodes,
                                          rate_method=s["rate_method"], window=s["rate_window"],

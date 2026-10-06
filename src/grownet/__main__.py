@@ -97,7 +97,7 @@ def _rate_flags(a) -> str:
             return f"{flag} writes the growth rates of the run, so it needs --report-rates"
     if a.steady_check and not a.report_rates:
         return "--steady-check scores the growth rates and coefficients of the run, so it needs --report-rates"
-    if a.glv and a.metric != "growth_rate" and not a.deriver:
+    if a.glv and a.metric != "growth_rate" and not a.deriver and a.derivation == "replicate":
         # a coefficient divides by a log2 ratio of growth rates, so the area or the maximum cannot make
         # one (#119); --glv-mode sets both at once
         return ("--glv writes fitted gLV coefficients, and a coefficient needs the log2 ratio of a "
@@ -208,7 +208,8 @@ def _derive_species(a):
                 "conditions": "\n".join([*a.conditions, *(a.study or "").split(",")]).strip(),
                 "only_entered": not a.all_partners, "exclude_studies": a.exclude_studies,
                 "merge_arcs": a.merge_arcs, "min_studies": a.min_studies, "merge_genera": a.merge_genera,
-                "report_rates": a.report_rates, "no_growth_alpha": a.no_growth_alpha,
+                "report_rates": a.report_rates, "derivation": a.derivation,
+                "no_growth_alpha": a.no_growth_alpha,
                 "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p}
     client = MGrowthDBClient()
     try:
@@ -492,6 +493,10 @@ def build_parser() -> argparse.ArgumentParser:
                                "model; a curve the model does not describe is left out and reported")
     settings.add_argument("--rate-window", type=int, default=5, metavar="N",
                           help="with easylinear: the points in each fitted window (default 5, as mGrowthDB)")
+    settings.add_argument("--derivation", choices=["replicate", "integrated"], default="replicate",
+                          help="replicate (default), the specified comparison of replicate sets; or "
+                               "integrated, which fits each organism's row from the whole time course and "
+                               "gives the gLV coefficients directly (the page's Derivation setting)")
     settings.add_argument("--metric", choices=["auc", "max", "growth_rate"], default="auc",
                           help="the growth property compared: auc, the area under the curve (default); max, the "
                                "maximal abundance; or growth_rate, the maximum specific growth rate")

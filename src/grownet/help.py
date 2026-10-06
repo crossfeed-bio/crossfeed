@@ -53,6 +53,16 @@ RELEASES = (
 
 # key in gui.DEFAULTS -> (label on the page, command line flag, what it does and when to change it)
 SETTINGS = {
+    "derivation": ("Derivation", "--derivation replicate|integrated",
+                   "How an interaction is derived. replicate (the default) is the comparison the "
+                   "collaboration specified: a growth property of the replicates with the partner "
+                   "against the replicates without it. integrated instead fits each organism's whole row "
+                   "from the time course, ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt), over "
+                   "its growth phase, so it needs no growth property and no abundance of its own to "
+                   "divide by, and it gives the gLV coefficients directly, with the condition number and "
+                   "the residual of every fit. It reports each row its design cannot identify instead of "
+                   "publishing a number, and a community of three or more is reported rather than "
+                   "derived, since an arc fitted inside one would be a new kind of evidence."),
     "metric": ("Growth property", "--metric auc|max|growth_rate",
                "The growth property compared with and without the partner. The area under the curve (auc, "
                "the default) combines lag, rate and yield in one number; the maximal abundance (max) keeps "
@@ -737,6 +747,24 @@ grow without bound and come back as NA, which now says something about the measu
 fitted as facilitating each other more than each limits itself, rather than about a convention; the
 equilibrium of a fit is the solution of A x = -r, and a negative entry there means the fit has no positive
 steady state.</p>
+<p><strong>A second derivation, from the whole time course.</strong> <strong>Derivation</strong> in
+Advanced settings (or <code>--derivation integrated</code>) fits each organism's row instead of comparing
+replicate sets. Integrating dx_i/dt = x_i (r_i + sum_j A_ij x_j) gives
+ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt), which is linear in r_i and in every A_ij, so
+one least-squares fit per organism returns its whole row: no growth property, no log2 ratio, no
+plateau to certify, and no partner abundance to divide by, since the regressor is the partner's own time
+integral. The monocultures identify r_i and its own limitation A_ii, which are then held fixed while the
+co-cultures give the partners, because inside one experiment those columns rise too nearly together to
+be told apart.</p>
+<p>The model has <strong>no lag term and no death term</strong>, so the rows start where growth starts
+(the lag the Baranyi fit reports) and stop where it ends (the plateau rule the Baranyi fit uses). Without
+those cuts a culture that sits at its inoculum, or declines after its peak, makes the fit pay in the rate,
+which showed up as a negative rate on a real study. Every arc carries the coefficient it fitted, the
+residual and the condition number of that fit, and a row the design cannot identify is reported rather
+than published. A community of three or more members is reported too, not derived: this form could fit a
+row inside one, which would be a new kind of evidence and needs a decision first. The growth rates and
+the carrying capacities of such a run come from the same fit, the capacity being the plateau it implies,
+-r_i / A_ii, so a package is all of one piece.</p>
 <p><strong>Scoring the package against a chemostat.</strong> A package is built from batch co-cultures,
 and mGrowthDB also holds continuous cultures, where a community sits at a steady state that satisfies
 A x = -(r - D) with D the dilution rate. Those numbers were never used to fit the parameters, so they test
