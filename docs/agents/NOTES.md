@@ -15,6 +15,20 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-06 (#118, from Karoline's decision on #116): the quantities a fitted gLV coefficient is made of
+  are measured and reported, and nothing applies them yet. `rates.easylinear_fit` and `rates.baranyi_fit`
+  return the window, the lag and the fit quality their estimators already computed; `growth.mean_over`
+  averages a curve over a window; `derive.partner_abundance(s)` takes the partner's mean over the target's
+  rate window; `monoculture_rates` and `merge_rates` collect the monoculture carrying capacity (only from
+  curves `reached_stationary` certifies), the Baranyi lag and the estimator. A curve can give a rate and no
+  capacity, so those exclusions live in `capacity_left_out` rather than in the derivation's `skipped`.
+  Each biculture arc and each `Edge` carries `partner_abundance` with its unit and replicate count.
+  **Measured against data, on #116** (Karoline's suggestion: study 7 for the parameters, study 5's `A8
+  control` for the steady state): the predicted equilibrium does not depend on the growth rates at all,
+  because every cell of row i carries the factor r_i and the row divides by it, so the estimator choice
+  moves a simulation's timescale and its lag, not where it settles. Which growth feature the ratio L
+  compares does move it: the growth rate and `auc` each land two of the three organisms within a factor 2
+  to 4, and `max` is the worst of the four.
 - 2026-10-04 (Karoline, taking her agent's recommendation after Craig's question on #107): the id is
   **`grownet.interaction_network/v1`** from 0.2.0. The namespace was Craig's call below and is unchanged;
   what moved is the version, because `significance` changed meaning (the corrected p-value became -log10
