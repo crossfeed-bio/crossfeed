@@ -447,6 +447,16 @@ class IntegratedDeriver:
                                         "the fit of this row did not identify this partner's effect"))
                         continue
                     here = reps[0].curve(partner)
+                    # the partner's abundance is measured on the partner's own curve, so its unit is that
+                    # curve's. It was labeled with the target's unit, and `matrix` keys a coefficient's
+                    # matrix on this label, so a cross-unit effect entered the target's matrix instead of
+                    # being named and left out (found 2026-10-06).
+                    partner_unit = here.abundance_unit if here is not None else ""
+                    if unit and partner_unit and partner_unit != unit:
+                        skipped.append((f"{partner} -> {target} [{exp.get('name') or _exp_id(exp)}]",
+                                        f"{partner} is counted in {partner_unit} and {target} in {unit}; "
+                                        "abundances are never converted, so this effect is left out"))
+                        continue
                     abundance = _mean_level(reps, partner)
                     effect = (coefficient * abundance / got["rate"]) if (abundance and got["rate"]) else 0.0
                     strength = math.log2(1 + effect) if effect > -1 else None
@@ -472,15 +482,16 @@ class IntegratedDeriver:
                         "sd": None, "se": None, "p_value": None, "q_value": None, "significance": None,
                         "effect_over_sd": None,
                         # what this derivation adds: the coefficient itself and the fit behind it
-                        "coefficient": coefficient, "coefficient_unit": f"1/({rate_unit_of(here)[2:]} x "
-                                                                        f"{unit})" if unit else "",
+                        "coefficient": coefficient,
+                        "coefficient_unit": (f"1/({rate_unit_of(here)[2:]} x {partner_unit or unit})"
+                                             if (partner_unit or unit) else ""),
                         "fitted_rate": got["rate"], "fitted_rate_unit": rate_unit_of(curve),
                         "fitted_self": own, "fitted_self_unit": unit,
                         "metric_with": got["rate"] + coefficient * (abundance or 0.0),
                         "metric_without": got["rate"],
                         "fit_r2": got["r2"], "fit_condition": got["condition"],
                         "fit_points": got["points"], "fit_stages": list(got["stages"]),
-                        "partner_abundance": abundance, "partner_abundance_unit": unit,
+                        "partner_abundance": abundance, "partner_abundance_unit": partner_unit or unit,
                         "partner_abundance_n": len(reps),
                         "study_id": study_id, **study_meta,
                     })

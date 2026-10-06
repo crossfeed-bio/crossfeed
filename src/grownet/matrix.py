@@ -390,7 +390,12 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
             continue
         quantified = edge.strength is not None
         censored = _extreme(edge) is not None
-        if not quantified and not censored:
+        # an arc can carry both its rates and no strength: the integrated form leaves `strength` None
+        # whenever the fitted inhibition at least cancels the organism's own rate (log2 of a non-positive
+        # number), which is the washout regime, so gating on `strength` alone dropped the strongest
+        # inhibitions out of the matrix without naming them (found 2026-10-06).
+        has_rates = edge.metric_with is not None and edge.metric_without is not None
+        if not quantified and not censored and not has_rates:
             continue
         pair = (edge.target, edge.source)
         unit = edge.partner_abundance_unit or ""

@@ -518,6 +518,28 @@ def partner_abundances(replicates, target: str, partner: str, rate_method: str =
 # Monocultures only, and batch monocultures only: a rate from a co-culture is the organism's growth with a
 # partner, which is the comparison, not the organism's own rate; and under dilution the rate a curve shows
 # is the dilution rate (`METRICS_FOR_CONTINUOUS_CULTURE`).
+def _collect_capacity(entry: dict, curve, label: str) -> None:
+    """Add this curve's plateau to an organism's capacities, or say why it gives none.
+
+    The plateau is certified by `reached_stationary` and taken as the curve's maximum. Every curve that
+    gives none is named in `capacity_left_out`, which is what the help promises a reader.
+    """
+    settled = reached_stationary(curve, curve.times[-1])
+    if settled is not True:
+        entry["capacity_left_out"].append(
+            (label, "the curve is too sparse or does not rise, so stationary phase cannot be judged"
+             if settled is None else "the curve had not reached stationary phase"))
+        return
+    if not entry["capacity_unit"]:
+        entry["capacity_unit"] = curve.abundance_unit
+    if curve.abundance_unit != entry["capacity_unit"]:
+        entry["capacity_left_out"].append(
+            (label, f"the plateau is in {curve.abundance_unit}, and this organism's others in "
+                    f"{entry['capacity_unit']}; left out rather than converted"))
+        return
+    entry["capacities"].append(curve_features(curve)["max"])
+
+
 def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window: int = None,
                       spike_factor: float = SPIKE_FACTOR, identities=None) -> tuple:
     """({node id: {"name", "values", "unit", "replicates"}}, skipped): a rate per monoculture replicate.
@@ -555,14 +577,21 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
                 continue
             if spike(curve, spike_factor):
                 skipped.append((label, "implausible spike in the curve; no growth rate from it"))
+                entry["capacity_left_out"].append(
+                    (label, "implausible spike in the curve, which would raise its maximum"))
                 continue
+            # a plateau is a property of the curve, so it is collected whether or not the chosen
+            # estimator can fit this curve's slope. It used to sit after these refusals, which made the
+            # carrying capacity, and so every diagonal, depend on the rate estimator (found 2026-10-06).
             try:
                 value = feature(curve.times, curve.values)
             except rates.RateUnavailable as e:
                 skipped.append((label, f"no growth rate: {e}"))
+                _collect_capacity(entry, curve, label)
                 continue
             if value <= 0:
                 skipped.append((label, f"non-positive growth rate ({value:g})"))
+                _collect_capacity(entry, curve, label)
                 continue
             unit = f"1/{curve.time_unit}"
             if not entry["unit"]:
@@ -570,6 +599,7 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
             if unit != entry["unit"]:
                 skipped.append((label, f"growth rate in {unit}, and this organism's other rates are in "
                                        f"{entry['unit']}; left out rather than converted"))
+                _collect_capacity(entry, curve, label)
                 continue
             entry["values"].append(value)
             entry["replicates"].append(rep.name or str(i))
@@ -580,23 +610,11 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
                 entry["lags"].append(rates.baranyi_fit(curve.times, curve.values)["lag"])
             except rates.RateUnavailable:
                 pass
-            # the carrying capacity: the plateau, and only where the curve is certified to have reached one
-            settled = reached_stationary(curve, curve.times[-1])
-            if settled is not True:
-                entry["capacity_left_out"].append(
-                    (label, "the curve is too sparse or does not rise, so stationary phase cannot be judged"
-                     if settled is None else "the curve had not reached stationary phase"))
-                continue
-            capacity = curve_features(curve)["max"]
-            if not entry["capacity_unit"]:
-                entry["capacity_unit"] = curve.abundance_unit
-            if curve.abundance_unit != entry["capacity_unit"]:
-                entry["capacity_left_out"].append(
-                    (label, f"the plateau is in {curve.abundance_unit}, and this organism's others in "
-                            f"{entry['capacity_unit']}; left out rather than converted"))
-                continue
-            entry["capacities"].append(capacity)
-    return {nid: e for nid, e in found.items() if e["values"]}, skipped
+            _collect_capacity(entry, curve, label)
+    # an organism is kept when it has a rate or a certified plateau: a study where the estimator fitted
+    # no rate still measured the plateau, and dropping it there made the capacity estimator-dependent
+    # across studies as well (found 2026-10-06)
+    return {nid: e for nid, e in found.items() if e["values"] or e["capacities"]}, skipped
 
 
 def growth_rates(client, study_ids, wanted=None, rate_method: str = None, window: int = None,
@@ -649,12 +667,13 @@ def merge_rates(per_study) -> dict:
                                          "lag_method": entry.get("lag_method", ""),
                                          "capacity_unit": "", "capacity_per_study": {},
                                          "other_capacity_units": [], "capacity_left_out": []})
-            if entry["unit"] != at["unit"]:
+            if entry["values"] and entry["unit"] != at["unit"]:
                 at["other_units"].append(f"{study_id} ({entry['unit']})")
                 continue
-            at["values"] += list(entry["values"])
-            at["studies"].append(study_id)
-            at["per_study"][study_id] = median(entry["values"])
+            if entry["values"]:
+                at["values"] += list(entry["values"])
+                at["studies"].append(study_id)
+                at["per_study"][study_id] = median(entry["values"])
             at["lags"] += list(entry.get("lags") or [])
             at["capacity_left_out"] += list(entry.get("capacity_left_out") or [])
             capacities = list(entry.get("capacities") or [])

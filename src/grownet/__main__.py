@@ -130,8 +130,14 @@ def _derive(a):
     if a.live:
         from .derive import derive_interactions, output_meta
         from .mgrowthdb import MGrowthDBClient
-        deriver = _load_deriver(a.deriver) if a.deriver else None
         client = MGrowthDBClient()
+        # --derivation picks the integrated form here as it does on the search path. It was read only by
+        # the pre-flight guard and by --species, so `derive <STUDY> --derivation integrated` quietly ran
+        # the default derivation and recorded nothing (found 2026-10-06).
+        from .gui import chosen_deriver
+        deriver = _load_deriver(a.deriver) if a.deriver else chosen_deriver(
+            {"derivation": a.derivation, "spike_factor": a.spike_factor,
+             "include_non_batch": a.include_non_batch}, client)
         try:
             from .selection import parse as parse_selection
             records, skipped = derive_interactions(client, a.study, deriver=deriver,
@@ -146,6 +152,7 @@ def _derive(a):
                                          a.merge_genera, max_adjusted_p=a.max_adjusted_p,
                                          include_absent=a.include_absent)
             extra["settings"] = {"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
+                                 "derivation": a.derivation,
                                  "merge_arcs": a.merge_arcs, "min_studies": a.min_studies,
                                  "merge_genera": a.merge_genera,
                                  "spike_factor": a.spike_factor,

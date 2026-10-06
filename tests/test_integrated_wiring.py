@@ -4,6 +4,8 @@ Karoline approved it "as an advanced option", so it is one setting, off by defau
 has the same choice. The arithmetic is checked in tests/test_integrated.py; this file checks that the
 choice reaches the derivation and that nothing changes when it is not made.
 """
+import os
+
 from test_gui import _query
 
 from grownet.gui import DEFAULTS, parse_settings, render_form
@@ -45,6 +47,33 @@ def test_the_command_line_has_the_same_choice():
     assert "--derivation" in options
     action = next(a for a in derive._actions if a.dest == "derivation")
     assert action.default == "replicate" and set(action.choices) == {"replicate", "integrated"}
+
+
+def test_the_choice_reaches_the_derivation_on_the_one_study_command(monkeypatch):
+    """The test above checks the option exists; it ran no command, and the option did nothing on
+    `grownet derive <STUDY>`, which reads a.derivation nowhere and ran the default derivation without
+    saying so (found 2026-10-06). This runs that path and looks at the deriver it builds and at what the
+    network records, which is what the requirement was about."""
+    import grownet.__main__ as cli
+    from grownet.integrated import IntegratedDeriver
+    from grownet.mgrowthdb import MGrowthDBClient
+
+    seen = {}
+
+    def fake_derive(client, study_id, deriver=None, **kwargs):
+        seen["deriver"] = deriver
+        return [], []
+
+    monkeypatch.setattr("grownet.derive.derive_interactions", fake_derive)
+    monkeypatch.setattr("grownet.mgrowthdb.data_versions", lambda *a, **k: {})
+    monkeypatch.setattr(MGrowthDBClient, "_get", lambda self, *a, **k: {})
+
+    parser = cli.build_parser()
+    for choice, expected in (("integrated", IntegratedDeriver), ("replicate", type(None))):
+        args = parser.parse_args(["derive", "SMGDB00000001", "--live", "--derivation", choice,
+                                  "--out", os.devnull])
+        cli._derive(args)
+        assert isinstance(seen["deriver"], expected), choice
 
 
 def test_the_report_and_the_help_name_the_derivation(monkeypatch):

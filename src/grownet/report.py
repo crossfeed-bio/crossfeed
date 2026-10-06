@@ -37,8 +37,13 @@ def _bound_line(e) -> str:
 def _mean_sd(e) -> str:
     if e.strength is None:
         bound = _bound_line(e)
-        return f"no ratio (one side did not grow), so the cell is a bound: {bound}" if bound else \
-            "no ratio (one side did not grow)"
+        if bound:
+            return f"no ratio (one side did not grow), so the cell is a bound: {bound}"
+        # a ratio is also undefined when both sides grew and the fitted effect at least cancels the
+        # organism's own rate, which is not "one side did not grow" (found 2026-10-06)
+        if e.outcome not in ("obligate", "abolished"):
+            return "no log2 ratio: the fitted effect at least cancels this organism's own growth rate"
+        return "no ratio (one side did not grow)"
     return f"log2 mean {e.strength:+.2f}" + ("" if e.sd is None else f" +/- {e.sd:.2f}")
 
 
