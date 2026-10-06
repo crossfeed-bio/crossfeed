@@ -786,23 +786,22 @@ a running R session, which is what the R package in this project is for. It assu
 hands over a plain matrix and a plain vector, with a helper that shapes them for
 <a href="https://bioconductor.org/packages/release/bioc/html/miaSim.html">miaSim</a>, whose
 <code>simulateGLV</code> solves dx/dt = x(b + Ax), the order this matrix is written in.</p>
-<p><strong>This route still carries the effect-size matrix</strong>, with -1 on the diagonal by convention
-and +10 or -10 for an obligate or abolished pair: the numbers of a cell here are log2 means of a growth
-comparison and are not fitted gLV coefficients, so they are scaled for a model rather than used unchanged,
-which is what <code>glv_scale()</code> in the R package is for. That factor is a free parameter, not a
-calibration: nothing in the growth data fixes the scale, so whoever simulates chooses it, and that choice,
-rather than the measurements, sets where the simulation settles. Report the factor you used with any
-result that depends on it. The zip above is the converted one; the conversion reaches this route and the
-R package next (#120), and then the scaling goes with it.</p>
+<p><strong>This route carries the same numbers as the zip</strong> (the payload is
+<code>grownet.glv/v1</code>): fitted coefficients, one matrix per abundance unit, with the rates and what
+each one is made of beside them, and every caveat as a field rather than as prose. So nothing there needs
+scaling, and <code>glv_scale()</code> warns when it is called on them and says why: their cells are
+already in the units of the diagonal they sit beside, and a fit whose cells outweigh the organisms' own
+limitations has no bounded state, which scaling hides rather than settles. It stays in the package for the
+parameters of 0.2.0 and earlier, which the R package still reads and tells apart.</p>
 <pre>install.packages("remotes")
 {_e(R_INSTALL)}
 library(grownet)
 glv &lt;- grownet_listen()        # then press Get gLV parameters, Send to R
 glv                            # prints what it holds and what to read before simulating
-A &lt;- glv_matrix(glv)           # warns about any cell that is a stated extreme
+A &lt;- glv_matrix(glv)           # one matrix per abundance unit: glv_matrix(glv, unit = ) picks one
 r &lt;- glv_rates(glv)
 
-args &lt;- as_miasim(glv_scale(glv))
+args &lt;- as_miasim(glv)         # no scaling: these are coefficients, in 1/(time x abundance)
 # miaSim simulates with stochasticity and migration on (stochastic = TRUE, migration_p = 0.01).
 # For the deterministic model, call it yourself with stochastic = FALSE and migration_p = 0.
 tse &lt;- do.call(miaSim::simulateGLV, c(args, list(x0 = rep(0.1, args$n_species))))

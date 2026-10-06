@@ -15,6 +15,14 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-06 (#120): **both routes carry the same numbers.** The payload is `grownet.glv/v1`:
+  `matrices` (one per abundance unit, each with its organisms, unit and media) replaced `interactions`,
+  the rates travel with the estimator, lag and capacity, and the caveats are fields rather than prose.
+  `matrix.readme` (the effect-size README) is gone, since only that route used it. The R package reads v1
+  and v0, carries `fitted` to say which, takes `unit =` wherever a matrix is chosen, warns when
+  `glv_scale()` is called on coefficients, and writes one file per matrix plus whatever the payload
+  carried beside the numbers. `R CMD check` passes (`make r-check`).
+
 - 2026-10-06 (#127, started): **the integrated form fits a row from the whole time course.**
   `grownet.integrated` holds the arithmetic:
   `ln(x_i(T)/x_i(0)) = r_i T + sum_j A_ij integral(x_j dt)` is linear in the parameters, so `design`

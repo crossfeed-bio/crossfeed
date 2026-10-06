@@ -2,10 +2,19 @@
 \alias{as_miasim}
 \title{Shape the parameters for miaSim}
 \usage{
-as_miasim(x, x0 = NULL, missing_rate = NULL, placeholders = c("keep", "na", "zero"))
+as_miasim(
+  x,
+  unit = NULL,
+  x0 = NULL,
+  missing_rate = NULL,
+  placeholders = c("keep", "na", "zero")
+)
 }
 \arguments{
 \item{x}{gLV parameters from \code{\link{grownet_listen}} or \code{\link{grownet_glv}}.}
+
+\item{unit}{The abundance unit of the matrix to simulate, as in \code{\link{glv_matrix}}. Only needed
+when the parameters hold more than one matrix.}
 
 \item{x0}{Starting abundances, or \code{NULL} to leave them to the simulator.}
 

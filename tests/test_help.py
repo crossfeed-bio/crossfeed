@@ -206,16 +206,22 @@ def test_the_help_explains_how_a_chemostat_is_treated():
 def test_the_help_explains_the_matrix_the_growth_rates_and_the_glv_package():
     """Karoline, 2026-10-03: "please make sure all of this is in the CLI and documented". Every convention
     a reader of those files needs is on the help page, in the words the files themselves use."""
-    from grownet import matrix
     html = help.render_help("tok", gui.DEFAULTS, gui.EXAMPLE)
     section = html[html.index("The matrix, the growth rates and gLV"):]
     section = section[section.index("<h2 id=\"glv\">"):section.index("<h2 id=\"settings\">")]
     assert "A[i][j]" in section.replace("&#x27;", "'") and "rows are affected" in section
     assert "median" in section and "disagree in sign" in section      # how arcs of one pair are merged
-    assert "+10" in section and "-10" in section                      # the obligate and abolished extremes
-    assert f"{matrix._number(matrix.DIAGONAL)} on the diagonal" in section or "-1" in section
     assert "monoculture" in section and "chemostat" in section        # where a rate comes from, and not
-    assert "not fitted gLV coefficients" in section
+    # what the package holds since #119, #123 and #129: coefficients, with no convention left in it, and
+    # a measured bound where the plain matrix used to carry a stated extreme
+    assert "per-capita" in section and "1/(time x abundance)" in section
+    assert "measured bound" in section and "no-growth rule" in section
+    assert "-r_i / K_i" in section and "(r_with - r_without) / x_j" in section
+    # the phrase survives only where the page says what replaced it
+    for sentence in section.split("."):
+        if "stated extreme" in sentence:
+            assert "instead of the stated extreme it used to carry" in sentence \
+                or "no floor and no stated extreme" in sentence
     # the command line section shows both new outputs, so the page and the terminal say the same
     cli = html[html.index("<h2 id=\"cli\">"):]
     assert "--format matrix" in cli and "--report-rates" in cli and "--glv" in cli

@@ -166,13 +166,13 @@ def test_a_genus_node_takes_the_median_rate_of_its_strains():
     assert "roseburia" not in aligned            # no monoculture of any Roseburia strain, so no rate
 
 
-def test_a_cell_that_holds_the_convention_says_so_in_the_readme():
-    # a reader has to know which numbers were measured and which are the stated extreme
+def test_a_cell_with_no_ratio_is_named_as_such():
+    """A reader has to know which numbers were measured. Since #129 such a cell holds a measured bound,
+    and `by_convention` is left for a network derived before that, which still falls back to the stated
+    extreme; `tests/test_measured_bound.py` checks the bound itself."""
     net = _net([dict(_arc("a", "b", 1.0), strength=None, outcome="obligate")])
     assert matrix.by_convention(net) == [("B", "A", 10.0)]
-    readme = matrix.readme(net, {}, [], [], matrix.by_convention(net))
-    assert "CONVENTIONS, NOT MEASUREMENTS" in readme
-    assert "A on B: 10" in readme.split("CONVENTIONS, NOT MEASUREMENTS")[1]
+    assert matrix.bounded_cells(net) == []
 
 
 def test_a_rate_is_reported_under_the_name_the_network_uses():
@@ -185,22 +185,17 @@ def test_a_rate_is_reported_under_the_name_the_network_uses():
     assert "Faecalibacterium duncaniae" in matrix.rates_csv(matrix.for_nodes(net, rates), net)
 
 
-def test_the_files_name_the_media_the_arcs_came_from():
+def test_the_network_says_which_media_its_arcs_came_from():
     """Karoline, 2026-10-04: a gLV simulation is of one environment, so the package says which media its
     numbers were measured in, and says it loudly when there is more than one."""
     one = _net([dict(_arc("a", "b", 1.5), medium="mMCB")])
     one.meta.update({"tool_version": "9.9.9", "absence": {"k": 1.0}})
     assert matrix.media(one) == ["mMCB"]
-    assert "Every arc was measured in one medium: mMCB." in matrix.readme(one, {}, [], [])
 
     mixed = _net([dict(_arc("a", "b", 1.5), medium="mMCB"),
                   dict(_arc("b", "a", -0.5, study_id="S2"), medium="Wilkins-Chalgren")])
     mixed.meta.update({"tool_version": "9.9.9", "absence": {"k": 1.0}})
     assert matrix.media(mixed) == ["mMCB", "Wilkins-Chalgren"]
-    text = matrix.readme(mixed, {}, [], [])
-    assert "THESE ARCS COME FROM 2 MEDIA" in text and "second box" in text
-    # and a program reading the payload sees the same, as data
-    assert matrix.glv_payload(mixed, {})["caveats"]["media"] == ["mMCB", "Wilkins-Chalgren"]
 
 
 def test_the_package_counts_the_arcs_a_glv_simulation_should_not_use():
@@ -209,10 +204,5 @@ def test_the_package_counts_the_arcs_a_glv_simulation_should_not_use():
     net = _net([_arc("a", "b", 1.5, evidence="dropout"), _arc("b", "a", 1.0, evidence="biculture")])
     net.meta.update({"tool_version": "9.9.9", "absence": {"k": 1.0}})
     assert matrix.dropout_arcs(net) == 1
-    text = matrix.readme(net, {}, [], [])
-    assert "1 ARC(S) COME FROM DROP-OUT DESIGNS" in text and "Include drop-out communities" in text
-    assert matrix.glv_payload(net, {})["caveats"]["dropout_arcs"] == 1
-    # a package without any says so plainly, so a reader knows the question was asked
     direct = _net([_arc("a", "b", 1.5, evidence="biculture")])
-    direct.meta.update({"tool_version": "9.9.9", "absence": {"k": 1.0}})
-    assert "none comes from a drop-out design" in matrix.readme(direct, {}, [], [])
+    assert matrix.dropout_arcs(direct) == 0

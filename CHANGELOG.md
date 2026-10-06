@@ -7,6 +7,18 @@ content.
 ## [Unreleased]
 
 ### Changed
+- **Send to R and `/glv.json` carry the same numbers as the zip** (#120): the payload is
+  `grownet.glv/v1`, with `matrices`, one per abundance unit, holding fitted coefficients, the rates with
+  the estimator, the lag and the carrying capacity beside each, and every caveat as a field: the cells
+  from a comparison where one side did not grow, the pairs left at 0 for disagreeing in sign, the
+  organisms and effects that could not be fitted, the media, the drop-out count and the standing note
+  that a fit can have no bounded state. The R package reads v1 and still reads v0, says which kind it
+  holds, and gained `unit =` on `glv_matrix()`, `glv_rates()`, `as_miasim()` and `glv_scale()` for the
+  organisms counted in another unit; `glv_scale()` now warns when it is called on fitted coefficients,
+  since their units already match the diagonal and scaling hides an unbounded fit rather than settling
+  it. `glv_write()` writes one matrix per unit and anything the payload carried beside the numbers, such
+  as the steady-state check. The page, the help and both READMEs say one thing rather than two, and the
+  effect-size README that only this route still used is gone.
 - **An organism with no certified monoculture plateau is fitted at its co-culture plateau** (#124 item 2,
   Karoline's "complete #124" of 2026-10-06), rather than left out of the package. The balance is the one
   #123 introduced for an organism that grows only with a partner, `0 = r_i + A_ii x_i + sum_j A_ij x_j` at

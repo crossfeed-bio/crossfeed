@@ -506,7 +506,8 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
     r_hint = (f"<p class=\"hint\">Send to R needs an R session waiting for it: install the companion package "
               f"once with <code>{_esc(rbridge.INSTALL_R)}</code> (if that answers 404, see the help), then run "
               f"<code>library(grownet); glv &lt;- grownet_listen()</code> and "
-              f"press this. What arrives prints its own caveats, warns when the matrix holds a stated extreme, "
+              f"press this. What arrives prints its own caveats, names every cell from a comparison where "
+              f"one side did not grow, "
               f"and refuses to build a simulation for an organism with no growth rate "
               f"(<a href=\"/help?token={t}{tail}#glv\">the help explains it</a>). Without a listener, read the "
               f"same parameters in R with <code>glv &lt;- grownet_glv(&quot;{_esc(_glv_url(token, result))}"
@@ -1123,19 +1124,31 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                        f"{TITLE}_growth_rates.csv")
         elif path == "/glv.json":
             # what the R package fetches, and what Send to R posts: the same numbers as the zip, with the
-            # caveats as data and the README text (#110)
-            self._send(json.dumps(matrix.glv_payload(result["network"], organism_rates), indent=1),
-                       "application/json; charset=utf-8")
+            # caveats as data and the README text (#110, converted on #120)
+            payload = self._payload(result, organism_rates)
+            if payload is not None:
+                self._send(json.dumps(payload, indent=1), "application/json; charset=utf-8")
         else:
             self._package(result, organism_rates)
+
+    def _payload(self, result, organism_rates):
+        """The gLV payload, or None when the page has already said which setting to change (#119)."""
+        try:
+            return matrix.glv_payload(result["network"], organism_rates, self._extra(result))
+        except matrix.CannotConvert as e:
+            self._send(render_result(self.token, result, message=f"No gLV parameters: {e}"))
+            return None
+
+    def _extra(self, result) -> dict:
+        """The files a package or a payload carries beside the numbers: the steady-state check (#125)."""
+        return ({"steady_state_check.txt": steady.as_text(result["steady"])}
+                if result.get("steady") is not None else {})
 
     def _package(self, result, organism_rates) -> None:
         """The zip, or the page saying which setting to change: a package of coefficients needs the
         comparison to be on a growth rate (#119)."""
-        extra = ({"steady_state_check.txt": steady.as_text(result["steady"])}
-                 if result.get("steady") is not None else None)
         try:
-            zipped = matrix.glv_package(result["network"], organism_rates, extra)
+            zipped = matrix.glv_package(result["network"], organism_rates, self._extra(result))
         except matrix.CannotConvert as e:
             self._send(render_result(self.token, result, message=f"No gLV package: {e}"))
             return
@@ -1152,7 +1165,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if form.get("to", ["zip"])[0] != "r":
             self._package(result, organism_rates)
             return
-        payload = matrix.glv_payload(result["network"], organism_rates)
+        payload = self._payload(result, organism_rates)
+        if payload is None:
+            return
         try:
             answer = rbridge.send(payload)
         except rbridge.RError as e:
@@ -1161,7 +1176,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         caveats = payload["caveats"]
         note = (f"Sent to R: {answer.get('organisms', 0)} organism(s), "
                 f"{answer.get('growth_rates', 0)} growth rate(s), "
-                f"{len(caveats['placeholders'])} placeholder cell(s). The R session printed what it holds "
+                f"{len(caveats['censored_cells'])} cell(s) from a comparison where one side did not "
+                "grow. The R session printed what it holds "
                 "and what to read before simulating.")
         self._send(render_result(self.token, result, message=note))
 

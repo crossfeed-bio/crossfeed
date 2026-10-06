@@ -315,80 +315,6 @@ def _media_lines(net: InteractionNetwork) -> list:
             "      keep a single environment."]
 
 
-def readme(net: InteractionNetwork, rates: dict, conflicts: list, missing: list, convention=()) -> str:
-    """What a reader has to know before feeding these two files to a simulator."""
-    meta = net.meta
-    absence = meta.get("absence", {})
-    count = counts(net)
-    lines = [
-        f"{brand.NAME} {meta.get('tool_version', '')}: parameters for a generalized Lotka-Volterra "
-        "simulation",
-        f"derived {meta.get('derived_at', '')} from {meta.get('source_db', 'mGrowthDB')}",
-        "",
-        "FILES",
-        "  interaction_matrix.csv  a square matrix; the header row and the first column are the organisms",
-        "  growth_rates.csv        one growth rate per organism, with how many values it rests on, and",
-        "                          beside it the estimator, the lag it fitted, and the monoculture",
-        "                          carrying capacity with its unit",
-        "",
-        "CONVENTIONS",
-        "  A[i][j] is the effect of j on i, so rows are affected and columns are the actor:",
-        "      dx_i/dt = x_i * ( r_i + sum_j A[i][j] * x_j )",
-        f"  The diagonal is {_number(DIAGONAL)} by convention (self-limitation). It is not a scale for the",
-        "      rest of the matrix.",
-        "  A cell holds the log2 mean of the growth comparison: log2(growth with the actor) minus",
-        "      log2(growth without it), merged across conditions and studies by its median.",
-        "      IT IS AN EFFECT SIZE, NOT A FITTED gLV COEFFICIENT. A gLV coefficient is a per-capita effect",
-        "      in absolute units; scale these numbers for your model rather than using them unchanged.",
-        f"  An empty cell is 0. An arc below the absence threshold (k = {absence.get('k', '')}) is also 0:",
-        "      the threshold judged it no interaction.",
-        f"  One cell per ordered pair: this network's {count['arcs']} arc(s) make {count['cells']} cell(s) "
-        f"over {count['organisms']} organism(s).",
-        *_media_lines(net),
-        *_dropout_lines(net),
-        "  An obligate interaction (the affected organism grows only with the actor) and an abolished one",
-        "      (it grows only without it) have no ratio, because one side did not grow at all, so their",
-        "      cell holds a MEASURED BOUND instead: the no-growth rule that said so allows that side at",
-        "      most a set factor over its own measured start, which bounds the ratio from below for an",
-        "      obligate pair and from above for an abolished one. Such a cell sets a pair only when no arc",
-        "      of it was quantified, and the report names every one of them with the rule behind it.",
-        f"  Cells are often stronger than the {_number(DIAGONAL)} on the diagonal, a partner outweighing "
-        "an organism's own",
-        "      self-limitation. A simulation run on them unchanged can grow without bound (deSolve returns",
-        "      NA). Scale the off-diagonal cells for your model; the R companion package has glv_scale().",
-        "  A growth rate is the maximum specific growth rate of that organism in monoculture (easylinear,",
-        f"      the method mGrowthDB reports), median over replicates and studies, in {RATE_UNIT}.",
-        "  The carrying capacity beside it is the plateau of that organism's monoculture, median over the",
-        "      curves that reached a certified stationary phase, in the abundance unit they were measured",
-        "      in (never converted); it is empty where no curve plateaued. The lag is the Baranyi fit's,",
-        "      empty for an estimator that fits none. These are reported quantities, not applied to the",
-        "      matrix above: the diagonal is still the convention.",
-        "",
-    ]
-    if convention:
-        lines += ["NUMBERS THAT ARE CONVENTIONS, NOT MEASUREMENTS",
-                  "  This network was derived before the bound above existed, so these cells still hold the",
-                  f"  stated extreme of {_number(EXTREME)}. Derive again to have a measured bound instead",
-                  "  (actor on affected):"]
-        lines += [f"      {actor} on {affected}: {_number(value)}" for affected, actor, value in convention]
-        lines.append("")
-    lines.append("WHAT IS NOT IN HERE")
-    if conflicts:
-        lines.append("  These pairs have arcs of opposite sign, in different conditions or studies, so they")
-        lines.append("  are left at 0 rather than averaged (actor on affected):")
-        lines += [f"      {actor} on {affected}" for affected, actor in conflicts]
-    else:
-        lines.append("  No pair had arcs of opposite sign.")
-    if missing:
-        lines.append("  These organisms have no growth rate, so a simulation needs one from elsewhere:")
-        lines += [f"      {name}" for name in missing]
-    else:
-        lines.append("  Every organism in the matrix has a growth rate.")
-    lines += ["", "Interactions are derived, not measured: see the report beside this file for what was",
-              "skipped and why."]
-    return "\n".join(lines) + "\n"
-
-
 # ---- fitted gLV coefficients (#119) ----------------------------------------------------------------
 #
 # Karoline settled the entries on #116, from Craig's derivation and the math: the package stops holding
@@ -900,32 +826,45 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
 # the numbers, so code can act on them instead of a person having to read the README first (Karoline,
 # 2026-10-03: "The problem is the README: caveats such as the placeholders for obligates/abolished taxa
 # have to reach the user"). The README text travels with it, so nothing is lost either way.
-GLV_FORMAT = "grownet.glv/v0"
+# The payload moved to v1 with #120: `matrices` replaced `interactions`, one per abundance unit, and the
+# numbers became fitted coefficients rather than log2 means, so the fields changed meaning and a version
+# is a promise about content (Craig's rule, #71).
+GLV_FORMAT = "grownet.glv/v1"
+PREVIOUS_GLV_FORMATS = ("grownet.glv/v0",)
 
 
-def glv_payload(net: InteractionNetwork, rates: dict) -> dict:
-    """The gLV parameters as one JSON-ready document (`GLV_FORMAT`).
+def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dict:
+    """The gLV parameters as one JSON-ready document (`GLV_FORMAT`), the same numbers as the zip (#120).
 
-    `organisms` names the rows and the columns of `interactions` (-1 on the diagonal), and
-    `growth_rates` runs in the same order, with null where an organism has none. `caveats` holds, as
-    data: the cells that carry the stated extreme rather than a measured ratio, the pairs left at 0 for
-    disagreeing in sign, the organisms without a rate, the absence threshold, and the standing note that
-    a cell is an effect size and not a fitted coefficient.
+    `matrices` holds one matrix per abundance unit, each with its `organisms`, its `interactions` (rows
+    affected, columns the actor, the fitted diagonal), its unit and the media its arcs came from, because
+    nothing is converted between abundance units. `growth_rate_detail` carries each rate with what a
+    coefficient is made of beside it: the estimator, the lag and the carrying capacity. `caveats` holds,
+    as data, everything the README says in prose: the cells from a comparison where one side did not grow,
+    the pairs left at 0 for disagreeing in sign, the organisms and effects that could not be fitted at
+    all, the rows fitted at a plateau, the absence threshold, the media, the drop-out count, and the
+    standing note that a fit can still have no bounded state. The README travels too, so neither route
+    loses what the other carries.
+
+    `extra` is {name: text} the caller computed, which is how the steady-state check of #125 travels here
+    as it does in the zip. Raises `CannotConvert` when the arcs cannot give coefficients.
     """
-    order = labels(net)
-    names, matrix, conflicts = rows(net, DIAGONAL)
-    missing = [_label(net.nodes[nid]) for nid in order if nid not in rates]
-    units = {rates[nid].get("unit", RATE_UNIT) for nid in order if nid in rates}
+    got = coefficients(net, rates)
     meta = net.meta
+    order = labels(net)
+    missing = [_label(net.nodes[nid]) for nid in order if nid not in rates
+               or (rates[nid] or {}).get("rate") is None]
+    units = {rates[nid].get("unit", RATE_UNIT) for nid in order if nid in rates}
     return {
         "format": GLV_FORMAT,
         "tool": meta.get("tool", brand.NAME),
         "tool_version": meta.get("tool_version", ""),
         "derived_at": meta.get("derived_at", ""),
         "source_db": meta.get("source_db", "mGrowthDB"),
-        "organisms": names,
-        "interactions": matrix,
-        "growth_rates": [rates[nid]["rate"] if nid in rates else None for nid in order],
+        "matrices": [{"abundance_unit": block["abundance_unit"], "unit": block["unit"],
+                      "organisms": list(block["organisms"]), "interactions": block["matrix"],
+                      "media": list(block["media"]), "cells": block["cells"], "file": block["file"]}
+                     for block in got["matrices"]],
         "growth_rate_unit": units.pop() if len(units) == 1 else "",
         "growth_rate_detail": [
             {"organism": _label(net.nodes[nid]), "rate": rates[nid]["rate"],
@@ -937,30 +876,43 @@ def glv_payload(net: InteractionNetwork, rates: dict) -> dict:
              "carrying_capacity": rates[nid].get("capacity"),
              "carrying_capacity_unit": rates[nid].get("capacity_unit", ""),
              "carrying_capacity_curves": rates[nid].get("capacity_n")}
-            for nid in order if nid in rates],
+            for nid in order if nid in rates and (rates[nid] or {}).get("rate") is not None],
         "caveats": {
+            "coefficients": ("every cell is a fitted per-capita coefficient: the diagonal is -r_i / K_i "
+                             "and an off-diagonal cell is (r_with - r_without) / x_j, so nothing here is "
+                             "a convention and nothing needs scaling to match the rest"),
+            "diagonal": "fitted: -r_i / K_i, with K_i the organism's own plateau",
+            "units": ("one matrix per abundance unit: abundances are never converted between units, since "
+                      "a cell mass conversion would have to be invented, and no effect between organisms "
+                      "counted differently was measured"),
+            "abundance_units": sorted({block["abundance_unit"] for block in got["matrices"]}),
+            "unbounded": ("a fit can have no bounded state: when two organisms are fitted as facilitating "
+                          "each other more than each limits itself, a simulation grows without bound and "
+                          "a solver returns NA. The equilibrium of a fit is the solution of A x = -r, and "
+                          "a negative entry there means there is no positive steady state"),
+            "censored": ("one of the two rates behind these cells is 0, measured: the affected organism "
+                         "grew only with the actor, or only without it. The formula takes that as it is, "
+                         "so they are measurements and not floors or stated extremes"),
+            "censored_cells": [{"affected": affected, "actor": actor}
+                               for affected, actor in got["censored_cells"]],
+            "sign_conflicts": [{"affected": affected, "actor": actor}
+                               for block in got["matrices"] for affected, actor in block["conflicts"]],
+            "left_out": [list(row) for row in got["left_out"]],
+            "pairs_left_out": [list(row) for row in got["pairs_left_out"]],
+            "across_units": [list(row) for row in got["across_units"]],
+            "obligate_rows": [list(row) for row in got.get("obligate_rows", [])],
+            "plateau_rows": [list(row) for row in got.get("plateau_rows", [])],
+            "from_the_ratio": [list(row) for row in got.get("from_the_ratio", [])],
             "media": media(net),
             "dropout_arcs": dropout_arcs(net),
-            "diagonal": DIAGONAL,
-            "extreme": EXTREME,
             "absence_k": meta.get("absence", {}).get("k"),
-            # cells with no ratio: a measured bound since #129, and the stated extreme only in a network
-            # derived before it. Both are listed here, since a reader of either has to know (#110).
-            "placeholders": [{"affected": affected, "actor": actor, "value": value,
-                              "outcome": "obligate" if value > 0 else "abolished",
-                              "kind": "convention" if abs(value) == EXTREME else "bound"}
-                             for affected, actor, value in _censored_cells(net)],
-            "bounds": [{"affected": affected, "actor": actor, "value": value,
-                        "outcome": "obligate" if value > 0 else "abolished"}
-                       for affected, actor, value in bounded_cells(net)],
-            "sign_conflicts": [{"affected": affected, "actor": actor} for affected, actor in conflicts],
             "without_a_rate": missing,
-            "effect_size": "a cell is the log2 mean of a growth comparison, an effect size, not a fitted "
-                           "gLV coefficient (a per-capita effect in absolute units); scale these numbers "
-                           "for your model rather than using them unchanged",
+            "rate_methods": got["rate_methods"],
+            "lag_methods": got["lag_methods"],
             "counts": counts(net),
         },
-        "readme": readme(net, rates, conflicts, missing, by_convention(net)),
+        "readme": readme_from(got, net, rates),
+        "files": dict(extra or {}),
         "studies": [{"id": sid, "citation": study.citation or sid, "url": study.url,
                      "license": study.license} for sid, study in sorted(net.studies.items())],
         "settings": dict(meta.get("settings", {})),

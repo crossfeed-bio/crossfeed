@@ -696,16 +696,18 @@ def test_the_glv_menu_sends_to_r_and_the_page_says_what_arrived(server, with_rat
     sent = {}
 
     def fake_send(payload, **kw):
+        """What the R package answers, counted from the converted payload of #120."""
         sent.update(payload=payload)
-        return {"received": True, "organisms": len(payload["organisms"]),
-                "growth_rates": sum(r is not None for r in payload["growth_rates"]),
-                "placeholders": len(payload["caveats"]["placeholders"]), "without_a_rate": 0}
+        organisms = [name for block in payload["matrices"] for name in block["organisms"]]
+        return {"received": True, "organisms": len(organisms),
+                "growth_rates": len(payload["growth_rate_detail"]),
+                "placeholders": len(payload["caveats"]["censored_cells"]), "without_a_rate": 0}
 
     monkeypatch.setattr(rbridge, "send", fake_send)
     _, page, _ = _open(f"{base}/glv?token={token}", b"to=r")
     assert "Sent to R: 2 organism(s), 2 growth rate(s)" in page
-    assert sent["payload"]["format"] == "grownet.glv/v0"
-    assert sent["payload"]["organisms"] == sorted([A, B])
+    assert sent["payload"]["format"] == "grownet.glv/v1"
+    assert sent["payload"]["matrices"][0]["organisms"] == sorted([A, B])
 
     # the same menu downloads the zip, so one control covers both
     with urllib.request.urlopen(f"{base}/glv?token={token}", data=b"to=zip", timeout=10) as answer:
@@ -722,17 +724,26 @@ def test_the_glv_menu_sends_to_r_and_the_page_says_what_arrived(server, with_rat
     assert "install_github" in page and "grownet_glv(url)" in page
 
 
-def test_r_can_fetch_the_same_parameters_from_the_page(server, with_rates):
+def test_r_can_fetch_the_same_parameters_from_the_page(server, with_rates, monkeypatch):
     """The other direction she asked for: when a port cannot be opened, R reads the payload from the page."""
     base, token = server
-    page = _finished(base, token, report_rates="1")
+    from grownet import rates as rate_module
+    monkeypatch.setattr(rate_module, "easylinear", lambda times, values, *a, **kw: values[-1] / 10)
+    monkeypatch.setattr(rate_module, "baranyi", lambda times, values, *a, **kw: values[-1] / 10)
+    page = _finished(base, token, report_rates="1", metric="growth_rate")
     assert "/glv.json?token=" in page                  # the address is printed under the control
     _, text, headers = _open(f"{base}/glv.json?token={token}")
     assert headers["Content-Type"].startswith("application/json")
     payload = json.loads(text)
-    assert payload["format"] == "grownet.glv/v0"
-    assert payload["organisms"] == sorted([A, B])
+    assert payload["format"] == "grownet.glv/v1"
+    (block,) = payload["matrices"]
+    assert block["organisms"] == sorted([A, B]) and block["unit"].startswith("1/(h x ")
     assert "readme" in payload and "caveats" in payload
+
+    # and with a growth property that cannot give coefficients, this route says so too (#119, #120)
+    _finished(base, token, report_rates="1")
+    _, said, _ = _open(f"{base}/glv.json?token={token}")
+    assert "No gLV parameters:" in said and "growth_rate" in said
 
 
 # ---- the second input box: media, experiments or studies (#113) ----------------------------------

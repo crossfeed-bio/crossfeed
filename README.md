@@ -244,7 +244,7 @@ remotes::install_github("crossfeed-bio/crossfeed", subdir = "r")
 library(grownet)
 glv <- grownet_listen()                 # then press Get gLV parameters, Send to R
 glv                                     # prints what it holds and what to read before simulating
-args <- as_miasim(glv_scale(glv))
+args <- as_miasim(glv)
 # miaSim simulates with stochasticity and migration on; for the deterministic model, call it
 # yourself with stochastic = FALSE and migration_p = 0
 tse <- do.call(miaSim::simulateGLV, c(args, list(x0 = rep(0.1, args$n_species))))
@@ -260,10 +260,11 @@ being used and cannot see it; installing from a clone needs no GitHub access at 
 `remotes::install_local("<the repository>/r")`, or `R CMD INSTALL r` in a terminal.
 
 The caveats travel as data rather than as text to be read first: the object prints them every time,
-`glv_matrix()` warns and names the cells that hold the stated extreme (+10 obligate, -10 abolished) and
-takes `placeholders = "na"` or `"zero"` to convert them, `glv_scale()` brings off-diagonal cells that
-outweigh the self-limitation down to a size a simulation survives, and `as_miasim()` stops when an
-organism has no growth rate, since a simulation cannot invent one. `grownet derive ... --report-rates --to-r` does the same from the command line, and `grownet_glv(url)` reads the parameters from the page
+`glv_matrix()` takes one matrix per abundance unit (`unit = ` picks one when the organisms were counted in
+more than one way), `glv_rates()` the matching rates, `glv_scale()` is unnecessary for fitted coefficients
+and says so (it stays for the effect-size parameters of 0.2.0 and
+earlier, which the package still reads), and `as_miasim()` stops when an organism has no growth rate,
+since a simulation cannot invent one. `grownet derive ... --report-rates --to-r` does the same from the command line, and `grownet_glv(url)` reads the parameters from the page
 when no port can be opened. The R package's own README is [`r/README.md`](r/README.md).
 
 ## Send it to Cytoscape
