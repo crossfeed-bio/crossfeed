@@ -955,9 +955,12 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
      organisms, so the package would fragment, while the second box already holds a search to one
      environment. Instead each matrix names the media its own arcs came from, so the mixture is visible.
    * item 6, **how `x_j_star` is taken**: kept as the partner's mean over the target's rate window, which
-     keeps the rate and the abundance in one interval; the README now states that the alternative, the
-     partner's own plateau, differs from it by 0.2 to 500 times across mGrowthDB. The integrated form of
-     #127 removes the choice, and comparing the two is what that task is for.
+     keeps the rate and the abundance in one interval rather than pairing a rate with an abundance the
+     organism reached at another time; the README says that much and quotes no corpus numbers, since
+     Karoline asked on 2026-10-06 that shipped text not depend on mGrowthDB's current state (the spread
+     between that mean and the partner's own plateau was measured for her on #124 and lives in the issue
+     comment). The integrated form of #127 removes the choice, and comparing the two is what that task is
+     for.
    * item 4b, **the steady states as constraints in a fit**: deferred until #127 lands, since a fit that
      uses them is a third derivation and the same data serve as the independent check meanwhile.
    PARTLY SETTLED 2026-10-06 (Karoline): the **chemostat validation** is built (#125, item 4a: a package

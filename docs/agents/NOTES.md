@@ -21,8 +21,11 @@ Rules for this file:
   zero (its partners suppress it harder than its own rate) is named instead. SMGDB00000004's package went
   from two organisms and one fitted cell to three and five. Media are **not** partitioned: each matrix
   names the media its own arcs came from, since most media hold one or two organisms and the second box
-  already keeps a search to one environment. `x_j_star` stays the mean over the target's rate window, with
-  the 0.2-to-500-times spread against the partner's own plateau now stated in the README.
+  already keeps a search to one environment. `x_j_star` stays the mean over the target's rate window, which
+  keeps the rate and the abundance in one interval. **Shipped text quotes no corpus numbers** (Karoline,
+  2026-10-06: "better not to quote numbers in documentation that depend on mGrowthDB's current state"), so
+  measurements like that spread belong in issue comments and in this file, not in the help, the README or
+  a generated package README.
 
 - 2026-10-06 (#129, Karoline's decision): **a censored cell holds a measured bound, not +/-10.**
   `interaction.no_growth_bound` turns the rule that said a side did not grow into a bound on that side's
