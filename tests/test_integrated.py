@@ -111,6 +111,8 @@ def test_the_two_stage_fit_holds_the_monoculture_numbers_fixed():
     assert got["rate"] == pytest.approx(0.4, rel=0.02)
     assert got["coefficients"]["A"] == pytest.approx(-4.0e-10, rel=0.05)   # from the monoculture
     assert got["coefficients"]["B"] == pytest.approx(2.0e-10, rel=0.25)    # from the co-culture
+    # the stages say how the monoculture numbers were obtained: the median of the replicates' own fits,
+    # or, where none of them identifies the row, one regression over all their rows (2026-10-06)
     assert got["stages"] == ["monoculture", "co-culture"]
 
 
@@ -320,3 +322,37 @@ def test_an_organism_whose_fit_implies_no_plateau_keeps_its_measured_one():
     assert filled["a"]["rate"] == 0.4
     # and an organism the fit did pin keeps the fit's plateau, untouched
     assert filled["b"]["capacity"] == 5.0e8 and "capacity_source" not in filled["b"]
+
+
+def test_the_monoculture_stage_pools_the_replicates_only_when_none_of_them_fits_alone():
+    """Measured on the whole database and decided on 2026-10-06 (register, "Two improvements to the
+    integrated form"): pooling every replicate's rows into one regression halves the worst coefficient
+    spread and adds arcs, and it also flips three signs, which is what one outlying replicate does to a
+    regression and not to a median. So the median of the separate fits stays the estimate, and pooling is
+    what happens when no replicate identifies the row by itself.
+
+    Three replicates of the same noiseless monoculture: each fits alone, so the median is used and the
+    stage says so. Truncating each one to two rows leaves none of them fittable, and their rows together
+    then give the same parameters, with the stage naming that route.
+    """
+    mono_times, mono_series = _simulate([0.4], [[-4.0e-10]], [1.0e7])
+    monos = [_named(["A"], mono_times, mono_series, f"m{k}") for k in range(3)]
+    co_times, co_series = _simulate([0.4, 0.3], [[-4.0e-10, 2.0e-10], [0.0, -3.0e-10]], [1.0e7, 5.0e8])
+    cos = [_named(["A", "B"], co_times, co_series, "c0")]
+
+    got = integrated.two_stage("A", monos, cos, ["A", "B"])
+    assert got["stages"][0] == "monoculture"
+    assert got["rate"] == pytest.approx(0.4, rel=0.02)
+
+    # three replicates of the same organism at different inocula, each cut to three measurements: two
+    # rows apiece, too few for any of them to be fitted alone, and six rows together
+    short = []
+    for k, start in enumerate((1.0e7, 3.0e7, 9.0e7)):
+        times, series = _simulate([0.4], [[-4.0e-10]], [start])
+        short.append(_named(["A"], times[:3], series[:3], f"s{k}"))
+    assert all(integrated.fit_row(r, "A", ["A"])["rate"] is None for r in short)
+
+    pooled = integrated.two_stage("A", short, cos, ["A", "B"])
+    assert pooled["stages"][0] == "monoculture (replicates pooled)"
+    assert pooled["rate"] == pytest.approx(0.4, rel=0.02)        # the same parameters, from the rows
+    assert pooled["coefficients"]["A"] == pytest.approx(-4.0e-10, rel=0.05)

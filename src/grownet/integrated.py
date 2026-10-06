@@ -38,6 +38,10 @@ import statistics
 # monoculture stage is what that number describes (stated 2026-10-06).
 MAX_CONDITION = 1.0e4
 MIN_ROWS = 3            # fewer rows than unknowns plus one, and nothing can be fitted
+# A free constant in each fit, which would absorb an error in the first measurement, was measured on the
+# whole database and left out: the constant it wants is a median factor of 7 on x(0), which is misfit on a
+# short window rather than a measurement error, and it costs a parameter where the rows are fewest
+# (2026-10-06; the numbers are in docs/METHOD_NOTES.md).
 
 
 def _trapezoid(times: list, values: list) -> list:
@@ -282,6 +286,33 @@ def _overall_r2(target: str, partners: list, cocultures: list, rate: float, own:
     return 1 - residual / total if total > 0 else float("nan")
 
 
+def _pooled_stage_one(target: str, replicates: list, max_condition: float):
+    """(r_i, A_ii, the condition number) from every replicate's rows at once, or None.
+
+    Each replicate contributes its own rows, `ln(x(t) / x(0))` against elapsed time and the integral of
+    its own abundance, from its own start: the replicates share the two parameters, so one regression over
+    all the rows uses all the data. None when there are no rows, when the design is not identified, or
+    when the pooled rate is not growth, and the caller then falls back to the median of the separate fits.
+    """
+    rows = []
+    for replicate in replicates:
+        built = design(replicate, target, [target])
+        if target not in built["partners"]:
+            continue
+        own_index = built["partners"].index(target)
+        rows += [{"y": row["y"], "columns": [row["time"], row["integrals"][own_index]]}
+                 for row in built["rows"]]
+    if len(rows) < MIN_ROWS:
+        return None
+    got = _least_squares(rows, 2)
+    if got["values"] is None or got["condition"] > max_condition:
+        return None
+    rate, own = got["values"]
+    if rate <= 0:
+        return None
+    return rate, own, got["condition"]
+
+
 def two_stage(target: str, monocultures: list, cocultures: list, organisms: list,
               max_condition: float = MAX_CONDITION) -> dict:
     """The organism's row from its monocultures first, then its partners from the co-cultures.
@@ -294,6 +325,7 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
     """
     stages, skipped = [], []
     rates, selfs, conditions = [], [], []
+    usable = []        # the monoculture replicates whose own fit describes them, pooled below
     for i, replicate in enumerate(monocultures):
         fit = fit_row(replicate, target, [target], max_condition)
         if fit["rate"] is not None and fit["rate"] <= 0:
@@ -307,20 +339,43 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
             continue
         rates.append(fit["rate"])
         selfs.append(fit["coefficients"][target])
+        usable.append(replicate)
         # the monoculture stage's conditioning is the informative one for a biculture: its partner stage
         # has one column, whose scaled normal matrix is [[1.0]], so reporting that stage alone made
         # every fitted arc read as perfectly conditioned (found 2026-10-06)
         if fit.get("condition") is not None and math.isfinite(fit["condition"]):
             conditions.append(fit["condition"])
     if not rates:
-        return {"rate": None, "coefficients": {}, "r2": float("nan"), "condition": float("inf"),
-                "points": 0, "stages": [], "skipped": skipped,
-                "reason": f"no monoculture replicate of {target} could be fitted"}
-    # a real median: sorted(x)[len(x) // 2] takes the upper middle value when the count is even,
-    # and two replicates is the common case here, while every other module uses statistics.median
+        # no replicate's own rows identify the row, but their rows together may: the replicates share
+        # r_i and A_ii, so one regression over all of them is the last thing to try before reporting
+        # nothing. Measured on the whole database, this is where five more arcs come from (2026-10-06).
+        pooled = _pooled_stage_one(target, monocultures, max_condition)
+        if pooled is None:
+            return {"rate": None, "coefficients": {}, "r2": float("nan"), "condition": float("inf"),
+                    "points": 0, "stages": [], "skipped": skipped,
+                    "reason": f"no monoculture replicate of {target} could be fitted"}
+        rates, selfs = [pooled[0]], [pooled[1]]
+        usable = list(monocultures)
+        conditions.append(pooled[2])
+        pooled_only = True
+    else:
+        pooled_only = False
+    # One regression over every usable monoculture replicate's rows, rather than the median of their
+    # separate fits: the replicates share r_i and A_ii, so pooling their rows estimates both from all the
+    # data at once, and the measured uncertainty of this stage was what dominated a partner coefficient's
+    # spread (2026-10-06, Karoline: "please do both"). The per-replicate fits above still decide which
+    # replicates the model describes and report the ones it does not, and the median of those fits is the
+    # fallback when the pooled design is not identified.
+    # the median of the separate fits, which is the project's merge rule for replicates and is robust to
+    # one replicate whose curve the model does not describe. Pooling every replicate's rows into one
+    # regression was measured against it on the whole database (2026-10-06): it halves the worst
+    # coefficient spread but leaves the median spread unchanged, fits the co-culture rows slightly worse,
+    # and flips the sign of three cells, which is what a single outlying replicate does to a regression
+    # and not to a median. So pooling is the fallback above, where the separate fits give nothing at all,
+    # rather than the estimate here.
     rate = statistics.median(rates)
     own = statistics.median(selfs)
-    stages.append("monoculture")
+    stages.append("monoculture (replicates pooled)" if pooled_only else "monoculture")
 
     partners = [name for name in organisms if name != target]
     # Stage 1 gives one (r, A_ii) per monoculture replicate, and stage 2 used to treat their median as
@@ -329,7 +384,13 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
     # leave-one-out of the monoculture replicates: the spread over that set carries the co-culture
     # replicate spread and stage 1's together, and the median over it is the estimate (2026-10-06).
     variants = [(rate, own)]
-    if len(rates) >= 3:
+    if pooled_only and len(usable) >= 3:
+        for k in range(len(usable)):
+            left_out = _pooled_stage_one(target, [r for j, r in enumerate(usable) if j != k],
+                                         max_condition)
+            if left_out is not None:
+                variants.append((left_out[0], left_out[1]))
+    elif len(rates) >= 3:
         for k in range(len(rates)):
             kept_rates = [v for j, v in enumerate(rates) if j != k]
             kept_selfs = [v for j, v in enumerate(selfs) if j != k]

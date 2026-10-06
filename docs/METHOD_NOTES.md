@@ -364,6 +364,50 @@ rows it cannot fit; a cell is a regression output rather than a division a reade
 it has no intercept, so an error in x_i(0) shared by every replicate would still pass, while one that
 differs between replicates now enters the reported spread.
 
+### Two improvements to the integrated form, measured and decided (2026-10-06)
+
+Karoline: "please do both: measure the intercept and pool the monoculture stage". Both were built and run
+over the whole database. One is kept as a fallback, the other is not kept, and the numbers are here so
+nobody measures them twice.
+
+**Pooling the monoculture stage.** The stage fits each monoculture replicate separately and takes the
+median of their rates and self-limitations, and that stage was measured to dominate a partner
+coefficient's uncertainty. The replicates share `r_i` and `A_ii`, so one regression over all their rows
+uses all the data at once. Measured against the median, over the whole corpus in gLV mode:
+
+| | median of the separate fits | one regression over all rows |
+| --- | --- | --- |
+| arcs | 23 | 28 |
+| relative spread of a coefficient, median | 0.33 | 0.38 |
+| relative spread, worst | 3.49 | 1.64 |
+| R2 of the fit, median | 0.889 | 0.823 |
+| on the arcs both produce: coefficients that change sign | | 3 |
+
+So pooling halves the worst spread and adds arcs, and it leaves the typical spread where it was, fits the
+co-culture rows slightly worse, and flips three signs. That is what one outlying replicate does to a
+regression and not to a median, and this data has such replicates (one monoculture rate of 3.09 /h beside
+two of 0.36 and 0.37). The median is also the project's merge rule for replicates. **Decision: the median
+stays the estimate, and pooling is the fallback where no single replicate identifies the row at all.** On
+today's corpus that fallback changes nothing, and it will matter for a study whose replicates are each
+too short to fit alone.
+
+**A free constant in each fit (an intercept).** The response is `ln(x_i(t) / x_i(0))`, so an error in the
+first measurement tilts every row of that replicate equally, and a free constant would absorb it. Run
+over the corpus it looks attractive: 25 arcs rather than 23, the worst relative spread four times tighter
+(3.49 to 0.85), and no coefficient changes sign. **It is not kept**, because of what the constant
+actually is. Fitted on 96 real monoculture replicates, it wants to move `x_i(0)` by a median factor of
+7.2 and by up to 9400. That is not a measurement error in an abundance; it is misfit, and the replicates
+where it is large are the ones with the fewest rows, beginning latest in the curve (median 6 rows
+starting 12 percent into the curve, against 8 rows starting at 3 percent where the constant is small). A
+third parameter on six points buys apparent precision by letting the trajectory float free of the
+measured starting abundance, and it hides the misfit rather than reporting it.
+
+What the measurement does point at is the growth window: the large constants are where the window is
+short and starts late. Narrowing down why is worth its own look, and it is the better-aimed fix. One
+honest note on method: the first comparison of R2 between the two variants was invalid, because the
+predictor that scores a fit omitted the fitted constant, so the intercept's fits were scored without the
+parameter they had. No R2 comparison is quoted above for that reason.
+
 ## Open decisions
 
 This is the single place where open method and format questions are collected, so Karoline and Craig
