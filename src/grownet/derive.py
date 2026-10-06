@@ -518,7 +518,7 @@ def partner_abundances(replicates, target: str, partner: str, rate_method: str =
 # Monocultures only, and batch monocultures only: a rate from a co-culture is the organism's growth with a
 # partner, which is the comparison, not the organism's own rate; and under dilution the rate a curve shows
 # is the dilution rate (`METRICS_FOR_CONTINUOUS_CULTURE`).
-def _collect_capacity(entry: dict, curve, label: str) -> None:
+def _collect_capacity(entry: dict, curve, label: str, medium: str = "") -> None:
     """Add this curve's plateau to an organism's capacities, or say why it gives none.
 
     The plateau is certified by `reached_stationary` and taken as the curve's maximum. Every curve that
@@ -538,6 +538,8 @@ def _collect_capacity(entry: dict, curve, label: str) -> None:
                     f"{entry['capacity_unit']}; left out rather than converted"))
         return
     entry["capacities"].append(curve_features(curve)["max"])
+    if medium and medium not in entry["capacity_media"]:
+        entry["capacity_media"].append(medium)
 
 
 def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window: int = None,
@@ -568,7 +570,9 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
         entry = found.setdefault(node["id"], {"name": name, "values": [], "unit": "", "replicates": [],
                                               "method": method, "lag_method": rates.LAG_METHOD,
                                               "lags": [], "capacities": [],
-                                              "capacity_unit": "", "capacity_left_out": []})
+                                              "capacity_unit": "", "capacity_left_out": [],
+                                              "capacity_media": []})
+        medium = selecting.medium_of(exp)
         for i, rep in enumerate(replicates):
             label = f"{name} monoculture [{exp.get('name', '') or _exp_id(exp)}], replicate {rep.name or i}"
             curve = rep.curve(name)
@@ -587,11 +591,11 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
                 value = feature(curve.times, curve.values)
             except rates.RateUnavailable as e:
                 skipped.append((label, f"no growth rate: {e}"))
-                _collect_capacity(entry, curve, label)
+                _collect_capacity(entry, curve, label, medium)
                 continue
             if value <= 0:
                 skipped.append((label, f"non-positive growth rate ({value:g})"))
-                _collect_capacity(entry, curve, label)
+                _collect_capacity(entry, curve, label, medium)
                 continue
             unit = f"1/{curve.time_unit}"
             if not entry["unit"]:
@@ -599,7 +603,7 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
             if unit != entry["unit"]:
                 skipped.append((label, f"growth rate in {unit}, and this organism's other rates are in "
                                        f"{entry['unit']}; left out rather than converted"))
-                _collect_capacity(entry, curve, label)
+                _collect_capacity(entry, curve, label, medium)
                 continue
             entry["values"].append(value)
             entry["replicates"].append(rep.name or str(i))
@@ -610,7 +614,7 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
                 entry["lags"].append(rates.baranyi_fit(curve.times, curve.values)["lag"])
             except rates.RateUnavailable:
                 pass
-            _collect_capacity(entry, curve, label)
+            _collect_capacity(entry, curve, label, medium)
     # an organism is kept when it has a rate or a certified plateau: a study where the estimator fitted
     # no rate still measured the plateau, and dropping it there made the capacity estimator-dependent
     # across studies as well (found 2026-10-06)
@@ -666,7 +670,8 @@ def merge_rates(per_study) -> dict:
                                          "method": entry.get("method", ""), "lags": [], "capacities": [],
                                          "lag_method": entry.get("lag_method", ""),
                                          "capacity_unit": "", "capacity_per_study": {},
-                                         "other_capacity_units": [], "capacity_left_out": []})
+                                         "other_capacity_units": [], "capacity_left_out": [],
+                                         "capacity_media": []})
             if entry["values"] and entry["unit"] != at["unit"]:
                 at["other_units"].append(f"{study_id} ({entry['unit']})")
                 continue
@@ -686,6 +691,9 @@ def merge_rates(per_study) -> dict:
                 else:
                     at["capacities"] += capacities
                     at["capacity_per_study"][study_id] = median(capacities)
+                    for name in entry.get("capacity_media") or ():
+                        if name not in at["capacity_media"]:
+                            at["capacity_media"].append(name)
     out = {}
     for nid, at in merged.items():
         if not at["values"]:
@@ -700,7 +708,10 @@ def merge_rates(per_study) -> dict:
                     "capacity_n": len(at["capacities"]),
                     "capacity_per_study": at["capacity_per_study"],
                     "other_capacity_units": at["other_capacity_units"],
-                    "capacity_left_out": at["capacity_left_out"]}
+                    "capacity_left_out": at["capacity_left_out"],
+                    # the media the plateaus behind this capacity were measured in: a capacity pooled
+                    # over two media sits beside off-diagonals measured in one of them (found 2026-10-06)
+                    "capacity_media": at["capacity_media"] if at["capacities"] else []}
     return out
 
 

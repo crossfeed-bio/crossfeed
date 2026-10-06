@@ -406,7 +406,10 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
         unit = edge.partner_abundance_unit or ""
         value, how = _per_arc(edge, ((rates or {}).get(edge.target) or {}).get("rate"))
         entry = per_pair.setdefault(pair, {"by_unit": {}, "reasons": [], "censored": False,
-                                           "how": set()})
+                                           "how": set(), "media": []})
+        for name in (edge.medium or "").split("; "):
+            if name and name not in entry["media"]:
+                entry["media"].append(name)
         if value is None:
             actor, affected = _label(net.nodes[edge.source]), _label(net.nodes[edge.target])
             entry["reasons"].append(
@@ -437,6 +440,10 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
             continue
         values[pair] = {"value": statistics.median(numbers), "unit": unit,
                         "censored": entry["censored"], "arcs": len(numbers),
+                        # the media behind this cell: arcs of a pair are merged by their median whatever
+                        # medium each was measured in, and a cell that pools two environments is named
+                        # rather than reading as one measurement (found 2026-10-06)
+                        "media": list(entry["media"]),
                         "how": "ratio" if "ratio" in entry["how"] else "rates"}
     return values, conflicts, unfitted
 
@@ -596,6 +603,7 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             keep.append(nid)
         names = [_label(net.nodes[nid]) for nid in keep]
         table, filled = [], 0
+        pooled: list = []
         for i, affected in enumerate(keep):
             rate = rates.get(affected) or {}
             row = []
@@ -617,6 +625,8 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                     continue
                 row.append(entry["value"])
                 filled += 1
+                if len(entry.get("media") or ()) > 1:
+                    pooled.append((*label_pair, ", ".join(entry["media"])))
             if rate.get("rate") is not None and rate.get("capacity"):
                 row[i] = -rate["rate"] / rate["capacity"]
             else:
@@ -665,6 +675,7 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                          "unit": coefficient_unit(rate_unit, abundance_unit),
                          "rate_unit": rate_unit, "organisms": names, "ids": keep, "matrix": table,
                          "cells": filled, "equilibrium": settles, "not_above_zero": infeasible,
+                         "pooled_media": pooled,
                          "conflicts": [(_label(net.nodes[a]), _label(net.nodes[b]))
                                        for a, b in conflicts if a in keep and b in keep],
                          "file": f"interaction_matrix.{unit_file(abundance_unit)}.csv"})
@@ -823,6 +834,14 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
     if not got["matrices"]:
         lines.append("  NONE: no organism had both a growth rate and a carrying capacity (see below).")
     lines.append("")
+    pooled = [row for block in got["matrices"] for row in (block.get("pooled_media") or ())]
+    if pooled:
+        lines += ["CELLS MERGED ACROSS MEDIA",
+                  "  A pair's arcs are merged by their median whatever medium each was measured in, so",
+                  "  these cells pool more than one environment. A gLV simulation is of one environment:",
+                  "  hold the search to one medium with the second box to keep them apart."]
+        lines += [f"      {actor} on {affected}: {media}" for affected, actor, media in pooled]
+        lines.append("")
     if got.get("plateau_rows"):
         lines += ["SELF-LIMITATION FITTED AT A CO-CULTURE PLATEAU",
                   "  These organisms reached no certified plateau in monoculture, so -r_i / K_i has no K_i",
@@ -926,7 +945,8 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
                       # that it settles nowhere with every organism above zero
                       "equilibrium": (list(block["equilibrium"])
                                       if block.get("equilibrium") is not None else None),
-                      "not_above_zero": list(block.get("not_above_zero") or [])}
+                      "not_above_zero": list(block.get("not_above_zero") or []),
+                      "pooled_media": [list(row) for row in (block.get("pooled_media") or ())]}
                      for block in got["matrices"]],
         "growth_rate_unit": units.pop() if len(units) == 1 else "",
         "growth_rate_detail": [
@@ -940,7 +960,8 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
              "carrying_capacity_unit": rates[nid].get("capacity_unit", ""),
              "carrying_capacity_curves": rates[nid].get("capacity_n"),
              "carrying_capacity_left_out": [list(row) for row in
-                                            (rates[nid].get("capacity_left_out") or [])]}
+                                            (rates[nid].get("capacity_left_out") or [])],
+             "carrying_capacity_media": list(rates[nid].get("capacity_media") or ())}
             for nid in order if nid in rates and (rates[nid] or {}).get("rate") is not None],
         "caveats": {
             "coefficients": ("every cell is a fitted per-capita coefficient: the diagonal is -r_i / K_i "
