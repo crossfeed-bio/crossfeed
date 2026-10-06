@@ -960,6 +960,15 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         # the derivation fitted a rate and a self-limitation per organism, and those are the parameters
         # that go with its coefficients (#127)
         organism_rates = {nid: entry for nid, entry in fitted.items() if nid in net.nodes}
+        # an organism whose fit implies no plateau keeps its row when its monocultures measured one
+        missing = {nid for nid, entry in organism_rates.items() if entry.get("capacity") is None}
+        if missing:
+            say(len(studies), len(studies), "Reading the monoculture plateaus the fit did not imply")
+            found, rate_skips = growth_rates(client, studies, wanted=missing,
+                                             rate_method=s["rate_method"], window=s["rate_window"],
+                                             spike_factor=s["spike_factor"], progress=say)
+            organism_rates, _ = integrated.fill_capacities(organism_rates, matrix.for_nodes(net, found))
+            skipped += rate_skips
         net.meta["growth_rates"] = matrix.rate_meta(net, organism_rates, integrated.METRIC)
     elif s["report_rates"]:
         say(len(studies), len(studies), "Reading the monoculture growth rates")

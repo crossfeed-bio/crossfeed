@@ -292,3 +292,31 @@ def test_a_row_whose_fit_explains_less_than_nothing_is_refused_with_the_reason(m
     assert not [r for r in records if r["target_name"] == "A"]
     assert any("explains less of A's log abundance change" in reason for _, reason in skipped), skipped
     assert any("R2 -0.5" in reason for _, reason in skipped)
+
+
+def test_an_organism_whose_fit_implies_no_plateau_keeps_its_measured_one():
+    """A fit whose A_ii is not negative implies no plateau, and such an organism used to leave every
+    matrix although its monocultures had reached a certified one. The diagonal is -r_i / K_i either way,
+    so the measured plateau is used and named. Live, this is what brought two of the eight organisms of
+    the whole-database package back, with the four cells that go with them (2026-10-06).
+
+    Hand computed: the fit gives A a rate of 0.4 and no usable self-limitation, the monocultures measured
+    a plateau of 1e9, so the capacity is 1e9 and the entry says where it came from.
+    """
+    fitted = {"a": {"name": "A", "rate": 0.4, "capacity": None, "capacity_unit": "", "capacity_n": 0},
+              "b": {"name": "B", "rate": 0.2, "capacity": 5.0e8, "capacity_unit": "Cells/mL",
+                    "capacity_n": 3}}
+    measured = {"a": {"name": "A", "rate": 0.38, "capacity": 1.0e9, "capacity_unit": "Cells/mL",
+                      "capacity_n": 4, "capacity_media": ["WC"], "capacity_per_study": {"S1": 1.0e9}},
+                "b": {"name": "B", "rate": 0.21, "capacity": 9.9e8, "capacity_unit": "Cells/mL",
+                      "capacity_n": 4}}
+    filled, named = integrated.fill_capacities(fitted, measured)
+
+    assert filled["a"]["capacity"] == 1.0e9 and filled["a"]["capacity_unit"] == "Cells/mL"
+    assert filled["a"]["capacity_n"] == 4 and filled["a"]["capacity_media"] == ["WC"]
+    assert "implies none" in filled["a"]["capacity_source"]
+    assert named == [("A", 1.0e9)]
+    # the rate stays the fit's own, since that is the parameter the coefficients were fitted with
+    assert filled["a"]["rate"] == 0.4
+    # and an organism the fit did pin keeps the fit's plateau, untouched
+    assert filled["b"]["capacity"] == 5.0e8 and "capacity_source" not in filled["b"]

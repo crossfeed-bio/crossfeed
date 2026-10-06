@@ -452,6 +452,33 @@ def fitted_rates(records: list) -> dict:
     return out
 
 
+def fill_capacities(fitted: dict, measured: dict) -> tuple:
+    """(the fitted rates with a measured plateau where the fit implies none, what was filled).
+
+    The fit implies `K_i = -r_i / A_ii`, and a fit whose `A_ii` is not negative implies no plateau, which
+    used to leave that organism out of every matrix although its monocultures had reached a certified
+    plateau. The diagonal is `-r_i / K_i` either way, so the measured plateau is used there and named.
+    This is the same pairing the specified comparison makes, a fitted rate beside a measured plateau, and
+    it keeps an organism whose own limitation the time course did not pin (2026-10-06).
+    """
+    filled = []
+    for nid, entry in fitted.items():
+        if entry.get("capacity") is not None:
+            continue
+        other = measured.get(nid) or {}
+        if other.get("capacity") is None:
+            continue
+        entry["capacity"] = other["capacity"]
+        entry["capacity_unit"] = other.get("capacity_unit", "")
+        entry["capacity_n"] = other.get("capacity_n", 0)
+        entry["capacity_per_study"] = dict(other.get("capacity_per_study") or {})
+        entry["capacity_media"] = list(other.get("capacity_media") or ())
+        entry["capacity_left_out"] = list(other.get("capacity_left_out") or ())
+        entry["capacity_source"] = "the monoculture plateau: this fit implies none"
+        filled.append((entry.get("name", nid), entry["capacity"]))
+    return fitted, filled
+
+
 class IntegratedDeriver:
     """Derive a network by fitting each organism's row from the whole time course (#127).
 

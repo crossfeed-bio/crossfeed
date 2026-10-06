@@ -264,6 +264,18 @@ def _rates_of(a, client, study_ids, net, skipped, records=None):
     from .integrated import fitted_rates
     fitted = fitted_rates(records or [])
     if fitted:
+        # an organism whose fit implies no plateau keeps its row when its monocultures measured one
+        from .integrated import fill_capacities
+        missing = [nid for nid, entry in fitted.items() if entry.get("capacity") is None]
+        if missing:
+            found, rate_skips = growth_rates(client, study_ids, wanted=set(missing),
+                                             rate_method=a.rate_method, window=a.rate_window,
+                                             spike_factor=a.spike_factor)
+            fitted, filled = fill_capacities(fitted, matrix.for_nodes(net, found))
+            skipped += rate_skips
+            for name, value in filled:
+                print(f"{name}: the fit implies no plateau, so its self-limitation uses the measured "
+                      f"monoculture plateau {value:.4g}", file=sys.stderr)
         net.meta["growth_rates"] = matrix.rate_meta(net, fitted, INTEGRATED)
         return fitted, skipped
     found, rate_skips = growth_rates(client, study_ids, wanted=set(net.nodes),
