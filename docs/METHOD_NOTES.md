@@ -860,6 +860,14 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    a fitted gLV coefficient (a per-capita effect in absolute units). Rates come from batch monocultures
    only: in a continuous culture the rate a curve shows is the dilution rate (item 12), and a rate measured
    in a co-culture is growth with a partner, which is the comparison itself.
+   SUPERSEDED for the package by items 34 to 38 (Karoline, 2026-10-06, from 0.3.0): the gLV package holds
+   fitted coefficients, so the -1 diagonal, the +/-10 and the effect-size note are gone from it, and a
+   censored pair is a measurement. **What this item still governs:** the plain adjacency matrix, which
+   keeps the log2 means, the 0 diagonal, the merge by median and the sign-conflict rule, with its censored
+   cells now a measured bound rather than +/-10 (item 38); and the reported growth rates, whose rule is
+   unchanged except that the lag and the carrying capacity travel beside them (item 34) and the estimator
+   is the reader's own (item 35). `matrix.EXTREME` survives only as the fallback for a network derived
+   before 0.3.0.
 
 33. **How the gLV parameters reach R, and how their caveats reach the user** (Karoline, 2026-10-03). Her
    words: "Now I'd like a companion plugin for R that would allow sending gLV parameters directly to R via

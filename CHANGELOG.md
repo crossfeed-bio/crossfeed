@@ -115,6 +115,13 @@ content.
   R. intestinalis at 3.2, while B. hydrogenotrophica is fitted to wash out where the chemostat holds it;
   against SMGDB00000011's six-member run, 10 and 30 times, with the three organisms the package does not
   hold named as not scored.
+- **Smaller things that came with the above**, each with its own setting or column: the rate estimator a
+  reader chooses now reports the Baranyi lag beside it whichever one produced the rate, and
+  `growth_rates.csv` names both (`method` and `lag_method`); gLV mode sets three settings rather than two,
+  adding the growth property it needs; `--steady-check` and `--derivation` join the command line, matching
+  the page's two new Advanced settings; the report prints both rates behind every arc, the partner
+  abundance it divides by, the bound behind a censored cell, and the condition number and residual of a
+  fitted row, so every number in a package can be rebuilt from it by hand.
 - **The quantities a fitted gLV coefficient is made of, measured and reported** (#118, from Karoline's
   decision on #116). Every growth rate now travels with the estimator that produced it, the lag the
   Baranyi fit estimated, and the organism's monoculture carrying capacity: the plateau of its curves,
