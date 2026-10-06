@@ -424,6 +424,14 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
             continue
         unit = max(entry["by_unit"], key=lambda u: len(entry["by_unit"][u]))
         numbers = entry["by_unit"][unit]
+        # the arcs of this pair counted in another unit are not merged into it and are not converted, so
+        # they are named here. They used to disappear, against the README's promise that a pair outside a
+        # matrix's unit is named (found 2026-10-06)
+        for other, dropped in entry["by_unit"].items():
+            if other != unit:
+                unfitted.append((pair, f"{len(dropped)} arc(s) of this pair measure the actor in {other} "
+                                       f"and the rest in {unit}; abundances are never converted, so they "
+                                       "are left out of this cell"))
         if any(v > 0 for v in numbers) and any(v < 0 for v in numbers):
             conflicts.append(pair)
             continue

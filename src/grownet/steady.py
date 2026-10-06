@@ -66,23 +66,37 @@ def _medium(exp: dict) -> str:
     return ""
 
 
-def _words(name: str) -> str:
-    """A medium name reduced to its letters and digits, so two spellings of one medium compare equal."""
-    return re.sub(r"[^a-z0-9]+", "", (name or "").casefold())
+def _words(name: str) -> list:
+    """A medium name as its lowercase alphanumeric words, so two spellings of one medium compare equal."""
+    return [w for w in re.split(r"[^a-z0-9]+", (name or "").casefold()) if w]
+
+
+# a word that states what was taken out of a medium or added to it: two names that differ by one of these
+# are two environments, however much else they share ("WC" against "WC-free" is the clearest case)
+CHANGED = {"free", "without", "minus", "depleted", "plus", "supplemented", "diluted", "with"}
 
 
 def same_medium(a: str, b: str) -> bool:
     """Whether two medium names are the same medium.
 
     mGrowthDB writes one medium several ways: SMGDB00000007 has "Wilkins-Chalgren Anaerobe Broth (WC)"
-    and SMGDB00000005 has "Wilkins-Chalgren". Reduced to letters and digits, one contains the other, which
-    is the rule here. An empty name matches nothing: a run whose medium is unrecorded is not scored
-    against a package, since a coefficient is specific to its environment.
+    and SMGDB00000005 has "Wilkins-Chalgren". Reduced to words, the shorter name's words are all in the
+    longer one, which is the rule here, and the shorter name has to bring at least two of them unless the
+    two names are the same words. One word is not enough: mGrowthDB holds "Mucin" and "MDb-MM basal
+    medium mucin DoS", a defined medium with mucin added, which a one-word match called the same medium
+    (found 2026-10-06). A word that states an omission or an addition makes the two differ whatever else
+    they share. An empty name matches nothing: a run whose medium is unrecorded is not scored against a
+    package, since a coefficient is specific to its environment.
     """
     first, second = _words(a), _words(b)
     if not first or not second:
         return False
-    return first in second or second in first
+    if first == second:
+        return True
+    shorter, longer = sorted((first, second), key=len)
+    if CHANGED & (set(longer) ^ set(shorter)):
+        return False
+    return len(shorter) >= 2 and set(shorter) <= set(longer)
 
 
 def _perturbed(exp: dict):

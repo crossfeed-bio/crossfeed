@@ -23,13 +23,19 @@ Standard library only: the normal equations of a design this small are solved by
 from __future__ import annotations
 
 import math
+import statistics
 
 # Above this condition number the columns are too close to tell apart, and the split between an
 # organism's own limitation and its partner's effect is not identified by this design. It is measured on
 # the design with each column scaled to unit length, so it reports collinearity and not the scale
 # difference between an elapsed time (tens) and an abundance integral (billions). Two columns correlating
 # at the +0.977 measured on #116 give about 86, so this limit keeps such a fit and reports its number,
-# and refuses only a design whose columns are near duplicates.
+# and refuses only a design whose columns are near duplicates. The number is the condition number of the
+# normal equations, the square of the design's own, so 1e4 here is a design conditioned at 100: it
+# refuses a numerically degenerate design and does not judge whether the split between an organism's own
+# limitation and its partner's effect is well determined. The reported condition is the largest over the
+# stages, and a biculture's partner stage has one column, whose scaled normal matrix is [[1.0]], so the
+# monoculture stage is what that number describes (stated 2026-10-06).
 MAX_CONDITION = 1.0e4
 MIN_ROWS = 3            # fewer rows than unknowns plus one, and nothing can be fitted
 
@@ -247,7 +253,7 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
     `skipped` holding every replicate that gave nothing, with its reason.
     """
     stages, skipped = [], []
-    rates, selfs = [], []
+    rates, selfs, conditions = [], [], []
     for i, replicate in enumerate(monocultures):
         fit = fit_row(replicate, target, [target], max_condition)
         if fit["rate"] is not None and fit["rate"] <= 0:
@@ -261,16 +267,23 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
             continue
         rates.append(fit["rate"])
         selfs.append(fit["coefficients"][target])
+        # the monoculture stage's conditioning is the informative one for a biculture: its partner stage
+        # has one column, whose scaled normal matrix is [[1.0]], so reporting that stage alone made
+        # every fitted arc read as perfectly conditioned (found 2026-10-06)
+        if fit.get("condition") is not None and math.isfinite(fit["condition"]):
+            conditions.append(fit["condition"])
     if not rates:
         return {"rate": None, "coefficients": {}, "r2": float("nan"), "condition": float("inf"),
                 "points": 0, "stages": [], "skipped": skipped,
                 "reason": f"no monoculture replicate of {target} could be fitted"}
-    rate = sorted(rates)[len(rates) // 2]
-    own = sorted(selfs)[len(selfs) // 2]
+    # a real median: sorted(x)[len(x) // 2] takes the upper middle value when the count is even,
+    # and two replicates is the common case here, while every other module uses statistics.median
+    rate = statistics.median(rates)
+    own = statistics.median(selfs)
     stages.append("monoculture")
 
     partners = [name for name in organisms if name != target]
-    rows, points, r2s, conditions = [], 0, [], []
+    rows, points, r2s = [], 0, []
     for i, replicate in enumerate(cocultures):
         built = design(replicate, target, [target, *partners])
         here = built["partners"]
@@ -516,4 +529,4 @@ def _mean_level(replicates: list, species: str):
             values.append(value)
     if not values:
         return None
-    return sorted(values)[len(values) // 2]
+    return statistics.median(values)

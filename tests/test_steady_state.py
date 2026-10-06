@@ -161,6 +161,16 @@ def test_the_two_names_of_wilkins_chalgren_are_one_medium():
     assert not steady.same_medium("mMCB", "Wilkins-Chalgren")
     assert not steady.same_medium("", "Wilkins-Chalgren")
 
+    # the rule compared raw substrings until 2026-10-06, which called a defined medium with mucin added
+    # the same medium as mucin alone: the one false positive mGrowthDB's own names produce. A short name
+    # now needs two words of the longer one, and a word that states an omission or an addition separates
+    # two names however much else they share.
+    assert not steady.same_medium("MDb-MM basal medium mucin DoS ", "Mucin")
+    assert not steady.same_medium("LB", "Albumin broth")
+    assert not steady.same_medium("WC", "Nutrient broth WC-free")
+    assert not steady.same_medium("Wilkins-Chalgren", "Wilkins-Chalgren without glucose")
+    assert steady.same_medium("Db-MM medium", "Db-MM medium ")       # a trailing space is one medium
+
 
 OTHER = "Escherichia coli LF82"
 
