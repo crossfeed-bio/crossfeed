@@ -650,10 +650,21 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             for name in (edge.medium or "").split("; "):
                 if name and name not in block_media:
                     block_media.append(name)
+        # the equilibrium this block implies, which the package defines as its own meaning and left the
+        # reader to compute. A fit can have none in the positive cone, and saying so is the first thing a
+        # reader of these numbers needs (found 2026-10-06)
+        from .steady import solve
+        rate_of = [(rates.get(nid) or {}).get("rate") for nid in keep]
+        settles, infeasible = None, []
+        if all(r is not None for r in rate_of):
+            answer = solve([row[:] for row in table], [-r for r in rate_of])
+            if answer is not None:
+                settles = answer
+                infeasible = [name for name, value in zip(names, answer, strict=True) if value <= 0]
         matrices.append({"abundance_unit": abundance_unit, "media": block_media or media(net),
                          "unit": coefficient_unit(rate_unit, abundance_unit),
                          "rate_unit": rate_unit, "organisms": names, "ids": keep, "matrix": table,
-                         "cells": filled,
+                         "cells": filled, "equilibrium": settles, "not_above_zero": infeasible,
                          "conflicts": [(_label(net.nodes[a]), _label(net.nodes[b]))
                                        for a, b in conflicts if a in keep and b in keep],
                          "file": f"interaction_matrix.{unit_file(abundance_unit)}.csv"})
@@ -795,6 +806,20 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         lines.append(f"  {block['file']}: {len(block['organisms'])} organism(s), "
                      f"{block['cells']} fitted cell(s), every cell in {block['unit']}"
                      + (f", measured in {', '.join(block['media'])}" if block.get("media") else ""))
+        # the equilibrium of this matrix, worked out here rather than left to the reader
+        if block.get("equilibrium") is None:
+            lines.append("      where it settles: not computed, since an organism here has no rate")
+        elif block.get("not_above_zero"):
+            lines.append("      where it settles: NOWHERE WITH EVERY ORGANISM ABOVE ZERO. The solution of "
+                         "A x = -r puts")
+            lines.append("          " + ", ".join(block["not_above_zero"]) + " at or below zero, so a "
+                         "simulation of this matrix")
+            lines.append("          settles with fewer organisms than it holds, or grows without bound.")
+        else:
+            lines.append("      where it settles (the solution of A x = -r, in "
+                         f"{block['abundance_unit']}): "
+                         + ", ".join(f"{name} {value:.4g}" for name, value
+                                     in zip(block["organisms"], block["equilibrium"], strict=True)))
     if not got["matrices"]:
         lines.append("  NONE: no organism had both a growth rate and a carrying capacity (see below).")
     lines.append("")
@@ -896,7 +921,12 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
         "source_db": meta.get("source_db", "mGrowthDB"),
         "matrices": [{"abundance_unit": block["abundance_unit"], "unit": block["unit"],
                       "organisms": list(block["organisms"]), "interactions": block["matrix"],
-                      "media": list(block["media"]), "cells": block["cells"], "file": block["file"]}
+                      "media": list(block["media"]), "cells": block["cells"], "file": block["file"],
+                      # where this matrix settles, so a reader does not have to solve it to find out
+                      # that it settles nowhere with every organism above zero
+                      "equilibrium": (list(block["equilibrium"])
+                                      if block.get("equilibrium") is not None else None),
+                      "not_above_zero": list(block.get("not_above_zero") or [])}
                      for block in got["matrices"]],
         "growth_rate_unit": units.pop() if len(units) == 1 else "",
         "growth_rate_detail": [

@@ -258,3 +258,31 @@ def test_the_readme_says_what_a_diverging_simulation_means_now():
     text = matrix.readme_from(got, _net(mutual), RATES)
     assert "can still grow without bound" in text and "A x = -r" in text
     assert "glv_scale" not in text
+
+
+def test_the_readme_says_where_each_matrix_settles():
+    """The package defines its own meaning as the solution of A x = -r and left the reader to solve it,
+    so a matrix with no positive equilibrium shipped looking like any other (found 2026-10-06).
+
+    PAIR gives A_AA = -0.4/1e9 = -4e-10, A_AB = (0.8 - 0.4)/2e8 = +2e-9, A_BB = -0.2/5e8 = -4e-10 and
+    A_BA = (0.1 - 0.2)/4e8 = -2.5e-10. By hand, B's row gives x_A = 8e8 - 1.6 x_B, and A's row then gives
+    2.64e-9 x_B = -0.08, so x_B = -3.03e7: B sits below zero, because A inhibits B just hard enough at
+    A's own plateau to cancel B's rate. So this matrix settles nowhere with every organism above zero,
+    and the README has to say so.
+    """
+    got, block = _one(_net(PAIR), RATES)
+    assert block["not_above_zero"] == ["B"]
+    assert block["equilibrium"][1] == pytest.approx(-3.0303e7, rel=1e-3)
+    assert "NOWHERE WITH EVERY ORGANISM ABOVE ZERO" in matrix.readme_from(got, _net(PAIR), RATES)
+
+    # a weaker inhibition of B by A does have a positive equilibrium, and then the README prints it:
+    # A_BA = (0.15 - 0.2)/4e8 = -1.25e-10 gives x_A = 1.6e9 - 3.2 x_B, then 3.28e-9 x_B = 0.24, so
+    # x_B = 7.317e7 and x_A = 1.366e9
+    softer = [PAIR[0], {**PAIR[1], "metric_with": 0.15, "metric_without": 0.2}]
+    other, block2 = _one(_net(softer), RATES)
+    assert block2["not_above_zero"] == []
+    assert block2["equilibrium"][0] == pytest.approx(1.3659e9, rel=1e-3)
+    assert block2["equilibrium"][1] == pytest.approx(7.317e7, rel=1e-3)
+    text = matrix.readme_from(other, _net(softer), RATES)
+    assert "where it settles (the solution of A x = -r" in text
+    assert "A 1.366e+09" in text and "B 7.317e+07" in text

@@ -273,7 +273,13 @@ def predicted(block: dict, rates: dict, dilution: float, organisms: list = None)
     values = {names[i]: answer[k] for k, i in enumerate(keep)}
     notes = {name: "not positive, so the fit gives this organism no steady state above zero"
              for name, value in values.items() if value <= 0}
-    return {"values": values, "notes": notes, "why_not": ""}
+    # the same prediction with every off-diagonal set to 0, which is each organism on its own at
+    # -r_i / A_ii. It says how much of the prediction the fitted interactions are responsible for, and
+    # without it a check of the whole package reads as a check of the interactions (found 2026-10-06)
+    alone = solve([[rows[a][b] if a == b else 0.0 for b in range(len(keep))] for a in range(len(keep))],
+                  list(rhs))
+    without = {names[i]: alone[k] for k, i in enumerate(keep)} if alone is not None else {}
+    return {"values": values, "notes": notes, "why_not": "", "without_interactions": without}
 
 
 def _fits(block: dict, unit: str, medium: str, organisms: set) -> bool:
@@ -336,7 +342,8 @@ def check(coefficients: dict, rates: dict, seen: list) -> list:
         biggest = max((o["value"] for o in entry["organisms"].values()), default=0.0)
         for name in shared:
             value, seen_here = got["values"][name], entry["organisms"][name]["value"]
-            row = {"organism": name, "predicted": value, "observed": seen_here, "ratio": None, "note": ""}
+            row = {"organism": name, "predicted": value, "observed": seen_here, "ratio": None, "note": "",
+                   "without_interactions": (got.get("without_interactions") or {}).get(name)}
             gone = _washed_out(seen_here, biggest)
             if value <= 0 and gone:
                 row["note"] = ("the fit washes this organism out and the chemostat did too, so the two "
@@ -381,9 +388,12 @@ def as_text(checks: list) -> str:
             lines.append(f"      note: {check_one['note']}")
         for row in check_one["rows"]:
             if row["ratio"] is not None:
+                alone = row.get("without_interactions")
+                beside = (f", and {_number(alone / row['observed'])}x with every interaction set to 0"
+                          if alone and row["observed"] else "")
                 lines.append(f"      {row['organism']}: predicted {_number(row['predicted'])}, "
                              f"observed {_number(row['observed'])}, "
-                             f"{_number(row['ratio'])}x observed")
+                             f"{_number(row['ratio'])}x observed{beside}")
             else:
                 lines.append(f"      {row['organism']}: predicted {_number(row['predicted'])}, "
                              f"observed {_number(row['observed'])}: {row['note']}")
