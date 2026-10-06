@@ -136,6 +136,26 @@ Rules for this file:
   Which growth feature the ratio L
   compares does move it: the growth rate and `auc` each land two of the three organisms within a factor 2
   to 4, and `max` is the worst of the four.
+- 2026-10-06 (hardening after a review of the whole 0.3.0 stack): what the review found and what was
+  done, so the next agent does not re-walk it. **Claims corrected:** the estimator does not leave the
+  equilibrium where it was (register item 34's amendment), the plain matrix's `--format matrix` help, and
+  "no positive steady state", which a boundary equilibrium disproves. **Defects fixed:**
+  `--derivation integrated` was ignored on `derive <STUDY>`; `_pair_values` dropped an arc that had its
+  two rates and no log2 strength, which is the washout regime of the integrated form; the integrated
+  deriver labeled the partner's abundance with the target's unit; the carrying capacity was collected
+  after the rate-failure refusals, so K moved with the estimator; the fitted diagonal depended on arc
+  order; censored drop-out arcs carried no bound and fell back to the stated extreme; `same_medium`
+  matched raw substrings; the integrated fit used an upper-middle value for a median and reported only
+  the stage whose condition number is always 1.0; minority-unit arcs vanished from a pair's median.
+  **Shown rather than left to the reader:** each matrix's equilibrium, the chemostat prediction with
+  every interaction set to 0, every curve that gave no capacity, and every capacity or cell that pools
+  two media. **Consumers:** the format id moved to v2 so an installed 0.2.0 derives live, `from_dict`
+  drops unknown fields, Send to R refuses a session that read no organisms, and the sdist carries what
+  its tests read. **Left for a human decision, deliberately not touched:** which derivation is the
+  default (the two disagree in sign on the largest cells of the only real multi-species community);
+  whether a near-scarce denominator is withheld and above what stated ratio; whether a capacity and the
+  cells beside it must share a medium; and whether `reached_stationary` should certify at the end of a
+  curve rather than over its last fifth, since it accepts a declining culture and records its peak.
 - 2026-10-06: the id is **`grownet.interaction_network/v2`** from 0.3.0, and the entry below is why it
   was `/v1`. It moved again for a reason about readers rather than fields: 0.3.0 adds optional edge
   fields, an installed 0.2.0 builds its edges with `Edge(**e)` and raises on a field it does not know,
