@@ -83,7 +83,11 @@ def _open(url, data=None):
 
 
 def _search(base, token, **fields):
-    form = {"species": f"{A}\n{B}", "only_entered": "1", **fields}
+    # `derivation` is the specified comparison: the fake study behind these tests measures two points per
+    # set, which is all that comparison needs and too few for the integrated form that became the default
+    # on 2026-10-06. These tests are about the interface, so they keep the derivation that the double can
+    # feed; the default itself is checked in tests/test_integrated_wiring.py.
+    form = {"species": f"{A}\n{B}", "only_entered": "1", "derivation": "replicate", **fields}
     return _open(f"{base}/run?token={token}", urllib.parse.urlencode(form).encode())
 
 
@@ -204,12 +208,13 @@ def test_the_command_line_gives_everything_the_page_does(monkeypatch, tmp_path, 
     # with k = 2 both arcs fall below the threshold, so --include-absent keeps them in what is written
     assert main(["derive", "--live", "--species", A, B, "--format", "graphml", "--out", str(out),
                  "--report", str(report), "--to-cytoscape", "--absence-threshold", "2",
-                 "--include-absent"]) == 0
+                 "--include-absent", "--derivation", "replicate"]) == 0
     assert ET.fromstring(out.read_text(encoding="utf-8")).tag.endswith("graphml") and sent["n"] == 2
     text = report.read_text(encoding="utf-8")
     assert f"tool: grownet {__version__}" in text and "Absence threshold k (--absence-threshold): 2.0" in text
     # the report is the page's own, for the same search
-    page = gui.run_query(FakeClient(), [A, B], {"absence_threshold": 2.0, "include_absent": True})
+    page = gui.run_query(FakeClient(), [A, B], {"absence_threshold": 2.0, "include_absent": True,
+                                                "derivation": "replicate"})
     from grownet.report import report_text
     def without_times(t):                  # the two runs are seconds apart; the rest must be identical
         return [line for line in t.splitlines() if not line.startswith(("run:", "data: "))]
@@ -640,17 +645,19 @@ def test_the_command_line_writes_the_matrix_the_rates_and_the_glv_package(monkey
     monkeypatch.setattr(gui_module, "growth_rates", lambda *a, **kw: (dict(RATES), []))
     table, rates_file, package, report = (tmp_path / n for n in
                                           ("m.csv", "rates.csv", "glv.zip", "report.txt"))
-    # --glv needs the growth-rate comparison since #119, and says so before anything is derived
+    # --glv needs the growth-rate comparison when the derivation is the specified comparison (#119),
+    # and says so before anything is derived. The default derivation fits the coefficients themselves, so
+    # it needs no growth property set, which is checked below (2026-10-06).
     assert main(["derive", "--live", "--species", A, B, "--report-rates", "--format", "matrix",
-                 "--out", str(table), "--glv", str(package)]) == 2
+                 "--derivation", "replicate", "--out", str(table), "--glv", str(package)]) == 2
     assert "a coefficient needs the log2 ratio of a growth rate" in capsys.readouterr().err
 
     from grownet import rates as rate_module
     monkeypatch.setattr(rate_module, "easylinear", lambda times, values, *a, **kw: values[-1] / 10)
     monkeypatch.setattr(rate_module, "baranyi", lambda times, values, *a, **kw: values[-1] / 10)
     assert main(["derive", "--live", "--species", A, B, "--report-rates", "--format", "matrix",
-                 "--metric", "growth_rate", "--out", str(table), "--rates", str(rates_file),
-                 "--glv", str(package), "--report", str(report)]) == 0
+                 "--derivation", "replicate", "--metric", "growth_rate", "--out", str(table),
+                 "--rates", str(rates_file), "--glv", str(package), "--report", str(report)]) == 0
 
     rows = [line.split(",") for line in table.read_text(encoding="utf-8").strip().splitlines()]
     names = rows[0][1:]

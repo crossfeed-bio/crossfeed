@@ -68,11 +68,24 @@ RETIRED_CLAIMS = [
 
 
 def default_deriver() -> str:
-    """The class `derive_interactions` falls back to, read from its source.
+    """The derivation the tool runs when the reader changes nothing, read from the code.
 
     Anchoring on the code rather than on a name written here is the point: a guard that carries its own
     copy of the answer goes stale in exactly the way it exists to prevent.
+
+    The page's and the command line's default is `gui.DEFAULTS["derivation"]`, and `gui.chosen_deriver`
+    turns it into a class; "replicate" means it builds none and `derive_interactions` falls back to its
+    own, which is read below. Before 2026-10-06 the setting was "replicate", so that fallback was the
+    whole answer.
     """
+    gui = open(os.path.join(ROOT, "src", "grownet", "gui.py"), encoding="utf-8").read()
+    chosen = re.search(r'"derivation":\s*"(\w+)"', gui)
+    if chosen and chosen.group(1) != "replicate":
+        wanted = chosen.group(1)
+        for name in deriver_classes():
+            if name.lower().startswith(wanted):
+                return name
+        raise SystemExit(f"claims-check: no deriver class matches the default derivation {wanted!r}")
     src = open(os.path.join(ROOT, "src", "grownet", "derive.py"), encoding="utf-8").read()
     tree = ast.parse(src)
     fn = next((n for n in ast.walk(tree)
@@ -90,9 +103,14 @@ def default_deriver() -> str:
 
 
 def deriver_classes() -> list:
-    src = open(os.path.join(ROOT, "src", "grownet", "derive.py"), encoding="utf-8").read()
-    return [n.name for n in ast.walk(ast.parse(src))
-            if isinstance(n, ast.ClassDef) and n.name.endswith("Deriver") and n.name != "Deriver"]
+    """Every deriver the project ships, wherever it lives: derive.py holds the specified comparison and
+    the retired baseline, integrated.py the form that became the default on 2026-10-06."""
+    out = []
+    for module in ("derive.py", "integrated.py"):
+        src = open(os.path.join(ROOT, "src", "grownet", module), encoding="utf-8").read()
+        out += [n.name for n in ast.walk(ast.parse(src))
+                if isinstance(n, ast.ClassDef) and n.name.endswith("Deriver") and n.name != "Deriver"]
+    return out
 
 
 def _read(rel: str) -> str:
@@ -121,12 +139,12 @@ def check_default_deriver(problems: list) -> None:
                     named_somewhere = True
                 elif cls in retired:
                     problems.append(
-                        f"{rel}:{line}: calls `{cls}` the default, but `derive_interactions` falls back "
-                        f"to `{current}`. Say which one ships.")
+                        f"{rel}:{line}: calls `{cls}` the default, but the tool runs `{current}` when "
+                        f"the reader changes nothing. Say which one ships.")
     if not named_somewhere:
         problems.append(
-            f"no doc in {', '.join(DOCS)} names `{current}` as the default, and it is what "
-            f"`derive_interactions` falls back to. A reader cannot tell what the tool runs.")
+            f"no doc in {', '.join(DOCS)} names `{current}` as the default, and it is what the tool "
+            f"runs when the reader changes nothing. A reader cannot tell what the tool runs.")
 
 
 VIEWER = "gui/index.html"

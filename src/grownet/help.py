@@ -74,16 +74,23 @@ RELEASES = (
 
 # key in gui.DEFAULTS -> (label on the page, command line flag, what it does and when to change it)
 SETTINGS = {
-    "derivation": ("Derivation", "--derivation replicate|integrated",
-                   "How an interaction is derived. replicate (the default) is the comparison the "
-                   "collaboration specified: a growth property of the replicates with the partner "
-                   "against the replicates without it. integrated instead fits each organism's whole row "
-                   "from the time course, ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt), over "
-                   "its growth phase, so it needs no growth property and no abundance of its own to "
-                   "divide by, and it gives the gLV coefficients directly, with the condition number and "
-                   "the residual of every fit. It reports each row its design cannot identify instead of "
-                   "publishing a number, and a community of three or more is reported rather than "
-                   "derived, since an arc fitted inside one would be a new kind of evidence."),
+    "derivation": ("Derivation", "--derivation integrated|replicate",
+                   "How an interaction is derived. integrated (the default) fits each organism's whole "
+                   "row from the time course, ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt), "
+                   "over its growth phase, so it needs no growth property and no abundance of its own to "
+                   "divide by, and it gives the gLV coefficients directly. It is the default because it "
+                   "is the form published work fits for this purpose and because the alternative's "
+                   "coefficient carries the organism's own density as a confound. Each arc carries the "
+                   "spread of its coefficient over the co-culture replicates and over leaving out each "
+                   "monoculture replicate, how much of the organism's log abundance change the fit "
+                   "explains, and the condition number of the design; a row that explains less than "
+                   "predicting nothing does is refused and named, as is a row the design cannot "
+                   "identify, and a community of three or more is reported rather than derived, since an "
+                   "arc fitted inside one would be a new kind of evidence. It needs a time course: a "
+                   "study measured at two or three points gives it nothing. replicate is the comparison "
+                   "the collaboration specified, a growth property of the replicates with the partner "
+                   "against the replicates without it, and it needs only two measurements per set, so "
+                   "it is what a sparsely sampled study can still give."),
     "metric": ("Growth property", "--metric auc|max|growth_rate",
                "The growth property compared with and without the partner. The area under the curve (auc, "
                "the default) combines lag, rate and yield in one number; the maximal abundance (max) keeps "

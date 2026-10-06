@@ -9,6 +9,14 @@ content.
 ## [0.3.0] (2026-10-06)
 
 ### Upgrading
+- **The default derivation is now the integrated form** (`--derivation integrated`, Karoline,
+  2026-10-06): each organism's row is fitted from its whole time course rather than from a difference of
+  two separately fitted growth rates divided by one partner mean. It is the form published work fits for
+  this purpose, and the difference form's coefficient carries the organism's own density as a confound,
+  which no number of replicates removes. The specified comparison of replicate sets is unchanged and is
+  one setting away, `--derivation replicate`, and it is what a sparsely sampled study can still give: the
+  integrated form needs a time course, so a study measured at two or three points now yields nothing by
+  default and the page says which setting to change.
 - **The network format id moves to `grownet.interaction_network/v2`.** Files from 0.1.x (`/v0`) and 0.2.x
   (`/v1`) stay valid and `grownet validate` names the version it read. The id moved so that an installed
   0.2.0 does not try to read a 0.3.0 network: it builds each arc from every field the document carries and

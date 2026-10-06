@@ -13,7 +13,16 @@ weigh in, we settle each default together, and the settled value ships as the de
 
 ## What the default derivation does today
 
-**Status 2026-09-21.** `ReplicateDeriver` is the default for a live derivation (#40). It reads each
+**Status 2026-10-06.** `IntegratedDeriver` is the default for a live derivation, Karoline's decision:
+"my decision would also be for the integrative form since it has support in publications and is not
+biased by construction. That weights heavier than low coverage on data currently in mGrowthDB. By
+default, grownet should do what is 'correct' i.e. more defensible mathematically." It fits each
+organism's row from its whole time course (#127), so a coefficient is not a difference of two separately
+fitted rates divided by one partner mean, a quantity that carries the organism's own density as a
+confound. Every arc carries the spread of its coefficient, what the fit explains, and the condition
+number; a row whose fit explains less than predicting nothing does is refused.
+
+**Status 2026-09-21, now the alternative (`--derivation replicate`).** `ReplicateDeriver` reads each
 replicate's measured curve through `crossfeed.adapter` (#38) and compares replicate sets with
 `crossfeed.interaction.interaction_strength`, the comparison Karoline specified, so the defaults settled
 below are shipped behavior rather than intentions. Every edge carries its mean, `sd`, `se`, replicate

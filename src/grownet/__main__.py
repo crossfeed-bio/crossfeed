@@ -501,10 +501,10 @@ def build_parser() -> argparse.ArgumentParser:
                                "reported beside a rate comes from the Baranyi fit either way")
     settings.add_argument("--rate-window", type=int, default=5, metavar="N",
                           help="with easylinear: the points in each fitted window (default 5, as mGrowthDB)")
-    settings.add_argument("--derivation", choices=["replicate", "integrated"], default="replicate",
-                          help="replicate (default), the specified comparison of replicate sets; or "
-                               "integrated, which fits each organism's row from the whole time course and "
-                               "gives the gLV coefficients directly (the page's Derivation setting)")
+    settings.add_argument("--derivation", choices=["replicate", "integrated"], default="integrated",
+                          help="integrated (default), which fits each organism's row from the whole time "
+                               "course and gives the gLV coefficients directly; or replicate, the "
+                               "specified comparison of replicate sets (the page's Derivation setting)")
     settings.add_argument("--metric", choices=["auc", "max", "growth_rate"], default="auc",
                           help="the growth property compared: auc, the area under the curve (default); max, the "
                                "maximal abundance; or growth_rate, the maximum specific growth rate")

@@ -11,17 +11,22 @@ from test_gui import _query
 from grownet.gui import DEFAULTS, parse_settings, render_form
 
 
-def test_the_derivation_is_a_setting_that_defaults_to_the_specified_comparison():
-    assert DEFAULTS["derivation"] == "replicate"
-    assert parse_settings({"derivation": ["integrated"]})["derivation"] == "integrated"
-    assert parse_settings({"derivation": ["nonsense"]})["derivation"] == "replicate"
+def test_the_derivation_defaults_to_the_integrated_form():
+    """Karoline, 2026-10-06, choosing it as the default: "my decision would also be for the integrative
+    form since it has support in publications and is not biased by construction. That weights heavier
+    than low coverage on data currently in mGrowthDB. By default, grownet should do what is 'correct'
+    i.e. more defensible mathematically." The specified comparison stays as the alternative and keeps
+    everything it had."""
+    assert DEFAULTS["derivation"] == "integrated"
+    assert parse_settings({"derivation": ["replicate"]})["derivation"] == "replicate"
+    assert parse_settings({"derivation": ["nonsense"]})["derivation"] == "integrated"
 
 
 def test_the_setting_is_in_advanced_settings_with_both_choices():
     page = render_form("tok")
     settings = page[page.index("<details>"):]
     assert 'name="derivation"' in settings
-    assert '<option value="replicate" selected>' in settings and 'value="integrated"' in settings
+    assert '<option value="integrated" selected>' in settings and 'value="replicate"' in settings
     assert "whole time course" in " ".join(settings.split())      # the muted text wraps in the source
 
 
@@ -46,7 +51,7 @@ def test_the_command_line_has_the_same_choice():
     options = {o for action in derive._actions for o in action.option_strings}
     assert "--derivation" in options
     action = next(a for a in derive._actions if a.dest == "derivation")
-    assert action.default == "replicate" and set(action.choices) == {"replicate", "integrated"}
+    assert action.default == "integrated" and set(action.choices) == {"replicate", "integrated"}
 
 
 def test_the_choice_reaches_the_derivation_on_the_one_study_command(monkeypatch):

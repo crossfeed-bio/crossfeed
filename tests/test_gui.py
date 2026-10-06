@@ -97,7 +97,14 @@ def _query(entries=("Faecalibacterium prausnitzii", "Blautia hydrogenotrophica")
     # the fake study's second arc is absent, and a file holds absences only when asked (Karoline,
     # 2026-10-03). Tests about everything else keep both arcs in view; the default is checked in
     # test_the_file_holds_what_the_page_counts.
-    settings = {"include_absent": True, **settings}
+    #
+    # `derivation` is the specified comparison here, which is no longer the shipped default (Karoline,
+    # 2026-10-06). This double's curves are two measurements per set, which is all that comparison
+    # needs and far too few to fit a row from a time course, so the integrated default would make every
+    # test in this file assert an empty network. The shipped default is exercised end to end in
+    # tests/test_integrated_wiring.py against simulated curves, and the page's own setting is checked
+    # there too.
+    settings = {"include_absent": True, "derivation": "replicate", **settings}
     return run_query(FakeClient(), list(entries), settings)
 
 
@@ -144,7 +151,7 @@ def test_only_entered_species_filters_other_pairs():
 
 
 def test_a_study_that_fails_is_reported_not_raised():
-    r = run_query(FakeClient(), ["853"], {"conditions": "SMGDB99999999"})
+    r = run_query(FakeClient(), ["853"], {"conditions": "SMGDB99999999", "derivation": "replicate"})
     assert r["errors"] and "SMGDB99999999" in r["errors"][0]
     assert r["network"].edges == []
 
@@ -182,7 +189,7 @@ def test_form_hides_every_setting_behind_one_button():
       "correction": "bh", "absence_threshold": 1.0, "include_dropout": True, "include_non_batch": False,
       "no_growth_alpha": 0.01, "no_growth_factor": 4.0, "exclude_studies": "SMGDB00000008", "merge_arcs": True,
       "min_studies": 2, "merge_genera": True, "max_adjusted_p": None, "report_rates": False,
-          "steady_check": False, "derivation": "replicate"}),
+          "steady_check": False, "derivation": "integrated"}),
     ({"metric": ["nonsense"], "spike_factor": ["not a number"]},
      {**DEFAULTS, "only_entered": False, "include_dropout": False}),
 ])
@@ -268,7 +275,8 @@ def test_server_serves_the_form_and_runs_a_search(server):
     base, token = server
     assert "Advanced settings" in _get(f"{base}/?token={token}")
     data = urllib.parse.urlencode({"species": "Faecalibacterium prausnitzii\nBlautia hydrogenotrophica",
-                                   "metric": "growthRate", "deadband": "0.25", "only_entered": "1"})
+                                   "metric": "growthRate", "deadband": "0.25", "only_entered": "1",
+                                   "derivation": "replicate"})
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data.encode(), timeout=10) as r:
         page = r.read().decode("utf-8")
     assert "interaction(s)" in page and "facilitation" in page
@@ -365,7 +373,7 @@ def test_a_species_entered_under_its_new_name_still_matches_the_study_that_uses_
     index = {"faecalibacterium duncaniae": {853: "Faecalibacterium duncaniae A2-165"},
              "blautia hydrogenotrophica": {53443: B}}
     r = run_query(FakeClient(), ["Faecalibacterium duncaniae", "Blautia hydrogenotrophica"],
-                  {"only_entered": True, "include_absent": True}, index=index)
+                  {"only_entered": True, "include_absent": True, "derivation": "replicate"}, index=index)
     assert r["taxon_ids"] == [853, 53443]
     assert len(r["network"].edges) == 2          # the study names the strain prausnitzii, the ids agree
 
@@ -373,7 +381,7 @@ def test_a_species_entered_under_its_new_name_still_matches_the_study_that_uses_
 def test_the_send_to_cytoscape_button_uses_the_network_already_computed(server, monkeypatch):
     base, token = server
     data = urllib.parse.urlencode({"species": "Faecalibacterium prausnitzii\nBlautia hydrogenotrophica",
-                                   "only_entered": "1"}).encode()
+                                   "only_entered": "1", "derivation": "replicate"}).encode()
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
         assert "Send to Cytoscape" in r.read().decode("utf-8")
 
@@ -468,7 +476,7 @@ def test_a_strain_is_named_by_its_current_name():
     index = SpeciesIndex({"faecalibacterium prausnitzii": {853: A}, "blautia hydrogenotrophica": {53443: B}},
                          current={853: "Faecalibacterium duncaniae A2-165"})
     r = run_query(FakeClient(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"],
-                  {"include_absent": True}, index=index)
+                  {"include_absent": True, "derivation": "replicate"}, index=index)
     node = r["network"].nodes["ncbi:853"]
     assert (node.name, node.species) == ("Faecalibacterium duncaniae A2-165", "faecalibacterium duncaniae")
     assert r["resolved"][0] == ("Faecalibacterium prausnitzii", {853: "Faecalibacterium duncaniae A2-165"})
@@ -495,7 +503,8 @@ def test_a_node_keyed_by_name_keeps_its_own_name_when_its_taxon_id_is_shared():
 # ---- All, a genus entered, and the level genus arcs count at (Karoline 2026-09-28) ------------------
 
 def test_all_ignores_the_box_and_derives_every_study_with_every_partner():
-    r = run_query(FakeClient(), ["whatever is typed"], {"only_entered": True}, all_studies=True)
+    r = run_query(FakeClient(), ["whatever is typed"],
+                  {"derivation": "replicate", "only_entered": True}, all_studies=True)
     assert r["all"] and r["studies"] == ["SMGDB00000001"] and r["resolved"] == [] and r["unresolved"] == []
     assert r["network"].meta["query"] == "all" and r["network"].edges        # the study's arcs, every partner
     page = render_result("tok", r)
@@ -503,7 +512,7 @@ def test_all_ignores_the_box_and_derives_every_study_with_every_partner():
 
 
 def test_all_still_leaves_out_the_excluded_studies_and_says_so():
-    r = run_query(FakeClient(), [], {"exclude_studies": "SMGDB00000001"}, all_studies=True)
+    r = run_query(FakeClient(), [], {"derivation": "replicate", "exclude_studies": "SMGDB00000001"}, all_studies=True)
     assert r["studies"] == [] and "Exclude these studies" in render_result("tok", r)
 
 
@@ -584,6 +593,8 @@ def test_the_daily_all_network_is_used_when_fresh_and_the_settings_are_the_defau
     import io
 
     from grownet import published
+    # the defaults on both sides, which is what `published.usable` asks: the double's curves give the
+    # default derivation nothing, so this network is empty, and what the test checks is the serving rule
     live = run_query(FakeClient(), [], {}, all_studies=True, published=False)
     payload = json.loads(json.dumps(published.to_payload(live)))          # as the release asset holds it
     derived = datetime.datetime.fromisoformat(payload["network"]["meta"]["derived_at"])
@@ -598,18 +609,33 @@ def test_the_daily_all_network_is_used_when_fresh_and_the_settings_are_the_defau
                         lambda: published.fetch_from(opener, now=derived + datetime.timedelta(hours=1)))
     r = run_query(FakeClient(), [], {}, all_studies=True)
     assert r["published"] == payload["network"]["meta"]["derived_at"] and r["all"]
-    # the published file says how to read it, as the page does (Craig's agent, #96), in JSON and GraphML
+    assert "derived once a day" in render_result("tok", r)
+
+    # the published file says how to read it, as the page does (Craig's agent, #96), in JSON and GraphML.
+    # This half is read from a served network that has arcs, which the double's two-point curves give the
+    # specified comparison: `usable` only serves a query at the defaults, and the default derivation fits
+    # a time course, so the two halves of this rule are checked on their own terms (2026-10-06).
     from grownet.derive import PROVISIONAL
     from grownet.export import to_graphml
+    with_arcs = run_query(FakeClient(), [], {"derivation": "replicate"}, all_studies=True, published=False)
+    served = published.fetch_from(
+        lambda url, timeout: io.BytesIO(json.dumps(published.to_payload(with_arcs)).encode()),
+        now=datetime.datetime.fromisoformat(
+            published.to_payload(with_arcs)["network"]["meta"]["derived_at"]) + datetime.timedelta(hours=1))
+    assert served["network"].edges
     # escaped on the page: the text comes from a file downloaded from GitHub
-    assert r["network"].meta["provisional"] == PROVISIONAL
+    assert served["network"].meta["provisional"] == PROVISIONAL
     # the sentence names the tool, which carries markup in prose, so it is read as a reader sees it
-    assert PROVISIONAL in html.unescape(visible(render_result("tok", r)))
-    assert "g_provisional" in to_graphml(r["network"]) and "few replicates" in to_graphml(r["network"])
-    assert "derived once a day" in render_result("tok", r)
+    served["all"] = True
+    assert PROVISIONAL in html.unescape(visible(render_result("tok", {**with_arcs, **served})))
+    assert "g_provisional" in to_graphml(served["network"])
+    assert "few replicates" in to_graphml(served["network"])
     # any other setting derives it live, and so does the command line's --no-published
-    assert "published" not in run_query(FakeClient(), [], {"absence_threshold": 2.0}, all_studies=True)
-    assert "published" not in run_query(FakeClient(), [], {}, all_studies=True, published=False)
+    assert "published" not in run_query(FakeClient(), [],
+                                        {"derivation": "replicate", "absence_threshold": 2.0},
+                                        all_studies=True)
+    assert "published" not in run_query(FakeClient(), [], {"derivation": "replicate"},
+                                        all_studies=True, published=False)
 
 
 def test_a_published_file_of_another_format_or_schema_is_not_used():
@@ -638,10 +664,11 @@ def test_the_page_offers_the_adjusted_p_filter_off_and_says_what_it_left_out():
     # and across which data the p-values are corrected (Karoline, 2026-09-30)
     assert ("across every comparison of this search together: all arcs of all the studies it reads"
             in " ".join(form.split()))
-    live = run_query(FakeClient(), [], {}, all_studies=True, published=False)
+    live = run_query(FakeClient(), [], {"derivation": "replicate"}, all_studies=True, published=False)
     tested = [e for e in live["network"].edges if e.status == "present" and e.significance is not None]
     assert tested, "the fake studies need a tested interaction for this test"
-    r = run_query(FakeClient(), [], {"max_adjusted_p": 1e-12}, all_studies=True, published=False)
+    r = run_query(FakeClient(), [], {"derivation": "replicate", "max_adjusted_p": 1e-12},
+                  all_studies=True, published=False)
     assert r["hidden"]["not_significant"] == len(tested) and r["settings"]["max_adjusted_p"] == 1e-12
     assert r["network"].meta["statistics"]["filter"]["left_out"] == len(tested)
     from grownet.report import report_text

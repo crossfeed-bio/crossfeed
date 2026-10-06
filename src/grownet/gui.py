@@ -74,8 +74,12 @@ DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window":
             "report_rates": False,
             # off by default too: the check reads the curves of chemostats the search never needed (#125)
             "steady_check": False,
-            # the specified comparison, with the integrated form of #127 as the advanced alternative
-            "derivation": "replicate",
+            # the integrated form, Karoline's decision of 2026-10-06: "By default, grownet should do
+            # what is 'correct' i.e. more defensible mathematically". It fits each organism's row from the
+            # whole time course, so a coefficient is not a difference of two separately fitted rates
+            # divided by one partner mean, which carries the organism's own density as a confound. The
+            # specified comparison of replicate sets is the alternative, and keeps everything it had.
+            "derivation": "integrated",
             "include_dropout": True,
             "include_non_batch": False, "conditions": "", "exclude_studies": "", "only_entered": True,
             "merge_arcs": False, "min_studies": 1, "merge_genera": False,
@@ -556,6 +560,16 @@ def _empty_reason(result: dict) -> str:
     """Why a search came back empty, with what the second box left out said first (#113)."""
     reason = _empty_reason_core(result)
     s = result.get("settings", {})
+    # the default derivation fits a row from a time course, so a sparsely sampled study gives it nothing
+    # where the specified comparison needs only two measurements per set. Say which setting moves, as the
+    # page does everywhere else (Karoline's decision of 2026-10-06 made this the common case)
+    if s.get("derivation", "integrated") == "integrated" and any(
+            "too few to fit a row" in why or "usable time point" in why
+            for _, why in result.get("skipped", ())):
+        reason += (" These curves are too sparsely sampled for the default derivation, which fits each "
+                   "organism's row from its whole time course. The specified comparison of replicate "
+                   "sets needs only two measurements per set: set Derivation to replicate in Advanced "
+                   "settings to use it.")
     unmatched = len([r for _, r in result.get("skipped", ()) if "no experiment of this study matches" in r])
     if s.get("conditions") and unmatched and "second box" not in reason:
         studies = len(result.get("studies", ()))

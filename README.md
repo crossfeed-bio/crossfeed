@@ -599,11 +599,28 @@ before you implement one.
 
 ## How the derivation works
 
-`ReplicateDeriver` (`src/grownet/derive.py`) is the default. It reads each replicate's measured growth
-curve from mGrowthDB and compares replicate sets on the log2 scale, over the area under the curve by
-default (`--metric max` for maximal abundance, `--metric growth_rate` for the maximum specific growth
-rate). Every edge therefore carries a spread, not just a number:
-its mean, standard deviation, standard error, and the replicate counts behind each side.
+`IntegratedDeriver` (`src/grownet/integrated.py`) is the default since 0.3.0. It fits each organism's
+whole row from its time course: `ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt)` is linear in
+the parameters, so one regression per organism gives its growth rate, its own self-limitation and every
+partner's per-capita coefficient together, in the units a gLV simulation reads. It is fitted in two
+stages, the monocultures first and then the co-cultures, because a single joint fit inside one experiment
+is not identified. Each arc carries the spread of its coefficient over the co-culture replicates and over
+leaving out each monoculture replicate in turn, the share of that spread which comes from the monoculture
+stage, how much of the organism's own log abundance change the fit explains, and the condition number of
+the design. A row whose fit explains less than predicting nothing does is refused and named.
+
+Why it is the default (Karoline, 2026-10-06): it is the form published work uses for this purpose, and it
+is not biased by construction. The alternative below estimates a coefficient as a difference of two
+separately fitted rates divided by one partner mean, and that quantity is the coefficient plus a term in
+the organism's own density, which is set by the inoculum rather than by the partner.
+
+`ReplicateDeriver` (`src/grownet/derive.py`) is the alternative, `--derivation replicate`, and the
+comparison the collaboration specified. It reads each replicate's measured growth curve from mGrowthDB
+and compares replicate sets on the log2 scale, over the area under the curve by default (`--metric max`
+for maximal abundance, `--metric growth_rate` for the maximum specific growth rate). Every edge
+therefore carries a spread, not just a number: its mean, standard deviation, standard error, and the
+replicate counts behind each side. It needs only two measurements per set, so it is what a sparsely
+sampled study can still give.
 
 Curves are compared over a shared time window, so no curve is extrapolated: from the common first time
 point to the earliest last time point among the curves compared, with the value at that end interpolated

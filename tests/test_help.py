@@ -108,7 +108,8 @@ def test_the_command_line_species_search_gives_the_pages_network(monkeypatch, ca
     out = tmp_path / "net.json"
     names = ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"]
     # both sides keep the absences, so the comparison is about the arcs, not about the new default
-    assert main(["derive", "--live", "--species", *names, "--out", str(out), "--include-absent"]) == 0
+    assert main(["derive", "--live", "--species", *names, "--out", str(out), "--include-absent",
+                 "--derivation", "replicate"]) == 0
     cli = json.loads(out.read_text(encoding="utf-8"))
     page = json.loads(_query(entries=names)["network"].to_json())
     assert cli["edges"] == page["edges"] and cli["nodes"] == page["nodes"]
@@ -120,9 +121,11 @@ def test_the_command_line_all_gives_the_pages_all_network(monkeypatch, capsys, t
     # `derive --live --all` and the page's All button: the same edges, and the report says what was asked
     monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", FakeClient)
     out, report = tmp_path / "all.json", tmp_path / "all.txt"
-    assert main(["derive", "--live", "--all", "--merge-genera", "--out", str(out), "--report", str(report)]) == 0
+    assert main(["derive", "--live", "--all", "--merge-genera", "--derivation", "replicate",
+                 "--out", str(out), "--report", str(report)]) == 0
     cli = json.loads(out.read_text(encoding="utf-8"))
-    page = json.loads(gui.run_query(FakeClient(), [], {"merge_genera": True}, all_studies=True)["network"].to_json())
+    page = json.loads(gui.run_query(FakeClient(), [], {"merge_genera": True, "derivation": "replicate"},
+                                    all_studies=True)["network"].to_json())
     assert cli["edges"] == page["edges"] and cli["edges"] and cli["meta"]["query"] == "all"
     assert {n["identity"] for n in cli["nodes"]} == {"genus"}
     assert "query: all of mGrowthDB" in report.read_text(encoding="utf-8")
