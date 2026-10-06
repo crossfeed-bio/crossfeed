@@ -19,7 +19,90 @@
       ]
     },
     "meta": {
-      "type": "object"
+      "type": "object",
+      "description": "how this network was made. The keys described as a promise are part of the format; the others are recorded because they are useful, and may change with what they describe. Keys not declared here are allowed, so a network from a later version still validates.",
+      "properties": {
+        "tool": {
+          "type": "string",
+          "description": "a promise of the format: the tool that derived this network"
+        },
+        "tool_version": {
+          "type": "string",
+          "description": "a promise of the format: its version"
+        },
+        "derived_on": {
+          "type": "string",
+          "description": "a promise of the format: the date it was derived (UTC)"
+        },
+        "derived_at": {
+          "type": "string",
+          "description": "a promise of the format: when it was derived, to the second"
+        },
+        "source_db": {
+          "type": "string",
+          "description": "a promise of the format: where the growth data came from, and whether live or a fixture"
+        },
+        "provisional": {
+          "type": "string",
+          "description": "a promise of the format: present while the derivation method is provisional, saying so in words"
+        },
+        "absence": {
+          "type": "object",
+          "description": "a promise of the format: the absence threshold this network was written with: k, and how many comparisons fell below it"
+        },
+        "statistics": {
+          "type": "object",
+          "description": "a promise of the format: the test behind p_value and q_value, the correction used and how many comparisons it ran over"
+        },
+        "query": {
+          "type": "string",
+          "description": "recorded, not promised: what was searched: species, all, or a study"
+        },
+        "species": {
+          "type": "array",
+          "description": "recorded, not promised: the names typed into the search"
+        },
+        "studies": {
+          "type": "array",
+          "description": "recorded, not promised: the studies the search read"
+        },
+        "settings": {
+          "type": "object",
+          "description": "recorded, not promised: every setting the run used"
+        },
+        "selection": {
+          "type": "object",
+          "description": "recorded, not promised: what the second box asked for: media, experiments or studies"
+        },
+        "no_growth": {
+          "type": "object",
+          "description": "recorded, not promised: the no-growth rule's own numbers"
+        },
+        "filters": {
+          "type": "object",
+          "description": "recorded, not promised: what was filtered out of the output"
+        },
+        "hidden": {
+          "type": "object",
+          "description": "recorded, not promised: how many arcs were hidden, and why"
+        },
+        "merge": {
+          "type": "object",
+          "description": "recorded, not promised: what merging parallel arcs did"
+        },
+        "genus": {
+          "type": "object",
+          "description": "recorded, not promised: what merging to the genus level did"
+        },
+        "data": {
+          "type": "object",
+          "description": "recorded, not promised: the data version: the API, when it was read, and what the database reported about itself"
+        },
+        "growth_rates": {
+          "type": "object",
+          "description": "recorded, not promised: the growth rates reported beside the network, with the rule they were derived by and the organisms that have none"
+        }
+      }
     },
     "nodes": {
       "type": "array",

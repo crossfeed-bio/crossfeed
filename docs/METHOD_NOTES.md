@@ -293,6 +293,23 @@ with no leave-one-out partners.
 **Proposed default (Craig): JSON canonical, GraphML on demand.** Both exist today; the viewer writes the
 same GraphML the CLI does.
 
+**What `meta` promises, and what it merely records** (#117, Craig while approving 0.2.0: "`meta` is still
+unconstrained in the schema ... the release that moves the version is the natural place to declare those
+sub-properties"). Its sub-properties are declared from 0.3.0, with each description saying which kind of
+key it is:
+
+- **a promise of the format**, which a reader can depend on and a later version will not change silently:
+  `tool`, `tool_version`, `derived_on`, `derived_at`, `source_db`, `provisional`, `absence` (the threshold
+  the network was written with) and `statistics` (the test behind `p_value` and `q_value`).
+- **recorded, not promised**, written because it is useful and free to change with the thing it
+  describes: `query`, `species`, `studies`, `settings`, `selection`, `no_growth`, `filters`, `hidden`,
+  `merge`, `genus`, `data` and `growth_rates`.
+
+`meta` stays permissive: nothing is declared closed, so a key a later version adds still validates here,
+and declaring a key constrains its type and not its presence. A declared key of the wrong type is now a
+validation error, which is the one thing this tightens, and it belongs with a version move for that
+reason.
+
 ## Open decisions
 
 This is the single place where open method and format questions are collected, so Karoline and Craig

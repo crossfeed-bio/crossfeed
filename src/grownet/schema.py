@@ -30,6 +30,61 @@ SCHEMA_FILE = os.path.join(
     "schema", "interaction_network.schema.json",
 )
 
+# What `meta` holds (#117, Craig while approving 0.2.0: "`meta` is still unconstrained in the schema ...
+# the release that moves the version is the natural place to declare those sub-properties").
+#
+# Two kinds of key, said in the descriptions so a reader knows which to depend on:
+#   * a **promise**: the format states it and a later version will not change its meaning silently;
+#   * **recorded**: written because it is useful to have, and free to change with the thing it describes
+#     (the settings of a run, for example, change whenever a setting is added).
+#
+# It stays permissive on purpose: no `additionalProperties`, so a network written by a later version, the
+# fixtures and the daily All network all keep validating. Declaring a key constrains its type, not its
+# presence.
+META_DESCRIPTION = ("how this network was made. The keys described as a promise are part of the format; "
+                    "the others are recorded because they are useful, and may change with what they "
+                    "describe. Keys not declared here are allowed, so a network from a later version "
+                    "still validates.")
+_PROMISE = "a promise of the format: "
+_RECORDED = "recorded, not promised: "
+META_PROPERTIES = {
+    "tool": {"type": "string", "description": _PROMISE + "the tool that derived this network"},
+    "tool_version": {"type": "string", "description": _PROMISE + "its version"},
+    "derived_on": {"type": "string", "description": _PROMISE + "the date it was derived (UTC)"},
+    "derived_at": {"type": "string", "description": _PROMISE + "when it was derived, to the second"},
+    "source_db": {"type": "string",
+                  "description": _PROMISE + "where the growth data came from, and whether live or a "
+                                            "fixture"},
+    "provisional": {"type": "string",
+                    "description": _PROMISE + "present while the derivation method is provisional, "
+                                              "saying so in words"},
+    "absence": {"type": "object",
+                "description": _PROMISE + "the absence threshold this network was written with: k, and "
+                                          "how many comparisons fell below it"},
+    "statistics": {"type": "object",
+                   "description": _PROMISE + "the test behind p_value and q_value, the correction used "
+                                             "and how many comparisons it ran over"},
+    "query": {"type": "string", "description": _RECORDED + "what was searched: species, all, or a study"},
+    "species": {"type": "array", "description": _RECORDED + "the names typed into the search"},
+    "studies": {"type": "array", "description": _RECORDED + "the studies the search read"},
+    "settings": {"type": "object", "description": _RECORDED + "every setting the run used"},
+    "selection": {"type": "object",
+                  "description": _RECORDED + "what the second box asked for: media, experiments or "
+                                             "studies"},
+    "no_growth": {"type": "object", "description": _RECORDED + "the no-growth rule's own numbers"},
+    "filters": {"type": "object", "description": _RECORDED + "what was filtered out of the output"},
+    "hidden": {"type": "object", "description": _RECORDED + "how many arcs were hidden, and why"},
+    "merge": {"type": "object", "description": _RECORDED + "what merging parallel arcs did"},
+    "genus": {"type": "object", "description": _RECORDED + "what merging to the genus level did"},
+    "data": {"type": "object",
+             "description": _RECORDED + "the data version: the API, when it was read, and what the "
+                                        "database reported about itself"},
+    "growth_rates": {"type": "object",
+                     "description": _RECORDED + "the growth rates reported beside the network, with the "
+                                                "rule they were derived by and the organisms that have "
+                                                "none"},
+}
+
 SCHEMA_DOC = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "https://github.com/crossfeed-bio/crossfeed/blob/main/schema/interaction_network.schema.json",
@@ -42,7 +97,7 @@ SCHEMA_DOC = {
     "additionalProperties": False,
     "properties": {
         "schema": {"enum": list(KNOWN_SCHEMAS)},
-        "meta": {"type": "object"},
+        "meta": {"type": "object", "description": META_DESCRIPTION, "properties": META_PROPERTIES},
         "nodes": {"type": "array", "items": {"$ref": "#/definitions/node"}},
         "edges": {"type": "array", "items": {"$ref": "#/definitions/edge"}},
         "studies": {"type": "array", "items": {"$ref": "#/definitions/study"}},
@@ -131,6 +186,23 @@ def _objs(x):
     return x if isinstance(x, list) and all(isinstance(i, dict) for i in x) else None
 
 
+_META_TYPES = {"string": str, "array": list, "object": dict}
+
+
+def _meta_problems(meta: dict) -> list:
+    """Where a declared key of `meta` holds the wrong kind of value. A key this schema does not declare is
+    left alone, which is what keeps a network from a later version valid here (#117)."""
+    problems = []
+    for key, value in meta.items():
+        declared = META_PROPERTIES.get(key)
+        if declared is None or value is None:
+            continue
+        kind = _META_TYPES[declared["type"]]
+        if not isinstance(value, kind) or isinstance(value, bool):
+            problems.append(f"meta.{key} must be {declared['type']}, not {type(value).__name__}")
+    return problems
+
+
 def validate_document(doc) -> list:
     """Return every problem with `doc` as a grownet interaction-network document (empty list = valid).
 
@@ -145,6 +217,8 @@ def validate_document(doc) -> list:
         problems.append(f"schema is {doc.get('schema')!r}, expected one of {list(KNOWN_SCHEMAS)}")
     if "meta" in doc and not isinstance(doc["meta"], dict):
         problems.append("meta must be an object")
+    elif "meta" in doc:
+        problems += _meta_problems(doc["meta"])
 
     lists = {}
     for key in ("nodes", "edges", "studies"):
