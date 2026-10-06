@@ -270,12 +270,14 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
 
     Beside the rate come the quantities a gLV coefficient is made of (#118): the estimator, the lag it
     fitted (empty for an estimator with none), and the monoculture carrying capacity with its unit and
-    how many curves it rests on (empty where no curve reached a certified plateau).
+    how many curves it rests on (empty where no curve reached a certified plateau), and how many curves
+    gave none, so an empty capacity does not read as absence.
     """
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow(["organism", "growth_rate", "unit", "replicates", "studies", "method", "lag",
-                     "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves"])
+                     "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves",
+                     "capacity_curves_left_out"])
     order = labels(net) if net is not None else sorted(rates)
     for nid in order:
         rate = rates.get(nid)
@@ -290,7 +292,10 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
                          rate.get("lag_method", "") if lag is not None else "",
                          "" if capacity is None else f"{capacity:g}",
                          rate.get("capacity_unit", "") if capacity is not None else "",
-                         rate.get("capacity_n", "") if capacity is not None else ""])
+                         rate.get("capacity_n", "") if capacity is not None else "",
+                         # an empty capacity reads as absence unless the curves that gave none are
+                         # counted where the capacity itself is read (found 2026-10-06)
+                         len(rate.get("capacity_left_out") or "") or ""])
     return out.getvalue()
 
 
@@ -444,10 +449,13 @@ def plateaus(net: InteractionNetwork) -> dict:
         theirs, their_unit = plateau.get((source, target), (None, ""))
         if theirs is None or their_unit != unit:
             continue
-        entry = out.setdefault(target, {"mine": mine, "unit": unit, "partners": {}})
+        entry = out.setdefault(target, {"unit": unit, "partners": {}})
         if entry["unit"] != unit:
             continue
-        entry["partners"][source] = theirs
+        # both plateaus of this co-culture, kept together: an organism beside two partners has a
+        # different plateau of its own beside each, so a single "mine" taken from whichever arc came
+        # first made the fitted diagonal depend on arc order (found 2026-10-06, Craig's agent on #128)
+        entry["partners"][source] = {"mine": mine, "theirs": theirs}
     return out
 
 
@@ -609,12 +617,17 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                 # that grows only with a partner r_i is 0, measured (#123); for one with a rate and no
                 # certified monoculture plateau it is its own rate (#124 item 2).
                 balance = plateau_of.get(affected) or {}
-                mine = balance.get("mine")
                 own_rate = rate.get("rate") or 0.0
-                held_up = own_rate + sum(row[k] * theirs
-                                         for partner, theirs in (balance.get("partners") or {}).items()
-                                         for k, other in enumerate(keep) if other == partner)
-                row[i] = -held_up / mine if mine else 0.0
+                # one equation per co-culture, each from that co-culture's own two plateaus, merged by
+                # their median as a pair's arcs are (register item 14)
+                fitted = []
+                for partner, both in (balance.get("partners") or {}).items():
+                    mine, theirs = both["mine"], both["theirs"]
+                    if not mine:
+                        continue
+                    effect = next((row[k] for k, other in enumerate(keep) if other == partner), 0.0)
+                    fitted.append(-(own_rate + effect * theirs) / mine)
+                row[i] = statistics.median(fitted) if fitted else 0.0
                 if row[i] >= 0:
                     unusable.append((_label(net.nodes[affected]),
                                      "its self-limitation comes out at or above zero at its co-culture "
@@ -887,7 +900,9 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
              "lag_method": rates[nid].get("lag_method", ""),
              "carrying_capacity": rates[nid].get("capacity"),
              "carrying_capacity_unit": rates[nid].get("capacity_unit", ""),
-             "carrying_capacity_curves": rates[nid].get("capacity_n")}
+             "carrying_capacity_curves": rates[nid].get("capacity_n"),
+             "carrying_capacity_left_out": [list(row) for row in
+                                            (rates[nid].get("capacity_left_out") or [])]}
             for nid in order if nid in rates and (rates[nid] or {}).get("rate") is not None],
         "caveats": {
             "coefficients": ("every cell is a fitted per-capita coefficient: the diagonal is -r_i / K_i "

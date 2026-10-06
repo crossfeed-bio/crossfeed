@@ -94,3 +94,26 @@ def test_each_matrix_names_the_media_its_own_arcs_came_from():
     assert by_unit["CFUs/mL"]["media"] == ["mMCB"]
     text = matrix.readme_from(got, records_to_network(arcs), rates)
     assert "in WC" in text and "in mMCB" in text
+
+
+def test_the_fitted_diagonal_does_not_depend_on_the_order_the_arcs_arrive_in():
+    """Found by Craig's agent on #128, 2026-10-06: the balance summed every partner's effect while
+    taking the organism's own plateau from whichever arc came first, so an organism obligate on two
+    partners got a diagonal that moved by the ratio of its two plateaus when the arcs were reordered.
+
+    A grows only with B and only with C. Its own plateau is 1e8 beside B and 5e8 beside C, and each
+    co-culture gives its own equation: with r_A = 0 and A_AB = 0.4 / 2e8 = +2e-9, beside B the balance is
+    -(2e-9 x 2e8) / 1e8 = -4e-9; with A_AC = 0.5 / 1e9 = +5e-10, beside C it is -(5e-10 x 1e9) / 5e8 =
+    -1e-9. The median of the two is -2.5e-9 whichever order they arrive in.
+    """
+    beside_b = _arc("b", "a", 0.4, 0.0, x_j=2.0e8, capacity=1.0e8)
+    back_from_b = _arc("a", "b", 0.3, 0.2, x_j=1.0e8, capacity=2.0e8)
+    beside_c = _arc("c", "a", 0.5, 0.0, x_j=1.0e9, capacity=5.0e8)
+    back_from_c = _arc("a", "c", 0.3, 0.2, x_j=5.0e8, capacity=1.0e9)
+    rates = {"b": _rate("B", 0.2, 5.0e8), "c": _rate("C", 0.2, 5.0e8)}
+
+    one = matrix.coefficients(records_to_network([beside_b, back_from_b, beside_c, back_from_c]), rates)
+    other = matrix.coefficients(records_to_network([beside_c, back_from_c, beside_b, back_from_b]), rates)
+    first, second = one["matrices"][0], other["matrices"][0]
+    assert _cell(first, "A", "A") == pytest.approx(-2.5e-9, rel=1e-9)
+    assert _cell(first, "A", "A") == _cell(second, "A", "A")

@@ -111,14 +111,24 @@ def test_the_rates_file_says_what_each_median_rests_on():
                    "method": "growth_rate:easylinear:5", "lag": 1.25, "lag_method": "baranyi",
                    "capacity": 2.0e8, "capacity_unit": "Cells/mL", "capacity_n": 4}}
     table = list(csv.reader(io.StringIO(matrix.rates_csv(rates, net))))
+    # capacity_curves_left_out added 2026-10-06: an empty capacity read as absence, because the curves
+    # that gave none were collected and never shown where the capacity is read
     assert table[0] == ["organism", "growth_rate", "unit", "replicates", "studies", "method", "lag",
-                        "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves"]
+                        "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves",
+                        "capacity_curves_left_out"]
     # the lag names its own estimator, since it is Baranyi's whichever one produced the rate
     assert table[1] == ["A", "0.42", "1/h", "6", "S1 S2", "growth_rate:easylinear:5", "1.25", "baranyi",
-                        "2e+08", "Cells/mL", "4"]
+                        "2e+08", "Cells/mL", "4", ""]
     # a rate with none of the gLV quantities keeps its row and leaves them empty (#118)
     plain = list(csv.reader(io.StringIO(matrix.rates_csv({"a": {"rate": 0.42, "unit": "1/h"}}, net))))
-    assert plain[1] == ["A", "0.42", "1/h", "", "", "", "", "", "", "", ""]
+    assert plain[1] == ["A", "0.42", "1/h", "", "", "", "", "", "", "", "", ""]
+
+    # and a capacity that rests on fewer curves than were read says how many gave none, so an empty or
+    # thin capacity does not read as absence (found 2026-10-06)
+    thin = {"a": {"rate": 0.42, "unit": "1/h", "capacity": 2.0e8, "capacity_unit": "Cells/mL",
+                  "capacity_n": 1, "capacity_left_out": [("A rep 2", "had not reached stationary phase"),
+                                                         ("A rep 3", "had not reached stationary phase")]}}
+    assert list(csv.reader(io.StringIO(matrix.rates_csv(thin, net))))[1][-1] == "2"
     assert len(table) == 2                    # b has no rate, so it has no row
 
 

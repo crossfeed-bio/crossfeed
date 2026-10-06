@@ -185,10 +185,17 @@ def report_text(result: dict) -> str:
             if rate.get("capacity") is not None:
                 extra.append(f"carrying capacity {rate['capacity']:.4g} {rate.get('capacity_unit', '')}"
                              f" from {rate.get('capacity_n', 0)} curve(s)")
+            # the help promises that every curve giving no capacity is named here with its reason, and
+            # nothing rendered them: an empty carrying capacity read as absence (found 2026-10-06)
+            left = rate.get("capacity_left_out") or []
+            if left:
+                extra.append(f"{len(left)} curve(s) gave no capacity")
             lines.append(f"  - {rate.get('name', nid)}: {rate['rate']:.4g} {rate.get('unit', '')}, median of "
                          f"{rate.get('n', 0)} monoculture replicate(s)"
                          + (f" ({per_study})" if per_study else "")
                          + ("; " + ", ".join(extra) if extra else ""))
+            for label, why in left:
+                lines.append(f"      no capacity from {label}: {why}")
         missing = rates.get("without_a_rate") or []
         if missing:
             lines.append("  no growth rate (a gLV simulation needs one from elsewhere): " + ", ".join(missing))

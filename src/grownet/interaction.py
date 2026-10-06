@@ -487,8 +487,19 @@ def dropout_interaction_strengths(full, dropouts: dict, method: str = "auc",
             if c["outcome"] == UNUSABLE:
                 result["skipped"].append((f"arc {removed} -> {target}", "every replicate of a set was left out"))
                 continue
+            # the same measured bound the biculture comparison carries (#129). It was computed there and
+            # not here, so a censored drop-out arc reached the matrix with nothing to hold and fell back
+            # to the stated extreme the release says it removed (found 2026-10-06).
+            bound = None
+            if c["outcome"] in (OBLIGATE, ABOLISHED):
+                which = reps_t if c["outcome"] == OBLIGATE else full_t
+                bound = no_growth_bound(which, target, window[1], method, no_growth_factor)
+                bound["side"] = "without" if c["outcome"] == OBLIGATE else "with"
+                where = without_role if c["outcome"] == OBLIGATE else "full community"
+                if bound["value"]:
+                    bound["rule"] = f"{bound['rule']} ({target} in the {where})"
             result["arcs"].append({"source": removed, "target": target, "evidence": evidence,
-                                   "community": community, "window": window,
+                                   "community": community, "window": window, "bound": bound,
                                    "stationary": {
                                        "with": stationary_verdict(_unspiked(full_t, target, spike_factor), target,
                                                                   window[1]),
