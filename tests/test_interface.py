@@ -882,8 +882,8 @@ def test_the_command_line_and_the_page_describe_the_same_settings():
     that happened". The mechanical halves are pinned elsewhere (every flag is explained, the defaults
     match); this pins the three that drifted during the 0.3.0 stack, where the flag's own help said less
     than the page's setting did."""
-    from grownet.__main__ import build_parser
     from grownet import help as help_page
+    from grownet.__main__ import build_parser
 
     derive = next(a for a in build_parser()._actions if a.dest == "cmd").choices["derive"]
     flag = {o: a.help for a in derive._actions for o in a.option_strings}
