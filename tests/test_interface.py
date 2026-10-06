@@ -508,17 +508,18 @@ def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
     assert 'name="report_rates" value="1" checked' in settings
     assert 'name="include_dropout" value="1">' in settings               # off
     assert "gLV mode on: growth rates on, drop-out communities off" in pressed
-    # and, since #119 turned the package into coefficients, the two settings the conversion needs: L is
-    # the log2 ratio of a growth rate, and the package asks for Baranyi rates
+    # and, since #119 turned the package into coefficients, the setting the conversion needs: L is the
+    # log2 ratio of a growth rate. The rate method stays the reader's own (Karoline, 2026-10-06: the rate
+    # from easylinear, the lag from Baranyi, "users can always enforce Baranyi in the advanced options")
     assert '<option value="growth_rate" selected>' in settings
-    assert '<option value="baranyi" selected>' in settings
+    assert '<option value="baranyi" selected>' not in settings
     assert f">{A}</textarea>" in pressed                                 # and what was typed stays
     assert 'class="switch on"' in pressed and 'aria-pressed="true"' in pressed   # the switch is on
 
     # Karoline, 2026-10-04: "Do I click a 2nd time to switch it off?" Pressing it again restores both
     # defaults, and says so
     again = press({"species": A, "glv_mode": "1", "report_rates": "1", "only_entered": "1",
-                   "metric": "growth_rate", "rate_method": "baranyi"})   # what the page posts when on
+                   "metric": "growth_rate"})                            # what the page posts when on
     back = again[again.index("<details>"):]
     assert 'name="report_rates" value="1">' in back                      # off, its default
     assert 'name="include_dropout" value="1" checked' in back            # on, its default
@@ -568,7 +569,8 @@ def test_the_growth_rates_are_their_own_download_and_bring_the_glv_control(serve
     rows = [line.split(",") for line in table.strip().splitlines()]
     assert rows[0][:5] == ["organism", "growth_rate", "unit", "replicates", "studies"]
     # and the quantities a gLV coefficient is made of, beside them (#118)
-    assert rows[0][5:] == ["method", "lag", "carrying_capacity", "capacity_unit", "capacity_curves"]
+    assert rows[0][5:] == ["method", "lag", "lag_method", "carrying_capacity", "capacity_unit",
+                           "capacity_curves"]
     assert [row[0] for row in rows[1:]] == sorted([A, B])
     assert dict(zip([r[0] for r in rows[1:]], [r[1] for r in rows[1:]], strict=True))[A] == "0.4"
 
@@ -654,8 +656,8 @@ def test_the_command_line_writes_the_matrix_the_rates_and_the_glv_package(monkey
     assert len(rows) == len(names) + 1
     assert float(rows[1 + names.index(A)][1 + names.index(B)]) > 0      # B facilitates A, as on the page
     assert rates_file.read_text(encoding="utf-8").splitlines()[0] == (
-        "organism,growth_rate,unit,replicates,studies,method,lag,carrying_capacity,capacity_unit,"
-        "capacity_curves")
+        "organism,growth_rate,unit,replicates,studies,method,lag,lag_method,carrying_capacity,"
+        "capacity_unit,capacity_curves")
     with zipfile.ZipFile(io.BytesIO(package.read_bytes())) as archive:
         assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv",
                                               "interaction_matrix.Cells_per_mL.csv"]
@@ -806,7 +808,7 @@ def test_glv_mode_on_the_command_line_sets_the_same_settings(capsys, monkeypatch
     assert captured["settings"]["report_rates"] is True
     assert captured["settings"]["include_dropout"] is False
     assert captured["settings"]["metric"] == "growth_rate"           # #119: L is a ratio of rates
-    assert captured["settings"]["rate_method"] == "baranyi"
+    assert captured["settings"]["rate_method"] == "easylinear"      # hers, not the mode's
 
 
 def test_the_page_and_the_command_line_mean_the_same_by_glv_mode():
@@ -816,8 +818,7 @@ def test_the_page_and_the_command_line_mean_the_same_by_glv_mode():
     assert applied["report_rates"] is True and applied["include_dropout"] is False
     # the two Karoline named, and the two the coefficients of #119 need; nothing else moves
     assert {k: v for k, v in applied.items() if DEFAULTS[k] != v} == {
-        "report_rates": True, "include_dropout": False, "metric": "growth_rate",
-        "rate_method": "baranyi"}
+        "report_rates": True, "include_dropout": False, "metric": "growth_rate"}
 
 
 def test_the_name_is_never_styled_where_a_command_is_meant():

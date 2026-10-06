@@ -108,16 +108,17 @@ def test_an_extreme_that_contradicts_a_measured_arc_leaves_the_cell_at_zero():
 def test_the_rates_file_says_what_each_median_rests_on():
     net = _net([_arc("a", "b", 1.5)])
     rates = {"a": {"rate": 0.42, "unit": "1/h", "n": 6, "studies": ["S1", "S2"],
-                   "method": "growth_rate:baranyi", "lag": 1.25, "capacity": 2.0e8,
-                   "capacity_unit": "Cells/mL", "capacity_n": 4}}
+                   "method": "growth_rate:easylinear:5", "lag": 1.25, "lag_method": "baranyi",
+                   "capacity": 2.0e8, "capacity_unit": "Cells/mL", "capacity_n": 4}}
     table = list(csv.reader(io.StringIO(matrix.rates_csv(rates, net))))
     assert table[0] == ["organism", "growth_rate", "unit", "replicates", "studies", "method", "lag",
-                        "carrying_capacity", "capacity_unit", "capacity_curves"]
-    assert table[1] == ["A", "0.42", "1/h", "6", "S1 S2", "growth_rate:baranyi", "1.25", "2e+08",
-                        "Cells/mL", "4"]
+                        "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves"]
+    # the lag names its own estimator, since it is Baranyi's whichever one produced the rate
+    assert table[1] == ["A", "0.42", "1/h", "6", "S1 S2", "growth_rate:easylinear:5", "1.25", "baranyi",
+                        "2e+08", "Cells/mL", "4"]
     # a rate with none of the gLV quantities keeps its row and leaves them empty (#118)
     plain = list(csv.reader(io.StringIO(matrix.rates_csv({"a": {"rate": 0.42, "unit": "1/h"}}, net))))
-    assert plain[1] == ["A", "0.42", "1/h", "", "", "", "", "", "", ""]
+    assert plain[1] == ["A", "0.42", "1/h", "", "", "", "", "", "", "", ""]
     assert len(table) == 2                    # b has no rate, so it has no row
 
 

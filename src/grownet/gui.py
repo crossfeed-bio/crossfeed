@@ -660,9 +660,9 @@ def _no_growth(s: dict, which: str) -> float:
 
 # What the page says when the mode is switched on and off.
 GLV_MODE_MESSAGE = ("gLV mode on: growth rates on, drop-out communities off, and the comparison on the "
-                    "growth rate with the Baranyi fit, which is what a fitted coefficient is made of. "
-                    "All four are in Advanced settings, and pressing gLV mode again switches them back. "
-                    "Name one medium in the second box to keep a simulation to one environment.")
+                    "growth rate, which is what a fitted coefficient is made of. All three are in "
+                    "Advanced settings, and pressing gLV mode again switches them back. Name one medium "
+                    "in the second box to keep a simulation to one environment.")
 GLV_MODE_OFF_MESSAGE = ("gLV mode off: growth rates off, drop-out communities included again and the "
                         "comparison back on the area under the curve, which are the defaults.")
 
@@ -670,8 +670,7 @@ GLV_MODE_OFF_MESSAGE = ("gLV mode off: growth rates off, drop-out communities in
 def glv_mode_on(settings: dict) -> bool:
     """Whether the settings are the ones gLV mode sets."""
     s = {**DEFAULTS, **(settings or {})}
-    return (bool(s["report_rates"]) and not s["include_dropout"]
-            and s["metric"] == "growth_rate" and s["rate_method"] == matrix.PACKAGE_RATE_METHOD)
+    return bool(s["report_rates"]) and not s["include_dropout"] and s["metric"] == "growth_rate"
 
 
 def glv_mode(settings: dict, on: bool = True) -> dict:
@@ -680,14 +679,13 @@ def glv_mode(settings: dict, on: bool = True) -> dict:
     toggles ("Do I click a 2nd time to switch it off?").
     """
     if on:
-        # the coefficients of #119 need both: L is the log2 ratio of a GROWTH RATE, which auc and max
-        # cannot produce, and the package asks for Baranyi rates, a global fit consistent with the
-        # plateau that A[i][i] = -r_i / K_i divides by
-        return {**settings, "report_rates": True, "include_dropout": False,
-                "metric": "growth_rate", "rate_method": matrix.PACKAGE_RATE_METHOD}
+        # the coefficients of #119 need the comparison to be on a GROWTH RATE, which auc and max cannot
+        # produce. The rate method is left alone: easylinear by default, since Karoline chose it on
+        # 2026-10-06 ("easylinear since it works better"), with the lag still Baranyi's, and anyone who
+        # wants Baranyi rates sets it in Advanced settings.
+        return {**settings, "report_rates": True, "include_dropout": False, "metric": "growth_rate"}
     return {**settings, "report_rates": DEFAULTS["report_rates"],
-            "include_dropout": DEFAULTS["include_dropout"],
-            "metric": DEFAULTS["metric"], "rate_method": DEFAULTS["rate_method"]}
+            "include_dropout": DEFAULTS["include_dropout"], "metric": DEFAULTS["metric"]}
 
 
 def parse_settings(form: dict) -> dict:

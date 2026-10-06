@@ -106,13 +106,11 @@ def _rate_flags(a) -> str:
 def _derive(a):
     if a.glv_mode:
         # the button sets them, and says so, rather than leaving a reader to remember them (#113). The
-        # metric and the rate method came with the coefficients of #119: L is the log2 ratio of a growth
-        # rate, and the package asks for Baranyi rates.
-        from .matrix import PACKAGE_RATE_METHOD
-        a.report_rates, a.no_dropout = True, True
-        a.metric, a.rate_method = "growth_rate", PACKAGE_RATE_METHOD
-        print("gLV mode: growth rates on, drop-out communities off, the comparison on the growth rate "
-              f"with the {PACKAGE_RATE_METHOD} fit", file=sys.stderr)
+        # the metric came with the coefficients of #119: L is the log2 ratio of a growth rate. The rate
+        # method is the reader's own setting (easylinear by default), with the lag always Baranyi's.
+        a.report_rates, a.no_dropout, a.metric = True, True, "growth_rate"
+        print("gLV mode: growth rates on, drop-out communities off, the comparison on the growth rate",
+              file=sys.stderr)
     problem = _rate_flags(a)
     if problem:
         print(problem, file=sys.stderr)

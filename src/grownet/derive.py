@@ -512,7 +512,8 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
         replicates, skips = replicates_for_experiment(client, exp, spike_factor)
         skipped += skips
         entry = found.setdefault(node["id"], {"name": name, "values": [], "unit": "", "replicates": [],
-                                              "method": method, "lags": [], "capacities": [],
+                                              "method": method, "lag_method": rates.LAG_METHOD,
+                                              "lags": [], "capacities": [],
                                               "capacity_unit": "", "capacity_left_out": []})
         for i, rep in enumerate(replicates):
             label = f"{name} monoculture [{exp.get('name', '') or _exp_id(exp)}], replicate {rep.name or i}"
@@ -540,12 +541,13 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
                 continue
             entry["values"].append(value)
             entry["replicates"].append(rep.name or str(i))
-            # the lag, when the method has one: gLV has no lag, so the integrated form starts where it ends
-            if method.startswith("growth_rate:baranyi"):
-                try:
-                    entry["lags"].append(rates.baranyi_fit(curve.times, curve.values)["lag"])
-                except rates.RateUnavailable:
-                    pass
+            # the lag always comes from the Baranyi fit, the only estimator that has one, whichever
+            # estimator produced the rate (Karoline, 2026-10-06: "use the lag from Baranyi and easylinear
+            # since it works better"). A curve the Baranyi guards reject keeps its rate and has no lag.
+            try:
+                entry["lags"].append(rates.baranyi_fit(curve.times, curve.values)["lag"])
+            except rates.RateUnavailable:
+                pass
             # the carrying capacity: the plateau, and only where the curve is certified to have reached one
             settled = reached_stationary(curve, curve.times[-1])
             if settled is not True:
@@ -602,8 +604,9 @@ def merge_rates(per_study) -> dict:
     from curves certified to have reached stationary phase, left out rather than converted across
     abundance units, with every curve left out and why in `capacity_left_out`; a curve can give a rate
     and no capacity, so these stay out of `skipped`, where the rate itself was not left out), `lag` with
-    `lag_n` (from the Baranyi fit, absent for a method that has none), and `method`, the estimator the
-    rate came from. Each is None when nothing qualified.
+    `lag_n` and `lag_method` (always the Baranyi fit, the only estimator that has a lag, whichever one
+    produced the rate), and `method`, the estimator the rate came from. Each is None when nothing
+    qualified.
     """
     merged: dict = {}
     for study_id, found in per_study:
@@ -611,6 +614,7 @@ def merge_rates(per_study) -> dict:
             at = merged.setdefault(nid, {"name": entry["name"], "unit": entry["unit"], "values": [],
                                          "studies": [], "per_study": {}, "other_units": [],
                                          "method": entry.get("method", ""), "lags": [], "capacities": [],
+                                         "lag_method": entry.get("lag_method", ""),
                                          "capacity_unit": "", "capacity_per_study": {},
                                          "other_capacity_units": [], "capacity_left_out": []})
             if entry["unit"] != at["unit"]:
@@ -639,6 +643,7 @@ def merge_rates(per_study) -> dict:
                     "n": len(at["values"]), "studies": at["studies"], "per_study": at["per_study"],
                     "other_units": at["other_units"], "method": at["method"],
                     "lag": median(at["lags"]) if at["lags"] else None, "lag_n": len(at["lags"]),
+                    "lag_method": at["lag_method"] if at["lags"] else "",
                     "capacity": median(at["capacities"]) if at["capacities"] else None,
                     "capacity_unit": at["capacity_unit"] if at["capacities"] else "",
                     "capacity_n": len(at["capacities"]),

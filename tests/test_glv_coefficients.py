@@ -33,7 +33,8 @@ def _arc(source, target, strength, x_j=2.0e8, unit="Cells/mL", **extra):
 
 def _rate(name, rate, capacity, unit="Cells/mL", method=RATE_METRIC, **extra):
     return {"name": name, "rate": rate, "unit": "1/h", "n": 3, "studies": ["S1"], "per_study": {"S1": rate},
-            "method": method, "lag": 0.5, "capacity": capacity, "capacity_unit": unit, "capacity_n": 3,
+            "method": method, "lag": 0.5, "lag_method": "baranyi", "capacity": capacity,
+            "capacity_unit": unit, "capacity_n": 3,
             **extra}
 
 
@@ -177,15 +178,20 @@ def test_a_network_derived_from_areas_cannot_be_converted():
     assert "growth_rate" in str(raised.value) and "auc" in str(raised.value)
 
 
-def test_the_readme_states_the_rate_method_and_says_when_it_is_not_the_pages():
-    """#119: "The README states the rate method beside the growth rates", and says when the package used
-    something other than the page's setting."""
+def test_the_readme_states_the_estimators_and_what_the_choice_moves():
+    """#119: "The README states the rate method beside the growth rates". Karoline, 2026-10-06, then
+    settled which: the rate is the reader's own estimator, the lag is always Baranyi's, and the README
+    says what choosing another rate estimator would move, which the live check on #116 measured: the
+    timescale, not the equilibrium."""
     got, _ = _one(_net(PAIR), RATES)
     text = matrix.readme_from(got, _net(PAIR), RATES)
-    assert "growth_rate:baranyi" in text
+    assert "Growth rates: growth_rate:baranyi" in text
+    assert "Lag: baranyi" in text
+    assert "sets how fast a simulation moves and nothing about where it settles" in text
+
     easylinear = {k: {**v, "method": "growth_rate:easylinear:5"} for k, v in RATES.items()}
     other = matrix.readme_from(matrix.coefficients(_net(PAIR), easylinear), _net(PAIR), easylinear)
-    assert "growth_rate:easylinear:5" in other and "baranyi" in other.lower()
+    assert "Growth rates: growth_rate:easylinear:5" in other and "Lag: baranyi" in other
 
 
 def test_the_plain_adjacency_matrix_still_holds_the_log2_means():

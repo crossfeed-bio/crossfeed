@@ -879,7 +879,7 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    estimator sets a simulation's timescale and its lag rather than where it settles (on #116). What the
    estimator does change is how many arcs survive: see the open decision below.
 
-35. **OPEN: which rate estimator gLV mode should use** (raised by the agent on 2026-10-06 while building
+35. **Which rate estimator gLV mode should use** (raised by the agent on 2026-10-06 while building
    #119, for Karoline and Craig on #116). #119 set gLV mode to the Baranyi fit, on the argument that a
    global fit consistent with the plateau is the companion of `A_ii = -r_i / K_i` while easylinear's
    steepest window is a maximum over windows, measured on study 4 as a median ratio of 0.58. What the
@@ -897,8 +897,13 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
      easylinear, with the Baranyi lag still reported beside the rate; (c) use Baranyi where it converges
      and easylinear where it does not, naming per organism which one produced the rate.
    Proposed default: (b), since the equilibrium is insensitive to the estimator while the rejections are
-   not, and (c) only if a mixed matrix is acceptable to both of you. Nothing changes until this is
-   settled; today's code does (a) and the README names the method.
+   not, and (c) only if a mixed matrix is acceptable to both of you.
+   SETTLED 2026-10-06 (Karoline), option (b), in her words: "yes, use the lag from Baranyi and easylinear
+   since it works better (users can always enforce Baranyi in the advanced options)". So the rate is
+   easylinear unless the reader sets Baranyi in Advanced settings, the lag is always the Baranyi fit's
+   whichever estimator produced the rate, and `growth_rates.csv` names both (`method` and `lag_method`).
+   gLV mode therefore sets three settings, not four: rates on, drop-out off, and the growth property on
+   the growth rate.
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

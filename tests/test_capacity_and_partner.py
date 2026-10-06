@@ -155,22 +155,23 @@ def test_a_curve_still_growing_gives_a_rate_and_no_capacity_and_says_so():
     assert merged["capacity_left_out"] == entry["capacity_left_out"]
 
 
-def test_the_lag_comes_with_the_rate_when_the_method_fits_one():
-    """Karoline, 2026-10-06, folding the lag into this task: easylinear has no lag to report, and the
-    Baranyi fit has the one it already estimated. The curve lags 2 h and then doubles hourly."""
+def test_the_lag_always_comes_from_the_baranyi_fit_whichever_rate_was_asked_for():
+    """Karoline, 2026-10-06, settling it after the live check: "use the lag from Baranyi and easylinear
+    since it works better (users can always enforce Baranyi in the advanced options)". So the rate is the
+    estimator the reader chose and the lag is Baranyi's either way, named as such. The curve lags 2 h and
+    then doubles hourly."""
     times, values = _baranyi_curve(mu=math.log(2), lag=2.0, points=20, step=0.5)
     curve = [(t, v, None) for t, v in zip(times, values, strict=True)]
-    easylinear, _ = monoculture_rates(_client({(1, A): curve}), [_mono("E1", A, [(1, "r1")])])
-    assert next(iter(easylinear.values()))["lags"] == []
-
-    baranyi, _ = monoculture_rates(_client({(1, A): curve}), [_mono("E1", A, [(1, "r1")])],
-                                   rate_method="baranyi")
-    entry = next(iter(baranyi.values()))
-    assert entry["method"] == "growth_rate:baranyi"
-    assert entry["lags"][0] == pytest.approx(2.0, abs=0.5)
-    merged = merge_rates([("S1", entry and baranyi)])[next(iter(baranyi))]
-    assert merged["lag"] == pytest.approx(2.0, abs=0.5) and merged["lag_n"] == 1
-    assert merged["method"] == "growth_rate:baranyi"
+    for method, named in (("easylinear", "growth_rate:easylinear:5"), ("baranyi", "growth_rate:baranyi")):
+        found, _ = monoculture_rates(_client({(1, A): curve}), [_mono("E1", A, [(1, "r1")])],
+                                     rate_method=method)
+        entry = next(iter(found.values()))
+        assert entry["method"] == named
+        assert entry["lag_method"] == "baranyi"
+        assert entry["lags"][0] == pytest.approx(2.0, abs=0.5)
+        merged = merge_rates([("S1", found)])[next(iter(found))]
+        assert merged["lag"] == pytest.approx(2.0, abs=0.5) and merged["lag_n"] == 1
+        assert merged["method"] == named and merged["lag_method"] == "baranyi"
 
 
 def test_capacities_in_another_abundance_unit_are_named_not_converted():

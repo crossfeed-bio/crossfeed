@@ -250,7 +250,7 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow(["organism", "growth_rate", "unit", "replicates", "studies", "method", "lag",
-                     "carrying_capacity", "capacity_unit", "capacity_curves"])
+                     "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves"])
     order = labels(net) if net is not None else sorted(rates)
     for nid in order:
         rate = rates.get(nid)
@@ -262,6 +262,7 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
         writer.writerow([name, _number(rate["rate"]), rate.get("unit", RATE_UNIT),
                          rate.get("n", ""), " ".join(rate.get("studies", ())),
                          rate.get("method", ""), "" if lag is None else _number(lag),
+                         rate.get("lag_method", "") if lag is not None else "",
                          "" if capacity is None else f"{capacity:g}",
                          rate.get("capacity_unit", "") if capacity is not None else "",
                          rate.get("capacity_n", "") if capacity is not None else ""])
@@ -386,7 +387,6 @@ class CannotConvert(ValueError):
 
 
 RATE_METRIC_PREFIX = "growth_rate"
-PACKAGE_RATE_METHOD = "baranyi"     # what the package derives its rates with (#119)
 
 
 def _metrics(net: InteractionNetwork) -> list:
@@ -587,7 +587,9 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
     return {"matrices": matrices, "left_out": left_out, "pairs_left_out": pairs_left_out,
             "across_units": across, "floors": floors, "floor_rule": rule, "floor": floor,
             "metric": metrics[0] if metrics else "",
-            "rate_methods": sorted({r.get("method", "") for r in rates.values() if r.get("method")})}
+            "rate_methods": sorted({r.get("method", "") for r in rates.values() if r.get("method")}),
+            "lag_methods": sorted({r.get("lag_method", "") for r in rates.values()
+                                   if r.get("lag") is not None and r.get("lag_method")})}
 
 
 def _coefficient(value: float) -> str:
@@ -606,15 +608,19 @@ def coefficient_csv(block: dict) -> str:
 
 
 def _rate_method_lines(got: dict) -> list:
-    """What the README says about the estimator behind r, which sets the scale of every cell."""
+    """What the README says about the estimator behind r, and what choosing another one would move."""
     methods = got["rate_methods"]
     named = ", ".join(methods) if methods else "not recorded"
-    lines = [f"  Growth rates: {named}, median over replicates and studies, batch monocultures only."]
-    if not any(PACKAGE_RATE_METHOD in m for m in methods):
-        lines += ["      THE PACKAGE ASKS FOR BARANYI RATES and these are not: a global fit consistent",
-                  "      with the plateau is the companion of A[i][i] = -r_i / K_i, while a steepest-window",
-                  "      estimate is a maximum over windows. Every cell carries the factor r_i, so the",
-                  "      estimator sets the scale of the whole row (#116, #119)."]
+    lines = [f"  Growth rates: {named}, median over replicates and studies, batch monocultures only.",
+             "      Every cell of a row carries the factor r_i, so the row divides by it: the estimator",
+             "      sets how fast a simulation moves and nothing about where it settles, which is the",
+             "      solution of A x = -r (measured on #116). The Growth rate method setting chooses it.",
+             ]
+    if got["lag_methods"]:
+        lines.append(f"  Lag: {', '.join(got['lag_methods'])}, reported beside each rate in "
+                     "growth_rates.csv. A gLV model has no lag term, so a simulation that should start "
+                     "after it")
+        lines.append("      starts at that time rather than at 0.")
     return lines
 
 
@@ -740,6 +746,7 @@ def glv_payload(net: InteractionNetwork, rates: dict) -> dict:
              "studies": list(rates[nid].get("studies", ())),
              "per_study": dict(rates[nid].get("per_study", {})),
              "method": rates[nid].get("method", ""), "lag": rates[nid].get("lag"),
+             "lag_method": rates[nid].get("lag_method", ""),
              "carrying_capacity": rates[nid].get("capacity"),
              "carrying_capacity_unit": rates[nid].get("capacity_unit", ""),
              "carrying_capacity_curves": rates[nid].get("capacity_n")}

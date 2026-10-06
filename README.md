@@ -400,7 +400,7 @@ holds one cell per ordered pair, so arcs of one pair merge across conditions and
 and a pair whose arcs disagree in sign is left at 0. An empty cell and an arc below the absence threshold
 are 0; an obligate interaction is +10 and an abolished one -10, a stated extreme rather than a measured
 ratio, since one side did not grow at all. The diagonal is 0 here.
-`--glv FILE` (with `--report-rates --metric growth_rate`, or `--glv-mode`) writes the parameters of a
+`--glv FILE` (with `--report-rates --metric growth_rate`, or `--glv-mode`, which sets both) writes the parameters of a
 generalized Lotka-Volterra simulation as a zip, as **fitted coefficients**: one
 `interaction_matrix.<unit>.csv` per abundance unit, with `A[i][i] = -r_i / K_i` on the diagonal (K is the
 monoculture carrying capacity) and `A[i][j] = r_i (2^L - 1) / x_j` off it, where L is the log2 ratio of

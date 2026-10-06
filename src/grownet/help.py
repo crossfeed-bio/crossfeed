@@ -646,20 +646,23 @@ one, with each study's own median kept beside it in the network's meta. Batch mo
 chemostat or a serial dilution the rate a curve shows is the dilution rate, and a rate from a co-culture
 would be growth with a partner, which is the comparison, not the organism's own rate. An organism whose
 curves give no rate is named on the page and in the report, never given a substitute number.</p>
-<p><strong>Three more quantities travel with a rate</strong>, for the gLV coefficients being built on
-#118 and #119: which estimator produced it, the lag the Baranyi fit estimated (empty for an estimator
-that fits none), and the organism's monoculture carrying capacity, the plateau of its curves, taken only
-from curves certified to have reached stationary phase and left in the abundance unit they were measured
-in. They are in <code>growth_rates.csv</code>, in the network's meta and in the report, with every curve
-that gave no capacity named and why. Each arc also carries
-<code>partner_abundance</code>, the actor's own abundance in the co-cultures averaged over the window the
-target's growth rate was fitted in. The matrix and the package still hold effect sizes and the convention
-on the diagonal: these numbers are reported, not yet applied.</p>
-<p><strong>Start with the gLV mode button</strong>, beside All. It sets the two settings a simulation
+<p><strong>Three more quantities travel with a rate</strong>, which is what a gLV coefficient is made of:
+which estimator produced the rate; the <strong>lag</strong>, always from the Baranyi fit, the only
+estimator that has one, whichever one produced the rate; and the organism's monoculture
+<strong>carrying capacity</strong>, the plateau of its curves, taken only from curves certified to have
+reached stationary phase and left in the abundance unit they were measured in. They are in
+<code>growth_rates.csv</code>, in the network's meta and in the report, with every curve that gave no
+capacity named and why. Each arc also carries <code>partner_abundance</code>, the actor's own abundance in
+the co-cultures averaged over the window the target's growth rate was fitted in.</p>
+<p><strong>Start with the gLV mode button</strong>, beside All. It sets the three settings a simulation
 needs and leaves them in sight in Advanced settings: <strong>Report growth rates</strong> on, since a
-simulation needs a rate per organism, and <strong>Include drop-out communities</strong> off, since such an
+simulation needs a rate per organism; <strong>Include drop-out communities</strong> off, since such an
 arc compares a community with the same community without one member and the effect may run through a third
-species, while a gLV coefficient is meant to be the direct effect of one organism on another. Name one
+species, while a gLV coefficient is meant to be the direct effect of one organism on another; and
+<strong>Growth property</strong> on the growth rate, since a coefficient is built from a ratio of rates.
+It leaves <strong>Growth rate method</strong> alone, easylinear by default, which is the estimator the
+measurements favor; anyone who wants the Baranyi rate sets it there, and the lag is Baranyi's either way.
+Name one
 medium in the second box as well (<a href="#where">choosing where to look</a>), because a simulation is of
 one environment. The package's README says which of these hold for the numbers in it: how many arcs came
 from drop-out designs, and which media they were measured in.</p>
@@ -684,8 +687,10 @@ fitted as facilitating each other more than each limits itself, rather than abou
 equilibrium of a fit is the solution of A x = -r, and a negative entry there means the fit has no positive
 steady state.</p>
 <p>So a package needs the comparison to be on the <strong>growth rate</strong>: the area under the curve
-and the maximum cannot produce the ratio L. gLV mode sets that, and the Baranyi fit with it, and without
-it the page says which setting to change rather than converting the wrong quantity.</p>
+and the maximum cannot produce the ratio L. gLV mode sets that, and without it the page says which
+setting to change rather than converting the wrong quantity. Every cell of a row carries the factor
+r_i, so the row divides by it: the rate estimator sets how fast a simulation moves and nothing about
+where it settles, which is the solution of A x = -r.</p>
 
 <p><strong>In R, with the companion package.</strong> The same control sends the parameters straight into
 a running R session, which is what the R package in this project is for. It assumes no simulator: it

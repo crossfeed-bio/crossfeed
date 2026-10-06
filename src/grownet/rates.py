@@ -272,6 +272,11 @@ def method_name(rate_method: str = DEFAULT_METHOD, window: int = DEFAULT_WINDOW)
     return f"growth_rate:easylinear:{int(window)}" if rate_method == "easylinear" else "growth_rate:baranyi"
 
 
+# The lag of a growth curve comes from the Baranyi fit whatever estimator produced the rate (Karoline,
+# 2026-10-06): easylinear's steepest window has no lag parameter to report.
+LAG_METHOD = "baranyi"
+
+
 def fit_parts(name: str) -> tuple:
     """(kind, window) behind a metric name: the rate fit whose window the name stands for. A metric that
     is not a rate ("auc", "max") has no fit of its own, so the default fit gives the window (#118)."""

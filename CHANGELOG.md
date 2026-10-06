@@ -17,8 +17,13 @@ content.
   names every organism and effect that could not be fitted and why. An obligate or abolished pair takes a
   derived floor, the largest magnitude measured in the same run, rather than a stated extreme.
   A package therefore needs the comparison to be on the growth rate: **gLV mode now also sets the growth
-  property to `growth_rate` and the rate method to Baranyi**, `--glv` says which setting to change when it
-  cannot convert, and the page says the same instead of failing. The plain adjacency matrix
+  property to `growth_rate`**, `--glv` says which setting to change when it cannot convert, and the page
+  says the same instead of failing. The rate estimator stays the reader's own setting, easylinear by
+  default (Karoline, 2026-10-06: "use the lag from Baranyi and easylinear since it works better (users can
+  always enforce Baranyi in the advanced options)"), and **the lag is always the Baranyi fit's**, the only
+  estimator that has one, with `growth_rates.csv` naming both in `method` and `lag_method`. Measured on
+  #116: every cell of a row carries the factor r_i, so the estimator sets how fast a simulation moves and
+  nothing about where it settles. The plain adjacency matrix
   (`--format matrix`) is unchanged, and so is Send to R, which carries the effect-size matrix until the
   conversion reaches it (#120). Checked live: the converted matrix of SMGDB00000004 and of the whole
   corpus simulates in miaSim with no scaling and settles exactly at the solution of `A x = -r`.
