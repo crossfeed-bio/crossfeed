@@ -862,5 +862,43 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    "keep glv_scale off by default" (Karoline, 2026-10-03, asked whether it should become the default).
    What arrives in R is therefore always the numbers grownet derived, and scaling is the user's own step.
 
+34. **The gLV package holds fitted coefficients** (Karoline, 2026-10-06, settling the first of the three
+   questions of #116). Her words: "so in gLV mode, let's use the mixture of growth curve features that
+   fits the equation best; following Craig's recommendation and the math", and, on the lag, "what if
+   Baranyi is used to determine r? It accounts for lag phase". So the package stops holding effect sizes
+   with a convention on the diagonal: `A_ii = -r_i / K_i` with K the monoculture carrying capacity from a
+   curve certified to have reached stationary phase, and `A_ij = r_i (2^L - 1) / x_j_star` with L the log2
+   ratio of the target's growth rate and `x_j_star` the partner's abundance over the target's rate window
+   (#118 measures all three, #119 converts). One matrix per abundance unit, Craig's partition: a cell mass
+   conversion would have to be invented, while the dynamics are the same in any unit. An obligate or
+   abolished pair takes a derived floor, the largest magnitude measured in the same run, since mGrowthDB
+   records no detection limit for a growth rate; the +/-10 stays in the plain adjacency matrix only.
+   Measured while building it: the converted matrix of SMGDB00000004 and of the whole corpus simulates in
+   miaSim with no scaling and settles exactly at the solution of `A x = -r`; with `A_ii` and `A_ij` both
+   proportional to r_i, that solution does not depend on the growth rates at all at D = 0, so the rate
+   estimator sets a simulation's timescale and its lag rather than where it settles (on #116). What the
+   estimator does change is how many arcs survive: see the open decision below.
+
+35. **OPEN: which rate estimator gLV mode should use** (raised by the agent on 2026-10-06 while building
+   #119, for Karoline and Craig on #116). #119 set gLV mode to the Baranyi fit, on the argument that a
+   global fit consistent with the plateau is the companion of `A_ii = -r_i / K_i` while easylinear's
+   steepest window is a maximum over windows, measured on study 4 as a median ratio of 0.58. What the
+   live check then showed:
+   * The predicted equilibrium does not depend on the growth rates at all (the algebra and the
+     measurement are in item 34), so the estimator buys no accuracy at steady state.
+   * It costs arcs and organisms. On SMGDB00000007, gLV mode with Baranyi derives a network of two
+     organisms: Bacteroides thetaiotaomicron drops out, because the Baranyi guards reject its curves, and
+     the pair that is left (B. hydrogenotrophica and R. intestinalis) is fitted as mutually facilitating
+     more strongly than each limits itself, so miaSim returns NA and the fit has no positive steady state.
+     The same study with easylinear keeps all three organisms, simulates finite, and lands within a factor
+     1.8 and 3.4 of the chemostat steady state of SMGDB00000005's control for two of them. Studies 8 and
+     13 produce no package at all under Baranyi, because no organism keeps a rate.
+   * Options: (a) keep Baranyi, and accept that fewer organisms reach a package; (b) let gLV mode keep
+     easylinear, with the Baranyi lag still reported beside the rate; (c) use Baranyi where it converges
+     and easylinear where it does not, naming per organism which one produced the rate.
+   Proposed default: (b), since the equilibrium is insensitive to the estimator while the rejections are
+   not, and (c) only if a mixed matrix is acceptable to both of you. Nothing changes until this is
+   settled; today's code does (a) and the README names the method.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

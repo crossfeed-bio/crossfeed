@@ -15,6 +15,21 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-06 (#119, Karoline's decision on #116): **the gLV package holds fitted coefficients**, one
+  `interaction_matrix.<unit>.csv` per abundance unit, with `A_ii = -r_i / K_i` and
+  `A_ij = r_i (2^L - 1) / x_j_star`. `matrix.coefficients` does the conversion and names every organism
+  and effect it could not fit; `matrix.readme_from` writes the README; `matrix.CannotConvert` is raised
+  when the arcs do not compare growth rates, which the page and `--glv` turn into a message naming the
+  setting to change. gLV mode now sets four settings: rates on, drop-out off, the growth property
+  `growth_rate` and the rate method Baranyi. The plain adjacency matrix is unchanged (log2 means, 0
+  diagonal, +/-10 for a censored pair), and so is Send to R, which still carries the effect-size matrix
+  until #120 converts that route; the help says which route holds which numbers.
+  **Live:** the converted matrix of SMGDB00000004 and of the whole corpus simulates in miaSim with no
+  scaling and settles exactly at the solution of `A x = -r`. **The Baranyi default has a measured cost**
+  (METHOD_NOTES open decision 35, for Karoline and Craig): on study 7 it loses an organism and leaves a
+  divergent pair, while easylinear keeps all three and lands within a factor 2 to 4 of the observed
+  chemostat steady state. The equilibrium does not depend on the estimator, so this is a cost without a
+  gain at steady state.
 - 2026-10-06 (#118, from Karoline's decision on #116): the quantities a fitted gLV coefficient is made of
   are measured and reported, and nothing applies them yet. `rates.easylinear_fit` and `rates.baranyi_fit`
   return the window, the lag and the fit quality their estimators already computed; `growth.mean_over`
