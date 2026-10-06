@@ -242,6 +242,46 @@ def fit_row(replicate, target: str, organisms: list, max_condition: float = MAX_
             "reason": built["reason"]}
 
 
+def _spread(values: list) -> dict:
+    """{"n", "median", "sd"} of a set of estimates of one coefficient, or n = 0 when there are none."""
+    if not values:
+        return {"n": 0, "median": None, "sd": None}
+    return {"n": len(values), "median": statistics.median(values),
+            "sd": statistics.stdev(values) if len(values) > 1 else None}
+
+
+def _overall_r2(target: str, partners: list, cocultures: list, rate: float, own: float,
+                coefficients: dict) -> float:
+    """How much of the organism's own log abundance change the whole fit explains, over its co-cultures.
+
+    `_least_squares` reports the R2 of the stage it ran, and stage 2 runs against stage 1's residual, so
+    its number answers a smaller question than the help's words. This one compares the model's prediction,
+    `r_i t + A_ii integral(x_i) + sum_j A_ij integral(x_j)`, with the measured `ln(x_i(t) / x_i(0))`.
+    """
+    ys, predicted = [], []
+    for replicate in cocultures:
+        built = design(replicate, target, [target, *partners])
+        here = built["partners"]
+        if target not in here:
+            continue
+        own_index = here.index(target)
+        for row in built["rows"]:
+            value = rate * row["time"] + own * row["integrals"][own_index]
+            for name in partners:
+                if name in here and name in coefficients:
+                    value += coefficients[name] * row["integrals"][here.index(name)]
+            ys.append(row["y"])
+            predicted.append(value)
+    if len(ys) < 2:
+        return float("nan")
+    # about zero rather than about the mean of y: the model has no intercept, because y is
+    # ln(x_i(t) / x_i(0)) and is zero at the start by construction, so the fit is not allowed to move the
+    # level and must not be scored as if it were (the uncentered R2 of a no-intercept regression)
+    total = sum(y * y for y in ys)
+    residual = sum((y - f) ** 2 for y, f in zip(ys, predicted, strict=True))
+    return 1 - residual / total if total > 0 else float("nan")
+
+
 def two_stage(target: str, monocultures: list, cocultures: list, organisms: list,
               max_condition: float = MAX_CONDITION) -> dict:
     """The organism's row from its monocultures first, then its partners from the co-cultures.
@@ -283,7 +323,22 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
     stages.append("monoculture")
 
     partners = [name for name in organisms if name != target]
-    rows, points, r2s = [], 0, []
+    # Stage 1 gives one (r, A_ii) per monoculture replicate, and stage 2 used to treat their median as
+    # exact, so a partner coefficient carried no uncertainty at all and an error in stage 1 reached it
+    # unannounced. Both are fixed by fitting stage 2 once per co-culture replicate and once per
+    # leave-one-out of the monoculture replicates: the spread over that set carries the co-culture
+    # replicate spread and stage 1's together, and the median over it is the estimate (2026-10-06).
+    variants = [(rate, own)]
+    if len(rates) >= 3:
+        for k in range(len(rates)):
+            kept_rates = [v for j, v in enumerate(rates) if j != k]
+            kept_selfs = [v for j, v in enumerate(selfs) if j != k]
+            variants.append((statistics.median(kept_rates), statistics.median(kept_selfs)))
+
+    per_replicate: list = []          # one {partner: value} per co-culture replicate, central variant
+    spread_values: dict = {}          # partner -> every value over replicates and stage-1 variants
+    stage_one_values: dict = {}       # partner -> values at a fixed replicate, varying stage 1 only
+    pooled_rows, points, present = [], 0, []
     for i, replicate in enumerate(cocultures):
         built = design(replicate, target, [target, *partners])
         here = built["partners"]
@@ -292,33 +347,65 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
                             built["reason"] or "too few usable time points"))
             continue
         own_index = here.index(target)
-        for row in built["rows"]:
-            # the monoculture's own numbers are known, so what is left to fit is the partners' effect
-            left = row["y"] - rate * row["time"] - own * row["integrals"][own_index]
-            rows.append({"y": left,
-                         "columns": [row["integrals"][here.index(name)] for name in partners
-                                     if name in here]})
+        mine = [name for name in partners if name in here]
+        for name in mine:
+            if name not in present:
+                present.append(name)
         points += len(built["rows"])
-    present = [name for name in partners
-               if any(name in design(rep, target, [target, *partners])["partners"] for rep in cocultures)]
+        central = {}
+        for which, (a_rate, a_self) in enumerate(variants):
+            rows = []
+            for row in built["rows"]:
+                # the monoculture's own numbers are known, so what is left to fit is the partners' effect
+                left = row["y"] - a_rate * row["time"] - a_self * row["integrals"][own_index]
+                rows.append({"y": left,
+                             "columns": [row["integrals"][here.index(name)] for name in mine]})
+            pooled_rows += rows if which == 0 else []
+            got = _least_squares(rows, len(mine))
+            if got["values"] is None or got["condition"] > max_condition:
+                continue
+            conditions.append(got["condition"])
+            for name, value in zip(mine, got["values"], strict=True):
+                spread_values.setdefault(name, []).append(value)
+                if which == 0:
+                    central[name] = value
+                else:
+                    stage_one_values.setdefault(name, []).append(value)
+        if central:
+            per_replicate.append({"replicate": replicate.name or str(i), **central})
+
     coefficients = {target: own}
-    if rows and present:
-        got = _least_squares(rows, len(present))
-        answer, condition = got["values"], got["condition"]
-        if answer is None or condition > max_condition:
+    fitted = {name: statistics.median(values) for name, values in spread_values.items() if values}
+    if fitted:
+        coefficients.update(fitted)
+        stages.append("co-culture")
+    elif pooled_rows and present:
+        # no single replicate identifies the partners on its own: fall back to all their rows together,
+        # which is what this stage did before. The arc then carries no spread, and the rest of the tool
+        # already reads a comparison with no spread as undetermined rather than as a measurement.
+        got = _least_squares(pooled_rows, len(present))
+        if got["values"] is None or got["condition"] > max_condition:
             skipped.append((f"{target} co-cultures",
                             "the partners' effects are not identified by these curves (condition "
-                            f"{condition:.3g})"))
+                            f"{got['condition']:.3g})"))
         else:
-            # this stage has one column per partner: the rate and the own limitation are already in
-            coefficients.update(dict(zip(present, answer, strict=True)))
-            r2s.append(got["r2"])
-            conditions.append(condition)
-            stages.append("co-culture")
+            coefficients.update(dict(zip(present, got["values"], strict=True)))
+            conditions.append(got["condition"])
+            stages.append("co-culture (replicates pooled)")
+
     return {"rate": rate, "coefficients": coefficients,
-            "r2": r2s[0] if r2s else float("nan"),
+            # how well the whole fit describes the organism's own log abundance change, which is what the
+            # help says this number is. It used to be stage 2's own R2 against stage 1's residual, a
+            # different and smaller question (2026-10-06).
+            "r2": _overall_r2(target, partners, cocultures, rate, own, coefficients),
             "condition": max(conditions) if conditions else float("inf"),
-            "points": points, "stages": stages, "skipped": skipped, "reason": ""}
+            "points": points, "stages": stages, "skipped": skipped, "reason": "",
+            # what the spread rests on: one value per co-culture replicate (central stage 1), every value
+            # over replicates and stage-1 variants, and the part of it that comes from stage 1 alone
+            "per_replicate": per_replicate,
+            "spread": {name: _spread(values) for name, values in spread_values.items()},
+            "stage_one_spread": {name: _spread(values) for name, values in stage_one_values.items()},
+            "replicates": len(per_replicate)}
 
 
 # ---- the Deriver -----------------------------------------------------------------------------------
@@ -392,9 +479,19 @@ class IntegratedDeriver:
 
     def derive(self, study: dict, exps: list):
         from .adapter import replicates_for_experiment
-        from .derive import BATCH, _exp_id, _identity, _members, cultivation, strain_identities
+        from .derive import (
+            BATCH,
+            SINGLE_REPLICATE,
+            TWO_REPLICATES,
+            _exp_id,
+            _identity,
+            _members,
+            cultivation,
+            strain_identities,
+        )
         from .growth import SPIKE_FACTOR
         from .selection import medium_of
+        from .stats import paired
 
         if self.client is None:
             raise ValueError("IntegratedDeriver needs a client: it reads each replicate's measured series")
@@ -450,6 +547,15 @@ class IntegratedDeriver:
                     skipped.append((f"{target} in {exp.get('name') or _exp_id(exp)}",
                                     got["reason"] or "its row could not be identified by this design"))
                     continue
+                # a fit that explains less of the organism's own log abundance change than predicting
+                # nothing does is not a measurement of anything. The line is zero, not a tuned
+                # threshold: it is where the model stops describing the curve (2026-10-06)
+                if got["r2"] is not None and got["r2"] == got["r2"] and got["r2"] < 0:
+                    skipped.append((f"{target} in {exp.get('name') or _exp_id(exp)}",
+                                    f"the fitted row explains less of {target}'s log abundance change "
+                                    f"than predicting nothing does (R2 {got['r2']:.3g} about zero), so "
+                                    "the integrated model does not describe these curves"))
+                    continue
                 own = got["coefficients"].get(target)
                 curve = reps[0].curve(target)
                 unit = curve.abundance_unit if curve is not None else ""
@@ -473,6 +579,25 @@ class IntegratedDeriver:
                     abundance = _mean_level(reps, partner)
                     effect = (coefficient * abundance / got["rate"]) if (abundance and got["rate"]) else 0.0
                     strength = math.log2(1 + effect) if effect > -1 else None
+                    # the spread the fit itself gives: one strength per co-culture replicate, so this arc
+                    # carries a mean, an sd, a standard error and a t-test against no effect, and the
+                    # absence threshold and the multiple-testing correction act on it as they do on the
+                    # specified comparison. Before this an integrated arc carried none of them and came
+                    # out "undetermined" under every threshold (2026-10-06).
+                    per_rep = _strengths(got, reps, partner, got["rate"])
+                    spread = (got.get("spread") or {}).get(partner) or {}
+                    stage_one = (got.get("stage_one_spread") or {}).get(partner) or {}
+                    n_reps = len(per_rep)
+                    if n_reps >= 2:
+                        strength = statistics.mean(per_rep)
+                        sd = statistics.stdev(per_rep)
+                        se = sd / math.sqrt(n_reps)
+                        test = paired(per_rep, [0.0] * n_reps)
+                    else:
+                        sd = se = None
+                        test = None
+                    quality = [SINGLE_REPLICATE] if n_reps < 2 else []
+                    cautions = [TWO_REPLICATES] if n_reps == 2 else []
                     src, tgt = _identity(identities, partner), _identity(identities, target)
                     records.append({
                         "source": src["id"], "source_name": partner,
@@ -485,15 +610,28 @@ class IntegratedDeriver:
                                    "inhibition" if coefficient < 0 else "neutral"),
                         "strength": None if strength is None else round(strength, 4),
                         "weight": None if strength is None else round(abs(strength), 4),
-                        "status": "present", "outcome": "quantified", "metric": METRIC,
+                        # the status is left to the output, where the absence threshold decides it from
+                        # the mean and the spread, as it does for every other derivation
+                        "status": None, "outcome": "quantified", "metric": METRIC,
                         "method": METHOD, "evidence": "biculture",
-                        "quality": [], "cautions": [], "notes": [], "cultivation_mode": cultivation(exp),
+                        "quality": quality, "cautions": cautions, "notes": [],
+                        "cultivation_mode": cultivation(exp),
                         "medium": medium, "condition": exp.get("name", ""),
                         "community": sorted(_identity(identities, m)["id"] for m in members),
                         "experiments": [_exp_id(exp)],
                         "n_with": len(reps), "n_without": len(monos),
-                        "sd": None, "se": None, "p_value": None, "q_value": None, "significance": None,
-                        "effect_over_sd": None,
+                        "sd": None if sd is None else round(sd, 4),
+                        "se": None if se is None else round(se, 4),
+                        "p_value": None if test is None else test["p"],
+                        "q_value": None, "significance": None,
+                        "effect_over_sd": (None if (sd is None or not sd or strength is None)
+                                           else round(abs(strength) / sd, 4)),
+                        # the coefficient's own spread, in the coefficient's units: over co-culture
+                        # replicates and over leave-one-out of the monoculture replicates together, with
+                        # the part that comes from the monoculture stage alone beside it
+                        "coefficient_sd": spread.get("sd"),
+                        "coefficient_n": spread.get("n"),
+                        "coefficient_sd_from_rate_stage": stage_one.get("sd"),
                         # what this derivation adds: the coefficient itself and the fit behind it
                         "coefficient": coefficient,
                         "coefficient_unit": (f"1/({rate_unit_of(here)[2:]} x {partner_unit or unit})"
@@ -509,6 +647,38 @@ class IntegratedDeriver:
                         "study_id": study_id, **study_meta,
                     })
         return records, skipped
+
+
+def _level_of(replicate, species: str):
+    """The partner's mean abundance over one replicate's measured span, or None."""
+    from .growth import mean_over
+
+    curve = replicate.curve(species)
+    if curve is None:
+        return None
+    return mean_over(curve, curve.times[0], curve.times[-1])
+
+
+def _strengths(got: dict, cocultures: list, partner: str, rate: float) -> list:
+    """The comparable log2 strength this fit gives per co-culture replicate.
+
+    One per replicate that identified the partner's effect, each from that replicate's own coefficient
+    and its own partner level, so the spread over them is a spread over replicates and the rest of the
+    tool can test it as it tests the specified comparison.
+    """
+    by_name = {replicate.name or str(i): replicate for i, replicate in enumerate(cocultures)}
+    out = []
+    for entry in got.get("per_replicate") or ():
+        if partner not in entry:
+            continue
+        replicate = by_name.get(entry["replicate"])
+        level = _level_of(replicate, partner) if replicate is not None else None
+        if not level or not rate:
+            continue
+        effect = entry[partner] * level / rate
+        if effect > -1:
+            out.append(math.log2(1 + effect))
+    return out
 
 
 def _mean_level(replicates: list, species: str):

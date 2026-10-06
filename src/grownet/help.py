@@ -321,6 +321,12 @@ EDGE_ATTRIBUTES = {
                    "it fitted, a per-capita effect in 1/(time x abundance)",
     "coefficient_unit": "the unit of that coefficient",
     "fit_r2": "how much of the organism's own log abundance change that fit explains",
+    "coefficient_sd": "the spread of the fitted coefficient: its standard deviation over the co-culture "
+                      "replicates and over leaving out each monoculture replicate the rate stage rests "
+                      "on, so it carries both stages' uncertainty",
+    "coefficient_n": "how many estimates of the coefficient that spread rests on",
+    "coefficient_sd_from_rate_stage": "the part of coefficient_sd that comes from the monoculture stage "
+                                      "alone, measured by leaving out each of its replicates in turn",
     "fit_condition": "how well the fit was determined: the condition number of the normal equations of "
                      "its design, every column scaled, so a large number means the columns were too "
                      "close to tell apart. It is the square of the design's own condition number, and "

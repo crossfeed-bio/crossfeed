@@ -336,6 +336,8 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             strength_bound=r.get("strength_bound"), bound_rule=r.get("bound_rule", ""),
             coefficient=r.get("coefficient"), coefficient_unit=r.get("coefficient_unit", ""),
             fit_r2=r.get("fit_r2"), fit_condition=r.get("fit_condition"),
+            coefficient_sd=r.get("coefficient_sd"), coefficient_n=r.get("coefficient_n"),
+            coefficient_sd_from_rate_stage=r.get("coefficient_sd_from_rate_stage"),
             merged_arcs=r.get("merged_arcs"), strength_range=tuple(r.get("strength_range", ())),
             supporting_pairs=r.get("supporting_pairs"), merged_pairs=tuple(r.get("merged_pairs", ())),
         ))

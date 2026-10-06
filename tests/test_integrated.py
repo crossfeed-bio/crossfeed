@@ -211,3 +211,84 @@ def test_the_rows_start_where_growth_starts_so_a_lag_does_not_eat_the_rate():
     assert after["rate"] == pytest.approx(0.5, rel=0.1)
     assert after["rate"] > whole["rate"]
     assert "where growth starts" in after["reason"]
+
+
+def _named(names, times, series, name, unit="Cells/mL"):
+    curves = tuple(GrowthCurve(species=n, times=list(times), values=[row[i] for row in series],
+                               time_unit="h", abundance_unit=unit) for i, n in enumerate(names))
+    return Replicate(curves=curves, name=name)
+
+
+def test_the_fit_carries_its_own_spread_over_replicates_and_over_the_rate_stage():
+    """Before 2026-10-06 an integrated arc carried no sd, no standard error and no p-value, so the
+    absence threshold returned "undetermined" for every one of them and nothing could be tested or
+    corrected for multiple testing. Stage 2 is now fitted once per co-culture replicate, and once per
+    leave-one-out of the monoculture replicates, so the spread over that set carries both stages.
+
+    Three monocultures and three co-cultures of the same noiseless system: every estimate is the same
+    number, so the spread is zero and the fit recovers the truth. What this pins is that the spread
+    exists, rests on the replicates, and names the part that comes from the rate stage.
+    """
+    r = [0.4, 0.3]
+    A = [[-4.0e-10, 2.0e-10], [0.0, -3.0e-10]]
+    mono_times, mono_series = _simulate([0.4], [[-4.0e-10]], [1.0e7])
+    monos = [_named(["A"], mono_times, mono_series, f"m{k}") for k in range(3)]
+    cos = []
+    for k, start in enumerate((1.0e7, 1.1e7, 0.9e7)):      # three replicates differing in inoculum
+        times, series = _simulate(r, A, [start, 5.0e8])
+        cos.append(_named(["A", "B"], times, series, f"c{k}"))
+    got = integrated.two_stage("A", monos, cos, ["A", "B"])
+
+    assert got["replicates"] == 3
+    assert [entry["replicate"] for entry in got["per_replicate"]] == ["c0", "c1", "c2"]
+    spread = got["spread"]["B"]
+    assert spread["n"] == 12                 # three replicates times four stage-1 variants
+    assert spread["median"] == pytest.approx(2.0e-10, rel=0.25)
+    assert spread["sd"] is not None and spread["sd"] >= 0
+    assert "B" in got["stage_one_spread"]
+
+    # and the R2 is of the whole fit against the measured log change, about zero, since y is zero at the
+    # start by construction and the model has no intercept
+    assert got["r2"] == pytest.approx(1.0, abs=0.05)
+
+
+def test_a_row_whose_fit_explains_less_than_nothing_is_refused_with_the_reason(monkeypatch):
+    """The R2 the arcs used to carry was stage 2's against stage 1's residual, which cannot say whether
+    the model describes the curve at all. With the honest R2 in hand, a row that explains less of the
+    organism's own log change than predicting nothing does is not a measurement, and the line is zero
+    rather than a tuned threshold. Live on the whole database this refuses six rows of twenty-nine
+    (2026-10-06).
+
+    The fit itself is exercised by the tests above; what this pins is the gate, so the fit is replaced by
+    one that reports a negative R2 and the deriver is asked what it does with it.
+    """
+    from test_growth_rates import _client, _co, _mono
+
+    from grownet.integrated import IntegratedDeriver
+    mono_a = _simulate([0.4], [[-4.0e-10]], [1.0e7])
+    mono_b = _simulate([0.3], [[-3.0e-10]], [5.0e8])
+    co = _simulate([0.4, 0.3], [[-4.0e-10, 2.0e-10], [0.0, -3.0e-10]], [1.0e7, 5.0e8])
+
+    def series(times, values, which=0):
+        return [(t, row[which], None) for t, row in zip(times, values, strict=True)]
+
+    client = _client({(1, "A"): series(*mono_a), (2, "B"): series(*mono_b),
+                      (3, "A"): series(*co, 0), (3, "B"): series(*co, 1)})
+    exps = [_mono("E1", "A", [(1, "r1")]), _mono("E2", "B", [(2, "r1")]),
+            _co("E3", "A", "B", [(3, "r1")])]
+
+    # with the real fit, A has an arc
+    records, _ = IntegratedDeriver(client=client).derive({"id": "S1"}, exps)
+    assert [r for r in records if r["target_name"] == "A"]
+
+    real = integrated.two_stage
+
+    def worse(target, monocultures, cocultures, organisms, max_condition=integrated.MAX_CONDITION):
+        got = real(target, monocultures, cocultures, organisms, max_condition)
+        return {**got, "r2": -0.5} if target == "A" else got
+
+    monkeypatch.setattr(integrated, "two_stage", worse)
+    records, skipped = IntegratedDeriver(client=client).derive({"id": "S1"}, exps)
+    assert not [r for r in records if r["target_name"] == "A"]
+    assert any("explains less of A's log abundance change" in reason for _, reason in skipped), skipped
+    assert any("R2 -0.5" in reason for _, reason in skipped)

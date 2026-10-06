@@ -310,6 +310,51 @@ and declaring a key constrains its type and not its presence. A declared key of 
 validation error, which is the one thing this tightens, and it belongs with a version move for that
 reason.
 
+### The integrated form after its own weaknesses were fixed (2026-10-06)
+
+Karoline: "can we fix any of the cons of the integrated form now? the release can wait, it's more
+important to ship something good". Three were structural rather than inherent, and are fixed:
+
+1. **It carried no uncertainty at all.** Stage 2 pooled every co-culture replicate into one regression
+   and treated stage 1's median rate and self-limitation as exact, so an arc had no sd, no standard
+   error and no p-value, and the absence threshold returned "undetermined" for every one of them.
+   Stage 2 is now fitted once per co-culture replicate and once per leave-one-out of the monoculture
+   replicates; the median over that set is the coefficient and the spread over it is its uncertainty.
+   An arc now carries the mean and sd of its per-replicate log2 strengths, a one-sample t-test against
+   no effect, and so a q-value and a status from the same machinery as the specified comparison. Live on
+   the whole database: 20 of 23 arcs tested, 2 at q < 0.05, 5 comparisons dropped by the threshold.
+2. **Stage 1's error reached the partner coefficient unannounced.** It is now inside that spread, and
+   reported separately as `coefficient_sd_from_rate_stage`. Measured, it **dominates**: on most arcs the
+   monoculture stage accounts for nearly all of the coefficient's uncertainty, which says where the next
+   improvement is (more monoculture replicates, not more co-culture ones).
+3. **The reported R2 answered a smaller question than its words.** It was stage 2's fit against stage
+   1's residual; it is now the whole fit against the measured `ln(x_i(t) / x_i(0))`, computed about zero
+   because the model has no intercept and y is zero at the start by construction. With that number in
+   hand, **a row whose fit explains less than predicting nothing does is refused**, which is a line at
+   zero rather than a tuned threshold. Live: 6 rows of 29 refused, and the survivors have a median R2 of
+   0.889.
+
+What this does to the comparison, measured the same day. Coverage: the default derivation gives 30 arcs,
+8 organism rows and 10 off-diagonal cells, every block with a positive equilibrium; the integrated form
+gives 23 arcs, 6 organism rows and 9 cells, with one block settling nowhere with every organism above
+zero. Out of sample against SMGDB00000005's control, with the interaction-free null beside each:
+
+| organism | default | integrated | no interactions at all |
+| --- | --- | --- | --- |
+| B. thetaiotaomicron | 1.60x | 0.34x | 1.58x to 1.77x |
+| B. hydrogenotrophica | washed out, wrong | 0.83x | 33x |
+| R. intestinalis | 3.26x | 3.22x | 2.97x to 3.42x |
+
+So the integrated form lands all three within a factor of 3 and is the only one that holds B.
+hydrogenotrophica, which is the organism the default washes out; its interactions earn a fortyfold
+improvement there and cost accuracy on B. thetaiotaomicron. The default's interactions move two
+predictions by 5 to 10 percent against discarding them and break the third.
+
+What is still true of the integrated form: fewer organisms reach a matrix, partly because it now refuses
+rows it cannot fit; a cell is a regression output rather than a division a reader can check on paper; and
+it has no intercept, so an error in x_i(0) shared by every replicate would still pass, while one that
+differs between replicates now enters the reported spread.
+
 ## Open decisions
 
 This is the single place where open method and format questions are collected, so Karoline and Craig
