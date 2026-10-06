@@ -905,5 +905,30 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    gLV mode therefore sets three settings, not four: rates on, drop-out off, and the growth property on
    the growth rate.
 
+36. **OPEN: fitting the coefficients from absolute rates, which also keeps obligate pairs** (#123, for
+   Karoline and Craig). Karoline, 2026-10-06: "Do we keep obligates despite the lack of a floor? If not,
+   how can we keep them?" Measured answer: the floor of item 34 is not the obstacle. An obligate pair is
+   kept today wherever the pair also has a quantified arc, and where it does not, what blocks it is that
+   an organism needs its own row (a rate and a self-limitation) to be in a matrix at all, which an
+   obligately dependent organism has from no monoculture. `A_ij = r_i (2^L - 1) / x_j_star` is
+   algebraically `(r_i_with - r_i_without) / x_j_star`, and that form is defined where the ratio is not:
+   an obligate pair has `r_i_without = 0`, so `A_ij = r_i_with / x_j_star`, a measurement rather than a
+   floor, and such an organism's row becomes `r_i = 0` with `A_ii` from its plateau in the co-culture.
+   It needs two more quantities on each arc (the target's absolute rate in each set, and its co-culture
+   plateau) and it also removes a mixed source: today L comes from one experiment while r_i is a median
+   over every study. Options and the recommendation are on #123; nothing is built until this is settled.
+37. **OPEN: the rest of the gLV parameterisation shortlist** (#124, for Karoline and Craig). Her question
+   of 2026-10-06, "anything else to do for a better parameterisation of gLV from the data in mGrowthDB?",
+   answered as seven separate decisions with what each was measured to change: the absence threshold means
+   "no effect" inside a matrix (13 comparisons dropped in the corpus run, 6 of 12 off-diagonal cells at 0);
+   a carrying capacity from another experiment where the monoculture never settled (SMGDB00000004's
+   B. hydrogenotrophica, certified eight times over in SMGDB00000007); fitting a row from the whole time
+   course through the integrated form (two-stage fit measured on SMGDB00000004); using the chemostat steady
+   states of SMGDB00000005, whose dilution rate 0.040 /h is recorded, as a standing validation or as
+   constraints; one matrix per medium as there is one per unit; how `x_j_star` is taken (a 500-fold
+   difference between a partner's window mean and its own plateau); and an optional unit bridge supplied by
+   the reader. Order proposed there: #123, then the chemostat validation, then the threshold, then the
+   integrated form.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.
