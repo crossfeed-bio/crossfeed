@@ -95,6 +95,8 @@ def _rate_flags(a) -> str:
     for flag, path in (("--rates", a.rates), ("--glv", a.glv), ("--to-r", a.to_r)):
         if path and not a.report_rates:
             return f"{flag} writes the growth rates of the run, so it needs --report-rates"
+    if a.steady_check and not a.report_rates:
+        return "--steady-check scores the growth rates and coefficients of the run, so it needs --report-rates"
     if a.glv and a.metric != "growth_rate":
         # a coefficient divides by a log2 ratio of growth rates, so the area or the maximum cannot make
         # one (#119); --glv-mode sets both at once
@@ -178,7 +180,7 @@ def _derive(a):
     if a.report_rates:
         organism_rates, skipped = _rates_of(a, client, [a.study], net, skipped)
     result = {"study": a.study, "entries": [], "resolved": [], "unresolved": [], "studies": [a.study],
-              "rates": organism_rates,
+              "rates": organism_rates, "client": client if a.live else None,
               "skipped": skipped, "errors": errors, "network": net}
     return _emit(a, net, skipped, extra, a.study, result)
 
@@ -208,9 +210,11 @@ def _derive_species(a):
                 "merge_arcs": a.merge_arcs, "min_studies": a.min_studies, "merge_genera": a.merge_genera,
                 "report_rates": a.report_rates, "no_growth_alpha": a.no_growth_alpha,
                 "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p}
+    client = MGrowthDBClient()
     try:
-        result = run_query(MGrowthDBClient(), a.species or [], settings, all_studies=a.all_studies,
+        result = run_query(client, a.species or [], settings, all_studies=a.all_studies,
                            published=not a.no_published)
+        result["client"] = client
     except MGrowthDBError as e:
         print(f"live fetch failed: {e}", file=sys.stderr)
         return 1
@@ -286,10 +290,33 @@ def _emit(a, net, skipped, extra, label, result):
         with open(a.rates, "w", encoding="utf-8") as f:
             f.write(rates_csv(organism_rates, net))
         print(f"wrote the growth rates to {a.rates}: {len(organism_rates)} organism(s)", file=sys.stderr)
+    checked = []
+    if a.steady_check and organism_rates:
+        # a chemostat steady state is an independent test of the parameters: it satisfies A x = -(r - D)
+        # and was never used to fit them (#125)
+        from . import steady
+        from .matrix import CannotConvert, coefficients
+        try:
+            got = coefficients(net, organism_rates)
+        except CannotConvert as e:
+            print(f"no steady-state check: {e}", file=sys.stderr)
+        else:
+            found = steady.find(result["client"], net) if result.get("client") is not None else []
+            checked = steady.check(got, organism_rates, found)
+            scored = sum(1 for one in checked if one["used"])
+            print(f"steady-state check: {scored} chemostat(s) scored, {len(checked) - scored} not "
+                  "(the report says why each)", file=sys.stderr)
+            result["steady"] = checked
+            if a.report:
+                from .report import report_text
+                with open(a.report, "w", encoding="utf-8") as f:
+                    f.write(report_text(result))
     if a.glv:
+        from . import steady as steady_module
         from .matrix import glv_package
+        extra_files = {"steady_state_check.txt": steady_module.as_text(checked)} if a.steady_check else None
         with open(a.glv, "wb") as f:
-            f.write(glv_package(net, organism_rates))
+            f.write(glv_package(net, organism_rates, extra_files))
         print(f"wrote the gLV parameters to {a.glv}: the interaction matrix, the growth rates and a README",
               file=sys.stderr)
 
@@ -537,8 +564,14 @@ def build_parser() -> argparse.ArgumentParser:
                          help="write the growth rates to FILE as CSV (needs --report-rates)")
     outputs.add_argument("--glv", metavar="FILE",
                          help="write the parameters of a generalized Lotka-Volterra simulation to FILE, a zip "
-                              "of the interaction matrix (-1 on the diagonal), the matching growth rates and a "
-                              "README (needs --report-rates)")
+                              "of one matrix of fitted coefficients per abundance unit, the matching growth "
+                              "rates and a README (needs --report-rates and --metric growth_rate, which "
+                              "--glv-mode sets)")
+    outputs.add_argument("--steady-check", action="store_true",
+                         help="score the gLV parameters against the chemostat steady states mGrowthDB "
+                              "holds for these organisms: the report gets the comparison and the zip a "
+                              "steady_state_check.txt. It reads curves the search did not need, so it is "
+                              "off unless asked for (needs --report-rates)")
     outputs.add_argument("--to-r", action="store_true",
                          help="also send the gLV parameters into an R session waiting for them (the page's "
                               "Send to R; in R: library(grownet); grownet_listen()). Needs --report-rates")

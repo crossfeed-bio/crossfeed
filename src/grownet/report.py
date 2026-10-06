@@ -171,6 +171,11 @@ def report_text(result: dict) -> str:
             lines.append("  no growth rate (a gLV simulation needs one from elsewhere): " + ", ".join(missing))
         lines.append("")
 
+    if result.get("steady") is not None:
+        from .steady import as_text
+        lines += as_text(result["steady"]).splitlines()
+        lines.append("")
+
     skips = condensed(result["skipped"])
     lines.append(f"pairs the data did not support ({len(skips)}):" if skips
                  else "pairs the data did not support: none")

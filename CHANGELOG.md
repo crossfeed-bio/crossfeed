@@ -29,6 +29,19 @@ content.
   corpus simulates in miaSim with no scaling and settles exactly at the solution of `A x = -r`.
 
 ### Added
+- **A gLV package can be scored against mGrowthDB's chemostat steady states** (#125, from Karoline's
+  suggestion of 2026-10-06 and her go-ahead on the shortlist of #124). A continuous culture satisfies
+  `A x = -(r - D)` at steady state with the dilution rate it records, and those numbers were never used to
+  fit the parameters, so they test them. **Check against chemostat steady states** in Advanced settings,
+  or `--steady-check`, puts predicted against observed per organism into the report and into the package
+  as `steady_state_check.txt`, and names every chemostat it could not use with the reason: no dilution
+  rate recorded, a perturbed run, another abundance unit, another medium, or no organism in common. It
+  only reports: no coefficient or rate changes because of it. Off by default, since it reads the curves of
+  chemostats a search does not otherwise need. Measured live on SMGDB00000007's package: against
+  SMGDB00000005's `A8 control`, B. thetaiotaomicron lands at 1.6 times the observed steady state and
+  R. intestinalis at 3.2, while B. hydrogenotrophica is fitted to wash out where the chemostat holds it;
+  against SMGDB00000011's six-member run, 10 and 30 times, with the three organisms the package does not
+  hold named as not scored.
 - **The quantities a fitted gLV coefficient is made of, measured and reported** (#118, from Karoline's
   decision on #116). Every growth rate now travels with the estimator that produced it, the lag the
   Baranyi fit estimated, and the organism's monoculture carrying capacity: the plateau of its curves,

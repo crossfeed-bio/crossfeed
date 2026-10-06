@@ -23,7 +23,7 @@ import urllib.parse
 import webbrowser
 from collections import Counter
 
-from . import __version__, brand, interaction, matrix, rates, rbridge
+from . import __version__, brand, interaction, matrix, rates, rbridge, steady
 from . import help as help_page
 from . import published as daily
 from . import selection as selecting
@@ -71,6 +71,8 @@ DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window":
             # off by default: a rate costs a fit per monoculture curve, and most searches do not need
             # one. The gLV mode button turns it on (Karoline, 2026-10-04)
             "report_rates": False,
+            # off by default too: the check reads the curves of chemostats the search never needed (#125)
+            "steady_check": False,
             "include_dropout": True,
             "include_non_batch": False, "conditions": "", "exclude_studies": "", "only_entered": True,
             "merge_arcs": False, "min_studies": 1, "merge_genera": False,
@@ -147,6 +149,7 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
     checked = " checked" if s["only_entered"] else ""
     low = " checked" if s["include_low_quality"] else ""
     rates_on = " checked" if s["report_rates"] else ""
+    steady_on = " checked" if s.get("steady_check") else ""
     dropout = " checked" if s["include_dropout"] else ""
     absent = " checked" if s["include_absent"] else ""
     non_batch = " checked" if s["include_non_batch"] else ""
@@ -175,6 +178,11 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   <span class="muted">each organism's maximum specific growth rate in monoculture, as its own download and
   as the rates a gLV simulation takes; off by default, since a rate costs a fit per curve. gLV mode turns
   it on</span></div>
+<div class="row"><label><input type="checkbox" name="steady_check" value="1"{steady_on}>
+  Check against chemostat steady states</label>
+  <span class="muted">score the gLV parameters against the steady states mGrowthDB holds for these
+  organisms in continuous culture: a chemostat satisfies A x = -(r - D) there and was never used to fit
+  them. Needs Report growth rates, and reads curves the search did not need</span></div>
 <div class="row"><label><input type="checkbox" name="include_dropout" value="1"{dropout}>
   Include drop-out communities</label>
   <span class="muted">arcs from a community compared with the same community without one member, labeled
@@ -738,6 +746,7 @@ def parse_settings(form: dict) -> dict:
     settings["exclude_studies"] = form.get("exclude_studies", [""])[0].strip()
     settings["only_entered"] = bool(form.get("only_entered"))
     settings["report_rates"] = bool(form.get("report_rates"))
+    settings["steady_check"] = bool(form.get("steady_check"))
     return settings
 
 
@@ -902,6 +911,18 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         skipped += rate_skips
         net.meta["growth_rates"] = matrix.rate_meta(
             net, organism_rates, rates.method_name(s["rate_method"], s["rate_window"]))
+    # the steady-state check (#125): a chemostat satisfies A x = -(r - D) there, and those numbers were
+    # never used to fit the parameters, so they test them. Off unless asked for: it reads the curves of
+    # chemostats this search did not need.
+    checked = None
+    if s.get("steady_check") and organism_rates:
+        say(len(studies), len(studies), "Reading the chemostat steady states")
+        try:
+            got = matrix.coefficients(net, organism_rates)
+        except matrix.CannotConvert as e:
+            errors.append(f"no steady-state check: {e}")
+        else:
+            checked = steady.check(got, organism_rates, steady.find(client, net, progress=say))
     say(len(studies), len(studies), "Preparing the result")
     return {"entries": names, "settings": dict(s), "resolved": resolved["resolved"],
             "reasons": resolved["reasons"], "suggestions": resolved["suggestions"], "excluded": left_out,
@@ -909,7 +930,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
             "partners_only": partners_only,
             "unresolved": resolved["unresolved"], "taxon_ids": resolved["taxon_ids"], "studies": studies,
             "network": net, "absent": records_to_network(absent_records) if absent_records else None,
-            "rates": organism_rates,
+            "rates": organism_rates, "steady": checked,
             "skipped": skipped, "errors": errors, "hidden": extra["hidden"], "absence": extra["absence"]}
 
 
@@ -1067,8 +1088,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _package(self, result, organism_rates) -> None:
         """The zip, or the page saying which setting to change: a package of coefficients needs the
         comparison to be on a growth rate (#119)."""
+        extra = ({"steady_state_check.txt": steady.as_text(result["steady"])}
+                 if result.get("steady") is not None else None)
         try:
-            zipped = matrix.glv_package(result["network"], organism_rates)
+            zipped = matrix.glv_package(result["network"], organism_rates, extra)
         except matrix.CannotConvert as e:
             self._send(render_result(self.token, result, message=f"No gLV package: {e}"))
             return

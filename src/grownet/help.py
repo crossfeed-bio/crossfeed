@@ -175,6 +175,13 @@ SETTINGS = {
     "only_entered": ("Only interactions between the species entered", "--all-partners",
                      "On by default: an edge is kept when both ends are species you typed. Untick it, or give "
                      "--all-partners, to see every partner of your species in the studies found."),
+    "steady_check": ("Check against chemostat steady states", "--steady-check",
+                     "Off by default. With it on, and with Report growth rates, the gLV parameters are "
+                     "scored against the steady states mGrowthDB holds for these organisms in continuous "
+                     "culture: a chemostat satisfies A x = -(r - D) at steady state, and those numbers "
+                     "were never used to fit the parameters, so they test them. The comparison is in the "
+                     "report and in the package, with every chemostat it could not use and why. It reads "
+                     "the curves of those chemostats, which a search does not otherwise need."),
     "report_rates": ("Report growth rates", "--report-rates",
                      "Off by default, since a rate costs a fit per curve. With it on, every organism in the "
                      "network also gets its maximum specific growth rate in monoculture, the median over the "
@@ -185,12 +192,16 @@ SETTINGS = {
 
 # command line options of `derive` that are not advanced settings -> what they do
 CLI_ONLY = {
-    "--glv-mode": "the page's gLV mode button, from the command line: --report-rates and --no-dropout "
-                  "together, which is what a simulation needs",
+    "--glv-mode": "the page's gLV mode button, from the command line: --report-rates, --no-dropout and "
+                  "--metric growth_rate together, which is what a fitted coefficient needs",
     "--rates": "write the growth rates to a CSV file, the page's Download the growth rates (needs "
                "--report-rates)",
     "--glv": "write the parameters of a generalized Lotka-Volterra simulation to a zip file, the page's "
              "gLV parameters, Download (needs --report-rates)",
+    "--steady-check": "score those parameters against the chemostat steady states mGrowthDB holds for "
+                      "these organisms, since a continuous culture satisfies A x = -(r - D) at steady "
+                      "state and was never used to fit them: the report gets the comparison and the zip "
+                      "a steady_state_check.txt (needs --report-rates and --live)",
     "--to-r": "send those parameters into an R session waiting for them, the page's gLV parameters, Send "
               "to R (needs --report-rates; the companion package's grownet_listen() is what waits there)",
     "--r-port": "the port that R session listens on (default 8793, what grownet_listen() uses)",
@@ -686,6 +697,15 @@ grow without bound and come back as NA, which now says something about the measu
 fitted as facilitating each other more than each limits itself, rather than about a convention; the
 equilibrium of a fit is the solution of A x = -r, and a negative entry there means the fit has no positive
 steady state.</p>
+<p><strong>Scoring the package against a chemostat.</strong> A package is built from batch co-cultures,
+and mGrowthDB also holds continuous cultures, where a community sits at a steady state that satisfies
+A x = -(r - D) with D the dilution rate. Those numbers were never used to fit the parameters, so they test
+them. <strong>Check against chemostat steady states</strong> in Advanced settings (or
+<code>--steady-check</code>) puts the comparison in the report and a <code>steady_state_check.txt</code>
+in the package: predicted against observed, per organism, with every chemostat it could not use and why
+(a run with no dilution rate recorded, a perturbed run, another abundance unit, another medium, or no
+organism in common). It is off by default, because it reads the curves of chemostats a search does not
+otherwise need. Two runs in mGrowthDB qualify today, in SMGDB00000005 and SMGDB00000011.</p>
 <p>So a package needs the comparison to be on the <strong>growth rate</strong>: the area under the curve
 and the maximum cannot produce the ratio L. gLV mode sets that, and without it the page says which
 setting to change rather than converting the wrong quantity. Every cell of a row carries the factor

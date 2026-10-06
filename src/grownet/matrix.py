@@ -552,7 +552,7 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                 if entry["floor"]:
                     floors.append((*label_pair, entry["log2"]))
             table.append(row)
-        matrices.append({"abundance_unit": abundance_unit,
+        matrices.append({"abundance_unit": abundance_unit, "media": media(net),
                          "unit": coefficient_unit(rate_unit, abundance_unit),
                          "rate_unit": rate_unit, "organisms": names, "ids": keep, "matrix": table,
                          "cells": filled,
@@ -774,9 +774,13 @@ def glv_payload(net: InteractionNetwork, rates: dict) -> dict:
     }
 
 
-def glv_package(net: InteractionNetwork, rates: dict) -> bytes:
+def glv_package(net: InteractionNetwork, rates: dict, extra: dict = None) -> bytes:
     """The zip a simulator is handed: one matrix of coefficients per abundance unit, the rates and the
-    README (#119). Raises `CannotConvert` when the arcs do not compare growth rates."""
+    README (#119). Raises `CannotConvert` when the arcs do not compare growth rates.
+
+    `extra` is {file name: text} the caller computed, which is how the steady-state check of #125 travels
+    in the package without this module having to read a chemostat.
+    """
     got = coefficients(net, rates)
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -784,4 +788,6 @@ def glv_package(net: InteractionNetwork, rates: dict) -> bytes:
             archive.writestr(block["file"], coefficient_csv(block))
         archive.writestr("growth_rates.csv", rates_csv(rates, net))
         archive.writestr("README.txt", readme_from(got, net, rates))
+        for name, text in (extra or {}).items():
+            archive.writestr(name, text)
     return buffer.getvalue()

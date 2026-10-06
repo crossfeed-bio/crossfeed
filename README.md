@@ -413,6 +413,13 @@ environment, so a package built from several media says so and points at the sec
 per-capita effect in 1/(time x abundance), so nothing in the package is a convention and nothing needs
 scaling; abundances are never converted between units, which is why each unit has its own matrix.
 
+**Scoring the package against a chemostat.** `--steady-check` (with `--report-rates --live`) scores the
+gLV parameters against the steady states mGrowthDB holds for these organisms in continuous culture: a
+chemostat satisfies `A x = -(r - D)` at steady state with D the dilution rate it records, and those
+numbers were never used to fit the parameters. The comparison goes into the report and into the package as
+`steady_state_check.txt`, predicted against observed per organism, with every chemostat it could not use
+and why. It is off by default, since it reads curves a search does not otherwise need.
+
 **Drop-out designs.** A community of three or more members, together with experiments holding the same
 community without one member under the same conditions, gives an arc from each removed member to each
 remaining one. The arc is labeled `evidence: dropout` because the removed member may act through a third
