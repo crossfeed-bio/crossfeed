@@ -31,6 +31,27 @@ ABOUT = (f"{NAME} was built by Karoline Faust (KU Leuven) and Craig Heilmann (Sy
 # user of the page wants, so each line says what they can now do rather than what moved in the code. A test
 # requires the newest entry to be this version, so a release cannot forget it.
 RELEASES = (
+    ("0.3.0", "2026-10-06", (
+        "The gLV parameters are fitted coefficients, not effect sizes: the diagonal is -r_i / K_i from "
+        "each organism's own plateau, and an off-diagonal cell is (r_with - r_without) / x_j, over the "
+        "partner's abundance. Every cell is a per-capita effect in 1/(time x abundance), so nothing in "
+        "the package is a convention and nothing needs scaling.",
+        "One matrix per abundance unit, since a conversion between cells, colony-forming units and grams "
+        "would have to be invented. The page says before the download when a package will hold more "
+        "than one.",
+        "A pair where one side did not grow is a measurement too, not a stated extreme: its coefficient "
+        "comes from the rate that was measured and the one that was 0, and in the plain adjacency matrix "
+        "such a cell now holds a measured bound from the no-growth rule instead of +/-10.",
+        "A growth rate now travels with the lag the Baranyi fit found, the estimator that produced it "
+        "and the organism's carrying capacity, which are the three numbers a coefficient is made of.",
+        "A package can be scored against the chemostat steady states mGrowthDB holds for the same "
+        "organisms, which were never used to fit it: predicted against observed, per organism.",
+        "A second derivation, in Advanced settings: instead of comparing replicate sets it fits each "
+        "organism's whole row from the time course, which needs no growth property and gives the "
+        "coefficients directly.",
+        "Send to R and the R package carry the same numbers as the download, and the package reads the "
+        "parameters of 0.2.0 as well, telling the two apart.",
+    )),
     ("0.2.0", "2026-10-04", (
         "Export a network as an adjacency matrix, and as the parameters a generalized Lotka-Volterra "
         "simulation takes: the interaction matrix, the growth rates beside it and a README of what the "

@@ -6,6 +6,8 @@ content.
 
 ## [Unreleased]
 
+## [0.3.0] (2026-10-06)
+
 ### Changed
 - **Send to R and `/glv.json` carry the same numbers as the zip** (#120): the payload is
   `grownet.glv/v1`, with `matrices`, one per abundance unit, holding fitted coefficients, the rates with
