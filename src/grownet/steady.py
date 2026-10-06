@@ -88,6 +88,9 @@ def same_medium(a: str, b: str) -> bool:
 def _perturbed(exp: dict):
     """True, False, or None when the records say neither way."""
     text = " ".join(str(exp.get(key) or "") for key in ("name", "description"))
+    # mGrowthDB serves no perturbations field today (its experiment records hold name, description,
+    # cultivationMode, compartments, communityStrains and bioreplicates), so the free-text rules below are
+    # the whole rule. This reads one if the API ever adds it.
     if exp.get("perturbations"):
         return True
     if _NOT_PERTURBED.search(text):

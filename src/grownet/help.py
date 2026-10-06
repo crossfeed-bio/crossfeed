@@ -802,9 +802,12 @@ otherwise need. The check's own output names every continuous culture it found a
 each, so which ones qualify is read from the run rather than from this page.</p>
 <p>So a package needs the comparison to be on the <strong>growth rate</strong>: the area under the curve
 and the maximum cannot produce the ratio L. gLV mode sets that, and without it the page says which
-setting to change rather than converting the wrong quantity. Every cell of a row carries the factor
-r_i, so the row divides by it: the rate estimator sets how fast a simulation moves and nothing about
-where it settles, which is the solution of A x = -r.</p>
+setting to change rather than converting the wrong quantity. The rate estimator sets where a package
+settles as well as how fast a simulation runs: the diagonal's r_i is a median over replicates and
+studies while each off-diagonal uses its own comparison's two rates, x_j_star is the mean over the
+window that estimator fitted in, and the rate guards reject different curves. The equilibrium of a
+package, the solution of A x = -r, therefore belongs to the estimator that produced it, and the
+package names which one that was.</p>
 
 <p><strong>In R, with the companion package.</strong> The same control sends the parameters straight into
 a running R session, which is what the R package in this project is for. It assumes no simulator: it

@@ -46,6 +46,12 @@ def check(tag: str, root: Path = ROOT) -> tuple:
         if "unreleased" in section.group(1).lower():
             problems.append(f"CHANGELOG.md still marks {version} unreleased")
         notes = section.group(2).strip()
+        # 0.3.0 was prepared with 0.2.0's release date still in CITATION.cff, which nothing read: the
+        # citation widget and every generated BibTeX entry take the date from there (found 2026-10-06).
+        heading = re.search(r"\(([0-9]{4}-[0-9]{2}-[0-9]{2})\)", section.group(1))
+        if dated and heading and dated.group(1) != heading.group(1):
+            problems.append(f"CITATION.cff dates the release {dated.group(1)}, CHANGELOG.md says "
+                            f"{heading.group(1)}")
     return problems, notes
 
 

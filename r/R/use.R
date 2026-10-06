@@ -5,13 +5,17 @@
 #' The interaction matrix
 #'
 #' `A[i, j]` is the effect of j on i: rows are affected, columns are the actor, which is the order
-#' `dx_i/dt = x_i (r_i + sum_j A[i][j] x_j)` reads in. The diagonal is -1 by convention, for
-#' self-limitation.
+#' `dx_i/dt = x_i (r_i + sum_j A[i][j] x_j)` reads in.
 #'
-#' A cell is the log2 mean of a growth comparison, an effect size, not a fitted gLV coefficient. Some
-#' cells are not measurements at all: an obligate interaction (the affected organism grows only with the
-#' actor) carries +10 and an abolished one -10, because neither has a ratio, one side having not grown.
-#' Those cells are named in a warning unless `placeholders` says what to do with them.
+#' Every cell is a fitted per-capita coefficient, in 1 over (time times abundance): the diagonal is
+#' `-r_i / K_i` with K the organism's own plateau, and an off-diagonal cell is
+#' `(r_with - r_without) / x_j`, the difference between the affected organism's growth rate with the
+#' actor and without it over the actor's abundance across that window. Nothing in it is a convention,
+#' and nothing needs scaling to match the rest.
+#'
+#' Abundances are never converted between units, so organisms counted in different units are in
+#' different matrices and `unit` says which one to take. A cell whose comparison had one side that did
+#' not grow is still a measurement, one of its two rates being 0, and `print(x)` names those cells.
 #'
 #' @param x gLV parameters from [grownet_listen()] or [grownet_glv()].
 #' @param placeholders What to do with the cells that hold a stated extreme: `"keep"` leaves them as
@@ -194,11 +198,19 @@ as_miasim <- function(x, unit = NULL, x0 = NULL, missing_rate = NULL,
 
 #' Scale the interaction strengths for a simulation
 #'
-#' The cells are effect sizes, log2 means of a growth comparison, and they are often larger than the -1
-#' on the diagonal: a partner whose effect outweighs an organism's own self-limitation. A gLV simulation
-#' run on such a matrix unchanged can grow without bound, which `deSolve` returns as `NA`. Scaling every
-#' off-diagonal cell by one factor keeps their signs and their relative sizes and brings the strongest
-#' one to `max_effect`.
+#' Scaling every off-diagonal cell by one factor keeps their signs and their relative sizes and brings
+#' the strongest one to `max_effect`.
+#'
+#' **Fitted parameters do not need this.** Their cells are per-capita coefficients in 1 over (time times
+#' abundance), the same units as the diagonal they sit beside, so nothing about them asks for scaling,
+#' and this function warns when it is called on them. A fit whose cells outweigh the organisms' own
+#' limitations has no bounded state, and scaling hides that rather than settling it: the equilibrium of
+#' a fit is the solution of `A x = -r`, and a negative entry there means there is none with every
+#' organism above zero.
+#'
+#' It stays for the parameters of grownet 0.2.0 or earlier, whose cells are log2 effect sizes and are
+#' often larger than the -1 on their diagonal, where a simulation run on them unchanged can grow without
+#' bound and `deSolve` returns `NA`.
 #'
 #' The factor is a free parameter, not a calibration: nothing in the growth data fixes the scale, so
 #' whoever simulates chooses it, and that choice, rather than the measurements, sets where the simulation

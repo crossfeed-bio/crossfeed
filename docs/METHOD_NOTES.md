@@ -903,6 +903,16 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    proportional to r_i, that solution does not depend on the growth rates at all at D = 0, so the rate
    estimator sets a simulation's timescale and its lag rather than where it settles (on #116). What the
    estimator does change is how many arcs survive: see the open decision below.
+   AMENDED 2026-10-06: **the invariance above is wrong and has been removed from every shipped text.**
+   The argument needs a change of estimator to multiply row i by one scalar, and it does not. The
+   diagonal's `r_i` is a median over replicates and studies while each off-diagonal uses its own
+   comparison's two rates; `x_j_star` is the mean over the window that estimator fitted in, so it moves
+   with the estimator while the diagonal does not; the carrying capacity moves too, because a curve whose
+   rate the estimator cannot fit contributes no plateau; and the rate guards reject different curves, so
+   the organism roster changes. Measured again on the two studies named above, switching only the rate
+   method: cells move by orders of magnitude, one study's matrix loses an organism, and the equilibrium
+   changes sign structure. This was never true of the shipped code, 0.2.0 included: it is not a
+   consequence of item 36's difference form, which rescales exactly as the ratio form does.
 
 35. **Which rate estimator gLV mode should use** (raised by the agent on 2026-10-06 while building
    #119, for Karoline and Craig on #116). #119 set gLV mode to the Baranyi fit, on the argument that a
@@ -929,6 +939,11 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    whichever estimator produced the rate, and `growth_rates.csv` names both (`method` and `lag_method`).
    gLV mode therefore sets three settings, not four: rates on, drop-out off, and the growth property on
    the growth rate.
+   AMENDED 2026-10-06: **the first bullet above is false** (see item 34's amendment): the equilibrium
+   does depend on the estimator. Karoline's conclusion is unaffected and is now better supported, since
+   the second bullet, that Baranyi costs arcs and organisms, was reproduced and the estimator turns out to
+   decide where a package settles as well. This is recorded here so the decision is not read as resting on
+   a premise that does not hold, and it goes back to Karoline with the corrected ground.
 
 36. **Fitting the coefficients from absolute rates, which also keeps obligate pairs** (#123, Karoline). Karoline, 2026-10-06: "Do we keep obligates despite the lack of a floor? If not,
    how can we keep them?" Measured answer: the floor of item 34 is not the obstacle. An obligate pair is

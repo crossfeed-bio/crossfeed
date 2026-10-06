@@ -206,13 +206,20 @@ def test_a_network_derived_from_areas_cannot_be_converted():
 def test_the_readme_states_the_estimators_and_what_the_choice_moves():
     """#119: "The README states the rate method beside the growth rates". Karoline, 2026-10-06, then
     settled which: the rate is the reader's own estimator, the lag is always Baranyi's, and the README
-    says what choosing another rate estimator would move, which the live check on #116 measured: the
-    timescale, not the equilibrium."""
+    says what choosing another rate estimator would move.
+
+    What it moves was corrected on 2026-10-06 (register item 34's amendment). This test asserted the
+    earlier claim, that the estimator sets the timescale and not the equilibrium. That claim is wrong:
+    the diagonal's r_i is a median over studies while each off-diagonal uses its own comparison's rates,
+    x_j_star is the window the estimator fitted in, and the guards reject different curves, so the
+    equilibrium belongs to the estimator. The requirement is unchanged and the sentence that meets it is
+    not."""
     got, _ = _one(_net(PAIR), RATES)
     text = matrix.readme_from(got, _net(PAIR), RATES)
     assert "Growth rates: growth_rate:baranyi" in text
     assert "Lag: baranyi" in text
-    assert "sets how fast a simulation moves and nothing about where it settles" in text
+    assert "sets where this matrix settles as well as how fast a simulation" in text
+    assert "nothing about where it settles" not in text
 
     easylinear = {k: {**v, "method": "growth_rate:easylinear:5"} for k, v in RATES.items()}
     other = matrix.readme_from(matrix.coefficients(_net(PAIR), easylinear), _net(PAIR), easylinear)

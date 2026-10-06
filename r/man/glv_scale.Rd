@@ -24,7 +24,8 @@ strongest one to \code{max_effect}.
 abundance), the same units as the diagonal they sit beside, so nothing about them asks for scaling, and
 this function warns when it is called on them. A fit whose cells outweigh the organisms' own limitations
 has no bounded state, and scaling hides that rather than settling it: the equilibrium of a fit is the
-solution of \code{A x = -r}, and a negative entry there means there is none above zero.
+solution of \code{A x = -r}, and a negative entry there means there is none with every organism
+above zero.
 
 It stays for the parameters of grownet 0.2.0 or earlier, whose cells are log2 effect sizes and are often
 larger than the -1 on their diagonal, where a simulation run on them unchanged can grow without bound

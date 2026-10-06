@@ -128,9 +128,12 @@ Rules for this file:
   capacity, so those exclusions live in `capacity_left_out` rather than in the derivation's `skipped`.
   Each biculture arc and each `Edge` carries `partner_abundance` with its unit and replicate count.
   **Measured against data, on #116** (Karoline's suggestion: study 7 for the parameters, study 5's `A8
-  control` for the steady state): the predicted equilibrium does not depend on the growth rates at all,
-  because every cell of row i carries the factor r_i and the row divides by it, so the estimator choice
-  moves a simulation's timescale and its lag, not where it settles. Which growth feature the ratio L
+  control` for the steady state): **the predicted equilibrium depends on the estimator** (corrected
+  2026-10-06, register item 34). The row-scaling argument needs a change of estimator to multiply row i by
+  one scalar; it does not, because the diagonal's r_i is a median over studies while each off-diagonal
+  uses its own comparison's rates, because x_j_star is the window that estimator fitted in, because a
+  curve whose rate will not fit contributes no plateau, and because the guards reject different curves.
+  Which growth feature the ratio L
   compares does move it: the growth rate and `auc` each land two of the three organisms within a factor 2
   to 4, and `max` is the worst of the four.
 - 2026-10-04 (Karoline, taking her agent's recommendation after Craig's question on #107): the id is

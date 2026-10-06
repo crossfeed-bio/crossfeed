@@ -59,7 +59,8 @@ gLV parameters from grownet 0.3.0, derived 2026-10-06T12:00:00+02:00 from mGrowt
    * 1 pair(s) left at 0 because their arcs disagree in sign: Roseburia intestinalis L1-82 on ...
    * 1 cell(s) outweigh the organism's own limitation on the diagonal. A fit like that can
        have no bounded state: the equilibrium is the solution of A x = -r, and a negative
-       entry there means there is none above zero. Scaling would hide it rather than settle it.
+       entry there means there is none with every organism above zero, although a simulation can settle
+       with fewer of them. Scaling would hide that rather than settle it.
 ```
 
 Every cell is in 1 over (time times abundance), so the numbers are per-capita coefficients rather than

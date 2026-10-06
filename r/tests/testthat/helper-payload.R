@@ -30,7 +30,7 @@ example_payload <- function() {
             units = "one matrix per abundance unit: abundances are never converted between units",
             abundance_units = list("Cells/mL"),
             unbounded = paste("the equilibrium of a fit is the solution of A x = -r, and a negative",
-                              "entry there means there is no positive steady state"),
+                              "entry there means there is no steady state with every organism above zero"),
             censored = "one of the two rates behind these cells is 0, measured",
             censored_cells = list(list(affected = "A", actor = "B")),
             sign_conflicts = list(list(affected = "C", actor = "A")),

@@ -696,9 +696,12 @@ def _rate_method_lines(got: dict) -> list:
     methods = got["rate_methods"]
     named = ", ".join(methods) if methods else "not recorded"
     lines = [f"  Growth rates: {named}, median over replicates and studies, batch monocultures only.",
-             "      Every cell of a row carries the factor r_i, so the row divides by it: the estimator",
-             "      sets how fast a simulation moves and nothing about where it settles, which is the",
-             "      solution of A x = -r (measured on #116). The Growth rate method setting chooses it.",
+             "      The estimator sets where this matrix settles as well as how fast a simulation",
+             "      runs. The diagonal's r_i is a median over replicates and studies while each",
+             "      off-diagonal uses its own comparison's two rates; x_j_star is the mean over the",
+             "      window that estimator fitted in; and the rate guards reject different curves. So",
+             "      the equilibrium below belongs to this estimator. The Growth rate method setting",
+             "      chooses it.",
              ]
     if got["lag_methods"]:
         lines.append(f"  Lag: {', '.join(got['lag_methods'])}, reported beside each rate in "
@@ -734,7 +737,8 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "      happens when two organisms are fitted as facilitating each other more strongly than each",
         "      limits itself, which these measurements then say, rather than a convention. Scaling the",
         "      cells would hide that rather than settle it; the equilibrium of the fit is the solution of",
-        "      A x = -r, and a negative entry there means this fit has no positive steady state.",
+        "      A x = -r, and a negative entry there means this fit has no steady state with every",
+        "      organism above zero. A simulation can still settle with fewer of them.",
         "  The diagonal is fitted: A[i][i] = -r_i / K_i, with K_i the organism's own monoculture carrying",
         "      capacity, the plateau of the curves that reached stationary phase. An organism on its own",
         "      therefore settles at K_i. Where no monoculture of it reached a certified plateau, its own",
@@ -892,7 +896,8 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
             "unbounded": ("a fit can have no bounded state: when two organisms are fitted as facilitating "
                           "each other more than each limits itself, a simulation grows without bound and "
                           "a solver returns NA. The equilibrium of a fit is the solution of A x = -r, and "
-                          "a negative entry there means there is no positive steady state"),
+                          "a negative entry there means there is no steady state with every organism "
+                          "above zero, although a simulation can settle with fewer of them"),
             "censored": ("one of the two rates behind these cells is 0, measured: the affected organism "
                          "grew only with the actor, or only without it. The formula takes that as it is, "
                          "so they are measurements and not floors or stated extremes"),
