@@ -286,6 +286,12 @@ EDGE_ATTRIBUTES = {
                       "inhibition, from the no-growth rule's own numbers",
     "bound_rule": "what that bound rests on, in words: the factor the rule allows and the measured start "
                   "it applies to",
+    "coefficient": "with a derivation that fits the row rather than comparing sets: the gLV coefficient "
+                   "it fitted, a per-capita effect in 1/(time x abundance)",
+    "coefficient_unit": "the unit of that coefficient",
+    "fit_r2": "how much of the organism's own log abundance change that fit explains",
+    "fit_condition": "how well the fit was determined: the condition number of its design with every "
+                     "column scaled, so a large number means the columns were too close to tell apart",
     "experiments": "the mGrowthDB experiments whose replicates the edge compares",
     "study_ids": "the studies supporting this edge; cite them (see Sources)",
     "merged_arcs": "with Merge parallel arcs: how many arcs of this source and target were merged into this one; "

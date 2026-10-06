@@ -139,6 +139,12 @@ class Edge:
     # instead of a stated extreme: at least this much facilitation, or at most this much inhibition (#129).
     strength_bound: float | None = None
     bound_rule: str = ""
+    # What a derivation that fits the row rather than comparing sets has to say for itself (#127): the
+    # coefficient it fitted, in 1/(time x abundance), and how well that fit was determined.
+    coefficient: float | None = None
+    coefficient_unit: str = ""
+    fit_r2: float | None = None
+    fit_condition: float | None = None
     merged_arcs: int | None = None  # arcs merged into this one (register item 14), None when not merged
     strength_range: tuple = ()    # (lowest, highest) log2 mean of the merged arcs
     supporting_pairs: int | None = None  # with genus merging: the distinct species (or strain) pairs behind it

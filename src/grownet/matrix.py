@@ -409,6 +409,9 @@ class CannotConvert(ValueError):
 
 
 RATE_METRIC_PREFIX = "growth_rate"
+# a derivation that fits the coefficient itself rather than a ratio of a growth property (#127): its arcs
+# already carry the quantity the package holds, so they need no ratio of rates
+FITTED_METRIC_PREFIX = "integrated"
 
 
 def _metrics(net: InteractionNetwork) -> list:
@@ -579,7 +582,8 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
     number. Raises `CannotConvert` when the arcs do not compare growth rates.
     """
     metrics = _metrics(net)
-    not_rates = [m for m in metrics if not (m or "").startswith(RATE_METRIC_PREFIX)]
+    not_rates = [m for m in metrics
+                 if not (m or "").startswith((RATE_METRIC_PREFIX, FITTED_METRIC_PREFIX))]
     if not_rates:
         raise CannotConvert(
             f"these arcs compare {', '.join(repr(m) for m in not_rates)}, and a gLV coefficient needs the "

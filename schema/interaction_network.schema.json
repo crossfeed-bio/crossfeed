@@ -300,6 +300,27 @@
         },
         "bound_rule": {
           "type": "string"
+        },
+        "coefficient": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "coefficient_unit": {
+          "type": "string"
+        },
+        "fit_r2": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fit_condition": {
+          "type": [
+            "number",
+            "null"
+          ]
         }
       }
     },

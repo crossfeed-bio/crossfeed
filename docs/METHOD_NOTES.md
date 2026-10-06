@@ -986,5 +986,16 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    because a culture that did not grow still carries its inoculum's area, and that cell stays 0 with the
    reason given.
 
+39. **OPEN: an arc fitted from a community of three or more** (raised by the agent on 2026-10-06 while
+   building #127, for Karoline and Craig). The integrated form fits a row with one column per partner, so
+   it can fit an organism's whole row from a community of any size, with no drop-out design needed. That
+   is a new kind of evidence: today an arc is `biculture` (one partner, compared against monocultures) or
+   `dropout` (a community against the same community without one member, which may act through a third
+   species). An arc fitted inside a community is neither: it is direct, and it uses every member's own
+   curve. Emitting it needs a value in `EVIDENCE` and therefore a format decision, so the deriver reports
+   such communities instead and derives nothing from them. What it would buy: SMGDB00000004's trio and
+   SMGDB00000007's trio each give three more rows, and the drop-out designs of SMGDB00000008 could be
+   fitted directly rather than as drop-outs.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

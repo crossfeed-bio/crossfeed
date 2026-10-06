@@ -76,6 +76,10 @@ _KEYS = [
     ("e_target_capacity_n", "edge", "target_capacity_n", "int"),
     ("e_strength_bound", "edge", "strength_bound", "double"),
     ("e_bound_rule", "edge", "bound_rule", "string"),
+    ("e_coefficient", "edge", "coefficient", "double"),
+    ("e_coefficient_unit", "edge", "coefficient_unit", "string"),
+    ("e_fit_r2", "edge", "fit_r2", "double"),
+    ("e_fit_condition", "edge", "fit_condition", "double"),
     ("e_merged_arcs", "edge", "merged_arcs", "int"),
     ("e_strength_range", "edge", "strength_range", "string"),
     ("e_supporting_pairs", "edge", "supporting_pairs", "int"),
@@ -176,6 +180,10 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(ed, "e_target_capacity_n", e.target_capacity_n)
         _data(ed, "e_strength_bound", e.strength_bound)
         _data(ed, "e_bound_rule", e.bound_rule)
+        _data(ed, "e_coefficient", e.coefficient)
+        _data(ed, "e_coefficient_unit", e.coefficient_unit)
+        _data(ed, "e_fit_r2", e.fit_r2)
+        _data(ed, "e_fit_condition", e.fit_condition)
 
     if pretty:
         ET.indent(root)

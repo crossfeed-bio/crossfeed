@@ -102,6 +102,10 @@ SCHEMA_DOC = {
                 "target_capacity_n": {"type": ["integer", "null"]},
                 "strength_bound": {"type": ["number", "null"]},
                 "bound_rule": {"type": "string"},
+                "coefficient": {"type": ["number", "null"]},
+                "coefficient_unit": {"type": "string"},
+                "fit_r2": {"type": ["number", "null"]},
+                "fit_condition": {"type": ["number", "null"]},
             },
         },
         "study": {

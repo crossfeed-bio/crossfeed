@@ -58,6 +58,10 @@ def _edge_line(net, e) -> str:
                      f"{e.n_without if e.n_without is not None else '?'} without")
     if e.significance is not None:
         parts.append(f"adjusted p {e.significance:.3g}")
+    if getattr(e, "coefficient", None) is not None:
+        parts.append(f"fitted coefficient {e.coefficient:.4g} {e.coefficient_unit}".strip())
+        if e.fit_r2 is not None and e.fit_condition is not None:
+            parts.append(f"fit r2 {e.fit_r2:.3f}, condition {e.fit_condition:.3g}")
     if getattr(e, "metric_with", None) is not None and getattr(e, "metric_without", None) is not None:
         parts.append(f"{name[e.target]} at {e.metric_with:.4g} with / {e.metric_without:.4g} without "
                      f"({e.metric})")

@@ -52,12 +52,14 @@ def test_the_design_of_one_organism_is_its_log_change_against_time_and_the_integ
     rep = _replicate(["A"], times, series)
     design = integrated.design(rep, "A", ["A"])
     assert design["partners"] == ["A"]
-    assert len(design["rows"]) == len(times) - 1
+    # every measured point after the first, minus any the lag of this curve puts before the start
+    assert len(times) - 4 <= len(design["rows"]) <= len(times) - 1
     first = design["rows"][0]
-    assert first["y"] == pytest.approx(math.log(series[1][0] / series[0][0]), rel=1e-9)
-    assert first["time"] == pytest.approx(times[1] - times[0])
+    begin = len(times) - 1 - len(design["rows"])        # the index the rows start from
+    assert first["y"] == pytest.approx(math.log(series[begin + 1][0] / series[begin][0]), rel=1e-9)
+    assert first["time"] == pytest.approx(times[begin + 1] - times[begin])
     # the integral of its own curve over that step, by the trapezoid rule
-    expected = 0.5 * (series[0][0] + series[1][0]) * (times[1] - times[0])
+    expected = 0.5 * (series[begin][0] + series[begin + 1][0]) * (times[begin + 1] - times[begin])
     assert first["integrals"][0] == pytest.approx(expected, rel=1e-9)
 
 
@@ -68,7 +70,7 @@ def test_one_organism_recovers_its_own_rate_and_self_limitation():
     fit = integrated.fit_row(_replicate(["A"], times, series), "A", ["A"])
     assert fit["rate"] == pytest.approx(0.5, rel=0.02)
     assert fit["coefficients"]["A"] == pytest.approx(-5.0e-10, rel=0.05)
-    assert fit["r2"] > 0.99 and fit["points"] == len(times) - 1
+    assert fit["r2"] > 0.99 and fit["points"] >= len(times) - 4
     assert fit["condition"] < 1.0e4           # one partner, so the design is well conditioned
 
 
@@ -118,3 +120,94 @@ def test_a_curve_that_starts_at_zero_or_never_rises_gives_no_fit():
                        abundance_unit="Cells/mL")
     fit = integrated.fit_row(Replicate(curves=(flat,), name="r1"), "A", ["A"])
     assert fit["coefficients"] == {} and "no positive" in fit["reason"]
+
+
+# ---- the Deriver ------------------------------------------------------------------------------------
+
+def test_the_deriver_emits_arcs_whose_strength_is_the_effect_at_the_measured_abundance():
+    """The two derivations have to be comparable, so an integrated arc carries the same kind of strength
+    as a ratio arc: with r_with = r_i + A_ij x_j, the log2 ratio is log2(1 + A_ij x_j / r_i), which is
+    what this arc records, with the fitted coefficient beside it. Hand computed from the simulation:
+    the arc's own numbers have to satisfy it exactly, and B, which rises from 5e8 towards its own 1e9
+    plateau during the run, puts it near log2(1.4)."""
+    from test_growth_rates import _client, _co, _mono
+
+    from grownet.integrated import IntegratedDeriver
+    r = [0.4, 0.3]
+    A = [[-4.0e-10, 2.0e-10], [0.0, -3.0e-10]]
+    mono_a = _simulate([0.4], [[-4.0e-10]], [1.0e7])
+    mono_b = _simulate([0.3], [[-3.0e-10]], [5.0e8])
+    co = _simulate(r, A, [1.0e7, 5.0e8])
+
+    def series(times, values, which=0):
+        return [(t, row[which], None) for t, row in zip(times, values, strict=True)]
+
+    client = _client({(1, "A"): series(*mono_a), (2, "B"): series(*mono_b),
+                      (3, "A"): series(*co, 0), (3, "B"): series(*co, 1)})
+    exps = [_mono("E1", "A", [(1, "r1")]), _mono("E2", "B", [(2, "r1")]),
+            _co("E3", "A", "B", [(3, "r1")])]
+    records, skipped = IntegratedDeriver(client=client).derive({"id": "S1"}, exps)
+    arc = next(r for r in records if r["target_name"] == "A" and r["source_name"] == "B")
+    assert arc["coefficient"] == pytest.approx(2.0e-10, rel=0.3)
+    assert arc["coefficient_unit"].startswith("1/(h x ")
+    # the identity the arc rests on, exactly: log2(1 + A_ij x_j / r_i)
+    assert arc["strength"] == pytest.approx(
+        math.log2(1 + arc["coefficient"] * arc["partner_abundance"] / arc["fitted_rate"]), abs=5e-4)
+    assert 0.2 < arc["strength"] < 0.8
+    assert arc["effect"] == "facilitation" and arc["outcome"] == "quantified"
+    assert arc["metric"].startswith("integrated")
+    assert arc["fit_condition"] > 0 and arc["fit_r2"] > 0.9
+
+
+def test_the_fitted_rates_of_a_run_carry_the_rate_and_the_capacity_the_fit_implies():
+    """The package needs a rate and a self-limitation per organism, and the integrated fit gives both:
+    r_i directly and K_i = -r_i / A_ii, which is the plateau that fit implies. Hand computed: 0.4 over
+    4e-10 is 1e9."""
+    from grownet.integrated import fitted_rates
+    records = [{"target": "a", "target_name": "A", "fitted_rate": 0.4, "fitted_self": -4.0e-10,
+                "fitted_self_unit": "Cells/mL", "study_id": "S1", "fit_r2": 0.99, "fit_condition": 12.0}]
+    rates = fitted_rates(records)
+    assert rates["a"]["rate"] == pytest.approx(0.4)
+    assert rates["a"]["capacity"] == pytest.approx(1.0e9)
+    assert rates["a"]["capacity_unit"] == "Cells/mL"
+    assert "integrated" in rates["a"]["method"]
+
+
+def test_an_organism_whose_row_is_not_identified_is_skipped_with_the_reason():
+    """A flat curve carries no growth to fit, so A's own rate and limitation cannot be identified and its
+    arc is reported rather than invented. B, which does grow, still gets its own arc."""
+    from test_growth_rates import _client, _co, _mono
+
+    from grownet.integrated import IntegratedDeriver
+    flat = [(float(t), 1.0e7, None) for t in range(14)]
+    mono_b = _simulate([0.3], [[-3.0e-10]], [5.0e8])
+    co = _simulate([0.0, 0.3], [[-1.0e-12, 0.0], [0.0, -3.0e-10]], [1.0e7, 5.0e8])
+
+    def series(times, values, which=0):
+        return [(t, row[which], None) for t, row in zip(times, values, strict=True)]
+
+    client = _client({(1, "A"): flat, (2, "B"): series(*mono_b),
+                      (3, "A"): series(*co, 0), (3, "B"): series(*co, 1)})
+    exps = [_mono("E1", "A", [(1, "r1")]), _mono("E2", "B", [(2, "r1")]),
+            _co("E3", "A", "B", [(3, "r1")])]
+    records, skipped = IntegratedDeriver(client=client).derive({"id": "S1"}, exps)
+    assert [r["target_name"] for r in records] == ["B"]
+    assert any("A" in label and ("fitted" in why or "identified" in why) for label, why in skipped)
+
+
+def test_the_rows_start_where_growth_starts_so_a_lag_does_not_eat_the_rate():
+    """Karoline, 2026-10-06: "so the integrated form depends on identifying lag phase. what if Baranyi is
+    used to determine r?" The model has no lag term, so a culture that sits at its inoculum and then grows
+    makes ln(x(T)/x(0)) smaller than the model expects and the fit pays for it in the rate: on
+    SMGDB00000007 that gave a rate of -0.08 /h. Starting the rows at the end of the lag, which #118
+    reports, recovers the rate instead."""
+    times, series = _simulate(*SOLO)
+    lagged_times = [0.0, *[t + 3.0 for t in times]]
+    lagged_series = [[series[0][0]], *series]          # three hours at the inoculum, then the same growth
+    rep = _replicate(["A"], lagged_times, lagged_series)
+
+    whole = integrated.fit_row(rep, "A", ["A"], start=0.0)      # the lag included: the rate is eaten
+    after = integrated.fit_row(rep, "A", ["A"])                 # the lag found and skipped
+    assert after["rate"] == pytest.approx(0.5, rel=0.1)
+    assert after["rate"] > whole["rate"]
+    assert "where growth starts" in after["reason"]

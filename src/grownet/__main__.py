@@ -97,7 +97,7 @@ def _rate_flags(a) -> str:
             return f"{flag} writes the growth rates of the run, so it needs --report-rates"
     if a.steady_check and not a.report_rates:
         return "--steady-check scores the growth rates and coefficients of the run, so it needs --report-rates"
-    if a.glv and a.metric != "growth_rate":
+    if a.glv and a.metric != "growth_rate" and not a.deriver:
         # a coefficient divides by a log2 ratio of growth rates, so the area or the maximum cannot make
         # one (#119); --glv-mode sets both at once
         return ("--glv writes fitted gLV coefficients, and a coefficient needs the log2 ratio of a "
@@ -178,7 +178,7 @@ def _derive(a):
         print(f"warning: {errors[0]}", file=sys.stderr)
     organism_rates = {}
     if a.report_rates:
-        organism_rates, skipped = _rates_of(a, client, [a.study], net, skipped)
+        organism_rates, skipped = _rates_of(a, client, [a.study], net, skipped, records)
     result = {"study": a.study, "entries": [], "resolved": [], "unresolved": [], "studies": [a.study],
               "rates": organism_rates, "client": client if a.live else None,
               "skipped": skipped, "errors": errors, "network": net}
@@ -242,11 +242,22 @@ def _derive_species(a):
     return _emit(a, net, result["skipped"], extra, label, result)
 
 
-def _rates_of(a, client, study_ids, net, skipped):
+def _rates_of(a, client, study_ids, net, skipped, records=None):
     """(rates by node id, skipped): the monoculture growth rates of these studies, keyed by the network's
-    own nodes, with the network's meta recording them as the page does."""
+    own nodes, with the network's meta recording them as the page does.
+
+    A derivation that fits each row carries its own rate and self-limitation on every arc (#127), and
+    those are the parameters that go with its coefficients, so they are used when they are there rather
+    than fitting the monocultures a second way.
+    """
     from . import matrix, rates
     from .derive import growth_rates
+    from .integrated import METRIC as INTEGRATED
+    from .integrated import fitted_rates
+    fitted = fitted_rates(records or [])
+    if fitted:
+        net.meta["growth_rates"] = matrix.rate_meta(net, fitted, INTEGRATED)
+        return fitted, skipped
     found, rate_skips = growth_rates(client, study_ids, wanted=set(net.nodes),
                                      rate_method=a.rate_method, window=a.rate_window,
                                      spike_factor=a.spike_factor)
