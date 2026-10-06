@@ -95,14 +95,24 @@ def _rate_flags(a) -> str:
     for flag, path in (("--rates", a.rates), ("--glv", a.glv), ("--to-r", a.to_r)):
         if path and not a.report_rates:
             return f"{flag} writes the growth rates of the run, so it needs --report-rates"
+    if a.glv and a.metric != "growth_rate":
+        # a coefficient divides by a log2 ratio of growth rates, so the area or the maximum cannot make
+        # one (#119); --glv-mode sets both at once
+        return ("--glv writes fitted gLV coefficients, and a coefficient needs the log2 ratio of a "
+                f"growth rate, not of {a.metric}: add --metric growth_rate, or use --glv-mode")
     return ""
 
 
 def _derive(a):
     if a.glv_mode:
-        # the button sets both, and says so, rather than leaving a reader to remember them (#113)
+        # the button sets them, and says so, rather than leaving a reader to remember them (#113). The
+        # metric and the rate method came with the coefficients of #119: L is the log2 ratio of a growth
+        # rate, and the package asks for Baranyi rates.
+        from .matrix import PACKAGE_RATE_METHOD
         a.report_rates, a.no_dropout = True, True
-        print("gLV mode: growth rates on, drop-out communities off", file=sys.stderr)
+        a.metric, a.rate_method = "growth_rate", PACKAGE_RATE_METHOD
+        print("gLV mode: growth rates on, drop-out communities off, the comparison on the growth rate "
+              f"with the {PACKAGE_RATE_METHOD} fit", file=sys.stderr)
     problem = _rate_flags(a)
     if problem:
         print(problem, file=sys.stderr)

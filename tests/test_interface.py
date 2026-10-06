@@ -466,9 +466,13 @@ def test_asking_for_the_absent_arcs_puts_them_in_the_file(server):
 # growth rates' was enabled)."
 
 RATES = {"ncbi:853": {"name": A, "rate": 0.4, "unit": "1/h", "n": 4, "studies": ["SMGDB00000001"],
-                      "per_study": {"SMGDB00000001": 0.4}, "other_units": []},
+                      "per_study": {"SMGDB00000001": 0.4}, "other_units": [],
+                      "method": "growth_rate:baranyi", "lag": 0.5, "capacity": 2.0,
+                      "capacity_unit": "Cells/mL", "capacity_n": 4},
          "ncbi:53443": {"name": B, "rate": 0.2, "unit": "1/h", "n": 4, "studies": ["SMGDB00000001"],
-                        "per_study": {"SMGDB00000001": 0.2}, "other_units": []}}
+                        "per_study": {"SMGDB00000001": 0.2}, "other_units": [],
+                        "method": "growth_rate:baranyi", "lag": 0.0, "capacity": 1.5,
+                        "capacity_unit": "Cells/mL", "capacity_n": 4}}
 
 
 @pytest.fixture
@@ -504,12 +508,17 @@ def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
     assert 'name="report_rates" value="1" checked' in settings
     assert 'name="include_dropout" value="1">' in settings               # off
     assert "gLV mode on: growth rates on, drop-out communities off" in pressed
+    # and, since #119 turned the package into coefficients, the two settings the conversion needs: L is
+    # the log2 ratio of a growth rate, and the package asks for Baranyi rates
+    assert '<option value="growth_rate" selected>' in settings
+    assert '<option value="baranyi" selected>' in settings
     assert f">{A}</textarea>" in pressed                                 # and what was typed stays
     assert 'class="switch on"' in pressed and 'aria-pressed="true"' in pressed   # the switch is on
 
     # Karoline, 2026-10-04: "Do I click a 2nd time to switch it off?" Pressing it again restores both
     # defaults, and says so
-    again = press({"species": A, "glv_mode": "1", "report_rates": "1", "only_entered": "1"})
+    again = press({"species": A, "glv_mode": "1", "report_rates": "1", "only_entered": "1",
+                   "metric": "growth_rate", "rate_method": "baranyi"})   # what the page posts when on
     back = again[again.index("<details>"):]
     assert 'name="report_rates" value="1">' in back                      # off, its default
     assert 'name="include_dropout" value="1" checked' in back            # on, its default
@@ -570,21 +579,45 @@ def test_the_growth_rates_are_their_own_download_and_bring_the_glv_control(serve
     assert "median over replicates and studies" in reported["rule"]
 
 
-def test_the_glv_package_holds_a_matrix_with_minus_one_on_the_diagonal_and_the_rates(server, with_rates):
+def test_the_glv_package_holds_fitted_coefficients_per_unit_and_the_rates(server, with_rates, monkeypatch):
+    """#119: the package holds coefficients in 1/(time x abundance), one matrix per abundance unit, and
+    no conventional number. The fake study's curves are two points long, so the rate itself is stubbed
+    here (`tests/test_glv_coefficients.py` checks the arithmetic on hand-built numbers); what this test
+    checks is the route, the files and the fitted diagonal, -r_i / K_i: A is 0.4 /h over 2.0 cells/mL and
+    B is 0.2 over 1.5, so the diagonal is -0.2 and -0.1333."""
     import io
     import zipfile
+
+    from grownet import rates as rate_module
+    monkeypatch.setattr(rate_module, "easylinear", lambda times, values, *a, **kw: values[-1] / 10)
+    monkeypatch.setattr(rate_module, "baranyi", lambda times, values, *a, **kw: values[-1] / 10)
     base, token = server
-    _finished(base, token, report_rates="1")
+    _finished(base, token, report_rates="1", metric="growth_rate", rate_method="baranyi")
     with urllib.request.urlopen(f"{base}/glv.zip?token={token}", timeout=10) as r:
         assert r.headers["Content-Type"] == "application/zip"
         archive = zipfile.ZipFile(io.BytesIO(r.read()))
-    assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv", "interaction_matrix.csv"]
-    rows = [line.split(",") for line in archive.read("interaction_matrix.csv").decode().strip().splitlines()]
+    assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv",
+                                          "interaction_matrix.Cells_per_mL.csv"]
+    rows = [line.split(",") for line in
+            archive.read("interaction_matrix.Cells_per_mL.csv").decode().strip().splitlines()]
     names = rows[0][1:]
-    assert [rows[1 + i][1 + i] for i in range(len(names))] == ["-1"] * len(names)
+    diagonal = {name: float(rows[1 + i][1 + i]) for i, name in enumerate(names)}
+    assert diagonal[A] == pytest.approx(-0.4 / 2.0, rel=1e-3)
+    assert diagonal[B] == pytest.approx(-0.2 / 1.5, rel=1e-3)
     assert A in archive.read("growth_rates.csv").decode()
     readme = archive.read("README.txt").decode()
-    assert "A[i][j] is the effect of j on i" in readme and "not a fitted glv coefficient" in readme.lower()
+    assert "A[i][j] is the effect of j on i" in readme
+    assert "EVERY CELL IS A PER-CAPITA COEFFICIENT, in 1/(h x Cells/mL)" in readme
+    assert "not a fitted" not in readme and "-1 by convention" not in readme
+
+
+def test_the_page_says_which_setting_to_change_when_a_package_cannot_be_fitted(server, with_rates):
+    """A coefficient needs the log2 ratio of a growth rate, so a search on the area under the curve
+    cannot make one. The page says so instead of failing (#119)."""
+    base, token = server
+    _finished(base, token, report_rates="1")            # the default growth property is auc
+    _, page, _ = _open(f"{base}/glv.zip?token={token}")
+    assert "No gLV package:" in page and "growth_rate" in page and "gLV mode" in page
 
 
 def test_the_command_line_writes_the_matrix_the_rates_and_the_glv_package(monkeypatch, tmp_path, capsys):
@@ -604,9 +637,17 @@ def test_the_command_line_writes_the_matrix_the_rates_and_the_glv_package(monkey
     monkeypatch.setattr(gui_module, "growth_rates", lambda *a, **kw: (dict(RATES), []))
     table, rates_file, package, report = (tmp_path / n for n in
                                           ("m.csv", "rates.csv", "glv.zip", "report.txt"))
+    # --glv needs the growth-rate comparison since #119, and says so before anything is derived
     assert main(["derive", "--live", "--species", A, B, "--report-rates", "--format", "matrix",
-                 "--out", str(table), "--rates", str(rates_file), "--glv", str(package),
-                 "--report", str(report)]) == 0
+                 "--out", str(table), "--glv", str(package)]) == 2
+    assert "a coefficient needs the log2 ratio of a growth rate" in capsys.readouterr().err
+
+    from grownet import rates as rate_module
+    monkeypatch.setattr(rate_module, "easylinear", lambda times, values, *a, **kw: values[-1] / 10)
+    monkeypatch.setattr(rate_module, "baranyi", lambda times, values, *a, **kw: values[-1] / 10)
+    assert main(["derive", "--live", "--species", A, B, "--report-rates", "--format", "matrix",
+                 "--metric", "growth_rate", "--out", str(table), "--rates", str(rates_file),
+                 "--glv", str(package), "--report", str(report)]) == 0
 
     rows = [line.split(",") for line in table.read_text(encoding="utf-8").strip().splitlines()]
     names = rows[0][1:]
@@ -616,9 +657,12 @@ def test_the_command_line_writes_the_matrix_the_rates_and_the_glv_package(monkey
         "organism,growth_rate,unit,replicates,studies,method,lag,carrying_capacity,capacity_unit,"
         "capacity_curves")
     with zipfile.ZipFile(io.BytesIO(package.read_bytes())) as archive:
-        assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv", "interaction_matrix.csv"]
-        matrix_rows = archive.read("interaction_matrix.csv").decode().strip().splitlines()
-    assert [r.split(",")[1 + i] for i, r in enumerate(matrix_rows[1:])] == ["-1", "-1"]
+        assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv",
+                                              "interaction_matrix.Cells_per_mL.csv"]
+        matrix_rows = archive.read("interaction_matrix.Cells_per_mL.csv").decode().strip().splitlines()
+    fitted = {r.split(",")[0]: float(r.split(",")[1 + i]) for i, r in enumerate(matrix_rows[1:])}
+    assert fitted[A] == pytest.approx(-0.4 / 2.0, rel=1e-3)     # the fitted diagonal, -r_i / K_i (#119)
+    assert fitted[B] == pytest.approx(-0.2 / 1.5, rel=1e-3)
     text = report.read_text(encoding="utf-8")
     assert "Report growth rates (--report-rates): on" in text
     assert "growth rates (growth_rate:easylinear:5 in monoculture" in text
@@ -639,9 +683,13 @@ def test_the_files_beside_the_network_need_the_rates_and_say_so(monkeypatch, tmp
 def test_the_glv_menu_sends_to_r_and_the_page_says_what_arrived(server, with_rates, monkeypatch):
     """Karoline, 2026-10-03: "one more result button to send gLV parameters to R", in "one single
     drop-down menu for gLV results where the user chooses whether to download or to send to R"."""
+    from grownet import rates as rate_module
     from grownet import rbridge
+    # in gLV mode, which is what a reader sending to R is in; the two-point curves need a stubbed rate
+    monkeypatch.setattr(rate_module, "easylinear", lambda times, values, *a, **kw: values[-1] / 10)
+    monkeypatch.setattr(rate_module, "baranyi", lambda times, values, *a, **kw: values[-1] / 10)
     base, token = server
-    _finished(base, token, report_rates="1")
+    _finished(base, token, report_rates="1", metric="growth_rate", rate_method="baranyi")
     sent = {}
 
     def fake_send(payload, **kw):
@@ -735,7 +783,7 @@ def test_drop_out_communities_stay_on_by_default_in_advanced_settings(server):
     assert "gLV mode unticks it" in settings                     # the setting says which button touches it
 
 
-def test_glv_mode_on_the_command_line_sets_the_same_two_settings(capsys, monkeypatch, tmp_path):
+def test_glv_mode_on_the_command_line_sets_the_same_settings(capsys, monkeypatch, tmp_path):
     """The button has its flag, so the command line still does everything the page does."""
     from grownet import gui as gui_module
     from grownet.__main__ import build_parser, main
@@ -757,6 +805,8 @@ def test_glv_mode_on_the_command_line_sets_the_same_two_settings(capsys, monkeyp
     assert "gLV mode: growth rates on, drop-out communities off" in capsys.readouterr().err
     assert captured["settings"]["report_rates"] is True
     assert captured["settings"]["include_dropout"] is False
+    assert captured["settings"]["metric"] == "growth_rate"           # #119: L is a ratio of rates
+    assert captured["settings"]["rate_method"] == "baranyi"
 
 
 def test_the_page_and_the_command_line_mean_the_same_by_glv_mode():
@@ -764,8 +814,10 @@ def test_the_page_and_the_command_line_mean_the_same_by_glv_mode():
     from grownet.gui import DEFAULTS, glv_mode
     applied = glv_mode(dict(DEFAULTS))
     assert applied["report_rates"] is True and applied["include_dropout"] is False
-    assert {k: v for k, v in applied.items() if DEFAULTS[k] != v} == {"report_rates": True,
-                                                                     "include_dropout": False}
+    # the two Karoline named, and the two the coefficients of #119 need; nothing else moves
+    assert {k: v for k, v in applied.items() if DEFAULTS[k] != v} == {
+        "report_rates": True, "include_dropout": False, "metric": "growth_rate",
+        "rate_method": "baranyi"}
 
 
 def test_the_name_is_never_styled_where_a_command_is_meant():

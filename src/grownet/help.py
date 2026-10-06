@@ -664,29 +664,42 @@ medium in the second box as well (<a href="#where">choosing where to look</a>), 
 one environment. The package's README says which of these hold for the numbers in it: how many arcs came
 from drop-out designs, and which media they were measured in.</p>
 
-<p><strong>The gLV parameters.</strong> The gLV control writes a zip for a generalized
-Lotka-Volterra simulator: <code>interaction_matrix.csv</code> (the matrix above, with -1 on the diagonal
-by convention, for self-limitation), <code>growth_rates.csv</code> (one rate per organism, in the same
-order, with how many values it rests on, and beside it the estimator, the lag and the monoculture
-carrying capacity) and <code>README.txt</code>, which states the conventions in the
-files themselves, names any pair left at 0 for disagreeing in sign, names every organism without a rate,
-and names the media the arcs were measured in: a simulation is of one environment, so a package built from
-several media says so in capitals and points at the second box
-(<a href="#where">choosing where to look</a>). The numbers are effect sizes, not fitted gLV coefficients:
-a gLV coefficient is a per-capita effect in absolute units, so scale them for your model rather than using
-them unchanged. Cells are often
-stronger than the -1 on the diagonal, a partner outweighing an organism's own self-limitation, and a
-simulation run on them unchanged can grow without bound and come back as NA; the R package below has
-<code>glv_scale()</code> for that. That factor is a free parameter, not a calibration: nothing in the
-growth data fixes the scale, so whoever simulates chooses it, and that choice, rather than the
-measurements, sets where the simulation settles. Report the factor you used with any result that depends
-on it.</p>
+<p><strong>The gLV parameters.</strong> The gLV control writes a zip for a generalized Lotka-Volterra
+simulator, and since #119 it holds <strong>fitted coefficients</strong> rather than effect sizes:
+<code>interaction_matrix.&lt;unit&gt;.csv</code>, one matrix per abundance unit and named after it, where
+the diagonal is <code>A[i][i] = -r_i / K_i</code> with K the organism's own monoculture carrying capacity,
+and an off-diagonal cell is <code>A[i][j] = r_i (2^L - 1) / x_j</code> with L the log2 ratio of i's growth
+rate with j over without it and x_j the partner's abundance over i's growth window;
+<code>growth_rates.csv</code> (one rate per organism, in the same order, with how many values it rests on,
+and beside it the estimator, the lag and the carrying capacity); and <code>README.txt</code>, which states
+every formula and unit, names any pair left at 0 for disagreeing in sign, names every organism and every
+effect that could not be fitted and why, and names the media the arcs were measured in: a simulation is of
+one environment, so a package built from several media says so in capitals and points at the second box
+(<a href="#where">choosing where to look</a>). Every cell is a per-capita effect in 1/(time x abundance),
+so nothing in the package is a convention and nothing needs scaling to match the rest. Abundances are
+never converted between units, which is why each unit has its own matrix: a cell mass conversion would
+have to be invented, while the dynamics are the same in any unit. A simulation of these numbers can still
+grow without bound and come back as NA, which now says something about the measurements, two organisms
+fitted as facilitating each other more than each limits itself, rather than about a convention; the
+equilibrium of a fit is the solution of A x = -r, and a negative entry there means the fit has no positive
+steady state.</p>
+<p>So a package needs the comparison to be on the <strong>growth rate</strong>: the area under the curve
+and the maximum cannot produce the ratio L. gLV mode sets that, and the Baranyi fit with it, and without
+it the page says which setting to change rather than converting the wrong quantity.</p>
 
 <p><strong>In R, with the companion package.</strong> The same control sends the parameters straight into
 a running R session, which is what the R package in this project is for. It assumes no simulator: it
 hands over a plain matrix and a plain vector, with a helper that shapes them for
 <a href="https://bioconductor.org/packages/release/bioc/html/miaSim.html">miaSim</a>, whose
 <code>simulateGLV</code> solves dx/dt = x(b + Ax), the order this matrix is written in.</p>
+<p><strong>This route still carries the effect-size matrix</strong>, with -1 on the diagonal by convention
+and +10 or -10 for an obligate or abolished pair: the numbers of a cell here are log2 means of a growth
+comparison and are not fitted gLV coefficients, so they are scaled for a model rather than used unchanged,
+which is what <code>glv_scale()</code> in the R package is for. That factor is a free parameter, not a
+calibration: nothing in the growth data fixes the scale, so whoever simulates chooses it, and that choice,
+rather than the measurements, sets where the simulation settles. Report the factor you used with any
+result that depends on it. The zip above is the converted one; the conversion reaches this route and the
+R package next (#120), and then the scaling goes with it.</p>
 <pre>install.packages("remotes")
 {_e(R_INSTALL)}
 library(grownet)

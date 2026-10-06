@@ -659,17 +659,19 @@ def _no_growth(s: dict, which: str) -> float:
 
 
 # What the page says when the mode is switched on and off.
-GLV_MODE_MESSAGE = ("gLV mode on: growth rates on, drop-out communities off. Both are in Advanced "
-                    "settings, and pressing gLV mode again switches them back. Name one medium in the "
-                    "second box to keep a simulation to one environment.")
-GLV_MODE_OFF_MESSAGE = ("gLV mode off: growth rates off and drop-out communities included again, which "
-                        "are the defaults.")
+GLV_MODE_MESSAGE = ("gLV mode on: growth rates on, drop-out communities off, and the comparison on the "
+                    "growth rate with the Baranyi fit, which is what a fitted coefficient is made of. "
+                    "All four are in Advanced settings, and pressing gLV mode again switches them back. "
+                    "Name one medium in the second box to keep a simulation to one environment.")
+GLV_MODE_OFF_MESSAGE = ("gLV mode off: growth rates off, drop-out communities included again and the "
+                        "comparison back on the area under the curve, which are the defaults.")
 
 
 def glv_mode_on(settings: dict) -> bool:
     """Whether the settings are the ones gLV mode sets."""
     s = {**DEFAULTS, **(settings or {})}
-    return bool(s["report_rates"]) and not s["include_dropout"]
+    return (bool(s["report_rates"]) and not s["include_dropout"]
+            and s["metric"] == "growth_rate" and s["rate_method"] == matrix.PACKAGE_RATE_METHOD)
 
 
 def glv_mode(settings: dict, on: bool = True) -> dict:
@@ -678,9 +680,14 @@ def glv_mode(settings: dict, on: bool = True) -> dict:
     toggles ("Do I click a 2nd time to switch it off?").
     """
     if on:
-        return {**settings, "report_rates": True, "include_dropout": False}
+        # the coefficients of #119 need both: L is the log2 ratio of a GROWTH RATE, which auc and max
+        # cannot produce, and the package asks for Baranyi rates, a global fit consistent with the
+        # plateau that A[i][i] = -r_i / K_i divides by
+        return {**settings, "report_rates": True, "include_dropout": False,
+                "metric": "growth_rate", "rate_method": matrix.PACKAGE_RATE_METHOD}
     return {**settings, "report_rates": DEFAULTS["report_rates"],
-            "include_dropout": DEFAULTS["include_dropout"]}
+            "include_dropout": DEFAULTS["include_dropout"],
+            "metric": DEFAULTS["metric"], "rate_method": DEFAULTS["rate_method"]}
 
 
 def parse_settings(form: dict) -> dict:
@@ -1057,8 +1064,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(json.dumps(matrix.glv_payload(result["network"], organism_rates), indent=1),
                        "application/json; charset=utf-8")
         else:
-            self._send(matrix.glv_package(result["network"], organism_rates), "application/zip",
-                       f"{TITLE}_glv_parameters.zip")
+            self._package(result, organism_rates)
+
+    def _package(self, result, organism_rates) -> None:
+        """The zip, or the page saying which setting to change: a package of coefficients needs the
+        comparison to be on a growth rate (#119)."""
+        try:
+            zipped = matrix.glv_package(result["network"], organism_rates)
+        except matrix.CannotConvert as e:
+            self._send(render_result(self.token, result, message=f"No gLV package: {e}"))
+            return
+        self._send(zipped, "application/zip", f"{TITLE}_glv_parameters.zip")
 
     def _glv(self, query: dict, form: dict) -> None:
         """The page's one gLV control: the zip, or the parameters posted into a listening R session."""
@@ -1069,8 +1085,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                                                        "and run the search again."))
             return
         if form.get("to", ["zip"])[0] != "r":
-            self._send(matrix.glv_package(result["network"], organism_rates), "application/zip",
-                       f"{TITLE}_glv_parameters.zip")
+            self._package(result, organism_rates)
             return
         payload = matrix.glv_payload(result["network"], organism_rates)
         try:

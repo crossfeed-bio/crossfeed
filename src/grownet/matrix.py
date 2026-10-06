@@ -366,6 +366,343 @@ def readme(net: InteractionNetwork, rates: dict, conflicts: list, missing: list,
     return "\n".join(lines) + "\n"
 
 
+# ---- fitted gLV coefficients (#119) ----------------------------------------------------------------
+#
+# Karoline settled the entries on #116, from Craig's derivation and the math: the package stops holding
+# effect sizes and holds coefficients in 1/(time x abundance).
+#
+#     A_ii = -r_i / K_i                     K_i: the monoculture carrying capacity (#118)
+#     A_ij = r_i * (2^L - 1) / x_j_star     L: the log2 ratio of i's GROWTH RATE with j over without it
+#                                           x_j_star: j's abundance over i's growth window (#118)
+#
+# So a package can only be built from a network derived with a growth rate as the growth property: `auc`
+# and `max` cannot produce L. Abundances are never converted between units (Craig's partition, which she
+# took): a cell mass conversion would have to be invented, while the dynamics are invariant to the unit,
+# so the zip holds one matrix per abundance unit and says which pairs fell outside it.
+
+
+class CannotConvert(ValueError):
+    """The network cannot become coefficients: its arcs do not compare growth rates."""
+
+
+RATE_METRIC_PREFIX = "growth_rate"
+PACKAGE_RATE_METHOD = "baranyi"     # what the package derives its rates with (#119)
+
+
+def _metrics(net: InteractionNetwork) -> list:
+    """The growth properties the arcs of this network were compared on, in order."""
+    seen = []
+    for edge in net.edges:
+        if edge.status == "absent" or (edge.strength is None and _extreme(edge) is None):
+            continue
+        name = edge.metric or ""
+        if name not in seen:
+            seen.append(name)
+    return seen
+
+
+def floor_magnitude(net: InteractionNetwork) -> float | None:
+    """The |log2 ratio| an obligate or abolished pair enters a coefficient with, or None.
+
+    Karoline's choice on Craig's censored argument (#116): such a pair is not a stated extreme but a
+    measurement cut off at the detection limit, so it takes a floor. mGrowthDB records no detection limit
+    for a growth rate, so the floor is the largest magnitude measured in the same run: the strongest
+    effect the data shows, which is the least the censored one can be. A run with no quantified arc has
+    no floor to take, and such pairs are then named instead.
+    """
+    sizes = [abs(e.strength) for e in net.edges if e.status != "absent" and e.strength is not None]
+    return max(sizes) if sizes else None
+
+
+def _pair_values(net: InteractionNetwork, floor: float | None) -> tuple:
+    """({pair: {"log2", "floor", "abundance", "unit"}}, conflicts, no_floor).
+
+    One entry per ordered pair, merged the way the matrix merges (median of the quantified arcs, signs
+    that disagree left out). `floor` is the magnitude a censored pair enters with; `abundance` is the
+    median of the partner abundances of the arcs behind the entry, in the one unit they agree on.
+    """
+    measured, censored, abundances, units = {}, {}, {}, {}
+    for edge in net.edges:
+        pair = (edge.target, edge.source)
+        quantified = edge.status != "absent" and edge.strength is not None
+        extreme = _extreme(edge)
+        if not quantified and extreme is None:
+            continue
+        if quantified:
+            measured.setdefault(pair, []).append(edge.strength)
+        else:
+            censored.setdefault(pair, []).append(1.0 if extreme > 0 else -1.0)
+        if edge.partner_abundance is not None:
+            abundances.setdefault(pair, {}).setdefault(edge.partner_abundance_unit or "", []) \
+                .append(edge.partner_abundance)
+    values, conflicts, no_floor = {}, [], []
+    for pair in list(measured) + [p for p in censored if p not in measured]:
+        signs = measured.get(pair, []) + censored.get(pair, [])
+        if any(v > 0 for v in signs) and any(v < 0 for v in signs):
+            conflicts.append(pair)
+            continue
+        if pair in measured:
+            log2, is_floor = statistics.median(measured[pair]), False
+        elif floor is None:
+            no_floor.append(pair)
+            continue
+        else:
+            log2, is_floor = floor * censored[pair][0], True
+        by_unit = abundances.get(pair, {})
+        unit = max(by_unit, key=lambda u: len(by_unit[u])) if by_unit else ""
+        values[pair] = {"log2": log2, "floor": is_floor,
+                        "abundance": statistics.median(by_unit[unit]) if unit else None,
+                        "unit": unit}
+        units[pair] = unit
+    return values, conflicts, no_floor
+
+
+def coefficient_unit(rate_unit: str, abundance_unit: str) -> str:
+    """The unit of a coefficient: 1/(time x abundance), from the rate's "1/h" and the abundance unit."""
+    time = (rate_unit or RATE_UNIT).removeprefix("1/") or "h"
+    return f"1/({time} x {abundance_unit})"
+
+
+def unit_file(abundance_unit: str) -> str:
+    """The abundance unit as part of a file name: "Cells/mL" becomes "Cells_per_mL"."""
+    safe = abundance_unit.replace("/", "_per_")
+    return "".join(c if c.isalnum() or c in "_-." else "_" for c in safe)
+
+
+def coefficients(net: InteractionNetwork, rates: dict) -> dict:
+    """The network and its rates as fitted gLV coefficients, one matrix per abundance unit (#119).
+
+    {"matrices": [{"abundance_unit", "unit", "organisms", "ids", "matrix", "cells", "conflicts"}],
+     "left_out": [(organism, why)], "pairs_left_out": [(affected, actor, why)],
+     "across_units": [(affected, actor, why)], "floors": [(affected, actor, log2)],
+     "floor_rule", "rate_methods", "metric"}
+
+    Every number is a measurement or a floor taken from one: no diagonal by convention, no stated
+    extreme. An organism whose rate or carrying capacity is missing, and a pair whose partner abundance
+    is missing or in another unit, are named rather than given a number. Raises `CannotConvert` when the
+    arcs do not compare growth rates, since L is a ratio of rates.
+    """
+    metrics = _metrics(net)
+    not_rates = [m for m in metrics if not (m or "").startswith(RATE_METRIC_PREFIX)]
+    if not_rates:
+        raise CannotConvert(
+            f"these arcs compare {', '.join(repr(m) for m in not_rates)}, and a gLV coefficient needs the "
+            f"log2 ratio of a growth rate: derive with the {RATE_METRIC_PREFIX} growth property (gLV mode "
+            "on the page, or --metric growth_rate) and build the package again")
+    floor = floor_magnitude(net)
+    values, conflicts, no_floor = _pair_values(net, floor)
+    left_out, pairs_left_out, across, floors = [], [], [], []
+
+    # an organism belongs to the matrix of the unit its own carrying capacity was measured in
+    blocks: dict = {}
+    for nid in labels(net):
+        name = _label(net.nodes[nid])
+        rate = rates.get(nid)
+        if rate is None or rate.get("rate") is None:
+            left_out.append((name, "no growth rate, so neither its own limitation nor the effect of "
+                                   "anything on it can be fitted"))
+            continue
+        if rate.get("capacity") is None:
+            left_out.append((name, "no carrying capacity from a curve that reached stationary phase, so "
+                                   "its self-limitation is not fitted"))
+            continue
+        blocks.setdefault(rate.get("capacity_unit", ""), []).append(nid)
+
+    matrices = []
+    for abundance_unit, ids in sorted(blocks.items()):
+        times = {(rates[nid].get("unit") or RATE_UNIT) for nid in ids}
+        rate_unit = sorted(times)[0]
+        keep = []
+        for nid in ids:
+            if (rates[nid].get("unit") or RATE_UNIT) != rate_unit:
+                left_out.append((_label(net.nodes[nid]),
+                                 f"its growth rate is in {rates[nid].get('unit')}, and this matrix in "
+                                 f"{rate_unit}; left out rather than converted"))
+                continue
+            keep.append(nid)
+        names = [_label(net.nodes[nid]) for nid in keep]
+        table, filled = [], 0
+        for i, affected in enumerate(keep):
+            rate = rates[affected]
+            row = []
+            for j, actor in enumerate(keep):
+                if i == j:
+                    row.append(-rate["rate"] / rate["capacity"])
+                    continue
+                entry = values.get((affected, actor))
+                if entry is None:
+                    row.append(0.0)
+                    continue
+                label_pair = (_label(net.nodes[affected]), _label(net.nodes[actor]))
+                if entry["abundance"] is None:
+                    pairs_left_out.append((*label_pair, f"no abundance for {label_pair[1]} over "
+                                                        f"{label_pair[0]}'s growth window, so the "
+                                                        "per-capita effect cannot be fitted"))
+                    row.append(0.0)
+                    continue
+                if entry["unit"] != abundance_unit:
+                    pairs_left_out.append((*label_pair,
+                                           f"{label_pair[1]}'s abundance beside {label_pair[0]} is in "
+                                           f"{entry['unit']}, and this matrix is in {abundance_unit}; "
+                                           "left out rather than converted"))
+                    row.append(0.0)
+                    continue
+                row.append(rate["rate"] * (2 ** entry["log2"] - 1) / entry["abundance"])
+                filled += 1
+                if entry["floor"]:
+                    floors.append((*label_pair, entry["log2"]))
+            table.append(row)
+        matrices.append({"abundance_unit": abundance_unit,
+                         "unit": coefficient_unit(rate_unit, abundance_unit),
+                         "rate_unit": rate_unit, "organisms": names, "ids": keep, "matrix": table,
+                         "cells": filled,
+                         "conflicts": [(_label(net.nodes[a]), _label(net.nodes[b]))
+                                       for a, b in conflicts if a in keep and b in keep],
+                         "file": f"interaction_matrix.{unit_file(abundance_unit)}.csv"})
+
+    # a pair whose two organisms sit in different matrices has no cell in either
+    where = {nid: block["abundance_unit"] for block in matrices for nid in block["ids"]}
+    for affected, actor in values:
+        if affected in where and actor in where and where[affected] != where[actor]:
+            across.append((_label(net.nodes[affected]), _label(net.nodes[actor]),
+                           f"{_label(net.nodes[actor])} is counted in {where[actor]} and "
+                           f"{_label(net.nodes[affected])} in {where[affected]}, so this effect is in "
+                           "neither matrix"))
+        elif affected not in where or actor not in where:
+            missing = [_label(net.nodes[nid]) for nid in (affected, actor)
+                       if nid not in where and nid in net.nodes]
+            if missing:
+                across.append((_label(net.nodes[affected]), _label(net.nodes[actor]),
+                               f"{' and '.join(missing)} could not be fitted, so this effect is in no "
+                               "matrix"))
+    for affected, actor in no_floor:
+        if affected in where:
+            across.append((_label(net.nodes[affected]), _label(net.nodes[actor]),
+                           "the pair is obligate or abolished and no arc of this run was quantified, so "
+                           "there is no floor to take"))
+    rule = ("a floor, not a measurement: the largest magnitude measured in this run "
+            f"(log2 {_number(floor)}) with the sign of the outcome, because one side did not grow and "
+            "mGrowthDB records no detection limit for a growth rate") if floor is not None else (
+            "no floor was available: this run has no quantified arc to take one from")
+    return {"matrices": matrices, "left_out": left_out, "pairs_left_out": pairs_left_out,
+            "across_units": across, "floors": floors, "floor_rule": rule, "floor": floor,
+            "metric": metrics[0] if metrics else "",
+            "rate_methods": sorted({r.get("method", "") for r in rates.values() if r.get("method")})}
+
+
+def _coefficient(value: float) -> str:
+    """A coefficient as text: these are small numbers, so they keep four significant digits."""
+    return "0" if value == 0 else f"{value:.4g}"
+
+
+def coefficient_csv(block: dict) -> str:
+    """One matrix of coefficients as CSV: the header row and the first column are the organisms."""
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(["", *block["organisms"]])
+    for name, row in zip(block["organisms"], block["matrix"], strict=True):
+        writer.writerow([name, *(_coefficient(v) for v in row)])
+    return out.getvalue()
+
+
+def _rate_method_lines(got: dict) -> list:
+    """What the README says about the estimator behind r, which sets the scale of every cell."""
+    methods = got["rate_methods"]
+    named = ", ".join(methods) if methods else "not recorded"
+    lines = [f"  Growth rates: {named}, median over replicates and studies, batch monocultures only."]
+    if not any(PACKAGE_RATE_METHOD in m for m in methods):
+        lines += ["      THE PACKAGE ASKS FOR BARANYI RATES and these are not: a global fit consistent",
+                  "      with the plateau is the companion of A[i][i] = -r_i / K_i, while a steepest-window",
+                  "      estimate is a maximum over windows. Every cell carries the factor r_i, so the",
+                  "      estimator sets the scale of the whole row (#116, #119)."]
+    return lines
+
+
+def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
+    """What a reader has to know before feeding the converted files to a simulator (#119)."""
+    meta = net.meta
+    absence = meta.get("absence", {})
+    units = [block["unit"] for block in got["matrices"]]
+    lines = [
+        f"{brand.NAME} {meta.get('tool_version', '')}: fitted parameters for a generalized "
+        "Lotka-Volterra simulation",
+        f"derived {meta.get('derived_at', '')} from {meta.get('source_db', 'mGrowthDB')}",
+        "",
+        "FILES",
+        "  interaction_matrix.<unit>.csv  one matrix per abundance unit, named after it; the header row",
+        "                          and the first column are the organisms",
+        "  growth_rates.csv        one growth rate per organism, with the estimator, the lag and the",
+        "                          monoculture carrying capacity behind it",
+        "",
+        "THE COEFFICIENTS",
+        "  A[i][j] is the effect of j on i, so rows are affected and columns are the actor:",
+        "      dx_i/dt = x_i * ( r_i + sum_j A[i][j] * x_j )",
+        "  EVERY CELL IS A PER-CAPITA COEFFICIENT, in " + (", ".join(units) if units else "1/(time x "
+        "abundance)") + ". Nothing here is a",
+        "      convention, and nothing needs scaling to be in the same units as the rest.",
+        "  A simulation of these numbers can still grow without bound, and a solver then returns NA: it",
+        "      happens when two organisms are fitted as facilitating each other more strongly than each",
+        "      limits itself, which these measurements then say, rather than a convention. Scaling the",
+        "      cells would hide that rather than settle it; the equilibrium of the fit is the solution of",
+        "      A x = -r, and a negative entry there means this fit has no positive steady state.",
+        "  The diagonal is fitted: A[i][i] = -r_i / K_i, with K_i the organism's own monoculture carrying",
+        "      capacity, the plateau of the curves that reached stationary phase. An organism on its own",
+        "      therefore settles at K_i.",
+        "  An off-diagonal cell is A[i][j] = r_i * (2^L - 1) / x_j, with L the log2 ratio of i's growth",
+        "      rate with j over without it, and x_j the partner's own abundance averaged over the window",
+        "      i's rate was fitted in.",
+        "  ABUNDANCES ARE NEVER CONVERTED BETWEEN UNITS: a cell mass conversion would have to be",
+        "      invented, while the dynamics are the same in any unit, so each unit has its own matrix and",
+        "      the pairs that fall outside it are named below.",
+        f"  An empty cell is 0. An arc below the absence threshold (k = {absence.get('k', '')}) is also 0:",
+        "      the threshold judged it no interaction.",
+        "  Arcs of one ordered pair are merged across conditions and studies by their median; a pair whose",
+        "      arcs disagree in sign is left at 0 and named below.",
+        *_media_lines(net),
+        *_dropout_lines(net),
+        *_rate_method_lines(got),
+        "",
+        "MATRICES",
+    ]
+    for block in got["matrices"]:
+        lines.append(f"  {block['file']}: {len(block['organisms'])} organism(s), "
+                     f"{block['cells']} fitted cell(s), every cell in {block['unit']}")
+    if not got["matrices"]:
+        lines.append("  NONE: no organism had both a growth rate and a carrying capacity (see below).")
+    lines.append("")
+    if got["floors"]:
+        lines += ["FLOORS, NOT MEASUREMENTS",
+                  f"  {got['floor_rule']}.",
+                  "  These cells rest on a floor (actor on affected, as log2 of the rate ratio):"]
+        lines += [f"      {actor} on {affected}: log2 {_number(value)}"
+                  for affected, actor, value in got["floors"]]
+        lines.append("")
+    lines.append("WHAT IS NOT IN HERE")
+    conflicts = [pair for block in got["matrices"] for pair in block["conflicts"]]
+    if conflicts:
+        lines.append("  These pairs have arcs of opposite sign, in different conditions or studies, so they")
+        lines.append("  are left at 0 rather than averaged (actor on affected):")
+        lines += [f"      {actor} on {affected}" for affected, actor in dict.fromkeys(conflicts)]
+    else:
+        lines.append("  No pair had arcs of opposite sign.")
+    if got["left_out"]:
+        lines.append("  These organisms are in no matrix, because a coefficient of theirs cannot be fitted:")
+        lines += [f"      {name}: {why}" for name, why in got["left_out"]]
+    else:
+        lines.append("  Every organism of the network is in a matrix.")
+    if got["pairs_left_out"]:
+        lines.append("  These effects are left at 0 (actor on affected):")
+        lines += [f"      {actor} on {affected}: {why}"
+                  for affected, actor, why in dict.fromkeys(got["pairs_left_out"])]
+    if got["across_units"]:
+        lines.append("  These effects are in no matrix:")
+        lines += [f"      {actor} on {affected}: {why}"
+                  for affected, actor, why in dict.fromkeys(got["across_units"])]
+    lines += ["", "Interactions are derived, not measured: see the report beside this file for what was",
+              "skipped and why."]
+    return "\n".join(lines) + "\n"
+
+
 # The same parameters as the zip, for a program rather than a reader: the caveats travel as data beside
 # the numbers, so code can act on them instead of a person having to read the README first (Karoline,
 # 2026-10-03: "The problem is the README: caveats such as the placeholders for obligates/abolished taxa
@@ -431,13 +768,13 @@ def glv_payload(net: InteractionNetwork, rates: dict) -> dict:
 
 
 def glv_package(net: InteractionNetwork, rates: dict) -> bytes:
-    """The zip a simulator is handed: the matrix, the rates and the README."""
-    order = labels(net)
-    names, _, conflicts = rows(net, DIAGONAL)
-    missing = [_label(net.nodes[nid]) for nid in order if nid not in rates]
+    """The zip a simulator is handed: one matrix of coefficients per abundance unit, the rates and the
+    README (#119). Raises `CannotConvert` when the arcs do not compare growth rates."""
+    got = coefficients(net, rates)
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr("interaction_matrix.csv", matrix_csv(net, DIAGONAL))
+        for block in got["matrices"]:
+            archive.writestr(block["file"], coefficient_csv(block))
         archive.writestr("growth_rates.csv", rates_csv(rates, net))
-        archive.writestr("README.txt", readme(net, rates, conflicts, missing, by_convention(net)))
+        archive.writestr("README.txt", readme_from(got, net, rates))
     return buffer.getvalue()

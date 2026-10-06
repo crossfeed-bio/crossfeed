@@ -6,6 +6,23 @@ content.
 
 ## [Unreleased]
 
+### Changed
+- **The gLV package holds fitted coefficients, one matrix per abundance unit** (#119, Karoline's decision
+  on #116). The diagonal is `A[i][i] = -r_i / K_i` with K the monoculture carrying capacity, and an
+  off-diagonal cell is `A[i][j] = r_i (2^L - 1) / x_j` with L the log2 ratio of i's growth rate with j
+  over without it and x_j the partner's abundance over i's growth window, so every cell is a per-capita
+  effect in 1/(time x abundance). No convention is left in the package: no -1 diagonal, no +/-10, and
+  nothing to scale. The zip holds one `interaction_matrix.<unit>.csv` per abundance unit, since a cell
+  mass conversion would have to be invented while the dynamics are the same in any unit, and the README
+  names every organism and effect that could not be fitted and why. An obligate or abolished pair takes a
+  derived floor, the largest magnitude measured in the same run, rather than a stated extreme.
+  A package therefore needs the comparison to be on the growth rate: **gLV mode now also sets the growth
+  property to `growth_rate` and the rate method to Baranyi**, `--glv` says which setting to change when it
+  cannot convert, and the page says the same instead of failing. The plain adjacency matrix
+  (`--format matrix`) is unchanged, and so is Send to R, which carries the effect-size matrix until the
+  conversion reaches it (#120). Checked live: the converted matrix of SMGDB00000004 and of the whole
+  corpus simulates in miaSim with no scaling and settles exactly at the solution of `A x = -r`.
+
 ### Added
 - **The quantities a fitted gLV coefficient is made of, measured and reported** (#118, from Karoline's
   decision on #116). Every growth rate now travels with the estimator that produced it, the lag the

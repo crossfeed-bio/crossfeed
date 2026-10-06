@@ -6,6 +6,10 @@ arcs of one pair are merged across studies by their median, and a pair whose arc
 at 0 and named. Then, on the first build: "obligate and abolished arcs need to carry numbers reflecting
 the strong effect, how about 10 with the appropriate sign?", so a comparison with no ratio enters the
 matrix as +10 (obligate) or -10 (abolished).
+
+Those conventions are the **adjacency matrix**, which is what this file checks. The gLV package left them
+behind on #119, on her decision on #116: it holds fitted coefficients, one matrix per abundance unit, and
+`tests/test_glv_coefficients.py` checks it.
 """
 import csv
 import io
@@ -117,19 +121,27 @@ def test_the_rates_file_says_what_each_median_rests_on():
     assert len(table) == 2                    # b has no rate, so it has no row
 
 
-def test_the_package_holds_the_two_files_and_a_readme_that_states_the_conventions():
-    net = _net([_arc("a", "b", 1.5), _arc("b", "a", -0.5)])
+def test_the_package_holds_a_matrix_the_rates_and_a_readme():
+    """The three files, and the README's standing content. What the numbers in them are is #119's, in
+    tests/test_glv_coefficients.py: coefficients, so the package needs growth-rate arcs."""
+    rate = {"rate": 0.4, "n": 3, "unit": "1/h", "method": "growth_rate:baranyi", "capacity": 1.0e9,
+            "capacity_unit": "Cells/mL", "capacity_n": 3}
+    net = _net([_arc("a", "b", 1.5, metric="growth_rate:baranyi", partner_abundance=2.0e8,
+                     partner_abundance_unit="Cells/mL"),
+                _arc("b", "a", -0.5, metric="growth_rate:baranyi", partner_abundance=1.0e8,
+                     partner_abundance_unit="Cells/mL")])
     net.meta.update({"tool_version": "9.9.9", "absence": {"k": 1.0}, "source_db": "mGrowthDB (live)"})
-    with zipfile.ZipFile(io.BytesIO(matrix.glv_package(net, {"a": {"rate": 0.4, "n": 3}}))) as archive:
-        assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv", "interaction_matrix.csv"]
+    with zipfile.ZipFile(io.BytesIO(matrix.glv_package(net, {"a": rate}))) as archive:
+        assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv",
+                                              "interaction_matrix.Cells_per_mL.csv"]
         readme = archive.read("README.txt").decode()
-        _, values = _read(archive.read("interaction_matrix.csv").decode())
-    assert values[("A", "A")] == -1.0 and values[("B", "A")] == 1.5 and values[("A", "B")] == -0.5
+        _, values = _read(archive.read("interaction_matrix.Cells_per_mL.csv").decode())
+    # only A has a rate and a capacity, so only A is in the matrix: -0.4 / 1e9
+    assert values == {("A", "A"): -4.0e-10}
     assert "A[i][j] is the effect of j on i" in readme
-    assert "not a fitted glv coefficient" in readme.lower()
     assert "k = 1.0" in readme
-    # an organism without a rate is named, since a simulation needs one from elsewhere
-    assert "B" in readme.split("no growth rate")[1]
+    # an organism that cannot be fitted is named, since a simulation needs its parameters from elsewhere
+    assert "B: no growth rate" in readme
 
 
 def test_the_order_is_stable_so_two_runs_line_up():

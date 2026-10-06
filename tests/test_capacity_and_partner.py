@@ -232,7 +232,9 @@ def test_the_glv_payload_and_the_package_carry_the_quantities_beside_each_rate()
 
     net = records_to_network(
         [{"source": "a", "target": "b", "source_name": "A", "target_name": "B", "effect": "facilitation",
-          "strength": 1.5, "status": "present", "outcome": "quantified", "study_id": "S1"}],
+          "strength": 1.5, "status": "present", "outcome": "quantified", "study_id": "S1",
+          "metric": "growth_rate:baranyi", "partner_abundance": 2.0e8,
+          "partner_abundance_unit": "Cells/mL", "partner_abundance_n": 3}],
         meta={"tool_version": "9.9.9", "absence": {"k": 1.0}})
     rates_found = {"a": {"name": "A", "rate": 0.4, "unit": "1/h", "n": 3, "studies": ["S1"],
                          "per_study": {"S1": 0.4}, "method": "growth_rate:baranyi", "lag": 1.5,
@@ -247,4 +249,4 @@ def test_the_glv_payload_and_the_package_carry_the_quantities_beside_each_rate()
         assert row["carrying_capacity"] == "2.5e+08" and row["lag"] == "1.5"
         assert row["method"] == "growth_rate:baranyi" and row["capacity_unit"] == "Cells/mL"
         readme = archive.read("README.txt").decode()
-        assert "carrying capacity" in readme and "reported quantities, not applied to the" in readme
+        assert "carrying capacity" in readme and "growth_rate:baranyi" in readme
