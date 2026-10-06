@@ -732,7 +732,8 @@ them. <strong>Check against chemostat steady states</strong> in Advanced setting
 in the package: predicted against observed, per organism, with every chemostat it could not use and why
 (a run with no dilution rate recorded, a perturbed run, another abundance unit, another medium, or no
 organism in common). It is off by default, because it reads the curves of chemostats a search does not
-otherwise need. Two runs in mGrowthDB qualify today, in SMGDB00000005 and SMGDB00000011.</p>
+otherwise need. The check's own output names every continuous culture it found and what it did with
+each, so which ones qualify is read from the run rather than from this page.</p>
 <p>So a package needs the comparison to be on the <strong>growth rate</strong>: the area under the curve
 and the maximum cannot produce the ratio L. gLV mode sets that, and without it the page says which
 setting to change rather than converting the wrong quantity. Every cell of a row carries the factor
