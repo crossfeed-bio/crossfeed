@@ -25,8 +25,23 @@ Rules for this file:
   scaled design) is named rather than returned. **Verified live on SMGDB00000004**: the three FP
   monocultures fit at r = 0.59, 0.51 and 0.39 /h with conditions 13 to 21, and the two-stage fit gives
   r_FP = 0.511 /h, A_FP,FP = -4.44e-10 and A_FP,BH = +9.83e-11, inside the +6.8e-11 to +1.0e-10 range
-  measured by hand on #116. Still to build: the `IntegratedDeriver` and its wiring (Advanced settings and
-  `--deriver`), the package path, and the report lines.
+  measured by hand on #116.
+  **The rows start where growth starts and stop where it ends** (`lag_of` from the Baranyi fit,
+  `growth_window` from register item 29's plateau rule), because the model has neither a lag term nor a
+  death term: without those cuts SMGDB00000007 fitted B. thetaiotaomicron at -0.08 /h and kept one
+  organism of three, and with them all three come out at 0.80, 0.27 and 0.62 /h with implied plateaus
+  within about 15 percent of their measured ones. A monoculture fit giving a non-positive rate is the
+  model failing on that curve and is reported, not used.
+  **`IntegratedDeriver` derives a network**, reachable with `--deriver
+  grownet.integrated:IntegratedDeriver`; `integrated.fitted_rates` gives the package its rates and the
+  plateau the fit implies, an arc records the comparable strength `log2(1 + A_ij x_j / r_i)` with the
+  coefficient and the fit's numbers beside it, and `metric_with`/`metric_without` carry the implied rates
+  so the package's difference form returns the fitted coefficient exactly.
+  **The comparison this task exists for**, SMGDB00000007 against SMGDB00000005's control: the integrated
+  fit lands all three organisms at 0.41, 0.73 and 2.69 times the observed steady state, where the ratio
+  form gives 1.60 and 3.26 and fits B. hydrogenotrophica to wash out although the chemostat holds it.
+  Still to build: the page's Advanced settings choice, the help and README text, and the decision on
+  fitting a row inside a community of three or more (register open decision 39).
 
 - 2026-10-06 (#124 items 2 and 5, her "complete #124"): **an organism with no certified monoculture
   plateau is fitted at its co-culture plateau** through `matrix.plateaus`, the balance #123 introduced for
