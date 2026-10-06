@@ -15,6 +15,24 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-06 (#125, Karoline's go-ahead on #124 item 4a): **a gLV package can be scored against
+  mGrowthDB's chemostat steady states.** `grownet.steady` reads the steady states of the continuous
+  cultures that hold a network's organisms (through the API's own search, so studies the search never
+  read are included), solves `A x = -(r - D)` for the sub-community each one holds, and reports predicted
+  against observed per organism. It only reports. Off by default on both the page and the command line
+  (`--steady-check`), since it reads curves a search does not need. What the corpus offers: six
+  continuous cultures, five with a dilution rate recorded (0.040 /h), of which two are unperturbed with
+  per-strain curves (SMGDB00000005 `A8 control`, three organisms and six vessels; SMGDB00000011
+  `No perturbations`, six organisms and four vessels). **Whether a run was perturbed is in free text
+  only**, and the two unperturbed ones are called "No perturbations" and "...but no perturbations", so
+  the rule reads a denial first and the change words second ("the feed was stopped", "changed from"), and
+  reports "not known from the records" when neither matches.
+  **Measured:** SMGDB00000007's package against `A8 control` gives 1.6x and 3.2x the observed steady
+  state for B. thetaiotaomicron and R. intestinalis, with B. hydrogenotrophica fitted to wash out where
+  the chemostat holds it at 2.9e7; against SMGDB00000011's six-member run it gives 10x and 30x, with the
+  three organisms the package does not hold named as not scored, which is the likely reason for the
+  larger miss.
+
 - 2026-10-06 (#119, Karoline's decision on #116): **the gLV package holds fitted coefficients**, one
   `interaction_matrix.<unit>.csv` per abundance unit, with `A_ii = -r_i / K_i` and
   `A_ij = r_i (2^L - 1) / x_j_star`. `matrix.coefficients` does the conversion and names every organism

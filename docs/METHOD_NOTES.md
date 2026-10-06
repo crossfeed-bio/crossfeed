@@ -929,6 +929,13 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    difference between a partner's window mean and its own plateau); and an optional unit bridge supplied by
    the reader. Order proposed there: #123, then the chemostat validation, then the threshold, then the
    integrated form.
+   PARTLY SETTLED 2026-10-06 (Karoline): the **chemostat validation** is built (#125, item 4a: a package
+   is scored against the unperturbed steady states of SMGDB00000005 and SMGDB00000011, reporting only),
+   and the **integrated form** is approved "as an advanced option", so it becomes a second `Deriver`
+   chosen in Advanced settings rather than a new default. Still open: the absence threshold inside a
+   matrix, on which she asked for more background; how `x_j_star` is taken and what a unit bridge would
+   entail, on which she asked what the numbers mean; and items 2 and 5. Nothing moves on those until she
+   and Craig settle them.
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.
