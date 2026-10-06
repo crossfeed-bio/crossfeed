@@ -660,22 +660,10 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             for name in (edge.medium or "").split("; "):
                 if name and name not in block_media:
                     block_media.append(name)
-        # the equilibrium this block implies, which the package defines as its own meaning and left the
-        # reader to compute. A fit can have none in the positive cone, and saying so is the first thing a
-        # reader of these numbers needs (found 2026-10-06)
-        from .steady import solve
-        rate_of = [(rates.get(nid) or {}).get("rate") for nid in keep]
-        settles, infeasible = None, []
-        if all(r is not None for r in rate_of):
-            answer = solve([row[:] for row in table], [-r for r in rate_of])
-            if answer is not None:
-                settles = answer
-                infeasible = [name for name, value in zip(names, answer, strict=True) if value <= 0]
         matrices.append({"abundance_unit": abundance_unit, "media": block_media or media(net),
                          "unit": coefficient_unit(rate_unit, abundance_unit),
                          "rate_unit": rate_unit, "organisms": names, "ids": keep, "matrix": table,
-                         "cells": filled, "equilibrium": settles, "not_above_zero": infeasible,
-                         "pooled_media": pooled,
+                         "cells": filled, "pooled_media": pooled,
                          "conflicts": [(_label(net.nodes[a]), _label(net.nodes[b]))
                                        for a, b in conflicts if a in keep and b in keep],
                          "file": f"interaction_matrix.{unit_file(abundance_unit)}.csv"})
@@ -710,6 +698,21 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                 block["ids"] = [block["ids"][k] for k in keep_at]
                 block["matrix"] = [[block["matrix"][i][j] for j in keep_at] for i in keep_at]
     matrices = [block for block in matrices if block["organisms"]]
+    # the equilibrium each block implies, which the package defines as its own meaning and used to leave
+    # the reader to compute. It is worked out here, after every organism that leaves a matrix has left it:
+    # computed inside the loop above it described the block before the removal, so a block that dropped a
+    # row carried an equilibrium of the wrong length, which named an organism it does not hold and raised
+    # on the package's own README (found 2026-10-06, round 2 of the review).
+    from .steady import solve
+    for block in matrices:
+        rate_of = [(rates.get(nid) or {}).get("rate") for nid in block["ids"]]
+        block["equilibrium"], block["not_above_zero"] = None, []
+        if all(r is not None for r in rate_of):
+            answer = solve([row[:] for row in block["matrix"]], [-r for r in rate_of])
+            if answer is not None:
+                block["equilibrium"] = answer
+                block["not_above_zero"] = [name for name, value
+                                           in zip(block["organisms"], answer, strict=True) if value <= 0]
     return {"matrices": matrices, "left_out": left_out, "pairs_left_out": pairs_left_out,
             "across_units": across, "floors": [],
             "from_absolute_rates": all(entry["how"] == "rates" for entry in values.values()),
