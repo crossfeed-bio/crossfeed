@@ -946,8 +946,20 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    * item 7, **a unit bridge**: no default factor, on the measurement that no arc in mGrowthDB crosses
      abundance units, plus one line in the result section saying when a package will hold several
      matrices (#130).
-   * items 2, 5 and 6 (a capacity from another experiment, one matrix per medium, how `x_j_star` is
-     taken) are still open; item 6 may dissolve with the integrated form of #127.
+   * item 2, **a capacity from somewhere other than that study's monoculture**: settled by building the
+     plateau balance for any organism, not only one that grows only with a partner. An organism with a
+     rate and no certified monoculture plateau is fitted at its own plateau beside its partners, and named
+     there; one whose balance comes out at or above zero is named instead. SMGDB00000004's package went
+     from two organisms and one cell to three and five.
+   * item 5, **one matrix per medium**: not done, and the reason is recorded: most media give one or two
+     organisms, so the package would fragment, while the second box already holds a search to one
+     environment. Instead each matrix names the media its own arcs came from, so the mixture is visible.
+   * item 6, **how `x_j_star` is taken**: kept as the partner's mean over the target's rate window, which
+     keeps the rate and the abundance in one interval; the README now states that the alternative, the
+     partner's own plateau, differs from it by 0.2 to 500 times across mGrowthDB. The integrated form of
+     #127 removes the choice, and comparing the two is what that task is for.
+   * item 4b, **the steady states as constraints in a fit**: deferred until #127 lands, since a fit that
+     uses them is a third derivation and the same data serve as the independent check meanwhile.
    PARTLY SETTLED 2026-10-06 (Karoline): the **chemostat validation** is built (#125, item 4a: a package
    is scored against the unperturbed steady states of SMGDB00000005 and SMGDB00000011, reporting only),
    and the **integrated form** is approved "as an advanced option", so it becomes a second `Deriver`

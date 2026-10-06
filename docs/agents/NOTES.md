@@ -15,6 +15,15 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-06 (#124 items 2 and 5, her "complete #124"): **an organism with no certified monoculture
+  plateau is fitted at its co-culture plateau** through `matrix.plateaus`, the balance #123 introduced for
+  an obligate organism, now used for any organism with a rate. One whose balance comes out at or above
+  zero (its partners suppress it harder than its own rate) is named instead. SMGDB00000004's package went
+  from two organisms and one fitted cell to three and five. Media are **not** partitioned: each matrix
+  names the media its own arcs came from, since most media hold one or two organisms and the second box
+  already keeps a search to one environment. `x_j_star` stays the mean over the target's rate window, with
+  the 0.2-to-500-times spread against the partner's own plateau now stated in the README.
+
 - 2026-10-06 (#129, Karoline's decision): **a censored cell holds a measured bound, not +/-10.**
   `interaction.no_growth_bound` turns the rule that said a side did not grow into a bound on that side's
   metric (`max`: factor times its own start; `auc`: that over the window; a growth rate: ln(factor) / T),

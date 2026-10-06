@@ -144,16 +144,23 @@ def test_no_convention_is_left_in_the_package():
         assert "1/(h x Cells/mL)" in readme
 
 
-def test_an_organism_without_a_certified_capacity_is_named_not_given_a_number():
-    """A self-limitation of 0 is a number no one stands behind, so the organism leaves the matrix and the
-    README says why. #118 only certifies K from a curve that reached stationary phase."""
+def test_an_organism_without_any_certified_plateau_is_named_not_given_a_number():
+    """A self-limitation of 0 is a number no one stands behind. #118 only certifies a monoculture K from a
+    curve that reached stationary phase, and #124 item 2 then allows the organism's own plateau beside its
+    partners instead; with neither, it leaves the matrix and the README says why."""
+    bare = [dict(arc, target_capacity=None, target_capacity_unit="", target_capacity_n=0) for arc in PAIR]
     rates = {"a": _rate("A", 0.4, 1.0e9), "b": _rate("B", 0.2, None, unit="")}
-    got, block = _one(_net(PAIR), rates)
+    got, block = _one(_net(bare), rates)
     assert block["organisms"] == ["A"]
     assert got["left_out"] == [("B", "no carrying capacity from a curve that reached stationary phase, "
                                 "so its self-limitation is not fitted")]
-    text = matrix.readme_from(got, _net(PAIR), rates)
+    text = matrix.readme_from(got, _net(bare), rates)
     assert "B" in text and "stationary" in text
+
+    # with a plateau beside its partner, the same organism is fitted there instead (#124 item 2)
+    got, block = _one(_net(PAIR), rates)
+    assert block["organisms"] == ["A", "B"]
+    assert got["plateau_rows"] == [("B", "its co-culture plateau")]
 
 
 def test_an_organism_without_a_rate_is_named_too():

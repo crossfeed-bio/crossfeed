@@ -7,6 +7,16 @@ content.
 ## [Unreleased]
 
 ### Changed
+- **An organism with no certified monoculture plateau is fitted at its co-culture plateau** (#124 item 2,
+  Karoline's "complete #124" of 2026-10-06), rather than left out of the package. The balance is the one
+  #123 introduced for an organism that grows only with a partner, `0 = r_i + A_ii x_i + sum_j A_ij x_j` at
+  its plateau, with every abundance measured; where it comes out at or above zero, which means the
+  partners suppress the organism harder than its own rate, the organism is still named instead. Measured:
+  SMGDB00000004's package now holds all three of its organisms and five fitted cells rather than two
+  organisms and one, because B. hydrogenotrophica never settles alone in that study. **Each matrix also
+  names the media its own arcs came from** (item 5), which keeps media together in one matrix per unit
+  rather than fragmenting the corpus into one matrix per medium, since the second box already holds a
+  search to one environment.
 - **A censored cell of the plain adjacency matrix holds a measured bound, not the stated +/-10** (#129,
   Karoline's decision of 2026-10-06: "go with the bound in #129 following your recommendation"). A pair is
   censored because the no-growth rule judged one side not to have grown, and that rule bounds that side's

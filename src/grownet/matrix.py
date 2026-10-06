@@ -491,6 +491,29 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
     return values, conflicts, unfitted
 
 
+def plateaus(net: InteractionNetwork) -> dict:
+    """{organism: {"mine": its own plateau in co-culture, "unit": ..., "partners": {partner: its plateau}}}.
+
+    The plateau balance of #123, which fits a self-limitation where a monoculture gave no certified
+    plateau: at an organism's plateau beside its partners, `0 = r_i + A_ii x_i + sum_j A_ij x_j`, so
+    `A_ii = -(r_i + sum_j A_ij x_j) / x_i`. Every abundance here is the measured plateau of a co-culture,
+    the organism's own from its arcs and each partner's from the reverse arc, which a biculture always
+    derives both of. Only plateaus in one abundance unit are put together.
+    """
+    plateau = {(e.target, e.source): (e.target_capacity, e.target_capacity_unit)
+               for e in net.edges if e.status != "absent" and e.target_capacity is not None}
+    out: dict = {}
+    for (target, source), (mine, unit) in plateau.items():
+        theirs, their_unit = plateau.get((source, target), (None, ""))
+        if theirs is None or their_unit != unit:
+            continue
+        entry = out.setdefault(target, {"mine": mine, "unit": unit, "partners": {}})
+        if entry["unit"] != unit:
+            continue
+        entry["partners"][source] = theirs
+    return out
+
+
 def obligate_partners(net: InteractionNetwork) -> dict:
     """{organism: [(partner, its plateau beside the organism, the organism's own plateau)]}.
 
@@ -564,10 +587,12 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             "on the page, or --metric growth_rate) and build the package again")
     values, conflicts, unfitted = _pair_values(net, rates)
     obligate = obligate_partners(net)
+    plateau_of = plateaus(net)
     # the organisms an arc says grow only with a partner, whether or not a plateau was certified for them
     only_with = {e.target for e in net.edges if e.status != "absent" and e.metric_without == 0
                  and e.metric_with not in (None, 0)}
     left_out, pairs_left_out, across, rows_fitted = [], [], [], []
+    unusable, plateau_rows = [], []
 
     # an organism belongs to the matrix of the unit its own abundance was measured in: its monoculture
     # carrying capacity, or, for one that grows only with a partner, its plateau beside that partner
@@ -577,6 +602,10 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
         rate = rates.get(nid) or {}
         if rate.get("rate") is not None and rate.get("capacity") is not None:
             blocks.setdefault(rate.get("capacity_unit", ""), []).append(nid)
+            continue
+        if rate.get("rate") is not None and nid in plateau_of:
+            blocks.setdefault(plateau_of[nid]["unit"], []).append(nid)
+            plateau_rows.append((name, "its co-culture plateau"))
             continue
         if nid in obligate:
             # r_i = 0 by measurement: it did not grow alone. Its unit is the one its plateau beside the
@@ -637,15 +666,32 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             if rate.get("rate") is not None and rate.get("capacity"):
                 row[i] = -rate["rate"] / rate["capacity"]
             else:
-                # the plateau balance of an organism that grows only with its partner: with r_i = 0,
-                # 0 = A_ii x_i + sum_j A_ij x_j, so A_ii = -(sum_j A_ij x_j) / x_i (#123)
-                mine = next((mine for _, _, mine in obligate.get(affected, [])), None)
-                held_up = sum(row[k] * theirs
-                              for partner, theirs, _ in obligate.get(affected, [])
-                              for k, other in enumerate(keep) if other == partner)
+                # the plateau balance: at the organism's plateau beside its partners,
+                # 0 = r_i + A_ii x_i + sum_j A_ij x_j, so A_ii = -(r_i + sum_j A_ij x_j) / x_i. For one
+                # that grows only with a partner r_i is 0, measured (#123); for one with a rate and no
+                # certified monoculture plateau it is its own rate (#124 item 2).
+                balance = plateau_of.get(affected) or {}
+                mine = balance.get("mine")
+                own_rate = rate.get("rate") or 0.0
+                held_up = own_rate + sum(row[k] * theirs
+                                         for partner, theirs in (balance.get("partners") or {}).items()
+                                         for k, other in enumerate(keep) if other == partner)
                 row[i] = -held_up / mine if mine else 0.0
+                if row[i] >= 0:
+                    unusable.append((_label(net.nodes[affected]),
+                                     "its self-limitation comes out at or above zero at its co-culture "
+                                     "plateau, where its partners' effect outweighs its own rate, so no "
+                                     "limitation can be fitted for it"))
             table.append(row)
-        matrices.append({"abundance_unit": abundance_unit, "media": media(net),
+        here = set(keep)
+        block_media = []
+        for edge in net.edges:
+            if edge.status == "absent" or edge.source not in here or edge.target not in here:
+                continue
+            for name in (edge.medium or "").split("; "):
+                if name and name not in block_media:
+                    block_media.append(name)
+        matrices.append({"abundance_unit": abundance_unit, "media": block_media or media(net),
                          "unit": coefficient_unit(rate_unit, abundance_unit),
                          "rate_unit": rate_unit, "organisms": names, "ids": keep, "matrix": table,
                          "cells": filled,
@@ -671,12 +717,24 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
     for (affected, actor), why in unfitted:
         pairs_left_out.append((_label(net.nodes[affected]), _label(net.nodes[actor]),
                                f"{why}, so the per-capita effect cannot be fitted"))
+    # an organism whose plateau balance gave no usable limitation leaves the matrix it was put in
+    for name, why in unusable:
+        left_out.append((name, why))
+        plateau_rows[:] = [row for row in plateau_rows if row[0] != name]
+        rows_fitted[:] = [row for row in rows_fitted if row[0] != name]
+        for block in matrices:
+            if name in block["organisms"]:
+                keep_at = [k for k, other in enumerate(block["organisms"]) if other != name]
+                block["organisms"] = [block["organisms"][k] for k in keep_at]
+                block["ids"] = [block["ids"][k] for k in keep_at]
+                block["matrix"] = [[block["matrix"][i][j] for j in keep_at] for i in keep_at]
+    matrices = [block for block in matrices if block["organisms"]]
     return {"matrices": matrices, "left_out": left_out, "pairs_left_out": pairs_left_out,
             "across_units": across, "floors": [],
             "from_absolute_rates": all(entry["how"] == "rates" for entry in values.values()),
             "from_the_ratio": [(_label(net.nodes[a]), _label(net.nodes[b]))
                                for (a, b), entry in values.items() if entry["how"] == "ratio"],
-            "obligate_rows": list(rows_fitted),
+            "obligate_rows": list(rows_fitted), "plateau_rows": list(plateau_rows),
             "censored_cells": [(_label(net.nodes[a]), _label(net.nodes[b]))
                                for (a, b), entry in values.items() if entry["censored"]],
             "metric": metrics[0] if metrics else "",
@@ -746,10 +804,14 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "      A x = -r, and a negative entry there means this fit has no positive steady state.",
         "  The diagonal is fitted: A[i][i] = -r_i / K_i, with K_i the organism's own monoculture carrying",
         "      capacity, the plateau of the curves that reached stationary phase. An organism on its own",
-        "      therefore settles at K_i.",
+        "      therefore settles at K_i. Where no monoculture of it reached a certified plateau, its own",
+        "      plateau beside its partners fits the same balance, 0 = r_i + A[i][i] x_i + sum_j A[i][j] x_j",
+        "      there, and the organism is named under SELF-LIMITATION FITTED AT A CO-CULTURE PLATEAU.",
         "  An off-diagonal cell is A[i][j] = (r_with - r_without) / x_j, the difference between i's own",
         "      growth rate with j and without it, over x_j, the partner's abundance averaged over the",
-        "      window i's rate was fitted in. Both rates come from the same comparison, and the two rates",
+        "      window i's rate was fitted in, which keeps the rate and the abundance in one interval; the",
+        "      alternative, the partner's own plateau, differs from it by 0.2 to 500 times across",
+        "      mGrowthDB. Both rates come from the same comparison, and the two rates",
         "      behind every arc are in the report beside this file, so every cell can be rebuilt by hand.",
         "      Where one of them is 0, measured, because i grew only with j or only without it, the cell",
         "      is still that difference: no floor and no stated extreme enters this package.",
@@ -768,10 +830,18 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
     ]
     for block in got["matrices"]:
         lines.append(f"  {block['file']}: {len(block['organisms'])} organism(s), "
-                     f"{block['cells']} fitted cell(s), every cell in {block['unit']}")
+                     f"{block['cells']} fitted cell(s), every cell in {block['unit']}"
+                     + (f", measured in {', '.join(block['media'])}" if block.get("media") else ""))
     if not got["matrices"]:
         lines.append("  NONE: no organism had both a growth rate and a carrying capacity (see below).")
     lines.append("")
+    if got.get("plateau_rows"):
+        lines += ["SELF-LIMITATION FITTED AT A CO-CULTURE PLATEAU",
+                  "  These organisms reached no certified plateau in monoculture, so -r_i / K_i has no K_i",
+                  "  for them. Their own plateau beside their partners fits the same balance instead:",
+                  "  0 = r_i + A[i][i] x_i + sum_j A[i][j] x_j there, with every abundance measured."]
+        lines += [f"      {who}: {why}" for who, why in got["plateau_rows"]]
+        lines.append("")
     if got.get("obligate_rows"):
         lines += ["ORGANISMS THAT GROW ONLY WITH A PARTNER",
                   "  These did not grow alone in the comparisons behind this package, so their own rate is",
