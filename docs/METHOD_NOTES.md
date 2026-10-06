@@ -917,7 +917,7 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    It needs two more quantities on each arc (the target's absolute rate in each set, and its co-culture
    plateau) and it also removes a mixed source: today L comes from one experiment while r_i is a median
    over every study. Options and the recommendation are on #123; nothing is built until this is settled.
-37. **OPEN: the rest of the gLV parameterisation shortlist** (#124, for Karoline and Craig). Her question
+37. **The rest of the gLV parameterisation shortlist** (#124, Karoline and Craig). Her question
    of 2026-10-06, "anything else to do for a better parameterisation of gLV from the data in mGrowthDB?",
    answered as seven separate decisions with what each was measured to change: the absence threshold means
    "no effect" inside a matrix (13 comparisons dropped in the corpus run, 6 of 12 off-diagonal cells at 0);
