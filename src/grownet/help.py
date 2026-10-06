@@ -281,6 +281,11 @@ EDGE_ATTRIBUTES = {
                        "phase: what fits the self-limitation of an organism that grows only with a partner",
     "target_capacity_unit": "the abundance unit that plateau is in, as measured; never converted",
     "target_capacity_n": "co-culture replicates behind that plateau",
+    "strength_bound": "for a comparison where one side did not grow, the measured bound the cell holds "
+                      "instead of a ratio: at least this much facilitation, or at most this much "
+                      "inhibition, from the no-growth rule's own numbers",
+    "bound_rule": "what that bound rests on, in words: the factor the rule allows and the measured start "
+                  "it applies to",
     "experiments": "the mGrowthDB experiments whose replicates the edge compares",
     "study_ids": "the studies supporting this edge; cite them (see Sources)",
     "merged_arcs": "with Merge parallel arcs: how many arcs of this source and target were merged into this one; "
@@ -655,10 +660,14 @@ the actor. Each organism appears once, so arcs of one pair from several conditio
 by their median, the same rule the Merge arcs setting uses; a pair whose arcs disagree in sign is left at
 0 rather than averaged. An empty cell is 0, and so is an arc below the absence threshold, which the
 threshold judged no interaction. An obligate interaction (the affected organism grows only with the actor)
-has no log2 ratio at all, because one side did not grow, so it carries +10 and an abolished one -10: a
-stated extreme, past anything a measured comparison reaches, which the gLV README names cell by cell. Such
-an arc never enters the median of the arcs that do have a ratio; it sets a cell only when no arc of that
-pair was quantified. The diagonal of this matrix is 0; only the gLV package sets it to -1.</p>
+has no log2 ratio at all, because one side did not grow, so its cell holds a <strong>measured bound</strong>
+instead of the stated extreme it used to carry: the no-growth rule allows that side at most its factor
+(1.5 by default) over its own measured start, which bounds the ratio from below for an obligate pair and
+from above for an abolished one. The report prints each bound with the rule behind it, and the arc says it
+is a bound (<code>strength_bound</code>). Where the rule bounds nothing away from zero, which happens with
+the area under the curve, because a culture that did not grow still carries the area of its own inoculum,
+the cell stays 0 and the report says which growth property bounds it tightly. Such an arc sets a cell only
+when no arc of that pair was quantified. The diagonal of this matrix is 0; only the gLV package fits it.</p>
 <p><strong>The growth rates.</strong> With Report growth rates on, every organism in the network also
 gets its maximum specific growth rate in monoculture: the method the Growth rate method setting names
 (easylinear by default, the one mGrowthDB reports), the median over the replicates and studies that have

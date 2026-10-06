@@ -115,6 +115,8 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
                 # the two absolute rates a coefficient is the difference of (#123)
                 "metric_with": getattr(edge, "metric_with", None),
                 "metric_without": getattr(edge, "metric_without", None),
+                # a censored arc's cell is a bound, not a ratio (#129)
+                "strength_bound": getattr(edge, "strength_bound", None),
                 "quality": " ".join(edge.quality), "cautions": " ".join(edge.cautions),
                 "notes": "; ".join(edge.notes), "community": " ".join(edge.community),
                 "experiments": " ".join(edge.experiments), "study_ids": " ".join(edge.study_ids),

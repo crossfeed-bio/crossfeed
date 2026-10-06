@@ -100,6 +100,8 @@ SCHEMA_DOC = {
                 "target_capacity": {"type": ["number", "null"]},
                 "target_capacity_unit": {"type": "string"},
                 "target_capacity_n": {"type": ["integer", "null"]},
+                "strength_bound": {"type": ["number", "null"]},
+                "bound_rule": {"type": "string"},
             },
         },
         "study": {

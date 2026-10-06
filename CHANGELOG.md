@@ -7,6 +7,17 @@ content.
 ## [Unreleased]
 
 ### Changed
+- **A censored cell of the plain adjacency matrix holds a measured bound, not the stated +/-10** (#129,
+  Karoline's decision of 2026-10-06: "go with the bound in #129 following your recommendation"). A pair is
+  censored because the no-growth rule judged one side not to have grown, and that rule bounds that side's
+  own metric: at most its factor (1.5 by default) over its own measured start, which bounds the cell from
+  below for an obligate pair and from above for an abolished one. The arc carries the bound and the rule
+  behind it (`strength_bound`, `bound_rule`), the report prints both, and the gLV payload lists the
+  bounded cells beside the conventional ones a network derived earlier still has. Where the rule bounds
+  nothing away from zero, which happens with the area under the curve because a culture that did not grow
+  still carries the area of its own inoculum, the cell stays 0 and says which growth property bounds it
+  tightly. Measured on SMGDB00000013: with the growth rate the seven censored arcs come out between +4.4
+  and +5.9 log2, in place of a flat +10, which as a log2 mean claimed a thousandfold effect.
 - **Every cell of the gLV package comes from absolute rates, and an obligate pair is a measurement**
   (#123, her decision of 2026-10-06 after asking "Do we keep obligates despite the lack of a floor? If
   not, how can we keep them?"). The formula she settled is the same number written as a difference,

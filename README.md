@@ -173,8 +173,9 @@ python -m grownet schema [--out FILE]
   column, and a cell holding the log2 mean of the comparison, so `A[i][j]` is the effect of j on i. Each
   organism appears once, so arcs of one pair are merged across conditions and studies by their median, a
   pair whose arcs disagree in sign is left at 0, and an empty cell or an arc below the absence threshold
-  is 0. An obligate interaction carries +10 and an abolished one -10, a stated extreme, since neither has
-  a log2 ratio: one side did not grow at all.
+  is 0. An obligate or abolished interaction has no log2 ratio, since one side did not grow at all, so its
+  cell holds a measured bound from the no-growth rule instead: at least this much facilitation, or at most
+  this much inhibition, with the rule printed in the report.
 - `--report-rates` also reports each organism's maximum specific growth rate in monoculture (the median
   over the replicates and studies that have one, batch monocultures only), which `--rates FILE` writes as
   CSV. With it, `--glv FILE` writes the parameters of a generalized Lotka-Volterra simulation: a zip of the
@@ -398,8 +399,10 @@ table: the organisms in the header row and in the first column, and `A[i][j]` th
 affected, columns the actor), so `dx_i/dt = x_i (r_i + sum_j A[i][j] x_j)` reads in that order. A matrix
 holds one cell per ordered pair, so arcs of one pair merge across conditions and studies by their median,
 and a pair whose arcs disagree in sign is left at 0. An empty cell and an arc below the absence threshold
-are 0; an obligate interaction is +10 and an abolished one -10, a stated extreme rather than a measured
-ratio, since one side did not grow at all. The diagonal is 0 here.
+are 0; an obligate or abolished interaction carries a measured bound rather than a ratio, since one side
+did not grow at all: the no-growth rule allows that side at most its factor over its own measured start,
+which bounds the cell from below or from above, and the report prints the rule behind each one. The
+diagonal is 0 here.
 `--glv FILE` (with `--report-rates --metric growth_rate`, or `--glv-mode`, which sets both) writes the parameters of a
 generalized Lotka-Volterra simulation as a zip, as **fitted coefficients**: one
 `interaction_matrix.<unit>.csv` per abundance unit, with `A[i][i] = -r_i / K_i` on the diagonal (K is the

@@ -956,5 +956,20 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    entail, on which she asked what the numbers mean; and items 2 and 5. Nothing moves on those until she
    and Craig settle them.
 
+38. **What a censored cell of the plain adjacency matrix holds** (Karoline, 2026-10-06, asking "Is it
+   possible to transfer values properly estimated in gLV mode for obligate/abolished species to the plain
+   adjacency matrix? else, what would be your suggestion to get rid of the ad-hoc value in the plain
+   adjacency matrix?"). Transferring is not possible: the plain matrix holds dimensionless log2 ratios and
+   the package per-capita coefficients in 1/(time x abundance), and for a censored pair the ratio is
+   infinite, which is why the convention existed. SETTLED the same day ("go with the bound in #129
+   following your recommendation"): the cell holds a **measured bound** from the rule that declared no
+   growth, which allows that side at most `factor` (1.5 by default) over its own measured start, so the
+   cell is bounded from below for an obligate pair and from above for an abolished one, flagged as a bound
+   and printed with its rule. `matrix.EXTREME` survives only as the fallback for a network derived before
+   this, named as such. Measured on SMGDB00000013: with the growth rate the bounds are +4.4 to +5.9 log2
+   rather than a flat +10; with the area under the curve one of them bounds nothing away from zero,
+   because a culture that did not grow still carries its inoculum's area, and that cell stays 0 with the
+   reason given.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

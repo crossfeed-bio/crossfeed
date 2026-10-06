@@ -214,6 +214,49 @@ def _unspiked(reps, species, spike_factor) -> list:
     return [r for r in reps if not spike(r.curve(species), spike_factor)]
 
 
+def no_growth_bound(reps, species: str, end: float, method: str, factor: float = None) -> dict:
+    """What the no-growth rule bounds the metric of a set that did not grow by (#129).
+
+    {"value", "factor", "start", "window", "rule"}: the rule says the geometric mean of that set's rises,
+    maximum over first point, stayed under `factor`, so the geometric mean of its maxima is at most
+    `factor` times the geometric mean of its starts, both measured. In the metric's own units that gives:
+
+      * `max`: factor * x0;
+      * `auc`: that bound held over the window, factor * x0 * T, since the curve stays under it;
+      * a growth rate: the rate that would produce the bounded rise over the window, ln(factor) / T.
+
+    So a censored comparison has a measured bound rather than a stated extreme. `value` is None when the
+    set has no usable start to measure from.
+    """
+    factor = NO_GROWTH_FACTOR if factor is None else factor
+    starts, spans = [], []
+    for rep_ in reps:
+        curve = rep_.curve(species)
+        if curve is None:
+            continue
+        times, values = cut(curve, end)
+        if values and values[0] > 0:
+            starts.append(values[0])
+            spans.append(times[-1] - times[0])
+    if not starts or not factor:
+        return {"value": None, "factor": factor, "start": None, "window": None,
+                "rule": "the no-growth rule left no measured start to bound this set by"}
+    start = math.exp(statistics.mean(math.log(s) for s in starts))
+    window = statistics.mean(spans) or 1.0
+    if method.startswith("growth_rate"):
+        value = math.log(factor) / window
+        how = (f"no growth: a rise under {factor:g} times its own start over {window:g} time unit(s) is a "
+               f"rate under {value:.4g}")
+    elif method == "auc":
+        value = factor * start * window
+        how = (f"no growth: at most {factor:g} times its own start ({start:.4g}) over {window:g} time "
+               "unit(s)")
+    else:
+        value = factor * start
+        how = f"no growth: at most {factor:g} times its own start ({start:.4g})"
+    return {"value": value, "factor": factor, "start": start, "window": window, "rule": how}
+
+
 def _grown_values(reps, species, role, prop, method, skipped, spike_factor, flagged, no_growth, end,
                   alpha, factor) -> list:
     """The log2 values of a set, or none when the set did not grow (the no-growth rule, #37). The rule is
@@ -336,7 +379,15 @@ def interaction_strength(mono_a, mono_b, co, species_a: str, species_b: str, met
         co_used, monos_used = _unspiked(co, species, spike_factor), _unspiked(monos, species, spike_factor)
         stationary = {"with": stationary_verdict(co_used, species, end),
                       "without": stationary_verdict(monos_used, species, end)}
-        result[key] = {"species": species, "window": window, "stationary": stationary,
+        bound = None
+        if c["outcome"] in (OBLIGATE, ABOLISHED):
+            # the side that did not grow, and what the rule that said so bounds its metric by (#129)
+            which = monos if c["outcome"] == OBLIGATE else co
+            bound = no_growth_bound(which, species, end, method, no_growth_factor)
+            bound["side"] = "without" if c["outcome"] == OBLIGATE else "with"
+            bound["rule"] = (f"{bound['rule']}"
+                             + (f" ({species} {bound['side']} the partner)" if bound["value"] else ""))
+        result[key] = {"species": species, "window": window, "stationary": stationary, "bound": bound,
                        "zero_start": {"with": starts_at_zero(co_used, species),
                                       "without": starts_at_zero(monos_used, species)},
                        "outcome": c["outcome"], "mean": c["mean"],

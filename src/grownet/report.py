@@ -25,9 +25,20 @@ def _value(key: str, value) -> str:
     return "none" if value == "" else str(value)
 
 
+def _bound_line(e) -> str:
+    """How the report writes a censored arc's cell: a bound, with the rule that produced it (#129)."""
+    size = getattr(e, "strength_bound", None)
+    if size is None:
+        return ""
+    direction = "at least" if size > 0 else "at most"
+    return f"{direction} log2 {size:+.4g}" + (f" [{e.bound_rule}]" if e.bound_rule else "")
+
+
 def _mean_sd(e) -> str:
     if e.strength is None:
-        return "no ratio (one side did not grow)"
+        bound = _bound_line(e)
+        return f"no ratio (one side did not grow), so the cell is a bound: {bound}" if bound else \
+            "no ratio (one side did not grow)"
     return f"log2 mean {e.strength:+.2f}" + ("" if e.sd is None else f" +/- {e.sd:.2f}")
 
 

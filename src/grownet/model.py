@@ -135,6 +135,10 @@ class Edge:
     target_capacity: float | None = None       # the target's own plateau in the co-culture
     target_capacity_unit: str = ""
     target_capacity_n: int | None = None
+    # A censored comparison has no ratio, so its cell holds a measured bound from the no-growth rule
+    # instead of a stated extreme: at least this much facilitation, or at most this much inhibition (#129).
+    strength_bound: float | None = None
+    bound_rule: str = ""
     merged_arcs: int | None = None  # arcs merged into this one (register item 14), None when not merged
     strength_range: tuple = ()    # (lowest, highest) log2 mean of the merged arcs
     supporting_pairs: int | None = None  # with genus merging: the distinct species (or strain) pairs behind it

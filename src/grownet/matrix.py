@@ -56,9 +56,20 @@ def labels(net: InteractionNetwork) -> list:
 
 
 def _extreme(edge):
-    """+EXTREME, -EXTREME, or None: the convention value of an arc that has no ratio."""
+    """The value of an arc that has no ratio, or None.
+
+    Since #129 that is the **measured bound** the no-growth rule puts on the side that did not grow: at
+    least this much facilitation for an obligate comparison, at most this much inhibition for an abolished
+    one (`interaction.no_growth_bound`, carried as `strength_bound`). A network derived before that change
+    has no bound, and falls back to `EXTREME` so its censored arcs still show rather than reading as 0,
+    which would say no interaction about the strongest effect there is; the README names those cells.
+    """
     if edge.strength is not None or edge.status == "absent":
         return None
+    if getattr(edge, "strength_bound", None) is not None:
+        return edge.strength_bound
+    if getattr(edge, "bound_rule", ""):
+        return None        # the rule was applied and bounds nothing away from zero: the cell stays 0
     if edge.outcome == OBLIGATE:
         return EXTREME
     return -EXTREME if edge.outcome == ABOLISHED else None
@@ -129,12 +140,23 @@ def counts(net: InteractionNetwork) -> dict:
     return {"arcs": in_a_cell, "cells": len(values), "organisms": len(net.nodes)}
 
 
-def by_convention(net: InteractionNetwork) -> list:
-    """The cells that hold `EXTREME` rather than a measured value, as (affected, actor, value) labels.
+def bounded_cells(net: InteractionNetwork) -> list:
+    """The cells that hold a measured bound rather than a ratio, as (affected, actor, value) labels.
 
     These are the pairs whose only arcs are obligate or abolished: no ratio exists, so the cell carries
-    the convention. The README names them, since a reader has to know which numbers were measured.
+    the bound the no-growth rule puts on the side that did not grow (#129). A reader has to know which
+    numbers are bounds, so the report and the README name them.
     """
+    return [row for row in _censored_cells(net) if row[2] not in (EXTREME, -EXTREME)]
+
+
+def by_convention(net: InteractionNetwork) -> list:
+    """The censored cells of a network old enough to have no bound, which fall back to `EXTREME`."""
+    return [row for row in _censored_cells(net) if row[2] in (EXTREME, -EXTREME)]
+
+
+def _censored_cells(net: InteractionNetwork) -> list:
+    """Every cell whose value comes from a comparison where one side did not grow."""
     values, _ = cells(net)
     measured = {(e.target, e.source) for e in net.edges if e.status != "absent" and e.strength is not None}
     pairs = []
@@ -324,13 +346,12 @@ def readme(net: InteractionNetwork, rates: dict, conflicts: list, missing: list,
         f"over {count['organisms']} organism(s).",
         *_media_lines(net),
         *_dropout_lines(net),
-        f"  An obligate interaction (the affected organism grows only with the actor) is {_number(EXTREME)} "
-        "and an abolished",
-        f"      one (it grows only without the actor) is {_number(-EXTREME)}: no ratio exists for them, "
-        "because one side did not",
-        "      grow at all, so these are stated extremes, not measurements. They do not enter the median "
-        "of the",
-        "      arcs that do have a ratio; they set a cell only when no arc of that pair was quantified.",
+        "  An obligate interaction (the affected organism grows only with the actor) and an abolished one",
+        "      (it grows only without it) have no ratio, because one side did not grow at all, so their",
+        "      cell holds a MEASURED BOUND instead: the no-growth rule that said so allows that side at",
+        "      most a set factor over its own measured start, which bounds the ratio from below for an",
+        "      obligate pair and from above for an abolished one. Such a cell sets a pair only when no arc",
+        "      of it was quantified, and the report names every one of them with the rule behind it.",
         f"  Cells are often stronger than the {_number(DIAGONAL)} on the diagonal, a partner outweighing "
         "an organism's own",
         "      self-limitation. A simulation run on them unchanged can grow without bound (deSolve returns",
@@ -346,8 +367,9 @@ def readme(net: InteractionNetwork, rates: dict, conflicts: list, missing: list,
     ]
     if convention:
         lines += ["NUMBERS THAT ARE CONVENTIONS, NOT MEASUREMENTS",
-                  "  These cells hold the stated extreme above, because one side did not grow at all and no",
-                  "  ratio exists (actor on affected):"]
+                  "  This network was derived before the bound above existed, so these cells still hold the",
+                  f"  stated extreme of {_number(EXTREME)}. Derive again to have a measured bound instead",
+                  "  (actor on affected):"]
         lines += [f"      {actor} on {affected}: {_number(value)}" for affected, actor, value in convention]
         lines.append("")
     lines.append("WHAT IS NOT IN HERE")
@@ -848,9 +870,15 @@ def glv_payload(net: InteractionNetwork, rates: dict) -> dict:
             "diagonal": DIAGONAL,
             "extreme": EXTREME,
             "absence_k": meta.get("absence", {}).get("k"),
+            # cells with no ratio: a measured bound since #129, and the stated extreme only in a network
+            # derived before it. Both are listed here, since a reader of either has to know (#110).
             "placeholders": [{"affected": affected, "actor": actor, "value": value,
-                              "outcome": "obligate" if value > 0 else "abolished"}
-                             for affected, actor, value in by_convention(net)],
+                              "outcome": "obligate" if value > 0 else "abolished",
+                              "kind": "convention" if abs(value) == EXTREME else "bound"}
+                             for affected, actor, value in _censored_cells(net)],
+            "bounds": [{"affected": affected, "actor": actor, "value": value,
+                        "outcome": "obligate" if value > 0 else "abolished"}
+                       for affected, actor, value in bounded_cells(net)],
             "sign_conflicts": [{"affected": affected, "actor": actor} for affected, actor in conflicts],
             "without_a_rate": missing,
             "effect_size": "a cell is the log2 mean of a growth comparison, an effect size, not a fitted "

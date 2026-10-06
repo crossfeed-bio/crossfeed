@@ -79,8 +79,11 @@ def test_the_payload_carries_the_numbers_in_the_order_the_formula_reads():
 def test_the_caveats_travel_as_data_not_only_as_prose():
     """A reader of a README can skip it; a program cannot skip a field."""
     caveats = matrix.glv_payload(_net(), RATES)["caveats"]
+    # an arc with no ratio carries a measured bound since #129; this fake network has none, so it falls
+    # back to the stated extreme, and the field says which of the two it is
     assert caveats["placeholders"] == [{"affected": "C", "actor": "A", "value": 10.0,
-                                        "outcome": "obligate"}]
+                                        "outcome": "obligate", "kind": "convention"}]
+    assert caveats["bounds"] == []
     assert caveats["sign_conflicts"] == [{"affected": "C", "actor": "B"}]
     assert caveats["without_a_rate"] == ["B", "C"]
     assert caveats["extreme"] == 10.0 and caveats["diagonal"] == -1.0 and caveats["absence_k"] == 1.0

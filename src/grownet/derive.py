@@ -832,6 +832,31 @@ def absolute_values(c: dict) -> tuple:
     return first, second
 
 
+def bounded_strength(c: dict) -> tuple:
+    """(the log2 bound a censored comparison's cell holds, the rule behind it), or (None, "").
+
+    A censored comparison has no ratio, because one side did not grow. The no-growth rule that said so
+    bounds that side's metric (`interaction.no_growth_bound`), so the cell holds a measured bound rather
+    than a stated extreme (#129): the growing side's own geometric mean over that bound, with the sign of
+    the outcome. An obligate pair gives a lower bound (at least this much facilitation) and an abolished
+    one an upper bound (at most this much inhibition).
+    """
+    bound = c.get("bound") or {}
+    if not bound.get("value"):
+        return None, ""
+    growing = c["with_log2"] if c["outcome"] == OBLIGATE else c["without_log2"]
+    if not growing:
+        return None, ""
+    size = mean(growing) - math.log2(bound["value"])
+    if size <= 0:
+        # the bound is weaker than the measurement it is compared with, so it does not put the effect
+        # away from zero. That happens with an area, where a culture that did not grow still carries the
+        # area of its own inoculum; `max` and a growth rate are bounded tightly (#129).
+        return None, (f"{bound['rule']}, which does not bound this effect away from zero: the cell is 0, "
+                      "and a comparison on the maximum or on the growth rate bounds it tightly")
+    return (round(size, 4) if c["outcome"] == OBLIGATE else round(-size, 4)), bound["rule"]
+
+
 def _record(source: str, target: str, c: dict, method: str, quality: list, cautions: list, notes: list,
             cond: str, evidence: str, community, experiments, study_id, study_meta, identities=None,
             mode: str = BATCH, medium: str = "", partner: dict = None, capacity: dict = None) -> dict:
@@ -844,6 +869,7 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
     """
     mean, sd = c["mean"], c["sd"]
     _absolute = absolute_values(c)
+    _bound = bounded_strength(c)
     test = welch(c["with_log2"], c["without_log2"])
     ratio = effect_over_sd(mean, sd)
     identities = identities or {}
@@ -874,6 +900,7 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
         # the two absolute numbers the strength is the ratio of, and the target's own plateau in the
         # co-culture, which together fit a row that a ratio cannot (#123)
         "metric_with": _absolute[0], "metric_without": _absolute[1],
+        "strength_bound": _bound[0], "bound_rule": _bound[1],
         "target_capacity": (capacity or {}).get("value"),
         "target_capacity_unit": (capacity or {}).get("unit", ""),
         "target_capacity_n": (capacity or {}).get("n"),
@@ -941,7 +968,8 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
             continue
         c = {"mean": side["mean"], "sd": side["sd"], "se": side["se"], "outcome": side["outcome"],
              "n_with": side["n_co"], "n_without": side["n_mono"],
-             "with_log2": side["co_log2"], "without_log2": side["mono_log2"]}
+             "with_log2": side["co_log2"], "without_log2": side["mono_log2"],
+             "bound": side.get("bound")}
         quality, cautions = _replicate_flags(c["n_with"], c["n_without"])
         cautions += stationary_cautions(side.get("stationary"), method, c["outcome"])
         cautions += zero_start_cautions(side.get("zero_start"), c["outcome"])

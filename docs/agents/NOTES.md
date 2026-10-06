@@ -15,6 +15,15 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-06 (#129, Karoline's decision): **a censored cell holds a measured bound, not +/-10.**
+  `interaction.no_growth_bound` turns the rule that said a side did not grow into a bound on that side's
+  metric (`max`: factor times its own start; `auc`: that over the window; a growth rate: ln(factor) / T),
+  `derive.bounded_strength` turns it into the signed log2 bound the cell holds, and `matrix._extreme`
+  prefers it over `EXTREME`, which now only serves a network derived before this change. An `auc`
+  comparison can leave the bound on the wrong side of zero, since a culture that did not grow still
+  carries its inoculum's area: the cell then stays 0 and says that the maximum or the growth rate bounds
+  it tightly. With the growth rate on SMGDB00000013 the bounds are +4.4 to +5.9 log2 in place of +10.
+
 - 2026-10-06 (#123, Karoline's decision): **every cell of the gLV package comes from absolute rates.**
   `A_ij = (r_with - r_without) / x_j_star`, the same formula as a difference, so a pair where one side did
   not grow is a measurement: `matrix.floor_magnitude` is gone, `EXTREME` stays in the plain adjacency
