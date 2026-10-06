@@ -178,9 +178,9 @@ python -m grownet schema [--out FILE]
   this much inhibition, with the rule printed in the report.
 - `--report-rates` also reports each organism's maximum specific growth rate in monoculture (the median
   over the replicates and studies that have one, batch monocultures only), which `--rates FILE` writes as
-  CSV. With it, `--glv FILE` writes the parameters of a generalized Lotka-Volterra simulation: a zip of the
-  interaction matrix with -1 on the diagonal, the matching growth rates and a README stating the
-  conventions. The numbers are effect sizes, not fitted gLV coefficients.
+  CSV. With it, `--glv FILE` writes the parameters of a generalized Lotka-Volterra simulation: a zip of one
+  matrix of fitted per-capita coefficients per abundance unit, the matching growth rates and a README
+  stating every formula. It needs the comparison to be on the growth rate, which `--glv-mode` sets.
 - `--out FILE` writes the network to a file instead of stdout; attribution and skipped pairs print to
   stderr.
 - `validate FILE` checks a network document against the neutral-format schema and exits non-zero if it

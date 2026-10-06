@@ -34,7 +34,10 @@ from . import brand
 from .interaction import ABOLISHED, OBLIGATE
 from .model import InteractionNetwork, genus_name
 
-DIAGONAL = -1.0           # self-limitation, by convention (Karoline, 2026-10-03)
+# The -1 a package used to carry on its diagonal by convention (Karoline, 2026-10-03). No output holds it
+# since #119: the package fits the diagonal from the data and the plain adjacency matrix leaves it at 0.
+# It is kept because `rows` takes a diagonal, and because a reader of a 0.2.0 package met this number.
+DIAGONAL = -1.0
 RATE_UNIT = "1/h"
 # An obligate comparison (the target grows only with the source) and an abolished one (only without it)
 # have no log2 ratio at all, because one side did not grow, while the interaction they report is the
@@ -170,8 +173,8 @@ def _censored_cells(net: InteractionNetwork) -> list:
 def rows(net: InteractionNetwork, diagonal: float | None = None) -> tuple:
     """(names, matrix, conflicts): the square matrix, row by row, with `diagonal` on the diagonal.
 
-    `diagonal` None leaves the diagonal at 0, which is the plain adjacency matrix; the gLV package passes
-    DIAGONAL.
+    `diagonal` None leaves the diagonal at 0, which is the plain adjacency matrix. The gLV package does
+    not come through here: it fits its own diagonal (`coefficients`).
     """
     order = labels(net)
     values, conflicts = cells(net)
