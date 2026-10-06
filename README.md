@@ -403,8 +403,10 @@ ratio, since one side did not grow at all. The diagonal is 0 here.
 `--glv FILE` (with `--report-rates --metric growth_rate`, or `--glv-mode`, which sets both) writes the parameters of a
 generalized Lotka-Volterra simulation as a zip, as **fitted coefficients**: one
 `interaction_matrix.<unit>.csv` per abundance unit, with `A[i][i] = -r_i / K_i` on the diagonal (K is the
-monoculture carrying capacity) and `A[i][j] = r_i (2^L - 1) / x_j` off it, where L is the log2 ratio of
-i's growth rate with j over without it and x_j is the partner's abundance over i's growth window;
+monoculture carrying capacity) and `A[i][j] = (r_with - r_without) / x_j` off it, the difference between
+i's own growth rate with j and without it over the partner's abundance across i's growth window, so a
+pair where one side did not grow is a measurement rather than a convention, and an organism that grows
+only with a partner gets `r_i = 0` and a self-limitation fitted at its plateau beside that partner;
 `growth_rates.csv`, one rate per organism in the same order with how many values it rests on, and beside
 it the estimator, the Baranyi lag and the carrying capacity with its abundance unit; and `README.txt`,
 which states every formula and unit, names the pairs left at 0 for disagreeing in sign, every organism and

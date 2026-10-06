@@ -905,8 +905,7 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    gLV mode therefore sets three settings, not four: rates on, drop-out off, and the growth property on
    the growth rate.
 
-36. **OPEN: fitting the coefficients from absolute rates, which also keeps obligate pairs** (#123, for
-   Karoline and Craig). Karoline, 2026-10-06: "Do we keep obligates despite the lack of a floor? If not,
+36. **Fitting the coefficients from absolute rates, which also keeps obligate pairs** (#123, Karoline). Karoline, 2026-10-06: "Do we keep obligates despite the lack of a floor? If not,
    how can we keep them?" Measured answer: the floor of item 34 is not the obstacle. An obligate pair is
    kept today wherever the pair also has a quantified arc, and where it does not, what blocks it is that
    an organism needs its own row (a rate and a self-limitation) to be in a matrix at all, which an

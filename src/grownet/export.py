@@ -69,6 +69,11 @@ _KEYS = [
     ("e_partner_abundance", "edge", "partner_abundance", "double"),
     ("e_partner_abundance_unit", "edge", "partner_abundance_unit", "string"),
     ("e_partner_abundance_n", "edge", "partner_abundance_n", "int"),
+    ("e_metric_with", "edge", "metric_with", "double"),
+    ("e_metric_without", "edge", "metric_without", "double"),
+    ("e_target_capacity", "edge", "target_capacity", "double"),
+    ("e_target_capacity_unit", "edge", "target_capacity_unit", "string"),
+    ("e_target_capacity_n", "edge", "target_capacity_n", "int"),
     ("e_merged_arcs", "edge", "merged_arcs", "int"),
     ("e_strength_range", "edge", "strength_range", "string"),
     ("e_supporting_pairs", "edge", "supporting_pairs", "int"),
@@ -162,6 +167,11 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(ed, "e_partner_abundance", e.partner_abundance)
         _data(ed, "e_partner_abundance_unit", e.partner_abundance_unit)
         _data(ed, "e_partner_abundance_n", e.partner_abundance_n)
+        _data(ed, "e_metric_with", e.metric_with)
+        _data(ed, "e_metric_without", e.metric_without)
+        _data(ed, "e_target_capacity", e.target_capacity)
+        _data(ed, "e_target_capacity_unit", e.target_capacity_unit)
+        _data(ed, "e_target_capacity_n", e.target_capacity_n)
 
     if pretty:
         ET.indent(root)

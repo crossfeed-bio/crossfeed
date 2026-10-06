@@ -47,6 +47,9 @@ def _edge_line(net, e) -> str:
                      f"{e.n_without if e.n_without is not None else '?'} without")
     if e.significance is not None:
         parts.append(f"adjusted p {e.significance:.3g}")
+    if getattr(e, "metric_with", None) is not None and getattr(e, "metric_without", None) is not None:
+        parts.append(f"{name[e.target]} at {e.metric_with:.4g} with / {e.metric_without:.4g} without "
+                     f"({e.metric})")
     if getattr(e, "partner_abundance", None) is not None:
         parts.append(f"{name[e.source]} at {e.partner_abundance:.4g} "
                      f"{e.partner_abundance_unit} over the window")

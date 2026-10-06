@@ -272,6 +272,15 @@ EDGE_ATTRIBUTES = {
                          "target's growth rate was fitted in; the x_j a gLV coefficient divides by",
     "partner_abundance_unit": "the abundance unit that number is in, as measured; never converted",
     "partner_abundance_n": "co-culture replicates behind that median",
+    "metric_with": "the target's own growth property in the co-culture, as a number rather than a ratio: "
+                   "the geometric mean over the replicates with the source present, which is what a "
+                   "fitted coefficient is built from",
+    "metric_without": "the same without the source; 0 means the target did not grow at all there, which "
+                      "is what an obligate outcome records",
+    "target_capacity": "the target's own plateau in the co-culture, where its curves reached stationary "
+                       "phase: what fits the self-limitation of an organism that grows only with a partner",
+    "target_capacity_unit": "the abundance unit that plateau is in, as measured; never converted",
+    "target_capacity_n": "co-culture replicates behind that plateau",
     "experiments": "the mGrowthDB experiments whose replicates the edge compares",
     "study_ids": "the studies supporting this edge; cite them (see Sources)",
     "merged_arcs": "with Merge parallel arcs: how many arcs of this source and target were merged into this one; "
@@ -682,8 +691,13 @@ from drop-out designs, and which media they were measured in.</p>
 simulator, and since #119 it holds <strong>fitted coefficients</strong> rather than effect sizes:
 <code>interaction_matrix.&lt;unit&gt;.csv</code>, one matrix per abundance unit and named after it, where
 the diagonal is <code>A[i][i] = -r_i / K_i</code> with K the organism's own monoculture carrying capacity,
-and an off-diagonal cell is <code>A[i][j] = r_i (2^L - 1) / x_j</code> with L the log2 ratio of i's growth
-rate with j over without it and x_j the partner's abundance over i's growth window;
+and an off-diagonal cell is <code>A[i][j] = (r_with - r_without) / x_j</code>, the difference between i's
+own growth rate with j and without it, over the partner's abundance averaged across the window i's rate
+was fitted in. Both rates come from the same comparison and are in the report, so every cell can be
+rebuilt by hand. Where one of them is 0 because i grew only with j, or only without it, the cell is still
+that difference: no floor and no stated extreme enters the package, and an organism that grows only with a
+partner gets a whole row, <code>r_i = 0</code> with its self-limitation fitted at the plateau it reaches
+beside that partner. The package also carries
 <code>growth_rates.csv</code> (one rate per organism, in the same order, with how many values it rests on,
 and beside it the estimator, the lag and the carrying capacity); and <code>README.txt</code>, which states
 every formula and unit, names any pair left at 0 for disagreeing in sign, names every organism and every

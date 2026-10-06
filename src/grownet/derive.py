@@ -27,7 +27,7 @@ import json
 import math
 import re
 from collections import Counter
-from statistics import median
+from statistics import mean, median
 
 from . import rates
 from . import selection as selecting
@@ -452,6 +452,38 @@ def partner_abundance(replicate, target: str, partner: str, rate_method: str = N
     return {"value": value, "unit": partner_curve.abundance_unit, "window": (start, end), "reason": ""}
 
 
+def target_capacity(replicates, target: str) -> dict:
+    """{"value", "unit", "n", "skipped"}: the target's own plateau in these co-culture replicates.
+
+    An organism that does not grow alone has no monoculture carrying capacity, so its self-limitation
+    cannot be fitted the usual way. What it does have is a plateau beside its partner, and at that plateau
+    the gLV balance reads `0 = r_i + A_ii x_i + sum_j A_ij x_j`, which fits `A_ii` (#123). Only curves
+    `reached_stationary` certifies count, as in #118, and the median runs over the replicates that have
+    one; abundances in different units are reported rather than converted.
+    """
+    values, unit, skipped = [], "", []
+    for i, replicate in enumerate(replicates):
+        curve = replicate.curve(target)
+        label = f"{target} in co-culture: replicate {replicate.name or i}"
+        if curve is None:
+            skipped.append((label, "no curve for this organism in this replicate"))
+            continue
+        settled = reached_stationary(curve, curve.times[-1])
+        if settled is not True:
+            skipped.append((label, "the curve is too sparse or does not rise, so stationary phase cannot "
+                                   "be judged" if settled is None else
+                                   "the curve had not reached stationary phase"))
+            continue
+        unit = unit or curve.abundance_unit
+        if curve.abundance_unit != unit:
+            skipped.append((label, f"the plateau is in {curve.abundance_unit} and the others in {unit}; "
+                                   "left out rather than converted"))
+            continue
+        values.append(curve_features(curve)["max"])
+    return {"value": median(values) if values else None, "unit": unit if values else "",
+            "n": len(values), "skipped": skipped}
+
+
 def partner_abundances(replicates, target: str, partner: str, rate_method: str = None,
                        window: int = None) -> dict:
     """The same over a replicate set: the median of the replicates that have one, with the rest reported.
@@ -785,9 +817,24 @@ def absence(mean, sd, outcome: str, k: float = ABSENCE_THRESHOLD):
     return ABSENT if abs(mean) < k * sd else PRESENT
 
 
+def absolute_values(c: dict) -> tuple:
+    """(with, without): the metric itself in each set, not its log2 ratio (#123).
+
+    The comparison is a difference of means of log2 values, so 2 to that mean is the geometric mean of
+    the metric in that set, and the ratio of the two is exactly the arc's strength. A set that did not
+    grow has no log2 values and its value is 0, which is what the outcomes obligate and abolished record:
+    `A_ij = (r_with - r_without) / x_j_star` is then a measurement where the log2 ratio does not exist.
+    """
+    with_log2, without_log2 = c.get("with_log2") or [], c.get("without_log2") or []
+    outcome = c.get("outcome")
+    first = 2 ** mean(with_log2) if with_log2 else (0.0 if outcome == ABOLISHED else None)
+    second = 2 ** mean(without_log2) if without_log2 else (0.0 if outcome == OBLIGATE else None)
+    return first, second
+
+
 def _record(source: str, target: str, c: dict, method: str, quality: list, cautions: list, notes: list,
             cond: str, evidence: str, community, experiments, study_id, study_meta, identities=None,
-            mode: str = BATCH, medium: str = "", partner: dict = None) -> dict:
+            mode: str = BATCH, medium: str = "", partner: dict = None, capacity: dict = None) -> dict:
     """One edge record from a comparison `c` (mean, sd, se, n_with, n_without, outcome, with_log2,
     without_log2), the shape `records_to_network` reads.
 
@@ -796,6 +843,7 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
     so a comparison whose partner was not measured keeps its arc, with the reason beside it.
     """
     mean, sd = c["mean"], c["sd"]
+    _absolute = absolute_values(c)
     test = welch(c["with_log2"], c["without_log2"])
     ratio = effect_over_sd(mean, sd)
     identities = identities or {}
@@ -823,6 +871,12 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
         "partner_abundance_unit": (partner or {}).get("unit", ""),
         "partner_abundance_n": (partner or {}).get("n"),
         "partner_abundance_left_out": list((partner or {}).get("skipped", ())),
+        # the two absolute numbers the strength is the ratio of, and the target's own plateau in the
+        # co-culture, which together fit a row that a ratio cannot (#123)
+        "metric_with": _absolute[0], "metric_without": _absolute[1],
+        "target_capacity": (capacity or {}).get("value"),
+        "target_capacity_unit": (capacity or {}).get("unit", ""),
+        "target_capacity_n": (capacity or {}).get("n"),
         "condition": cond, "method": REPLICATE_METHOD.format(metric=method),
         "evidence": evidence, "community": sorted(_identity(identities, m)["id"] for m in community),
         "experiments": list(experiments),
@@ -910,7 +964,7 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
         records.append(_record(source, target, c, method, quality, cautions,
                                _spike_notes(result["flagged"], target), cond, "biculture", (a, b),
                                [_exp_id(exp), *origin[target]], study_id, study_meta, identities, mode,
-                               selecting.medium_of(exp), partner))
+                               selecting.medium_of(exp), partner, target_capacity(co_reps, target)))
 
 
 def run_group(exp: dict) -> str:

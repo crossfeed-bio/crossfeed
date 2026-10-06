@@ -401,60 +401,95 @@ def _metrics(net: InteractionNetwork) -> list:
     return seen
 
 
-def floor_magnitude(net: InteractionNetwork) -> float | None:
-    """The |log2 ratio| an obligate or abolished pair enters a coefficient with, or None.
+def _per_arc(edge, fallback_rate: float | None = None) -> tuple:
+    """(the coefficient one biculture arc gives, how it was obtained), or (None, "").
 
-    Karoline's choice on Craig's censored argument (#116): such a pair is not a stated extreme but a
-    measurement cut off at the detection limit, so it takes a floor. mGrowthDB records no detection limit
-    for a growth rate, so the floor is the largest magnitude measured in the same run: the strongest
-    effect the data shows, which is the least the censored one can be. A run with no quantified arc has
-    no floor to take, and such pairs are then named instead.
+    `A_ij = (r_with - r_without) / x_j_star`, Karoline's formula written as a difference rather than a
+    ratio (#123). Both rates are the arc's own, from the same comparison, and a set that did not grow
+    carries 0, so an obligate or abolished pair is a measurement here rather than a floor or a stated
+    extreme.
+
+    A network saved before #123 carries no absolute rates, only the log2 ratio, so such an arc falls back
+    to `r_i (2^L - 1) / x_j_star` with the organism's reported rate, which is the same number whenever
+    that rate is the arc's own without-set rate. The README says when a package holds such a cell.
     """
-    sizes = [abs(e.strength) for e in net.edges if e.status != "absent" and e.strength is not None]
-    return max(sizes) if sizes else None
+    if edge.partner_abundance in (None, 0):
+        return None, ""
+    if edge.metric_with is not None and edge.metric_without is not None:
+        return (edge.metric_with - edge.metric_without) / edge.partner_abundance, "rates"
+    if edge.strength is not None and fallback_rate:
+        return fallback_rate * (2 ** edge.strength - 1) / edge.partner_abundance, "ratio"
+    return None, ""
 
 
-def _pair_values(net: InteractionNetwork, floor: float | None) -> tuple:
-    """({pair: {"log2", "floor", "abundance", "unit"}}, conflicts, no_floor).
+def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
+    """({pair: {"value", "unit", "censored", "arcs"}}, conflicts, unfitted).
 
-    One entry per ordered pair, merged the way the matrix merges (median of the quantified arcs, signs
-    that disagree left out). `floor` is the magnitude a censored pair enters with; `abundance` is the
-    median of the partner abundances of the arcs behind the entry, in the one unit they agree on.
+    One entry per ordered pair: the median of the coefficients its arcs give, which is Karoline's merge
+    rule (register item 14) applied to the converted numbers, and only within one abundance unit. A pair
+    whose arcs disagree in sign is not merged and is returned in `conflicts`; a pair no arc could convert
+    is returned in `unfitted` with the reason.
     """
-    measured, censored, abundances, units = {}, {}, {}, {}
+    per_pair: dict = {}
     for edge in net.edges:
-        pair = (edge.target, edge.source)
-        quantified = edge.status != "absent" and edge.strength is not None
-        extreme = _extreme(edge)
-        if not quantified and extreme is None:
+        if edge.status == "absent":
             continue
-        if quantified:
-            measured.setdefault(pair, []).append(edge.strength)
-        else:
-            censored.setdefault(pair, []).append(1.0 if extreme > 0 else -1.0)
-        if edge.partner_abundance is not None:
-            abundances.setdefault(pair, {}).setdefault(edge.partner_abundance_unit or "", []) \
-                .append(edge.partner_abundance)
-    values, conflicts, no_floor = {}, [], []
-    for pair in list(measured) + [p for p in censored if p not in measured]:
-        signs = measured.get(pair, []) + censored.get(pair, [])
-        if any(v > 0 for v in signs) and any(v < 0 for v in signs):
+        quantified = edge.strength is not None
+        censored = _extreme(edge) is not None
+        if not quantified and not censored:
+            continue
+        pair = (edge.target, edge.source)
+        unit = edge.partner_abundance_unit or ""
+        value, how = _per_arc(edge, ((rates or {}).get(edge.target) or {}).get("rate"))
+        entry = per_pair.setdefault(pair, {"by_unit": {}, "reasons": [], "censored": False,
+                                           "how": set()})
+        if value is None:
+            actor, affected = _label(net.nodes[edge.source]), _label(net.nodes[edge.target])
+            entry["reasons"].append(
+                f"no abundance for {actor} over {affected}'s growth window"
+                if edge.partner_abundance in (None, 0) else
+                f"the rates behind this arc were not recorded (metric {edge.metric or 'unknown'})")
+            continue
+        entry["by_unit"].setdefault(unit, []).append(value)
+        entry["censored"] = entry["censored"] or censored
+        entry["how"].add(how)
+    values, conflicts, unfitted = {}, [], []
+    for pair, entry in per_pair.items():
+        if not entry["by_unit"]:
+            unfitted.append((pair, "; ".join(dict.fromkeys(entry["reasons"]))))
+            continue
+        unit = max(entry["by_unit"], key=lambda u: len(entry["by_unit"][u]))
+        numbers = entry["by_unit"][unit]
+        if any(v > 0 for v in numbers) and any(v < 0 for v in numbers):
             conflicts.append(pair)
             continue
-        if pair in measured:
-            log2, is_floor = statistics.median(measured[pair]), False
-        elif floor is None:
-            no_floor.append(pair)
+        values[pair] = {"value": statistics.median(numbers), "unit": unit,
+                        "censored": entry["censored"], "arcs": len(numbers),
+                        "how": "ratio" if "ratio" in entry["how"] else "rates"}
+    return values, conflicts, unfitted
+
+
+def obligate_partners(net: InteractionNetwork) -> dict:
+    """{organism: [(partner, its plateau beside the organism, the organism's own plateau)]}.
+
+    The arcs that say an organism grows only with a partner: it did not grow in that comparison without
+    it (`metric_without` is 0). Such an organism has no monoculture rate or capacity, and a gLV model
+    says so with `r_i = 0` and a self-limitation fitted at the plateau it does reach beside the partner
+    (#123). The partner's own plateau in the same co-culture is the reverse arc's, which a biculture
+    always derives both of.
+    """
+    plateau = {(e.target, e.source): (e.target_capacity, e.target_capacity_unit)
+               for e in net.edges if e.target_capacity is not None}
+    out: dict = {}
+    for edge in net.edges:
+        if edge.status == "absent" or edge.metric_without != 0 or edge.metric_with in (None, 0):
             continue
-        else:
-            log2, is_floor = floor * censored[pair][0], True
-        by_unit = abundances.get(pair, {})
-        unit = max(by_unit, key=lambda u: len(by_unit[u])) if by_unit else ""
-        values[pair] = {"log2": log2, "floor": is_floor,
-                        "abundance": statistics.median(by_unit[unit]) if unit else None,
-                        "unit": unit}
-        units[pair] = unit
-    return values, conflicts, no_floor
+        mine, unit = plateau.get((edge.target, edge.source), (None, ""))
+        theirs, their_unit = plateau.get((edge.source, edge.target), (None, ""))
+        if mine is None or theirs is None or unit != their_unit:
+            continue
+        out.setdefault(edge.target, []).append((edge.source, theirs, mine))
+    return out
 
 
 def coefficient_unit(rate_unit: str, abundance_unit: str) -> str:
@@ -474,13 +509,15 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
 
     {"matrices": [{"abundance_unit", "unit", "organisms", "ids", "matrix", "cells", "conflicts"}],
      "left_out": [(organism, why)], "pairs_left_out": [(affected, actor, why)],
-     "across_units": [(affected, actor, why)], "floors": [(affected, actor, log2)],
-     "floor_rule", "rate_methods", "metric"}
+     "across_units": [(affected, actor, why)], "obligate_rows": [(organism, partner)],
+     "censored_cells": [(affected, actor)], "rate_methods", "lag_methods", "metric"}
 
-    Every number is a measurement or a floor taken from one: no diagonal by convention, no stated
-    extreme. An organism whose rate or carrying capacity is missing, and a pair whose partner abundance
-    is missing or in another unit, are named rather than given a number. Raises `CannotConvert` when the
-    arcs do not compare growth rates, since L is a ratio of rates.
+    **Every number is a measurement** (#123): a cell is `(r_with - r_without) / x_j_star` from one arc's
+    own rates, merged across the arcs of a pair by their median, and a diagonal is `-r_i / K_i` from the
+    monoculture. An organism that grows only with a partner has `r_i = 0` by measurement and its
+    self-limitation from the plateau it reaches beside that partner, so an obligate pair needs no floor
+    and no stated extreme. An organism or pair that still cannot be fitted is named rather than given a
+    number. Raises `CannotConvert` when the arcs do not compare growth rates.
     """
     metrics = _metrics(net)
     not_rates = [m for m in metrics if not (m or "").startswith(RATE_METRIC_PREFIX)]
@@ -489,57 +526,69 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             f"these arcs compare {', '.join(repr(m) for m in not_rates)}, and a gLV coefficient needs the "
             f"log2 ratio of a growth rate: derive with the {RATE_METRIC_PREFIX} growth property (gLV mode "
             "on the page, or --metric growth_rate) and build the package again")
-    floor = floor_magnitude(net)
-    values, conflicts, no_floor = _pair_values(net, floor)
-    left_out, pairs_left_out, across, floors = [], [], [], []
+    values, conflicts, unfitted = _pair_values(net, rates)
+    obligate = obligate_partners(net)
+    # the organisms an arc says grow only with a partner, whether or not a plateau was certified for them
+    only_with = {e.target for e in net.edges if e.status != "absent" and e.metric_without == 0
+                 and e.metric_with not in (None, 0)}
+    left_out, pairs_left_out, across, rows_fitted = [], [], [], []
 
-    # an organism belongs to the matrix of the unit its own carrying capacity was measured in
+    # an organism belongs to the matrix of the unit its own abundance was measured in: its monoculture
+    # carrying capacity, or, for one that grows only with a partner, its plateau beside that partner
     blocks: dict = {}
     for nid in labels(net):
         name = _label(net.nodes[nid])
-        rate = rates.get(nid)
-        if rate is None or rate.get("rate") is None:
-            left_out.append((name, "no growth rate, so neither its own limitation nor the effect of "
-                                   "anything on it can be fitted"))
+        rate = rates.get(nid) or {}
+        if rate.get("rate") is not None and rate.get("capacity") is not None:
+            blocks.setdefault(rate.get("capacity_unit", ""), []).append(nid)
             continue
-        if rate.get("capacity") is None:
+        if nid in obligate:
+            # r_i = 0 by measurement: it did not grow alone. Its unit is the one its plateau beside the
+            # partner was measured in, which obligate_partners already matched between the two.
+            unit = next((e.target_capacity_unit for e in net.edges
+                         if e.target == nid and e.target_capacity is not None), "")
+            blocks.setdefault(unit, []).append(nid)
+            rows_fitted.append((name, _label(net.nodes[obligate[nid][0][0]])))
+            continue
+        if nid in only_with:
+            left_out.append((name, "it grows only with a partner and reached no certified plateau beside "
+                                   "one, in the same abundance unit as that partner, so its "
+                                   "self-limitation cannot be fitted"))
+        elif rate.get("rate") is None:
+            left_out.append((name, "no growth rate, and no arc saying it grows only with a partner, so "
+                                   "neither its own limitation nor the effect of anything on it can be "
+                                   "fitted"))
+        else:
             left_out.append((name, "no carrying capacity from a curve that reached stationary phase, so "
                                    "its self-limitation is not fitted"))
-            continue
-        blocks.setdefault(rate.get("capacity_unit", ""), []).append(nid)
 
     matrices = []
     for abundance_unit, ids in sorted(blocks.items()):
-        times = {(rates[nid].get("unit") or RATE_UNIT) for nid in ids}
+        times = {(rates[nid].get("unit") or RATE_UNIT) for nid in ids if nid in rates} or {RATE_UNIT}
         rate_unit = sorted(times)[0]
         keep = []
         for nid in ids:
-            if (rates[nid].get("unit") or RATE_UNIT) != rate_unit:
+            own = (rates.get(nid) or {}).get("unit")
+            if own and own != rate_unit:
                 left_out.append((_label(net.nodes[nid]),
-                                 f"its growth rate is in {rates[nid].get('unit')}, and this matrix in "
-                                 f"{rate_unit}; left out rather than converted"))
+                                 f"its growth rate is in {own}, and this matrix in {rate_unit}; left out "
+                                 "rather than converted"))
                 continue
             keep.append(nid)
         names = [_label(net.nodes[nid]) for nid in keep]
         table, filled = [], 0
         for i, affected in enumerate(keep):
-            rate = rates[affected]
+            rate = rates.get(affected) or {}
             row = []
             for j, actor in enumerate(keep):
                 if i == j:
-                    row.append(-rate["rate"] / rate["capacity"])
+                    row.append(0.0)        # set below, once the row's partners are known
                     continue
                 entry = values.get((affected, actor))
                 if entry is None:
                     row.append(0.0)
                     continue
                 label_pair = (_label(net.nodes[affected]), _label(net.nodes[actor]))
-                if entry["abundance"] is None:
-                    pairs_left_out.append((*label_pair, f"no abundance for {label_pair[1]} over "
-                                                        f"{label_pair[0]}'s growth window, so the "
-                                                        "per-capita effect cannot be fitted"))
-                    row.append(0.0)
-                    continue
                 if entry["unit"] != abundance_unit:
                     pairs_left_out.append((*label_pair,
                                            f"{label_pair[1]}'s abundance beside {label_pair[0]} is in "
@@ -547,10 +596,18 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                                            "left out rather than converted"))
                     row.append(0.0)
                     continue
-                row.append(rate["rate"] * (2 ** entry["log2"] - 1) / entry["abundance"])
+                row.append(entry["value"])
                 filled += 1
-                if entry["floor"]:
-                    floors.append((*label_pair, entry["log2"]))
+            if rate.get("rate") is not None and rate.get("capacity"):
+                row[i] = -rate["rate"] / rate["capacity"]
+            else:
+                # the plateau balance of an organism that grows only with its partner: with r_i = 0,
+                # 0 = A_ii x_i + sum_j A_ij x_j, so A_ii = -(sum_j A_ij x_j) / x_i (#123)
+                mine = next((mine for _, _, mine in obligate.get(affected, [])), None)
+                held_up = sum(row[k] * theirs
+                              for partner, theirs, _ in obligate.get(affected, [])
+                              for k, other in enumerate(keep) if other == partner)
+                row[i] = -held_up / mine if mine else 0.0
             table.append(row)
         matrices.append({"abundance_unit": abundance_unit, "media": media(net),
                          "unit": coefficient_unit(rate_unit, abundance_unit),
@@ -575,17 +632,17 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                 across.append((_label(net.nodes[affected]), _label(net.nodes[actor]),
                                f"{' and '.join(missing)} could not be fitted, so this effect is in no "
                                "matrix"))
-    for affected, actor in no_floor:
-        if affected in where:
-            across.append((_label(net.nodes[affected]), _label(net.nodes[actor]),
-                           "the pair is obligate or abolished and no arc of this run was quantified, so "
-                           "there is no floor to take"))
-    rule = ("a floor, not a measurement: the largest magnitude measured in this run "
-            f"(log2 {_number(floor)}) with the sign of the outcome, because one side did not grow and "
-            "mGrowthDB records no detection limit for a growth rate") if floor is not None else (
-            "no floor was available: this run has no quantified arc to take one from")
+    for (affected, actor), why in unfitted:
+        pairs_left_out.append((_label(net.nodes[affected]), _label(net.nodes[actor]),
+                               f"{why}, so the per-capita effect cannot be fitted"))
     return {"matrices": matrices, "left_out": left_out, "pairs_left_out": pairs_left_out,
-            "across_units": across, "floors": floors, "floor_rule": rule, "floor": floor,
+            "across_units": across, "floors": [],
+            "from_absolute_rates": all(entry["how"] == "rates" for entry in values.values()),
+            "from_the_ratio": [(_label(net.nodes[a]), _label(net.nodes[b]))
+                               for (a, b), entry in values.items() if entry["how"] == "ratio"],
+            "obligate_rows": list(rows_fitted),
+            "censored_cells": [(_label(net.nodes[a]), _label(net.nodes[b]))
+                               for (a, b), entry in values.items() if entry["censored"]],
             "metric": metrics[0] if metrics else "",
             "rate_methods": sorted({r.get("method", "") for r in rates.values() if r.get("method")}),
             "lag_methods": sorted({r.get("lag_method", "") for r in rates.values()
@@ -654,9 +711,12 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "  The diagonal is fitted: A[i][i] = -r_i / K_i, with K_i the organism's own monoculture carrying",
         "      capacity, the plateau of the curves that reached stationary phase. An organism on its own",
         "      therefore settles at K_i.",
-        "  An off-diagonal cell is A[i][j] = r_i * (2^L - 1) / x_j, with L the log2 ratio of i's growth",
-        "      rate with j over without it, and x_j the partner's own abundance averaged over the window",
-        "      i's rate was fitted in.",
+        "  An off-diagonal cell is A[i][j] = (r_with - r_without) / x_j, the difference between i's own",
+        "      growth rate with j and without it, over x_j, the partner's abundance averaged over the",
+        "      window i's rate was fitted in. Both rates come from the same comparison, and the two rates",
+        "      behind every arc are in the report beside this file, so every cell can be rebuilt by hand.",
+        "      Where one of them is 0, measured, because i grew only with j or only without it, the cell",
+        "      is still that difference: no floor and no stated extreme enters this package.",
         "  ABUNDANCES ARE NEVER CONVERTED BETWEEN UNITS: a cell mass conversion would have to be",
         "      invented, while the dynamics are the same in any unit, so each unit has its own matrix and",
         "      the pairs that fall outside it are named below.",
@@ -676,12 +736,29 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
     if not got["matrices"]:
         lines.append("  NONE: no organism had both a growth rate and a carrying capacity (see below).")
     lines.append("")
-    if got["floors"]:
-        lines += ["FLOORS, NOT MEASUREMENTS",
-                  f"  {got['floor_rule']}.",
-                  "  These cells rest on a floor (actor on affected, as log2 of the rate ratio):"]
-        lines += [f"      {actor} on {affected}: log2 {_number(value)}"
-                  for affected, actor, value in got["floors"]]
+    if got.get("obligate_rows"):
+        lines += ["ORGANISMS THAT GROW ONLY WITH A PARTNER",
+                  "  These did not grow alone in the comparisons behind this package, so their own rate is",
+                  "  0 by measurement and their self-limitation is fitted at the plateau they reach beside",
+                  "  the partner: 0 = A[i][i] x_i + sum_j A[i][j] x_j there."]
+        lines += [f"      {who} grows only with {partner}" for who, partner in got["obligate_rows"]]
+        lines.append("")
+    if got.get("from_the_ratio"):
+        lines += ["CELLS TAKEN FROM THE LOG2 RATIO, NOT FROM TWO RATES",
+                  "  These arcs come from a network derived before the two absolute rates were recorded,",
+                  "  so their cells use r_i (2^L - 1) / x_j with the organism's reported rate, which is",
+                  "  the same number whenever that rate is the arc's own rate without the actor. Derive",
+                  "  again to have them from the measurements themselves (actor on affected):"]
+        lines += [f"      {actor} on {affected}" for affected, actor in got["from_the_ratio"]]
+        lines.append("")
+    if got.get("censored_cells"):
+        lines += ["CELLS FROM A COMPARISON WHERE ONE SIDE DID NOT GROW",
+                  "  One of the two rates behind these cells is 0, measured: the affected organism grew",
+                  "  only with the actor, or only without it. The formula takes that as it is, so these",
+                  "  are measurements and not floors or stated extremes, and they enter the median of",
+                  "  their pair like any other measurement, which register item 14 kept them out of while",
+                  "  they were conventions (actor on affected):"]
+        lines += [f"      {actor} on {affected}" for affected, actor in got["censored_cells"]]
         lines.append("")
     lines.append("WHAT IS NOT IN HERE")
     conflicts = [pair for block in got["matrices"] for pair in block["conflicts"]]

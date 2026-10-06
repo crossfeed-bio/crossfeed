@@ -112,6 +112,9 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
                 # the partner's abundance over the target's growth window, for a gLV coefficient (#118)
                 "partner_abundance": getattr(edge, "partner_abundance", None),
                 "partner_abundance_unit": getattr(edge, "partner_abundance_unit", ""),
+                # the two absolute rates a coefficient is the difference of (#123)
+                "metric_with": getattr(edge, "metric_with", None),
+                "metric_without": getattr(edge, "metric_without", None),
                 "quality": " ".join(edge.quality), "cautions": " ".join(edge.cautions),
                 "notes": "; ".join(edge.notes), "community": " ".join(edge.community),
                 "experiments": " ".join(edge.experiments), "study_ids": " ".join(edge.study_ids),

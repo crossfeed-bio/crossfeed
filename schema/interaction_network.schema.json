@@ -264,6 +264,33 @@
             "integer",
             "null"
           ]
+        },
+        "metric_with": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "metric_without": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "target_capacity": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "target_capacity_unit": {
+          "type": "string"
+        },
+        "target_capacity_n": {
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     },

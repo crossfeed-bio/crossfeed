@@ -22,13 +22,30 @@ from grownet.mgrowthdb import records_to_network
 RATE_METRIC = "growth_rate:baranyi"
 
 
+# each organism's own rate, so an arc can carry the absolute numbers its strength is the ratio of (#123)
+RATE_OF = {"a": 0.4, "b": 0.2, "c": 0.5, "d": 0.5}
+
+
 def _arc(source, target, strength, x_j=2.0e8, unit="Cells/mL", **extra):
-    """One biculture arc with the partner's abundance #118 measures beside it."""
-    return {"source": source, "target": target, "source_name": source.upper(), "target_name": target.upper(),
-            "effect": "facilitation" if (strength or 1) > 0 else "inhibition", "strength": strength,
-            "status": "present", "outcome": "quantified", "study_id": "S1", "metric": RATE_METRIC,
-            "evidence": "biculture", "medium": "WC", "partner_abundance": x_j,
-            "partner_abundance_unit": unit, "partner_abundance_n": 3, **extra}
+    """One biculture arc with the partner's abundance #118 measures beside it, and the two absolute rates
+    #123 fits from: the target's own rate without the source, and that rate times 2^strength with it, so
+    (r_with - r_without) / x_j is the same number the ratio form gave."""
+    without = RATE_OF.get(target, 0.4)
+    with_source = None if strength is None else without * 2 ** strength
+    record = {"source": source, "target": target, "source_name": source.upper(),
+              "target_name": target.upper(),
+              "effect": "facilitation" if (strength or 1) > 0 else "inhibition", "strength": strength,
+              "status": "present", "outcome": "quantified", "study_id": "S1", "metric": RATE_METRIC,
+              "evidence": "biculture", "medium": "WC", "partner_abundance": x_j,
+              "partner_abundance_unit": unit, "partner_abundance_n": 3,
+              "metric_with": with_source, "metric_without": without,
+              "target_capacity": 3.0e8, "target_capacity_unit": unit, "target_capacity_n": 3}
+    record.update(extra)
+    if record["outcome"] == "obligate":
+        record.update(metric_with=without * 2, metric_without=0.0)       # grew only with the source
+    elif record["outcome"] == "abolished":
+        record.update(metric_with=0.0, metric_without=without)           # grew only without it
+    return record
 
 
 def _rate(name, rate, capacity, unit="Cells/mL", method=RATE_METRIC, **extra):
@@ -96,24 +113,24 @@ def test_one_matrix_per_abundance_unit_each_declaring_its_own():
     assert all(abs(v) < 1.0e-8 for row in by_unit["Cells/mL"]["matrix"] for v in row)
 
 
-def test_an_obligate_pair_gets_a_derived_floor_not_a_stated_extreme():
-    """Karoline's choice on Craig's censored argument: the +/-10 leaves the package and an obligate pair
-    takes a floor from the run. The largest measured magnitude here is L = 1.0 (B on A), so the obligate
-    arc enters at L = +1.0: 0.4 * (2 - 1) / 2e8 = +2e-9, and the README calls it a floor."""
-    arcs = PAIR + [dict(_arc("c", "a", None, x_j=2.0e8), outcome="obligate", effect="facilitation")]
+def test_an_obligate_pair_needs_no_floor_at_all():
+    """The floor this task gave a censored pair was replaced on #123, which Karoline settled the same
+    day: the formula is a difference of rates, and an obligate pair measured 0 without the actor, so
+    0.8 / 2e8 = +4e-9 is a measurement. tests/test_absolute_rates.py checks that form; here only that
+    no floor and no stated extreme is left."""
+    arcs = PAIR + [_arc("c", "a", None, x_j=2.0e8, outcome="obligate", effect="facilitation")]
     rates = {**RATES, "c": _rate("C", 0.5, 1.0e8)}
     got, block = _one(_net(arcs), rates)
-    assert _cell(block, "A", "C") == pytest.approx(2.0e-9)
-    assert got["floors"] == [("A", "C", 1.0)]
-    assert got["floor_rule"].startswith("a floor")
+    assert _cell(block, "A", "C") == pytest.approx(4.0e-9)
+    assert got["floors"] == []
     text = matrix.readme_from(got, _net(arcs), rates)
-    assert "FLOOR" in text and "stated extreme" not in text and "by convention" not in text
+    assert "FLOORS, NOT MEASUREMENTS" not in text and "by convention" not in text
     assert all(abs(v) != 10.0 for row in block["matrix"] for v in row)
 
 
 def test_no_convention_is_left_in_the_package():
     """The acceptance of #119: no -1 diagonal, no +/-10, and nothing to scale."""
-    arcs = PAIR + [dict(_arc("b", "c", None, x_j=2.0e8), outcome="abolished", effect="inhibition")]
+    arcs = PAIR + [_arc("b", "c", None, x_j=2.0e8, outcome="abolished", effect="inhibition")]
     rates = {**RATES, "c": _rate("C", 0.5, 1.0e8)}
     with zipfile.ZipFile(io.BytesIO(matrix.glv_package(_net(arcs), rates))) as archive:
         names = sorted(archive.namelist())
@@ -144,8 +161,9 @@ def test_an_organism_without_a_rate_is_named_too():
     reach the package with no rate at all. It leaves the matrix and is named."""
     got, block = _one(_net(PAIR), {"a": _rate("A", 0.4, 1.0e9)})
     assert block["organisms"] == ["A"]
-    assert got["left_out"] == [("B", "no growth rate, so neither its own limitation nor the effect of "
-                                "anything on it can be fitted")]
+    assert got["left_out"] == [("B", "no growth rate, and no arc saying it grows only with a partner, so "
+                                "neither its own limitation nor the effect of anything on it can be "
+                                "fitted")]
 
 
 def test_a_pair_without_the_partners_abundance_stays_at_zero_and_is_named():

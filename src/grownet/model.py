@@ -128,6 +128,13 @@ class Edge:
     partner_abundance: float | None = None
     partner_abundance_unit: str = ""      # the abundance unit it was measured in, never converted
     partner_abundance_n: int | None = None  # co-culture replicates behind the median
+    # The metric itself in each set, which `strength` is the log2 ratio of: a set that did not grow has 0
+    # here, so a censored pair is a measurement rather than a floor (#123).
+    metric_with: float | None = None
+    metric_without: float | None = None
+    target_capacity: float | None = None       # the target's own plateau in the co-culture
+    target_capacity_unit: str = ""
+    target_capacity_n: int | None = None
     merged_arcs: int | None = None  # arcs merged into this one (register item 14), None when not merged
     strength_range: tuple = ()    # (lowest, highest) log2 mean of the merged arcs
     supporting_pairs: int | None = None  # with genus merging: the distinct species (or strain) pairs behind it

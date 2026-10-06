@@ -329,6 +329,10 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             partner_abundance=r.get("partner_abundance"),
             partner_abundance_unit=r.get("partner_abundance_unit", ""),
             partner_abundance_n=r.get("partner_abundance_n"),
+            metric_with=r.get("metric_with"), metric_without=r.get("metric_without"),
+            target_capacity=r.get("target_capacity"),
+            target_capacity_unit=r.get("target_capacity_unit", ""),
+            target_capacity_n=r.get("target_capacity_n"),
             merged_arcs=r.get("merged_arcs"), strength_range=tuple(r.get("strength_range", ())),
             supporting_pairs=r.get("supporting_pairs"), merged_pairs=tuple(r.get("merged_pairs", ())),
         ))

@@ -7,6 +7,22 @@ content.
 ## [Unreleased]
 
 ### Changed
+- **Every cell of the gLV package comes from absolute rates, and an obligate pair is a measurement**
+  (#123, her decision of 2026-10-06 after asking "Do we keep obligates despite the lack of a floor? If
+  not, how can we keep them?"). The formula she settled is the same number written as a difference,
+  `A_ij = (r_with - r_without) / x_j`, and that form is defined where the ratio is not: an obligate pair
+  measured 0 without the actor and an abolished one 0 with it, so **the floor and the stated extreme are
+  both gone from the package**, and such a cell enters the median of its pair like any other measurement.
+  An organism that grows only with a partner now gets a whole row: `r_i = 0` by measurement, and its
+  self-limitation fitted at the plateau it reaches beside that partner, `0 = A_ii x_i + sum_j A_ij x_j`
+  there. Both rates behind every arc, and the target's own plateau in the co-culture, travel on the arc,
+  in the schema, in GraphML, in the Cytoscape style and in the report, so every cell can be rebuilt by
+  hand. A cell also no longer mixes sources: it used one experiment's ratio with a rate averaged over
+  every study, and now both rates come from the same comparison. A network saved before this change
+  carries no absolute rates and still converts through the ratio, with the README naming those cells.
+  Measured: on SMGDB00000013 four censored pairs become measurements and one of them enters the matrix;
+  on the whole corpus the cells move by up to a third and the chemostat check stays in the same range
+  (1.6 and 3.2 times the observed steady state of SMGDB00000005's control).
 - **The gLV package holds fitted coefficients, one matrix per abundance unit** (#119, Karoline's decision
   on #116). The diagonal is `A[i][i] = -r_i / K_i` with K the monoculture carrying capacity, and an
   off-diagonal cell is `A[i][j] = r_i (2^L - 1) / x_j` with L the log2 ratio of i's growth rate with j

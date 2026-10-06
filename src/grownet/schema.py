@@ -95,6 +95,11 @@ SCHEMA_DOC = {
                 "partner_abundance": {"type": ["number", "null"]},
                 "partner_abundance_unit": {"type": "string"},
                 "partner_abundance_n": {"type": ["integer", "null"]},
+                "metric_with": {"type": ["number", "null"]},
+                "metric_without": {"type": ["number", "null"]},
+                "target_capacity": {"type": ["number", "null"]},
+                "target_capacity_unit": {"type": "string"},
+                "target_capacity_n": {"type": ["integer", "null"]},
             },
         },
         "study": {
