@@ -724,7 +724,8 @@ which estimator produced the rate; the <strong>lag</strong>, always from the Bar
 estimator that has one, whichever one produced the rate; and the organism's monoculture
 <strong>carrying capacity</strong>, the plateau of its curves, taken only from curves certified to have
 reached stationary phase and left in the abundance unit they were measured in. They are in
-<code>growth_rates.csv</code>, in the network's meta and in the report, with every curve that gave no
+<code>growth_rates.csv</code>, which names both estimators in its <code>method</code> and
+<code>lag_method</code> columns, in the network's meta and in the report, with every curve that gave no
 capacity named and why. Each arc also carries <code>partner_abundance</code>, the actor's own abundance in
 the co-cultures averaged over the window the target's growth rate was fitted in.</p>
 <p><strong>Start with the gLV mode button</strong>, beside All. It sets the three settings a simulation
@@ -750,7 +751,10 @@ was fitted in. Both rates come from the same comparison and are in the report, s
 rebuilt by hand. Where one of them is 0 because i grew only with j, or only without it, the cell is still
 that difference: no floor and no stated extreme enters the package, and an organism that grows only with a
 partner gets a whole row, <code>r_i = 0</code> with its self-limitation fitted at the plateau it reaches
-beside that partner. The package also carries
+beside that partner. An organism that does grow alone but whose monocultures never settled is fitted at
+its plateau beside its partners in the same way, rather than left out, and the README names it; one whose
+partners suppress it harder than its own rate there is named instead, since a self-limitation at or above
+zero is not one. The package also carries
 <code>growth_rates.csv</code> (one rate per organism, in the same order, with how many values it rests on,
 and beside it the estimator, the lag and the carrying capacity); and <code>README.txt</code>, which states
 every formula and unit, names any pair left at 0 for disagreeing in sign, names every organism and every

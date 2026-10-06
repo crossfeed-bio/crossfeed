@@ -490,7 +490,8 @@ def build_parser() -> argparse.ArgumentParser:
     settings.add_argument("--rate-method", choices=["easylinear", "baranyi"], default="easylinear",
                           help="with --metric growth_rate: easylinear (default), the steepest part of the log "
                                "curve as mGrowthDB computes its reported rates, or baranyi, a fitted growth "
-                               "model; a curve the model does not describe is left out and reported")
+                               "model; a curve the model does not describe is left out and reported. The lag "
+                               "reported beside a rate comes from the Baranyi fit either way")
     settings.add_argument("--rate-window", type=int, default=5, metavar="N",
                           help="with easylinear: the points in each fitted window (default 5, as mGrowthDB)")
     settings.add_argument("--derivation", choices=["replicate", "integrated"], default="replicate",
@@ -544,12 +545,14 @@ def build_parser() -> argparse.ArgumentParser:
                                "stricter; 0 leaves the test alone)")
 
     settings.add_argument("--glv-mode", action="store_true",
-                          help="the page's gLV mode button: report growth rates and leave out drop-out "
-                               "communities, which is what a generalized Lotka-Volterra simulation needs")
+                          help="the page's gLV mode button: report growth rates, leave out drop-out "
+                               "communities, and compare the growth rate, which is what a fitted "
+                               "generalized Lotka-Volterra coefficient is made of")
     settings.add_argument("--report-rates", action="store_true",
-                          help="also report each organism's maximum specific growth rate in monoculture, the "
-                               "median over replicates and studies (the page's Report growth rates); needed "
-                               "for --glv")
+                          help="also report each organism's maximum specific growth rate in monoculture, "
+                               "the median over replicates and studies, with the lag and the monoculture "
+                               "carrying capacity beside it (the page's Report growth rates); needed for "
+                               "--glv")
     settings.add_argument("--merge-arcs", action="store_true",
                           help="merge the arcs of each source and target, across conditions and studies, into "
                                "one with the median log2 mean and its range; arcs whose signs disagree are not "

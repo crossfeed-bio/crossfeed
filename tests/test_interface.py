@@ -875,3 +875,25 @@ def test_marking_the_name_cannot_be_made_slow():
     # and it still marks a name in prose and leaves commands alone
     assert brand.in_prose("<p>grownet reads it.</p>") == f"<p>{brand.NAME_HTML} reads it.</p>"
     assert brand.in_prose("<code>grownet gui</code>") == "<code>grownet gui</code>"
+
+
+def test_the_command_line_and_the_page_describe_the_same_settings():
+    """Karoline, 2026-10-06, asking for a last check that "CLI and help are up to date with everything
+    that happened". The mechanical halves are pinned elsewhere (every flag is explained, the defaults
+    match); this pins the three that drifted during the 0.3.0 stack, where the flag's own help said less
+    than the page's setting did."""
+    from grownet.__main__ import build_parser
+    from grownet import help as help_page
+
+    derive = next(a for a in build_parser()._actions if a.dest == "cmd").choices["derive"]
+    flag = {o: a.help for a in derive._actions for o in a.option_strings}
+
+    # gLV mode sets three settings since #119, not two
+    assert "growth rate" in flag["--glv-mode"] and "drop-out" in flag["--glv-mode"]
+    # a rate travels with the lag and the capacity since #118
+    assert "lag" in flag["--report-rates"] and "carrying capacity" in flag["--report-rates"]
+    # and the lag is the Baranyi fit's whichever estimator produced the rate (her decision of 2026-10-06)
+    assert "Baranyi" in flag["--rate-method"]
+    # the two derivations are both named, on the flag and in the help's settings table
+    assert "integrated" in flag["--derivation"] and "replicate" in flag["--derivation"]
+    assert "integrated" in help_page.SETTINGS["derivation"][2]
