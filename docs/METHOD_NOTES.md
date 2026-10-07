@@ -250,9 +250,23 @@ a plateau from the WC side of SMGDB00000002 and one from its WC-plus-Mucin desig
 environment. Keying is stricter in both directions. Of the 7 pairs the subset rule called one medium on the
 live names it keeps one, SMGDB00000009 and 16's "Wilkins-Chalgren Anaerobe Broth" against SMGDB00000002, 7
 and 11's "...Anaerobe Broth (WC)", and drops the three composite matches and three against the bare short
-name. The measured cost in the chemostat check is SMGDB00000005's A8 control, whose medium is recorded as
-the bare "Wilkins-Chalgren"; SMGDB00000001's misspelled run was already unscorable, for want of a recorded
-dilution rate. An alias table is the only thing that would recover a misspelling and it is not wired in:
+name.
+
+**The measured cost in the chemostat check, and it is half of it.** Measured by running the same command
+on both sides, 2026-10-07:
+
+```
+grownet derive --live --derivation replicate --metric growth_rate \
+  --species "Bacteroides thetaiotaomicron" "Blautia hydrogenotrophica" "Roseburia intestinalis" \
+  --report-rates --steady-check
+```
+
+Under the subset rule: **2 chemostats scored, 4 not**. Under keying: **1 scored, 5 not**. The one lost is
+SMGDB00000005's A8 control, whose medium mGrowthDB records as the bare "Wilkins-Chalgren", which no longer
+reaches the packages' "Wilkins-Chalgren Anaerobe Broth (WC)". It had scored three organisms, with
+*B. thetaiotaomicron* at 1.55 times observed and *R. intestinalis* at 3.18. SMGDB00000001's misspelled run
+is unscorable either way, for want of a recorded dilution rate, so the "Anerobe" misspelling costs nothing
+today; the short name costs a validation. An alias table would recover both and it is not wired in:
 containment says one name is a less complete spelling of the other, where a character substitution says
 the two names disagree, and an edit distance loose enough to merge "Anerobe" with "Anaerobe" also merges
 names differing by a digit, which in medium names is routine.
