@@ -100,6 +100,17 @@ content.
   the short rows with zeros would reintroduce the claim `design` refuses and dropping a partner's column
   would claim it had no effect at all.
 
+### Added
+- **A gLV example button, and the steps to simulate it** (Karoline, 2026-10-07). Beside All, **gLV
+  example** fills both boxes and the one setting a package cannot be built without, and runs the search.
+  The study it picks was chosen by running every study that yields a package: SMGDB00000006, two
+  organisms in one abundance unit, both with a fitted rate and a plateau, and the only package in the
+  database whose matrix settles with every organism above zero. The help has a section of its own, "The
+  gLV example, step by step", which installs miaSim, listens in R, prints the matrix and the equilibrium,
+  runs `simulateGLV` deterministically and says what to expect, with the numbers this search gives today
+  and a note that mGrowthDB changes. The route above it stays generic; only the numbers are the
+  example's.
+
 ### Changed
 - **The gLV package states the formula its own derivation fitted** (#142 item 6). `README.txt` inside the
   package, the payload's `caveats.coefficients`, the R package's printout and its `glv_matrix`

@@ -51,6 +51,13 @@ TITLE = brand.NAME
 # species that derive a non-empty network, for the Example button (Karoline's proposal, #73). The first is
 # taxon 411483, which mGrowthDB holds under both its names after the 2022 reclassification.
 EXAMPLE = ("Faecalibacterium duncaniae", "Blautia hydrogenotrophica")
+# A search that gives a gLV package anyone can simulate, chosen by running every study that yields one
+# (2026-10-07, Karoline: "include a gLV example button in the GUI that configures everything for a
+# working gLV example"). SMGDB00000006 is the yoghurt pair: two organisms in one abundance unit (g/L),
+# both with a fitted rate and a plateau, and the only package in the database whose matrix settles with
+# every organism above zero, which is what makes it worth simulating rather than only downloading.
+GLV_EXAMPLE = ("Lactobacillus delbrueckii", "Streptococcus thermophilus")
+GLV_EXAMPLE_STUDY = "SMGDB00000006"
 METRICS = ("auc", "max", "growth_rate")
 DERIVATIONS = ("replicate", "integrated")
 
@@ -321,11 +328,12 @@ every medium.</p>
 <div class="bar"><button class="primary" type="submit">Find interactions</button>
 <button type="submit" name="example" value="1">Example</button>
 <button type="submit" name="all" value="1">All</button>
+<button type="submit" name="glv_example" value="1">gLV example</button>
 <button type="submit" name="glv_mode" value="1" class="switch{glv_on}" aria-pressed="{glv_pressed}"
 ><span class="track"><span class="knob"></span></span>gLV mode</button>
-<span class="muted">All derives every study in mGrowthDB, ignoring the boxes (half a minute or so).
-gLV mode sets what a simulation needs, growth rates on and drop-out communities off; press it again to
-switch back.</span></div>
+<span class="muted">All derives every study, ignoring the boxes (half a minute or so). gLV example fills
+the boxes and settings for a package that simulates, and runs it. gLV mode sets growth rates on and
+drop-out communities off; press it again to switch back.</span></div>
 {_settings_block(settings or {}, token, job)}
 </form>{below}""", token, refresh, job)
 
@@ -1310,6 +1318,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if form.get("example"):
             self._send(render_form(self.token, "\n".join(EXAMPLE), settings,
                                    conditions=settings.get("conditions", "")))
+            return
+        if form.get("glv_example"):
+            # everything a working simulation needs, and then the search itself: the two organisms, the
+            # study they are in so nothing else is read, and growth rates on, which a package cannot be
+            # built without. The help's gLV section runs this package through miaSim step by step.
+            settings = {**settings, "report_rates": True, "conditions": GLV_EXAMPLE_STUDY}
+            job = self._start(list(GLV_EXAMPLE), settings)
+            job["thread"].join(self.wait)
+            self._redirect(f"/?token={self.token}&job={job['id']}#result")
             return
         if form.get("all"):
             job = self._start([], settings, all_studies=True)

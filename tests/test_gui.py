@@ -521,7 +521,11 @@ def test_the_all_button_sits_next_to_example_with_its_explainer(server):
     base, token = server
     form = _get(f"{base}/?token={token}")
     assert '<button type="submit" name="example" value="1">Example</button>\n<button type="submit" name="all"' in form
-    assert "All derives every study in mGrowthDB, ignoring the boxes" in form
+    assert "All derives every study, ignoring the boxes" in form
+    # and the gLV example button beside them, which fills the boxes and the settings for a package that
+    # simulates and runs the search (Karoline, 2026-10-07)
+    assert 'name="glv_example" value="1">gLV example</button>' in form
+    assert "gLV example fills" in form
     with urllib.request.urlopen(f"{base}/run?token={token}", data=b"all=1&species=", timeout=10) as r:
         page = r.read().decode("utf-8")
     assert "All of mGrowthDB" in page or "Searching" in page             # a quick fake search, or its progress
@@ -732,3 +736,30 @@ def test_opening_the_page_without_the_token_explains_itself(server):
         body = refused.read().decode("utf-8")
     assert "grownet is running on this machine" in visible(body)
     assert token not in body                                 # never the token itself
+
+
+def test_the_glv_example_button_configures_everything_and_runs(server):
+    """Karoline, 2026-10-07: "include a gLV example button in the GUI that configures everything for a
+    working gLV example". It fills both boxes and the one setting a package cannot be built without, and
+    runs the search, so a reader gets a package to simulate from one press.
+
+    The double here serves the fake study, not SMGDB00000006, so what this pins is the configuring: the
+    example's species in the first box, its study in the second, Report growth rates on, and the shipped
+    derivation untouched. The package the real study gives is what the help's steps walk through.
+    """
+    import grownet.gui as gui
+    base, token = server
+    data = urllib.parse.urlencode({"glv_example": "1"}).encode()
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=30) as r:
+        page = r.read().decode("utf-8")
+    assert "Advanced settings" in page            # the result page, not an error
+
+    doc = json.loads(_get(f"{base}/download.json?token={token}"))
+    said = doc["meta"]["settings"]
+    assert said["report_rates"] is True           # a package needs a rate per organism
+    assert said["conditions"] == gui.GLV_EXAMPLE_STUDY
+    assert said["derivation"] == gui.DEFAULTS["derivation"]
+    # the species it asked for are the example's, which the report of the run names
+    report = _get(f"{base}/report.txt?token={token}")
+    for name in gui.GLV_EXAMPLE:
+        assert name in report

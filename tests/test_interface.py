@@ -502,8 +502,11 @@ def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
     assert 'class="switch"' in bar and 'aria-pressed="false"' in bar      # a switch, standing at off
     assert '<span class="track"><span class="knob">' in bar               # drawn, not described
     assert bar.index('name="glv_mode"') > bar.index('name="all"')        # next to All
+    # the gLV example button sits between them: it fills the boxes and the settings for a package that
+    # simulates and runs the search (Karoline, 2026-10-07)
+    assert bar.index('name="all"') < bar.index('name="glv_example"') < bar.index('name="glv_mode"')
     assert not re.findall(r'<input[^>]*name="([^"]+)"', bar)             # and no checkboxes in the bar
-    assert len(bar) < 700                                                # the text beside it stays short
+    assert len(bar) < 720                                                # the text beside it stays short
 
     # pressing it ticks growth rates and unticks drop-out communities, in Advanced settings where they live
     def press(form):

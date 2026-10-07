@@ -313,3 +313,27 @@ def test_the_about_page_logs_what_each_release_brought():
     for version, _, lines in RELEASES:
         assert f">{version} <" in page
         assert lines[0][:40] in page
+
+
+def test_the_glv_example_section_gives_every_step_of_running_it_in_miasim():
+    """Karoline, 2026-10-07: "The help, while being generic, should provide all the steps to run this
+    example with miaSim." Generic means the route above it, which holds for any package; this section is
+    that route with one search's numbers in it, and a reader should not need anything the page does not
+    say."""
+    page = gui.render_help("tok")
+    section = page[page.index('<h2 id="glv-example">'):]
+    section = section[:section.index("<h2 ", 10)] if "<h2 " in section[10:] else section
+    # the button, the command line that does the same, and the study it reads
+    assert "gLV example" in section and "SMGDB00000006" in section
+    assert "--report-rates" in section and "--glv" in section
+    # installing miaSim is part of the steps: it is a Bioconductor package, not a CRAN one
+    assert "BiocManager::install" in section and "miaSim" in section
+    # the three calls a simulation needs, and the deterministic settings spelled out
+    for call in ("grownet_listen()", "glv_matrix(glv)", "glv_rates(glv)", "as_miasim(glv)",
+                 "miaSim::simulateGLV", "stochastic = FALSE", "migration_p = 0"):
+        assert call in section, call
+    # what to expect, so a reader can tell it worked, and where the numbers come from
+    assert "solve(A, -r)" in section
+    assert "0.00831" in section and "0.2146" in section
+    # and that the numbers are of the database as it is, not a promise
+    assert "mGrowthDB changes" in section
