@@ -207,6 +207,20 @@ def reached_stationary(curve: GrowthCurve, end: float, flat: float = STATIONARY_
     return stopped and not (later and max(later) > top + flat * rise)
 
 
+def fall_from_peak(curve: GrowthCurve, end: float):
+    """How far a certified curve has fallen from its peak by `end`: window maximum / last value.
+
+    1 is a curve that ends at its peak; 3 is one that ends at a third of it. None when the last value is
+    not positive, so nothing divides by zero. `reached_stationary` certifies a culture that grew, peaked
+    and then declined -- it has stopped growing, which is what the predicate is named for -- and the
+    plateau recorded for it is the peak, a level it held for one measurement and then lost. This is the
+    number that says so, and `derive.CAPACITY_MAX_FALL` is where it becomes a refusal.
+    """
+    times, values = cut(curve, end)
+    last = values[-1]
+    return max(values) / last if last > 0 else None
+
+
 def _auc(times, values) -> float:
     """Area under the curve by the trapezoidal rule, with no baseline subtraction."""
     return sum((t1 - t0) * (v0 + v1) / 2

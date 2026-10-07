@@ -37,6 +37,7 @@ from .growth import (
     GrowthCurve,
     Replicate,
     curve_features,
+    fall_from_peak,
     mean_over,
     reached_stationary,
     spike,
@@ -518,11 +519,30 @@ def partner_abundances(replicates, target: str, partner: str, rate_method: str =
 # Monocultures only, and batch monocultures only: a rate from a co-culture is the organism's growth with a
 # partner, which is the comparison, not the organism's own rate; and under dilution the rate a curve shows
 # is the dilution rate (`METRICS_FOR_CONTINUOUS_CULTURE`).
-def _collect_capacity(entry: dict, curve, label: str, medium: str = "") -> None:
+# How far a certified curve may have fallen from its peak and still give a carrying capacity: the window
+# maximum divided by the last measured value. `reached_stationary` certifies a culture that grew, peaked
+# and then declined, because it has stopped growing, and the plateau recorded for it is the peak. On the
+# live database (2026-10-07, all 1,331 per-strain batch curves) 443 certify and 417 of them, 94 percent,
+# end more than 10 percent below their peak: the median certified curve ends at a third of its peak and
+# the upper quartile at a tenth, so a decline is the ordinary shape of a batch culture of gut anaerobes
+# and refusing every declining curve would take 20 of the 29 organism-study pairs that have a capacity
+# down to none (Karoline, 2026-10-07: "I agree Craig's approach is too harsh"). The tail is a different
+# matter: A. tumefaciens in SMGDB00000014 certifies with a peak of 8.2e7 against a last value of 1, and
+# 18 curves fall by more than a thousandfold, where the peak is a spike and not a level anything held.
+# 10 is the line between them and reads as a sentence: the culture still holds a tenth of its peak at the
+# last measurement. It refuses 112 of the 443 and leaves 2 of the 29 pairs with no capacity, both in
+# SMGDB00000012 and both named in `capacity_left_out`. The page and --capacity-max-fall can move it; 0
+# switches the refusal off and keeps every certified plateau, as the tool did before 0.3.0.
+CAPACITY_MAX_FALL = 10.0
+
+
+def _collect_capacity(entry: dict, curve, label: str, medium: str = "",
+                      max_fall: float = CAPACITY_MAX_FALL) -> None:
     """Add this curve's plateau to an organism's capacities, or say why it gives none.
 
     The plateau is certified by `reached_stationary` and taken as the curve's maximum. Every curve that
-    gives none is named in `capacity_left_out`, which is what the help promises a reader.
+    gives none is named in `capacity_left_out`, which is what the help promises a reader. A curve that
+    has fallen further from its peak than `max_fall` gives none either: see `CAPACITY_MAX_FALL`.
     """
     settled = reached_stationary(curve, curve.times[-1])
     if settled is not True:
@@ -537,13 +557,25 @@ def _collect_capacity(entry: dict, curve, label: str, medium: str = "") -> None:
             (label, f"the plateau is in {curve.abundance_unit}, and this organism's others in "
                     f"{entry['capacity_unit']}; left out rather than converted"))
         return
+    fall = fall_from_peak(curve, curve.times[-1])
+    if fall is None:
+        entry["capacity_left_out"].append(
+            (label, "the curve ends at zero or below, so what it held cannot be read from it"))
+        return
+    if max_fall and fall > max_fall:
+        entry["capacity_left_out"].append(
+            (label, f"the curve ends at 1/{fall:.3g} of its peak, further than the {max_fall:g} times "
+                    "allowed: the peak is not a level this culture held"))
+        return
     entry["capacities"].append(curve_features(curve)["max"])
+    entry["capacity_falls"].append(fall)
     if medium and medium not in entry["capacity_media"]:
         entry["capacity_media"].append(medium)
 
 
 def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window: int = None,
-                      spike_factor: float = SPIKE_FACTOR, identities=None) -> tuple:
+                      spike_factor: float = SPIKE_FACTOR, identities=None,
+                      capacity_max_fall: float = CAPACITY_MAX_FALL) -> tuple:
     """({node id: {"name", "values", "unit", "replicates"}}, skipped): a rate per monoculture replicate.
 
     `wanted`, when given, is the node ids to read, so a search reads the rates of the organisms in its
@@ -569,7 +601,7 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
         skipped += skips
         entry = found.setdefault(node["id"], {"name": name, "values": [], "unit": "", "replicates": [],
                                               "method": method, "lag_method": rates.LAG_METHOD,
-                                              "lags": [], "capacities": [],
+                                              "lags": [], "capacities": [], "capacity_falls": [],
                                               "capacity_unit": "", "capacity_left_out": [],
                                               "capacity_media": []})
         medium = selecting.medium_of(exp)
@@ -591,11 +623,11 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
                 value = feature(curve.times, curve.values)
             except rates.RateUnavailable as e:
                 skipped.append((label, f"no growth rate: {e}"))
-                _collect_capacity(entry, curve, label, medium)
+                _collect_capacity(entry, curve, label, medium, capacity_max_fall)
                 continue
             if value <= 0:
                 skipped.append((label, f"non-positive growth rate ({value:g})"))
-                _collect_capacity(entry, curve, label, medium)
+                _collect_capacity(entry, curve, label, medium, capacity_max_fall)
                 continue
             unit = f"1/{curve.time_unit}"
             if not entry["unit"]:
@@ -603,7 +635,7 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
             if unit != entry["unit"]:
                 skipped.append((label, f"growth rate in {unit}, and this organism's other rates are in "
                                        f"{entry['unit']}; left out rather than converted"))
-                _collect_capacity(entry, curve, label, medium)
+                _collect_capacity(entry, curve, label, medium, capacity_max_fall)
                 continue
             entry["values"].append(value)
             entry["replicates"].append(rep.name or str(i))
@@ -614,7 +646,7 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
                 entry["lags"].append(rates.baranyi_fit(curve.times, curve.values)["lag"])
             except rates.RateUnavailable:
                 pass
-            _collect_capacity(entry, curve, label, medium)
+            _collect_capacity(entry, curve, label, medium, capacity_max_fall)
     # an organism is kept when it has a rate or a certified plateau: a study where the estimator fitted
     # no rate still measured the plateau, and dropping it there made the capacity estimator-dependent
     # across studies as well (found 2026-10-06)
@@ -622,7 +654,8 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
 
 
 def growth_rates(client, study_ids, wanted=None, rate_method: str = None, window: int = None,
-                 spike_factor: float = SPIKE_FACTOR, progress=None) -> tuple:
+                 spike_factor: float = SPIKE_FACTOR, progress=None,
+                 capacity_max_fall: float = CAPACITY_MAX_FALL) -> tuple:
     """(rates, skipped) over several studies: each study's monoculture rates, merged by `merge_rates`.
 
     The studies are the ones the search read, so their experiments and curves are already cached and no
@@ -638,7 +671,8 @@ def growth_rates(client, study_ids, wanted=None, rate_method: str = None, window
         except MGrowthDBError as e:
             skipped.append((f"growth rates of {study_id}", f"could not be read: {e}"))
             continue
-        found, skips = monoculture_rates(client, exps, wanted, rate_method, window, spike_factor)
+        found, skips = monoculture_rates(client, exps, wanted, rate_method, window, spike_factor,
+                                         capacity_max_fall=capacity_max_fall)
         per_study.append((study_id, found))
         skipped += skips
     return merge_rates(per_study), skipped
@@ -671,7 +705,7 @@ def merge_rates(per_study) -> dict:
                                          "lag_method": entry.get("lag_method", ""),
                                          "capacity_unit": "", "capacity_per_study": {},
                                          "other_capacity_units": [], "capacity_left_out": [],
-                                         "capacity_media": []})
+                                         "capacity_falls": [], "capacity_media": []})
             if entry["values"] and entry["unit"] != at["unit"]:
                 at["other_units"].append(f"{study_id} ({entry['unit']})")
                 continue
@@ -690,6 +724,7 @@ def merge_rates(per_study) -> dict:
                     at["other_capacity_units"].append(f"{study_id} ({unit})")
                 else:
                     at["capacities"] += capacities
+                    at["capacity_falls"] += list(entry.get("capacity_falls") or [])
                     at["capacity_per_study"][study_id] = median(capacities)
                     for name in entry.get("capacity_media") or ():
                         if name not in at["capacity_media"]:
@@ -706,6 +741,9 @@ def merge_rates(per_study) -> dict:
                     "capacity": median(at["capacities"]) if at["capacities"] else None,
                     "capacity_unit": at["capacity_unit"] if at["capacities"] else "",
                     "capacity_n": len(at["capacities"]),
+                    # how far the curves behind this plateau had fallen from their peak, merged the same
+                    # way as the plateau itself: 1 is a curve that ended at its peak (Karoline, 2026-10-07)
+                    "capacity_fall": median(at["capacity_falls"]) if at["capacity_falls"] else None,
                     "capacity_per_study": at["capacity_per_study"],
                     "other_capacity_units": at["other_capacity_units"],
                     "capacity_left_out": at["capacity_left_out"],

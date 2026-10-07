@@ -252,7 +252,8 @@ def test_the_page_and_the_command_line_start_from_the_same_defaults():
     from grownet.__main__ import build_parser
     a = build_parser().parse_args(["derive", "--live", "--species", "x"])
     cli = {"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
-           "spike_factor": a.spike_factor, "absence_threshold": a.absence_threshold,
+           "spike_factor": a.spike_factor, "capacity_max_fall": a.capacity_max_fall,
+           "absence_threshold": a.absence_threshold,
            "include_low_quality": a.include_low_quality, "include_absent": a.include_absent,
            "correction": a.correction,
            "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
@@ -576,7 +577,7 @@ def test_the_growth_rates_are_their_own_download_and_bring_the_glv_control(serve
     assert rows[0][:5] == ["organism", "growth_rate", "unit", "replicates", "studies"]
     # and the quantities a gLV coefficient is made of, beside them (#118)
     assert rows[0][5:] == ["method", "lag", "lag_method", "carrying_capacity", "capacity_unit",
-                           "capacity_curves", "capacity_curves_left_out"]
+                           "capacity_curves", "capacity_curves_left_out", "capacity_fall_from_peak"]
     assert [row[0] for row in rows[1:]] == sorted([A, B])
     assert dict(zip([r[0] for r in rows[1:]], [r[1] for r in rows[1:]], strict=True))[A] == "0.4"
 
@@ -665,7 +666,7 @@ def test_the_command_line_writes_the_matrix_the_rates_and_the_glv_package(monkey
     assert float(rows[1 + names.index(A)][1 + names.index(B)]) > 0      # B facilitates A, as on the page
     assert rates_file.read_text(encoding="utf-8").splitlines()[0] == (
         "organism,growth_rate,unit,replicates,studies,method,lag,lag_method,carrying_capacity,"
-        "capacity_unit,capacity_curves,capacity_curves_left_out")
+        "capacity_unit,capacity_curves,capacity_curves_left_out,capacity_fall_from_peak")
     with zipfile.ZipFile(io.BytesIO(package.read_bytes())) as archive:
         assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv",
                                               "interaction_matrix.Cells_per_mL.csv"]

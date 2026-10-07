@@ -224,7 +224,7 @@ Rules for this file:
   replaces the subset rule, and with it the composite bug of #142 item 13. Measured consequence on the
   live names: of the 7 pairs the subset rule calls the same medium, keying keeps the one that matters
   (SMGDB00000009 and 16's "Wilkins-Chalgren Anaerobe Broth" against SMGDB00000002, 7 and 11's
-  "...Anaerobe Broth (WC)") and drops 6 -- the three composite matches, which were wrong, and three
+  "...Anaerobe Broth (WC)") and drops 6: the three composite matches, which were wrong, and three
   against the bare short name "Wilkins-Chalgren". The one real loss is SMGDB00000001, whose chemostat is
   recorded in "Wilkins-Chalgren An**e**robe Broth (WC)" and now matches nothing; that is the misspelling,
   and a one-entry alias table is the only thing that recovers it (Craig recommends against widening the

@@ -185,6 +185,12 @@ def report_text(result: dict) -> str:
             if rate.get("capacity") is not None:
                 extra.append(f"carrying capacity {rate['capacity']:.4g} {rate.get('capacity_unit', '')}"
                              f" from {rate.get('capacity_n', 0)} curve(s)")
+                # a certified curve that grew, peaked and then declined has its peak recorded as the
+                # plateau, so what it held at the last measurement is published beside it (Karoline,
+                # 2026-10-07, closing open decision 4 of #141)
+                fall = rate.get("capacity_fall")
+                if fall is not None and fall > 1.01:
+                    extra.append(f"those curves ended at 1/{fall:.3g} of their peak (median)")
             # the help promises that every curve giving no capacity is named here with its reason, and
             # nothing rendered them: an empty carrying capacity read as absence (found 2026-10-06)
             # a capacity pooled over more than one medium sits beside off-diagonals measured in one of

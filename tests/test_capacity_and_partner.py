@@ -188,6 +188,97 @@ def test_capacities_in_another_abundance_unit_are_named_not_converted():
     assert merged["n"] == 2                       # the rates themselves are in one unit, so both count
 
 
+# ---- a plateau the culture did not hold -----------------------------------------------------------
+
+def _peaks_then_falls(peak=1.0e8, fall=10.0, start=1.0e6, points=12):
+    """A curve that rises geometrically to `peak` and then declines geometrically, so its last point is
+    exactly `peak / fall`. It has stopped growing, so `reached_stationary` certifies it, and the plateau
+    recorded for it is the peak."""
+    half = points // 2
+    rise = [start * (peak / start) ** (k / (half - 1)) for k in range(half)]
+    tail = [peak * (1.0 / fall) ** ((k + 1) / (points - half)) for k in range(points - half)]
+    return [(float(i), v, None) for i, v in enumerate(rise + tail)]
+
+
+def test_the_fall_from_the_peak_is_one_for_a_plateau_and_the_ratio_for_a_decline():
+    """`fall_from_peak` is the window maximum over the last measured value: 1 where the curve ends at its
+    peak, and the ratio where it declined after peaking. A curve that falls from its first point has no
+    rise, so `reached_stationary` returns None and nothing asks this question of it."""
+    from grownet.growth import fall_from_peak, reached_stationary
+
+    def curve(values):
+        return GrowthCurve("A", [2.0 * i for i in range(len(values))], values, "h", "OD600")
+
+    plateau = curve([1.0, 3.0, 6.0, 8.4, 8.55, 8.6])
+    peaked = curve([1.0, 3.0, 6.0, 8.6, 6.5, 4.5])
+    falling = curve([8.6, 7.9, 7.1, 6.3, 5.4, 4.5])
+    assert reached_stationary(plateau, plateau.times[-1]) is True
+    assert fall_from_peak(plateau, plateau.times[-1]) == pytest.approx(1.0)
+    assert reached_stationary(peaked, peaked.times[-1]) is True
+    assert fall_from_peak(peaked, peaked.times[-1]) == pytest.approx(8.6 / 4.5)
+    # the shape Craig's agent's note was about is this one, not the next: it certifies and hands over a
+    # peak 1.91 times what it held
+    assert reached_stationary(falling, falling.times[-1]) is None
+
+
+def test_a_curve_that_fell_too_far_from_its_peak_gives_no_capacity_and_is_named():
+    """Karoline, 2026-10-07, closing open decision 4 of #141: the plateau stays the peak, the fall is
+    published beside it, and a curve that fell further than the limit gives nothing and says so. One
+    replicate falls a hundredfold and one tenfold, and the default limit of 10 keeps the second."""
+    client = _client({(1, A): _peaks_then_falls(peak=1.0e8, fall=100.0),
+                      (2, A): _peaks_then_falls(peak=1.0e8, fall=10.0)})
+    found, skipped = monoculture_rates(client, [_mono("E1", A, [(1, "r1"), (2, "r2")])])
+    (entry,) = found.values()
+    assert entry["capacities"] == pytest.approx([1.0e8])          # only the replicate within the limit
+    assert entry["capacity_falls"] == pytest.approx([10.0])
+    assert skipped == []                                          # the rate itself was not left out
+    (label, reason) = entry["capacity_left_out"][0]
+    assert "r1" in label and "1/100 of its peak" in reason and "10 times allowed" in reason
+    merged = merge_rates([("S1", found)])[next(iter(found))]
+    assert merged["capacity"] == pytest.approx(1.0e8) and merged["capacity_n"] == 1
+    assert merged["capacity_fall"] == pytest.approx(10.0)
+
+
+def test_the_limit_is_a_setting_and_zero_keeps_every_certified_plateau():
+    """"the factor ... should go in the advanced settings" (Karoline, 2026-10-07). 0 is the behaviour
+    before 0.3.0: every certified plateau counts, however far the culture fell afterwards."""
+    curves = {(1, A): _peaks_then_falls(peak=1.0e8, fall=100.0),
+              (2, A): _peaks_then_falls(peak=1.0e8, fall=10.0)}
+    off, _ = monoculture_rates(_client(curves), [_mono("E1", A, [(1, "r1"), (2, "r2")])],
+                               capacity_max_fall=0)
+    entry = next(iter(off.values()))
+    assert len(entry["capacities"]) == 2 and entry["capacity_left_out"] == []
+    assert merge_rates([("S1", off)])[next(iter(off))]["capacity_fall"] == pytest.approx(55.0)
+
+    strict, _ = monoculture_rates(_client(curves), [_mono("E1", A, [(1, "r1"), (2, "r2")])],
+                                  capacity_max_fall=2.0)
+    entry = next(iter(strict.values()))
+    assert entry["capacities"] == [] and len(entry["capacity_left_out"]) == 2
+
+
+def test_the_fall_travels_into_the_report_and_the_rates_csv():
+    """A plateau that is the peak of a declining curve is published with what those curves held at their
+    last measurement, in the report's growth-rates section and as a column of the rates CSV."""
+    import csv as csv_module
+    import io as io_module
+
+    from grownet import matrix
+    rates_found = {"ncbi:1": {"name": A, "rate": 0.4, "unit": "1/h", "n": 2, "studies": ["S1"],
+                              "per_study": {}, "method": "growth_rate:easylinear:5", "lag": None,
+                              "lag_method": "", "capacity": 1.0e8, "capacity_unit": "Cells/mL",
+                              "capacity_n": 2, "capacity_fall": 4.0, "capacity_left_out": []}}
+    row = list(csv_module.reader(io_module.StringIO(matrix.rates_csv(rates_found))))[1]
+    assert row[-1] == "4"
+
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    net = InteractionNetwork()
+    net.meta["growth_rates"] = {"rule": "r", "organisms": {"ncbi:1": rates_found["ncbi:1"]}}
+    text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "those curves ended at 1/4 of their peak (median)" in text
+
+
 # ---- the partner's abundance reaches the arc ------------------------------------------------------
 
 def test_an_arc_carries_the_partners_abundance_over_the_targets_window():

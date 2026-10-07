@@ -534,6 +534,7 @@ def fill_capacities(fitted: dict, measured: dict) -> tuple:
         entry["capacity_n"] = other.get("capacity_n", 0)
         entry["capacity_per_study"] = dict(other.get("capacity_per_study") or {})
         entry["capacity_media"] = list(other.get("capacity_media") or ())
+        entry["capacity_fall"] = other.get("capacity_fall")
         entry["capacity_left_out"] = list(other.get("capacity_left_out") or ())
         entry["capacity_source"] = "the monoculture plateau: this fit implies none"
         filled.append((entry.get("name", nid), entry["capacity"]))

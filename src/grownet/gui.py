@@ -33,6 +33,7 @@ from .cytoscape import CytoscapeError, send, style_xml
 from .derive import (
     ABSENCE_THRESHOLD,
     ABSENT,
+    CAPACITY_MAX_FALL,
     PROVISIONAL,
     derive_interactions,
     genus_species,
@@ -68,6 +69,11 @@ def metric_name(s: dict) -> str:
 INPUT_EXAMPLES = ("Blautia hydrogenotrophica", "Faecalibacterium duncaniae A2-165", "Bacteroides", "411483")
 DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window": rates.DEFAULT_WINDOW,
             "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
+            # how far a certified curve may have fallen from its peak and still give a carrying capacity
+            # (Karoline, 2026-10-07, closing open decision 4 of #141: "the factor ... should go in the
+            # advanced settings. please choose a sensible default for it"). See derive.CAPACITY_MAX_FALL
+            # for the measurement behind the 10.
+            "capacity_max_fall": CAPACITY_MAX_FALL,
             "include_low_quality": False, "include_absent": False, "correction": "bh",
             # off by default: a rate costs a fit per monoculture curve, and most searches do not need
             # one. The gLV mode button turns it on (Karoline, 2026-10-04)
@@ -240,6 +246,11 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   <input name="spike_factor" type="text" size="6" value="{_esc(s['spike_factor'])}"></label>
   <span class="muted">leave out a curve with one or two points this many times above both neighbors;
   0 keeps all</span></div>
+<div class="row"><label>Carrying capacity decline limit
+  <input name="capacity_max_fall" type="text" size="6" value="{_esc(s['capacity_max_fall'])}"></label>
+  <span class="muted">a monoculture that grew, peaked and then declined has stopped growing, and its
+  plateau is recorded as the peak; leave out a curve that ends below 1/this of its peak, where the peak
+  was not a level the culture held; 0 keeps every certified plateau</span></div>
 <div class="row"><label>No-growth alpha
   <input name="no_growth_alpha" type="text" size="6" value="{_esc(_no_growth(s, 'alpha'))}"></label>
   <span class="muted">before any comparison, grownet checks that a species grew: across the replicate
@@ -762,6 +773,10 @@ def parse_settings(form: dict) -> dict:
         settings["spike_factor"] = abs(float(form.get("spike_factor", [""])[0]))
     except ValueError:
         pass
+    try:
+        settings["capacity_max_fall"] = abs(float(form.get("capacity_max_fall", [""])[0]))
+    except ValueError:
+        pass
     settings["include_low_quality"] = bool(form.get("include_low_quality"))
     settings["include_absent"] = bool(form.get("include_absent"))
     settings["include_dropout"] = bool(form.get("include_dropout"))
@@ -966,7 +981,8 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
             say(len(studies), len(studies), "Reading the monoculture plateaus the fit did not imply")
             found, rate_skips = growth_rates(client, studies, wanted=missing,
                                              rate_method=s["rate_method"], window=s["rate_window"],
-                                             spike_factor=s["spike_factor"], progress=say)
+                                             spike_factor=s["spike_factor"], progress=say,
+                                             capacity_max_fall=s["capacity_max_fall"])
             organism_rates, _ = integrated.fill_capacities(organism_rates, matrix.for_nodes(net, found))
             skipped += rate_skips
         net.meta["growth_rates"] = matrix.rate_meta(net, organism_rates, integrated.METRIC)
@@ -974,7 +990,8 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         say(len(studies), len(studies), "Reading the monoculture growth rates")
         found, rate_skips = growth_rates(client, studies, wanted=rate_nodes,
                                          rate_method=s["rate_method"], window=s["rate_window"],
-                                         spike_factor=s["spike_factor"], progress=say)
+                                         spike_factor=s["spike_factor"], progress=say,
+                                         capacity_max_fall=s["capacity_max_fall"])
         organism_rates = matrix.for_nodes(net, found)
         skipped += rate_skips
         net.meta["growth_rates"] = matrix.rate_meta(

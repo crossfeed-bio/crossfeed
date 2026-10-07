@@ -167,6 +167,14 @@ SETTINGS = {
                      "A replicate curve with one or two interior points more than F times above both "
                      "neighbors (default 100) is left out and reported, with the other measurements of the "
                      "same replicate named. 0 keeps every curve."),
+    "capacity_max_fall": ("Carrying capacity decline limit", "--capacity-max-fall F",
+                         "A monoculture that grew, reached a peak and then declined has stopped growing, "
+                         "so it is certified as having reached stationary phase, and the carrying "
+                         "capacity recorded for it is that peak. A curve whose last measurement is below "
+                         "1/F of its peak (default 10) gives no capacity and is named with the others "
+                         "that gave none, because there the peak is a spike rather than a level the "
+                         "culture held. A decline is the ordinary shape of a batch culture, so this is a "
+                         "limit on how far, not a refusal of decline: 0 keeps every certified plateau."),
     "no_growth_alpha": ("No-growth alpha", "--no-growth-alpha ALPHA",
                         "Before any comparison, grownet checks that a species grew. It takes the replicate "
                         "growth curves of that species in one culture condition (alone, or with its "
@@ -745,7 +753,12 @@ curves give no rate is named on the page and in the report, never given a substi
 which estimator produced the rate; the <strong>lag</strong>, always from the Baranyi fit, the only
 estimator that has one, whichever one produced the rate; and the organism's monoculture
 <strong>carrying capacity</strong>, the plateau of its curves, taken only from curves certified to have
-reached stationary phase and left in the abundance unit they were measured in. They are in
+reached stationary phase and left in the abundance unit they were measured in. A culture that grew, peaked
+and then declined has stopped growing, so it is certified too and its plateau is that peak; how far those
+curves had fallen from their peak at the last measurement is published beside the capacity
+(<code>capacity_fall_from_peak</code>), and a curve that fell further than the
+<strong>Carrying capacity decline limit</strong> gives no capacity at all, because there the peak is a
+spike rather than a level the culture held. They are in
 <code>growth_rates.csv</code>, which names both estimators in its <code>method</code> and
 <code>lag_method</code> columns, in the network's meta and in the report, with every curve that gave no
 capacity named and why. Each arc also carries <code>partner_abundance</code>, the actor's own abundance in

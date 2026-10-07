@@ -31,6 +31,19 @@ content.
   always the solution of `A x = -r` and the reader had to work it out.
 
 ### Changed
+- **A carrying capacity says how far its curves fell from their peak, and the worst of them are refused**
+  (Karoline, 2026-10-07, closing the open decision on #141). `reached_stationary` certifies a culture that
+  grew, reached a peak and then declined, because it has stopped growing, and the plateau recorded for it
+  is that peak. Measured over all 1,331 per-strain batch curves in the database, 443 certify and 417 of
+  them end more than 10 percent below their peak, the median one at a third of its peak, so a decline is
+  the ordinary shape of a batch culture and refusing every declining curve would leave 20 of the 29
+  organism-study pairs that have a capacity with none. The tail is a different matter: one certified curve
+  hands over a peak 82 million times its last value. So the peak stays, the fall is published beside it in
+  the report, in `growth_rates.csv` (`capacity_fall_from_peak`) and in the gLV payload, and a curve that
+  fell further than the new **Carrying capacity decline limit** gives no capacity and is named with the
+  others that gave none. The limit is an advanced setting and `--capacity-max-fall F`, 10 by default,
+  which reads as "the culture still holds a tenth of its peak at the last measurement"; 0 keeps every
+  certified plateau, as 0.2.0 did.
 - **Send to R and `/glv.json` carry the same numbers as the zip** (#120): the payload is
   `grownet.glv/v1`, with `matrices`, one per abundance unit, holding fitted coefficients, the rates with
   the estimator, the lag and the carrying capacity beside each, and every caveat as a field: the cells

@@ -189,7 +189,8 @@ def test_form_hides_every_setting_behind_one_button():
       "correction": "bh", "absence_threshold": 1.0, "include_dropout": True, "include_non_batch": False,
       "no_growth_alpha": 0.01, "no_growth_factor": 4.0, "exclude_studies": "SMGDB00000008", "merge_arcs": True,
       "min_studies": 2, "merge_genera": True, "max_adjusted_p": None, "report_rates": False,
-          "steady_check": False, "derivation": "integrated"}),
+          "steady_check": False, "derivation": "integrated",
+          "capacity_max_fall": DEFAULTS["capacity_max_fall"]}),
     ({"metric": ["nonsense"], "spike_factor": ["not a number"]},
      {**DEFAULTS, "only_entered": False, "include_dropout": False}),
 ])

@@ -17,6 +17,7 @@ from collections import Counter
 
 from .adapter import condensed, unread
 from .attribution import render_attribution
+from .derive import CAPACITY_MAX_FALL
 from .mgrowthdb import MGrowthDBError, records_to_network
 from .schema import schema_json, validate_document
 
@@ -156,6 +157,7 @@ def _derive(a):
                                  "merge_arcs": a.merge_arcs, "min_studies": a.min_studies,
                                  "merge_genera": a.merge_genera,
                                  "spike_factor": a.spike_factor,
+                                 "capacity_max_fall": a.capacity_max_fall,
                                  "absence_threshold": a.absence_threshold,
                                  "include_low_quality": a.include_low_quality, "correction": a.correction,
                                  "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
@@ -207,7 +209,7 @@ def _derive_species(a):
     from .gui import DEFAULTS, run_query
     from .mgrowthdb import MGrowthDBClient
     settings = {**DEFAULTS, "metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
-                "spike_factor": a.spike_factor,
+                "spike_factor": a.spike_factor, "capacity_max_fall": a.capacity_max_fall,
                 "absence_threshold": a.absence_threshold, "include_low_quality": a.include_low_quality,
                 "include_absent": a.include_absent,
                 "correction": a.correction, "include_dropout": not a.no_dropout,
@@ -270,7 +272,8 @@ def _rates_of(a, client, study_ids, net, skipped, records=None):
         if missing:
             found, rate_skips = growth_rates(client, study_ids, wanted=set(missing),
                                              rate_method=a.rate_method, window=a.rate_window,
-                                             spike_factor=a.spike_factor)
+                                             spike_factor=a.spike_factor,
+                                             capacity_max_fall=a.capacity_max_fall)
             fitted, filled = fill_capacities(fitted, matrix.for_nodes(net, found))
             skipped += rate_skips
             for name, value in filled:
@@ -280,7 +283,8 @@ def _rates_of(a, client, study_ids, net, skipped, records=None):
         return fitted, skipped
     found, rate_skips = growth_rates(client, study_ids, wanted=set(net.nodes),
                                      rate_method=a.rate_method, window=a.rate_window,
-                                     spike_factor=a.spike_factor)
+                                     spike_factor=a.spike_factor,
+                                     capacity_max_fall=a.capacity_max_fall)
     organism_rates = matrix.for_nodes(net, found)
     net.meta["growth_rates"] = matrix.rate_meta(net, organism_rates,
                                                 rates.method_name(a.rate_method, a.rate_window))
@@ -553,6 +557,11 @@ def build_parser() -> argparse.ArgumentParser:
     settings.add_argument("--spike-factor", type=float, default=100.0, metavar="F",
                           help="leave out a growth curve with one or two points F times above both neighbors "
                                "(default 100; 0 keeps every curve)")
+    settings.add_argument("--capacity-max-fall", type=float, default=CAPACITY_MAX_FALL, metavar="F",
+                          help="a monoculture that grew, peaked and then declined has stopped growing, so its "
+                               "carrying capacity is recorded as that peak; leave out a curve whose last "
+                               "measurement is below 1/F of its peak, where the peak was not a level the "
+                               "culture held (default 10; 0 keeps every certified plateau)")
     settings.add_argument("--no-growth-alpha", type=float, default=None, metavar="ALPHA",
                           help="before any comparison, check that a species grew: across the replicate growth "
                                "curves of that species in one culture condition, the rise from the first time "
