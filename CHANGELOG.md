@@ -6,7 +6,7 @@ content.
 
 ## [Unreleased]
 
-## [0.3.0] (2026-10-06)
+## [0.3.0] (2026-10-07)
 
 ### Upgrading
 - **The default derivation is now the integrated form** (`--derivation integrated`, Karoline,
@@ -120,6 +120,26 @@ content.
   removed compound makes another environment.
 
 ### Fixed
+- **The release workflow published to PyPI without running the suite, the gate or the linter** (#155
+  item 7). Its job graph was `check` -> `dist` -> `install` -> `pypi`, where `check` ran only
+  `check_release.py` and `install` ran `grownet --help` and the smoke script. `ci.yml` does fire on a tag,
+  but the two workflows are independent and nothing linked them, so a tag whose suite was red still
+  reached PyPI, held back only by the optional environment approval. A version on PyPI cannot be replaced,
+  which makes it the one failure in that workflow that cannot be undone. `check` now runs `ruff`,
+  `checks/gate.py` and the whole suite before the tag is believed, and both the workflow's own header and
+  RELEASING.md said otherwise and now say what happens.
+- **The release gate could not be green and honest at the same time** (#155 item 8). With no tag it
+  synthesised `v{version}` and ran the full tag check, including "CHANGELOG.md still marks {version}
+  unreleased", so any tree whose in-development version was marked unreleased failed `make check`, which
+  is the Keep a Changelog convention the file follows. The only green states were to leave the version at
+  the last released one or to mark the next release released before it is; the tree took the second and a
+  test pinned it. That check now applies only when a release is being cut. Two more holes with it: the
+  date agreement read only a parenthesised date, so `## [0.3.0] - 2099-01-01` passed in silence against a
+  different date in `CITATION.cff`, and two files agreeing with each other is not either being right, so
+  a date in the future is now refused. The tree was wrong in exactly that way, dating the release
+  2026-10-06 while every commit in it was 2026-10-07 and both files agreed; both now say 2026-10-07, and
+  a test compares the release's date with the newest commit rather than only the two files with each
+  other.
 - **The package README described the diagonal backwards under the default** (#155 item 11). The
   off-diagonal prose was branched by derivation and the diagonal's was not, so a package from the
   derivation that ships said `K_i` is "the plateau of the curves that reached stationary phase" when on

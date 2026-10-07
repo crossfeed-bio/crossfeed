@@ -63,9 +63,11 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
    git push origin vX.Y.Z
    ```
 
-3. **Watch the workflow** (Actions, "release"). It checks the tag, builds and tests the wheel on Linux,
-   Windows and macOS, builds and starts the Windows program, then waits for approval of the `pypi`
-   environment. Approve it; it publishes to PyPI and creates the GitHub release, with the notes taken from
+3. **Watch the workflow** (Actions, "release"). It checks the tag against the version and the changelog
+   and runs the linter, the guardrail gate and the whole suite before anything is published, then builds
+   and tests the wheel on Linux, Windows and macOS, builds and starts the Windows program, and waits for
+   approval of the `pypi` environment. Until 2026-10-07 the first of those was the only check in this
+   workflow, so a tag whose suite was red could reach PyPI with nothing but that approval in the way. Approve it; it publishes to PyPI and creates the GitHub release, with the notes taken from
    the changelog and the wheel, the source archive and `grownet-vX.Y.Z-windows.zip` attached.
 4. **Refresh the daily All network** (Actions, "all-network", Run workflow). The page and `derive --all`
    read the published network only when it is less than a day old and speaks the current format, so until a

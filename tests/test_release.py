@@ -52,7 +52,8 @@ def test_the_release_notes_start_with_how_to_get_past_the_windows_warning(tmp_pa
     assert "**More info** link" in notes and "only then does a **Run anyway** button appear" in notes
     assert notes.endswith("### Added\n- the first release")
     import check_release
-    monkeypatch.setattr(check_release, "check", lambda tag: check(tag, _repo(tmp_path)))
+    monkeypatch.setattr(check_release, "check",
+                        lambda tag, **kw: check(tag, _repo(tmp_path), **kw))
     out = tmp_path / "notes.md"
     assert main(["v0.1.0", str(out)]) == 0
     assert out.read_text(encoding="utf-8") == notes + "\n"
@@ -117,3 +118,65 @@ def test_the_check_runs_with_no_tag_against_this_tree(tmp_path, capsys):
     assert current_version() == __import__("grownet").__version__
     assert main([]) == 0
     assert "is ready" in capsys.readouterr().out
+
+
+def test_a_tree_in_development_can_be_green_and_honest_at_once(tmp_path):
+    """#155 item 8. With no tag the check asks about the version this tree would release, and a tree in
+    development marks that version unreleased, which is the Keep a Changelog convention this file follows.
+    Treating that as a problem left two green states: leave the version at the last released one, or mark
+    the next release released before it is. The tree took the second and a test pinned it.
+
+    So "still marks unreleased" is a problem only when a release is actually being cut.
+    """
+    repo = _repo(tmp_path, heading="## [0.1.0] (unreleased)")
+    assert check("v0.1.0", repo, releasing=False)[0] == []
+    problems, _ = check("v0.1.0", repo, releasing=True)
+    assert any("still marks 0.1.0 unreleased" in p for p in problems)
+
+
+def test_a_date_in_the_future_is_refused_however_it_is_written(tmp_path):
+    """#155 item 8. The agreement check read only the parenthesized date, so `## [0.1.0] - 2099-01-01`
+    was invisible to it: the heading and CITATION.cff could disagree in silence. And two files agreeing
+    with each other is not either being right, so a date that has not happened yet is refused.
+    """
+    import datetime
+
+    today = datetime.date(2026, 10, 7)
+    # the dash form is read, so a disagreement in it is caught
+    dashed = _repo(tmp_path / "a", heading="## [0.1.0] - 2026-10-02")
+    problems, _ = check("v0.1.0", dashed, today=today)
+    assert any("CHANGELOG.md says 2026-10-02" in p for p in problems), problems
+    # a date in the future is refused even when both files carry it
+    ahead = _repo(tmp_path / "b", heading="## [0.1.0] (2099-01-01)")
+    (ahead / "CITATION.cff").write_text('cff-version: 1.2.0\ntitle: grownet\nversion: 0.1.0\n'
+                                        'date-released: "2099-01-01"\n', encoding="utf-8")
+    problems, _ = check("v0.1.0", ahead, today=today)
+    assert sum("in the future" in p for p in problems) == 2, problems
+    # and a release with no date at all is refused when one is being cut
+    undated = _repo(tmp_path / "c", heading="## [0.1.0]")
+    assert any("gives no date" in p for p in check("v0.1.0", undated, today=today)[0])
+    assert not any("gives no date" in p for p in check("v0.1.0", undated, releasing=False, today=today)[0])
+
+
+def test_this_tree_dates_its_release_no_earlier_than_its_newest_commit():
+    """The dates said 2026-10-06 while every commit of the release was 2026-10-07, and because the two
+    files agreed with each other the gate was silent (#155 item 8). This reads the tree, so it keeps
+    them honest rather than only consistent."""
+    import datetime
+    import re
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    changelog = root.joinpath("CHANGELOG.md").read_text(encoding="utf-8")
+    version = re.search(r'^__version__ = "([^"]+)"', root.joinpath("src", "grownet", "__init__.py")
+                        .read_text(encoding="utf-8"), re.M).group(1)
+    heading = re.search(rf"^## \[{re.escape(version)}\][^\n]*?([0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}})",
+                        changelog, re.M)
+    assert heading, f"CHANGELOG.md gives no date for {version}"
+    dated = datetime.date.fromisoformat(heading.group(1))
+    newest = subprocess.run(["git", "log", "-1", "--format=%cs"], capture_output=True, text=True,
+                            cwd=root).stdout.strip()
+    if newest:                      # a tarball has no git history, and then there is nothing to compare
+        assert dated >= datetime.date.fromisoformat(newest), (
+            f"the release is dated {dated} and its newest commit is {newest}")
