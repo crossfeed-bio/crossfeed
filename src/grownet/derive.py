@@ -250,6 +250,25 @@ def stationary_cautions(stationary, method: str, outcome: str) -> list:
     return [STATIONARY_DIFFERS] if verdicts[0] != verdicts[1] else []
 
 
+def condition_key(exp: dict):
+    """What counts as the same condition: the recorded conditions AND the medium by the strict rule.
+
+    Karoline, 2026-10-07: "the strict medium matching (exclusion of cases with modifications e.g. mucin
+    addition) should be applied everywhere where medium matching is done." `conditions` compares the
+    compartment records, and mGrowthDB states an added sugar, a removed carbon source or a supplement only
+    in the **description**, which `media.identity` reads and `conditions` does not. So `conditions` alone
+    put chemically different experiments under one key: on SMGDB00000014 a single `conditions` value
+    covers twelve media, from plain minimal medium to minimal medium with 0.75 per cent linoleic acid and
+    a tbhq antioxidant, and the monocultures of all twelve were offered to one co-culture, to be told
+    apart afterwards by the wording of their descriptions.
+
+    Every place that asks "is this the same condition" uses this, so the strict rule cannot hold in one
+    path and not another: the monoculture index both derivations read, the drop-out designs, and the run
+    variants.
+    """
+    return conditions(exp), media_identity(exp)["key"]
+
+
 def media_identity(exp: dict) -> dict:
     """The medium an experiment ran in, by the strict rule (`media.identity`).
 
@@ -322,10 +341,10 @@ def select_experiments(exps, selection, skipped) -> list:
     # strict rule, since `conditions` compares the compartment records and mGrowthDB states an added sugar
     # or a removed carbon source only in the description. Without the medium, naming one chemistry of
     # SMGDB00000014 pulled in the monocultures of all twelve (Karoline, 2026-10-07)
-    wanted = {(conditions(e), media_identity(e)["key"]) for e in kept if len(_members(e)) > 1}
+    wanted = {condition_key(e) for e in kept if len(_members(e)) > 1}
     added = [e for e in exps
              if e not in kept and len(_members(e)) == 1
-             and (conditions(e), media_identity(e)["key"]) in wanted]
+             and condition_key(e) in wanted]
     if added:
         skipped.append(("monocultures kept alongside the experiments named",
                         ", ".join(sorted(_exp_id(e) for e in added))
@@ -416,8 +435,12 @@ def _identity(identities: dict, name: str) -> dict:
 
 
 def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, identities=None) -> dict:
-    """(node id, conditions) -> {run group: (monoculture replicates, the distinct strain names pooled under
-    it, the ids of the experiments they come from, their descriptions, their names)}.
+    """(node id, conditions, medium key) -> {run group: (monoculture replicates, the distinct strain names
+    pooled under it, the ids of the experiments they come from, their descriptions, their names)}.
+
+    The medium is part of the key by the strict rule (`condition_key`), so a monoculture in an unaltered
+    medium is never offered to a co-culture in an altered one. `why_no_monoculture` turns a miss into a
+    reason that names the medium that was there instead.
 
     Monocultures are pooled only when they are replicates: identical recorded conditions AND the same
     description apart from a run number (`run_group`), the rule communities already follow (Karoline, on
@@ -433,7 +456,7 @@ def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, ident
             continue
         replicates, skips = replicates_for_experiment(client, exp, spike_factor)
         skipped += skips
-        key = (_identity(identities, members[0])["id"], conditions(exp))
+        key = (_identity(identities, members[0])["id"], *condition_key(exp))
         reps, strains, ids, descriptions, names = index.setdefault(key, {}).setdefault(
             run_group(exp), ([], set(), [], [], []))
         reps.extend(replicates)
@@ -441,7 +464,7 @@ def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, ident
         ids.append(_exp_id(exp))
         descriptions.append(exp.get("description") or exp.get("name") or "")
         names.append(exp.get("name") or "")
-    for (key, _), groups in index.items():
+    for (key, *_rest), groups in index.items():
         for _, (_, strains, _, _, _) in groups.items():
             if len(strains) > 1 and not key.startswith("ncbi:"):
                 skipped.append((f"monocultures of {key}", f"{len(strains)} strains pooled into one monoculture set "
@@ -882,6 +905,32 @@ def _choose_monocultures(groups: dict, exp: dict):
                   "known and none is guessed")
 
 
+def why_no_monoculture(index, node_id: str, exp: dict, base: str) -> str:
+    """Why this experiment has no monoculture set, naming a medium that differs only in what was added.
+
+    "No monoculture under this experiment's recorded conditions" is true and unhelpful when the
+    monoculture is there in the unaltered medium: on SMGDB00000004 the co-cultures are recorded in mMCB
+    with and without initial acetate while the monocultures are recorded in plain mMCB, so the strict
+    rule refuses the comparison. The reader deserves to know that is what happened rather than that the
+    data is missing (Karoline, 2026-10-07: "the strict medium matching ... should be applied everywhere
+    where medium matching is done").
+    """
+    from .media import differing_alterations_of_keys
+
+    cond, key = condition_key(exp)
+    for other in sorted({other for (nid, other_cond, other) in index
+                         if nid == node_id and other_cond == cond and other != key}):
+        differ = differing_alterations_of_keys(key, other)
+        if differ is None:
+            continue
+        mine, theirs = differ
+        return (f"{base}; one was measured in the same base medium with {theirs or 'nothing added'} "
+                f"where this experiment has {mine or 'nothing added'}, and an added or removed compound "
+                "makes another environment, so the two are not compared. Name that experiment in the "
+                "second box to read it on its own")
+    return base
+
+
 def _exp_id(exp: dict) -> str:
     return str(exp.get("id", exp.get("name", "")))
 
@@ -1068,7 +1117,7 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
     skipped += skips
     sets, pooled, origin, matched = {}, {}, {}, set()
     for species in (a, b):
-        key = (_identity(identities or {}, species)["id"], conditions(exp))
+        key = (_identity(identities or {}, species)["id"], *condition_key(exp))
         groups = monos.get(key, {})
         chosen, how = _choose_monocultures(groups, exp) if groups else (None, "")
         why = "" if chosen else how
@@ -1077,7 +1126,10 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
         found, strains, ids = (chosen[0], chosen[1], chosen[2]) if chosen else ([], set(), [])
         if not groups:
             skipped.append((f"{a} with {b} [{cond}]",
-                            f"no monoculture replicates for {species} under this experiment's conditions"))
+                            why_no_monoculture(
+                                monos, key[0], exp,
+                                f"no monoculture replicates for {species} under this experiment's "
+                                "conditions")))
         elif not chosen:
             skipped.append((f"{a} with {b} [{cond}]", f"{species}: {why}"))
         sets[species] = _renamed(found, species)
@@ -1159,7 +1211,7 @@ def dropout_designs(exps, skipped) -> list:
     for exp in exps:
         members = frozenset(_members(exp))
         if len(members) >= 2:
-            groups = by_condition.setdefault(conditions(exp), {}).setdefault(members, {})
+            groups = by_condition.setdefault(condition_key(exp), {}).setdefault(members, {})
             groups.setdefault(run_group(exp), []).append(exp)
     designs, used = [], set()
     for communities in by_condition.values():
@@ -1250,7 +1302,7 @@ def _variants(exps) -> dict:
     study holds: more than one means experiments that differ only in their description."""
     groups = {}
     for exp in exps:
-        groups.setdefault((frozenset(_members(exp)), conditions(exp)), set()).add(run_group(exp))
+        groups.setdefault((frozenset(_members(exp)), *condition_key(exp)), set()).add(run_group(exp))
     return {key: len(g) for key, g in groups.items()}
 
 
@@ -1299,9 +1351,11 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
                 CONTINUOUS_CULTURE if method in METRICS_FOR_CONTINUOUS_CULTURE else NON_BATCH)
         # the full community or this drop-out comes in variants told apart only by their descriptions, so
         # which drop-out goes with which full community is not recorded (Karoline, 2026-09-27)
-        key = conditions(full_exps[0])
-        if (variants or {}).get((frozenset(members), key), 1) > 1 or \
-                (variants or {}).get((frozenset(members - {removed}), key), 1) > 1:
+        # the same key `_variants` builds, which carries the medium by the strict rule: looking up a
+        # 2-tuple against a 3-tuple missed every time and silently turned the caution off (2026-10-07)
+        key = condition_key(full_exps[0])
+        if (variants or {}).get((frozenset(members), *key), 1) > 1 or \
+                (variants or {}).get((frozenset(members - {removed}), *key), 1) > 1:
             cautions.append(CONDITIONS_UNVERIFIED)
         cond = ", ".join(e.get("name", "") for e in drops[removed])
         experiments = [_exp_id(e) for e in [*full_exps, *drops[removed]]]
@@ -1399,7 +1453,8 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
                                     "not derived: the partner is not among the species entered"))
                 continue
             _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, records, skipped,
-                      identities, no_growth, variants[(frozenset(_members(exp)), conditions(exp))])
+                      identities, no_growth,
+                      variants[(frozenset(_members(exp)), *condition_key(exp))])
     if dropout:
         for design in dropout_designs(exps, skipped):
             if wanted is not None and len(design[0] & wanted) < 2:

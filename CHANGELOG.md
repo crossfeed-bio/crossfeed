@@ -100,7 +100,30 @@ content.
   the short rows with zeros would reintroduce the claim `design` refuses and dropping a partner's column
   would claim it had no effect at all.
 
+### Upgrading
+- **The strict medium rule now decides every match, not only the capacity** (Karoline, 2026-10-07: "the
+  strict medium matching (exclusion of cases with modifications e.g. mucin addition) should be applied
+  everywhere where medium matching is done"). `conditions` compares the compartment records, and
+  mGrowthDB states a supplement, an added sugar or a removed carbon source only in the **description**,
+  which `media.identity` reads and `conditions` does not. So `conditions` alone put chemically different
+  experiments under one key: on SMGDB00000014 a single `conditions` value covers twelve media, and the
+  monocultures of all twelve were offered to one co-culture, to be told apart afterwards by the wording
+  of their descriptions. One function, `derive.condition_key`, now answers "is this the same condition"
+  for the monoculture index both derivations read, the drop-out designs and the run variants, so the rule
+  cannot hold in one path and not another.
+  **This removes arcs**, and that is the rule working: on the live All network 22 arcs become 14. All
+  eight are SMGDB00000004's, whose co-cultures are recorded in mMCB with and without initial acetate
+  while its monocultures are recorded in plain mMCB, so a comparison across them would read the acetate's
+  effect as the partner's. **No arc with an adjusted p-value below 0.05 is lost** (four before, four
+  after). Where a comparison is refused this way the report says so instead of reporting missing data: it
+  names the medium that was measured, what it has that this experiment does not, and that an added or
+  removed compound makes another environment.
+
 ### Fixed
+- **The `conditions_unverified` caution had silently stopped firing on drop-out arcs.** `_variants` keys
+  by community and condition, and `_dropout` looked that key up with one element fewer than it was built
+  with, so the lookup missed every time and defaulted to "one variant": two full communities told apart
+  only by their descriptions were no longer cautioned. Found by a test while the key gained the medium.
 - **A capacity came from one medium on one derivation and from several on the default** (#155 item 2).
   Karoline's decision of 2026-10-07, that plateaus are not pooled across media because a capacity sits
   beside off-diagonals measured in one of them, was in force for `--derivation replicate` and not for the

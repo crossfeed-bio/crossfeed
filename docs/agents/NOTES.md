@@ -15,6 +15,27 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-07 (Karoline): **one function decides what counts as the same condition.** "The strict medium
+  matching (exclusion of cases with modifications e.g. mucin addition) should be applied everywhere where
+  medium matching is done." `derive.condition_key` is `(conditions(exp), media_identity(exp)["key"])` and
+  every site that asked "same condition" now calls it: the monoculture index both derivations read, the
+  drop-out designs, the run variants and the experiment filter. Before, `conditions` alone was the key in
+  most of them, and `conditions` reads the compartment records only, while a supplement is stated in the
+  description: one `conditions` value covers twelve media on SMGDB00000014.
+  Live effect: 22 arcs become 14, all eight from SMGDB00000004's acetate arms, and no arc under q = 0.05
+  is lost. `derive.why_no_monoculture` appends the reason to the refusal, using
+  `media.differing_alterations`, which covers both shapes of the case: a supplement given as its own
+  compartment ("Wilkins-Chalgren" against "Mucin; Wilkins-Chalgren") and alterations stated in the
+  description.
+  **Two things the next agent should know.** Adding the medium to one of these keys broke another: the
+  `conditions_unverified` caution stopped firing because `_dropout` looked up `_variants` with a 2-tuple
+  while `_variants` built 3-tuples, and the lookup defaulted to "one variant" instead of raising. When a
+  key changes, grep for every `.get(` against it. And the rule is only as strict as
+  `media.alterations`: "without initial acetate" reads as `-acetate` while a bare "with acetate" reads as
+  nothing, so two arms of one study can separate in one direction only. Broadening the addition patterns
+  is risky, since "with X" in a description is as likely to name a co-culture member as a supplement;
+  that is #81's territory and is not decided here.
+
 - 2026-10-07 (#155 item 2): **a decision is not in force until every derivation applies it.** "A capacity
   comes from one medium" was implemented in `derive.merge_rates` and not in `integrated.fitted_rates`,
   which is the path the shipped default takes, so the decision held for the derivation nobody runs by

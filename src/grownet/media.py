@@ -321,6 +321,43 @@ def assign_atmospheres(identities: list) -> list:
     return out
 
 
+def differing_alterations(one: str, other: str):
+    """(what the first adds or removes, what the second does) where two media are the same base medium
+    with different alterations, or None.
+
+    The foodnet rule Karoline settled on 2026-10-07: a medium matches, but contradicting extras, such as
+    acetic acid or mucin, do not count as matching. So "Wilkins-Chalgren" and "Wilkins-Chalgren + mucin"
+    are two environments and a comparison across them is refused. This says that in the refusal, because
+    "no monoculture under this experiment's recorded conditions" is true and unhelpful when the
+    monoculture is right there in the unaltered medium: the reader can then ask for that medium, or accept
+    that the comparison is not available.
+
+    Unlike `near_miss`, which is for one word spelled two ways, this is for a real difference in what was
+    added or taken away. Returns ("", "+mucin") when the first has no alterations and the second adds one.
+    """
+    return differing_alterations_of_keys(key_from_label(one), key_from_label(other))
+
+
+def differing_alterations_of_keys(first: str, second: str):
+    """`differing_alterations` for two keys that `identity` or `key_from_label` already normalized."""
+    if not first or not second or first == second:
+        return None
+    base_one, _, changed_one = first.partition(" | ")
+    base_two, _, changed_two = second.partition(" | ")
+    names_one, names_two = set(base_one.split("; ")), set(base_two.split("; "))
+    # two shapes of the same case: the compartment lists are nested, which is how mGrowthDB records a
+    # supplement given as its own compartment ("Wilkins-Chalgren" against "Mucin; Wilkins-Chalgren"), or
+    # the compartments agree and the alterations stated in the descriptions differ
+    nested = names_one < names_two or names_two < names_one
+    if not nested and names_one != names_two:
+        return None               # a different base medium altogether
+    if not nested and changed_one == changed_two:
+        return None               # the same medium: not this case
+    extra_one = sorted(names_one - names_two) + changed_one.split()
+    extra_two = sorted(names_two - names_one) + changed_two.split()
+    return " ".join(extra_one), " ".join(extra_two)
+
+
 def near_miss(one: str, other: str):
     """(word in the first, word in the second) where two media differ only in the spelling of one word,
     or None.

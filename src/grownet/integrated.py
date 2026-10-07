@@ -950,11 +950,12 @@ class IntegratedDeriver:
             _exp_id,
             _identity,
             _members,
-            conditions,
+            condition_key,
             cultivation,
             media_identity,
             run_group,
             strain_identities,
+            why_no_monoculture,
         )
         from .growth import SPIKE_FACTOR
 
@@ -985,7 +986,7 @@ class IntegratedDeriver:
                 # pools only what the specified comparison would pool: identical recorded conditions and
                 # the same description apart from a run number. The shape is what `_choose_monocultures`
                 # reads: (replicates, strains, experiment ids, descriptions, names).
-                here = monocultures.setdefault((members[0], conditions(exp)), {}).setdefault(
+                here = monocultures.setdefault((members[0], *condition_key(exp)), {}).setdefault(
                     run_group(exp), ([], set(), [], [], []))
                 here[0].extend(reps)
                 here[1].add(members[0])
@@ -1019,11 +1020,14 @@ class IntegratedDeriver:
                 # It now follows the rule settled on #47 and recorded on #81, through the same two
                 # functions the specified comparison uses, so both derivations compare like with like
                 # (#142 item 1).
-                groups = monocultures.get((target, conditions(exp))) or {}
+                groups = monocultures.get((target, *condition_key(exp))) or {}
                 if not groups:
                     skipped.append((f"{target} in {exp.get('name') or _exp_id(exp)}",
-                                    "no monoculture of it under this experiment's recorded conditions, so "
-                                    "its own rate and limitation cannot be identified for this condition"))
+                                    why_no_monoculture(
+                                        monocultures, target, exp,
+                                        "no monoculture of it under this experiment's recorded "
+                                        "conditions, so its own rate and limitation cannot be "
+                                        "identified for this condition")))
                     continue
                 chosen, how = _choose_monocultures(groups, exp)
                 if chosen is None:
