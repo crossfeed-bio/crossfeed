@@ -626,6 +626,45 @@ def test_a_published_file_of_another_format_or_schema_is_not_used():
     assert not published.fresh({**good, "network": {**good["network"],
                                                     "schema": "crossfeed.interaction_network/v0"}}, now)
     assert not published.fresh({**good, "network": {**good["network"], "meta": {}}}, now)
+    # the id moved to v2 with the optional arc fields of #118, and this is the half of that which this
+    # copy can test: a daily network written by 0.2.x is read as a format it does not know, so the page
+    # derives live. The other half is an installed 0.2.0 doing the same with a v2 artifact, which is why
+    # the id had to move at all (Craig's agent, on #121)
+    assert not published.fresh({**good, "network": {**good["network"],
+                                                    "schema": "grownet.interaction_network/v1"}}, now)
+
+
+def test_an_unreadable_published_network_derives_live_rather_than_raising():
+    """Craig's agent, on #121: `from_payload` sat outside `fetch_from`'s guard, and nothing above it had a
+    handler, so a document this copy cannot build left the All button by exception instead of falling back
+    to a live derivation. Any failure to read the artifact now means None, which is "derive live"."""
+    import contextlib
+    import datetime
+    import io
+    import json
+
+    from grownet import published
+    from grownet.model import SCHEMA
+    now = datetime.datetime(2026, 9, 28, 12, tzinfo=datetime.timezone.utc)
+    payload = {"format": published.FORMAT,
+               "network": {"schema": SCHEMA, "meta": {"derived_at": "2026-09-28T10:00:00+00:00"},
+                           "nodes": [], "studies": [], "edges": []},
+               "skipped": [], "resolved": [], "unresolved": [], "studies": [], "errors": []}
+
+    def opener(url, timeout=None):
+        return contextlib.closing(io.BytesIO(json.dumps(payload).encode("utf-8")))
+
+    assert published.fetch_from(opener, now=now) is not None       # a readable one is still read
+
+    def raising(*_args, **_kwargs):
+        raise TypeError("Edge.__init__() got an unexpected keyword argument 'from_the_future'")
+
+    saved = published.from_payload
+    try:
+        published.from_payload = raising
+        assert published.fetch_from(opener, now=now) is None
+    finally:
+        published.from_payload = saved
 
 
 def test_the_page_offers_the_adjusted_p_filter_off_and_says_what_it_left_out():

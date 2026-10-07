@@ -72,9 +72,13 @@ def fetch() -> dict | None:
 
 def fetch_from(opener, now: datetime.datetime | None = None) -> dict | None:
     """`fetch` with the opener and the clock given, for tests."""
+    # every failure to read the published network is a reason to derive live, which is what the caller
+    # does with None. `from_payload` is inside the guard because that is where an unreadable document
+    # raises: a field a reader does not know used to come out of `Edge(**e)` as a TypeError, which is
+    # neither OSError nor ValueError, so it left the All button by exception (Craig's agent, on #121).
     try:
         with opener(URL, timeout=TIMEOUT) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except (OSError, ValueError):
+        return from_payload(payload) if fresh(payload, now) else None
+    except Exception:          # noqa: BLE001 - any unreadable artifact means derive live
         return None
-    return from_payload(payload) if fresh(payload, now) else None
