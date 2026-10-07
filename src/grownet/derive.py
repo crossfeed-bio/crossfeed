@@ -29,6 +29,7 @@ import re
 from collections import Counter
 from statistics import mean, median
 
+from . import media as media_rules
 from . import rates
 from . import selection as selecting
 from .adapter import replicates_for_experiment
@@ -237,6 +238,16 @@ def stationary_cautions(stationary, method: str, outcome: str) -> list:
     return [STATIONARY_DIFFERS] if verdicts[0] != verdicts[1] else []
 
 
+def media_identity(exp: dict) -> dict:
+    """The medium an experiment ran in, by the strict rule (`media.identity`).
+
+    One place, so every medium comparison in the tool means the same thing: the capacity merge, the
+    chemostat check, the second box and what an arc says it was measured in (Karoline, 2026-10-07:
+    "foodnet's strict medium rule should be applied in general").
+    """
+    return media_rules.identity(exp)
+
+
 def conditions(exp: dict) -> str:
     """The culture conditions of an experiment as a comparable key: cultivation mode and compartments.
 
@@ -295,9 +306,14 @@ def select_experiments(exps, selection, skipped) -> list:
     if selecting.empty(selection):
         return list(exps)
     kept = [e for e in exps if selecting.matches(e, selection)]
-    wanted_conditions = {conditions(e) for e in kept if len(_members(e)) > 1}
+    # the monocultures a kept comparison needs: the same recorded conditions AND the same medium by the
+    # strict rule, since `conditions` compares the compartment records and mGrowthDB states an added sugar
+    # or a removed carbon source only in the description. Without the medium, naming one chemistry of
+    # SMGDB00000014 pulled in the monocultures of all twelve (Karoline, 2026-10-07)
+    wanted = {(conditions(e), media_identity(e)["key"]) for e in kept if len(_members(e)) > 1}
     added = [e for e in exps
-             if e not in kept and len(_members(e)) == 1 and conditions(e) in wanted_conditions]
+             if e not in kept and len(_members(e)) == 1
+             and (conditions(e), media_identity(e)["key"]) in wanted]
     if added:
         skipped.append(("monocultures kept alongside the experiments named",
                         ", ".join(sorted(_exp_id(e) for e in added))
@@ -305,6 +321,16 @@ def select_experiments(exps, selection, skipped) -> list:
     if not kept:
         skipped.append((f"study {study_ids_of(exps)}",
                         "no experiment of this study matches the media, experiments or studies entered"))
+    # a medium is matched as text, so one word reaches every medium whose name or description holds it,
+    # and an added or removed compound makes another environment: say how many were read, since that is
+    # what the strict rule is for (Karoline, 2026-10-07, "because such changes alter interactions")
+    if selection.get("media"):
+        labels = sorted({media_identity(e)["label"] for e in kept})
+        if len(labels) > 1:
+            skipped.append(("media matched by " + ", ".join(selection["media"]),
+                            f"{len(labels)} different media, which are different environments and give "
+                            "separate arcs, never one pooled set: " + "; ".join(labels)
+                            + ". Name an experiment id in the second box to read one of them alone"))
     return kept + added
 
 
@@ -536,26 +562,24 @@ def partner_abundances(replicates, target: str, partner: str, rate_method: str =
 CAPACITY_MAX_FALL = 10.0
 
 
-def _collect_capacity(entry: dict, curve, label: str, medium: str = "",
+def _collect_capacity(entry: dict, curve, label: str, medium: dict | None = None,
                       max_fall: float = CAPACITY_MAX_FALL) -> None:
-    """Add this curve's plateau to an organism's capacities, or say why it gives none.
+    """Add this curve's plateau to an organism's capacities for the medium it was measured in, or say why
+    it gives none.
 
     The plateau is certified by `reached_stationary` and taken as the curve's maximum. Every curve that
     gives none is named in `capacity_left_out`, which is what the help promises a reader. A curve that
     has fallen further from its peak than `max_fall` gives none either: see `CAPACITY_MAX_FALL`.
+
+    `medium` is a `media.identity` result. Plateaus are collected per medium and never pooled across
+    media, Karoline's decision of 2026-10-07: a capacity sits on the diagonal beside off-diagonals
+    measured in one medium, so the two have to be the same medium. `merge_rates` chooses which.
     """
     settled = reached_stationary(curve, curve.times[-1])
     if settled is not True:
         entry["capacity_left_out"].append(
             (label, "the curve is too sparse or does not rise, so stationary phase cannot be judged"
              if settled is None else "the curve had not reached stationary phase"))
-        return
-    if not entry["capacity_unit"]:
-        entry["capacity_unit"] = curve.abundance_unit
-    if curve.abundance_unit != entry["capacity_unit"]:
-        entry["capacity_left_out"].append(
-            (label, f"the plateau is in {curve.abundance_unit}, and this organism's others in "
-                    f"{entry['capacity_unit']}; left out rather than converted"))
         return
     fall = fall_from_peak(curve, curve.times[-1])
     if fall is None:
@@ -567,10 +591,18 @@ def _collect_capacity(entry: dict, curve, label: str, medium: str = "",
             (label, f"the curve ends at 1/{fall:.3g} of its peak, further than the {max_fall:g} times "
                     "allowed: the peak is not a level this culture held"))
         return
-    entry["capacities"].append(curve_features(curve)["max"])
-    entry["capacity_falls"].append(fall)
-    if medium and medium not in entry["capacity_media"]:
-        entry["capacity_media"].append(medium)
+    medium = medium or {"key": "unnamed medium", "label": "unnamed medium"}
+    at = entry["capacity_by_medium"].setdefault(
+        medium["key"], {"label": medium["label"], "unit": curve.abundance_unit,
+                        "values": [], "falls": [], "curves": []})
+    if curve.abundance_unit != at["unit"]:
+        entry["capacity_left_out"].append(
+            (label, f"the plateau is in {curve.abundance_unit}, and this organism's others in "
+                    f"{at['unit']}; left out rather than converted"))
+        return
+    at["values"].append(curve_features(curve)["max"])
+    at["falls"].append(fall)
+    at["curves"].append(label)
 
 
 def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window: int = None,
@@ -601,10 +633,9 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
         skipped += skips
         entry = found.setdefault(node["id"], {"name": name, "values": [], "unit": "", "replicates": [],
                                               "method": method, "lag_method": rates.LAG_METHOD,
-                                              "lags": [], "capacities": [], "capacity_falls": [],
-                                              "capacity_unit": "", "capacity_left_out": [],
-                                              "capacity_media": []})
-        medium = selecting.medium_of(exp)
+                                              "lags": [], "capacity_by_medium": {},
+                                              "capacity_left_out": []})
+        medium = media_identity(exp)
         for i, rep in enumerate(replicates):
             label = f"{name} monoculture [{exp.get('name', '') or _exp_id(exp)}], replicate {rep.name or i}"
             curve = rep.curve(name)
@@ -650,7 +681,7 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
     # an organism is kept when it has a rate or a certified plateau: a study where the estimator fitted
     # no rate still measured the plateau, and dropping it there made the capacity estimator-dependent
     # across studies as well (found 2026-10-06)
-    return {nid: e for nid, e in found.items() if e["values"] or e["capacities"]}, skipped
+    return {nid: e for nid, e in found.items() if e["values"] or e["capacity_by_medium"]}, skipped
 
 
 def growth_rates(client, study_ids, wanted=None, rate_method: str = None, window: int = None,
@@ -695,17 +726,23 @@ def merge_rates(per_study) -> dict:
     `lag_n` and `lag_method` (always the Baranyi fit, the only estimator that has a lag, whichever one
     produced the rate), and `method`, the estimator the rate came from. Each is None when nothing
     qualified.
+
+    **A capacity comes from one medium**, Karoline's decision of 2026-10-07: plateaus are collected per
+    medium (`media.identity`) and the medium with the most certified curves is the one published, named
+    in `capacity_medium`, with every other medium's curves named in `capacity_left_out` rather than
+    pooled in. `capacity_media` therefore holds exactly one label, and `capacity_other_media` says what
+    else this organism has a plateau in, so a reader who wants that medium can ask for it in the second
+    box. Pooling plateaus over media was how this worked before 0.3.0, and it put a diagonal from two
+    chemistries beside off-diagonals measured in one of them.
     """
     merged: dict = {}
     for study_id, found in per_study:
         for nid, entry in found.items():
             at = merged.setdefault(nid, {"name": entry["name"], "unit": entry["unit"], "values": [],
                                          "studies": [], "per_study": {}, "other_units": [],
-                                         "method": entry.get("method", ""), "lags": [], "capacities": [],
+                                         "method": entry.get("method", ""), "lags": [],
                                          "lag_method": entry.get("lag_method", ""),
-                                         "capacity_unit": "", "capacity_per_study": {},
-                                         "other_capacity_units": [], "capacity_left_out": [],
-                                         "capacity_falls": [], "capacity_media": []})
+                                         "by_medium": {}, "capacity_left_out": []})
             if entry["values"] and entry["unit"] != at["unit"]:
                 at["other_units"].append(f"{study_id} ({entry['unit']})")
                 continue
@@ -715,41 +752,51 @@ def merge_rates(per_study) -> dict:
                 at["per_study"][study_id] = median(entry["values"])
             at["lags"] += list(entry.get("lags") or [])
             at["capacity_left_out"] += list(entry.get("capacity_left_out") or [])
-            capacities = list(entry.get("capacities") or [])
-            if capacities:
-                unit = entry.get("capacity_unit") or ""
-                if not at["capacity_unit"]:
-                    at["capacity_unit"] = unit
-                if unit != at["capacity_unit"]:
-                    at["other_capacity_units"].append(f"{study_id} ({unit})")
-                else:
-                    at["capacities"] += capacities
-                    at["capacity_falls"] += list(entry.get("capacity_falls") or [])
-                    at["capacity_per_study"][study_id] = median(capacities)
-                    for name in entry.get("capacity_media") or ():
-                        if name not in at["capacity_media"]:
-                            at["capacity_media"].append(name)
+            for key, found_here in (entry.get("capacity_by_medium") or {}).items():
+                one = at["by_medium"].setdefault(key, {"label": found_here["label"],
+                                                       "unit": found_here["unit"], "values": [],
+                                                       "falls": [], "curves": [], "per_study": {},
+                                                       "other_units": []})
+                if found_here["unit"] != one["unit"]:
+                    one["other_units"].append(f"{study_id} ({found_here['unit']})")
+                    continue
+                one["values"] += list(found_here["values"])
+                one["falls"] += list(found_here["falls"])
+                one["curves"] += list(found_here["curves"])
+                one["per_study"][study_id] = median(found_here["values"])
     out = {}
     for nid, at in merged.items():
         if not at["values"]:
             continue
+        # the medium with the most certified curves is the one published; a tie goes to the first label,
+        # so the choice does not depend on the order the studies were read in
+        order = sorted(at["by_medium"].items(), key=lambda kv: (-len(kv[1]["values"]), kv[1]["label"]))
+        chosen = order[0][1] if order else None
+        left_out = list(at["capacity_left_out"])
+        for _key, other in order[1:]:
+            left_out.append((f"{len(other['values'])} curve(s) in {other['label']}",
+                             f"this organism's capacity is taken from {chosen['label']}, where more "
+                             "curves reached a plateau; plateaus are not pooled across media, since a "
+                             "capacity sits beside off-diagonals measured in one of them"))
         out[nid] = {"name": at["name"], "rate": median(at["values"]), "unit": at["unit"],
                     "n": len(at["values"]), "studies": at["studies"], "per_study": at["per_study"],
                     "other_units": at["other_units"], "method": at["method"],
                     "lag": median(at["lags"]) if at["lags"] else None, "lag_n": len(at["lags"]),
                     "lag_method": at["lag_method"] if at["lags"] else "",
-                    "capacity": median(at["capacities"]) if at["capacities"] else None,
-                    "capacity_unit": at["capacity_unit"] if at["capacities"] else "",
-                    "capacity_n": len(at["capacities"]),
+                    "capacity": median(chosen["values"]) if chosen else None,
+                    "capacity_unit": chosen["unit"] if chosen else "",
+                    "capacity_n": len(chosen["values"]) if chosen else 0,
                     # how far the curves behind this plateau had fallen from their peak, merged the same
                     # way as the plateau itself: 1 is a curve that ended at its peak (Karoline, 2026-10-07)
-                    "capacity_fall": median(at["capacity_falls"]) if at["capacity_falls"] else None,
-                    "capacity_per_study": at["capacity_per_study"],
-                    "other_capacity_units": at["other_capacity_units"],
-                    "capacity_left_out": at["capacity_left_out"],
-                    # the media the plateaus behind this capacity were measured in: a capacity pooled
-                    # over two media sits beside off-diagonals measured in one of them (found 2026-10-06)
-                    "capacity_media": at["capacity_media"] if at["capacities"] else []}
+                    "capacity_fall": median(chosen["falls"]) if chosen and chosen["falls"] else None,
+                    "capacity_per_study": dict(chosen["per_study"]) if chosen else {},
+                    "other_capacity_units": list(chosen["other_units"]) if chosen else [],
+                    "capacity_left_out": left_out,
+                    # one medium, never pooled (Karoline, 2026-10-07): the label of the medium the
+                    # plateau was measured in, and what else this organism has a plateau in
+                    "capacity_medium": chosen["label"] if chosen else "",
+                    "capacity_media": [chosen["label"]] if chosen else [],
+                    "capacity_other_media": [other["label"] for _key, other in order[1:]]}
     return out
 
 
@@ -1060,7 +1107,7 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
         records.append(_record(source, target, c, method, quality, cautions,
                                _spike_notes(result["flagged"], target), cond, "biculture", (a, b),
                                [_exp_id(exp), *origin[target]], study_id, study_meta, identities, mode,
-                               selecting.medium_of(exp), partner, target_capacity(co_reps, target)))
+                               media_identity(exp)["label"], partner, target_capacity(co_reps, target)))
 
 
 def run_group(exp: dict) -> str:
@@ -1238,7 +1285,7 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
         experiments = [_exp_id(e) for e in [*full_exps, *drops[removed]]]
         records.append(_record(removed, target, arc, method, quality, cautions, notes, cond, arc["evidence"],
                                members, experiments, study_id, study_meta, identities, mode,
-                               selecting.medium_of(full_exps[0])))
+                               media_identity(full_exps[0])["label"]))
 
 
 def _wanted(exps, keep) -> set:

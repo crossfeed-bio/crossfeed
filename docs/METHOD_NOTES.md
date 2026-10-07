@@ -231,6 +231,39 @@ match is a case-insensitive substring over the medium name, the description and 
 Selecting changes no derivation rule: the medium is part of the conditions key, so a comparison never mixed
 media in the first place.
 
+**What counts as one medium** (Karoline, 2026-10-07: "foodnet's strict medium rule should be applied in
+general in case someone specifies it in the 2nd search box (because such changes alter interactions); and
+it should also be documented"). A substring match is right for the box, which takes prose, and wrong for
+deciding whether two measurements are of one environment. `grownet.media.identity` decides that: the
+compartments' names without case, punctuation or a parenthesized abbreviation, plus every alteration the
+description states with its amount, plus the atmosphere where one is recorded. Measured on the live
+database on 2026-10-07, over all 559 experiments: the names alone give **15** media, this rule gives
+**60**. SMGDB00000026 varies the sugars in Wilkins-Chalgren seventeen ways and drops glucose and pyruvate;
+SMGDB00000014 runs one minimal medium at five concentrations of linoleic acid and five of oleic acid, plus
+TBHQ and DMSO; SMGDB00000025 varies twelve carbon sources in DM29.
+
+Two faults of the rule it replaced, both found on the live names (Craig's agent, on #141). It was a subset
+rule over the names' words, so it was **not transitive**: the short name "Wilkins-Chalgren" reached all
+three long spellings while the two correct long ones did not reach the misspelled "Anerobe". And it matched
+a **composite** name to one of its own compartments, because `medium_of` joins one name per compartment, so
+a plateau from the WC side of SMGDB00000002 and one from its WC-plus-Mucin design were called the same
+environment. Keying is stricter in both directions. Of the 7 pairs the subset rule called one medium on the
+live names it keeps one, SMGDB00000009 and 16's "Wilkins-Chalgren Anaerobe Broth" against SMGDB00000002, 7
+and 11's "...Anaerobe Broth (WC)", and drops the three composite matches and three against the bare short
+name. The measured cost in the chemostat check is SMGDB00000005's A8 control, whose medium is recorded as
+the bare "Wilkins-Chalgren"; SMGDB00000001's misspelled run was already unscorable, for want of a recorded
+dilution rate. An alias table is the only thing that would recover a misspelling and it is not wired in:
+containment says one name is a less complete spelling of the other, where a character substitution says
+the two names disagree, and an edit distance loose enough to merge "Anerobe" with "Anaerobe" also merges
+names differing by a digit, which in medium names is routine.
+
+The rule is foodnet's, the sister tool's (`src/foodnet/media.py`), with **one adaptation grownet needs**:
+foodnet also reads "+X" and "-X" in an experiment's *name*, which its own module says is safe because
+foodnet reads monocultures. grownet reads co-cultures, where those forms name community members, `At+Ct`
+and `Ct+Ms` in SMGDB00000013 and `LB+STneg` in SMGDB00000006. With them on, those two studies split into 4
+and 3 media that do not exist, and a co-culture would never match its own monocultures. With the
+description patterns alone they are one medium each and every real split survives.
+
 ## 9. Drop-out (leave-one-out) communities
 
 Deletion designs grow a community with one member removed and read the effect on the rest. They carry

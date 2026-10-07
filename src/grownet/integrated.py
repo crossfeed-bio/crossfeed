@@ -576,10 +576,10 @@ class IntegratedDeriver:
             _identity,
             _members,
             cultivation,
+            media_identity,
             strain_identities,
         )
         from .growth import SPIKE_FACTOR
-        from .selection import medium_of
         from .stats import paired
 
         if self.client is None:
@@ -622,7 +622,9 @@ class IntegratedDeriver:
         study_meta = {"study_citation": study.get("citation", ""), "study_license": study.get("license", ""),
                       "study_url": study.get("url", "")}
         for exp, members, reps in communities:
-            medium = medium_of(exp)
+            # the strict label, so an arc says which altered medium it was measured in and the capacity
+            # beside it can be matched to the same one (Karoline, 2026-10-07)
+            medium = media_identity(exp)["label"]
             for target in members:
                 partners = [m for m in members if m != target]
                 monos = [rep for _, found in monocultures.get(target, []) for rep in found]

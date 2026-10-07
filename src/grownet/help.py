@@ -212,7 +212,11 @@ SETTINGS = {
                    "name mGrowthDB records on the experiment's compartments, its description and its name, "
                    "so \"wilkins\" finds every spelling of Wilkins-Chalgren and \"mucin\" finds the "
                    "experiments that mention it; an id picks one study (SMGDB...) or one experiment "
-                   "(EMGDB...), and naming a comparison keeps the monocultures it is made against. On the "
+                   "(EMGDB...), and naming a comparison keeps the monocultures it is made against. One "
+                   "word can reach several media: a medium with a sugar added or a carbon source left out "
+                   "is another environment, and SMGDB00000026 varies the sugars in Wilkins-Chalgren "
+                   "seventeen ways. Those are never pooled, they give separate arcs, and the report names "
+                   "every medium a search read, so name an experiment id to read one of them alone. On the "
                    "command line a study id given this way replaces the study argument."),
     "exclude_studies": ("Exclude these studies", "--exclude-studies IDS",
                         "Comma separated mGrowthDB study ids that are never searched, for example a study "
@@ -578,8 +582,22 @@ report names what came along.</li>
 say so on each arc, while a <a href="#glv">gLV simulation</a> takes one matrix of numbers, and numbers from
 different environments do not belong in one simulation (Karoline, 2026-10-04). Nothing about the method
 changes: a comparison never mixed media, because the medium is part of the conditions two replicate sets
-must share. Every arc now records its <code>medium</code>, so a network says which environments it came
+must share. Every arc records its <code>medium</code>, so a network says which environments it came
 from.</p>
+<p><strong>What counts as one medium.</strong> mGrowthDB names a medium per compartment and does not
+report its composition systematically: an added sugar, a removed carbon source or a supplement usually
+lives only in the experiment's description ("WC plus mucin beads", "minimal medium with 0.75% linoleic
+acid", "RI_BH -Ac"). So a medium's identity is its compartments' names, without case, punctuation or a
+parenthesized abbreviation, together with every alteration the description states, with the amount where
+one is stated, and the atmosphere where it is recorded. Over the whole database the names alone give 15
+media and this rule gives 60. Two media are the same medium when those agree and not otherwise: a name
+that merely contains another is not a match, since "Wilkins-Chalgren Anaerobe Broth (WC)" and
+"Wilkins-Chalgren Anaerobe Broth (WC); Mucin" are a one-compartment design and a two-compartment one, and
+0.1 and 0.75 percent linoleic acid are two environments. The rule decides what a carrying capacity may be
+pooled over, which chemostat a gLV package may be scored against, and what the second box reaches; where
+two studies spell one medium differently, as SMGDB00000001's "Anerobe" against SMGDB00000009's
+"Anaerobe", grownet says the names differ and names the word rather than merging names that disagree
+(Karoline, 2026-10-07).</p>
 
 <h2 id="idea">The idea behind it</h2>
 <p>How one species affects another can be read from growth alone: grow each species by itself, grow the

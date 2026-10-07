@@ -310,7 +310,10 @@ derived from mGrowthDB growth data on this machine; nothing is uploaded.</p>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in selecting.EXAMPLES)}</p>
 <textarea id="conditions" name="conditions" rows="5">{_esc(conditions)}</textarea>
 <p class="hint">One per line. A medium is matched as text, so "wilkins" finds every spelling of
-Wilkins-Chalgren; an id (SMGDB..., EMGDB...) picks that study or experiment. Empty means every medium.</p>
+Wilkins-Chalgren <em>and</em> every variant of it: a medium with a sugar added or a carbon source left out
+is another environment, so those stay apart and the report names every medium the search read. An id
+(SMGDB..., EMGDB...) picks that study or experiment, which is how to read one medium alone. Empty means
+every medium.</p>
 </div>
 </div>
 <div class="bar"><button class="primary" type="submit">Find interactions</button>

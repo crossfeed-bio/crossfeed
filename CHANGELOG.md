@@ -31,6 +31,28 @@ content.
   always the solution of `A x = -r` and the reader had to work it out.
 
 ### Changed
+- **What counts as one medium is a rule now, and it decides every medium comparison** (Karoline,
+  2026-10-07, closing the open decision on #141 and then: "foodnet's strict medium rule should be applied
+  in general in case someone specifies it in the 2nd search box (because such changes alter
+  interactions)"). mGrowthDB names a medium per compartment and states an added sugar, a removed carbon
+  source or a supplement only in the experiment's description, so a medium's identity (`grownet.media`) is
+  its compartments' names without case, punctuation or a parenthesized abbreviation, plus every alteration
+  the description states with its amount, plus the atmosphere where one is recorded. Over the whole
+  database the names alone give 15 media and this rule gives 60. Four things follow. **A carrying capacity
+  comes from one medium**, the one with the most certified curves, named in `capacity_medium`, with every
+  other medium's plateaus named rather than pooled in, which is the decision itself: a diagonal sits
+  beside off-diagonals measured in one environment. **Every arc records the medium it was measured in**
+  with its alterations, so SMGDB00000014's twelve chemistries no longer all read "Minimal medium (MM)".
+  **A gLV package is scored against a chemostat only when the two media are the same by this rule**, which
+  replaces a subset rule over the names' words that was not transitive and that matched a two-compartment
+  design to one of its own compartments; where two studies spell one medium differently the report now
+  says the names differ and names the word, instead of asserting that the environments do. **The second
+  box** still matches a medium as text, because mGrowthDB's names are prose, but says how many media one
+  word reached, and the monocultures it keeps alongside a named comparison must now share the medium and
+  not only the recorded conditions. The rule is foodnet's, the sister tool's, with one adaptation: foodnet
+  also reads "+X" in an experiment's **name**, which is safe for a tool that reads monocultures and is not
+  for grownet, where `At+Ct` and `LB+STneg` name community members and would have split two studies into
+  media that do not exist.
 - **A carrying capacity says how far its curves fell from their peak, and the worst of them are refused**
   (Karoline, 2026-10-07, closing the open decision on #141). `reached_stationary` certifies a culture that
   grew, reached a peak and then declined, because it has stopped growing, and the plateau recorded for it

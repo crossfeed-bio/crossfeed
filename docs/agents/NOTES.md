@@ -213,6 +213,8 @@ Rules for this file:
   where it is recorded. Measured on the live database (2026-10-07): the names alone give 15 media over the
   559 experiments and the strict rule gives 60, which is what makes an organism's monocultures poolable
   only within one chemistry.
+  Implemented as `grownet.media` on 2026-10-07 (#142 item 16); the register's section 8 holds the
+  measurements and the two faults of the rule it replaced.
   **One adaptation grownet needs.** foodnet also reads `+X` and `-X` in an experiment's *name*, which its
   own module says is safe because foodnet reads monocultures. grownet reads co-cultures, where those forms
   name community members: `At+Ct`, `At+Ms`, `Ct+Ms` in SMGDB00000013 and `LB+STneg`, `LB+STpos` in

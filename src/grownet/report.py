@@ -193,11 +193,15 @@ def report_text(result: dict) -> str:
                     extra.append(f"those curves ended at 1/{fall:.3g} of their peak (median)")
             # the help promises that every curve giving no capacity is named here with its reason, and
             # nothing rendered them: an empty carrying capacity read as absence (found 2026-10-06)
-            # a capacity pooled over more than one medium sits beside off-diagonals measured in one of
-            # them, which changes the ratio of a cell to its own diagonal (found 2026-10-06)
-            media = rate.get("capacity_media") or []
-            if len(media) > 1:
-                extra.append("capacity pooled over " + ", ".join(media))
+            # a capacity comes from one medium and is never pooled across them, since it sits beside
+            # off-diagonals measured in one of them (Karoline, 2026-10-07). The medium it came from is
+            # said, and so is every other medium this organism has a plateau in, which the second box
+            # can ask for.
+            if rate.get("capacity_medium"):
+                extra.append(f"capacity measured in {rate['capacity_medium']}")
+            others = rate.get("capacity_other_media") or []
+            if others:
+                extra.append(f"{len(others)} other medium(s) hold a plateau of this organism, named below")
             left = rate.get("capacity_left_out") or []
             if left:
                 extra.append(f"{len(left)} curve(s) gave no capacity")
@@ -205,6 +209,8 @@ def report_text(result: dict) -> str:
                          f"{rate.get('n', 0)} monoculture replicate(s)"
                          + (f" ({per_study})" if per_study else "")
                          + ("; " + ", ".join(extra) if extra else ""))
+            for label in others:
+                lines.append(f"      a plateau in {label} is not pooled into the capacity above")
             for label, why in left:
                 lines.append(f"      no capacity from {label}: {why}")
         missing = rates.get("without_a_rate") or []

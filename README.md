@@ -212,7 +212,10 @@ resolves them to taxon ids from mGrowthDB's own strain records, finds the studie
 the interactions, and shows them as a table. The second is optional and says **where** to look: a medium,
 matched as text against the medium name mGrowthDB records, the experiment description and its name (so
 `wilkins` finds every spelling of Wilkins-Chalgren), an experiment id or a study id. Naming a comparison
-keeps the monocultures it is made against, and every arc records its `medium`.
+keeps the monocultures it is made against, and every arc records its `medium`. One word can reach several
+media, because a medium with a sugar added or a carbon source left out is another environment and
+mGrowthDB states that only in the description: those are told apart, never pooled, and the report names
+every medium a search read, so name an experiment id to read one of them alone.
 
 **Four buttons.** Find interactions; Example, which fills the first box with a pair that gives a result;
 All, which derives every study in mGrowthDB; and the gLV mode switch, which sets what a simulation needs
@@ -452,7 +455,14 @@ usually environmentally specific; under different conditions they give separate 
 of those conditions, so a comparison never mixes media, and the second box on the page (`--conditions`) is
 how you look at one of them rather than all. Because mGrowthDB
 does not detail medium components well, their descriptions must also agree, apart from a trailing run
-number ("All 1" and "All 2" pool; "with initial acetate" and "without initial acetate" do not).
+number ("All 1" and "All 2" pool; "with initial acetate" and "without initial acetate" do not). The same
+reading of a description gives a medium its identity: its compartments' names without case, punctuation
+or a parenthesized abbreviation, plus every alteration the description states with its amount, plus the
+atmosphere where one is recorded. Over the whole database the names alone give 15 media and that rule
+gives 60. It is what decides which plateaus a carrying capacity may be pooled over (one medium, never
+more), which chemostat a gLV package may be scored against, and what the second box reaches; where two
+studies spell one medium differently, grow**net** says the names differ and names the word rather than
+merging names that disagree.
 Each arc is compared over its own window, the target's curves in the two sets, so one short curve
 elsewhere in the design does not shorten every arc. A design does not
 need every drop-out. mGrowthDB still measures the removed member in a drop-out experiment; that curve is

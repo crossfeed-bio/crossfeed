@@ -129,8 +129,9 @@ def test_the_carrying_capacity_is_the_plateau_of_a_monoculture_that_reached_one(
     client = _client({(1, A): _settles(plateau=1.0e8), (2, A): _settles(plateau=3.0e8)})
     found, skipped = monoculture_rates(client, [_mono("E1", A, [(1, "r1"), (2, "r2")])])
     (entry,) = found.values()
-    assert entry["capacities"] == pytest.approx([1.0e8, 3.0e8])
-    assert entry["capacity_unit"] == "Cells/mL"       # the abundance unit, not the rate's 1/h
+    (here,) = entry["capacity_by_medium"].values()        # one medium: these fixtures name none
+    assert here["values"] == pytest.approx([1.0e8, 3.0e8])
+    assert here["unit"] == "Cells/mL"                 # the abundance unit, not the rate's 1/h
     assert entry["method"] == "growth_rate:easylinear:5"
     assert entry["capacity_left_out"] == [] and skipped == []
     merged = merge_rates([("S1", found)])[next(iter(found))]
@@ -146,7 +147,7 @@ def test_a_curve_still_growing_gives_a_rate_and_no_capacity_and_says_so():
     client = _client({(1, A): [(t, v, None) for t, v in zip(times, values, strict=True)]})
     found, skipped = monoculture_rates(client, [_mono("E1", A, [(1, "r1")])])
     (entry,) = found.values()
-    assert entry["values"] and entry["capacities"] == []            # a rate, no capacity
+    assert entry["values"] and entry["capacity_by_medium"] == {}    # a rate, no capacity
     assert skipped == []                                            # nothing about the rate was left out
     (label, reason) = entry["capacity_left_out"][0]
     assert "r1" in label and "had not reached stationary phase" in reason
@@ -176,12 +177,12 @@ def test_the_lag_always_comes_from_the_baranyi_fit_whichever_rate_was_asked_for(
 
 def test_capacities_in_another_abundance_unit_are_named_not_converted():
     """The same rule the rates follow across time units, Karoline's "left out rather than converted"."""
-    cells = {"ncbi:1": {"name": A, "unit": "1/h", "values": [0.4], "replicates": ["r1"], "lags": [],
-                        "capacities": [1.0e8], "capacity_unit": "Cells/mL", "capacity_left_out": [],
-                        "method": "growth_rate:easylinear:5"}}
-    grams = {"ncbi:1": {"name": A, "unit": "1/h", "values": [0.4], "replicates": ["r1"], "lags": [],
-                        "capacities": [0.9], "capacity_unit": "g/L", "capacity_left_out": [],
-                        "method": "growth_rate:easylinear:5"}}
+    def one(value, unit):
+        return {"ncbi:1": {"name": A, "unit": "1/h", "values": [0.4], "replicates": ["r1"], "lags": [],
+                           "capacity_left_out": [], "method": "growth_rate:easylinear:5",
+                           "capacity_by_medium": {"wc": {"label": "WC", "unit": unit, "values": [value],
+                                                         "falls": [1.0], "curves": ["r1"]}}}}
+    cells, grams = one(1.0e8, "Cells/mL"), one(0.9, "g/L")
     merged = merge_rates([("S1", cells), ("S2", grams)])["ncbi:1"]
     assert merged["capacity"] == pytest.approx(1.0e8) and merged["capacity_unit"] == "Cells/mL"
     assert merged["other_capacity_units"] == ["S2 (g/L)"]
@@ -229,8 +230,9 @@ def test_a_curve_that_fell_too_far_from_its_peak_gives_no_capacity_and_is_named(
                       (2, A): _peaks_then_falls(peak=1.0e8, fall=10.0)})
     found, skipped = monoculture_rates(client, [_mono("E1", A, [(1, "r1"), (2, "r2")])])
     (entry,) = found.values()
-    assert entry["capacities"] == pytest.approx([1.0e8])          # only the replicate within the limit
-    assert entry["capacity_falls"] == pytest.approx([10.0])
+    (here,) = entry["capacity_by_medium"].values()
+    assert here["values"] == pytest.approx([1.0e8])               # only the replicate within the limit
+    assert here["falls"] == pytest.approx([10.0])
     assert skipped == []                                          # the rate itself was not left out
     (label, reason) = entry["capacity_left_out"][0]
     assert "r1" in label and "1/100 of its peak" in reason and "10 times allowed" in reason
@@ -247,13 +249,14 @@ def test_the_limit_is_a_setting_and_zero_keeps_every_certified_plateau():
     off, _ = monoculture_rates(_client(curves), [_mono("E1", A, [(1, "r1"), (2, "r2")])],
                                capacity_max_fall=0)
     entry = next(iter(off.values()))
-    assert len(entry["capacities"]) == 2 and entry["capacity_left_out"] == []
+    (here,) = entry["capacity_by_medium"].values()
+    assert len(here["values"]) == 2 and entry["capacity_left_out"] == []
     assert merge_rates([("S1", off)])[next(iter(off))]["capacity_fall"] == pytest.approx(55.0)
 
     strict, _ = monoculture_rates(_client(curves), [_mono("E1", A, [(1, "r1"), (2, "r2")])],
                                   capacity_max_fall=2.0)
     entry = next(iter(strict.values()))
-    assert entry["capacities"] == [] and len(entry["capacity_left_out"]) == 2
+    assert entry["capacity_by_medium"] == {} and len(entry["capacity_left_out"]) == 2
 
 
 def test_the_fall_travels_into_the_report_and_the_rates_csv():
@@ -266,9 +269,10 @@ def test_the_fall_travels_into_the_report_and_the_rates_csv():
     rates_found = {"ncbi:1": {"name": A, "rate": 0.4, "unit": "1/h", "n": 2, "studies": ["S1"],
                               "per_study": {}, "method": "growth_rate:easylinear:5", "lag": None,
                               "lag_method": "", "capacity": 1.0e8, "capacity_unit": "Cells/mL",
-                              "capacity_n": 2, "capacity_fall": 4.0, "capacity_left_out": []}}
+                              "capacity_n": 2, "capacity_fall": 4.0, "capacity_left_out": [],
+                              "capacity_medium": "WC"}}
     row = list(csv_module.reader(io_module.StringIO(matrix.rates_csv(rates_found))))[1]
-    assert row[-1] == "4"
+    assert row[-2] == "4" and row[-1] == "WC"
 
     from grownet.model import InteractionNetwork
     from grownet.report import report_text
@@ -277,6 +281,80 @@ def test_the_fall_travels_into_the_report_and_the_rates_csv():
     text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
                         "skipped": [], "entries": []})
     assert "those curves ended at 1/4 of their peak (median)" in text
+
+
+# ---- a capacity comes from one medium -------------------------------------------------------------
+
+def _mono_in(exp_id, name, replicates, medium, description=""):
+    """A monoculture experiment that names its medium and states its alterations, as mGrowthDB does."""
+    exp = _mono(exp_id, name, replicates)
+    exp["compartments"] = [{"mediumName": medium}]
+    exp["description"] = description
+    return exp
+
+
+def test_a_capacity_is_taken_from_one_medium_and_the_others_are_named():
+    """Karoline, 2026-10-07: "capacity merge by medium is a good idea. in addition, we can do the stricter
+    test that foodnet does; medium matches but contradicting extras, such as acetic acid or mucin, do not
+    count as matching medium." Plateaus are collected per medium and never pooled: the medium with the
+    most certified curves is published, and the other is named rather than averaged in. Two replicates
+    plateau at 1e8 in the base medium, one at 3e8 with acetate added."""
+    client = _client({(1, A): _settles(plateau=1.0e8), (2, A): _settles(plateau=1.0e8),
+                      (3, A): _settles(plateau=3.0e8)})
+    exps = [_mono_in("E1", A, [(1, "r1"), (2, "r2")], "mMCB"),
+            _mono_in("E2", A, [(3, "r3")], "mMCB", "mMCB with initial acetate")]
+    found, _ = monoculture_rates(client, exps)
+    (entry,) = found.values()
+    assert sorted(entry["capacity_by_medium"]) == ["mmcb", "mmcb | +acetate"]
+
+    merged = merge_rates([("S1", found)])[next(iter(found))]
+    assert merged["capacity"] == pytest.approx(1.0e8)          # the base medium's, not of all three
+    assert merged["capacity_medium"] == "mMCB"
+    assert merged["capacity_media"] == ["mMCB"]                # one medium, so nothing is pooled
+    assert merged["capacity_other_media"] == ["mMCB (+acetate)"]
+    assert merged["capacity_n"] == 2
+    (what, why) = merged["capacity_left_out"][-1]
+    assert what == "1 curve(s) in mMCB (+acetate)"
+    assert "not pooled across media" in why and "taken from mMCB" in why
+
+
+def test_the_medium_with_the_most_curves_wins_whatever_order_the_studies_came_in():
+    """A tie goes to the first label, so the published capacity does not depend on the order the studies
+    were read in, which is the failure register item 14 is about in another place."""
+    curves = {(1, A): _settles(plateau=1.0e8), (2, A): _settles(plateau=3.0e8),
+              (3, A): _settles(plateau=3.0e8)}
+    base = _mono_in("E1", A, [(1, "r1")], "mMCB")
+    added = _mono_in("E2", A, [(2, "r2"), (3, "r3")], "mMCB", "mMCB with initial acetate")
+    for order in ([base, added], [added, base]):
+        found, _ = monoculture_rates(_client(curves), order)
+        merged = merge_rates([("S1", found)])[next(iter(found))]
+        assert merged["capacity_medium"] == "mMCB (+acetate)"   # two curves against one
+        assert merged["capacity"] == pytest.approx(3.0e8)
+
+
+def test_the_second_box_says_how_many_media_one_word_reached():
+    """Karoline, 2026-10-07: the strict rule applies to the second box too, "because such changes alter
+    interactions". A reader who types one word is told how many environments came back, so a search over
+    a study that varies one medium does not read as a search of one medium."""
+    from grownet.derive import select_experiments
+    from grownet.selection import parse
+    exps = [_mono_in("E1", A, [(1, "r1")], "Minimal medium (MM)",
+                     "Growth of At on minimal medium with 0.05% linoleic acid"),
+            _mono_in("E2", A, [(2, "r2")], "Minimal medium (MM)",
+                     "Growth of At on minimal medium with 0.75% linoleic acid")]
+    notes: list = []
+    kept = select_experiments(exps, parse(["linoleic"]), notes)
+    assert len(kept) == 2                                  # both are read, as the text match asks
+    (what, why) = next((row for row in notes if row[0].startswith("media matched by")), (None, None))
+    assert what == "media matched by linoleic"
+    assert "2 different media" in why and "never one pooled set" in why
+    assert "Minimal medium (MM) (+0.05% linoleic acid)" in why
+    assert "Name an experiment id" in why
+
+    # one medium, one note fewer: nothing is said where there is nothing to warn about
+    quiet: list = []
+    select_experiments(exps[:1], parse(["linoleic"]), quiet)
+    assert not [row for row in quiet if row[0].startswith("media matched by")]
 
 
 # ---- the partner's abundance reaches the arc ------------------------------------------------------

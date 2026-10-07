@@ -18,8 +18,12 @@ from grownet.derive import _gs
 from grownet.mgrowthdb import records_to_network
 
 
-def _chemostat(exp_id, name, members, replicates, dilution="0.040", medium="Wilkins-Chalgren",
-               description=""):
+# the chemostat's medium and the package's below are the two live spellings of one medium that still
+# match under the keyed rule of 2026-10-07: the same words, one of them with the parenthesized
+# abbreviation mGrowthDB sometimes adds. The bare short name "Wilkins-Chalgren" no longer matches either,
+# which is the measured cost of keying and is pinned in the medium test below.
+def _chemostat(exp_id, name, members, replicates, dilution="0.040",
+               medium="Wilkins-Chalgren Anaerobe Broth", description=""):
     return {"id": exp_id, "name": name, "cultivationMode": "chemostat", "description": description,
             "communityStrains": [{"name": m} for m in members],
             "compartments": [{"mediumName": medium, "dilutionRate": dilution}],
@@ -41,7 +45,9 @@ def test_the_steady_state_of_a_vessel_is_the_mean_over_the_end_of_the_run():
     exp = _chemostat("E1", "no perturbations", [A], [(1, "V1"), (2, "V2")])
     (seen,) = steady.observed(client, [exp])
     assert seen["dilution"] == pytest.approx(0.040) and seen["unit"] == "Cells/mL"
-    assert seen["medium"] == "Wilkins-Chalgren" and seen["vessels"] == 2
+    # the medium is the strict label since 2026-10-07: the name with every alteration its description
+    # stated, which is what an arc records too, so the two sides of the check are comparable
+    assert seen["medium"] == "Wilkins-Chalgren Anaerobe Broth" and seen["vessels"] == 2
     assert seen["organisms"][A]["value"] == pytest.approx(3.0e8)
     assert seen["organisms"][A]["vessels"] == 2
     assert seen["window"][0] < seen["window"][1] and seen["perturbed"] is False
@@ -153,23 +159,66 @@ def test_nothing_is_scored_across_abundance_units_or_media():
     assert check["used"] is False and "mMCB" in check["why_not"]
 
 
-def test_the_two_names_of_wilkins_chalgren_are_one_medium():
-    """The batch study writes "Wilkins-Chalgren Anaerobe Broth (WC)" and the chemostat "Wilkins-Chalgren",
-    and they are the same medium, so a check is not refused over the spelling."""
-    assert steady.same_medium("Wilkins-Chalgren Anaerobe Broth (WC)", "Wilkins-Chalgren")
-    assert steady.same_medium("wilkins chalgren", "Wilkins-Chalgren Anaerobe Brot")
-    assert not steady.same_medium("mMCB", "Wilkins-Chalgren")
-    assert not steady.same_medium("", "Wilkins-Chalgren")
+def test_two_media_are_one_when_their_identities_agree_and_not_when_they_differ():
+    """Karoline, 2026-10-07: "foodnet's strict medium rule should be applied in general ... because such
+    changes alter interactions". So two recorded media are one when `media.identity`'s key agrees, and
+    the key normalizes case, punctuation and a parenthesized abbreviation and carries every alteration
+    the description stated. The rule is an equality, so it is transitive, which the subset rule it
+    replaced was not (#142 item 10).
 
-    # the rule compared raw substrings until 2026-10-06, which called a defined medium with mucin added
-    # the same medium as mucin alone: the one false positive mGrowthDB's own names produce. A short name
-    # now needs two words of the longer one, and a word that states an omission or an addition separates
-    # two names however much else they share.
+    Each case below is a pair of names mGrowthDB actually serves."""
+    # the same words, with and without the abbreviation: SMGDB00000009 and 16 against SMGDB00000002, 7
+    # and 11, which is the comparison the chemostat validation rests on
+    assert steady.same_medium("Wilkins-Chalgren Anaerobe Broth (WC)", "Wilkins-Chalgren Anaerobe Broth")
+    assert steady.same_medium("Db-MM medium", "Db-MM medium ")       # a trailing space is one medium
+    assert not steady.same_medium("mMCB", "Wilkins-Chalgren Anaerobe Broth")
+    assert not steady.same_medium("", "Wilkins-Chalgren Anaerobe Broth")
+
+    # spoke to spoke, which the old test never asked (Craig's agent, on #141): every assertion there put
+    # the short name on one side, and the short name was a subset of all three long ones
+    assert not steady.same_medium("Wilkins-Chalgren Anaerobe Broth",
+                                  "Wilkins-Chalgren Anerobe Broth (WC)")
+    # the measured cost of keying: the bare short name of SMGDB00000005 and 26 no longer reaches the long
+    # spellings. A missed comparison costs validation and produces no wrong number, where a false merge
+    # produces a coefficient scored against the wrong environment
+    assert not steady.same_medium("Wilkins-Chalgren Anaerobe Broth (WC)", "Wilkins-Chalgren")
+
+    # a composite name is a design of two compartments, not a medium with something added, and matching
+    # it to one of its own compartments loses which compartment the organism was in (#142 item 13)
+    assert not steady.same_medium("Wilkins-Chalgren Anaerobe Broth (WC)",
+                                  "Wilkins-Chalgren Anaerobe Broth (WC); Mucin")
     assert not steady.same_medium("MDb-MM basal medium mucin DoS ", "Mucin")
     assert not steady.same_medium("LB", "Albumin broth")
-    assert not steady.same_medium("WC", "Nutrient broth WC-free")
-    assert not steady.same_medium("Wilkins-Chalgren", "Wilkins-Chalgren without glucose")
-    assert steady.same_medium("Db-MM medium", "Db-MM medium ")       # a trailing space is one medium
+
+    # an alteration the description stated travels in the label, so two concentrations are two media
+    assert steady.same_medium("Minimal medium (MM) (+0.05% linoleic acid)",
+                              "Minimal medium (+0.05% linoleic acid)")
+    assert not steady.same_medium("Minimal medium (MM) (+0.05% linoleic acid)",
+                                  "Minimal medium (MM) (+0.75% linoleic acid)")
+    assert not steady.same_medium("Wilkins-Chalgren Anaerobe Broth",
+                                  "Wilkins-Chalgren Anaerobe Broth (-glucose, -pyruvate)")
+
+
+def test_a_run_not_scored_over_a_spelling_says_so_rather_than_blaming_the_environment():
+    """Craig's agent, on #141: `why_not` gave a scientific reason, that a coefficient is specific to its
+    environment, for what is a typo in a third-party database. SMGDB00000001's chemostat is recorded in
+    "Wilkins-Chalgren An**e**robe Broth (WC)" and the packages in the correct spelling, so the message
+    says the two names differ and names the one word they differ in."""
+    from grownet.media import near_miss
+    assert near_miss("Wilkins-Chalgren Anaerobe Broth (WC)",
+                     "Wilkins-Chalgren Anerobe Broth (WC)") == ("anaerobe", "anerobe")
+    # something added or taken away is a real difference, not a spelling, and is not reported as one
+    assert near_miss("Wilkins-Chalgren Anaerobe Broth",
+                     "Wilkins-Chalgren Anaerobe Broth (-glucose)") is None
+
+    client = _client({(1, A): _flat(3.0e8)})
+    misspelled = steady.observed(client, [_chemostat("E1", "x", [A], [(1, "V1")],
+                                                     medium="Wilkins-Chalgren Anerobe Broth (WC)")])
+    (check,) = steady.check(_package(), RATES, misspelled)
+    assert check["used"] is False
+    assert "mGrowthDB names them as different media" in check["why_not"]
+    assert "differs from this run's medium in one word only" in check["why_not"]
+    assert '"anaerobe" against "anerobe"' in check["why_not"]
 
 
 OTHER = "Escherichia coli LF82"

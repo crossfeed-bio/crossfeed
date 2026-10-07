@@ -277,7 +277,7 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow(["organism", "growth_rate", "unit", "replicates", "studies", "method", "lag",
                      "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves",
-                     "capacity_curves_left_out", "capacity_fall_from_peak"])
+                     "capacity_curves_left_out", "capacity_fall_from_peak", "capacity_medium"])
     order = labels(net) if net is not None else sorted(rates)
     for nid in order:
         rate = rates.get(nid)
@@ -298,7 +298,10 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
                          len(rate.get("capacity_left_out") or "") or "",
                          # a plateau is the peak of a curve that may have declined after it, so what the
                          # curves held at their last measurement travels with it (Karoline, 2026-10-07)
-                         "" if rate.get("capacity_fall") is None else f"{rate['capacity_fall']:.4g}"])
+                         "" if rate.get("capacity_fall") is None else f"{rate['capacity_fall']:.4g}",
+                         # one medium, never pooled: the diagonal and the cells beside it are of one
+                         # environment (Karoline, 2026-10-07)
+                         rate.get("capacity_medium", "") if capacity is not None else ""])
     return out.getvalue()
 
 
@@ -968,6 +971,8 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
              "carrying_capacity_left_out": [list(row) for row in
                                             (rates[nid].get("capacity_left_out") or [])],
              "carrying_capacity_media": list(rates[nid].get("capacity_media") or ()),
+             "carrying_capacity_medium": rates[nid].get("capacity_medium", ""),
+             "carrying_capacity_other_media": list(rates[nid].get("capacity_other_media") or ()),
              "carrying_capacity_fall_from_peak": rates[nid].get("capacity_fall")}
             for nid in order if nid in rates and (rates[nid] or {}).get("rate") is not None],
         "caveats": {

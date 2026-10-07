@@ -60,43 +60,37 @@ def _dilution(exp: dict):
 
 
 def _medium(exp: dict) -> str:
-    for comp in exp.get("compartments") or []:
-        if comp.get("mediumName"):
-            return str(comp["mediumName"])
-    return ""
-
-
-def _words(name: str) -> list:
-    """A medium name as its lowercase alphanumeric words, so two spellings of one medium compare equal."""
-    return [w for w in re.split(r"[^a-z0-9]+", (name or "").casefold()) if w]
-
-
-# a word that states what was taken out of a medium or added to it: two names that differ by one of these
-# are two environments, however much else they share ("WC" against "WC-free" is the clearest case)
-CHANGED = {"free", "without", "minus", "depleted", "plus", "supplemented", "diluted", "with"}
+    """The medium this run was in, by the strict rule: the name with every alteration its description
+    states (`media.identity`), which is what an arc records too, so the two are comparable."""
+    from .media import identity
+    return identity(exp)["label"]
 
 
 def same_medium(a: str, b: str) -> bool:
-    """Whether two medium names are the same medium.
+    """Whether two recorded media are the same medium, by `media.identity`'s key.
 
-    mGrowthDB writes one medium several ways: SMGDB00000007 has "Wilkins-Chalgren Anaerobe Broth (WC)"
-    and SMGDB00000005 has "Wilkins-Chalgren". Reduced to words, the shorter name's words are all in the
-    longer one, which is the rule here, and the shorter name has to bring at least two of them unless the
-    two names are the same words. One word is not enough: mGrowthDB holds "Mucin" and "MDb-MM basal
-    medium mucin DoS", a defined medium with mucin added, which a one-word match called the same medium
-    (found 2026-10-06). A word that states an omission or an addition makes the two differ whatever else
-    they share. An empty name matches nothing: a run whose medium is unrecorded is not scored against a
-    package, since a coefficient is specific to its environment.
+    Karoline, 2026-10-07: "foodnet's strict medium rule should be applied in general ... because such
+    changes alter interactions". Both sides are labels, one from the package's arcs and one from the
+    chemostat run, so the key is reconstructed from each (`media.key_from_label`) and the two keys are
+    compared for equality. An empty label matches nothing: a run whose medium is unrecorded is not scored
+    against a package, since a coefficient is specific to its environment.
+
+    This replaced a subset rule over the names' words, which had two faults the live names exposed. It
+    was not transitive: "Wilkins-Chalgren" reached all three long spellings, while the two correct long
+    ones did not reach the misspelled "Anerobe" (#142 item 10). And it matched a composite name to one of
+    its own compartments, because `medium_of` joins one name per compartment, so a capacity from the WC
+    side of SMGDB00000002 and one from its WC-plus-Mucin design were called the same environment (#142
+    item 13). Keying is stricter in both directions: of the 7 pairs the subset rule called one medium on
+    the live names it keeps the one the validation needs, SMGDB00000009 and 16's "Wilkins-Chalgren
+    Anaerobe Broth" against SMGDB00000002, 7 and 11's "...Anaerobe Broth (WC)", and drops the three
+    composite matches and three against the bare short name. The cost is SMGDB00000001, whose chemostat
+    is recorded under the "Anerobe" misspelling and now matches nothing; only an alias table recovers
+    that, and Craig's agent recommends against widening the matching, since a missed comparison costs
+    validation while a false merge produces a wrong number carrying a scientific claim.
     """
-    first, second = _words(a), _words(b)
-    if not first or not second:
-        return False
-    if first == second:
-        return True
-    shorter, longer = sorted((first, second), key=len)
-    if CHANGED & (set(longer) ^ set(shorter)):
-        return False
-    return len(shorter) >= 2 and set(shorter) <= set(longer)
+    from .media import key_from_label
+    first, second = key_from_label(a), key_from_label(b)
+    return bool(first and second and first == second)
 
 
 def _perturbed(exp: dict):
@@ -319,8 +313,9 @@ def check(coefficients: dict, rates: dict, seen: list) -> list:
                       if _fits(b, entry["unit"], entry["medium"], here)), None)
         if block is None:
             units = sorted({b["abundance_unit"] for b in coefficients["matrices"]})
-            media = sorted({name for b in coefficients["matrices"] for name in b.get("media") or []})
-            theirs = ", ".join(name for name in media if name) or "an unrecorded medium"
+            media_names = sorted({name for b in coefficients["matrices"]
+                                  for name in b.get("media") or [] if name})
+            theirs = ", ".join(media_names) or "an unrecorded medium"
             if not any(here.intersection(b["organisms"]) for b in coefficients["matrices"]):
                 result["why_not"] = ("no organism of this run is in the package, so there is nothing to "
                                      "compare")
@@ -328,9 +323,22 @@ def check(coefficients: dict, rates: dict, seen: list) -> list:
                 result["why_not"] = (f"this run measures {entry['unit']} and the package holds "
                                      f"{', '.join(units) or 'nothing'}; left out rather than converted")
             else:
-                result["why_not"] = (f"this run is in {entry['medium'] or 'an unrecorded medium'} and the "
-                                     f"package was measured in {theirs}, and a coefficient is specific to "
-                                     "its environment")
+                # the two media are told apart by name, and the name is a third party's: so this says the
+                # names differ, and names a near miss where one word is spelled differently, rather than
+                # asserting that the environments differ (Craig's agent, on #141)
+                from .media import near_miss
+                mine = entry["medium"] or "an unrecorded medium"
+                result["why_not"] = (f"this run is recorded in {mine} and the package in {theirs}: "
+                                     "mGrowthDB names them as different media, and a coefficient is "
+                                     "specific to the environment it was fitted in")
+                close = next(((name, near_miss(name, entry["medium"])) for name in media_names
+                              if near_miss(name, entry["medium"])), None)
+                if close:
+                    name, (theirs_word, mine_word) = close
+                    result["why_not"] += (f". {name} differs from this run's medium in one word only, "
+                                          f"\"{theirs_word}\" against \"{mine_word}\": if that is one "
+                                          "medium spelled two ways, the two studies record it "
+                                          "differently and grownet does not merge names that disagree")
             out.append(result)
             continue
         shared = [name for name in block["organisms"] if name in here]
