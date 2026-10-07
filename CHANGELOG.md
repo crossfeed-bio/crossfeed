@@ -120,6 +120,18 @@ content.
   removed compound makes another environment.
 
 ### Fixed
+- **A GraphML exported from the page carried none of the graph-level attributes** (#155 item 4). The
+  Python writer reads them from a nested `meta`: `absence_rule` is `meta.absence.rule`, `absence_count`
+  is `meta.absence.absent`, `statistics_test` is `meta.statistics.test`, and `hidden` is the counts
+  joined. The viewer looked up the flat names directly on `meta`, so four came back empty and `hidden`
+  was written as `[object Object]`. The purpose of adding them was that an absent arc can be read against
+  the `k` that marked it on the route Cytoscape uses, and on that route there was no `k`. The viewer now
+  resolves them the same way, and writes a double whose value is whole as a float, so 2.4e8 is
+  `240000000.0` on both routes rather than differing by a formatting artifact.
+  The test that keeps the two writers equal built its network with no `meta` and a record carrying none
+  of the fitted fields, so every key this release added was skipped on both sides and the equality held
+  vacuously. Its fixture now carries a full `meta` and all thirty-odd arc fields, which is what found the
+  two float cases above.
 - **A stated amount of zero was read as something added** (#155 item 3). SMGDB00000014 states its
   no-fatty-acid arms as "0% linoleic acid" and "0% oleic acid", and the amount pattern matched the stated
   zero, so each became a medium with a compound added at zero: two media that do not exist. Neither was

@@ -602,29 +602,46 @@ const lineStyleOf=e=>{const drop=e.evidence==="dropout", one=flagsOf(e).includes
   return drop&&one?"DASH_DOT":drop?"LONG_DASH":one?"DOT":"SOLID";};
 const displayWeightOf=e=>e.outcome==="obligate"||e.outcome==="abolished"?8.0:Number(e.weight||0);
 const pyFloat=x=>Number.isInteger(x)?x.toFixed(1):String(x);     // as Python's str() writes a float
-function graphmlValue(attr,v){
+function graphmlValue(attr,v,ty){
   if(v===null||v===undefined)return "";
   if(Array.isArray(v))return v.join(attr==="notes"||attr==="merged_pairs"?"; ":" ");
+  // a double whose value happens to be whole is still written as a float, the way Python's str() does:
+  // 2.4e8 is "240000000.0" and not "240000000", or a reader diffing the two routes sees a difference
+  // that is not there (#155 item 4)
+  if(ty==="double"&&typeof v==="number")return pyFloat(v);
   return v;
 }
+// The graph-level attributes are flat names over a nested meta, exactly as grownet.export writes them:
+// `absence_k` is meta.absence.k, `absence_count` is meta.absence.absent, `statistics_test` is
+// meta.statistics.test, and `hidden` is the counts joined, not the object. Reading meta[nm] gave
+// undefined for four of the five and "[object Object]" for hidden, so a GraphML exported from this page
+// carried none of them and an absent arc could not be read against the k that marked it (#155 item 4).
+const GRAPH_META={absence_rule:m=>(m.absence||{}).rule,
+  // a double, written the way Python's str() writes a float, so k = 1 reads as 1.0 on both routes
+  absence_k:m=>{const k=(m.absence||{}).k;return k===null||k===undefined?null:pyFloat(k);},
+  absence_count:m=>(m.absence||{}).absent,statistics_test:m=>(m.statistics||{}).test,
+  hidden:m=>{const h=m.hidden||{};const k=Object.keys(h).sort();
+    return k.length?k.map(n=>`${n} ${h[n]}`).join("; "):null;}};
+function graphMeta(meta,nm){return GRAPH_META[nm]?GRAPH_META[nm](meta):meta[nm];}
+
 function toGraphML(net){
   const data=(key,val)=>{if(val===null||val===undefined||val==="")return"";return `      <data key="${key}">${esc(xmlClean(val))}</data>\n`;};
   const of=kind=>GRAPHML_KEYS.filter(k=>k[1]===kind);
   let g='<?xml version="1.0" encoding="UTF-8"?>\n<graphml xmlns="http://graphml.graphdrawing.org/xmlns">\n';
   GRAPHML_KEYS.forEach(([id,f,nm,ty])=>{g+=`  <key id="${id}" for="${f}" attr.name="${nm}" attr.type="${ty}"/>\n`;});
   g+='  <graph edgedefault="directed">\n';
-  of("graph").forEach(([id,,nm])=>{g+=data(id,(net.meta||{})[nm]).replace(/^      /,"    ");});
+  of("graph").forEach(([id,,nm])=>{g+=data(id,graphMeta(net.meta||{},nm)).replace(/^      /,"    ");});
   const counts={};(net.nodes||[]).forEach(n=>{const k=genusOf(n.name||n.species);counts[k]=(counts[k]||0)+1;});
   const colors={};Object.keys(counts).sort((a,b)=>counts[b]-counts[a]||(a<b?-1:a>b?1:0))
     .forEach((k,i)=>colors[k]=GENUS_COLORS[i%GENUS_COLORS.length]);
   (net.nodes||[]).forEach(n=>{g+=`    <node id="${esc(xmlClean(n.id))}">\n`;
     const k=genusOf(n.name||n.species), derived={genus:k,genus_color:colors[k]};
-    of("node").forEach(([id,,nm])=>{g+=data(id,nm==="label"?(n.name||n.id):nm in derived?derived[nm]:graphmlValue(nm,n[nm]));});
+    of("node").forEach(([id,,nm,ty])=>{g+=data(id,nm==="label"?(n.name||n.id):nm in derived?derived[nm]:graphmlValue(nm,n[nm],ty));});
     g+=`    </node>\n`;});
   (net.edges||[]).forEach((e,i)=>{
     g+=`    <edge id="e${i}" source="${esc(xmlClean(e.source))}" target="${esc(xmlClean(e.target))}">\n`;
     const derived={line_style:lineStyleOf(e),display_weight:pyFloat(displayWeightOf(e))};
-    of("edge").forEach(([id,,nm])=>{g+=data(id,nm in derived?derived[nm]:graphmlValue(nm,e[nm]));});
+    of("edge").forEach(([id,,nm,ty])=>{g+=data(id,nm in derived?derived[nm]:graphmlValue(nm,e[nm],ty));});
     g+=`    </edge>\n`;});
   return g+"  </graph>\n</graphml>\n";
 }

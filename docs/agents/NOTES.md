@@ -15,6 +15,17 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-07 (#155 item 4): **a parity test is only worth its fixture.** `test_the_viewer_writes_the_same
+  _graphml_as_the_command_line` compares `gui/index.html`'s `toGraphML` with `grownet.export.to_graphml`,
+  and it built its network with no `meta` and a record holding none of the fitted fields. Every key this
+  release added was therefore absent on both sides and the test passed while the viewer wrote four
+  graph-level attributes as nothing and `hidden` as `[object Object]`. The fixture now carries a full
+  `meta` and every arc field, and that alone found two more differences: the viewer wrote a whole-valued
+  double as `240000000` where Python writes `240000000.0`.
+  When a field is added, add it to that fixture in the same change, or the test will agree about nothing.
+  The viewer's graph-level names are flat over a nested `meta`, so `GRAPH_META` maps each one to its path
+  and must be kept beside `export._KEYS`.
+
 - 2026-10-07 (#155 item 3): **a zero amount is a control, not an addition.** "0% linoleic acid" was read
   as a compound added at zero, so SMGDB00000014's two no-fatty-acid arms became two media that do not
   exist, neither of them the plain medium and neither matching the other. Fixed in `_tokens` and in
