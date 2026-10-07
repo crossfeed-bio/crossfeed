@@ -51,13 +51,22 @@ TITLE = brand.NAME
 # species that derive a non-empty network, for the Example button (Karoline's proposal, #73). The first is
 # taxon 411483, which mGrowthDB holds under both its names after the 2022 reclassification.
 EXAMPLE = ("Faecalibacterium duncaniae", "Blautia hydrogenotrophica")
-# A search that gives a gLV package anyone can simulate, chosen by running every study that yields one
-# (2026-10-07, Karoline: "include a gLV example button in the GUI that configures everything for a
-# working gLV example"). SMGDB00000006 is the yoghurt pair: two organisms in one abundance unit (g/L),
-# both with a fitted rate and a plateau, and the only package in the database whose matrix settles with
-# every organism above zero, which is what makes it worth simulating rather than only downloading.
-GLV_EXAMPLE = ("Lactobacillus delbrueckii", "Streptococcus thermophilus")
-GLV_EXAMPLE_STUDY = "SMGDB00000006"
+# A search that gives a gLV package anyone can simulate, chosen by building the package of every study
+# that yields one and scoring them (2026-10-07, Karoline: "include a gLV example button in the GUI that
+# configures everything for a working gLV example"). Five studies give a package of two organisms or
+# more, three of those settle with every organism above zero, and SMGDB00000002 is the soundest of the
+# three: each rate is the median of three monoculture replicates that were all kept and all fitted a
+# negative self-limitation (0.777, 0.859, 0.798 and 0.673, 0.671, 0.634 per hour), no capacity had to be
+# substituted, and the equilibrium puts both organisms below their own monoculture plateaus in the order
+# the co-culture measured.
+#
+# It replaced SMGDB00000006, the yoghurt pair, which was wrong on all three counts: of S. thermophilus's
+# three monoculture replicates two were refused for a negative rate and the third was kept at 0.0109 /h,
+# a 64 hour doubling time for a dairy starter, while all three fitted a POSITIVE self-limitation and so
+# failed the same way; its plateau had to be taken from one measured curve; and the equilibrium inverted
+# the co-culture it was fitted from by about 90 times (2026-10-07, #155 item 13).
+GLV_EXAMPLE = ("Bacteroides thetaiotaomicron", "Roseburia intestinalis")
+GLV_EXAMPLE_STUDY = "SMGDB00000002"
 METRICS = ("auc", "max", "growth_rate")
 DERIVATIONS = ("replicate", "integrated")
 

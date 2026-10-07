@@ -744,7 +744,8 @@ def fitted_rates(records: list) -> dict:
             "name": record.get("target_name", nid), "unit": record.get("fitted_rate_unit", "1/h"),
             "rates": [], "points": [], "studies": [], "per_study": {}, "other_units": [],
             "capacity_unit": "", "capacities": [], "capacity_points": [], "capacity_per_study": {},
-            "other_capacity_units": [], "r2": [], "conditions": [], "self_sources": [], "media": []})
+            "other_capacity_units": [], "r2": [], "conditions": [], "self_sources": [], "media": [],
+            "stage_n": []})
         study = record.get("study_id", "")
         unit = record.get("fitted_rate_unit", "1/h")
         if unit != at["unit"]:
@@ -753,6 +754,14 @@ def fitted_rates(records: list) -> dict:
             continue
         at["rates"].append(rate)
         at["points"].append(record.get("fit_points", 0))
+        # the monoculture replicates stage 1 fitted this organism's rate from. `n` below counts the
+        # fitted rows, which is what this path merges over, and the CSV's `replicates` column has meant
+        # monoculture replicates since 0.2.0, where it was right because the only derivation compared
+        # replicate sets. Writing the row count into that column made a rate from three monocultures
+        # read as resting on one culture, which is how the gLV example's thinness went unnoticed
+        # (#155 item 13).
+        if record.get("rate_stage_n"):
+            at["stage_n"].append(record["rate_stage_n"])
         at["per_study"].setdefault(study, []).append(rate)
         if study and study not in at["studies"]:
             at["studies"].append(study)
@@ -789,6 +798,8 @@ def fitted_rates(records: list) -> dict:
             # count of replicates and this path never had any (it used to report time points under that
             # name, and merging rows would have added them up)
             "n": len(at["rates"]), "n_label": "fitted row(s)", "points": sum(at["points"]),
+            # one monoculture set per organism, so the rows agree on it; the largest is that set's size
+            "replicates": max(at["stage_n"]) if at["stage_n"] else None,
             # sorted, so the whole entry is a function of the rows and not of the order they arrived in
             "studies": sorted(at["studies"]),
             "per_study": {study: statistics.median(values) for study, values in at["per_study"].items()},
@@ -796,6 +807,9 @@ def fitted_rates(records: list) -> dict:
             "capacity": statistics.median(at["capacities"]) if at["capacities"] else None,
             "capacity_unit": at["capacity_unit"] if at["capacities"] else "",
             "capacity_n": len(at["capacities"]),
+            # the capacity is -r/A_ii from the same monoculture stage, so the curves behind it are that
+            # stage's replicates, not the rows the median was taken over
+            "capacity_curves": (max(at["stage_n"]) if (at["stage_n"] and at["capacities"]) else None),
             "capacity_points": sum(at["capacity_points"]) if at["capacities"] else 0,
             "capacity_per_study": {study: statistics.median(values)
                                    for study, values in at["capacity_per_study"].items()},

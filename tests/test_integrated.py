@@ -680,3 +680,60 @@ def test_the_fitted_window_is_measured_against_the_whole_course():
     # a course fitted end to end covers all of itself
     growing = _named(["A"], times, [[1.0e7 * math.exp(0.08 * t)] for t in times], "r2")
     assert integrated.fitted_window([growing], "A")["share"] == pytest.approx(1.0)
+
+
+def test_the_published_rate_says_how_many_cultures_it_rests_on_not_how_many_rows():
+    """#155 item 13. `growth_rates.csv`'s `replicates` column has meant monoculture replicates since
+    0.2.0, where it was right because the only derivation compared replicate sets. This derivation merges
+    fitted rows, and writing that row count into the column made a rate from three monocultures read as
+    resting on one culture, which is how the gLV example's thinness went unnoticed: the example's
+    *S. thermophilus* rate really does rest on one replicate of three, and nothing distinguished it.
+
+    Two arcs for one organism, both fitted from the same three monocultures: `n` is 2 rows, `replicates`
+    is 3 cultures, and the capacity, which is -r/A_ii from that same stage, rests on those 3 too.
+    """
+    records = [{"target": "ncbi:1", "target_name": "A", "fitted_rate": 0.4, "fitted_self": -4.0e-10,
+                "fitted_rate_unit": "1/h", "fitted_self_unit": "Cells/mL", "study_id": "S1",
+                "rate_stage_n": 3, "fit_points": 7},
+               {"target": "ncbi:1", "target_name": "A", "fitted_rate": 0.5, "fitted_self": -5.0e-10,
+                "fitted_rate_unit": "1/h", "fitted_self_unit": "Cells/mL", "study_id": "S1",
+                "rate_stage_n": 3, "fit_points": 7}]
+    got = integrated.fitted_rates(records)["ncbi:1"]
+    assert got["n"] == 2 and got["n_label"] == "fitted row(s)"      # what the median was taken over
+    assert got["replicates"] == 3                                   # what the rate itself rests on
+    assert got["capacity_curves"] == 3
+    assert got["rate"] == pytest.approx(0.45)                       # the median of the two rows
+
+    # a row whose stage was never resampled reports no replicate count rather than inventing one
+    thin = integrated.fitted_rates([{**records[0], "rate_stage_n": None}])["ncbi:1"]
+    assert thin["replicates"] is None and thin["n"] == 1
+
+
+def test_the_rates_csv_writes_cultures_under_replicates_for_either_derivation():
+    """The column means one thing whichever derivation filled it: the replicate path has no `replicates`
+    key and its `n` already counts cultures, so it is written unchanged."""
+    from grownet import matrix
+
+    integrated_entry = {"name": "A", "rate": 0.45, "unit": "1/h", "n": 2, "n_label": "fitted row(s)",
+                        "replicates": 3, "studies": ["S1"], "method": "integrated:two_stage",
+                        "lag": None, "capacity": 9.0e8, "capacity_unit": "Cells/mL", "capacity_n": 2,
+                        "capacity_curves": 3}
+    replicate_entry = {"name": "B", "rate": 0.30, "unit": "1/h", "n": 4, "studies": ["S1"],
+                       "method": "easylinear", "lag": None, "capacity": 7.0e8,
+                       "capacity_unit": "Cells/mL", "capacity_n": 4}
+    rows = [line.split(",") for line in
+            matrix.rates_csv({"a": integrated_entry, "b": replicate_entry}).strip().splitlines()]
+    head = rows[0]
+    assert head[3] == "replicates" and head[10] == "capacity_curves"
+    by = {r[0]: r for r in rows[1:]}                     # without a network the row is keyed by node id
+    assert by["a"][3] == "3" and by["a"][10] == "3"      # the cultures, not the 2 rows
+    assert by["b"][3] == "4" and by["b"][10] == "4"      # unchanged where n already counts cultures
+
+
+def test_the_rate_rule_does_not_claim_one_merge_where_there_are_two():
+    from grownet import matrix
+
+    assert "median over the fitted rows" in matrix.rate_rule("integrated:two_stage")
+    assert "monoculture replicates" in matrix.rate_rule("integrated:two_stage")
+    assert matrix.rate_rule("easylinear").endswith("median over replicates and studies; "
+                                                   "batch experiments only")

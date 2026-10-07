@@ -15,6 +15,23 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-07 (#155 item 13): **the gLV example moved, and the reason generalises.** SMGDB00000006 was
+  chosen for the example because it was the one package whose matrix settled with every organism above
+  zero. That was false (three of the five studies that yield a package settle) and the package was unsound:
+  *S. thermophilus* STpos's three monoculture fits gave rates -0.1121, -0.1051 and +0.0109 with
+  self-limitations +4.357, +4.276 and +1.595, so **all three failed the same way** and the
+  non-positive-rate guard kept the one whose rate happened to be positive. Its steady state then inverted
+  the measured co-culture by about 90 times. SMGDB00000002 replaced it: three monoculture replicates per
+  organism, all kept, all with a negative self-limitation, rates 0.777/0.859/0.798 and 0.673/0.671/0.634,
+  and a steady state about two to three times above the measured peaks in the right order, which is what
+  this model fitted this way is worth.
+  Two lessons for the next agent. **A count has to say what it counts**: the row count of
+  `fitted_rates` was being written into the `replicates` column, which is why a rate resting on one
+  culture of three was indistinguishable from one resting on three. **Checking that a simulation matches
+  `solve(A, -r)` checks nothing about the data**: it only says the simulation and the package agree, and
+  the walkthrough now compares the steady state with the co-culture instead.
+  The guard itself is a method choice and is raised as its own decision issue rather than changed here.
+
 - 2026-10-07 (#155 item 1): **the arc absorbs any rate mismatch, and two new fields let a reader see it.**
   Stage 1 is held fixed in stage 2, so the arc coefficient is the only free parameter left to take up a
   difference between the rate an organism had in monoculture and the rate it had in the co-culture, and

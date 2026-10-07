@@ -46,9 +46,9 @@ RELEASES = (
         "and the organism's carrying capacity, which are the three numbers a coefficient is made of.",
         "A package can be scored against the chemostat steady states mGrowthDB holds for the same "
         "organisms, which were never used to fit it: predicted against observed, per organism.",
-        "A gLV example button beside All: it fills both boxes and the settings for the one package in "
-        "mGrowthDB whose matrix settles with every organism above zero, and runs the search. The help "
-        "walks that package through miaSim step by step.",
+        "A gLV example button beside All: it fills both boxes and the settings for a package that "
+        "settles, and runs the search. The help walks that package through miaSim step by step, and "
+        "ends by holding the simulated steady state against the co-culture it was fitted from.",
         "The default derivation fits each organism's whole row from the measured time course instead of "
         "comparing replicate sets, which needs no growth property and gives the coefficients directly. "
         "The comparison of replicate sets is Derivation in Advanced settings, or --derivation replicate, "
@@ -970,28 +970,34 @@ from the address the page shows under its gLV control.</p>
 <h2 id="glv-walkthrough">The gLV example, step by step</h2>
 <p><strong>gLV example</strong> beside All fills both boxes and the one setting a package cannot be built
 without, and runs the search, so the route above has something concrete to run on. It is one search of
-one study, picked by running every study that yields a package: SMGDB00000006, two organisms in one
-abundance unit, both with a fitted rate and a plateau, and the only package in the database whose matrix
-settles with <em>every</em> organism above zero, which is what makes it worth simulating rather than only
-downloading. Everything below is the generic route; only the numbers are this example's.</p>
+one study, chosen by building the package of every study that yields one and scoring them: five give a
+package of two organisms or more, three of those settle with every organism above zero, and this one is
+the soundest of the three. Everything below is the generic route; only the numbers are this example's.</p>
+<p>What makes it worth simulating, in the terms the package itself reports: each growth rate is the
+median of three monoculture replicates that were all kept and all fitted a negative self-limitation, so
+no plateau had to be substituted, and the steady state it predicts puts both organisms below their own
+monoculture plateaus. What is thin about it is in the output too, and step 5 is where you find that
+out.</p>
 <ol>
 <li><strong>Press gLV example.</strong> The first box fills with
-<em>Lactobacillus delbrueckii</em> and <em>Streptococcus thermophilus</em>, the second with
-<code>SMGDB00000006</code> so nothing else is read, Report growth rates goes on, and the search runs. On
+<em>Bacteroides thetaiotaomicron</em> and <em>Roseburia intestinalis</em>, the second with
+<code>SMGDB00000002</code> so nothing else is read, Report growth rates goes on, and the search runs. On
 the command line the same run is
-<code>grownet derive --live --species "Lactobacillus delbrueckii" "Streptococcus thermophilus"
---conditions SMGDB00000006 --report-rates --glv glv.zip</code>.</li>
-<li><strong>Read what came out</strong> before simulating anything. Two organisms, three arcs,
-<em>S. thermophilus</em> inhibiting <em>L. delbrueckii</em> and <em>L. delbrueckii</em> facilitating
-<em>S. thermophilus</em>: the yoghurt pair, and the asymmetry is the point of the example. The growth
-rates are 0.8764 /h for <em>L. delbrueckii</em> at a plateau of 0.6369 g/L, and 0.0109 /h for
-<em>S. thermophilus</em> STpos at 0.105 g/L. That second plateau is measured rather than fitted, and the
-rates file says so in <code>capacity_source</code>, which is the kind of thing to look at before you
-trust a number.</li>
+<code>grownet derive --live --species "Bacteroides thetaiotaomicron" "Roseburia intestinalis"
+--conditions SMGDB00000002 --report-rates --glv glv.zip</code>.</li>
+<li><strong>Read what came out</strong> before simulating anything. Two organisms and two arcs, each
+inhibiting the other, which is the shape of a competition for one medium. The growth rates are 0.7981 /h
+for <em>B. thetaiotaomicron</em> at a plateau of 9.13e8 Cells/mL and 0.6707 /h for
+<em>R. intestinalis</em> at 7.01e8 Cells/mL, both fitted rather than measured, which
+<code>capacity_source</code> in the rates file states. Both arcs carry the
+<code>window_partial</code> caution: the rows cover about 0 to 30 of 120 measured hours, because the
+model has no death term and these cultures decline after their peak. Neither arc reaches q below 0.05
+(0.17 and 0.13), so this example shows a package being built and simulated, not an interaction being
+established.</li>
 <li><strong>Take the parameters.</strong> Either press <strong>Get gLV parameters</strong> for the zip,
 or start R and press <strong>Send to R</strong>. The zip holds
-<code>interaction_matrix.g_per_L.csv</code>, <code>growth_rates.csv</code> and a <code>README.txt</code>
-that states every formula, every unit and every caveat.</li>
+<code>interaction_matrix.Cells_per_mL.csv</code>, <code>growth_rates.csv</code> and a
+<code>README.txt</code> that states every formula, every unit and every caveat.</li>
 <li><strong>In R:</strong>
 <pre>install.packages("remotes")
 {_e(R_INSTALL)}
@@ -1000,30 +1006,33 @@ BiocManager::install("miaSim")
 
 library(grownet)
 glv &lt;- grownet_listen()        # now press Send to R on the page
-glv                            # 2 organisms, 1 matrix in g/L, and the caveats
+glv                            # 2 organisms, 1 matrix in Cells/mL, and the caveats
 
 A &lt;- glv_matrix(glv)           # rows are affected, columns are the actor
 r &lt;- glv_rates(glv)
-A                              # L. delbrueckii: -1.376 on itself, -4.031 from S. thermophilus
-                               # S. thermophilus: +1.364 from L. delbrueckii, -0.1035 on itself
-solve(A, -r)                   # where it settles: 0.00831 and 0.2146 g/L, both above zero
+A                              # B. thetaiotaomicron: -8.74e-10 on itself, -4.351e-10 from R. intestinalis
+                               # R. intestinalis: -4.41e-10 from B. thetaiotaomicron, -9.571e-10 on itself
+solve(A, -r)                   # where it settles: 7.323e8 and 3.634e8 Cells/mL, both above zero
 
 args &lt;- as_miasim(glv)         # no scaling: these are coefficients, in 1/(time x abundance)
 tse &lt;- do.call(miaSim::simulateGLV,
-               c(args, list(x0 = c(0.05, 0.05), t_end = 50, t_step = 0.1,
+               c(args, list(x0 = c(1e6, 1e6), t_end = 120, t_step = 0.1,
                             stochastic = FALSE, migration_p = 0)))
 
 x &lt;- SummarizedExperiment::assay(tse)
-matplot(t(x), type = "l", lty = 1, xlab = "time (h)", ylab = "abundance (g/L)")
+matplot(t(x), type = "l", lty = 1, xlab = "time (h)", ylab = "abundance (Cells/mL)")
 legend("topright", legend = rownames(x), lty = 1, col = seq_len(nrow(x)), bty = "n")</pre></li>
-<li><strong>What to expect.</strong> Both organisms start at 0.05 g/L and settle near the two numbers
-<code>solve(A, -r)</code> prints, which is the check that the simulation and the package agree:
-<em>S. thermophilus</em> rises because <em>L. delbrueckii</em> facilitates it, and
-<em>L. delbrueckii</em> is held down to a fraction of its own 0.6369 g/L plateau by the inhibition.
-<code>stochastic = FALSE</code> and <code>migration_p = 0</code> give the deterministic model, which is
-what these coefficients describe; <code>as_miasim()</code> leaves miaSim's own defaults
-(<code>stochastic = TRUE</code>, <code>migration_p = 0.01</code>) in place, so pass them explicitly when
-you want the equilibrium to be reproducible.</li>
+<li><strong>Hold it against the measurement.</strong> This is the step to keep, whatever package you
+build. Both organisms start at 1e6 Cells/mL and settle near the two numbers
+<code>solve(A, -r)</code> prints, which only checks that the simulation and the package agree. Whether
+the package agrees with the <em>data</em> is a separate question, and the co-culture it was fitted from
+answers it: those curves peak near 2.4e8 and 2.3e8 Cells/mL, so the predicted steady state sits about
+three times and about one and a half times above the measured peaks, in the same order, and the measured
+cultures never held a steady state at all inside the window the fit used. A factor of a few in the same
+order is what this model, fitted this way, is worth. Read any package this way before you trust it: a
+prediction that inverts the ordering of the co-culture is telling you the fit absorbed something, and
+<code>rate_mismatch_to_zero</code> on each arc says how small a mismatch in the monoculture rate would
+account for it.</li>
 <li><strong>If it does not settle</strong>, that is a result and the package says so before you run it:
 a fit whose cells outweigh the organisms' own limitations has no bounded state, and the README names it.
 Nothing in the package should be scaled to make a simulation behave, which is why

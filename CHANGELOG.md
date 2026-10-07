@@ -100,6 +100,29 @@ content.
   the short rows with zeros would reintroduce the claim `design` refuses and dropping a partner's column
   would claim it had no effect at all.
 
+### Fixed
+- **The gLV example rested on a monoculture fit that had failed, and the help called it the only one of
+  its kind** (#155 item 13). The example moved from SMGDB00000006 to SMGDB00000002. Of the yoghurt pair's
+  three *S. thermophilus* monoculture replicates two were refused for a negative rate and the third was
+  kept at 0.0109 /h, a 64 hour doubling time for a dairy starter, while all three fitted a **positive**
+  self-limitation and so failed in the same way; its carrying capacity had to be taken from one measured
+  curve; and the package's steady state inverted the co-culture it was fitted from by about 90 times. The
+  claim that it was "the only package in the database whose matrix settles with every organism above
+  zero" was false: of the five studies that yield a package of two organisms or more, three settle. The
+  new example's rates are each the median of three monoculture replicates that were all kept and all
+  fitted a negative self-limitation, and its steady state puts both organisms below their own monoculture
+  plateaus in the order the co-culture measured. The walkthrough now ends by holding the simulated steady
+  state against that co-culture, which is the step that catches a package settling where the data never
+  was, and the shipped text no longer claims the example is unique.
+- **`growth_rates.csv` counted fitted rows under `replicates`** (#155 item 13). The column has meant
+  monoculture replicates since 0.2.0, where it was right because the only derivation compared replicate
+  sets. The integrated form merges fitted rows instead, and its row count went into that column, so a
+  rate resting on three monocultures read as resting on one culture and a rate resting on one read the
+  same way. It now holds the replicates the rate stage fitted, `capacity_curves` holds the curves behind
+  the capacity on the same basis, and the row count stays in the text report, which already named it
+  "fitted row(s)". The package README and the recorded rate rule no longer say "median over replicates"
+  of a derivation that takes a median of medians.
+
 ### Added
 - **Every fitted arc now says how large a rate mismatch would explain it away, and how much of the course
   it rests on** (Karoline, 2026-10-07). The monoculture rate is held fixed while the partners are fitted,

@@ -239,7 +239,15 @@ def _merged_capacity(members: list) -> dict:
 
 
 def rate_rule(method: str) -> str:
-    """How a reported rate was obtained, recorded in every network that carries rates."""
+    """How a reported rate was obtained, recorded in every network that carries rates.
+
+    The integrated form does not merge replicate sets: each fitted row already holds a rate that stage 1
+    took as the median over that organism's monoculture replicates, and the published rate is the median
+    over the rows. Saying "median over replicates" of it put one merge where there are two (#155 item 13).
+    """
+    if str(method).startswith("integrated"):
+        return (f"{method} in monoculture, the median over the fitted rows, each row's own rate the "
+                "median over that organism's monoculture replicates; batch experiments only")
     return f"{method} in monoculture, median over replicates and studies; batch experiments only"
 
 
@@ -338,13 +346,19 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
         name = _label(net.nodes[nid]) if net is not None else nid
         capacity = rate.get("capacity")
         lag = rate.get("lag")
+        # `replicates` means monoculture replicates, as it has since 0.2.0. A derivation that merges
+        # fitted rows rather than replicate sets says how many replicates its rate stage had in
+        # `replicates` and keeps the row count in `n`, which the report prints with `n_label`.
+        replicates = rate.get("replicates")
         writer.writerow([name, _number(rate["rate"]), rate.get("unit", RATE_UNIT),
-                         rate.get("n", ""), " ".join(rate.get("studies", ())),
+                         rate.get("n", "") if replicates is None else replicates,
+                         " ".join(rate.get("studies", ())),
                          rate.get("method", ""), "" if lag is None else _number(lag),
                          rate.get("lag_method", "") if lag is not None else "",
                          "" if capacity is None else f"{capacity:g}",
                          rate.get("capacity_unit", "") if capacity is not None else "",
-                         rate.get("capacity_n", "") if capacity is not None else "",
+                         (rate.get("capacity_curves") if rate.get("capacity_curves") is not None
+                          else rate.get("capacity_n", "")) if capacity is not None else "",
                          # an empty capacity reads as absence unless the curves that gave none are
                          # counted where the capacity itself is read (found 2026-10-06)
                          len(rate.get("capacity_left_out") or "") or "",
@@ -855,9 +869,12 @@ def _rate_method_lines(got: dict) -> list:
     """What the README says about the estimator behind r, and what choosing another one would move."""
     methods = got["rate_methods"]
     named = ", ".join(methods) if methods else "not recorded"
-    lines = [f"  Growth rates: {named}, median over replicates and studies, batch monocultures only.",
+    merge = ("the median over the fitted rows, each row's rate the median over that organism's "
+             "monoculture replicates" if any(str(m).startswith("integrated") for m in methods)
+             else "median over replicates and studies")
+    lines = [f"  Growth rates: {named}, {merge}, batch monocultures only.",
              "      The estimator sets where this matrix settles as well as how fast a simulation",
-             "      runs. The diagonal's r_i is a median over replicates and studies while each",
+             f"      runs. The diagonal's r_i is {merge} while each",
              "      off-diagonal uses its own comparison's two rates; x_j_star is the mean over the",
              "      window that estimator fitted in; and the rate guards reject different curves. So",
              "      the equilibrium below belongs to this estimator. The Growth rate method setting",

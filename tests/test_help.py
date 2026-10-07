@@ -325,8 +325,11 @@ def test_the_glv_example_section_gives_every_step_of_running_it_in_miasim():
     # work was written on, which test_release.py refuses in shipped text and rightly
     section = page[page.index('<h2 id="glv-walkthrough">'):]
     section = section[:section.index("<h2 ", 10)] if "<h2 " in section[10:] else section
-    # the button, the command line that does the same, and the study it reads
-    assert "gLV example" in section and "SMGDB00000006" in section
+    # the button, the command line that does the same, and the study it reads. The study moved from
+    # SMGDB00000006 to SMGDB00000002 (#155 item 13): the yoghurt pair's package rested on one of three
+    # monoculture replicates, all three of which fitted a positive self-limitation, and its equilibrium
+    # inverted the co-culture it was fitted from. Her requirement is the steps, not the study.
+    assert "gLV example" in section and "SMGDB00000002" in section
     assert "--report-rates" in section and "--glv" in section
     # installing miaSim is part of the steps: it is a Bioconductor package, not a CRAN one
     assert "BiocManager::install" in section and "miaSim" in section
@@ -336,6 +339,10 @@ def test_the_glv_example_section_gives_every_step_of_running_it_in_miasim():
         assert call in section, call
     # what to expect, so a reader can tell it worked, and where the numbers come from
     assert "solve(A, -r)" in section
-    assert "0.00831" in section and "0.2146" in section
+    assert "7.323e8" in section and "3.634e8" in section
+    # and the step that holds the prediction against the data, which is what a reader needs to catch a
+    # package that settles somewhere the co-culture never was: agreeing with `solve(A, -r)` only says
+    # the simulation and the package agree with each other
+    assert "measured peaks" in section and "rate_mismatch_to_zero" in section
     # and that the numbers are of the database as it is, not a promise
     assert "mGrowthDB changes" in section
