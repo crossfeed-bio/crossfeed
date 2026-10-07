@@ -17,12 +17,17 @@ content.
   one setting away, `--derivation replicate`, and it is what a sparsely sampled study can still give: the
   integrated form needs a time course, so a study measured at two or three points now yields nothing by
   default and the page says which setting to change.
-- **The network format id moves to `grownet.interaction_network/v2`.** Files from 0.1.x (`/v0`) and 0.2.x
-  (`/v1`) stay valid and `grownet validate` names the version it read. The id moved so that an installed
-  0.2.0 does not try to read a 0.3.0 network: it builds each arc from every field the document carries and
-  stops on a field it does not know, and the daily All network is republished from `main`. Under the new
-  id that copy derives live instead, which is what the check was built for. A reader of its own is
-  unaffected: nothing an older field means has changed, and the new fields are optional.
+- **The network format id moves to `grownet.interaction_network/v2`** (#121, Craig's agent's trace).
+  Files from 0.1.x (`/v0`) and 0.2.x (`/v1`) stay valid and `grownet validate` still names the version it
+  read. The id is what `published.fresh` checks before an installed copy uses the daily All network, and
+  #118 added optional arc fields that an installed 0.2.0 cannot build, because it builds each arc from
+  every field a document carries. Under the unchanged id that copy would have accepted the next daily
+  artifact and then raised inside the All button, with the derive-live fallback never reached. With the id
+  moved it reads the artifact as a format it does not know and derives live, which is what the fallback is
+  for. A reader of its own is unaffected: nothing an older field means has changed, and the new fields are
+  optional. Two readers are hardened with it: **every** record kind now drops a field it does not know
+  rather than raising, nodes and studies as well as arcs, and any failure to read the published network
+  means derive live.
 - **Reinstall the R companion package** when you upgrade: `remotes::install_github("crossfeed-bio/crossfeed", subdir = "r")`.
   A 0.2.0 R package reads no organisms out of a 0.3.0 payload. Send to R now says so and names that
   command rather than reporting a successful send into an empty matrix.

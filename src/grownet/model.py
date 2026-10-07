@@ -21,12 +21,12 @@ from dataclasses import asdict, dataclass, field, fields
 # and runs the other way. A version is a promise about content (Craig, on #71), and this is the one signal
 # that says the meaning of a field moved; without it a reader of a v0 file would misread a 0.2.0 network
 # silently. Nothing else about the format changed, and the fields added since v0 are optional.
-# It moved to v2 with 0.3.0, for a reason about readers rather than about fields. The id is what
-# `published.fresh` checks before an installed copy uses the daily All network, so that "a v0 daily
-# network holds the old meaning, and the page derives live until the workflow republishes" (Karoline,
-# 2026-10-04). 0.3.0 adds optional edge fields, and an installed 0.2.0 builds its edges with Edge(**e),
-# which raises on a field it does not know: keeping the id would have let 0.2.0 accept the artifact and
-# then fail on it, where moving the id makes it derive live as designed (found 2026-10-06).
+# It moves to v2 with 0.3.0 for a reason about readers rather than about meaning. The id is what
+# `published.fresh` checks before an installed copy uses the daily All network, so that an older copy
+# derives live rather than reading a network it cannot read (Karoline, 2026-10-04). #118 adds optional
+# edge fields, and an installed 0.2.0 builds its edges with `Edge(**e)`, which raises on a field it does
+# not know: under an unchanged id that copy would accept the daily artifact and then fail on it, inside
+# the All button, within a day of the cron republishing from this branch (Craig's agent, on #121).
 SCHEMA = "grownet.interaction_network/v2"
 # Older ids a reader still accepts, newest first. A v0 document is valid: its `significance` means what v0
 # said it means, which is why `grownet validate` names the version it read.
@@ -261,7 +261,7 @@ class InteractionNetwork:
             net.add_node(Node(**{k: v for k, v in n.items() if k in known_nodes}))
         for e in d.get("edges", []):
             # a field this reader does not know is dropped rather than raising, so a newer document is
-            # read as far as it can be: Edge(**e) is what made 0.2.0 fail on a 0.3.0 network
+            # read as far as it can be: `Edge(**e)` is what would have made 0.2.0 fail on a 0.3.0 network
             e = {k: v for k, v in e.items() if k in known}
             e["study_ids"] = tuple(e.get("study_ids", ()))
             e["community"] = tuple(e.get("community", ()))

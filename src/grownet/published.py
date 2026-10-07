@@ -72,13 +72,15 @@ def fetch() -> dict | None:
 
 def fetch_from(opener, now: datetime.datetime | None = None) -> dict | None:
     """`fetch` with the opener and the clock given, for tests."""
-    # any failure to read the published network is a reason to derive live, never to end the run:
-    # a 0.3.0 artifact reached an installed 0.2.0 through an uncaught TypeError (found 2026-10-06). The
-    # guard covered the fetch and the JSON parse only, while the TypeError its own comment describes comes
-    # from `from_payload`, which was outside it, as was `fresh`. Both are inside now (#155 item 14).
+    # every failure to read the published network is a reason to derive live, which is what the caller
+    # does with None. `from_payload` is inside the guard because that is where an unreadable document
+    # raises: a field a reader does not know used to come out of `Edge(**e)` as a TypeError, which is
+    # neither OSError nor ValueError, so it left the All button by exception (Craig's agent, on #121).
+    # #155 item 14 found the same thing on this branch, which did not yet carry #143's fix, so the two
+    # lines fixed it independently; this is #143's wording, which is the one with the attribution.
     try:
         with opener(URL, timeout=TIMEOUT) as response:
             payload = json.loads(response.read().decode("utf-8"))
         return from_payload(payload) if fresh(payload, now) else None
-    except Exception:  # noqa: BLE001 - see above
+    except Exception:          # noqa: BLE001 - any unreadable artifact means derive live
         return None

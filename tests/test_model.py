@@ -3,7 +3,7 @@ import os
 
 from grownet.attribution import edge_citations, render_attribution, studies_with_edges
 from grownet.mgrowthdb import effect_from_logratio, records_to_network
-from grownet.model import Edge, InteractionNetwork, Node
+from grownet.model import SCHEMA, Edge, InteractionNetwork, Node
 
 FIX = os.path.join(os.path.dirname(__file__), "fixtures", "example_interactions.json")
 
@@ -54,3 +54,17 @@ def test_missing_study_is_invalid():
 def test_edge_without_study_is_invalid():
     e = Edge("a", "b", "facilitation")      # no study_ids
     assert any("edge-level attribution" in p for p in e.validate())
+
+
+def test_an_arc_field_this_reader_does_not_know_is_dropped_rather_than_raising():
+    """Craig's agent, on #121: `Edge(**e)` raises `TypeError` on a field the reader does not have, which
+    is what an installed 0.2.0 does with a 0.3.0 network. The id moving to /v2 keeps that copy away from
+    the daily artifact; this is the other half, so that every later reader reads a newer document as far
+    as it can rather than failing on it."""
+    doc = {"schema": SCHEMA, "studies": [{"id": "S1", "citation": "c"}], "edges": [
+        {"source": "a", "target": "b", "effect": "facilitation", "study_ids": ["S1"],
+         "a_field_from_a_later_version": 1.0}],
+        "nodes": [{"id": "a"}, {"id": "b"}]}
+    net = InteractionNetwork.from_dict(doc)
+    assert [(e.source, e.target) for e in net.edges] == [("a", "b")]
+    assert not hasattr(net.edges[0], "a_field_from_a_later_version")

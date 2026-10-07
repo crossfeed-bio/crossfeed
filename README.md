@@ -298,14 +298,12 @@ When Cytoscape is not running, the command says so and names the port instead of
 ## The output format
 
 `derive` emits one JSON document: the neutral interaction network. Its `schema` field names the format,
-`grownet.interaction_network/v2` since 0.3.0. It moved to `/v1` in 0.2.0 because `significance`
-changed meaning, from the corrected p-value to -log10 of it, and a reader that branches on the id would
-otherwise misread those numbers. It moved again in 0.3.0 for a reason about readers rather than fields:
-the id is what an installed copy checks before it uses the daily All network, and a 0.2.0 install builds
-its edges from every field a document carries, so the new optional fields would have reached it as an
-error. Under the new id that copy derives live instead, which is what the check is for. A file from 0.1.x
-says `/v0`, one from 0.2.x says `/v1`, both are still valid, and `grownet validate` names the version it
-read. It is the contract downstream tools
+`grownet.interaction_network/v2` since 0.3.0. It moved to `/v1` in 0.2.0 because `significance` changed
+meaning, from the corrected p-value to -log10 of it, and a reader that branches on the id would otherwise
+misread those numbers; it moved to `/v2` because optional edge fields were added and an installed 0.2.0
+builds its edges from every field a document carries, so it has to read the daily network as a format it
+does not know and derive live instead. Files from 0.1.x (`/v0`) and 0.2.x (`/v1`) are still valid, and
+`grownet validate` names the version it read. It is the contract downstream tools
 read, and it is pinned by a JSON Schema at
 [`schema/interaction_network.schema.json`](schema/interaction_network.schema.json). Its `meta` records
 the tool, `tool_version` and `derived_on` (the date: mGrowthDB changes, so the same version can derive a

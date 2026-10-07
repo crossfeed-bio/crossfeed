@@ -1084,11 +1084,11 @@ give others; the report beside the download says what was read and when.</p>
 <h2 id="attributes">Arc and node attributes</h2>
 <p>Every downloaded network, JSON or GraphML, carries these for each arc (edge) and node. A network
 names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v2</code>
-since 0.3.0: it moved to <code>/v1</code> in 0.2.0 because <code>significance</code> changed meaning, from
-the corrected p-value to -log10 of it, and again in 0.3.0 so that an installed 0.2.0 derives live rather
-than reading a network whose new fields it cannot build. Files from 0.1.x and 0.2.x say <code>/v0</code>
-and <code>/v1</code>, are still valid, and no field
-it already had changed meaning, which is what moving the id is for. The network
+since 0.3.0. It moved to <code>/v1</code> in 0.2.0 because <code>significance</code> changed meaning, from
+the corrected p-value to -log10 of it, and to <code>/v2</code> because optional arc fields were added and
+an installed 0.2.0 builds its arcs from every field a file carries, so it must read a newer daily network
+as a format it does not know and derive live instead. A file from 0.1.x says <code>/v0</code> and one from
+0.2.x <code>/v1</code>; both are still valid, read with their own meaning. The network
 itself records the tool, <code>tool_version</code>, the date and time it was derived (<code>derived_on</code>,
 <code>derived_at</code>), every setting used, and the version of the data: mGrowthDB publishes no version of
 the whole database, so <code>meta.data</code> holds when it was read and each study's upload and
