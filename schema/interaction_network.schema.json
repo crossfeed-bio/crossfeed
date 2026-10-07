@@ -14,6 +14,7 @@
   "properties": {
     "schema": {
       "enum": [
+        "grownet.interaction_network/v2",
         "grownet.interaction_network/v1",
         "grownet.interaction_network/v0"
       ]

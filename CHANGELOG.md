@@ -6,6 +6,17 @@ content.
 
 ## [Unreleased]
 
+### Changed
+- **The network format id moves to `grownet.interaction_network/v2`** (#121, Craig's agent's trace).
+  Files from 0.1.x (`/v0`) and 0.2.x (`/v1`) stay valid and `grownet validate` still names the version it
+  read. The id is what `published.fresh` checks before an installed copy uses the daily All network, and
+  #118 added optional arc fields that an installed 0.2.0 cannot build, because it builds each arc from
+  every field a document carries. Under the unchanged id that copy would have accepted the next daily
+  artifact and then raised inside the All button, with the derive-live fallback never reached. With the id
+  moved it reads the artifact as a format it does not know and derives live, which is what the fallback is
+  for. Two readers are hardened with it: a field a reader does not know is now dropped rather than raising,
+  and any failure to read the published network means derive live.
+
 ### Added
 - **The quantities a fitted gLV coefficient is made of, measured and reported** (#118, from Karoline's
   decision on #116). Every growth rate now travels with the estimator that produced it, the lag the
