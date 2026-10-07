@@ -126,7 +126,10 @@ SETTINGS = {
                         "the target, directly or through other members, so it is labeled evidence dropout, "
                         "and the gLV mode button unticks it: a gLV coefficient is meant to be the direct "
                         "effect of one organism on another, which an arc that may act through a third "
-                        "species is not."),
+                        "species is not. It applies to the comparison of replicate sets only: the default "
+                        "derivation refuses a community of three or more members, since fitting a row "
+                        "inside one is a new kind of evidence and needs a decision first, so with it this "
+                        "setting changes nothing either way and the report says so."),
     "include_non_batch": ("Include chemostat and serial dilution experiments", "--include-non-batch",
                           "What a continuous culture can be compared on depends on the growth measure. With "
                           "max it is derived without this setting: the level such a culture settles at is "

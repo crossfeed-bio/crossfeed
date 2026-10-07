@@ -520,17 +520,32 @@ def plateaus(net: InteractionNetwork) -> dict:
     plateau = {(e.target, e.source): (e.target_capacity, e.target_capacity_unit)
                for e in net.edges if e.status != "absent" and e.target_capacity is not None}
     out: dict = {}
-    for (target, source), (mine, unit) in plateau.items():
+    left_out: list = []
+    for (target, source), (mine, unit) in sorted(plateau.items()):
         theirs, their_unit = plateau.get((source, target), (None, ""))
-        if theirs is None or their_unit != unit:
+        if theirs is None:
             continue
-        entry = out.setdefault(target, {"unit": unit, "partners": {}})
+        if their_unit != unit:
+            left_out.append((f"{target} beside {source}",
+                             f"its plateau is in {unit} and {source}'s in {their_unit}, so the balance "
+                             "cannot be formed: abundances are never converted"))
+            continue
+        entry = out.setdefault(target, {"unit": unit, "partners": {}, "left_out": []})
         if entry["unit"] != unit:
+            # the organism's first plateau fixed the unit, and this one is in another: named rather than
+            # dropped on a bare `continue`, which lost it in silence while the partner still carried the
+            # arc from its own side (Craig's agent on #133, #142 item 14)
+            entry["left_out"].append(
+                (f"{target} beside {source}",
+                 f"this plateau is in {unit} and this organism's others in {entry['unit']}; left out "
+                 "rather than converted"))
             continue
         # both plateaus of this co-culture, kept together: an organism beside two partners has a
         # different plateau of its own beside each, so a single "mine" taken from whichever arc came
         # first made the fitted diagonal depend on arc order (found 2026-10-06, Craig's agent on #128)
         entry["partners"][source] = {"mine": mine, "theirs": theirs}
+    for entry in out.values():
+        entry["left_out"] = sorted(entry["left_out"]) + left_out
     return out
 
 
@@ -630,10 +645,27 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             continue
         if nid in obligate:
             # r_i = 0 by measurement: it did not grow alone. Its unit is the one its plateau beside the
-            # partner was measured in, which obligate_partners already matched between the two.
-            unit = next((e.target_capacity_unit for e in net.edges
-                         if e.target == nid and e.target_capacity is not None), "")
-            blocks.setdefault(unit, []).append(nid)
+            # partner was measured in.
+            #
+            # The invariant this relies on, one capacity unit per organism, is enforced upstream in
+            # `derive._collect_capacity`, which pins an organism's unit on the first plateau and names
+            # every later one in another unit as left out rather than converted. It is NOT enforced by
+            # `obligate_partners`, which the comment here used to credit: that function matches units
+            # within a pair and never compares one partner against another (Craig's agent on #133).
+            #
+            # A network does not always come from a fresh derivation: `from_dict` reads one from a
+            # published artifact and drops fields it does not know, so a file could carry plateaus of one
+            # organism in two units. This used to pick a unit by edge order and say nothing, so it now
+            # refuses and names it, as everything else here refuses rather than guesses (#142 item 14).
+            units = sorted({e.target_capacity_unit for e in net.edges
+                            if e.target == nid and e.target_capacity is not None
+                            and e.target_capacity_unit})
+            if len(units) > 1:
+                left_out.append((name, f"its plateaus are in {', '.join(units)}: one organism's "
+                                       "capacity has one unit, and this network carries two, so which "
+                                       "matrix it belongs in is not known and none is guessed"))
+                continue
+            blocks.setdefault(units[0] if units else "", []).append(nid)
             rows_fitted.append((name, _label(net.nodes[obligate[nid][0][0]])))
             continue
         if nid in only_with:

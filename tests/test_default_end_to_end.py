@@ -198,3 +198,36 @@ def test_the_package_prose_states_the_formula_the_derivation_actually_fitted():
 def io_bytes(data: bytes):
     import io
     return io.BytesIO(data)
+
+
+def test_the_zip_and_the_payload_carry_the_same_numbers_to_four_significant_digits():
+    """#142 item 15, Craig's agent on #135: that PR exists to establish that the two routes carry the same
+    numbers, and each was tested against hand arithmetic on its own fixture rather than against the other.
+    They agree to four significant digits, because `coefficient_csv` is `.4g` and the payload carries the
+    raw float, so a reader who diffs them finds a difference in the fifth digit and should not have to
+    wonder which is wrong."""
+    import csv
+    import io
+    import zipfile
+
+    from grownet import matrix
+    result = _default_query()
+    net, rates = result["network"], result.get("rates") or {}
+    payload = matrix.glv_payload(net, rates)
+
+    with zipfile.ZipFile(io_bytes(matrix.glv_package(net, rates))) as archive:
+        name = next(n for n in archive.namelist() if n.startswith("interaction_matrix"))
+        rows = list(csv.reader(io.StringIO(archive.read(name).decode("utf-8"))))
+
+    header, body = rows[0][1:], rows[1:]
+    from_zip = {(row[0], header[j]): float(value)
+                for row in body for j, value in enumerate(row[1:]) if value not in ("", "0")}
+    block = payload["matrices"][0]
+    names = block["organisms"]
+    from_payload = {(names[i], names[j]): block["interactions"][i][j]
+                    for i in range(len(names)) for j in range(len(names))}
+    assert from_zip, "the package held no non-zero cell to compare"
+    for key, value in from_zip.items():
+        assert key in from_payload, key
+        # four significant digits is what the CSV carries, and no more is claimed of the agreement
+        assert value == pytest.approx(from_payload[key], rel=1e-4), key

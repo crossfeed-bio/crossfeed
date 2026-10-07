@@ -208,7 +208,9 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
 <div class="row"><label><input type="checkbox" name="include_dropout" value="1"{dropout}>
   Include drop-out communities</label>
   <span class="muted">arcs from a community compared with the same community without one member, labeled
-  evidence dropout; on by default. Such an arc may act through a third species, so gLV mode unticks it</span></div>
+  evidence dropout; on by default. Such an arc may act through a third species, so gLV mode unticks it.
+  The comparison of replicate sets only: the default derivation refuses a community of three or more, so
+  with it this setting changes nothing</span></div>
 <div class="row"><label><input type="checkbox" name="include_low_quality" value="1"{low}>
   Show low-quality edges</label>
   <span class="muted">pooled strains, a chemostat curve, or a drop-out whose removed member was still detected;
@@ -921,7 +923,10 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     deriver = chosen_deriver(s, client)
     from .fetch import prefetch_studies
     prefetch_studies(client, studies, s["include_non_batch"], progress=lambda d, t, m: say(d, t, m),
-                     keep=narrowed, dropout=s["include_dropout"])
+                     # the default derivation refuses a community of three or more, so prefetching the
+                     # drop-out designs reads curves nothing can use (#142 item 10)
+                     keep=narrowed,
+                     dropout=s["include_dropout"] and s["derivation"] != "integrated")
     for i, study_id in enumerate(studies):
         say(i, len(studies), f"Reading {study_id} ({i + 1} of {len(studies)})")
         try:

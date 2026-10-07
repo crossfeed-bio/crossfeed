@@ -9,8 +9,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packaging"))
 from check_release import check, main, release_notes  # noqa: E402
 
 
-def _repo(tmp_path, version="0.1.0", code="0.1.0", heading="## [0.1.0] (2026-10-01)", cited=None):
+def _repo(tmp_path, version="0.1.0", code="0.1.0", heading="## [0.1.0] (2026-10-01)", cited=None,
+          r_version=None):
     (tmp_path / "src" / "grownet").mkdir(parents=True)
+    # the R companion's own version, which RELEASING.md calls the only signal an installed R copy is out
+    # of date, so the check reads it too (#142 item 10)
+    (tmp_path / "r").mkdir(parents=True)
+    (tmp_path / "r" / "DESCRIPTION").write_text(f"Package: grownet\nVersion: {r_version or version}\n")
     (tmp_path / "pyproject.toml").write_text(f'[project]\nname = "grownet"\nversion = "{version}"\n')
     (tmp_path / "src" / "grownet" / "__init__.py").write_text(f'__version__ = "{code}"\n')
     # the citation names the version too: 0.1.0 shipped while CITATION.cff still said 0.0.2
@@ -93,3 +98,22 @@ def test_what_a_user_reads_describes_a_release_not_our_branches():
     if branch and branch != "main" and branch != "HEAD":
         for what, text in shipped.items():
             assert branch not in text, f"{what} names the branch {branch!r}, which no release will have"
+
+
+def test_the_r_package_version_is_part_of_the_release_check(tmp_path):
+    """#142 item 10: `check_release.py` did not read `r/DESCRIPTION`, which RELEASING.md calls the only
+    signal an installed R copy is out of date, so a release could ship an R package that cannot tell a
+    reader to update."""
+    problems, _ = check("v0.1.0", _repo(tmp_path, r_version="0.0.9"))
+    assert any("r/DESCRIPTION says Version 0.0.9" in p for p in problems), problems
+
+
+def test_the_check_runs_with_no_tag_against_this_tree(tmp_path, capsys):
+    """#142 item 15: the check appeared only in release.yml, on $GITHUB_REF_NAME, so the gate that
+    catches a citation date drifting from the changelog fired for the first time when somebody pushed the
+    tag. With no argument it checks the version this tree would release, which is what `make check` and
+    CI now run on every build."""
+    from check_release import current_version
+    assert current_version() == __import__("grownet").__version__
+    assert main([]) == 0
+    assert "is ready" in capsys.readouterr().out

@@ -32,6 +32,11 @@ jobs:
         run: ruff check .
       - name: guardrail gate
         run: python checks/gate.py
+      - name: release gate
+        # with no tag it checks this tree's own version across pyproject.toml, the package, CITATION.cff
+        # and r/DESCRIPTION, and the citation date against the changelog heading. It used to run only on
+        # the tag, so a drift was found when the release was already being cut (#142 item 15)
+        run: python packaging/check_release.py
       - name: tests
         run: pytest -q
 

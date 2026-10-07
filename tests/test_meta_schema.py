@@ -28,15 +28,27 @@ def test_the_promised_keys_are_declared_with_their_types():
         assert declared[key]["type"] == "array"
 
 
-def test_the_schema_says_which_keys_are_promises():
-    """A reader has to know which of these to depend on, which is Craig's point."""
+def test_the_schema_says_which_keys_a_current_derivation_always_writes():
+    """A reader has to know which of these to depend on, which is Craig's point.
+
+    The wording changed on 2026-10-07 (#142 item 15): these eight said "a promise of the format" while
+    `meta` has no `required` list, so `meta = {}` validates and the word did work the file does not back.
+    A `required` list is the wrong fix, since one shape validates /v0, /v1 and /v2 and an older artifact
+    without `statistics` or `absence` would start failing, against what #141 promises about 0.1.x and
+    0.2.x files. So the description says what is true: a current derivation writes these, and their
+    meaning is fixed. `provisional` is among them and is conditional by design, which its own description
+    says: it is present while the derivation is provisional."""
     declared = schema.SCHEMA_DOC["properties"]["meta"]["properties"]
     promised = ("tool", "tool_version", "derived_on", "derived_at", "source_db", "provisional",
                 "absence", "statistics")
     for key in promised:
-        assert "promise" in declared[key]["description"], key
+        assert "part of the format" in declared[key]["description"], key
+        assert "every current derivation" in declared[key]["description"], key
     for key in ("settings", "selection", "hidden", "filters"):
         assert "recorded" in declared[key]["description"], key
+    # and none of them is required, which is what keeps an older artifact valid
+    assert "required" not in schema.SCHEMA_DOC["properties"]["meta"]
+    assert schema.validate_document({**_doc(), "meta": {}}) == []
 
 
 def test_a_meta_key_the_schema_does_not_declare_still_validates():

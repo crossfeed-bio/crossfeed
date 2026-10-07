@@ -52,7 +52,22 @@ def check(tag: str, root: Path = ROOT) -> tuple:
         if dated and heading and dated.group(1) != heading.group(1):
             problems.append(f"CITATION.cff dates the release {dated.group(1)}, CHANGELOG.md says "
                             f"{heading.group(1)}")
+    # The R companion is versioned separately and RELEASING.md calls r/DESCRIPTION the only signal an
+    # installed R copy is out of date, so a release that forgets it ships a package that cannot tell a
+    # reader to update (#142 item 10).
+    description = (root / "r" / "DESCRIPTION").read_text(encoding="utf-8")
+    r_version = re.search(r"^Version: *(.+)$", description, re.M)
+    if not r_version:
+        problems.append("r/DESCRIPTION has no Version")
+    elif r_version.group(1).strip() != version:
+        problems.append(f"r/DESCRIPTION says Version {r_version.group(1).strip()}, pyproject.toml says "
+                        f"{version}")
     return problems, notes
+
+
+def current_version(root: Path = ROOT) -> str:
+    """The version this working tree would release, for a check that is not given a tag."""
+    return tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
 
 
 # First on every release page, where Windows users download the program: it is unsigned until the project
@@ -75,6 +90,13 @@ def release_notes(tag: str, section: str) -> str:
 
 
 def main(argv) -> int:
+    # With no tag, check the version this tree would release. The check used to appear only in
+    # release.yml, invoked on $GITHUB_REF_NAME, so the gate that catches a citation date drifting from
+    # the changelog fired for the first time when somebody pushed the tag, which is the moment it is most
+    # expensive to act on: the release is being cut and the fix means retagging (Craig's agent on #138,
+    # #142 item 15). `make check` runs it with no argument on every build.
+    if not argv or argv[0] in ("--current", ""):
+        argv = [f"v{current_version()}", *argv[1:]]
     tag, notes_file = argv[0], (argv[1] if len(argv) > 1 else None)
     problems, notes = check(tag)
     for p in problems:

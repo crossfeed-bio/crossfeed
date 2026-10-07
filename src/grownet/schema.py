@@ -45,11 +45,18 @@ SCHEMA_FILE = os.path.join(
 # It stays permissive on purpose: no `additionalProperties`, so a network written by a later version, the
 # fixtures and the daily All network all keep validating. Declaring a key constrains its type, not its
 # presence.
-META_DESCRIPTION = ("how this network was made. The keys described as a promise are part of the format; "
-                    "the others are recorded because they are useful, and may change with what they "
-                    "describe. Keys not declared here are allowed, so a network from a later version "
-                    "still validates.")
-_PROMISE = "a promise of the format: "
+META_DESCRIPTION = ("how this network was made. The keys described as part of the format are the ones a "
+                    "current derivation always writes, and what they mean does not change; the others "
+                    "are recorded because they are useful, and may change with what they describe. "
+                    "Neither kind is required here, because one shape validates /v0, /v1 and /v2 and an "
+                    "older artifact does not carry every key a current one does. Keys not declared here "
+                    "are allowed, so a network from a later version still validates.")
+# Craig's agent, on #136: eight keys said "a promise of the format" while `meta` has no `required` list,
+# so `meta = {}` validates and the word did work the file does not back. A `required` list is the wrong
+# fix, since it would apply to /v0 and /v1 too and an older artifact without `statistics` or `absence`
+# would start failing, against what #141 promises about 0.1.x and 0.2.x files. So the wording says what
+# is true: a current derivation writes these, and their meaning is fixed (#142 item 15).
+_PROMISE = "part of the format, and written by every current derivation: "
 _RECORDED = "recorded, not promised: "
 META_PROPERTIES = {
     "tool": {"type": "string", "description": _PROMISE + "the tool that derived this network"},
@@ -165,6 +172,12 @@ SCHEMA_DOC = {
                 "coefficient_unit": {"type": "string"},
                 "fit_r2": {"type": ["number", "null"]},
                 "fit_null_r2": {"type": ["number", "null"]},
+                # merging parallel arcs and merging to the genus: emitted since 0.2.0 and declared only
+                # now, which is the drift `tests/test_schema.py` closes the loop on (#142 item 10)
+                "merged_arcs": {"type": ["integer", "null"]},
+                "strength_range": {"type": "array", "items": {"type": "number"}},
+                "supporting_pairs": {"type": ["integer", "null"]},
+                "merged_pairs": {"type": "array", "items": {"type": "string"}},
                 "fit_condition": {"type": ["number", "null"]},
                 # the coefficient's uncertainty, as two disjoint designs: the co-culture replicates, and
                 # the monoculture stage resampled over its own replicates (#142 item 2)
@@ -217,6 +230,30 @@ def _meta_problems(meta: dict) -> list:
     return problems
 
 
+def declared_keys(kind: str) -> set:
+    """The keys the shipped JSON Schema declares for "node", "edge" or "study"."""
+    return set(SCHEMA_DOC.get("definitions", {}).get(kind, {}).get("properties") or {})
+
+
+def _unknown_keys(lists: dict) -> list:
+    """Every key in the document that no record kind declares, named with where it is.
+
+    The model drops such a key when it reads the file, so nothing else reports it. A newer document read
+    by an older grownet will have keys this copy does not know, which is the point of dropping them, so
+    the message says the version rather than calling the file invalid.
+    """
+    out = []
+    for key, kind in (("nodes", "node"), ("edges", "edge"), ("studies", "study")):
+        declared = declared_keys(kind)
+        if not declared:
+            continue
+        for i, item in enumerate(lists.get(key, [])):
+            for name in sorted(set(item) - declared):
+                out.append(f"{key}[{i}] has {name!r}, which this version of the format does not declare: "
+                           "a reader of this version drops it, so check the spelling or the version")
+    return out
+
+
 def validate_document(doc) -> list:
     """Return every problem with `doc` as a grownet interaction-network document (empty list = valid).
 
@@ -241,6 +278,11 @@ def validate_document(doc) -> list:
             problems.append(f"{key} must be a list of objects")
         else:
             lists[key] = lst
+
+    # a key no record kind declares: the reader drops it rather than raising, which is what keeps an
+    # older copy of grownet working on a newer file, so `validate` is the only place a misspelling is
+    # caught at all and it has to name it (#142 item 10)
+    problems += _unknown_keys(lists)
 
     for i, n in enumerate(lists.get("nodes", [])):
         if not n.get("id"):

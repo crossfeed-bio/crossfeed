@@ -232,11 +232,18 @@ def _condition(normal: list) -> float:
 
 
 def _least_squares(rows: list, columns: int) -> dict:
-    """The least-squares solution of these rows, with its residual and the design's condition number.
+    """The least-squares solution of these rows, with its residual and a condition number.
 
     Each column is scaled to unit length before the normal equations are formed, so the condition number
     measures how close the columns are to each other rather than how different their units are, and the
     solution is scaled back afterwards.
+
+    The condition number is **of the normal equations**, not of the design, and the two differ by a
+    square: a library `cond` of the design reporting 100 is this number reporting 1e4, so `MAX_CONDITION`
+    is a stricter limit read the other way (Craig's agent on #134, #142 item 15). The R2 is about zero
+    rather than about the mean of y, because this model has no intercept: y is a left-over after the
+    monoculture stage's terms are subtracted and the fit is not allowed to move the level, so scoring it
+    about the mean credited the fit for an intercept it does not have (#142 item 10).
     """
     design_rows = [list(row["columns"]) for row in rows]
     ys = [row["y"] for row in rows]
@@ -251,8 +258,7 @@ def _least_squares(rows: list, columns: int) -> dict:
         return {"values": None, "condition": float("inf"), "r2": float("nan")}
     answer = [a / size for a, size in zip(answer, sizes, strict=True)]
     fitted = [sum(a * b for a, b in zip(row, answer, strict=True)) for row in design_rows]
-    mean = sum(ys) / len(ys)
-    total = sum((y - mean) ** 2 for y in ys)
+    total = sum(y * y for y in ys)
     residual = sum((y - f) ** 2 for y, f in zip(ys, fitted, strict=True))
     r2 = 1 - residual / total if total > 0 else float("nan")
     return {"values": answer, "condition": condition, "r2": r2, "residual": residual}
@@ -583,8 +589,13 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
         built = design(replicate, target, [target, *partners])
         here = built["partners"]
         if len(built["rows"]) < MIN_ROWS or target not in here:
+            # the real cause first, then whatever the design has to add. The window note is
+            # informational, and reporting it alone said why the rows were cut and not why the row was
+            # refused, 196 times over the corpus (#142 item 10)
+            why = (f"{len(built['rows'])} usable time point(s), fewer than the {MIN_ROWS} a fit needs"
+                   if target in here else f"{target} has no column in this replicate")
             skipped.append((f"{target} co-culture replicate {replicate.name or i}",
-                            built["reason"] or "too few usable time points"))
+                            f"{why}; {built['reason']}" if built["reason"] else why))
             continue
         own_index = here.index(target)
         mine = [name for name in partners if name in here]

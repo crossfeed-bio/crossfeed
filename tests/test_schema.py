@@ -173,3 +173,35 @@ def test_the_daily_all_network_is_used_only_when_it_speaks_this_version():
     old = {"format": published.FORMAT,
            "network": {"schema": PREVIOUS_SCHEMAS[0], "meta": {"derived_at": now}}}
     assert not published.fresh(old)
+
+
+def test_every_field_the_model_carries_is_declared_in_the_shipped_schema():
+    """#142 item 10: `coefficient_sd`, `coefficient_n` and `coefficient_sd_from_rate_stage` were emitted
+    and not declared, and nothing asserted that the two agree, so the schema and the model drifted in
+    both directions. This closes the loop for all three record kinds."""
+    from dataclasses import fields
+
+    from grownet.model import Edge, Node, Study
+    from grownet.schema import declared_keys
+    for kind, cls in (("edge", Edge), ("node", Node), ("study", Study)):
+        carried = {f.name for f in fields(cls)}
+        declared = declared_keys(kind)
+        assert carried - declared == set(), f"{kind}: emitted and not declared: {sorted(carried - declared)}"
+        assert declared - carried == set(), f"{kind}: declared and not emitted: {sorted(declared - carried)}"
+
+
+def test_validate_names_a_misspelled_key_the_reader_drops():
+    """`from_dict` drops a key it does not know, which is what keeps an older grownet working on a newer
+    file, so `grownet validate` is the only place a misspelling is caught at all (#142 item 10)."""
+    from grownet.model import SCHEMA
+    from grownet.schema import validate_document
+    doc = {"schema": SCHEMA, "nodes": [{"id": "a"}, {"id": "b"}],
+           "studies": [{"id": "S1", "citation": "c"}],
+           "edges": [{"source": "a", "target": "b", "effect": "facilitation", "study_ids": ["S1"],
+                      "coefficent": 1.0}]}                       # one letter missing
+    problems = validate_document(doc)
+    assert any("'coefficent'" in p and "does not declare" in p for p in problems), problems
+    # and the correctly spelled one is not reported
+    doc["edges"][0] = {**doc["edges"][0], "coefficient": 1.0}
+    del doc["edges"][0]["coefficent"]
+    assert validate_document(doc) == []

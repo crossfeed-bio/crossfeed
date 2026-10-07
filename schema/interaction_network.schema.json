@@ -21,39 +21,39 @@
     },
     "meta": {
       "type": "object",
-      "description": "how this network was made. The keys described as a promise are part of the format; the others are recorded because they are useful, and may change with what they describe. Keys not declared here are allowed, so a network from a later version still validates.",
+      "description": "how this network was made. The keys described as part of the format are the ones a current derivation always writes, and what they mean does not change; the others are recorded because they are useful, and may change with what they describe. Neither kind is required here, because one shape validates /v0, /v1 and /v2 and an older artifact does not carry every key a current one does. Keys not declared here are allowed, so a network from a later version still validates.",
       "properties": {
         "tool": {
           "type": "string",
-          "description": "a promise of the format: the tool that derived this network"
+          "description": "part of the format, and written by every current derivation: the tool that derived this network"
         },
         "tool_version": {
           "type": "string",
-          "description": "a promise of the format: its version"
+          "description": "part of the format, and written by every current derivation: its version"
         },
         "derived_on": {
           "type": "string",
-          "description": "a promise of the format: the date it was derived (UTC)"
+          "description": "part of the format, and written by every current derivation: the date it was derived (UTC)"
         },
         "derived_at": {
           "type": "string",
-          "description": "a promise of the format: when it was derived, to the second"
+          "description": "part of the format, and written by every current derivation: when it was derived, to the second"
         },
         "source_db": {
           "type": "string",
-          "description": "a promise of the format: where the growth data came from, and whether live or a fixture"
+          "description": "part of the format, and written by every current derivation: where the growth data came from, and whether live or a fixture"
         },
         "provisional": {
           "type": "string",
-          "description": "a promise of the format: present while the derivation method is provisional, saying so in words"
+          "description": "part of the format, and written by every current derivation: present while the derivation method is provisional, saying so in words"
         },
         "absence": {
           "type": "object",
-          "description": "a promise of the format: the absence threshold this network was written with: k, and how many comparisons fell below it"
+          "description": "part of the format, and written by every current derivation: the absence threshold this network was written with: k, and how many comparisons fell below it"
         },
         "statistics": {
           "type": "object",
-          "description": "a promise of the format: the test behind p_value and q_value, the correction used and how many comparisons it ran over"
+          "description": "part of the format, and written by every current derivation: the test behind p_value and q_value, the correction used and how many comparisons it ran over"
         },
         "query": {
           "type": "string",
@@ -405,6 +405,30 @@
             "number",
             "null"
           ]
+        },
+        "merged_arcs": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "strength_range": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "supporting_pairs": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "merged_pairs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "fit_condition": {
           "type": [

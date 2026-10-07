@@ -32,6 +32,31 @@ content.
 
 ### Changed
 ### Fixed
+- **Fifteen smaller things, from the two reviews** (#142 items 10, 14 and 15). A reader drops a field it
+  does not know for **nodes and studies** as well as edges, so the 0.2.0-against-0.3.0 failure is no
+  longer armed for the next release that adds one. The shipped JSON Schema and the model agreed in
+  neither direction, which nothing asserted: `merged_arcs`, `strength_range`, `supporting_pairs` and
+  `merged_pairs` were emitted and undeclared, and a test now closes the loop for all three record kinds.
+  `grownet validate` names a key the format does not declare, which is the only place a misspelling can
+  be caught now that the reader drops it. `_least_squares` scores its stage about zero, since the model
+  has no intercept, and its docstring says its condition number is of the normal equations and not of the
+  design, which differ by a square. A co-culture replicate refused for too few usable points says that,
+  rather than the informational window note that replaced the real cause 196 times over the corpus.
+  `rbridge.send`'s refusal tells the reader to run `grownet_listen()` again, which "send again" needed
+  and did not say. `check_release.py` reads `r/DESCRIPTION`, which RELEASING.md calls the only signal an
+  installed R copy is out of date, and runs **on every build** with no tag, in `make check` and in CI,
+  instead of firing first when somebody pushes the tag. The drop-out setting says it applies to the
+  comparison of replicate sets only, since the default derivation refuses a community of three or more,
+  and the prefetch no longer reads those designs under the default. The one-unit-per-organism invariant
+  is re-checked in `matrix.py` rather than assumed, with the comment pointing at `derive` where it is
+  enforced, and `plateaus()` names a plateau it leaves out instead of dropping it on a bare `continue`.
+  GraphML carries the absence rule and its threshold, the suppressed counts and the test the derivation
+  ran, so an edge marked absent can be read against the `k` that marked it on the route Cytoscape uses,
+  along with the fit's null R2 and the two halves of its standard error. The eight `meta` keys that said
+  "a promise of the format" say what is true instead, that a current derivation writes them and their
+  meaning is fixed, since a `required` list would break older artifacts. And a test asserts that the
+  package's matrix CSV and `/glv.json` carry the same numbers to four significant digits, which the
+  README now states, since the CSV is `.4g` and the payload is the raw float.
 - **A row the package publishes is now the row that was fitted** (#142 item 7). An organism whose fit
   implies no plateau was given the measured one *after* its partners had been fitted against the fitted
   self-limitation, so the published row satisfied no equation anyone had fitted and its R2 and condition

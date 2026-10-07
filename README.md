@@ -421,7 +421,9 @@ only with a partner gets `r_i = 0` and a self-limitation fitted at its plateau b
 `growth_rates.csv`, one rate per organism in the same order with how many values it rests on, and beside
 it the estimator, the Baranyi lag and the carrying capacity with its abundance unit, how many curves it
 rests on, how many gave none, and how far those curves had fallen from their peak
-(`capacity_fall_from_peak`: 1 is a curve that ended at its peak); and `README.txt`,
+(`capacity_fall_from_peak`: 1 is a curve that ended at its peak). The matrix CSV keeps four significant
+digits and `/glv.json` carries the raw float, so the two routes agree to four significant digits and no
+more: a reader who diffs them will find a difference in the fifth, and neither is wrong. And `README.txt`,
 which states every formula and unit, names the pairs left at 0 for disagreeing in sign, every organism and
 effect that could not be fitted and why, and the media the arcs were measured in. A simulation is of one
 environment, so a package built from several media says so and points at the second box. Every cell is a

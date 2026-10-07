@@ -244,11 +244,16 @@ class InteractionNetwork:
     @classmethod
     def from_dict(cls, d: dict) -> InteractionNetwork:
         net = cls(meta=d.get("meta", {}), schema=d.get("schema", SCHEMA))
-        for s in d.get("studies", []):
-            net.add_study(Study(**s))
-        for n in d.get("nodes", []):
-            net.add_node(Node(**n))
+        # a field this reader does not know is dropped for every record kind, not only for edges: Node
+        # and Study raised on one, so the 0.2.0-against-0.3.0 failure stayed armed for the next release
+        # that adds a node or study field (#142 item 10)
+        known_nodes = {f.name for f in fields(Node)}
+        known_studies = {f.name for f in fields(Study)}
         known = {f.name for f in fields(Edge)}
+        for s in d.get("studies", []):
+            net.add_study(Study(**{k: v for k, v in s.items() if k in known_studies}))
+        for n in d.get("nodes", []):
+            net.add_node(Node(**{k: v for k, v in n.items() if k in known_nodes}))
         for e in d.get("edges", []):
             # a field this reader does not know is dropped rather than raising, so a newer document is
             # read as far as it can be: Edge(**e) is what made 0.2.0 fail on a 0.3.0 network
