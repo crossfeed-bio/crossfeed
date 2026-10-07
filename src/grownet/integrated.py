@@ -450,7 +450,12 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
     per_replicate: list = []          # one {partner: value} per co-culture replicate, at (rate, own)
     sensitivity: list = []            # one {partner: (d/d rate, d/d own)} per co-culture replicate
     spread_values: dict = {}          # partner -> one value per co-culture replicate
-    pooled_rows, points, present = [], 0, []
+    # the pooled fallback's rows, kept per partner set rather than in one list: `design` leaves a partner
+    # with no curve out of the columns, so a replicate's rows are as wide as that replicate's partners,
+    # and pooling them all raised IndexError out of `_least_squares` on the ordinary shape of monocultures
+    # of A with co-cultures A+B and A+C (#142 item 12, Craig's agent on #134)
+    pooled_by_set: dict = {}
+    points, present = 0, []
     for i, replicate in enumerate(cocultures):
         built = design(replicate, target, [target, *partners])
         here = built["partners"]
@@ -472,7 +477,7 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
                     for row in built["rows"]]
 
         rows = rows_at(rate, own)
-        pooled_rows += rows
+        pooled_by_set.setdefault(tuple(mine), []).extend(rows)
         got = _least_squares(rows, len(mine))
         if got["values"] is None or got["condition"] > max_condition:
             continue
@@ -502,17 +507,32 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
     if fitted:
         coefficients.update(fitted)
         stages.append("co-culture")
-    elif pooled_rows and present:
-        # no single replicate identifies the partners on its own: fall back to all their rows together,
-        # which is what this stage did before. The arc then carries no spread, and the rest of the tool
-        # already reads a comparison with no spread as undetermined rather than as a measurement.
-        got = _least_squares(pooled_rows, len(present))
+    elif pooled_by_set:
+        # no single replicate identifies the partners on its own: fall back to their rows together, which
+        # is what this stage did before. The arc then carries no spread, and the rest of the tool already
+        # reads a comparison with no spread as undetermined rather than as a measurement.
+        #
+        # Only replicates that measured the same partners are pooled. Padding the short rows with zeros
+        # would claim a partner was absent rather than unmeasured, which is exactly what `design` refuses
+        # one line at a time, and dropping a partner's column from the design would claim it had no effect
+        # at all. So the largest set of replicates that share their partners is used, a tie going to the
+        # first set in order so the choice does not depend on the order the replicates were read in, and
+        # every other set is named rather than mixed in.
+        order = sorted(pooled_by_set.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+        mine, rows = order[0]
+        for others, their_rows in order[1:]:
+            skipped.append((f"{target} co-cultures of {', '.join(others) or 'no measured partner'}",
+                            f"{len(their_rows)} row(s) left out of the pooled fit: these replicates "
+                            f"measured {', '.join(others) or 'no partner'} and the pooled fit is of "
+                            f"{', '.join(mine)}. A partner that was not measured is not a partner at "
+                            "zero, so the two are not one design"))
+        got = _least_squares(rows, len(mine)) if mine else {"values": None, "condition": float("inf")}
         if got["values"] is None or got["condition"] > max_condition:
             skipped.append((f"{target} co-cultures",
                             "the partners' effects are not identified by these curves (condition "
                             f"{got['condition']:.3g})"))
         else:
-            coefficients.update(dict(zip(present, got["values"], strict=True)))
+            coefficients.update(dict(zip(mine, got["values"], strict=True)))
             conditions.append(got["condition"])
             stages.append("co-culture (replicates pooled)")
 

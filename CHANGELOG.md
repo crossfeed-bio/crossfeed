@@ -31,6 +31,20 @@ content.
   always the solution of `A x = -r` and the reader had to work it out.
 
 ### Changed
+### Fixed
+- **A crash that took out a whole derivation** (#142 item 12, traced by Craig's agent on #134).
+  `design` leaves a partner with no curve out of the columns, since a column of zeros would claim it was
+  absent rather than unmeasured, so a replicate's rows are as wide as that replicate's own partners,
+  while the pooled fallback in `two_stage` asked for the union of partners across replicates.
+  `_least_squares` indexed past the short rows and raised `IndexError`, which nothing caught: the call
+  sits inside the loop over every target organism in every experiment, so one organism in one experiment
+  ended the run for all of them. The shape is ordinary: monocultures of A with co-cultures A+B and A+C,
+  which is pairwise co-culture in a community of three. Only replicates that measured the same partners
+  are pooled now, the largest such set being used and every other named in the report, because padding
+  the short rows with zeros would reintroduce the claim `design` refuses and dropping a partner's column
+  would claim it had no effect at all.
+
+### Changed
 - **A network says what test its own derivation ran, not what the specified comparison runs** (#142
   items 5 and 11). `meta.statistics` and `meta.provisional` were module constants copied into every
   network, so a file derived by the integrated form claimed Welch's two-sided t-test on per-replicate

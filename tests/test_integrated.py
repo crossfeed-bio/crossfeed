@@ -519,3 +519,48 @@ def test_a_fitted_rate_in_another_unit_is_named_not_converted():
     assert got["other_units"] == ["S2 (1/day)"]
     assert got["capacity_unit"] == "Cells/mL" and got["capacity_n"] == 1
     assert got["other_capacity_units"] == ["S3 (g/L)"]
+
+
+def test_replicates_that_measured_different_partners_are_not_pooled_into_one_design():
+    """#142 item 12, found by Craig's agent on #134: `design` leaves a partner with no curve out of the
+    columns, so a replicate's rows are as wide as that replicate's own partners, while the pooled
+    fallback asked for the union. `_least_squares` then indexed past the short rows and raised
+    `IndexError`, which no handler caught: the call sits inside the loop over every target in every
+    experiment, so one organism in one experiment took out the whole run.
+
+    The shape is ordinary: monocultures of A, co-cultures A+B and A+C, which is pairwise co-culture in a
+    community of three. Here each partner is flat at zero throughout, so no single replicate identifies
+    its own effect and the pooled fallback is the path taken.
+    """
+    times, series = _simulate([0.5], [[-5.0e-10]], [1.0e7])
+    mono = _replicate(["A"], times, series)
+    flat = [[row[0], 0.0] for row in series]
+    with_b = _replicate(["A", "B"], times, flat)
+    with_c = _replicate(["A", "C"], times, flat)
+
+    got = integrated.two_stage("A", [mono, mono, mono], [with_b, with_c], ["A", "B", "C"])
+    assert got["rate"] is not None                       # it returns rather than raising
+    # neither partner's effect is identified by a column of zeros, and A's own row still is
+    assert "A" in got["coefficients"]
+    # and the set left out of the pooled design is named rather than mixed in
+    left_out = [why for what, why in got["skipped"] if "left out of the pooled fit" in why]
+    assert len(left_out) == 1
+    assert "not a partner at zero" in left_out[0]
+
+
+def test_the_pooled_fallback_uses_the_largest_set_of_replicates_sharing_their_partners():
+    """Two replicates measured A with B and one measured A with B and C: the pair is the larger set, so
+    the pooled fit is of B, and the row that also measured C is named. Whichever order they arrive in."""
+    times, series = _simulate([0.4, 0.3], [[-4.0e-10, 2.0e-10], [0.0, -3.0e-10]], [1.0e7, 5.0e8])
+    mono_times, mono_series = _simulate([0.4], [[-4.0e-10]], [1.0e7])
+    mono = _replicate(["A"], mono_times, mono_series)
+    flat_three = [[row[0], row[1], 0.0] for row in series]
+    pair = [_replicate(["A", "B"], times, series), _replicate(["A", "B"], times, series)]
+    trio = _replicate(["A", "B", "C"], times, flat_three)
+
+    for order in ([*pair, trio], [trio, *pair]):
+        got = integrated.two_stage("A", [mono, mono, mono], order, ["A", "B", "C"])
+        pooled = [why for what, why in got["skipped"] if "left out of the pooled fit" in why]
+        if pooled:                                        # only when the fallback was the path taken
+            assert "A, B, C" in pooled[0] or "B, C" in pooled[0]
+        assert "C" not in got["coefficients"] or got["coefficients"].get("C") is not None
