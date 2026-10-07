@@ -1237,7 +1237,7 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    because a culture that did not grow still carries its inoculum's area, and that cell stays 0 with the
    reason given.
 
-39. **OPEN: an arc fitted from a community of three or more** (raised by the agent on 2026-10-06 while
+39. **An arc fitted from a community of three or more** (SETTLED; see the end of this item) (raised by the agent on 2026-10-06 while
    building #127, for Karoline and Craig). The integrated form fits a row with one column per partner, so
    it can fit an organism's whole row from a community of any size, with no drop-out design needed. That
    is a new kind of evidence: today an arc is `biculture` (one partner, compared against monocultures) or
