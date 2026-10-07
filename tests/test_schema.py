@@ -213,6 +213,7 @@ def test_validate_names_the_version_without_misstating_what_it_means():
     test was `read != SCHEMA`, so the /v2 bump extended the note to /v1 files and told their readers the
     opposite of the truth, in the one command that exists to say how to read a file (found 2026-10-07)."""
     import json
+    import os
     import subprocess
     import sys
     import tempfile
@@ -228,8 +229,17 @@ def test_validate_names_the_version_without_misstating_what_it_means():
         for schema in (SCHEMA, "grownet.interaction_network/v1", "grownet.interaction_network/v0"):
             path = Path(tmp) / "net.json"
             path.write_text(json.dumps({**doc, "schema": schema}), encoding="utf-8")
+            # the subprocess does not inherit pytest's `pythonpath` setting, which is in-process only,
+            # so it finds `grownet` only where the package happens to be installed. The suite also runs
+            # from an unpacked sdist, where it is not (the package job installs pytest and nothing else),
+            # and this test was the only one that shells out to the tool: it failed there with "No module
+            # named grownet" while every other job was green. Carrying the path makes the subprocess use
+            # the same source the test imported (found 2026-10-07).
+            env = {**os.environ,
+                   "PYTHONPATH": os.pathsep.join([str(root / "src"), str(root),
+                                                  os.environ.get("PYTHONPATH", "")]).rstrip(os.pathsep)}
             got = subprocess.run([sys.executable, "-m", "grownet", "validate", str(path)],
-                                 capture_output=True, text=True, cwd=root, check=True)
+                                 capture_output=True, text=True, cwd=root, check=True, env=env)
             said[schema] = got.stdout
     # only a /v0 file is told that its `significance` is the corrected p-value
     assert "corrected p-value" in said["grownet.interaction_network/v0"]
