@@ -1205,13 +1205,22 @@ def _arc_statistics(got: dict, cocultures: list, partner: str) -> dict:
         out["coefficient_sd_from_rate_stage"] = math.sqrt(statistics.variance(coefficient_means) * scale)
     out["se_rate_stage"] = math.sqrt(var_stage)
     out["se"] = math.sqrt(var_replicates + var_stage)
-    # `sd` is the dispersion of one estimate and `se` the dispersion of their mean, and the tool's own
-    # relation between them is se = sd / sqrt(n). Keeping that relation is what carries the rate stage
-    # into the absence threshold, which compares the effect with k * sd, and into effect_over_sd: the
-    # rate stage's error belongs to every replicate alike, so at replicate scale it is n times its
-    # contribution to the variance of the mean. The two halves stay published beside it, so the
-    # replicates' own scatter is still readable as se_replicates * sqrt(n) (#142 item 2).
-    out["sd"] = out["se"] * math.sqrt(len(rows))
+    # `sd` is the co-culture replicates' own spread, which is what the field says it is everywhere and
+    # what the specified comparison puts there, so one name carries one quantity.
+    #
+    # It briefly carried `se * sqrt(n)` instead, to pull the monoculture stage into the absence
+    # threshold, and that was wrong: the stage's error is one `(r_i, A_ii)` shared by every replicate of
+    # the row, so it contributes the same amount to the variance of the mean however many replicates
+    # there are, which `se` has right. Multiplying it by n to express it "at replicate scale" invents a
+    # scatter no replicate has, and made the threshold `|mean| < k * sd` harder to pass the more
+    # co-culture replicates a row had. Measured on a noise-free simulation with the replicate spread at
+    # zero: `se` stayed 0.0336 from two replicates to six while `sd` grew 0.0476, 0.0583, 0.0673,
+    # 0.0752, 0.0824, so `|effect| / sd` fell from 10.0 to 5.8 as data was added (2026-10-07).
+    #
+    # So the monoculture stage reaches `p_value` and `q_value`, through `se`, and does not reach the
+    # absence threshold. Whether it should is a question about what k means and is Karoline's: the two
+    # halves are published as `se_replicates` and `se_rate_stage` so the choice can be made on numbers.
+    out["sd"] = sd
 
     df_replicates = len(rows) - 1
     df_stage = max(1, (got.get("stage_one_n") or 1) - 1)

@@ -321,7 +321,9 @@ def test_the_glv_example_section_gives_every_step_of_running_it_in_miasim():
     that route with one search's numbers in it, and a reader should not need anything the page does not
     say."""
     page = gui.render_help("tok")
-    section = page[page.index('<h2 id="glv-example">'):]
+    # the anchor is "glv-walkthrough", not "glv-example": the latter collided with the branch name this
+    # work was written on, which test_release.py refuses in shipped text and rightly
+    section = page[page.index('<h2 id="glv-walkthrough">'):]
     section = section[:section.index("<h2 ", 10)] if "<h2 " in section[10:] else section
     # the button, the command line that does the same, and the study it reads
     assert "gLV example" in section and "SMGDB00000006" in section

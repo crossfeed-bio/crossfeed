@@ -548,7 +548,7 @@ SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"), ("mea
             ("example", "Try the example"), ("reading", "Reading the result"),
             ("statistics", "How an interaction is decided"),
             ("glv", "The matrix, the growth rates and gLV"),
-            ("glv-example", "The gLV example, step by step"),
+            ("glv-walkthrough", "The gLV example, step by step"),
             ("settings", "Advanced settings"), ("attributes", "Arc and node attributes"),
             ("decisions", "Why it works this way"), ("cli", "The command line"),
             ("empty", "No network came back"), ("qa", "Questions and problems"), ("cite", "How to cite"),
@@ -947,7 +947,7 @@ the same parameters instead.</p>
 the download holds. When a port cannot be opened, <code>grownet_glv(url)</code> reads the same parameters
 from the address the page shows under its gLV control.</p>
 
-<h2 id="glv-example">The gLV example, step by step</h2>
+<h2 id="glv-walkthrough">The gLV example, step by step</h2>
 <p><strong>gLV example</strong> beside All fills both boxes and the one setting a package cannot be built
 without, and runs the search, so the route above has something concrete to run on. It is one search of
 one study, picked by running every study that yields a package: SMGDB00000006, two organisms in one

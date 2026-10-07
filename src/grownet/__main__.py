@@ -439,8 +439,15 @@ def _validate(a):
         return 1
     from .model import SCHEMA
     read = doc.get("schema")
-    older = "" if read == SCHEMA else (
-        f" (schema {read}: `significance` there is the corrected p-value, not -log10 of it)")
+    # The note belongs to /v0 alone: that is where `significance` is the corrected p-value. It moved to
+    # -log10 of it in /v1, which is why the id moved then, and /v2 changed no field's meaning at all. The
+    # test was `read != SCHEMA`, so the /v2 bump silently extended the note to /v1 files and told their
+    # readers the opposite of the truth, in the one command that exists to say how to read a file
+    # (found 2026-10-07).
+    older = (" (schema grownet.interaction_network/v0: `significance` there is the corrected p-value, "
+             "not -log10 of it)") if read == "grownet.interaction_network/v0" else ""
+    if read != SCHEMA and not older:
+        older = f" (schema {read}; `significance` means what it means in {SCHEMA})"
     print(f"valid: {a.file}{older}")
     return 0
 

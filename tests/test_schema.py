@@ -205,3 +205,35 @@ def test_validate_names_a_misspelled_key_the_reader_drops():
     doc["edges"][0] = {**doc["edges"][0], "coefficient": 1.0}
     del doc["edges"][0]["coefficent"]
     assert validate_document(doc) == []
+
+
+def test_validate_names_the_version_without_misstating_what_it_means():
+    """The note about `significance` belongs to /v0 alone: that is where it is the corrected p-value. It
+    moved to -log10 of it in /v1, which is why the id moved then, and /v2 changed no field's meaning. The
+    test was `read != SCHEMA`, so the /v2 bump extended the note to /v1 files and told their readers the
+    opposite of the truth, in the one command that exists to say how to read a file (found 2026-10-07)."""
+    import json
+    import subprocess
+    import sys
+    import tempfile
+    from pathlib import Path
+
+    from grownet.model import SCHEMA
+    doc = {"nodes": [{"id": "a"}, {"id": "b"}], "studies": [{"id": "S1", "citation": "c"}],
+           "edges": [{"source": "a", "target": "b", "effect": "facilitation", "study_ids": ["S1"],
+                      "significance": 1.699, "q_value": 0.02}]}
+    root = Path(__file__).resolve().parents[1]
+    with tempfile.TemporaryDirectory() as tmp:
+        said = {}
+        for schema in (SCHEMA, "grownet.interaction_network/v1", "grownet.interaction_network/v0"):
+            path = Path(tmp) / "net.json"
+            path.write_text(json.dumps({**doc, "schema": schema}), encoding="utf-8")
+            got = subprocess.run([sys.executable, "-m", "grownet", "validate", str(path)],
+                                 capture_output=True, text=True, cwd=root, check=True)
+            said[schema] = got.stdout
+    # only a /v0 file is told that its `significance` is the corrected p-value
+    assert "corrected p-value" in said["grownet.interaction_network/v0"]
+    assert "corrected p-value" not in said["grownet.interaction_network/v1"]
+    assert "corrected p-value" not in said[SCHEMA]
+    # and a /v1 file is still told which version it is, since that is the point of the id
+    assert "grownet.interaction_network/v1" in said["grownet.interaction_network/v1"]
