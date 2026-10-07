@@ -103,9 +103,11 @@ class Edge:
     target: str                   # Node.id of the affected organism
     effect: str                   # one of EFFECTS
     strength: float | None = None       # e.g. a growth log-ratio
-    # The three numbers of the test, in one direction each (Karoline, 2026-10-03): p_value is Welch's raw
-    # value, q_value the same after correction for multiple testing, and significance -log10(q_value), so
-    # that a larger significance means stronger evidence and a continuous style can map it.
+    # The three numbers of the test, in one direction each (Karoline, 2026-10-03): p_value is the raw
+    # value of whatever test the derivation ran, which `meta.statistics.test` names (Welch's t-test on the
+    # per-replicate log2 values for the specified comparison), q_value the same after correction for
+    # multiple testing, and significance -log10(q_value), so that a larger significance means stronger
+    # evidence and a continuous style can map it.
     significance: float | None = None   # -log10(q_value): larger is stronger, 0 at q = 1
     q_value: float | None = None        # p_value corrected for multiple testing (Benjamini-Hochberg or -Yekutieli)
     p_value: float | None = None        # the unadjusted p-value the correction started from

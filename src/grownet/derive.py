@@ -179,6 +179,11 @@ REPLICATE_METHOD = ("crossfeed replicate v1: mean log2({metric} in co-culture) m
                     "reported and corrected for multiple testing, not used to decide")
 PRESENT, ABSENT = "present", "absent"
 ABSENCE_THRESHOLD = 1.0    # k: absent when |log2 mean| < k * sd. k = 1 is the mean plus or minus sd rule
+# What a network says about its own statistics. These are the **specified comparison's**: a derivation
+# that tests something else says so through its own `statistics` attribute, which `output_meta` reads
+# (#142 item 5). They were a module constant copied into every network, so a file derived by the
+# integrated form claimed Welch's test over replicate sets, which that form does not run, and the claim
+# travelled into the JSON, GraphML, the Cytoscape legend, the page and the daily artifact.
 STATISTICS = {"test": "Welch's two-sided t-test on the per-replicate log2 values",
               "correction": "{name} over every comparison tested in this derivation",
               "role": "reported as support for an edge; presence is decided by the absence threshold"}
@@ -1676,7 +1681,8 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
                 absence_threshold: float = ABSENCE_THRESHOLD, no_growth_alpha: float = None,
                 no_growth_factor: float = None, merge_arcs: bool = False, min_studies: int = 1,
                 merge_genera: bool = False, support_level: str = "species",
-                max_adjusted_p: float | None = None, include_absent: bool = False) -> tuple:
+                max_adjusted_p: float | None = None, include_absent: bool = False,
+                deriver=None) -> tuple:
     """(edges, meta) for writing a network.
 
     Sets each record's `status` from the absence threshold k (None, undetermined, for a low-quality
@@ -1685,6 +1691,11 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
     how many edges each rule touched. `meta.no_growth` records the no-growth rule the derivation ran with,
     since the count of obligate and abolished edges depends on it (#37); pass the same values given to
     the derivation.
+
+    `deriver` is the derivation that made these records, and `meta.statistics` and `meta.provisional`
+    come from it: a derivation states what it tests and what is provisional about it, as it already
+    states its `name` and `method`. Without it the specified comparison's words are used, which is what
+    every network said before 2026-10-07 whatever had derived it (#142 item 5).
     """
     for record in records:
         # a low-quality edge is never read as the absence of an interaction (Karoline, on #40; #50)
@@ -1697,7 +1708,8 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
         hidden["not_significant"] = significance_filter["left_out"]
     edges, merge = merge_parallel(edges, merge_arcs, min_studies)
     edges, genus = merge_genus(edges, merge_genera, support_level)
-    statistics = {**STATISTICS, "correction": STATISTICS["correction"].format(name=CORRECTIONS[correction][0]),
+    said = dict(getattr(deriver, "statistics", None) or STATISTICS)
+    statistics = {**said, "correction": said["correction"].format(name=CORRECTIONS[correction][0]),
                   "tests": tests, "filter": significance_filter}
     if max_adjusted_p is not None:
         statistics["role"] = (f"presence is decided by the absence threshold, and an interaction whose "
@@ -1705,7 +1717,8 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
                               "(the q-value filter)")
     # how many the threshold marked absent, whether or not they are in the file
     absent = hidden["absent"] + sum(1 for e in edges if e.get("status") == ABSENT)
-    provisional = PROVISIONAL + ("" if max_adjusted_p is None else FILTER_NOTE.format(q=max_adjusted_p))
+    base = getattr(deriver, "provisional", None) or PROVISIONAL
+    provisional = base + ("" if max_adjusted_p is None else FILTER_NOTE.format(q=max_adjusted_p))
     meta = {"provisional": provisional, "statistics": statistics,
             "absence": {"rule": "absent when |log2 mean| < k * sd", "k": absence_threshold, "absent": absent},
             "no_growth": {**rule_meta(no_growth_alpha, no_growth_factor),
@@ -1732,6 +1745,11 @@ class Deriver:
 
     name = "abstract"
     method = ""
+    # what a network derived this way says about its own statistics and about what is provisional in it.
+    # None means the specified comparison's words, which is what every derivation used to claim whether
+    # or not it ran that test (#142 item 5): a derivation that tests something else states it here.
+    statistics = None
+    provisional = None
 
     def derive(self, study: dict, exps: list):
         """Return (records, skipped). `records` is a list of dicts for records_to_network; `skipped` is a
@@ -1750,6 +1768,8 @@ class ReplicateDeriver(Deriver):
 
     name = "replicate-v1"
     needs_client = True
+    statistics = STATISTICS
+    provisional = PROVISIONAL
 
     def __init__(self, method: str = "auc", spike_factor: float = SPIKE_FACTOR, client=None,
                  dropout: bool = True, include_non_batch: bool = False, no_growth_alpha: float = None,

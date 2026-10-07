@@ -143,7 +143,7 @@ SETTINGS = {
                           "interactions count as present; 0 marks only a mean of exactly zero absent. Absent "
                           "interactions stay in the downloads with status absent."),
     "correction": ("Multiple testing correction", "--correction bh|by",
-                   "How the p-values of Welch's t-test are adjusted for multiple testing, over every "
+                   "How the p-values of the test the derivation ran are adjusted for multiple testing, over every "
                    "comparison one search tests (every arc of every study it reads, absent and low-quality "
                    "ones included): Benjamini-Hochberg (default) or the more conservative "
                    "Benjamini-Yekutieli, which holds under any dependence between tests. The adjusted "
@@ -286,7 +286,9 @@ EDGE_ATTRIBUTES = {
                       "another k",
     "status": "present, absent (below the absence threshold), or empty when undetermined (a single "
               "replicate or a low-quality edge)",
-    "p_value": "Welch's t-test on the per-replicate log2 values, unadjusted",
+    "p_value": "the unadjusted p-value of the test the derivation ran, which the network's "
+               "meta.statistics names: Welch's two-sided t-test on the per-replicate log2 values for the "
+               "specified comparison of replicate sets",
     "q_value": "that p-value corrected for multiple testing over every comparison of the search, the q "
                "on the page (see How an interaction is decided)",
     "significance": "-log10 of the q-value: larger is stronger evidence, 0 at q = 1, and a style can map "
@@ -727,8 +729,12 @@ replicates.</p>
 (the absence threshold, default 1: the mean plus or minus its sd stays on one side of zero), and absent
 otherwise. It is undetermined when one side has a single replicate, since there is then no spread; it is
 obligate or abolished when the target did not grow on one side, since there is then no finite ratio.</p>
-<p><strong>The p-value.</strong> Every arc with at least two replicates on each side is tested with Welch's
-two-sided t-test on the per-replicate log2 values (<code>p_value</code>). The p-values are adjusted for
+<p><strong>The p-value.</strong> Every arc with at least two replicates on each side is tested
+(<code>p_value</code>). Which test depends on the derivation and the network says so in its
+<code>meta.statistics</code>: the comparison of replicate sets runs Welch's two-sided t-test on the
+per-replicate log2 values, and the integrated form, which compares no sets, tests its fitted log2
+strength against no effect over a standard error carrying both the co-culture replicates and the
+monoculture stage. The p-values are adjusted for
 multiple testing over every comparison one search tests: every arc of every study the search reads,
 absent and low-quality ones included, with Benjamini-Hochberg by default or Benjamini-Yekutieli
 (Multiple testing correction). The result is the <strong>adjusted p-value, which is what a q-value is</strong>:

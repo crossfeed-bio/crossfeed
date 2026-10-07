@@ -543,7 +543,8 @@ set without growth is zero from its first time point, so no growth cannot be tol
 counts below detection. Such an edge keeps its `status` and is exported. With `--max-adjusted-p`, an arc
 with no p-value carries `untested`: the filter kept it without judging it.
 `notes` inform without disqualifying, for example a replicate left out for an implausible spike. Every
-comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2 values:
+comparison with at least two replicates per side is also tested, with the test its derivation runs and
+`meta.statistics` names (Welch's t-test on the per-replicate log2 values for the specified comparison):
 `p_value` is the raw value, `q_value` the adjusted one (Benjamini-Hochberg by default,
 Benjamini-Yekutieli with `--correction by`) across all comparisons tested in the derivation: one study
 with `derive STUDY`, every study a search reads with `--species`, `--all` or the page, absent and
@@ -658,8 +659,11 @@ implausible spike. Low-quality edges are computed and then hidden at output, wit
 to show them; `meta.hidden` says how many were left out, so a network file never quietly under-reports.
 Single-replicate edges are the exception: they are shown, flagged, and marked by the Cytoscape style.
 
-Each comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2
-values, reported as `p_value`, as `q_value` (the correction over every comparison tested in the
+Each comparison with at least two replicates per side is also tested, with the test its derivation runs
+and `meta.statistics` names: Welch's t-test on the per-replicate log2 values for the specified comparison,
+and for the integrated form, which compares no sets, its fitted log2 strength against no effect over a
+standard error carrying both the co-culture replicates and the monoculture stage. It is reported as
+`p_value`, as `q_value` (the correction over every comparison tested in the
 derivation, Benjamini-Hochberg by default, in `meta.statistics`) and as `significance`, which is
 `-log10(q_value)`. The test supports an edge when significant and decides nothing unless
 `--max-adjusted-p` is given: with two or three replicates a real

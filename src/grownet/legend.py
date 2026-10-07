@@ -72,8 +72,9 @@ NOTES = [
                            "set was emptied by exclusions. Both are reported with a reason instead."),
     ("neutral", "a log2 mean of exactly zero: no direction, and always absent. There is no neutral edge in "
                 "the sense of a weak one."),
-    ("Support, not decision", "each edge carries Welch's t-test corrected for multiple testing. Presence "
-                              "follows the threshold k, never the test."),
+    ("Support, not decision", "each edge carries the test its derivation ran, corrected for multiple "
+                              "testing; the network's meta.statistics names it. Presence follows the "
+                              "threshold k, never the test."),
 ]
 
 

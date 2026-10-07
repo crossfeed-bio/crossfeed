@@ -230,7 +230,7 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   zero; 0 marks only a mean of exactly zero absent</span></div>
 <div class="row"><label>Multiple testing correction
   <select name="correction">{corrections}</select></label>
-  <span class="muted">how the p-values of Welch's t-test are adjusted: Benjamini-Hochberg (default) or the
+  <span class="muted">how the p-values of the test the derivation ran are adjusted: Benjamini-Hochberg (default) or the
   more conservative Benjamini-Yekutieli. The adjustment runs across every comparison of this search
   together: all arcs of all the studies it reads, absent and low-quality ones included, not study by study.
   So an arc's q-value can change with the other studies a search reads (All reads every
@@ -916,13 +916,16 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # with "only the species entered", only what can give an interaction between them is read (identical
     # networks, checked against reading everything); read it all first, a few requests at a time
     narrowed = keep if (only_entered and narrow) else None
+    # one instance for the whole search, so the network's statistics and the arcs come from the same
+    # derivation rather than from a fresh object per study
+    deriver = chosen_deriver(s, client)
     from .fetch import prefetch_studies
     prefetch_studies(client, studies, s["include_non_batch"], progress=lambda d, t, m: say(d, t, m),
                      keep=narrowed, dropout=s["include_dropout"])
     for i, study_id in enumerate(studies):
         say(i, len(studies), f"Reading {study_id} ({i + 1} of {len(studies)})")
         try:
-            recs, skips = derive_interactions(client, study_id, deriver=chosen_deriver(s, client),
+            recs, skips = derive_interactions(client, study_id, deriver=deriver,
                                               metric=metric_name(s),
                                               spike_factor=s["spike_factor"], dropout=s["include_dropout"],
                                               include_non_batch=s["include_non_batch"],
@@ -952,10 +955,12 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         errors.append(f"{len(failed)} replicate(s) or growth curve(s) could not be read from mGrowthDB "
                       f"(for example {failed[0][0]}: {failed[0][1]}); the result is incomplete, so run the "
                       "search again")
+    # the derivation that made these records says what it tests and what is provisional in it: the words
+    # used to be the specified comparison's whatever had derived the network (#142 item 5)
     kept, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"],
                               s["no_growth_alpha"], s["no_growth_factor"], s["merge_arcs"], s["min_studies"],
                               s["merge_genera"], support_level(names), s["max_adjusted_p"],
-                              s["include_absent"])
+                              s["include_absent"], deriver=deriver)
     # output_meta sets each record's status in place, so the arcs it left out below the threshold are still
     # here to show in their own section: the page reports them, the file holds what the page counts
     absent_records = [] if s["include_absent"] else [r for r in records if r.get("status") == ABSENT]

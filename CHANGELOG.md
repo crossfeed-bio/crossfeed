@@ -31,6 +31,23 @@ content.
   always the solution of `A x = -r` and the reader had to work it out.
 
 ### Changed
+- **A network says what test its own derivation ran, not what the specified comparison runs** (#142
+  items 5 and 11). `meta.statistics` and `meta.provisional` were module constants copied into every
+  network, so a file derived by the integrated form claimed Welch's two-sided t-test on per-replicate
+  log2 values and a comparison of replicate sets, neither of which that form does, and the claim
+  traveled into the JSON, GraphML, the Cytoscape legend, the page, the report and the daily artifact. A
+  derivation now states both, as it already states its `name` and its `method`, and `output_meta` reads
+  them from the derivation that made the records. The ten other places a reader meets the claim say which
+  derivation runs Welch: the arc glossary, the help's statistics section, the correction setting on the
+  page and the command line, the Cytoscape legend, `model.py`'s own documentation of `p_value`, the
+  standalone viewer and the README. `checks/claims_check.py` holds it as a retired claim, so text that
+  says an edge carries Welch's test without naming the derivation fails the build.
+  **And the reason it survived twelve commits is fixed too:** every page, command-line, report, export and
+  threshold test asked for `derivation=replicate`, because the double they share measures two points per
+  set, so the derivation that produces the daily artifact and every default user's file was covered end to
+  end nowhere. `tests/test_default_end_to_end.py` serves simulated gLV time courses, runs the page's own
+  `run_query` with nothing overridden, and asserts both halves: the search gives arcs, and the report, the
+  page, the GraphML and `meta` all describe the derivation that made them.
 - **A fitted rate, plateau and diagonal are the median of every row behind them, not the first one**
   (#142 item 4). `integrated.fitted_rates` kept the first row it met per organism, so an organism's rate,
   the plateau its fit implies, the diagonal `-r/K`, the printed equilibrium and the chemostat prediction

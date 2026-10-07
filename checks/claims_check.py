@@ -64,6 +64,18 @@ RETIRED_CLAIMS = [
         "--include-neutral. Corrected 2026-09-21 (Karoline): a neutral edge is a contradiction; a comparison "
         "below the absence threshold k is the absence of an edge, exported with status absent.",
     ),
+    (
+        # an edge or a comparison asserted to carry Welch's test, said of networks in general. Narrow on
+        # purpose: a historical note that says "a paired test instead of Welch" is not this claim.
+        re.compile(r"(?:carries|carry|gets|get|is tested with|are tested with|tested with)\s+Welch", re.I),
+        re.compile(r"specified comparison|replicate sets|meta\.statistics|its derivation|the derivation "
+                   r"ran|which test|integrated form", re.I),
+        "every network said in meta.statistics that it ran Welch's t-test on per-replicate log2 values, "
+        "which is the specified comparison's test; the integrated form, the default since 2026-10-06, "
+        "compares no replicate sets and runs a different test. Corrected 2026-10-07 (#142 item 5): a "
+        "derivation states its own statistics and provisional note, and text that mentions Welch has to "
+        "say which derivation runs it.",
+    ),
 ]
 
 

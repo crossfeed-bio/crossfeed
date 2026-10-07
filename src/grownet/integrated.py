@@ -686,6 +686,27 @@ class IntegratedDeriver:
     name = "integrated-v1"
     method = METHOD
     needs_client = True
+    # this form runs no Welch test and compares no replicate sets, so it says what it does run (#142
+    # item 5). The t statistic is the one `_arc_statistics` builds: the mean of the per-replicate log2
+    # strengths over a standard error that carries the co-culture replicates and the monoculture stage.
+    statistics = {
+        "test": "two-sided t-test of the fitted log2 strength against no effect, over a standard error "
+                "with two components: the co-culture replicates, and the monoculture stage resampled "
+                "over its own replicates (Satterthwaite degrees of freedom)",
+        "correction": "{name} over every comparison tested in this derivation",
+        "role": "reported as support for an edge; presence is decided by the absence threshold",
+    }
+    provisional = (
+        "Each interaction is a coefficient of a generalized Lotka-Volterra row, fitted from the whole "
+        "measured time course: the organism's own rate and self-limitation from its monocultures under "
+        "the same conditions, then its partners' effects from the co-cultures. The strength reported "
+        "beside it is log2(1 + A_ij x_j / r_i), the same quantity the replicate-set comparison measures, "
+        "so the two derivations can be read together. An interaction is reported when |mean| is at least "
+        "k standard deviations (the absence threshold, default 1), where the dispersion carries both the "
+        "co-culture replicates and the monoculture stage. The t-test, corrected for multiple testing, is "
+        "shown as supporting evidence and does not decide; with few replicates, more experiments may "
+        "change any of these results (see docs/METHOD_NOTES.md in the grownet repository)."
+    )
 
     def __init__(self, client=None, spike_factor: float = None, max_condition: float = MAX_CONDITION,
                  include_non_batch: bool = False, **_ignored):

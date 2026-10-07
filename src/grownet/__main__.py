@@ -151,7 +151,9 @@ def _derive(a):
             records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold,
                                          a.no_growth_alpha, a.no_growth_factor, a.merge_arcs, a.min_studies,
                                          a.merge_genera, max_adjusted_p=a.max_adjusted_p,
-                                         include_absent=a.include_absent)
+                                         include_absent=a.include_absent,
+                                         # the derivation says what it tests (#142 item 5)
+                                         deriver=deriver)
             extra["settings"] = {"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
                                  "derivation": a.derivation,
                                  "merge_arcs": a.merge_arcs, "min_studies": a.min_studies,
@@ -546,9 +548,10 @@ def build_parser() -> argparse.ArgumentParser:
                                "its effect is small against its spread, |log2 mean| < K * sd; default 1, the "
                                "mean plus or minus sd crossing zero; 0 marks only a mean of exactly zero absent")
     settings.add_argument("--correction", choices=["bh", "by"], default="bh",
-                          help="multiple testing correction of the reported p-values (Welch's t-test on the "
-                               "per-replicate log2 values), over every comparison one derivation tests: bh "
-                               "(Benjamini-Hochberg, default) or by (Benjamini-Yekutieli)")
+                          help="multiple testing correction of the reported p-values, whichever test the "
+                               "derivation ran (the network's meta.statistics names it), over every "
+                               "comparison one derivation tests: bh (Benjamini-Hochberg, default) or by "
+                               "(Benjamini-Yekutieli)")
     settings.add_argument("--max-adjusted-p", type=_probability, default=None, metavar="Q",
                           help="also leave out interactions whose adjusted p-value is above Q (for example "
                                "0.05); arcs without a p-value are kept, marked untested. Off by default: with "
