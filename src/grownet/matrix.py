@@ -313,6 +313,30 @@ OFF_DIAGONAL = {
     ],
 }
 
+# The two assumptions of the generalized Lotka-Volterra form itself, which no amount of care in the
+# fitting removes (Karoline, 2026-10-07: "let's add some caveats about the assumptions of gLV, especially
+# the higher-order interactions and constant interaction coefficients. In batch, the medium changes, so
+# the environment changes, and with it the species interactions"). They belong beside the parameters
+# rather than only in the help, because the zip and the R object travel without the page.
+MODEL_ASSUMPTIONS = (
+    "  EVERY COEFFICIENT IS CONSTANT IN TIME. One number stands for the effect of j on i over the whole",
+    "      run. In a batch culture the medium is consumed, the pH moves and metabolites accumulate, so a",
+    "      pair that competes for a resource while it is plentiful can cross-feed on what is left once it",
+    "      is gone: the effect can change in size and in sign along the growth curve. A cell here is the",
+    "      average that best described the interval that was fitted, not a property of the pair. Each arc",
+    "      reports fit_window_share, the share of the measured course its rows cover, and carries the",
+    "      window_partial caution below a half; an effect that appears only in late stationary phase is",
+    "      outside that window rather than averaged into it.",
+    "  INTERACTIONS ARE PAIRWISE AND ADD UP. The effect of j on i is the same whoever else is present,",
+    "      and a community is the sum of its pairs. A higher-order interaction, where a third organism",
+    "      changes how the first two affect each other, has no term in this model and cannot be fitted",
+    "      into one. Every cell here was measured between two organisms and is carried into a simulation",
+    "      of any community as though it still held there.",
+    "  So read a simulation against the measurement it came from rather than against itself, and treat",
+    "      these numbers as a description of the organisms under the conditions that were fitted. The",
+    "      medium travels with every arc and with every carrying capacity for that reason.",
+)
+
 CAVEAT_COEFFICIENTS = {
     "replicate": ("every cell is a fitted per-capita coefficient: the diagonal is -r_i / K_i "
                   "and an off-diagonal cell is (r_with - r_without) / x_j, so nothing here is "
@@ -934,6 +958,9 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         *_dropout_lines(net),
         *_rate_method_lines(got),
         "",
+        "WHAT THIS MODEL ASSUMES",
+        *MODEL_ASSUMPTIONS,
+        "",
         "MATRICES",
     ]
     for block in got["matrices"]:
@@ -1105,6 +1132,20 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
             "coefficients": CAVEAT_COEFFICIENTS[derivation_of(net)],
             "derivation": derivation_of(net),
             "diagonal": "fitted: -r_i / K_i, with K_i the organism's own plateau",
+            # the assumptions of the form itself, so the R object and any other consumer carry them too
+            "model_assumptions": {
+                "constant_coefficients": (
+                    "every coefficient is constant in time. In batch culture the medium is consumed and "
+                    "metabolites accumulate, so the effect one organism has on another can change in "
+                    "size and in sign along the growth curve; a cell is the average over the interval "
+                    "that was fitted, and each arc's fit_window_share says what share of the measured "
+                    "course that interval covers"),
+                "pairwise_only": (
+                    "interactions are pairwise and add up: the effect of j on i is taken to be the same "
+                    "whoever else is present. A higher-order interaction, where a third organism changes "
+                    "how the first two affect each other, has no term in this model, and every cell here "
+                    "was measured between two organisms"),
+            },
             "units": ("one matrix per abundance unit: abundances are never converted between units, since "
                       "a cell mass conversion would have to be invented, and no effect between organisms "
                       "counted differently was measured"),

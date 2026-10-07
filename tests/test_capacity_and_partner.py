@@ -439,3 +439,14 @@ def test_the_report_calls_the_q_value_the_adjusted_p_and_names_significance_sepa
     assert "significance -log10(q) 2.17" in text
     # and the old rendering, which read as a p-value above 1, is gone
     assert "adjusted p 2.17" not in text
+
+
+def test_the_package_states_what_the_model_assumes_in_the_readme_and_as_data():
+    """Karoline, 2026-10-07: the gLV assumptions belong with the parameters, since the zip and the R
+    object travel without the page."""
+    from grownet import matrix
+
+    assert any("CONSTANT IN TIME" in line for line in matrix.MODEL_ASSUMPTIONS)
+    assert any("PAIRWISE AND ADD UP" in line for line in matrix.MODEL_ASSUMPTIONS)
+    text = " ".join(matrix.MODEL_ASSUMPTIONS)
+    assert "higher-order interaction" in text and "fit_window_share" in text

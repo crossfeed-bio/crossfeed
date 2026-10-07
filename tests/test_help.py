@@ -346,3 +346,30 @@ def test_the_glv_example_section_gives_every_step_of_running_it_in_miasim():
     assert "measured peaks" in section and "rate_mismatch_to_zero" in section
     # and that the numbers are of the database as it is, not a promise
     assert "mGrowthDB changes" in section
+
+
+def test_the_help_states_what_a_glv_model_assumes():
+    """Karoline, 2026-10-07: "let's add some caveats about the assumptions of gLV, especially the
+    higher-order interactions and constant interaction coefficients. In batch, the medium changes, so the
+    environment changes, and with it the species interactions."
+
+    These are properties of the form, not defects in the fit, so they are stated as such and in the two
+    places a reader meets the parameters: the page and the package the download carries.
+    """
+    import re
+
+    page = gui.render_help("tok")
+    section = page[page.index('<h2 id="glv-assumptions">'):]
+    section = section[:section.index("<h2 ", 10)]
+    section = re.sub(r"\s+", " ", section)      # the prose wraps, so the phrases below span line breaks
+    assert "constant in time" in section
+    assert "change in size and in sign along the growth curve" in section
+    assert "Higher-order interactions" in section and "third organism" in section
+    # the batch argument, in her terms: the medium changes, so the environment does
+    for phrase in ("medium is consumed", "metabolites accumulate", "late stationary phase"):
+        assert phrase in section, phrase
+    # tied to the fields that say how much of the course a coefficient rests on
+    assert "fit_window_share" in section and "window_partial" in section
+    # and it is in the table of contents, so a reader meets it before the walkthrough
+    assert 'href="#glv-assumptions"' in page
+    assert page.index('href="#glv-assumptions"') < page.index('href="#glv-walkthrough"')

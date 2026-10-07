@@ -568,6 +568,7 @@ SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"), ("mea
             ("example", "Try the example"), ("reading", "Reading the result"),
             ("statistics", "How an interaction is decided"),
             ("glv", "The matrix, the growth rates and gLV"),
+            ("glv-assumptions", "What a gLV model assumes"),
             ("glv-walkthrough", "The gLV example, step by step"),
             ("settings", "Advanced settings"), ("attributes", "Arc and node attributes"),
             ("decisions", "Why it works this way"), ("cli", "The command line"),
@@ -969,6 +970,36 @@ the same parameters instead.</p>
 <code>glv_readme()</code> prints grownet's own README, and <code>glv_write()</code> saves the three files
 the download holds. When a port cannot be opened, <code>grownet_glv(url)</code> reads the same parameters
 from the address the page shows under its gLV control.</p>
+
+<h2 id="glv-assumptions">What a gLV model assumes</h2>
+<p>The parameters above are fitted from the curves and say what they rest on, and the model they are
+fitted to still makes two assumptions that growth data in batch culture does not satisfy. Neither is a defect in the fit;
+both are properties of the generalized Lotka-Volterra form itself, and both matter when a simulation is
+read as a prediction rather than as a summary of what was measured.</p>
+<p><strong>Every coefficient is constant in time.</strong> One number stands for the effect of j on i for
+the whole run. In a batch culture nothing about the environment is constant: the medium is consumed, the
+pH moves, metabolites accumulate, and a pair that competes for a resource while it is plentiful can
+cross-feed on what is left once it is gone. The effect one organism has on another can therefore change
+in size and in sign along the growth curve, and a single coefficient is the average that best described
+the interval that was fitted, not a property of the pair. {NAME} does not model that change; it says what
+it fitted and over what. Each arc reports the share of the measured course its rows cover
+(<code>fit_window_share</code>) and carries the <code>window_partial</code> caution when that is under a
+half, because the model has no death term and the rows stop at the end of the plateau after the maximum.
+An effect that appears only in late stationary phase is outside the window, not averaged into it.</p>
+<p><strong>Interactions are pairwise and add up.</strong> The effect of j on i is the same whoever else is
+in the vessel, and a community's dynamics are the sum of its pairs. Higher-order interactions, where a
+third organism changes how the first two affect each other, have no term in this model and cannot be
+fitted into one. {NAME} derives each arc from a pair, so a coefficient measured between two organisms is
+carried into a simulation of any community as though it still held there. Where that is the question you
+care about, a pairwise model is the wrong instrument rather than a model to be tuned.</p>
+<p><strong>What to do about it.</strong> Read a simulation against the measurement it came from, as the
+walkthrough below does, rather than against itself. Treat the coefficients as a description of the
+organisms under the conditions that were fitted, and say which conditions those were: the medium travels
+with every arc and with the carrying capacity for exactly this reason. Where it matters whether an
+interaction is stable at all, the design that answers it is to run the same pair under more than one
+environment and for long enough to reach late stationary phase, and to compare how the partner changes
+the late abundances in each. That is a question about the organisms, not about the parameters, and it is
+outside what {NAME} sets out to do: growth curves in, network out.</p>
 
 <h2 id="glv-walkthrough">The gLV example, step by step</h2>
 <p><strong>gLV example</strong> beside All fills both boxes and the one setting a package cannot be built

@@ -142,6 +142,17 @@ content.
   of a derivation that takes a median of medians.
 
 ### Added
+- **What a gLV model assumes, stated where a reader meets the parameters** (Karoline, 2026-10-07). Two
+  assumptions belong to the form rather than to the fit: every coefficient is constant in time, which a
+  batch culture does not satisfy because the medium is consumed and metabolites accumulate, so an effect
+  can change in size and in sign along the growth curve; and interactions are pairwise and add up, so a
+  higher-order interaction, where a third organism changes how the first two affect each other, has no
+  term in the model. The help has a section of its own, "What a gLV model assumes", ahead of the
+  walkthrough; the package README has "WHAT THIS MODEL ASSUMES"; and the payload carries both as data
+  under `caveats.model_assumptions`, so the zip and the R object say it without the page. Modeling a
+  coefficient that varies with time or with the community stays out of scope; `docs/METHOD_NOTES.md`
+  records the design that answers it instead.
+
 - **Every fitted arc now says how large a rate mismatch would explain it away, and how much of the course
   it rests on** (Karoline, 2026-10-07). The monoculture rate is held fixed while the partners are fitted,
   so the arc is the only parameter left to absorb a difference between the rate an organism had alone and

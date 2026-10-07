@@ -1,5 +1,34 @@
 # Derivation method: settings and agreed defaults
 
+## What the gLV form assumes, and what grownet does not model
+
+Recorded 2026-10-07 (Karoline): "let's add some caveats about the assumptions of gLV, especially the
+higher-order interactions and constant interaction coefficients. In batch, the medium changes, so the
+environment changes, and with it the species interactions. For study 2, we let it run for 120h with and
+without mucin to see how late-stationary abundances are impacted by the partner. That is beyond the scope
+for 0.3.0, but good for users to know in general."
+
+Two assumptions belong to the generalized Lotka-Volterra form itself and are not removed by fitting it
+carefully:
+
+- **Every coefficient is constant in time.** In batch culture the medium is consumed, the pH moves and
+  metabolites accumulate, so a pair that competes for a resource while it is plentiful can cross-feed on
+  what is left once it is gone. The effect can change in size and in sign along the curve, and a fitted
+  cell is the average over the interval it was fitted in. grownet says what that interval was:
+  `fit_window_share` per arc, and the `window_partial` caution below a half.
+- **Interactions are pairwise and add up.** The effect of j on i is taken to be the same whoever else is
+  present. A higher-order interaction, where a third organism changes how the first two affect each other,
+  has no term in the model, and every coefficient grownet fits was measured between two organisms.
+
+**What a design can answer that a parameter cannot.** SMGDB00000002 runs *Bacteroides thetaiotaomicron*
+and *Roseburia intestinalis* for 120 hours in Wilkins-Chalgren, as monocultures and as a co-culture, each
+arm with and without mucin beads: six experiments, two environments, long enough to reach late stationary
+phase. Comparing how the partner changes the late abundances in each environment is how one finds out
+whether an interaction is stable at all. That is a question about the organisms rather than about the
+parameters, and modeling a coefficient that varies with time or with the community is **out of scope**
+(the scope rule of 2026-10-06: growth curves in, network out). Documenting the assumption is in scope, and
+it is in the help, in the package README and in the payload's `caveats.model_assumptions`.
+
 mGrowthDB serves growth curves, not interactions. Turning growth into a directed, condition-specific
 interaction is a scientific choice, and it belongs to the collaboration (K. Faust, H. Zafeiropoulos), not
 to this code.
