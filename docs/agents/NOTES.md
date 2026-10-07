@@ -204,6 +204,31 @@ Rules for this file:
 
 ## Decisions
 
+- 2026-10-07 (Karoline), **a carrying capacity and the cells beside it must share a medium**, which closes
+  open decision 3 of #141: "capacity merge by medium is a good idea. in addition, we can do the stricter
+  test that foodnet does; medium matches but contradicting extras, such as acetic acid or mucin, do not
+  count as matching medium." So the capacity merge is keyed by medium, and medium identity comes from
+  foodnet's `media.identity`: the compartments' names normalized (case, punctuation and a parenthesized
+  abbreviation removed), plus every alteration the experiment's description states, plus the atmosphere
+  where it is recorded. Measured on the live database (2026-10-07): the names alone give 15 media over the
+  559 experiments and the strict rule gives 60, which is what makes an organism's monocultures poolable
+  only within one chemistry.
+  **One adaptation grownet needs.** foodnet also reads `+X` and `-X` in an experiment's *name*, which its
+  own module says is safe because foodnet reads monocultures. grownet reads co-cultures, where those forms
+  name community members: `At+Ct`, `At+Ms`, `Ct+Ms` in SMGDB00000013 and `LB+STneg`, `LB+STpos` in
+  SMGDB00000006. With foodnet's name patterns on, those two studies split into 4 and 3 media that do not
+  exist; with the description patterns only they are one medium each, and every real split (SMGDB00000014,
+  25, 26, 19, 15, 4, 2) survives. So grownet takes the description patterns and leaves the name patterns
+  out.
+  This also decides `same_medium` in `steady.py`, which keeps the chemostat validation honest: keying
+  replaces the subset rule, and with it the composite bug of #142 item 13. Measured consequence on the
+  live names: of the 7 pairs the subset rule calls the same medium, keying keeps the one that matters
+  (SMGDB00000009 and 16's "Wilkins-Chalgren Anaerobe Broth" against SMGDB00000002, 7 and 11's
+  "...Anaerobe Broth (WC)") and drops 6 -- the three composite matches, which were wrong, and three
+  against the bare short name "Wilkins-Chalgren". The one real loss is SMGDB00000001, whose chemostat is
+  recorded in "Wilkins-Chalgren An**e**robe Broth (WC)" and now matches nothing; that is the misspelling,
+  and a one-entry alias table is the only thing that recovers it (Craig recommends against widening the
+  matching, and Karoline has not been asked for an alias table).
 - 2026-10-06 (Karoline), **scope**: "grownet's core philosophy is growth curves in, network out. We're not
   feeding MDSINE2, it's the job of a dedicated converter." In AGENTS.md as a standing instruction. It
   closed open decision 39 (an arc fitted inside a community of three or more) and declined an export of
