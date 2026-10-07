@@ -124,3 +124,31 @@ def test_the_viewer_writes_the_same_graphml_as_the_command_line(tmp_path):
                       for d in el.findall(ns + "data"))
         return keys, data
     assert content(ours) == content(to_graphml(net))
+
+
+def test_the_viewer_accepts_every_network_the_tool_writes():
+    """gui/index.html once rejected every file grownet writes: its guard tested the schema id against
+    `crossfeed.interaction_network` after the rename, so "unexpected schema" came out of a file the tool
+    had just produced (found 2026-10-06, fixed on #141). Nothing pinned the guard, so this runs the line
+    itself with Node against every id a reader may meet, including the gLV payload's, which belongs to the
+    other download and must still be refused."""
+    import json
+    import re
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    import pytest
+
+    from grownet.model import KNOWN_SCHEMAS
+    if not shutil.which("node"):
+        pytest.skip("node is not installed")
+    page = (Path(__file__).resolve().parents[1] / "gui" / "index.html").read_text(encoding="utf-8")
+    guard = re.search(r"^.*unexpected schema.*$", page, re.M).group(0).strip()
+    accept = [*KNOWN_SCHEMAS, "crossfeed.interaction_network/v0"]   # the id before the rename stays valid
+    refuse = ["grownet.glv/v1", "grownet.all_result/v1", "other/v1"]
+    js = ("function check(s){const d={schema:s};try{" + guard + "return 'yes';}catch(e){return 'no';}}"
+          "console.log(JSON.stringify(" + json.dumps(accept + refuse) + ".map(check)));")
+    got = json.loads(subprocess.run(["node", "-e", js], capture_output=True, text=True,
+                                    check=True).stdout)
+    assert got == ["yes"] * len(accept) + ["no"] * len(refuse)
