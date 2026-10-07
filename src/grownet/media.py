@@ -112,6 +112,12 @@ def _clean(text: str) -> tuple:
     return amount, " ".join(words)
 
 
+# A stated amount of zero: "0%", "0.0 %", "0 mM". Not "0.1%", whose first character is also a zero.
+_NOTHING = re.compile(r"^0(?![.\d])")
+# the same, for a token already in a label: "+0% linoleic acid"
+_NOTHING_IN_LABEL = re.compile(r"^[+-]\s*0(?![.\d])")
+
+
 def _tokens(sign: str, match) -> set:
     found = set()
     groups = match.groupdict()
@@ -122,6 +128,12 @@ def _tokens(sign: str, match) -> set:
             # an amount is part of the medium: 0.1 and 0.75 percent linoleic acid are two media
             # (SMGDB00000014), as are 0.1 and 3.0 mg/L pantothenate (SMGDB00000019)
             dose = own or (amount if i == 0 else "")
+            # an amount of ZERO is the control, so nothing was added and the medium is the plain one.
+            # SMGDB00000014 states its no-fatty-acid arms as "0% linoleic acid" and "0% oleic acid", and
+            # reading them as additions made two media that do not exist: neither was plain minimal
+            # medium and neither matched the other, though both are the same plain medium (#155 item 3)
+            if dose and _NOTHING.match(dose):
+                continue
             found.add(sign + (f"{dose} " if dose else "") + name)
     return found
 
@@ -233,7 +245,12 @@ def key_from_label_with_aliases(label: str) -> tuple:
     changed: tuple = ()
     found = re.search(r"\s\(([+-][^()]*)\)$", text)
     if found:
-        changed = tuple(part for part in (p.strip() for p in found.group(1).split(",")) if len(part) > 1)
+        # the same rule `_tokens` applies when the label is built: an amount of zero is the control, so
+        # nothing was added. A label written before that rule carries "+0% linoleic acid", and reading it
+        # as an alteration would make an older network's arcs disagree with a freshly derived plain
+        # medium (#155 item 3)
+        changed = tuple(part for part in (p.strip() for p in found.group(1).split(","))
+                        if len(part) > 1 and not _NOTHING_IN_LABEL.match(part))
         text = text[:found.start()]
     names, used = [], []
     for part in text.split(";"):

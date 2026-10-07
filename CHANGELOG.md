@@ -120,6 +120,19 @@ content.
   removed compound makes another environment.
 
 ### Fixed
+- **A stated amount of zero was read as something added** (#155 item 3). SMGDB00000014 states its
+  no-fatty-acid arms as "0% linoleic acid" and "0% oleic acid", and the amount pattern matched the stated
+  zero, so each became a medium with a compound added at zero: two media that do not exist. Neither was
+  plain minimal medium and neither matched the other, though all three are the same plain medium. An
+  addition now needs an amount above zero, in `media.alterations` and in `key_from_label`, which reverses
+  the label it writes, so a network derived before the rule reads as the plain medium rather than
+  disagreeing with a freshly derived one. SMGDB00000014 holds 11 media instead of 12, and the four
+  experiments of the two phantom arms join plain minimal medium.
+  **This changes no number in today's corpus**: the growth rates and all three interaction matrices of
+  the live All package are byte-identical before and after, and SMGDB00000014's three arcs are unchanged.
+  The item recorded an 18.4-fold change to *A. tumefaciens*'s carrying capacity, which was true when it
+  was written and is not now: keying capacities by medium and the strict rule moved that capacity to
+  metalworking fluid, a medium these arms were never in.
 - **The `conditions_unverified` caution had silently stopped firing on drop-out arcs.** `_variants` keys
   by community and condition, and `_dropout` looked that key up with one element fewer than it was built
   with, so the lookup missed every time and defaulted to "one variant": two full communities told apart

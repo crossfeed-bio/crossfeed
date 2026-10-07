@@ -138,6 +138,49 @@ def test_one_amount_has_one_spelling():
         assert media.same_medium(_exp("E", one), _exp("E", other)), (one, other)
 
 
+def test_an_amount_of_zero_is_the_control_and_not_an_addition():
+    """SMGDB00000014's no-fatty-acid arms are stated as "0% linoleic acid" and "0% oleic acid", and the
+    amount pattern matched the stated zero, so each became a medium with a compound added at zero: two
+    media that do not exist. Neither was plain minimal medium and neither matched the other, though all
+    three are the same plain medium, and the capacity went to whichever of these fictions had the most
+    certified curves (#155 item 3).
+    """
+    plain = _exp("control", "At grown on a minimal medium")
+    zero_linoleic = _exp("0% LA", "At grown on a minimal medium with 0% linoleic acid")
+    zero_oleic = _exp("0% OA", "At grown on a minimal medium with 0.0% oleic acid")
+    for control in (zero_linoleic, zero_oleic):
+        assert media.alterations(control) == ()
+        assert media.same_medium(plain, control), control["name"]
+    assert media.same_medium(zero_linoleic, zero_oleic)
+
+    # and a real amount is still an addition, including one whose first character is a zero
+    some = _exp("0.1% LA", "At grown on a minimal medium with 0.1% linoleic acid")
+    assert media.alterations(some) == ("+0.1% linoleic acid",)
+    assert not media.same_medium(plain, some)
+    # a zero of one compound beside a real amount of another keeps only what was added
+    mixed = _exp("mixed", "minimal medium with 0% linoleic acid and 0.5% oleic acid")
+    assert media.alterations(mixed) == ("+0.5% oleic acid",)
+    # every unit, not only per cent
+    assert media.alterations(_exp("E", "WC + 0 mM acetate")) == ()
+    assert media.alterations(_exp("E", "WC + 10 mM acetate")) == ("+10mm acetate",)
+    # the label carries nothing either, so an arc records the plain medium it was measured in
+    assert media.identity(zero_linoleic)["label"] == media.identity(plain)["label"]
+
+
+def test_a_label_written_before_the_zero_rule_reads_as_the_plain_medium():
+    """`key_from_label` reverses `identity`'s label, so it has to apply the same rule. A network derived
+    before the rule carries "Minimal medium (MM) (+0% linoleic acid)", and reading that as an alteration
+    would make its arcs disagree with a freshly derived plain medium: the capacity would be keyed to one
+    and the arcs to the other (#155 item 3)."""
+    plain = media.key_from_label("Minimal medium (MM)")
+    assert media.key_from_label("Minimal medium (MM) (+0% linoleic acid)") == plain
+    assert media.key_from_label("Wilkins-Chalgren (-0 mM acetate)") == media.key_from_label("Wilkins-Chalgren")
+    # and a real amount in a label is still an alteration, including beside a zero
+    assert media.key_from_label("Minimal medium (MM) (+0.75% linoleic acid)") != plain
+    assert (media.key_from_label("Minimal medium (MM) (+0% linoleic acid, +0.5% oleic acid)")
+            == media.key_from_label("Minimal medium (MM) (+0.5% oleic acid)"))
+
+
 # ---- the atmosphere ------------------------------------------------------------------------------
 
 def test_a_recorded_atmosphere_splits_a_medium_and_an_unrecorded_one_joins_it():

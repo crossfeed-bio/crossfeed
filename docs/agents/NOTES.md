@@ -15,6 +15,18 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-07 (#155 item 3): **a zero amount is a control, not an addition.** "0% linoleic acid" was read
+  as a compound added at zero, so SMGDB00000014's two no-fatty-acid arms became two media that do not
+  exist, neither of them the plain medium and neither matching the other. Fixed in `_tokens` and in
+  `key_from_label`, which has to apply the same rule because it reverses the label `identity` writes:
+  otherwise a network derived before the rule keys to `+0%linoleicacid` and a fresh one to the plain
+  medium, and the capacity and the arcs of one study disagree.
+  **It changes nothing in today's output** and was still worth doing: the growth rates and all three
+  matrices of the live All package are byte-identical before and after. Item 3's recorded 18.4-fold
+  capacity change no longer applies, because items 2 and 13 moved that capacity to a medium these arms
+  were never in. A finding's measured consequence is only true of the tree it was measured on; re-measure
+  before quoting it.
+
 - 2026-10-07 (Karoline): **one function decides what counts as the same condition.** "The strict medium
   matching (exclusion of cases with modifications e.g. mucin addition) should be applied everywhere where
   medium matching is done." `derive.condition_key` is `(conditions(exp), media_identity(exp)["key"])` and
