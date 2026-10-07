@@ -1,0 +1,250 @@
+"""The quantities a gLV coefficient is made of (#118), on hand-built curves.
+
+Karoline's decision on #116: the gLV matrix stops using conventions, so `A_ii = -r_i / K_i` needs the
+monoculture carrying capacity, and `A_ij = r_i (2^L - 1) / x_j_star` needs the partner's abundance over
+the window the target's rate was fitted in ("the mean over the target's rate window"). Baranyi's lag comes
+with them, since the integrated form starts there and the rate estimators disagree without it.
+
+This task only adds fields: nothing an arc already said changes.
+"""
+import math
+
+import pytest
+from test_growth_rates import A, _client, _mono  # the fake mGrowthDB API of the rate tests
+
+from grownet import rates
+from grownet.derive import merge_rates, monoculture_rates, partner_abundance
+from grownet.growth import GrowthCurve, Replicate, mean_over
+
+START = math.log(1.0e6)      # the Baranyi model's y0: a culture starting at 1e6
+RISE = math.log(1.0e3)       # its d: a thousandfold rise to the plateau
+
+
+def _exponential(doubling=2.0, points=12, start=1.0e6, step=1.0, lag=0.0):
+    """A curve that sits at `start` through `lag` hours, then doubles every `doubling` hours."""
+    out = []
+    for k in range(points):
+        t = k * step
+        value = start if t <= lag else start * 2 ** ((t - lag) / doubling)
+        out.append((t, value))
+    return [t for t, _ in out], [v for _, v in out]
+
+
+def _curve(times, values, species="A", unit="Cells/mL"):
+    return GrowthCurve(species=species, times=times, values=values, time_unit="h", abundance_unit=unit)
+
+
+# ---- the fits expose what they already computed ----------------------------------------------------
+
+def test_the_rate_fit_says_which_window_it_used():
+    """`x_j_star` is an average over that window, so the window has to leave the fit."""
+    times, values = _exponential(doubling=2.0, points=14)
+    fit = rates.easylinear_fit(times, values)
+    assert fit["rate"] == pytest.approx(rates.easylinear(times, values))   # the old call is unchanged
+    assert fit["rate"] == pytest.approx(math.log(2) / 2, rel=1e-9)
+    assert fit["start"] < fit["end"]
+    assert fit["start"] >= times[0] and fit["end"] <= times[-1]
+    assert fit["points"] >= rates.DEFAULT_WINDOW
+
+
+def test_a_flat_curve_has_no_window_to_report():
+    times, values = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [1e6] * 7
+    fit = rates.easylinear_fit(times, values)
+    assert fit["rate"] <= 0 and fit["start"] is None and fit["end"] is None
+
+
+def _baranyi_curve(mu, lag, points=24, step=0.5, y0=START, d=RISE):
+    """A curve the Baranyi model itself generates, so the fit can be asked to recover known parameters."""
+    times = [k * step for k in range(points)]
+    return times, [math.exp(rates._baranyi(t, y0, mu, d, mu * lag)) for t in times]
+
+
+def test_the_baranyi_fit_reports_the_lag_it_fitted():
+    """Karoline, 2026-10-06: "what if Baranyi is used to determine r? It accounts for lag phase." The fit
+    already estimates h0 = mu * lag and threw the lag away; asked for known parameters, it returns them."""
+    times, values = _baranyi_curve(mu=0.35, lag=3.0)
+    fit = rates.baranyi_fit(times, values)
+    assert fit["rate"] == pytest.approx(rates.baranyi(times, values))      # the old call is unchanged
+    assert fit["rate"] == pytest.approx(0.35, rel=0.15)
+    assert fit["lag"] == pytest.approx(3.0, abs=0.75)                      # the lag is recovered
+    assert fit["r2"] > 0.95 and fit["start"] <= times[0] + 1e-9
+
+    no_lag = rates.baranyi_fit(*_baranyi_curve(mu=0.35, lag=0.0))
+    assert no_lag["lag"] == pytest.approx(0.0, abs=0.5)                    # and not invented
+
+
+# ---- the partner's abundance over a window ---------------------------------------------------------
+
+def test_the_mean_over_a_window_is_the_area_divided_by_its_length():
+    # a straight line from 2 to 6 over 4 hours has mean 4; taken over its middle two hours, mean 4 again
+    curve = _curve([0.0, 1.0, 2.0, 3.0, 4.0], [2.0, 3.0, 4.0, 5.0, 6.0])
+    assert mean_over(curve, 0.0, 4.0) == pytest.approx(4.0)
+    assert mean_over(curve, 1.0, 3.0) == pytest.approx(4.0)
+    # a window inside one interval interpolates rather than snapping to a measured point
+    assert mean_over(curve, 0.0, 1.0) == pytest.approx(2.5)
+    assert mean_over(curve, 3.5, 4.0) == pytest.approx(5.75)
+
+
+def test_a_window_outside_the_curve_has_no_mean():
+    curve = _curve([0.0, 1.0, 2.0], [2.0, 3.0, 4.0])
+    assert mean_over(curve, 5.0, 6.0) is None
+    assert mean_over(curve, 1.0, 1.0) is None            # no width, no average
+
+
+def test_the_partner_abundance_of_a_replicate_is_its_mean_over_the_targets_window():
+    """The number Karoline chose: the partner's average across the interval the target's rate came from."""
+    times, values = _exponential(doubling=2.0, points=14)
+    target = _curve(times, values, species="target")
+    partner = _curve(times, [5.0e8] * len(times), species="partner")     # flat, so its mean is 5e8 anywhere
+    rep = Replicate(curves=(target, partner))
+    got = partner_abundance(rep, "target", "partner")
+    assert got["value"] == pytest.approx(5.0e8)
+    assert got["unit"] == "Cells/mL"
+    assert got["window"][0] < got["window"][1]
+
+
+def test_a_partner_that_was_not_measured_gives_a_reason_not_a_number():
+    times, values = _exponential(points=14)
+    rep = Replicate(curves=(_curve(times, values, species="target"),))
+    got = partner_abundance(rep, "target", "partner")
+    assert got["value"] is None and "partner" in got["reason"]
+
+
+# ---- the carrying capacity, the lag and the method travel with the rate ----------------------------
+
+
+def _settles(plateau=1.0e8, start=1.0e6, points=12):
+    """A curve that doubles every hour up to `plateau` and then stays there, so stationary phase is
+    certified and the plateau is the carrying capacity. Hand computed: 1e6 doubling hourly reaches 1e8
+    after 6.64 h, and every later point repeats 1e8."""
+    out = []
+    for t in range(points):
+        out.append((float(t), min(plateau, start * 2 ** t), None))
+    return out
+
+
+def test_the_carrying_capacity_is_the_plateau_of_a_monoculture_that_reached_one():
+    """#116: "A_ii = -r_i / K_i", so K_i is the monoculture plateau, in the abundance unit it was
+    measured in. Two replicates plateau at 1e8 and 3e8, so the median of the two is 2e8."""
+    client = _client({(1, A): _settles(plateau=1.0e8), (2, A): _settles(plateau=3.0e8)})
+    found, skipped = monoculture_rates(client, [_mono("E1", A, [(1, "r1"), (2, "r2")])])
+    (entry,) = found.values()
+    assert entry["capacities"] == pytest.approx([1.0e8, 3.0e8])
+    assert entry["capacity_unit"] == "Cells/mL"       # the abundance unit, not the rate's 1/h
+    assert entry["method"] == "growth_rate:easylinear:5"
+    assert entry["capacity_left_out"] == [] and skipped == []
+    merged = merge_rates([("S1", found)])[next(iter(found))]
+    assert merged["capacity"] == pytest.approx(2.0e8) and merged["capacity_n"] == 2
+    assert merged["capacity_unit"] == "Cells/mL"
+    assert merged["capacity_per_study"]["S1"] == pytest.approx(2.0e8)
+
+
+def test_a_curve_still_growing_gives_a_rate_and_no_capacity_and_says_so():
+    """A plateau that was never measured is not a carrying capacity, and the rate is still good: the
+    exclusion is reported beside the capacity, not as a rate that was left out."""
+    times, values = _exponential(doubling=1.0, points=12)
+    client = _client({(1, A): [(t, v, None) for t, v in zip(times, values, strict=True)]})
+    found, skipped = monoculture_rates(client, [_mono("E1", A, [(1, "r1")])])
+    (entry,) = found.values()
+    assert entry["values"] and entry["capacities"] == []            # a rate, no capacity
+    assert skipped == []                                            # nothing about the rate was left out
+    (label, reason) = entry["capacity_left_out"][0]
+    assert "r1" in label and "had not reached stationary phase" in reason
+    merged = merge_rates([("S1", found)])[next(iter(found))]
+    assert merged["capacity"] is None and merged["capacity_n"] == 0
+    assert merged["capacity_left_out"] == entry["capacity_left_out"]
+
+
+def test_the_lag_comes_with_the_rate_when_the_method_fits_one():
+    """Karoline, 2026-10-06, folding the lag into this task: easylinear has no lag to report, and the
+    Baranyi fit has the one it already estimated. The curve lags 2 h and then doubles hourly."""
+    times, values = _baranyi_curve(mu=math.log(2), lag=2.0, points=20, step=0.5)
+    curve = [(t, v, None) for t, v in zip(times, values, strict=True)]
+    easylinear, _ = monoculture_rates(_client({(1, A): curve}), [_mono("E1", A, [(1, "r1")])])
+    assert next(iter(easylinear.values()))["lags"] == []
+
+    baranyi, _ = monoculture_rates(_client({(1, A): curve}), [_mono("E1", A, [(1, "r1")])],
+                                   rate_method="baranyi")
+    entry = next(iter(baranyi.values()))
+    assert entry["method"] == "growth_rate:baranyi"
+    assert entry["lags"][0] == pytest.approx(2.0, abs=0.5)
+    merged = merge_rates([("S1", entry and baranyi)])[next(iter(baranyi))]
+    assert merged["lag"] == pytest.approx(2.0, abs=0.5) and merged["lag_n"] == 1
+    assert merged["method"] == "growth_rate:baranyi"
+
+
+def test_capacities_in_another_abundance_unit_are_named_not_converted():
+    """The same rule the rates follow across time units, Karoline's "left out rather than converted"."""
+    cells = {"ncbi:1": {"name": A, "unit": "1/h", "values": [0.4], "replicates": ["r1"], "lags": [],
+                        "capacities": [1.0e8], "capacity_unit": "Cells/mL", "capacity_left_out": [],
+                        "method": "growth_rate:easylinear:5"}}
+    grams = {"ncbi:1": {"name": A, "unit": "1/h", "values": [0.4], "replicates": ["r1"], "lags": [],
+                        "capacities": [0.9], "capacity_unit": "g/L", "capacity_left_out": [],
+                        "method": "growth_rate:easylinear:5"}}
+    merged = merge_rates([("S1", cells), ("S2", grams)])["ncbi:1"]
+    assert merged["capacity"] == pytest.approx(1.0e8) and merged["capacity_unit"] == "Cells/mL"
+    assert merged["other_capacity_units"] == ["S2 (g/L)"]
+    assert merged["n"] == 2                       # the rates themselves are in one unit, so both count
+
+
+# ---- the partner's abundance reaches the arc ------------------------------------------------------
+
+def test_an_arc_carries_the_partners_abundance_over_the_targets_window():
+    """End to end: the number lands on the record, so a gLV coefficient can be built from a network.
+    The partner is flat at 5e8 cells/mL in both co-culture replicates, so its mean over any window is
+    5e8, and the median over the two replicates is 5e8 too."""
+    from test_growth_rates import B, _co
+    from test_growth_rates import _mono as _mono_exp
+
+    from grownet.derive import interactions_from_replicates
+
+    def curve(doubling, points=12, start=1.0e6):
+        return [(float(t), start * 2 ** (t / doubling), None) for t in range(points)]
+
+    flat = [(float(t), 5.0e8, None) for t in range(12)]
+    client = _client({(1, A): curve(2.0), (2, A): curve(2.0),          # A alone, two replicates
+                      (3, B): curve(2.0), (4, B): curve(2.0),          # B alone, two replicates
+                      (5, A): curve(1.0), (5, B): flat,                # A with B, faster with B
+                      (6, A): curve(1.0), (6, B): flat})
+    exps = [_mono_exp("E1", A, [(1, "r1"), (2, "r2")]), _mono_exp("E2", B, [(3, "r1"), (4, "r2")]),
+            _co("E3", A, B, [(5, "r1"), (6, "r2")])]
+    records, _ = interactions_from_replicates(client, {"id": "S1"}, exps, "S1", method="auc")
+    arc = next(r for r in records if r["target_name"] == A and r["source_name"] == B)
+    assert arc["partner_abundance"] == pytest.approx(5.0e8)
+    assert arc["partner_abundance_unit"] == "Cells/mL" and arc["partner_abundance_n"] == 2
+    assert arc["partner_abundance_left_out"] == []
+
+    # and through the network, so a saved file carries it (#119 reads it from there)
+    from grownet.mgrowthdb import records_to_network
+    edge = next(e for e in records_to_network(records).edges if e.target.startswith("faecalibacterium"))
+    assert edge.partner_abundance == pytest.approx(5.0e8) and edge.partner_abundance_unit == "Cells/mL"
+
+
+def test_the_glv_payload_and_the_package_carry_the_quantities_beside_each_rate():
+    """What travels to R and into the zip: the rate as before, and the three numbers beside it, so
+    nothing a reader would have seen in the report is missing on those routes (#118)."""
+    import csv
+    import io
+    import zipfile
+
+    from grownet import matrix
+    from grownet.mgrowthdb import records_to_network
+
+    net = records_to_network(
+        [{"source": "a", "target": "b", "source_name": "A", "target_name": "B", "effect": "facilitation",
+          "strength": 1.5, "status": "present", "outcome": "quantified", "study_id": "S1"}],
+        meta={"tool_version": "9.9.9", "absence": {"k": 1.0}})
+    rates_found = {"a": {"name": "A", "rate": 0.4, "unit": "1/h", "n": 3, "studies": ["S1"],
+                         "per_study": {"S1": 0.4}, "method": "growth_rate:baranyi", "lag": 1.5,
+                         "capacity": 2.5e8, "capacity_unit": "Cells/mL", "capacity_n": 3}}
+    detail, = matrix.glv_payload(net, rates_found)["growth_rate_detail"]
+    assert detail["rate"] == 0.4 and detail["method"] == "growth_rate:baranyi" and detail["lag"] == 1.5
+    assert detail["carrying_capacity"] == 2.5e8 and detail["carrying_capacity_unit"] == "Cells/mL"
+    assert detail["carrying_capacity_curves"] == 3
+
+    with zipfile.ZipFile(io.BytesIO(matrix.glv_package(net, rates_found))) as archive:
+        row, = list(csv.DictReader(io.StringIO(archive.read("growth_rates.csv").decode())))
+        assert row["carrying_capacity"] == "2.5e+08" and row["lag"] == "1.5"
+        assert row["method"] == "growth_rate:baranyi" and row["capacity_unit"] == "Cells/mL"
+        readme = archive.read("README.txt").decode()
+        assert "carrying capacity" in readme and "reported quantities, not applied to the" in readme

@@ -123,6 +123,11 @@ class Edge:
     experiments: tuple = ()       # ids of the experiments whose replicates the edge compares (its origin)
     cultivation_mode: str = ""    # batch, chemostat, and so on, as mGrowthDB records it
     medium: str = ""              # the growth medium the comparison ran in, as mGrowthDB names it (#113)
+    # The partner's abundance over the target's growth window, in the co-cultures this arc compares: the
+    # x_j* a gLV coefficient divides by (#118). None when the partner was not measured there.
+    partner_abundance: float | None = None
+    partner_abundance_unit: str = ""      # the abundance unit it was measured in, never converted
+    partner_abundance_n: int | None = None  # co-culture replicates behind the median
     merged_arcs: int | None = None  # arcs merged into this one (register item 14), None when not merged
     strength_range: tuple = ()    # (lowest, highest) log2 mean of the merged arcs
     supporting_pairs: int | None = None  # with genus merging: the distinct species (or strain) pairs behind it

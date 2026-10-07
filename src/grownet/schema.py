@@ -92,6 +92,9 @@ SCHEMA_DOC = {
                 "experiments": {"type": "array", "items": {"type": "string"}},
                 "cultivation_mode": {"type": "string"},
                 "medium": {"type": "string"},
+                "partner_abundance": {"type": ["number", "null"]},
+                "partner_abundance_unit": {"type": "string"},
+                "partner_abundance_n": {"type": ["integer", "null"]},
             },
         },
         "study": {

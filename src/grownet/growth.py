@@ -219,6 +219,38 @@ FEATURES = {
 }
 
 
+def mean_over(curve: GrowthCurve, start: float, end: float):
+    """The curve's mean abundance between `start` and `end`, or None when that window is not covered.
+
+    The area under the curve over the window, divided by its length, with the value at each end
+    interpolated between the two measurements around it rather than snapped to the nearest point. This is
+    the number a gLV coefficient needs for the partner, `x_j_star`: Karoline chose "the mean over the
+    target's rate window" (2026-10-06, on #116), because the coefficient is instantaneous and the single
+    number standing for it is the partner's average across the stretch the rate came from.
+    """
+    if end <= start:
+        return None
+    times, values = list(curve.times), list(curve.values)
+    if start < times[0] or end > times[-1]:
+        return None                       # the window reaches outside what was measured
+
+    def at(t):
+        if t <= times[0]:
+            return values[0]
+        for i in range(1, len(times)):
+            if t <= times[i]:
+                span = times[i] - times[i - 1]
+                if span <= 0:
+                    return values[i]
+                share = (t - times[i - 1]) / span
+                return values[i - 1] + share * (values[i] - values[i - 1])
+        return values[-1]
+
+    points = [start] + [t for t in times if start < t < end] + [end]
+    area = sum(0.5 * (at(a) + at(b)) * (b - a) for a, b in zip(points, points[1:], strict=False))
+    return area / (end - start)
+
+
 def curve_features(curve: GrowthCurve, end: float | None = None) -> dict:
     """Basic features of one growth curve, up to `end` (the whole curve by default): each name in FEATURES
     ("auc" in time unit times abundance unit, "max" in abundance unit) mapped to its value."""

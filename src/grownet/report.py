@@ -153,9 +153,16 @@ def report_text(result: dict) -> str:
                      else "growth rates: asked for, none could be computed")
         for nid, rate in sorted(organisms.items(), key=lambda kv: str(kv[1].get("name", kv[0])).lower()):
             per_study = "; ".join(f"{sid} {value:.4g}" for sid, value in sorted(rate.get("per_study", {}).items()))
+            extra = []
+            if rate.get("lag") is not None:
+                extra.append(f"lag {rate['lag']:.3g} {rate.get('unit', '1/h').removeprefix('1/')}")
+            if rate.get("capacity") is not None:
+                extra.append(f"carrying capacity {rate['capacity']:.4g} {rate.get('capacity_unit', '')}"
+                             f" from {rate.get('capacity_n', 0)} curve(s)")
             lines.append(f"  - {rate.get('name', nid)}: {rate['rate']:.4g} {rate.get('unit', '')}, median of "
                          f"{rate.get('n', 0)} monoculture replicate(s)"
-                         + (f" ({per_study})" if per_study else ""))
+                         + (f" ({per_study})" if per_study else "")
+                         + ("; " + ", ".join(extra) if extra else ""))
         missing = rates.get("without_a_rate") or []
         if missing:
             lines.append("  no growth rate (a gLV simulation needs one from elsewhere): " + ", ".join(missing))

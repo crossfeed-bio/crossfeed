@@ -4,6 +4,22 @@ All notable changes to grownet (called crossfeed before 0.1.0) are recorded here
 a Changelog. A released version is a promise about content: a tagged version is never reused for changed
 content.
 
+## [Unreleased]
+
+### Added
+- **The quantities a fitted gLV coefficient is made of, measured and reported** (#118, from Karoline's
+  decision on #116). Every growth rate now travels with the estimator that produced it, the lag the
+  Baranyi fit estimated, and the organism's monoculture carrying capacity: the plateau of its curves,
+  taken only from curves certified to have reached stationary phase, in the abundance unit they were
+  measured in and never converted, with every curve that gave no capacity named and why. Each biculture
+  arc carries `partner_abundance`, the actor's own abundance in the co-cultures averaged over the window
+  the target's growth rate was fitted in, with its unit and the replicates behind it. They are in
+  `growth_rates.csv` (five new columns), in the network's meta, in the gLV payload and package, in the
+  report, in GraphML, in the Cytoscape style and in the help. The matrix and the package still hold
+  effect sizes and the convention on the diagonal: these numbers are reported, not yet applied. On study
+  7 all eight monoculture curves of each of the three organisms are certified stationary, giving
+  K of 1.05e9, 1.18e9 and 9.16e8 Cells/mL.
+
 ## [0.2.0] (2026-10-04)
 
 ### Added

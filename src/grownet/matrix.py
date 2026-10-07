@@ -191,8 +191,26 @@ def for_nodes(net: InteractionNetwork, rates: dict) -> dict:
                     "n": sum(r.get("n", 0) for r in members),
                     "studies": sorted({s for r in members for s in r.get("studies", ())}),
                     "per_study": {}, "other_units": [],
+                    "method": members[0].get("method", ""),
+                    **_merged_capacity(members),
                     "merged_from": sorted(r["name"] for r in members)}
     return out
+
+
+def _merged_capacity(members: list) -> dict:
+    """The capacity and the lag of a genus node, merged over the species behind it (#118): the median of
+    the ones that have a capacity, and only within one abundance unit."""
+    units = {r.get("capacity_unit") for r in members if r.get("capacity") is not None and r.get("capacity_unit")}
+    unit = units.pop() if len(units) == 1 else ""
+    sizes = [r["capacity"] for r in members
+             if r.get("capacity") is not None and r.get("capacity_unit") == unit] if unit else []
+    lags = [r["lag"] for r in members if r.get("lag") is not None]
+    return {"capacity": statistics.median(sizes) if sizes else None,
+            "capacity_unit": unit if sizes else "",
+            "capacity_n": sum(r.get("capacity_n", 0) for r in members) if sizes else 0,
+            "capacity_per_study": {}, "other_capacity_units": sorted(units) if not unit else [],
+            "capacity_left_out": [x for r in members for x in r.get("capacity_left_out") or []],
+            "lag": statistics.median(lags) if lags else None, "lag_n": len(lags)}
 
 
 def rate_rule(method: str) -> str:
@@ -223,18 +241,30 @@ def matrix_csv(net: InteractionNetwork, diagonal: float | None = None) -> str:
 
 
 def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
-    """The growth rates as CSV: one row per organism, with how many values the median rests on."""
+    """The growth rates as CSV: one row per organism, with how many values the median rests on.
+
+    Beside the rate come the quantities a gLV coefficient is made of (#118): the estimator, the lag it
+    fitted (empty for an estimator with none), and the monoculture carrying capacity with its unit and
+    how many curves it rests on (empty where no curve reached a certified plateau).
+    """
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
-    writer.writerow(["organism", "growth_rate", "unit", "replicates", "studies"])
+    writer.writerow(["organism", "growth_rate", "unit", "replicates", "studies", "method", "lag",
+                     "carrying_capacity", "capacity_unit", "capacity_curves"])
     order = labels(net) if net is not None else sorted(rates)
     for nid in order:
         rate = rates.get(nid)
         if rate is None:
             continue
         name = _label(net.nodes[nid]) if net is not None else nid
+        capacity = rate.get("capacity")
+        lag = rate.get("lag")
         writer.writerow([name, _number(rate["rate"]), rate.get("unit", RATE_UNIT),
-                         rate.get("n", ""), " ".join(rate.get("studies", ()))])
+                         rate.get("n", ""), " ".join(rate.get("studies", ())),
+                         rate.get("method", ""), "" if lag is None else _number(lag),
+                         "" if capacity is None else f"{capacity:g}",
+                         rate.get("capacity_unit", "") if capacity is not None else "",
+                         rate.get("capacity_n", "") if capacity is not None else ""])
     return out.getvalue()
 
 
@@ -274,7 +304,9 @@ def readme(net: InteractionNetwork, rates: dict, conflicts: list, missing: list,
         "",
         "FILES",
         "  interaction_matrix.csv  a square matrix; the header row and the first column are the organisms",
-        "  growth_rates.csv        one growth rate per organism, with how many values it rests on",
+        "  growth_rates.csv        one growth rate per organism, with how many values it rests on, and",
+        "                          beside it the estimator, the lag it fitted, and the monoculture",
+        "                          carrying capacity with its unit",
         "",
         "CONVENTIONS",
         "  A[i][j] is the effect of j on i, so rows are affected and columns are the actor:",
@@ -304,6 +336,11 @@ def readme(net: InteractionNetwork, rates: dict, conflicts: list, missing: list,
         "      NA). Scale the off-diagonal cells for your model; the R companion package has glv_scale().",
         "  A growth rate is the maximum specific growth rate of that organism in monoculture (easylinear,",
         f"      the method mGrowthDB reports), median over replicates and studies, in {RATE_UNIT}.",
+        "  The carrying capacity beside it is the plateau of that organism's monoculture, median over the",
+        "      curves that reached a certified stationary phase, in the abundance unit they were measured",
+        "      in (never converted); it is empty where no curve plateaued. The lag is the Baranyi fit's,",
+        "      empty for an estimator that fits none. These are reported quantities, not applied to the",
+        "      matrix above: the diagonal is still the convention.",
         "",
     ]
     if convention:
@@ -364,7 +401,11 @@ def glv_payload(net: InteractionNetwork, rates: dict) -> dict:
             {"organism": _label(net.nodes[nid]), "rate": rates[nid]["rate"],
              "unit": rates[nid].get("unit", RATE_UNIT), "replicates": rates[nid].get("n"),
              "studies": list(rates[nid].get("studies", ())),
-             "per_study": dict(rates[nid].get("per_study", {}))}
+             "per_study": dict(rates[nid].get("per_study", {})),
+             "method": rates[nid].get("method", ""), "lag": rates[nid].get("lag"),
+             "carrying_capacity": rates[nid].get("capacity"),
+             "carrying_capacity_unit": rates[nid].get("capacity_unit", ""),
+             "carrying_capacity_curves": rates[nid].get("capacity_n")}
             for nid in order if nid in rates],
         "caveats": {
             "media": media(net),
