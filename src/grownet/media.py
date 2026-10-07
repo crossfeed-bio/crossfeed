@@ -10,7 +10,8 @@ mGrowthDB names a medium per compartment and does not report its composition sys
 sugar, a removed carbon source or a supplement usually lives only in the experiment's description or name
 ("WC plus mucin beads", "RI_BH -Ac", "supplemented with 2g/L trehalose"). Matching on the medium name
 alone therefore puts different media together. Measured on the live database (2026-10-07, all 559
-experiments): the names alone give 15 media, and this rule gives 60.
+experiments): the names alone give 15 media, this rule gives 60, and the alias table at the top of the
+next section brings that to 58 by merging the two names someone decided are one medium.
 
 A medium's identity (`identity`) is:
 
@@ -143,10 +144,68 @@ def alterations(exp: dict) -> tuple:
     return tuple(sorted(t for t in found if len(t) > 1))
 
 
-def _normalize(name: str) -> str:
-    """One medium name reduced to its words: case, punctuation and a parenthesized abbreviation go."""
+# ---- the alias table ----------------------------------------------------------------------------
+#
+# Karoline curates this (2026-10-07: "yes, add the alias table"). Everything else in this module reads
+# mGrowthDB and decides; these two tables are the only place where grownet says two names that disagree
+# are one medium anyway, so each entry is a judgement about the database rather than a rule, and every
+# alias that fires is reported wherever it changed an answer.
+#
+# Why it is needed at all. The rule above tells media apart by their names, and mGrowthDB's names are a
+# third party's free text. Measured on 2026-10-07, keying rather than matching names as subsets took the
+# chemostat validation from 2 scored to 1: SMGDB00000005's A8 control records the bare "Wilkins-Chalgren"
+# and no longer reached the packages' "Wilkins-Chalgren Anaerobe Broth (WC)". That is half the validation
+# the database can give, lost to a short name.
+#
+# Why it is a table and not a looser match. Containment says one name is a less complete spelling of
+# another, which is one-directional and hard to get wrong; a character substitution says two names
+# disagree, and an edit distance loose enough to merge "Anerobe" with "Anaerobe" also merges names
+# differing by a digit, which in medium names is routine (Craig's agent, on #141). A table merges exactly
+# what someone decided to merge and nothing else, and it goes stale visibly rather than silently.
+#
+# To add an entry: a word whose spelling differs goes in WORD_ALIASES, lowercase; a whole name that is a
+# short form of another goes in NAME_ALIASES, lowercase and already reduced to words (no punctuation, no
+# parenthesized abbreviation). Add nothing you would not defend in a paper.
+WORD_ALIASES = {
+    # SMGDB00000001 writes "Wilkins-Chalgren Anerobe Broth (WC)"; SMGDB00000009 and 16 write "Anaerobe".
+    # One medium, and the difference is a typo. That run is unscorable today for want of a recorded
+    # dilution rate, so this entry buys nothing yet and is here because the names are the same medium.
+    "anerobe": "anaerobe",
+}
+NAME_ALIASES = {
+    # SMGDB00000005 and SMGDB00000026 write the medium as "Wilkins-Chalgren" alone, where SMGDB00000002,
+    # 7, 9, 11 and 16 give the full name. This entry is what scores SMGDB00000005's A8 control chemostat.
+    "wilkins chalgren": "wilkins chalgren anaerobe broth",
+}
+
+
+def _alias_words(words: list) -> tuple:
+    """(the words with every WORD_ALIASES substitution applied, the substitutions that fired)."""
+    out, used = [], []
+    for word in words:
+        instead = WORD_ALIASES.get(word)
+        if instead and instead != word:
+            used.append((word, instead))
+            out.append(instead)
+        else:
+            out.append(word)
+    return out, tuple(used)
+
+
+def _normalize(name: str) -> tuple:
+    """(one medium name reduced to what tells media apart, the aliases that fired on it).
+
+    Case, punctuation and a parenthesized abbreviation go; then the alias table is applied to the words
+    and to the whole name, so a spelling someone decided is the same medium becomes the same key.
+    """
     text = re.sub(r"\([^)]*\)", " ", (name or "").casefold())
-    return " ".join(re.sub(r"[^0-9a-z]+", " ", text).split())
+    words, used = _alias_words(re.sub(r"[^0-9a-z]+", " ", text).split())
+    joined = " ".join(words)
+    instead = NAME_ALIASES.get(joined)
+    if instead and instead != joined:
+        used = (*used, (joined, instead))
+        joined = instead
+    return joined, used
 
 
 def _token_key(changed) -> str:
@@ -163,16 +222,27 @@ def key_from_label(label: str) -> str:
     reverses `identity`'s label, whose alteration tokens always begin with "+" or "-" and sit in one
     parenthesis at the end. "" for an empty label, which matches nothing.
     """
+    return key_from_label_with_aliases(label)[0]
+
+
+def key_from_label_with_aliases(label: str) -> tuple:
+    """(`key_from_label`, the aliases that fired on it), for a caller that has to say so."""
     text = (label or "").strip()
     if not text:
-        return ""
+        return "", ()
     changed: tuple = ()
     found = re.search(r"\s\(([+-][^()]*)\)$", text)
     if found:
         changed = tuple(part for part in (p.strip() for p in found.group(1).split(",")) if len(part) > 1)
         text = text[:found.start()]
-    names = sorted({n for n in (_normalize(part) for part in text.split(";")) if n})
-    return ("; ".join(names) or "unnamed medium") + _token_key(changed)
+    names, used = [], []
+    for part in text.split(";"):
+        one, fired = _normalize(part)
+        if one:
+            names.append(one)
+            used += list(fired)
+    key = ("; ".join(sorted(set(names))) or "unnamed medium") + _token_key(changed)
+    return key, tuple(dict.fromkeys(used))
 
 
 def base_key(exp: dict) -> str:
@@ -183,8 +253,18 @@ def base_key(exp: dict) -> str:
     are all kept, sorted, so a two-compartment experiment is not the same medium as either compartment on
     its own, which the old substring rule got wrong (#142 item 13).
     """
-    parts = [_normalize(c.get("mediumName") or "") for c in exp.get("compartments", [])]
-    return "; ".join(sorted({p for p in parts if p})) or "unnamed medium"
+    return base_key_with_aliases(exp)[0]
+
+
+def base_key_with_aliases(exp: dict) -> tuple:
+    """(`base_key`, the aliases that fired on it)."""
+    parts, used = [], []
+    for compartment in exp.get("compartments", []):
+        one, fired = _normalize(compartment.get("mediumName") or "")
+        if one:
+            parts.append(one)
+            used += list(fired)
+    return ("; ".join(sorted(set(parts))) or "unnamed medium"), tuple(dict.fromkeys(used))
 
 
 GASES = ("O2", "CO2", "H2", "N2")
@@ -210,12 +290,15 @@ def identity(exp: dict, strict: bool = True) -> dict:
     """
     from .selection import medium_of
     name = medium_of(exp) or "unnamed medium"
+    base, used = base_key_with_aliases(exp)
     if not strict:
-        return {"key": base_key(exp), "label": name, "alterations": (), "atmosphere": ""}
+        return {"key": base, "label": name, "alterations": (), "atmosphere": "", "aliases": used}
     changed = alterations(exp)
-    key = base_key(exp) + _token_key(changed)
     label = name + ("" if not changed else " (" + ", ".join(changed) + ")")
-    return {"key": key, "label": label, "alterations": changed, "atmosphere": atmosphere(exp)}
+    # `aliases` is every entry of the alias table that fired on this name, so a caller that merged two
+    # names which disagree can say which entry made it do that (Karoline, 2026-10-07)
+    return {"key": base + _token_key(changed), "label": label, "alterations": changed,
+            "atmosphere": atmosphere(exp), "aliases": used}
 
 
 def assign_atmospheres(identities: list) -> list:

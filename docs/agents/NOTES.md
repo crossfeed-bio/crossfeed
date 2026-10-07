@@ -211,10 +211,14 @@ Rules for this file:
   foodnet's `media.identity`: the compartments' names normalized (case, punctuation and a parenthesized
   abbreviation removed), plus every alteration the experiment's description states, plus the atmosphere
   where it is recorded. Measured on the live database (2026-10-07): the names alone give 15 media over the
-  559 experiments and the strict rule gives 60, which is what makes an organism's monocultures poolable
+  559 experiments and the strict rule gives 60 (58 with the alias table below), which is what makes an organism's monocultures poolable
   only within one chemistry.
   Implemented as `grownet.media` on 2026-10-07 (#142 item 16); the register's section 8 holds the
-  measurements and the two faults of the rule it replaced.
+  measurements and the two faults of the rule it replaced. Keying alone took the chemostat validation
+  from 2 scored to 1, since SMGDB00000005's A8 control records the bare "Wilkins-Chalgren", so Karoline
+  added an alias table on the same day ("yes, add the alias table"): `WORD_ALIASES` for a word spelled
+  differently and `NAME_ALIASES` for a short form, curated by hand, with every alias that fires reported
+  wherever it changed an answer. It is the one place grownet calls two names that disagree one medium.
   **One adaptation grownet needs.** foodnet also reads `+X` and `-X` in an experiment's *name*, which its
   own module says is safe because foodnet reads monocultures. grownet reads co-cultures, where those forms
   name community members: `At+Ct`, `At+Ms`, `Ct+Ms` in SMGDB00000013 and `LB+STneg`, `LB+STpos` in

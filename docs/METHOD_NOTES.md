@@ -238,7 +238,9 @@ deciding whether two measurements are of one environment. `grownet.media.identit
 compartments' names without case, punctuation or a parenthesized abbreviation, plus every alteration the
 description states with its amount, plus the atmosphere where one is recorded. Measured on the live
 database on 2026-10-07, over all 559 experiments: the names alone give **15** media, this rule gives
-**60**. SMGDB00000026 varies the sugars in Wilkins-Chalgren seventeen ways and drops glucose and pyruvate;
+**60**, and **58** once the alias table below merges the two names someone decided are one medium (the
+short-name entry fires on 36 experiments and the spelling entry on 1).
+SMGDB00000026 varies the sugars in Wilkins-Chalgren seventeen ways and drops glucose and pyruvate;
 SMGDB00000014 runs one minimal medium at five concentrations of linoleic acid and five of oleic acid, plus
 TBHQ and DMSO; SMGDB00000025 varies twelve carbon sources in DM29.
 
@@ -266,10 +268,26 @@ SMGDB00000005's A8 control, whose medium mGrowthDB records as the bare "Wilkins-
 reaches the packages' "Wilkins-Chalgren Anaerobe Broth (WC)". It had scored three organisms, with
 *B. thetaiotaomicron* at 1.55 times observed and *R. intestinalis* at 3.18. SMGDB00000001's misspelled run
 is unscorable either way, for want of a recorded dilution rate, so the "Anerobe" misspelling costs nothing
-today; the short name costs a validation. An alias table would recover both and it is not wired in:
-containment says one name is a less complete spelling of the other, where a character substitution says
-the two names disagree, and an edit distance loose enough to merge "Anerobe" with "Anaerobe" also merges
-names differing by a digit, which in medium names is routine.
+today; the short name costs a validation.
+
+**The alias table** (Karoline, 2026-10-07, on being shown that number: "yes, add the alias table"). An
+edit distance loose enough to merge "Anerobe" with "Anaerobe" also merges names differing by a digit,
+which in medium names is routine, and a rule that merged short names would merge "Mucin" into every
+medium that holds mucin. So the two names are merged by hand instead, in `grownet.media.WORD_ALIASES`
+(one word spelled differently: `anerobe` to `anaerobe`) and `NAME_ALIASES` (a whole name that is a short
+form: `wilkins chalgren` to `wilkins chalgren anaerobe broth`), which Karoline curates. A table merges
+exactly what someone decided to merge, and it goes stale visibly rather than silently.
+
+An alias is the one place grownet says two names that *disagree* are one medium, so it is never silent.
+`media.identity` returns the entries that fired, a chemostat scored across one prints
+`scored across a medium alias: "wilkins chalgren" is read as "wilkins chalgren anaerobe broth"`, and a
+carrying capacity whose plateaus were recorded under more than one spelling names them all. The label a
+reader sees is always what the study wrote; an alias decides identity, never what is reported.
+
+With the two entries the same command above gives **2 chemostats scored, 4 not** again, the figure the
+subset rule gave, and SMGDB00000005's A8 control is scored with the alias declared on its block. The
+"Anerobe" entry buys nothing yet, since that run has no recorded dilution rate, and is there because the
+names are the same medium.
 
 The rule is foodnet's, the sister tool's (`src/foodnet/media.py`), with **one adaptation grownet needs**:
 foodnet also reads "+X" and "-X" in an experiment's *name*, which its own module says is safe because

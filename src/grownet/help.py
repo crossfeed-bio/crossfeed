@@ -590,14 +590,23 @@ lives only in the experiment's description ("WC plus mucin beads", "minimal medi
 acid", "RI_BH -Ac"). So a medium's identity is its compartments' names, without case, punctuation or a
 parenthesized abbreviation, together with every alteration the description states, with the amount where
 one is stated, and the atmosphere where it is recorded. Over the whole database the names alone give 15
-media and this rule gives 60. Two media are the same medium when those agree and not otherwise: a name
+media and this rule gives 60, or 58 once the alias table merges the two names it merges. Two media are
+the same medium when those agree and not otherwise: a name
 that merely contains another is not a match, since "Wilkins-Chalgren Anaerobe Broth (WC)" and
 "Wilkins-Chalgren Anaerobe Broth (WC); Mucin" are a one-compartment design and a two-compartment one, and
 0.1 and 0.75 percent linoleic acid are two environments. The rule decides what a carrying capacity may be
 pooled over, which chemostat a gLV package may be scored against, and what the second box reaches; where
-two studies spell one medium differently, as SMGDB00000001's "Anerobe" against SMGDB00000009's
-"Anaerobe", grownet says the names differ and names the word rather than merging names that disagree
-(Karoline, 2026-10-07).</p>
+two studies spell one medium differently, grownet says the names differ and names the word rather
+than merging names that disagree (Karoline, 2026-10-07).</p>
+<p><strong>The alias table.</strong> Two live names disagree with the others rather than being less
+complete: SMGDB00000001 writes "Wilkins-Chalgren An<strong>e</strong>robe Broth (WC)", a typo, and
+SMGDB00000005 and 26 write "Wilkins-Chalgren" alone, a short form. The rule tells both apart from the
+full name, and a looser match would merge names differing by a digit, which in medium names is routine.
+So those two are merged by hand, in a table Karoline curates
+(<code>grownet.media.WORD_ALIASES</code> and <code>NAME_ALIASES</code>). It is the one place grownet
+calls two names that disagree one medium, so it is never silent: a chemostat scored across an alias says
+which entry made it one medium, and a carrying capacity whose curves were recorded under more than one
+spelling names them all. What a reader sees is always what the study wrote.</p>
 
 <h2 id="idea">The idea behind it</h2>
 <p>How one species affects another can be read from growth alone: grow each species by itself, grow the

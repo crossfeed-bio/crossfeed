@@ -38,7 +38,8 @@ content.
   source or a supplement only in the experiment's description, so a medium's identity (`grownet.media`) is
   its compartments' names without case, punctuation or a parenthesized abbreviation, plus every alteration
   the description states with its amount, plus the atmosphere where one is recorded. Over the whole
-  database the names alone give 15 media and this rule gives 60. Four things follow. **A carrying capacity
+  database the names alone give 15 media and this rule gives 60, or 58 once the alias table below merges
+  the two names it merges. Four things follow. **A carrying capacity
   comes from one medium**, the one with the most certified curves, named in `capacity_medium`, with every
   other medium's plateaus named rather than pooled in, which is the decision itself: a diagonal sits
   beside off-diagonals measured in one environment. **Every arc records the medium it was measured in**
@@ -46,7 +47,15 @@ content.
   **A gLV package is scored against a chemostat only when the two media are the same by this rule**, which
   replaces a subset rule over the names' words that was not transitive and that matched a two-compartment
   design to one of its own compartments; where two studies spell one medium differently the report now
-  says the names differ and names the word, instead of asserting that the environments do. **The second
+  says the names differ and names the word, instead of asserting that the environments do. Two live names
+  do disagree with the others rather than being less complete, SMGDB00000001's "Anerobe" and
+  SMGDB00000005's bare "Wilkins-Chalgren", and keying alone took the chemostat validation from 2 scored to
+  1, so those two are merged by a **hand-curated alias table** (`grownet.media.WORD_ALIASES` and
+  `NAME_ALIASES`, Karoline's call of 2026-10-07) rather than by a looser match, which would also merge
+  names differing by a digit. It is the one place the tool calls two names that disagree one medium, so it
+  is never silent: a chemostat scored across an alias says which entry did it, a capacity whose curves
+  were recorded under several spellings names them all, and the label a reader sees is always what the
+  study wrote. **The second
   box** still matches a medium as text, because mGrowthDB's names are prose, but says how many media one
   word reached, and the monocultures it keeps alongside a named comparison must now share the medium and
   not only the recorded conditions. The rule is foodnet's, the sister tool's, with one adaptation: foodnet

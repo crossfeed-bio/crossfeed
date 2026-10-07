@@ -175,13 +175,13 @@ def test_two_media_are_one_when_their_identities_agree_and_not_when_they_differ(
     assert not steady.same_medium("", "Wilkins-Chalgren Anaerobe Broth")
 
     # spoke to spoke, which the old test never asked (Craig's agent, on #141): every assertion there put
-    # the short name on one side, and the short name was a subset of all three long ones
-    assert not steady.same_medium("Wilkins-Chalgren Anaerobe Broth",
-                                  "Wilkins-Chalgren Anerobe Broth (WC)")
-    # the measured cost of keying: the bare short name of SMGDB00000005 and 26 no longer reaches the long
-    # spellings. A missed comparison costs validation and produces no wrong number, where a false merge
-    # produces a coefficient scored against the wrong environment
-    assert not steady.same_medium("Wilkins-Chalgren Anaerobe Broth (WC)", "Wilkins-Chalgren")
+    # the short name on one side, and the short name was a subset of all three long ones. Both of these
+    # hold because the alias table says so, not because the rule does (Karoline, 2026-10-07: "yes, add
+    # the alias table"); `tests/test_media.py` pins what the rule says without it
+    assert steady.same_medium("Wilkins-Chalgren Anaerobe Broth", "Wilkins-Chalgren Anerobe Broth (WC)")
+    assert steady.same_medium("Wilkins-Chalgren Anaerobe Broth (WC)", "Wilkins-Chalgren")
+    # an alias reaches a name, never an environment: a sugar dropped still makes another medium
+    assert not steady.same_medium("Wilkins-Chalgren", "Wilkins-Chalgren Anaerobe Broth (-glucose)")
 
     # a composite name is a design of two compartments, not a medium with something added, and matching
     # it to one of its own compartments loses which compartment the organism was in (#142 item 13)
@@ -199,26 +199,41 @@ def test_two_media_are_one_when_their_identities_agree_and_not_when_they_differ(
                                   "Wilkins-Chalgren Anaerobe Broth (-glucose, -pyruvate)")
 
 
+def test_a_run_scored_across_an_alias_says_which_entry_made_it_one_medium():
+    """An alias is the one place grownet calls two names that disagree one medium, so it is never silent:
+    the run is scored and the block says which entry of the table did it (Karoline, 2026-10-07)."""
+    client = _client({(1, A): _flat(9.0e8)})
+    short = steady.observed(client, [_chemostat("E1", "no perturbations", [A], [(1, "V1")],
+                                                medium="Wilkins-Chalgren")])
+    (check,) = steady.check(_package(), RATES, short)
+    assert check["used"] is True
+    assert check["medium_aliases"] == [["wilkins chalgren", "wilkins chalgren anaerobe broth"]]
+    assert 'scored across a medium alias: "wilkins chalgren" is read as' in steady.as_text([check])
+
+    # the full name on both sides needs no alias, and says nothing
+    (plain,) = steady.check(_package(), RATES, steady.observed(
+        client, [_chemostat("E1", "no perturbations", [A], [(1, "V1")])]))
+    assert plain["used"] is True and plain["medium_aliases"] == []
+    assert "medium alias" not in steady.as_text([plain])
+
+
 def test_a_run_not_scored_over_a_spelling_says_so_rather_than_blaming_the_environment():
     """Craig's agent, on #141: `why_not` gave a scientific reason, that a coefficient is specific to its
-    environment, for what is a typo in a third-party database. SMGDB00000001's chemostat is recorded in
-    "Wilkins-Chalgren An**e**robe Broth (WC)" and the packages in the correct spelling, so the message
-    says the two names differ and names the one word they differ in."""
+    environment, for what may be a typo in a third-party database. For a spelling nobody has put in the
+    alias table, the message says the two names differ and names the one word they differ in."""
     from grownet.media import near_miss
-    assert near_miss("Wilkins-Chalgren Anaerobe Broth (WC)",
-                     "Wilkins-Chalgren Anerobe Broth (WC)") == ("anaerobe", "anerobe")
+    assert near_miss("Db-MM medium", "Db-MN medium") == ("mm", "mn")
     # something added or taken away is a real difference, not a spelling, and is not reported as one
     assert near_miss("Wilkins-Chalgren Anaerobe Broth",
                      "Wilkins-Chalgren Anaerobe Broth (-glucose)") is None
 
     client = _client({(1, A): _flat(3.0e8)})
-    misspelled = steady.observed(client, [_chemostat("E1", "x", [A], [(1, "V1")],
-                                                     medium="Wilkins-Chalgren Anerobe Broth (WC)")])
-    (check,) = steady.check(_package(), RATES, misspelled)
+    other = steady.observed(client, [_chemostat("E1", "x", [A], [(1, "V1")], medium="Db-MM medium")])
+    (check,) = steady.check(_package(medium="Db-MN medium"), RATES, other)
     assert check["used"] is False
     assert "mGrowthDB names them as different media" in check["why_not"]
     assert "differs from this run's medium in one word only" in check["why_not"]
-    assert '"anaerobe" against "anerobe"' in check["why_not"]
+    assert '"mn" against "mm"' in check["why_not"]
 
 
 OTHER = "Escherichia coli LF82"

@@ -594,7 +594,11 @@ def _collect_capacity(entry: dict, curve, label: str, medium: dict | None = None
     medium = medium or {"key": "unnamed medium", "label": "unnamed medium"}
     at = entry["capacity_by_medium"].setdefault(
         medium["key"], {"label": medium["label"], "unit": curve.abundance_unit,
-                        "values": [], "falls": [], "curves": []})
+                        "values": [], "falls": [], "curves": [], "labels": []})
+    # the alias table can make two spellings one medium, so every spelling behind a capacity is kept and
+    # reported: a merge grownet made by hand is never silent (Karoline, 2026-10-07)
+    if medium["label"] not in at["labels"]:
+        at["labels"].append(medium["label"])
     if curve.abundance_unit != at["unit"]:
         entry["capacity_left_out"].append(
             (label, f"the plateau is in {curve.abundance_unit}, and this organism's others in "
@@ -756,10 +760,13 @@ def merge_rates(per_study) -> dict:
                 one = at["by_medium"].setdefault(key, {"label": found_here["label"],
                                                        "unit": found_here["unit"], "values": [],
                                                        "falls": [], "curves": [], "per_study": {},
-                                                       "other_units": []})
+                                                       "other_units": [], "labels": []})
                 if found_here["unit"] != one["unit"]:
                     one["other_units"].append(f"{study_id} ({found_here['unit']})")
                     continue
+                for spelling in found_here.get("labels") or ():
+                    if spelling not in one["labels"]:
+                        one["labels"].append(spelling)
                 one["values"] += list(found_here["values"])
                 one["falls"] += list(found_here["falls"])
                 one["curves"] += list(found_here["curves"])
@@ -795,6 +802,9 @@ def merge_rates(per_study) -> dict:
                     # one medium, never pooled (Karoline, 2026-10-07): the label of the medium the
                     # plateau was measured in, and what else this organism has a plateau in
                     "capacity_medium": chosen["label"] if chosen else "",
+                    # every spelling the plateaus behind it were recorded under: more than one means the
+                    # alias table merged two names that disagree, which is said rather than assumed
+                    "capacity_medium_spellings": list(chosen["labels"]) if chosen else [],
                     "capacity_media": [chosen["label"]] if chosen else [],
                     "capacity_other_media": [other["label"] for _key, other in order[1:]]}
     return out

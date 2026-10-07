@@ -341,6 +341,15 @@ def check(coefficients: dict, rates: dict, seen: list) -> list:
                                           "differently and grownet does not merge names that disagree")
             out.append(result)
             continue
+        # an alias is the one place grownet says two names that disagree are one medium, so a run scored
+        # across one says which entry of the table made that happen (Karoline, 2026-10-07)
+        from .media import key_from_label_with_aliases
+        fired = list(key_from_label_with_aliases(entry["medium"])[1])
+        for name in block.get("media") or []:
+            for pair in key_from_label_with_aliases(name)[1]:
+                if pair not in fired:
+                    fired.append(pair)
+        result["medium_aliases"] = [list(pair) for pair in fired]
         shared = [name for name in block["organisms"] if name in here]
         got = predicted(block, rates, entry["dilution"], shared)
         if got["why_not"]:
@@ -392,6 +401,9 @@ def as_text(checks: list) -> str:
             continue
         lines.append(f"{head}, dilution rate {check_one['dilution']:g} /h, "
                      f"{check_one['vessels']} vessel(s):")
+        for short, full in check_one.get("medium_aliases") or []:
+            lines.append(f"      scored across a medium alias: \"{short}\" is read as \"{full}\" "
+                         "(grownet.media.WORD_ALIASES and NAME_ALIASES, curated by hand)")
         if check_one.get("note"):
             lines.append(f"      note: {check_one['note']}")
         for row in check_one["rows"]:

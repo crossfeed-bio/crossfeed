@@ -459,10 +459,13 @@ number ("All 1" and "All 2" pool; "with initial acetate" and "without initial ac
 reading of a description gives a medium its identity: its compartments' names without case, punctuation
 or a parenthesized abbreviation, plus every alteration the description states with its amount, plus the
 atmosphere where one is recorded. Over the whole database the names alone give 15 media and that rule
-gives 60. It is what decides which plateaus a carrying capacity may be pooled over (one medium, never
+gives 60, or 58 once the alias table below merges the two names it merges. It is what decides which plateaus a carrying capacity may be pooled over (one medium, never
 more), which chemostat a gLV package may be scored against, and what the second box reaches; where two
 studies spell one medium differently, grow**net** says the names differ and names the word rather than
-merging names that disagree.
+merging names that disagree. Two live names disagree with the others rather than being less complete, a
+misspelling and a short form of one medium, and those are merged by a hand-curated alias table
+(`grownet.media.WORD_ALIASES` and `NAME_ALIASES`). It is the only place the tool calls two names that
+disagree one medium, so it says so wherever it changed an answer.
 Each arc is compared over its own window, the target's curves in the two sets, so one short curve
 elsewhere in the design does not shorten every arc. A design does not
 need every drop-out. mGrowthDB still measures the removed member in a drop-out experiment; that curve is

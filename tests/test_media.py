@@ -22,17 +22,60 @@ def _exp(name, description="", compartments=None, **gases):
 
 # ---- the name, reduced to what tells media apart --------------------------------------------------
 
-def test_the_four_live_spellings_reduce_to_the_words_they_share():
-    """Case, punctuation and a parenthesized abbreviation go, so two studies writing one medium two ways
-    are one medium. A misspelling is not: a character substitution says the names disagree."""
-    def key(name):
-        return media.base_key({"compartments": [{"mediumName": name}]})
+def _key(name, **aliases):
+    return media.base_key({"compartments": [{"mediumName": name}]})
 
-    assert key("Wilkins-Chalgren Anaerobe Broth (WC)") == key("Wilkins-Chalgren Anaerobe Broth")
-    assert key("Db-MM medium") == key("Db-MM medium ")
-    assert key("Wilkins-Chalgren Anerobe Broth (WC)") != key("Wilkins-Chalgren Anaerobe Broth")
-    assert key("Wilkins-Chalgren") != key("Wilkins-Chalgren Anaerobe Broth")
-    assert key("") == "unnamed medium"
+
+def test_case_punctuation_and_an_abbreviation_do_not_make_another_medium():
+    """Two studies writing one medium two ways are one medium, without any help from the alias table."""
+    assert _key("Wilkins-Chalgren Anaerobe Broth (WC)") == _key("Wilkins-Chalgren Anaerobe Broth")
+    assert _key("Db-MM medium") == _key("Db-MM medium ")
+    assert _key("mMCB") != _key("Wilkins-Chalgren Anaerobe Broth")
+    assert _key("") == "unnamed medium"
+
+
+def test_the_alias_table_is_what_makes_the_four_live_spellings_one_medium():
+    """Karoline, 2026-10-07: "yes, add the alias table". Two of the four spellings mGrowthDB serves
+    disagree with the others rather than being less complete: "Anerobe" is a typo and "Wilkins-Chalgren"
+    alone is a short form, and the rule by itself tells both apart from the full name. The table says
+    they are one medium anyway, and `identity` reports which entry fired so no merge is silent.
+
+    Without the table the two would not match, which is the measured cost the table buys back: keying
+    took the chemostat validation from 2 scored to 1 (`docs/METHOD_NOTES.md`, section 8)."""
+    full = "Wilkins-Chalgren Anaerobe Broth"
+    for other in (full, "Wilkins-Chalgren Anaerobe Broth (WC)", "Wilkins-Chalgren Anerobe Broth (WC)",
+                  "Wilkins-Chalgren"):
+        assert _key(other) == _key(full), other
+
+    short = media.identity({"compartments": [{"mediumName": "Wilkins-Chalgren"}]})
+    assert short["aliases"] == (("wilkins chalgren", "wilkins chalgren anaerobe broth"),)
+    typo = media.identity({"compartments": [{"mediumName": "Wilkins-Chalgren Anerobe Broth (WC)"}]})
+    assert typo["aliases"] == (("anerobe", "anaerobe"),)
+    assert media.identity({"compartments": [{"mediumName": full}]})["aliases"] == ()
+
+    # and the label is still what the study wrote: an alias decides identity, never what a reader is told
+    assert short["label"] == "Wilkins-Chalgren"
+
+    # without the table the rule tells them apart, which is why each entry is a judgement rather than a
+    # rule: a character substitution says two names disagree
+    saved_words, saved_names = dict(media.WORD_ALIASES), dict(media.NAME_ALIASES)
+    try:
+        media.WORD_ALIASES.clear()
+        media.NAME_ALIASES.clear()
+        assert _key("Wilkins-Chalgren Anerobe Broth (WC)") != _key(full)
+        assert _key("Wilkins-Chalgren") != _key(full)
+    finally:
+        media.WORD_ALIASES.update(saved_words)
+        media.NAME_ALIASES.update(saved_names)
+
+
+def test_an_alias_does_not_reach_an_alteration():
+    """The table merges names, not environments: a medium with glucose taken out stays its own medium
+    however its base name is spelled."""
+    plain = {"compartments": [{"mediumName": "Wilkins-Chalgren"}]}
+    changed = {"compartments": [{"mediumName": "Wilkins-Chalgren Anaerobe Broth"}],
+               "description": "WC without glucose"}
+    assert not media.same_medium(plain, changed)
 
 
 def test_a_two_compartment_design_is_not_the_same_medium_as_either_compartment():
@@ -124,10 +167,12 @@ def test_the_label_a_network_carries_gives_the_key_back():
 
 
 def test_two_media_differing_in_one_word_are_named_as_a_near_miss_not_merged():
-    """So that a reader is told the two names differ, rather than that the environments do, where the
-    difference is a typo in a third-party database (Craig's agent, on #141)."""
+    """For a spelling nobody has put in the alias table: a reader is told the two names differ in one
+    word, rather than that the environments differ (Craig's agent, on #141). The four Wilkins-Chalgren
+    spellings are in the table, so they are one medium and not a near miss at all."""
+    assert media.near_miss("Db-MM medium", "Db-MN medium") == ("mm", "mn")
     assert media.near_miss("Wilkins-Chalgren Anaerobe Broth (WC)",
-                           "Wilkins-Chalgren Anerobe Broth (WC)") == ("anaerobe", "anerobe")
+                           "Wilkins-Chalgren Anerobe Broth (WC)") is None     # aliased, so one medium
     assert media.near_miss("Wilkins-Chalgren Anaerobe Broth", "mMCB") is None
     assert media.near_miss("WC", "WC") is None                       # the same medium is not a near miss
     assert media.near_miss("WC (+mucin)", "WC") is None              # an addition is a real difference

@@ -199,6 +199,12 @@ def report_text(result: dict) -> str:
             # can ask for.
             if rate.get("capacity_medium"):
                 extra.append(f"capacity measured in {rate['capacity_medium']}")
+                # more than one spelling means the alias table merged names that disagree, which is said
+                spellings = [name for name in (rate.get("capacity_medium_spellings") or [])
+                             if name != rate["capacity_medium"]]
+                if spellings:
+                    extra.append("also recorded as " + ", ".join(spellings)
+                                 + ", read as one medium by the alias table")
             others = rate.get("capacity_other_media") or []
             if others:
                 extra.append(f"{len(others)} other medium(s) hold a plateau of this organism, named below")
