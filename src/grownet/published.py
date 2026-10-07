@@ -72,11 +72,13 @@ def fetch() -> dict | None:
 
 def fetch_from(opener, now: datetime.datetime | None = None) -> dict | None:
     """`fetch` with the opener and the clock given, for tests."""
+    # any failure to read the published network is a reason to derive live, never to end the run:
+    # a 0.3.0 artifact reached an installed 0.2.0 through an uncaught TypeError (found 2026-10-06). The
+    # guard covered the fetch and the JSON parse only, while the TypeError its own comment describes comes
+    # from `from_payload`, which was outside it, as was `fresh`. Both are inside now (#155 item 14).
     try:
         with opener(URL, timeout=TIMEOUT) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    # any failure to read the published network is a reason to derive live, never to end the run:
-    # a 0.3.0 artifact reached an installed 0.2.0 through an uncaught TypeError (found 2026-10-06)
+        return from_payload(payload) if fresh(payload, now) else None
     except Exception:  # noqa: BLE001 - see above
         return None
-    return from_payload(payload) if fresh(payload, now) else None

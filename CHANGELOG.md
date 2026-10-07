@@ -120,6 +120,30 @@ content.
   removed compound makes another environment.
 
 ### Fixed
+- **`grownet validate` and the shipped JSON Schema were strict in opposite directions** (#155 item 5). A
+  document with one undeclared **record** key was INVALID to `validate` and valid to the schema, where
+  draft-07 reads an omitted `additionalProperties` as allowing anything; meanwhile the document **root**
+  carried `additionalProperties: false`, so an undeclared top-level key was the other way round, and the
+  standalone viewer, which preserves unknown top-level fields on export, could write a file the schema
+  rejected. Both halves are permissive now, which is what the schema's own sentence promises. An
+  undeclared key is a **note** rather than a problem: calling it a problem also skipped the
+  referential-integrity pass, which runs only when there are none, so one unrecognised field turned off
+  the check that catches an edge citing a study the document does not hold.
+- **The decline limit did not reach the co-culture plateau** (#155 item 10). `derive.target_capacity` is
+  the other place a plateau becomes a self-limitation and was the only one that did not refuse a curve
+  whose peak it had long since lost: 18 live values rested on curves past the limit, several with every
+  curve behind the value past it. The limit now applies there too, and the advanced setting reaches it,
+  which it did not before, so one setting means one thing.
+- **Smaller ones** (#155 item 14). `q_value` was rounded to six **decimal places**, so an adjusted
+  p-value below 5e-7 published as exactly `0.0`, the strongest q there is, and `significance` came out
+  infinite; it is six significant figures now. `published.fetch_from`'s guard covered the fetch and the
+  JSON parse while the `TypeError` its own comment describes comes from `from_payload`, which sat outside
+  it; the whole read is inside now. `meta.study_id` was emitted by every single-study derivation and
+  declared nowhere, because the schema-agreement test covered node, edge and study and not `meta`;
+  `_meta_problems` also ignored an undeclared key in silence while `_unknown_keys` called one a problem
+  three lines away, and both are notes now. `derived_on` was documented as UTC and has always been the
+  local date. `--glv`'s help demanded `--metric growth_rate`, which only the specified comparison needs.
+  `r/README.md` quoted a `print(x)` line the R code cannot produce.
 - **The release workflow published to PyPI without running the suite, the gate or the linter** (#155
   item 7). Its job graph was `check` -> `dist` -> `install` -> `pypi`, where `check` ran only
   `check_release.py` and `install` ran `grownet --help` and the smoke script. `ci.yml` does fire on a tag,

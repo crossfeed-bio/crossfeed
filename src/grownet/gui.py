@@ -953,6 +953,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
                                               include_non_batch=s["include_non_batch"],
                                               no_growth_alpha=s["no_growth_alpha"],
                                               no_growth_factor=s["no_growth_factor"], keep=narrowed,
+                                              capacity_max_fall=s["capacity_max_fall"],
                                               selection=selection)
         except MGrowthDBError as e:
             errors.append(f"{study_id}: {e}")

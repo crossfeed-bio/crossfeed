@@ -15,6 +15,25 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-07 (#155 items 5, 9, 10, 14): **the last of the third review's findings.** Four are worth
+  carrying forward.
+  **A validator that refuses what the reader accepts turns off its own other checks.** An undeclared
+  record key made `validate` report INVALID, and the referential-integrity pass runs only when there are
+  no problems, so one unrecognized field silenced the check that catches an edge citing a study the
+  document does not hold. Unknown keys are notes now, at both levels, and the schema is permissive at the
+  root as it already was inside every record.
+  **`reached_stationary` is permissive on purpose and `CAPACITY_MAX_FALL` is the guard.** It certifies a
+  culture that grew, peaked and declined, which is what "stopped growing" means, and its condition 1
+  compares a linear change with a fraction of the linear rise, so a decaying culture passes easily. Its
+  diauxie condition cannot fire where a capacity is decided, because all three such callers pass
+  `end = curve.times[-1]`. Both facts are now in its docstring, and whether the condition should be read
+  on log abundance is an open decision in METHOD_NOTES rather than a quiet change.
+  **One setting has to reach every path that uses it**, the same lesson as the medium rule:
+  `capacity_max_fall` reached `_collect_capacity` and not `target_capacity`, and threading it meant five
+  signatures.
+  **Round to significant figures, not decimal places**, wherever a small number means something:
+  `round(q, 6)` published an adjusted p below 5e-7 as exactly 0.0, which passes every filter.
+
 - 2026-10-07 (#155 item 4): **a parity test is only worth its fixture.** `test_the_viewer_writes_the_same
   _graphml_as_the_command_line` compares `gui/index.html`'s `toGraphML` with `grownet.export.to_graphml`,
   and it built its network with no `meta` and a record holding none of the fitted fields. Every key this

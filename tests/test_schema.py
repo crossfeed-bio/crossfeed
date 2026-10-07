@@ -190,21 +190,35 @@ def test_every_field_the_model_carries_is_declared_in_the_shipped_schema():
         assert declared - carried == set(), f"{kind}: declared and not emitted: {sorted(declared - carried)}"
 
 
-def test_validate_names_a_misspelled_key_the_reader_drops():
+def test_validate_names_a_misspelled_key_without_calling_the_file_invalid():
     """`from_dict` drops a key it does not know, which is what keeps an older grownet working on a newer
-    file, so `grownet validate` is the only place a misspelling is caught at all (#142 item 10)."""
+    file, so `grownet validate` is the only place a misspelling is caught at all (#142 item 10).
+
+    It is a **note**, not a problem (#155 item 5). Calling it a problem contradicted the schema's own
+    sentence that a network from a later version still validates, and it skipped the referential-integrity
+    pass, which runs only when there are no problems: one unrecognized field turned off every other check,
+    including the one that catches an edge citing a study the document does not hold.
+    """
     from grownet.model import SCHEMA
     from grownet.schema import validate_document
     doc = {"schema": SCHEMA, "nodes": [{"id": "a"}, {"id": "b"}],
            "studies": [{"id": "S1", "citation": "c"}],
            "edges": [{"source": "a", "target": "b", "effect": "facilitation", "study_ids": ["S1"],
                       "coefficent": 1.0}]}                       # one letter missing
-    problems = validate_document(doc)
-    assert any("'coefficent'" in p and "does not declare" in p for p in problems), problems
-    # and the correctly spelled one is not reported
+    notes = []
+    assert validate_document(doc, notes) == []                    # valid: the reader drops the key
+    assert any("'coefficent'" in n and "does not declare" in n for n in notes), notes
+    # and the correctly spelled one is not reported at all
     doc["edges"][0] = {**doc["edges"][0], "coefficient": 1.0}
     del doc["edges"][0]["coefficent"]
-    assert validate_document(doc) == []
+    notes = []
+    assert validate_document(doc, notes) == [] and notes == []
+    # the integrity pass still runs beside an undeclared key, which is what the old behavior skipped
+    broken = {**doc, "edges": [{**doc["edges"][0], "from_the_future": 1, "study_ids": ["S404"]}]}
+    notes = []
+    problems = validate_document(broken, notes)
+    assert any("S404" in p for p in problems), problems
+    assert any("'from_the_future'" in n for n in notes), notes
 
 
 def test_validate_names_the_version_without_misstating_what_it_means():
@@ -247,3 +261,32 @@ def test_validate_names_the_version_without_misstating_what_it_means():
     assert "corrected p-value" not in said[SCHEMA]
     # and a /v1 file is still told which version it is, since that is the point of the id
     assert "grownet.interaction_network/v1" in said["grownet.interaction_network/v1"]
+
+
+def test_the_schema_and_validate_are_strict_in_the_same_direction():
+    """#155 item 5. The document root carried `additionalProperties: False` while `node`, `study` and
+    `edge` declared nothing of the kind, so a future **top-level** key was invalid to the schema and
+    valid to `grownet validate`, and a future **record** key was the other way round: the two halves of
+    one contract disagreed about the same documents, in opposite directions.
+
+    Both are now permissive, which is what the schema's own sentence promises ("Keys not declared here
+    are allowed, so a network from a later version still validates") and what the reader does. The
+    standalone viewer preserves unknown top-level fields on export, so the strict root meant it could
+    write a file this schema rejected.
+    """
+    from grownet.model import SCHEMA
+    from grownet.schema import SCHEMA_DOC, validate_document
+    doc = SCHEMA_DOC
+    assert "additionalProperties" not in doc, doc.get("additionalProperties")
+    for kind in ("node", "study", "edge"):
+        assert "additionalProperties" not in doc["definitions"][kind], kind
+
+    base = {"schema": SCHEMA, "nodes": [{"id": "a"}, {"id": "b"}],
+            "studies": [{"id": "S1", "citation": "c"}],
+            "edges": [{"source": "a", "target": "b", "effect": "facilitation", "study_ids": ["S1"]}]}
+    # and `validate` accepts a key at either level, naming the record one
+    for where, newer in (("top level", {**base, "from_the_future": 1}),
+                         ("a record", {**base, "edges": [{**base["edges"][0], "from_the_future": 1}]})):
+        notes = []
+        assert validate_document(newer, notes) == [], where
+    assert notes and "from_the_future" in notes[0]

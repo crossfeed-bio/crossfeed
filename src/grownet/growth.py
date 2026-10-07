@@ -192,6 +192,23 @@ def reached_stationary(curve: GrowthCurve, end: float, flat: float = STATIONARY_
       2. not growing again: wherever the curve was measured after `end`, it stays below its window maximum
          plus that much, so a measured second phase makes the pause not stationary.
     A second phase after the last measurement cannot be seen by any rule.
+
+    **Condition 2 cannot fire where a carrying capacity is decided.** Every caller that decides one
+    (`derive._collect_capacity`, `derive.target_capacity`, `integrated._measured_plateau`) passes
+    `end = curve.times[-1]`, so there is nothing measured after `end` and the diauxie half of this
+    predicate is inert on that path; only `interaction.py`, which judges a growth window, can reach it
+    (#155 item 9).
+
+    **This predicate is permissive on purpose and is not the guard.** Condition 1 compares an absolute
+    change at the end with a fraction of the linear rise, so a culture that is decaying exponentially
+    passes as soon as its level is small beside its peak: on SMGDB00000007 *B. thetaiotaomicron* falls
+    three orders of magnitude over 88 of its 120 hours and certifies True, with `flat * rise` 36 times
+    its final value. That is why 302 of 316 certified curves end more than a tenth below their peak. The
+    name is "reached stationary", meaning it has stopped growing, and a culture that grew, peaked and
+    declined has; what keeps a peak held for one measurement out of a carrying capacity is
+    `derive.CAPACITY_MAX_FALL`, applied by every caller that decides one. Whether this condition should
+    instead be read on log abundance, as `rates._until_decline` reads it, is a method question and is
+    recorded as one in docs/METHOD_NOTES.md rather than changed here.
     """
     if sum(1 for t in curve.times if t <= end + 1e-9) < min_points:
         return None

@@ -560,6 +560,19 @@ parameter they had. No R2 comparison is quoted above for that reason.
 
 ## Open decisions
 
+
+- **Should `reached_stationary` read its "stopped growing" condition on log abundance?** It compares an
+  absolute change over the last fifth of the window with a tenth of the **linear** rise from inoculum to
+  peak, so a culture decaying exponentially passes as soon as its level is small beside its peak:
+  SMGDB00000007's *B. thetaiotaomicron* falls three orders of magnitude over 88 of its 120 hours and
+  certifies True, with `flat * rise` 36 times its final value, and 302 of 316 certified curves end more
+  than a tenth below their peak. The predicate is permissive by design, since a culture that grew, peaked
+  and declined has stopped growing, and `CAPACITY_MAX_FALL` is the guard that keeps a lost peak out of a
+  carrying capacity (applied by all three callers that decide one since 2026-10-07). The question is
+  whether certification itself should use the log reading the repository already has in
+  `rates._until_decline`, which would make it tell "holding" from "falling steadily" rather than leaving
+  that entirely to the limit downstream. Raised 2026-10-07 (#155 item 9); it changes which curves
+  certify, so it is a method choice.
 This is the single place where open method and format questions are collected, so Karoline and Craig
 can settle several at once. Agents add a question here (with the options, a proposed default, and the
 issue it came from) instead of deciding it; a settled item moves to "Decisions" in

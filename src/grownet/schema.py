@@ -61,7 +61,11 @@ _RECORDED = "recorded, not promised: "
 META_PROPERTIES = {
     "tool": {"type": "string", "description": _PROMISE + "the tool that derived this network"},
     "tool_version": {"type": "string", "description": _PROMISE + "its version"},
-    "derived_on": {"type": "string", "description": _PROMISE + "the date it was derived (UTC)"},
+    # `provenance` takes it from `datetime.now().astimezone()`, so it is the LOCAL date of whoever ran
+    # the derivation; `derived_at` beside it carries the time with its offset, which is what says which
+    # day that was anywhere else. The description said UTC, which it has never been (#155 item 14).
+    "derived_on": {"type": "string", "description": _PROMISE + "the local date it was derived; "
+                                                    "derived_at beside it carries the offset"},
     "derived_at": {"type": "string", "description": _PROMISE + "when it was derived, to the second"},
     "source_db": {"type": "string",
                   "description": _PROMISE + "where the growth data came from, and whether live or a "
@@ -78,6 +82,10 @@ META_PROPERTIES = {
     "query": {"type": "string", "description": _RECORDED + "what was searched: species, all, or a study"},
     "species": {"type": "array", "description": _RECORDED + "the names typed into the search"},
     "studies": {"type": "array", "description": _RECORDED + "the studies the search read"},
+    # a single-study derivation records which study it was, and this was emitted and undeclared: the
+    # agreement test covered node, edge and study and not `meta`, so nothing compared the two (#155 item 14)
+    "study_id": {"type": "string", "description": _RECORDED + "the one study this network was derived "
+                                                  "from, where a derivation read a single study"},
     "settings": {"type": "object", "description": _RECORDED + "every setting the run used"},
     "selection": {"type": "object",
                   "description": _RECORDED + "what the second box asked for: media, experiments or "
@@ -105,7 +113,13 @@ SCHEMA_DOC = {
                     "every edge carries the studies it was derived from (edge-level attribution)."),
     "type": "object",
     "required": ["schema", "nodes", "edges", "studies"],
-    "additionalProperties": False,
+    # Permissive here too, for the same reason it is permissive inside `meta` and inside every record:
+    # a network written by a later version still validates. `additionalProperties: False` at this one
+    # level made the document root the strictest part of the schema while `node`, `study` and `edge`
+    # declared nothing of the kind, so a future top-level key was invalid to the schema and valid to
+    # `grownet validate`, and a future record key was the other way round. The standalone viewer
+    # deliberately preserves unknown top-level fields on export, so it could write a file this schema
+    # rejected (#155 item 5).
     "properties": {
         "schema": {"enum": list(KNOWN_SCHEMAS)},
         "meta": {"type": "object", "description": META_DESCRIPTION, "properties": META_PROPERTIES},
@@ -218,13 +232,23 @@ def _objs(x):
 _META_TYPES = {"string": str, "array": list, "object": dict}
 
 
-def _meta_problems(meta: dict) -> list:
+def _meta_problems(meta: dict, notes: list = None) -> list:
     """Where a declared key of `meta` holds the wrong kind of value. A key this schema does not declare is
-    left alone, which is what keeps a network from a later version valid here (#117)."""
+    left alone, which is what keeps a network from a later version valid here (#117).
+
+    An undeclared key goes to `notes`, as `_unknown_keys` does for a record: the two sat in the same
+    function treating the same situation differently, one silent and one calling the file invalid, and
+    both are now a note (#155 item 14 and item 5).
+    """
     problems = []
-    for key, value in meta.items():
+    for key, value in sorted(meta.items()):
         declared = META_PROPERTIES.get(key)
-        if declared is None or value is None:
+        if declared is None:
+            if notes is not None:
+                notes.append(f"meta has {key!r}, which this version of the format does not declare: a "
+                             "reader of this version ignores it, so check the spelling or the version")
+            continue
+        if value is None:
             continue
         kind = _META_TYPES[declared["type"]]
         if not isinstance(value, kind) or isinstance(value, bool):
@@ -256,11 +280,17 @@ def _unknown_keys(lists: dict) -> list:
     return out
 
 
-def validate_document(doc) -> list:
+def validate_document(doc, notes: list = None) -> list:
     """Return every problem with `doc` as a grownet interaction-network document (empty list = valid).
 
     Dependency-free. Checks the top-level shape, per-item required fields and the effect enum, the
     non-empty study_ids on every edge, and (when the shape is sound) referential integrity via the model.
+
+    A key no record kind declares is **not** a problem. It goes to `notes` when one is passed, because the
+    reader drops it and this document is from a version this copy does not know: calling it invalid
+    contradicted the schema's own promise that a network from a later version still validates, and it
+    skipped the referential-integrity pass below, which runs only when there are no problems. So one
+    unrecognized field turned off every remaining check (#155 item 5).
     """
     if not isinstance(doc, dict):
         return ["document is not a JSON object"]
@@ -271,7 +301,7 @@ def validate_document(doc) -> list:
     if "meta" in doc and not isinstance(doc["meta"], dict):
         problems.append("meta must be an object")
     elif "meta" in doc:
-        problems += _meta_problems(doc["meta"])
+        problems += _meta_problems(doc["meta"], notes)
 
     lists = {}
     for key in ("nodes", "edges", "studies"):
@@ -283,8 +313,9 @@ def validate_document(doc) -> list:
 
     # a key no record kind declares: the reader drops it rather than raising, which is what keeps an
     # older copy of grownet working on a newer file, so `validate` is the only place a misspelling is
-    # caught at all and it has to name it (#142 item 10)
-    problems += _unknown_keys(lists)
+    # caught at all and it has to name it (#142 item 10). Named, not refused (#155 item 5).
+    if notes is not None:
+        notes += _unknown_keys(lists)
 
     for i, n in enumerate(lists.get("nodes", [])):
         if not n.get("id"):

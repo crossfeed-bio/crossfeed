@@ -87,3 +87,27 @@ def test_a_network_derived_today_still_validates():
               "settings": dict(DEFAULTS), "selection": {"media": []}, "absence": {"k": 1.0},
               "statistics": {"correction": "bh"}, "hidden": {"absent": 0}})
     assert schema.validate_document(json.loads(json.dumps(net.to_dict()))) == []
+
+
+def test_every_meta_key_a_derivation_emits_is_declared():
+    """#155 item 14. The agreement test that closed the loop for node, edge and study did not cover
+    `meta`, so `meta.study_id` was emitted by every single-study derivation and declared nowhere, and
+    `_meta_problems` ignored it in silence while `_unknown_keys` three lines away called an undeclared
+    record key a problem: the same situation treated two ways in one function."""
+    from grownet.mgrowthdb import provenance
+    from grownet.schema import META_PROPERTIES, _meta_problems
+
+    # what a derivation puts in meta beyond provenance, as `output_meta` and the single-study path do
+    emitted = {**provenance(), "source_db": "mGrowthDB", "study_id": "SMGDB00000002",
+               "studies": [], "settings": {}, "absence": {}, "statistics": {}, "hidden": {},
+               "growth_rates": {}, "provisional": "", "data": {}, "filters": {}, "merge": {},
+               "no_growth": {}, "query": {}, "selection": {}, "species": [], "genus": {}}
+    undeclared = sorted(set(emitted) - set(META_PROPERTIES))
+    assert undeclared == [], f"emitted and undeclared: {undeclared}"
+
+    # and an undeclared key is a note, the same as an undeclared record key, not silence and not a problem
+    notes = []
+    assert _meta_problems({"from_the_future": 1}, notes) == []
+    assert notes and "from_the_future" in notes[0] and "does not declare" in notes[0]
+    # a declared key with the wrong kind of value is still a problem
+    assert _meta_problems({"tool": 7}) == ["meta.tool must be string, not int"]

@@ -147,6 +147,7 @@ def _derive(a):
                                                    include_non_batch=a.include_non_batch,
                                                    no_growth_alpha=a.no_growth_alpha,
                                                    no_growth_factor=a.no_growth_factor,
+                                                   capacity_max_fall=a.capacity_max_fall,
                                                    selection=parse_selection(a.conditions))
             records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold,
                                          a.no_growth_alpha, a.no_growth_factor, a.merge_arcs, a.min_studies,
@@ -431,7 +432,8 @@ def _style(a):
 def _validate(a):
     with open(a.file, encoding="utf-8") as f:
         doc = json.load(f)
-    problems = validate_document(doc)
+    notes = []
+    problems = validate_document(doc, notes)
     if problems:
         print(f"INVALID: {a.file}", file=sys.stderr)
         for p in problems:
@@ -449,6 +451,10 @@ def _validate(a):
     if read != SCHEMA and not older:
         older = f" (schema {read}; `significance` means what it means in {SCHEMA})"
     print(f"valid: {a.file}{older}")
+    # a field this version does not declare: the reader drops it, so the file is valid and the note is
+    # the only place a misspelling or a newer version shows up at all
+    for note in notes:
+        print(f"  note: {note}")
     return 0
 
 
@@ -618,8 +624,9 @@ def build_parser() -> argparse.ArgumentParser:
     outputs.add_argument("--glv", metavar="FILE",
                          help="write the parameters of a generalized Lotka-Volterra simulation to FILE, a zip "
                               "of one matrix of fitted coefficients per abundance unit, the matching growth "
-                              "rates and a README (needs --report-rates and --metric growth_rate, which "
-                              "--glv-mode sets)")
+                              "rates and a README (needs --report-rates; under --derivation replicate it "
+                              "also needs --metric growth_rate, which the default derivation does not, "
+                              "and --glv-mode sets both)")
     outputs.add_argument("--steady-check", action="store_true",
                          help="score the gLV parameters against the chemostat steady states mGrowthDB "
                               "holds for these organisms: the report gets the comparison and the zip a "

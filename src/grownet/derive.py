@@ -514,7 +514,7 @@ def partner_abundance(replicate, target: str, partner: str, rate_method: str = N
     return {"value": value, "unit": partner_curve.abundance_unit, "window": (start, end), "reason": ""}
 
 
-def target_capacity(replicates, target: str) -> dict:
+def target_capacity(replicates, target: str, max_fall: float = None) -> dict:
     """{"value", "unit", "n", "skipped"}: the target's own plateau in these co-culture replicates.
 
     An organism that does not grow alone has no monoculture carrying capacity, so its self-limitation
@@ -522,7 +522,16 @@ def target_capacity(replicates, target: str) -> dict:
     the gLV balance reads `0 = r_i + A_ii x_i + sum_j A_ij x_j`, which fits `A_ii` (#123). Only curves
     `reached_stationary` certifies count, as in #118, and the median runs over the replicates that have
     one; abundances in different units are reported rather than converted.
+
+    **The decline limit applies here too** (Karoline, 2026-10-07, `CAPACITY_MAX_FALL`). This is the other
+    place a plateau becomes a self-limitation, and it was the only one that did not refuse a curve whose
+    peak it had long since lost: `reached_stationary` certifies a culture that grew, peaked and declined,
+    on purpose, and the limit is what keeps a peak that was held for one measurement out of a carrying
+    capacity. Without it 18 live values rested on curves past the limit, several of them with every curve
+    behind the value past it: SMGDB00000007's `bhbt` B. thetaiotaomicron fell by 67 to 159 times on all
+    six (#155 item 10).
     """
+    limit = CAPACITY_MAX_FALL if max_fall is None else max_fall
     values, unit, skipped = [], "", []
     for i, replicate in enumerate(replicates):
         curve = replicate.curve(target)
@@ -535,6 +544,15 @@ def target_capacity(replicates, target: str) -> dict:
             skipped.append((label, "the curve is too sparse or does not rise, so stationary phase cannot "
                                    "be judged" if settled is None else
                                    "the curve had not reached stationary phase"))
+            continue
+        fall = fall_from_peak(curve, curve.times[-1])
+        if fall is None:
+            skipped.append((label, "the curve ends at zero or below, so what it held cannot be read "
+                                   "from it"))
+            continue
+        if limit and fall > limit:
+            skipped.append((label, f"the curve ends at 1/{fall:.3g} of its peak, further than the "
+                                   f"{limit:g} times allowed: the peak is not a level this culture held"))
             continue
         unit = unit or curve.abundance_unit
         if curve.abundance_unit != unit:
@@ -1109,7 +1127,8 @@ def _no_growth_kwargs(no_growth) -> dict:
 
 
 def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, records, skipped,
-              identities=None, no_growth=None, variants=1) -> None:
+              identities=None, no_growth=None, variants=1,
+              capacity_max_fall: float = CAPACITY_MAX_FALL) -> None:
     """The edges of one two-member co-culture against the monocultures of its members."""
     a, b = _members(exp)
     cond = exp.get("name", "")
@@ -1181,7 +1200,8 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
         records.append(_record(source, target, c, method, quality, cautions,
                                _spike_notes(result["flagged"], target), cond, "biculture", (a, b),
                                [_exp_id(exp), *origin[target]], study_id, study_meta, identities, mode,
-                               media_identity(exp)["label"], partner, target_capacity(co_reps, target)))
+                               media_identity(exp)["label"], partner,
+                               target_capacity(co_reps, target, capacity_max_fall)))
 
 
 def run_group(exp: dict) -> str:
@@ -1402,7 +1422,7 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
                                  method: str = "auc", spike_factor: float = SPIKE_FACTOR,
                                  dropout: bool = True, include_non_batch: bool = False,
                                  no_growth_alpha: float = None, no_growth_factor: float = None, keep=None,
-                                 selection=None):
+                                 selection=None, capacity_max_fall: float = CAPACITY_MAX_FALL):
     """The specified comparison, run on a study: (records, skipped).
 
     Two designs give edges. Each two-member co-culture is compared with the monoculture replicates of
@@ -1454,7 +1474,8 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
                 continue
             _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, records, skipped,
                       identities, no_growth,
-                      variants[(frozenset(_members(exp)), *condition_key(exp))])
+                      variants[(frozenset(_members(exp)), *condition_key(exp))],
+                      capacity_max_fall)
     if dropout:
         for design in dropout_designs(exps, skipped):
             if wanted is not None and len(design[0] & wanted) < 2:
@@ -1499,7 +1520,10 @@ def adjust_significance(records, correction: str = "bh") -> int:
     tested = [r for r in records if r.get("p_value") is not None]
     adjust = CORRECTIONS[correction][1]
     for record, adjusted in zip(tested, adjust([r["p_value"] for r in tested]), strict=True):
-        record["q_value"] = round(adjusted, 6)
+        # significant figures, not decimal places: `round(q, 6)` published an adjusted p below 5e-7 as
+        # exactly 0.0, which is the strongest q-value there is and passes any filter, and `significance`
+        # then came out as infinity. A strong result should not be rounded into a certainty (#155 item 14)
+        record["q_value"] = float(f"{adjusted:.6g}") if adjusted else 0.0
         record["significance"] = significance_of(record["q_value"])
     return len(tested)
 
@@ -1835,7 +1859,8 @@ class ReplicateDeriver(Deriver):
 
     def __init__(self, method: str = "auc", spike_factor: float = SPIKE_FACTOR, client=None,
                  dropout: bool = True, include_non_batch: bool = False, no_growth_alpha: float = None,
-                 no_growth_factor: float = None, keep=None, selection=None):
+                 no_growth_factor: float = None, keep=None, selection=None,
+                 capacity_max_fall: float = CAPACITY_MAX_FALL):
         self.keep = keep
         self.selection = selection
         self.method = method
@@ -1845,6 +1870,9 @@ class ReplicateDeriver(Deriver):
         self.include_non_batch = include_non_batch
         self.no_growth_alpha = no_growth_alpha
         self.no_growth_factor = no_growth_factor
+        # the decline limit reaches the co-culture plateau too, which is the other place a plateau
+        # becomes a self-limitation and the only one that did not refuse a lost peak (#155 item 10)
+        self.capacity_max_fall = capacity_max_fall
 
     def derive(self, study: dict, exps: list):
         if self.client is None:
@@ -1852,7 +1880,8 @@ class ReplicateDeriver(Deriver):
         return interactions_from_replicates(self.client, study, exps, study.get("id"),
                                             self.method, self.spike_factor, self.dropout,
                                             self.include_non_batch, self.no_growth_alpha,
-                                            self.no_growth_factor, self.keep, self.selection)
+                                            self.no_growth_factor, self.keep, self.selection,
+                                            self.capacity_max_fall)
 
 
 class BaselineDeriver(Deriver):
@@ -1874,13 +1903,16 @@ class BaselineDeriver(Deriver):
 def derive_interactions(client: MGrowthDBClient, study_id: str, deriver: Deriver = None,
                         metric: str = "auc", spike_factor: float = SPIKE_FACTOR, dropout: bool = True,
                         include_non_batch: bool = False, no_growth_alpha: float = None,
-                        no_growth_factor: float = None, keep=None, selection=None):
+                        no_growth_factor: float = None, keep=None, selection=None,
+                        capacity_max_fall: float = CAPACITY_MAX_FALL):
     """Fetch a study and its experiments from the API, then derive interactions with `deriver`
-    (default: ReplicateDeriver, the specified comparison). `metric`, `spike_factor` and `dropout` configure
-    the default deriver only. A deriver that reads measured series says so with `needs_client`."""
+    (default: ReplicateDeriver, the specified comparison). `metric`, `spike_factor`, `dropout` and
+    `capacity_max_fall` configure the default deriver only. A deriver that reads measured series says so
+    with `needs_client`."""
     deriver = deriver or ReplicateDeriver(method=metric, spike_factor=spike_factor, dropout=dropout,
                                          include_non_batch=include_non_batch, no_growth_alpha=no_growth_alpha,
-                                         no_growth_factor=no_growth_factor, keep=keep, selection=selection)
+                                         no_growth_factor=no_growth_factor, keep=keep, selection=selection,
+                                         capacity_max_fall=capacity_max_fall)
     if getattr(deriver, "needs_client", False) and getattr(deriver, "client", None) is None:
         deriver.client = client
     if getattr(deriver, "needs_client", False):

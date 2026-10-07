@@ -10,7 +10,6 @@
     "edges",
     "studies"
   ],
-  "additionalProperties": false,
   "properties": {
     "schema": {
       "enum": [
@@ -33,7 +32,7 @@
         },
         "derived_on": {
           "type": "string",
-          "description": "part of the format, and written by every current derivation: the date it was derived (UTC)"
+          "description": "part of the format, and written by every current derivation: the local date it was derived; derived_at beside it carries the offset"
         },
         "derived_at": {
           "type": "string",
@@ -66,6 +65,10 @@
         "studies": {
           "type": "array",
           "description": "recorded, not promised: the studies the search read"
+        },
+        "study_id": {
+          "type": "string",
+          "description": "recorded, not promised: the one study this network was derived from, where a derivation read a single study"
         },
         "settings": {
           "type": "object",
