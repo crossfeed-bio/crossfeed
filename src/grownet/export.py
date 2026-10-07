@@ -91,6 +91,9 @@ _KEYS = [
     # the fit's own null and its uncertainty, on the same route the rest of the arc travels: Cytoscape is
     # where a reader looks at these numbers, and they were emitted in the JSON and nowhere else
     ("e_fit_null_r2", "edge", "fit_null_r2", "double"),
+    # the share of the measured course the rows cover, and the rate mismatch that would zero the arc
+    ("e_fit_window_share", "edge", "fit_window_share", "double"),
+    ("e_rate_mismatch_to_zero", "edge", "rate_mismatch_to_zero", "double"),
     ("e_coefficient_sd", "edge", "coefficient_sd", "double"),
     ("e_coefficient_n", "edge", "coefficient_n", "int"),
     ("e_coefficient_sd_from_rate_stage", "edge", "coefficient_sd_from_rate_stage", "double"),
@@ -214,7 +217,8 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(ed, "e_fit_condition", e.fit_condition)
         for name in ("fit_null_r2", "coefficient_sd", "coefficient_n",
                      "coefficient_sd_from_rate_stage", "se_replicates", "se_rate_stage",
-                     "rate_stage_method", "rate_stage_n"):
+                     "rate_stage_method", "rate_stage_n", "fit_window_share",
+                     "rate_mismatch_to_zero"):
             _data(ed, f"e_{name}", getattr(e, name, None))
 
     if pretty:

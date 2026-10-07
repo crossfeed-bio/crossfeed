@@ -613,3 +613,70 @@ def test_the_fit_is_scored_only_over_the_replicates_stage_two_used():
     # and the null is there to compare against: B does affect A, so the fit beats it
     assert got["null_r2"] == got["null_r2"]            # not nan
     assert got["r2"] > got["null_r2"]
+
+
+def test_the_mismatch_that_would_zero_an_arc_is_minus_a_over_the_rate_times_the_derivative():
+    """`rate_mismatch_to_zero` by hand, with no fitting in the way.
+
+    A rate `r (1 + d)` moves a coefficient to `A + (dA/dr) r d`, exactly, because stage 2's solution is
+    affine in the rate. Setting that to zero gives `d = -A / (r dA/dr)`. With r = 4, one replicate at
+    A = 2 and dA/dr = 0.5, that is -2 / (0.5 * 4) = -1.0; a second at A = -3 and dA/dr = 0.5 gives
+    3 / 2 = 1.5; the arc reports their median, which with a third replicate at -1.0 is -1.0.
+    """
+    rows = [(2.0, (0.5, 0.0), 1.0, 0.0), (-3.0, (0.5, 0.0), 1.0, 0.0), (1.0, (-0.25, 0.0), 1.0, 0.0)]
+    assert integrated._mismatch_to_zero(rows[:1], 4.0) == pytest.approx(-1.0)
+    assert integrated._mismatch_to_zero(rows[1:2], 4.0) == pytest.approx(1.5)
+    assert integrated._mismatch_to_zero(rows[2:], 4.0) == pytest.approx(1.0)
+    assert integrated._mismatch_to_zero(rows, 4.0) == pytest.approx(1.0)      # median of -1.0, 1.5, 1.0
+    # a replicate whose derivative is zero contributes nothing: no change in the rate reaches that arc
+    assert integrated._mismatch_to_zero([(2.0, (0.0, 0.0), 1.0, 0.0)], 4.0) is None
+    assert integrated._mismatch_to_zero([(2.0, None, 1.0, 0.0)], 4.0) is None
+    assert integrated._mismatch_to_zero(rows, 0.0) is None                    # no rate, no fraction of it
+
+
+def test_the_mismatch_that_would_zero_an_arc_recovers_a_planted_rate_mismatch():
+    """The truth: B has no effect on A, A_AB = 0 exactly. The only departure from the ideal is that A's
+    monocultures were grown at 0.90 times the rate A had in the co-culture, which is the ordinary case
+    where the recorded conditions match and the biology did not. Stage 1 is held fixed in stage 2, so the
+    arc is the only parameter left to absorb the mismatch and a facilitation arc appears that is not
+    there (#155 item 1).
+
+    The rate the fit holds is 0.90 r, and the rate that would explain the arc away is r, which is higher
+    by 1 / 0.90 - 1 = 0.1111. `rate_mismatch_to_zero` is that number, to three decimals.
+    """
+    rates, effects, start = [0.4, 0.3], [[-4.0e-10, 0.0], [0.0, -3.0e-10]], [1.0e7, 5.0e8]
+    co_times, co_series = _simulate(rates, effects, start)
+    cos = [_named(["A", "B"], co_times, co_series, f"c{k}") for k in range(3)]
+    for bias, expected in ((1.00, 0.0), (0.90, 1.0 / 0.90 - 1.0), (1.20, 1.0 / 1.20 - 1.0)):
+        mono_times, mono_series = _simulate([rates[0] * bias], [[effects[0][0]]], [start[0]], t_end=40.0)
+        monos = [_named(["A"], mono_times, mono_series, f"m{k}") for k in range(3)]
+        got = integrated.two_stage("A", monos, cos, ["A", "B"])
+        stats = integrated._arc_statistics(got, cos, "B")
+        assert stats["rate_mismatch_to_zero"] == pytest.approx(expected, abs=5e-4), bias
+
+
+def test_the_fitted_window_is_measured_against_the_whole_course():
+    """Karoline, 2026-10-07: "the effect 1 organism has on another can change along the growth curve.
+    this is not something we treat here, but something we can warn about."
+
+    The model has no death term, so the rows stop at the end of the plateau after the maximum. This curve
+    rises for 10 h and then falls back for another 30, measured every 2 h: the fit covers 0 to 12 h of the
+    40 measured, a share of 0.3, and the arc carries the window_partial caution below half.
+    """
+    times = [2.0 * k for k in range(21)]                       # 0 to 40 h
+    rise = [1.0e7 * math.exp(0.4 * t) for t in times[:6]]      # 0 to 10 h, growing
+    peak = rise[-1]
+    fall = [peak * math.exp(-0.15 * (t - 10.0)) for t in times[6:]]
+    series = [[v] for v in rise + fall]
+    rep = _named(["A"], times, series, "r1")
+    window = integrated.fitted_window([rep], "A")
+    assert (window["span_start"], window["span_end"]) == (0.0, 40.0)
+    assert window["start"] == 0.0 and window["end"] == pytest.approx(12.0)
+    assert window["share"] == pytest.approx(12.0 / 40.0)
+    assert window["unit"] == "h"
+    assert window["share"] < integrated.WINDOW_SHARE_CAUTION
+    # an organism this replicate does not hold has no window at all, rather than a window of zero
+    assert integrated.fitted_window([rep], "B") == {}
+    # a course fitted end to end covers all of itself
+    growing = _named(["A"], times, [[1.0e7 * math.exp(0.08 * t)] for t in times], "r2")
+    assert integrated.fitted_window([growing], "A")["share"] == pytest.approx(1.0)

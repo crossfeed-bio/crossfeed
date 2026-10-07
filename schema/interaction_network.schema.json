@@ -318,7 +318,8 @@
               "stationary_unchecked",
               "zero_at_start",
               "untested",
-              "continuous_culture"
+              "continuous_culture",
+              "window_partial"
             ]
           }
         },
@@ -401,6 +402,18 @@
           ]
         },
         "fit_null_r2": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fit_window_share": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "rate_mismatch_to_zero": {
           "type": [
             "number",
             "null"

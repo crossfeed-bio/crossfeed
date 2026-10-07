@@ -213,6 +213,13 @@ TWO_REPLICATES = "two_replicates"
 # experiments that differ only in their description (a supplement, a lineage) under identical recorded
 # conditions, where nothing recorded says which monoculture or drop-out matches which (Karoline, 2026-09-27)
 CONDITIONS_UNVERIFIED = "conditions_unverified"
+# the rows of an integrated fit cover less than half the measured course, because the model has no lag
+# term and no death term and so stops at the end of the plateau after the maximum. The effect one
+# organism has on another can change along the growth curve, competition first and facilitation later;
+# that is not treated here, and this says the coefficient describes the phase inside the window rather
+# than the whole course (Karoline, 2026-10-07: "this is not something we treat here, but something we
+# can warn about", with SMGDB00000002's Roseburia and Bacteroides as her example)
+WINDOW_PARTIAL = "window_partial"
 # with max as the measure (Karoline, 2026-09-28): one set reached stationary phase and the other did not,
 # so the maximum of one may still be rising; or the curves are too sparse to tell
 STATIONARY_DIFFERS, STATIONARY_UNCHECKED = "stationary_phase_differs", "stationary_unchecked"

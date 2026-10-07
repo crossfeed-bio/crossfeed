@@ -101,6 +101,23 @@ content.
   would claim it had no effect at all.
 
 ### Added
+- **Every fitted arc now says how large a rate mismatch would explain it away, and how much of the course
+  it rests on** (Karoline, 2026-10-07). The monoculture rate is held fixed while the partners are fitted,
+  so the arc is the only parameter left to absorb a difference between the rate an organism had alone and
+  the rate it had beside its partner, and no growth curve measures that difference. `rate_mismatch_to_zero`
+  is the fractional change in that rate which would drive the arc's coefficient to zero, exactly and
+  signed, from the derivatives the fit already computes: an arc at 0.5 survives a 50 per cent error in the
+  rate, an arc at 0.04 does not survive 4 per cent. Checked against a simulation with a known mismatch
+  planted in it, where it recovers 0.1109 against the true 0.1111.
+- **A `window_partial` caution, and the share of the course a fit covers** (Karoline, 2026-10-07: "the
+  effect 1 organism has on another can change along the growth curve. this is not something we treat here,
+  but something we can warn about"). The integrated model has no lag term and no death term, so the rows
+  start where growth starts and stop at the end of the plateau after the maximum: a course measured well
+  past its peak is fitted on the early part of itself, and grownet fits one constant coefficient per arc,
+  so an effect that changes along the curve is reported as whatever it was inside the window.
+  `fit_window_share` is the fraction of the measured span the rows cover, a note names both spans, and an
+  arc below half carries the caution. On SMGDB00000002 both arcs between *Roseburia intestinalis* and
+  *Bacteroides thetaiotaomicron* are fitted on 0 to 32 of 120 measured hours and now say so.
 - **A gLV example button, and the steps to simulate it** (Karoline, 2026-10-07). Beside All, **gLV
   example** fills both boxes and the one setting a package cannot be built without, and runs the search.
   The study it picks was chosen by running every study that yields a package: SMGDB00000006, two

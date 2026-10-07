@@ -42,7 +42,7 @@ OUTCOMES = ("quantified", "obligate", "abolished", "no_growth")
 QUALITY_FLAGS = ("single_replicate", "strains_pooled", "non_batch", "removed_member_detected")
 # cautions a reader should see that do not make an edge low quality: it keeps its status and is shown
 CAUTIONS = ("two_replicates", "conditions_unverified", "stationary_phase_differs", "stationary_unchecked",
-            "zero_at_start", "untested", "continuous_culture")
+            "zero_at_start", "untested", "continuous_culture", "window_partial")
 # what a node's id rests on: the NCBI taxon id of the strain, or genus and species of its name (#23)
 IDENTITIES = ("ncbi", "name", "genus")
 # whether a comparison counts as an interaction under the absence threshold (grownet.derive.absence)
@@ -162,6 +162,11 @@ class Edge:
     coefficient_sd: float | None = None
     coefficient_n: int | None = None
     coefficient_sd_from_rate_stage: float | None = None
+    # the share of the measured course the fitted rows cover, and the fractional change in the
+    # monoculture rate that would drive this arc's coefficient to zero: what a reader needs to judge an
+    # arc against the two things the model cannot check for itself
+    fit_window_share: float | None = None
+    rate_mismatch_to_zero: float | None = None
     # the two halves of `se`, and how the monoculture stage was resampled for the second
     se_replicates: float | None = None
     se_rate_stage: float | None = None

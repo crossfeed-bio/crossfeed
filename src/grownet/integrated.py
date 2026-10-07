@@ -707,6 +707,10 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
 METHOD = ("integrated v1: ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt), two-stage least "
           "squares (monocultures for r_i and A_ii, then co-cultures for the partners)")
 METRIC = "integrated:two_stage"
+# A `window_partial` caution when the fitted window covers less than this share of the measured course.
+# Half is the point where the phase the coefficient describes is the minority of what was measured; on
+# the live corpus it fires on SMGDB00000002 (0.27) and not on a course fitted end to end.
+WINDOW_SHARE_CAUTION = 0.5
 
 
 def rate_unit_of(curve) -> str:
@@ -884,6 +888,7 @@ class IntegratedDeriver:
             CONDITIONS_UNVERIFIED,
             SINGLE_REPLICATE,
             TWO_REPLICATES,
+            WINDOW_PARTIAL,
             _choose_monocultures,
             _exp_id,
             _identity,
@@ -1013,6 +1018,13 @@ class IntegratedDeriver:
                         "for is the usual cause")
                 if got.get("self_limitation_source", "").startswith("-r/K"):
                     row_notes.append(got["self_limitation_source"])
+                window = fitted_window(reps, target)
+                if window and window.get("share") is not None:
+                    row_notes.append(
+                        f"the fit covers {window['start']:g} to {window['end']:g} {window['unit']} of "
+                        f"{window['span_start']:g} to {window['span_end']:g} {window['unit']} measured, "
+                        "where growth starts and where the plateau after the maximum ends (the model has "
+                        "no lag and no death term), so the coefficient describes that phase")
                 curve = reps[0].curve(target)
                 unit = curve.abundance_unit if curve is not None else ""
                 for partner in partners:
@@ -1049,6 +1061,11 @@ class IntegratedDeriver:
                     cautions = [TWO_REPLICATES] if n_reps == 2 else []
                     if unverified:
                         cautions.append(CONDITIONS_UNVERIFIED)
+                    # an effect that changes along the growth curve is not treated here, so an arc whose
+                    # window is the minority of the course says so rather than reading as the whole
+                    # course's effect (Karoline, 2026-10-07)
+                    if window.get("share") is not None and window["share"] < WINDOW_SHARE_CAUTION:
+                        cautions.append(WINDOW_PARTIAL)
                     src, tgt = _identity(identities, partner), _identity(identities, target)
                     records.append({
                         "source": src["id"], "source_name": partner,
@@ -1104,6 +1121,14 @@ class IntegratedDeriver:
                         # the partners bought and the gate above is not taken on trust (#142 item 9)
                         "fit_null_r2": got.get("null_r2"),
                         "fit_points": got["points"], "fit_stages": list(got["stages"]),
+                        # how much of the measured course the rows cover, and how large a mismatch
+                        # between the monoculture rate and the co-culture rate would explain this arc
+                        # away: the two things a reader needs to judge an arc this model cannot check
+                        # for itself (#155 item 1, and Karoline on effects that change along the curve)
+                        "fit_window_share": (None if window.get("share") is None
+                                             else round(window["share"], 4)),
+                        "rate_mismatch_to_zero": (None if stats_here["rate_mismatch_to_zero"] is None
+                                                  else round(stats_here["rate_mismatch_to_zero"], 4)),
                         "partner_abundance": abundance, "partner_abundance_unit": partner_unit or unit,
                         "partner_abundance_n": len(reps),
                         "study_id": study_id, **study_meta,
@@ -1126,6 +1151,70 @@ def _log2_effect(coefficient: float, level: float, rate: float):
     fitted effect at least cancels the organism's own rate and no ratio exists."""
     effect = coefficient * level / rate
     return math.log2(1 + effect) if effect > -1 else None
+
+
+def _mismatch_to_zero(rows: list, rate: float):
+    """The fractional change in the monoculture rate that would drive this arc's coefficient to zero.
+
+    Stage 1 is held fixed in stage 2, so the arc is the only free parameter left to absorb a difference
+    between the rate a monoculture grew at and the rate that organism had in the co-culture, and a few
+    per cent of such a difference publishes a significant arc that is not there (#155 item 1). This says
+    how much difference it would take for THIS arc: a rate `r (1 + d)` moves the coefficient to
+    `A + (dA/dr) r d`, exactly, because stage 2's solution is affine in `(r_i, A_ii)` and `rows` carries
+    each replicate's exact derivative. Setting that to zero,
+
+        d = -A / (r dA/dr)
+
+    Positive means the monoculture rate would have to be higher by that fraction, negative lower. An arc
+    needing 0.5 survives a 50 per cent error in the rate; one needing 0.04 does not survive 4 per cent.
+    The median over the replicates, as the published coefficient is their median. None where no replicate
+    carries a derivative, or where the derivative is zero and no change in the rate reaches the arc.
+    """
+    values = []
+    for coefficient, slopes, _level, _central in rows:
+        if slopes is None or not rate:
+            continue
+        by_rate = slopes[0]
+        if not by_rate:
+            continue
+        values.append(-coefficient / (by_rate * rate))
+    return statistics.median(values) if values else None
+
+
+def fitted_window(replicates: list, target: str) -> dict:
+    """Where this organism's rows start and stop, against the whole course that was measured.
+
+    The integrated model has no lag term and no death term, so `design` starts the rows where growth
+    starts and stops them at the end of the plateau after the maximum. On SMGDB00000002 that is 0 to 32
+    of 120 measured hours, so three quarters of the course is outside the fit and the coefficient
+    describes the phase inside it. An effect that changes along the growth curve, competition first and
+    facilitation later, is therefore reported as whatever it was inside the window (Karoline, 2026-10-07:
+    "the effect 1 organism has on another can change along the growth curve. this is not something we
+    treat here, but something we can warn about").
+
+    {"start", "end", "span_start", "span_end", "share", "unit"}, medians over the replicates in the
+    curves' own time unit, or an empty dict where the organism has no curve. `share` is the fraction of
+    the measured span the window covers.
+    """
+    starts, ends, span_starts, span_ends, units = [], [], [], [], []
+    for replicate in replicates:
+        curve = replicate.curve(target)
+        if curve is None or len(curve.times) < 2:
+            continue
+        start = used_lag(curve)["lag"]
+        starts.append(start)
+        ends.append(growth_window(curve, start))
+        span_starts.append(curve.times[0])
+        span_ends.append(curve.times[-1])
+        units.append(curve.time_unit)
+    if not starts:
+        return {}
+    out = {"start": statistics.median(starts), "end": statistics.median(ends),
+           "span_start": statistics.median(span_starts), "span_end": statistics.median(span_ends),
+           "unit": units[0]}
+    span = out["span_end"] - out["span_start"]
+    out["share"] = (out["end"] - out["start"]) / span if span > 0 else None
+    return out
 
 
 def _arc_statistics(got: dict, cocultures: list, partner: str) -> dict:
@@ -1170,9 +1259,11 @@ def _arc_statistics(got: dict, cocultures: list, partner: str) -> dict:
 
     out = {"n": len(rows), "strength": None, "sd": None, "se": None, "se_replicates": None,
            "se_rate_stage": None, "p_value": None, "df": None, "coefficient_sd": None,
-           "coefficient_sd_from_rate_stage": None, "per_replicate": [row[3] for row in rows]}
+           "coefficient_sd_from_rate_stage": None, "rate_mismatch_to_zero": None,
+           "per_replicate": [row[3] for row in rows]}
     if not rows:
         return out
+    out["rate_mismatch_to_zero"] = _mismatch_to_zero(rows, rate)
     out["strength"] = statistics.mean(row[3] for row in rows)
     if len(rows) < 2:
         return out

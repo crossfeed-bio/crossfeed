@@ -172,6 +172,8 @@ SCHEMA_DOC = {
                 "coefficient_unit": {"type": "string"},
                 "fit_r2": {"type": ["number", "null"]},
                 "fit_null_r2": {"type": ["number", "null"]},
+                "fit_window_share": {"type": ["number", "null"]},
+                "rate_mismatch_to_zero": {"type": ["number", "null"]},
                 # merging parallel arcs and merging to the genus: emitted since 0.2.0 and declared only
                 # now, which is the drift `tests/test_schema.py` closes the loop on (#142 item 10)
                 "merged_arcs": {"type": ["integer", "null"]},

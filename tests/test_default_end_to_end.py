@@ -231,3 +231,59 @@ def test_the_zip_and_the_payload_carry_the_same_numbers_to_four_significant_digi
         assert key in from_payload, key
         # four significant digits is what the CSV carries, and no more is claimed of the agreement
         assert value == pytest.approx(from_payload[key], rel=1e-4), key
+
+
+class DeclineClient(TimeCourseClient):
+    """The same study, measured well past the peak: every curve carries a decaying tail.
+
+    Karoline, 2026-10-07: "the effect 1 organism has on another can change along the growth curve. this
+    is not something we treat here, but something we can warn about." The integrated model has no death
+    term, so the rows stop at the end of the plateau after the maximum, and a course measured three times
+    as long as its growth phase is fitted on the early third of itself. On SMGDB00000002, her example,
+    that is 0 to 32 of 120 measured hours.
+    """
+
+    # the growth phase is sampled every 0.2 h and runs to 10 h; the tail adds 20 points 1.5 h apart, so
+    # the course runs to 40 h and the fit covers the first quarter of it
+    TAIL_STEP, TAIL_POINTS, DECAY = 1.5, 20, 0.3
+
+    def get_measurement_series(self, context_id):
+        points = super().get_measurement_series(context_id)
+        last_t, last_v, _ = points[-1]
+        tail = [(last_t + self.TAIL_STEP * k, last_v * math.exp(-self.DECAY * self.TAIL_STEP * k), None)
+                for k in range(1, self.TAIL_POINTS + 1)]
+        return points + tail
+
+
+def test_an_arc_fitted_on_part_of_the_course_says_which_part():
+    """The window is a quarter of the course here (10 h of 40), so every arc carries the share, the
+    caution and a note naming both spans. Without the tail the same search fits the whole course and
+    carries neither."""
+    from grownet.derive import WINDOW_PARTIAL
+
+    arc = _arc(run_query(DeclineClient(), [A, B], {}), B, A)
+    assert arc.fit_window_share == pytest.approx(10.0 / 40.0, abs=0.05)
+    assert WINDOW_PARTIAL in arc.cautions
+    note = next(n for n in arc.notes if "the fit covers" in n)
+    assert "of 0 to 40 h measured" in note and "no lag and no death term" in note
+
+    whole = _arc(_default_query(), B, A)
+    assert whole.fit_window_share > 0.9        # the plateau rule trims the flat tail of the last point
+    assert WINDOW_PARTIAL not in whole.cautions
+
+
+def test_every_default_arc_says_how_large_a_rate_mismatch_would_explain_it_away():
+    """#155 item 1: the monoculture rate is held fixed when the partners are fitted, so the arc absorbs
+    any difference between the rate the organism had alone and the rate it had beside its partner, and
+    nothing in a growth curve measures that difference. Here the simulated monocultures and co-cultures
+    share one rate, so the arc is real and survives a large mismatch: B facilitates A with
+    A_AB = 2e-10, and the rate would have to move by tens of per cent to cancel it.
+    """
+    arc = _arc(_default_query(), B, A)
+    assert arc.rate_mismatch_to_zero is not None
+    assert abs(arc.rate_mismatch_to_zero) > 0.1, arc.rate_mismatch_to_zero
+    # the sign says which way the held rate would have to move. A higher rate explains more of the
+    # organism's own growth, which removes the need for a facilitating partner, so a facilitation arc is
+    # cancelled by a higher rate and an inhibition arc by a lower one: the mismatch carries the sign of
+    # the coefficient. The planted-mismatch test in test_integrated.py checks the magnitude.
+    assert (arc.rate_mismatch_to_zero > 0) == (arc.coefficient > 0)

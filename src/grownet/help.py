@@ -317,7 +317,11 @@ EDGE_ATTRIBUTES = {
                 "counts below detection), continuous_culture (a chemostat or serial dilution arc, compared "
                 "on max: the level a culture settles at is comparable with and without a partner, while an "
                 "area under the curve or a growth rate of such a run is not), untested (with the adjusted "
-                "p-value filter on: the arc has no p-value, so the filter kept it without judging it)",
+                "p-value filter on: the arc has no p-value, so the filter kept it without judging it), "
+                "window_partial (the fitted rows cover less than half the measured course, because the "
+                "integrated model has no lag term and no death term and stops at the end of the plateau "
+                "after the maximum: the effect one organism has on another can change along the growth "
+                "curve, and the coefficient describes the phase inside the window)",
     "notes": "other remarks, for example a replicate left out for a spike",
     "evidence": "biculture (monoculture against a two-member co-culture: a direct interaction) or dropout "
                 "(a community against the same community without the source: direct or indirect)",
@@ -353,6 +357,22 @@ EDGE_ATTRIBUTES = {
     "fit_null_r2": "the same for the same row with every partner's effect set to zero: the line a fitted "
                    "row has to beat to be a measurement of an interaction rather than of the organism's "
                    "own growth, and the difference is how much the partners bought",
+    "fit_window_share": "the share of the measured course the fitted rows cover. The integrated model "
+                        "has no lag term and no death term, so the rows start where growth starts and "
+                        "stop at the end of the plateau after the maximum; a course measured well past "
+                        "its peak is fitted on the early part of itself. Below half, the arc carries the "
+                        "window_partial caution. grownet fits one constant coefficient per arc, so an "
+                        "effect that changes along the growth curve, competition first and facilitation "
+                        "later, is reported as whatever it was inside the window",
+    "rate_mismatch_to_zero": "the fractional change in the fitted monoculture growth rate that would "
+                             "drive this arc's coefficient to zero, exactly, signed: positive means the "
+                             "rate would have to be that much higher. The monoculture rate is held fixed "
+                             "when the partners are fitted, so the arc is the only parameter left to "
+                             "absorb a difference between the rate the organism had on its own and the "
+                             "rate it had beside its partner, and nothing in a growth curve can measure "
+                             "that difference. Read it as how much of that difference this arc needs to "
+                             "be explained away: an arc at 0.5 survives a 50 per cent error in the rate, "
+                             "an arc at 0.04 does not survive 4 per cent",
     "coefficient_sd": "the spread of the fitted coefficient over the co-culture replicates: one "
                       "coefficient per replicate, at the rate stage's own estimate. The monoculture "
                       "stage's contribution is a separate number beside it, measured on its own design, "

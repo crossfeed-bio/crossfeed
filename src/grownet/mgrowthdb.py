@@ -339,6 +339,8 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             coefficient_sd=r.get("coefficient_sd"), coefficient_n=r.get("coefficient_n"),
             coefficient_sd_from_rate_stage=r.get("coefficient_sd_from_rate_stage"),
             fit_null_r2=r.get("fit_null_r2"),
+            fit_window_share=r.get("fit_window_share"),
+            rate_mismatch_to_zero=r.get("rate_mismatch_to_zero"),
             se_replicates=r.get("se_replicates"), se_rate_stage=r.get("se_rate_stage"),
             rate_stage_method=r.get("rate_stage_method", "") or "",
             rate_stage_n=r.get("rate_stage_n"),

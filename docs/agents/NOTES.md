@@ -15,6 +15,34 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-07 (#155 item 1): **the arc absorbs any rate mismatch, and two new fields let a reader see it.**
+  Stage 1 is held fixed in stage 2, so the arc coefficient is the only free parameter left to take up a
+  difference between the rate an organism had in monoculture and the rate it had in the co-culture, and
+  no growth curve in the design can measure that difference. In a noise-free simulation where the truth
+  is no interaction at all, monocultures grown at 0.90 times the co-culture rate publish a facilitation
+  arc at `q = 0.047`, present, with `fit_r2 = 0.9994`; at 1.20 times it is inhibition at `q = 0.008`.
+  The sign of the invented arc is the sign of the mismatch, and the R2 gate sees none of it because the
+  fit is excellent either way. So each arc now carries `rate_mismatch_to_zero`, the exact signed
+  fractional change in the held rate that would drive its coefficient to zero,
+  `-A / (r dA/dr)` from the derivatives `two_stage` already stores, median over the replicates. It
+  recovers a planted mismatch to three decimals, which is what `test_the_mismatch_that_would_zero_an_arc
+  _recovers_a_planted_rate_mismatch` checks. Two things this does **not** fix, for the next agent: the
+  point estimate, the effect and the status are still whatever the mismatch made them, and testing the
+  coefficient instead of the strength changes nothing (measured: the two tests agree to three decimals
+  in every cell of a null simulation, and on the live All network the switch moves `p < 0.05` from 11
+  arcs to 10). The remaining options are in #155.
+
+- 2026-10-07 (Karoline): **an arc says how much of the course it rests on.** "The effect 1 organism has
+  on another can change along the growth curve. this is not something we treat here, but something we can
+  warn about." The integrated model has no lag term and no death term, so `design` stops the rows at the
+  end of the plateau after the maximum (`growth_window`): on SMGDB00000002 that is 0 to 32 of 120
+  measured hours, three quarters of the course outside the fit, and the whole of it was invisible to a
+  reader. `fitted_window` measures the window against the measured span, `fit_window_share` publishes the
+  fraction, a note names both spans, and an arc under `WINDOW_SHARE_CAUTION` (half) carries the
+  `window_partial` caution. Splitting the window to detect a sign change **inside** it does not work with
+  this machinery: stage 1 cannot be fitted on a half window, so both halves come back without a
+  coefficient. Detecting a sign change would need the rate freed or carried across the halves.
+
 - 2026-10-06 (#120): **both routes carry the same numbers.** The payload is `grownet.glv/v1`:
   `matrices` (one per abundance unit, each with its organisms, unit and media) replaced `interactions`,
   the rates travel with the estimator, lag and capacity, and the caveats are fields rather than prose.
