@@ -45,6 +45,16 @@ content.
   would claim it had no effect at all.
 
 ### Changed
+- **The gLV package states the formula its own derivation fitted** (#142 item 6). `README.txt` inside the
+  package, the payload's `caveats.coefficients`, the R package's printout and its `glv_matrix`
+  documentation, the help's gLV section and the About page's 0.3.0 entry all said an off-diagonal cell is
+  `(r_with - r_without) / x_j` over a rate window, which is the comparison's formula and not what the
+  integrated form fits: there a cell is a parameter of the fit of the whole row,
+  `ln(x_i(T) / x_i(0)) = r_i T + sum_j A[i][j] integral(x_j dt)`. The package text now follows the
+  derivation that made it, `caveats.derivation` names it, the R package prints the package's own sentence
+  rather than one of its own, and the static R documentation gives both. The About page also no longer
+  calls the integrated form a second derivation in Advanced settings: it is the default, and the setting
+  switches to the comparison.
 - **A network says what test its own derivation ran, not what the specified comparison runs** (#142
   items 5 and 11). `meta.statistics` and `meta.provisional` were module constants copied into every
   network, so a file derived by the integrated form claimed Welch's two-sided t-test on per-replicate

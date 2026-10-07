@@ -30,10 +30,13 @@ A square numeric matrix with the organisms as its row and column names.
 }
 \details{
 Every cell is a fitted per-capita coefficient, in 1 over (time times abundance): the diagonal is
-\code{-r_i / K_i} with K the organism's own plateau, and an off-diagonal cell is
+\code{-r_i / K_i} with K the organism's own plateau. What an off-diagonal cell is depends on the
+derivation that made the package, and \code{print(x)} says which: the comparison of replicate sets fits
 \code{(r_with - r_without) / x_j}, the difference between the affected organism's growth rate with the
-actor and without it over the actor's abundance across that window. Nothing in it is a convention, and
-nothing needs scaling to match the rest.
+actor and without it over the actor's abundance across that window, while the integrated form, the
+default since 0.3.0, fits the whole row from the measured time course as a parameter of
+\code{ln(x_i(T) / x_i(0)) = r_i T + sum_j A[i][j] integral(x_j dt)}. Nothing in it is a convention
+either way, and nothing needs scaling to match the rest.
 
 Abundances are never converted between units, so organisms counted in different units are in different
 matrices and \code{unit} says which one to take. A cell whose comparison had one side that did not grow

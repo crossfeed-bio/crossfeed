@@ -265,6 +265,57 @@ def matrix_csv(net: InteractionNetwork, diagonal: float | None = None) -> str:
     return out.getvalue()
 
 
+def derivation_of(net: InteractionNetwork | None) -> str:
+    """"integrated" or "replicate": whose formula this network's cells follow.
+
+    The prose a package carries has to match the derivation that made it, and a reader meets that prose
+    in README.txt, in the payload's caveats and in the R package (#142 item 6). The settings say it;
+    where they do not, the arcs do, since an integrated arc records its own metric.
+    """
+    said = ((net.meta.get("settings") if net is not None else None) or {}).get("derivation")
+    if said in ("integrated", "replicate"):
+        return said
+    if net is not None and any(str(e.metric or "").startswith("integrated") for e in net.edges):
+        return "integrated"
+    return "replicate"
+
+
+# What an off-diagonal cell is, in each derivation's own words. The specified comparison takes a
+# difference of two separately fitted rates; the integrated form fits the whole row from the time course
+# and the cell is a parameter of that fit, so the comparison's formula is not what it holds.
+OFF_DIAGONAL = {
+    "replicate": [
+        "  An off-diagonal cell is A[i][j] = (r_with - r_without) / x_j, the difference between i's own",
+        "      growth rate with j and without it, over x_j, the partner's abundance averaged over the",
+        "      window i's rate was fitted in, which keeps the rate and the abundance in one interval",
+        "      rather than pairing a rate with an abundance the organism reached at another time. Both",
+        "      rates come from the same comparison, and the two rates",
+        "      behind every arc are in the report beside this file, so every cell can be rebuilt by hand.",
+        "      Where one of them is 0, measured, because i grew only with j or only without it, the cell",
+        "      is still that difference: no floor and no stated extreme enters this package.",
+    ],
+    "integrated": [
+        "  An off-diagonal cell is A[i][j] fitted from the whole measured time course, not a difference of",
+        "      two rates: integrating dx_i/dt = x_i (r_i + sum_j A[i][j] x_j) over a replicate's span gives",
+        "      ln(x_i(T) / x_i(0)) = r_i T + sum_j A[i][j] integral(x_j dt), which is linear in r_i and in",
+        "      every A[i][j], so one least-squares fit per organism gives its whole row. r_i and A[i][i]",
+        "      come from that organism's monocultures under the same conditions, then the partners' effects",
+        "      from the co-cultures with those held fixed. Every arc carries the coefficient, the condition",
+        "      number and the residual of the fit behind it, so every cell can be traced to its fit.",
+    ],
+}
+
+CAVEAT_COEFFICIENTS = {
+    "replicate": ("every cell is a fitted per-capita coefficient: the diagonal is -r_i / K_i "
+                  "and an off-diagonal cell is (r_with - r_without) / x_j, so nothing here is "
+                  "a convention and nothing needs scaling to match the rest"),
+    "integrated": ("every cell is a fitted per-capita coefficient: the diagonal is -r_i / K_i and an "
+                   "off-diagonal cell is fitted from the whole time course, as a parameter of "
+                   "ln(x_i(T) / x_i(0)) = r_i T + sum_j A[i][j] integral(x_j dt), so nothing here is a "
+                   "convention and nothing needs scaling to match the rest"),
+}
+
+
 def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
     """The growth rates as CSV: one row per organism, with how many values the median rests on.
 
@@ -801,14 +852,8 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "      therefore settles at K_i. Where no monoculture of it reached a certified plateau, its own",
         "      plateau beside its partners fits the same balance, 0 = r_i + A[i][i] x_i + sum_j A[i][j] x_j",
         "      there, and the organism is named under SELF-LIMITATION FITTED AT A CO-CULTURE PLATEAU.",
-        "  An off-diagonal cell is A[i][j] = (r_with - r_without) / x_j, the difference between i's own",
-        "      growth rate with j and without it, over x_j, the partner's abundance averaged over the",
-        "      window i's rate was fitted in, which keeps the rate and the abundance in one interval",
-        "      rather than pairing a rate with an abundance the organism reached at another time. Both",
-        "      rates come from the same comparison, and the two rates",
-        "      behind every arc are in the report beside this file, so every cell can be rebuilt by hand.",
-        "      Where one of them is 0, measured, because i grew only with j or only without it, the cell",
-        "      is still that difference: no floor and no stated extreme enters this package.",
+        # in the derivation's own words: the comparison's formula is not what an integrated cell holds
+        *OFF_DIAGONAL[derivation_of(net)],
         "  ABUNDANCES ARE NEVER CONVERTED BETWEEN UNITS: a cell mass conversion would have to be",
         "      invented, while the dynamics are the same in any unit, so each unit has its own matrix and",
         "      the pairs that fall outside it are named below.",
@@ -976,9 +1021,10 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
              "carrying_capacity_fall_from_peak": rates[nid].get("capacity_fall")}
             for nid in order if nid in rates and (rates[nid] or {}).get("rate") is not None],
         "caveats": {
-            "coefficients": ("every cell is a fitted per-capita coefficient: the diagonal is -r_i / K_i "
-                             "and an off-diagonal cell is (r_with - r_without) / x_j, so nothing here is "
-                             "a convention and nothing needs scaling to match the rest"),
+            # in the derivation's own words (#142 item 6): the comparison's formula is not what an
+            # integrated cell holds, and the R package prints this text rather than one of its own
+            "coefficients": CAVEAT_COEFFICIENTS[derivation_of(net)],
+            "derivation": derivation_of(net),
             "diagonal": "fitted: -r_i / K_i, with K_i the organism's own plateau",
             "units": ("one matrix per abundance unit: abundances are never converted between units, since "
                       "a cell mass conversion would have to be invented, and no effect between organisms "

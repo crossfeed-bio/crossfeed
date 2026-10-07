@@ -200,8 +200,14 @@ print.grownet_glv <- function(x, ...) {
                 if (nzchar(x$growth_rate_unit)) paste0(" (", x$growth_rate_unit, ")") else ""))
     cat("  A[i, j] is the effect of j on i: rows are affected, columns are the actor.\n")
     if (x$fitted) {
-        cat("  Every cell is a fitted per-capita coefficient: the diagonal is -r_i / K_i and an\n")
-        cat("  off-diagonal cell is (r_with - r_without) / x_j. Nothing here is a convention.\n")
+        # the package's own sentence, which says what its derivation fitted: an integrated cell is not a
+        # difference of two rates, and this used to state the comparison's formula for both (#142 item 6)
+        said <- x$caveats$coefficients
+        if (length(said) == 1L && nzchar(said)) {
+            cat(paste0("  ", sub("^every", "Every", said), ".\n"))
+        } else {
+            cat("  Every cell is a fitted per-capita coefficient: the diagonal is -r_i / K_i.\n")
+        }
     }
     cat("  Read before you simulate:\n")
     censored <- x$caveats$censored_cells

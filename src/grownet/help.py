@@ -33,8 +33,8 @@ ABOUT = (f"{NAME} was built by Karoline Faust (KU Leuven) and Craig Heilmann (Sy
 RELEASES = (
     ("0.3.0", "2026-10-06", (
         "The gLV parameters are fitted coefficients, not effect sizes: the diagonal is -r_i / K_i from "
-        "each organism's own plateau, and an off-diagonal cell is (r_with - r_without) / x_j, over the "
-        "partner's abundance. Every cell is a per-capita effect in 1/(time x abundance), so nothing in "
+        "each organism's own plateau, and an off-diagonal cell is whatever its derivation fitted, which "
+        "the package states. Every cell is a per-capita effect in 1/(time x abundance), so nothing in "
         "the package is a convention and nothing needs scaling.",
         "One matrix per abundance unit, since a conversion between cells, colony-forming units and grams "
         "would have to be invented. The page says before the download when a package will hold more "
@@ -46,9 +46,10 @@ RELEASES = (
         "and the organism's carrying capacity, which are the three numbers a coefficient is made of.",
         "A package can be scored against the chemostat steady states mGrowthDB holds for the same "
         "organisms, which were never used to fit it: predicted against observed, per organism.",
-        "A second derivation, in Advanced settings: instead of comparing replicate sets it fits each "
-        "organism's whole row from the time course, which needs no growth property and gives the "
-        "coefficients directly.",
+        "The default derivation fits each organism's whole row from the measured time course instead of "
+        "comparing replicate sets, which needs no growth property and gives the coefficients directly. "
+        "The comparison of replicate sets is Derivation in Advanced settings, or --derivation replicate, "
+        "and is unchanged.",
         "Send to R and the R package carry the same numbers as the download, and the package reads the "
         "parameters of 0.2.0 as well, telling the two apart.",
     )),
@@ -823,9 +824,13 @@ from drop-out designs, and which media they were measured in.</p>
 simulator, and since #119 it holds <strong>fitted coefficients</strong> rather than effect sizes:
 <code>interaction_matrix.&lt;unit&gt;.csv</code>, one matrix per abundance unit and named after it, where
 the diagonal is <code>A[i][i] = -r_i / K_i</code> with K the organism's own monoculture carrying capacity,
-and an off-diagonal cell is <code>A[i][j] = (r_with - r_without) / x_j</code>, the difference between i's
+and an off-diagonal cell is whatever the derivation fitted, which the package's own README.txt and the
+payload's <code>caveats.coefficients</code> state. Under the default, the integrated form, it is a
+parameter of the fit of the whole row, <code>ln(x_i(T) / x_i(0)) = r_i T + sum_j A[i][j] integral(x_j
+dt)</code>, with the condition number and the residual of that fit on every arc. Under the comparison of
+replicate sets it is <code>A[i][j] = (r_with - r_without) / x_j</code>, the difference between i's
 own growth rate with j and without it, over the partner's abundance averaged across the window i's rate
-was fitted in. Both rates come from the same comparison and are in the report, so every cell can be
+was fitted in; both rates come from the same comparison and are in the report, so every cell can be
 rebuilt by hand. Where one of them is 0 because i grew only with j, or only without it, the cell is still
 that difference: no floor and no stated extreme enters the package, and an organism that grows only with a
 partner gets a whole row, <code>r_i = 0</code> with its self-limitation fitted at the plateau it reaches
@@ -850,9 +855,10 @@ grow without bound and come back as NA, which now says something about the measu
 fitted as facilitating each other more than each limits itself, rather than about a convention; the
 equilibrium of a fit is the solution of A x = -r, and a negative entry there means the fit has no positive
 steady state.</p>
-<p><strong>A second derivation, from the whole time course.</strong> <strong>Derivation</strong> in
-Advanced settings (or <code>--derivation integrated</code>) fits each organism's row instead of comparing
-replicate sets. Integrating dx_i/dt = x_i (r_i + sum_j A_ij x_j) gives
+<p><strong>The default derivation, from the whole time course.</strong> It fits each organism's row
+instead of comparing replicate sets; <strong>Derivation</strong> in Advanced settings (or
+<code>--derivation replicate</code>) switches to the comparison of replicate sets, which is unchanged.
+Integrating dx_i/dt = x_i (r_i + sum_j A_ij x_j) gives
 ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt), which is linear in r_i and in every A_ij, so
 one least-squares fit per organism returns its whole row: no growth property, no log2 ratio, no
 plateau to certify, and no partner abundance to divide by, since the regressor is the partner's own time

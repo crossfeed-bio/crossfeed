@@ -164,3 +164,37 @@ def test_the_statistics_a_default_arc_carries_are_the_two_component_ones():
     assert arc.rate_stage_n == 3
     # `se` is rounded to four decimals on the record, so the relation holds to half of the last digit
     assert arc.se == pytest.approx(math.sqrt(arc.se_replicates ** 2 + arc.se_rate_stage ** 2), abs=5e-5)
+
+
+def test_the_package_prose_states_the_formula_the_derivation_actually_fitted():
+    """#142 item 6: the gLV package's README.txt and the payload's `caveats.coefficients` stated the
+    comparison's formula, `(r_with - r_without) / x_j` over a rate window, for every package including
+    one derived by the integrated form, which fits the row from the time course and never takes that
+    difference. Both now follow the derivation, and `caveats.derivation` names it."""
+    import zipfile
+
+    from grownet import matrix
+    result = _default_query()
+    net, rates = result["network"], result.get("rates") or {}
+    assert matrix.derivation_of(net) == "integrated"
+
+    payload = matrix.glv_payload(net, rates)
+    assert payload["caveats"]["derivation"] == "integrated"
+    assert "(r_with - r_without)" not in payload["caveats"]["coefficients"]
+    assert "integral(x_j dt)" in payload["caveats"]["coefficients"]
+
+    with zipfile.ZipFile(io_bytes(matrix.glv_package(net, rates))) as archive:
+        readme = archive.read("README.txt").decode("utf-8")
+    assert "(r_with - r_without)" not in readme
+    assert "fitted from the whole measured time course" in readme
+
+    # and the comparison's own package still states the comparison's formula
+    other = run_query(TimeCourseClient(), [A, B], {"derivation": "replicate", "metric": "growth_rate"})
+    assert matrix.derivation_of(other["network"]) == "replicate"
+    said = matrix.glv_payload(other["network"], other.get("rates") or {})["caveats"]["coefficients"]
+    assert "(r_with - r_without)" in said
+
+
+def io_bytes(data: bytes):
+    import io
+    return io.BytesIO(data)
