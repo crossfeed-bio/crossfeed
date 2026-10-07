@@ -31,6 +31,24 @@ content.
   always the solution of `A x = -r` and the reader had to work it out.
 
 ### Changed
+- **The integrated form fits each organism's row from the monocultures of its own condition, and its
+  statistics carry both stages' error** (#142 items 1 and 2). Two fixes to the derivation that is now the
+  default. Stage 1 used to be every monoculture replicate of the organism anywhere in the study: it now
+  follows the rule settled on #47, identical recorded conditions and the same description apart from a run
+  number, through the same two functions the specified comparison uses, so both derivations compare like
+  with like. On SMGDB00000014 the arc at 0.75 percent linoleic acid is gone, refused by the R2 gate that
+  it had passed only because stage 1 handed it a rate from the conditions where the organism does grow;
+  the TBHQ arc's coefficient nearly doubles and its reverse direction becomes identifiable. On
+  SMGDB00000007 five arcs become six and every coefficient moves, the largest by 3.2 times. And `sd`,
+  `se`, `p_value`, `q_value` and the absence threshold used to be computed from the co-culture replicates
+  alone, so the monoculture stage was treated as exact in the one place that decides which arcs reach a
+  file: that stage is now resampled over its own replicates, each co-culture replicate carries the exact
+  derivative of its coefficient with respect to the stage's two numbers, and the two variances are added.
+  Both halves are published (`se_replicates`, `se_rate_stage`, `rate_stage_method`, `rate_stage_n`), and
+  `coefficient_sd` and `coefficient_sd_from_rate_stage` now mean what they say, on disjoint designs.
+  Measured over the six studies that give arcs: 20 arcs become 17, p < 0.05 goes from 12 to 9, q < 0.05
+  from 8 to 5, the largest sd grows 8.3 times, and on 5 of the 17 the monoculture stage contributes more
+  of the variance than the co-culture replicates do.
 - **What counts as one medium is a rule now, and it decides every medium comparison** (Karoline,
   2026-10-07, closing the open decision on #141 and then: "foodnet's strict medium rule should be applied
   in general in case someone specifies it in the 2nd search box (because such changes alter

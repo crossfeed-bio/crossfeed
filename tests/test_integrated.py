@@ -12,6 +12,7 @@ rate window, no log2 ratio and no certified plateau. The tests build curves from
 ask the fit to recover them.
 """
 import math
+import statistics
 
 import pytest
 
@@ -224,8 +225,10 @@ def _named(names, times, series, name, unit="Cells/mL"):
 def test_the_fit_carries_its_own_spread_over_replicates_and_over_the_rate_stage():
     """Before 2026-10-06 an integrated arc carried no sd, no standard error and no p-value, so the
     absence threshold returned "undetermined" for every one of them and nothing could be tested or
-    corrected for multiple testing. Stage 2 is now fitted once per co-culture replicate, and once per
-    leave-one-out of the monoculture replicates, so the spread over that set carries both stages.
+    corrected for multiple testing. Stage 2 is now fitted once per co-culture replicate, with its exact
+    derivative with respect to stage 1's two numbers beside it, and stage 1 is resampled over its own
+    monoculture replicates, so the two sources of error are measured on disjoint designs and added
+    (2026-10-07, #142 item 2; before that the spread mixed them in one set).
 
     Three monocultures and three co-cultures of the same noiseless system: every estimate is the same
     number, so the spread is zero and the fit recovers the truth. What this pins is that the spread
@@ -244,10 +247,24 @@ def test_the_fit_carries_its_own_spread_over_replicates_and_over_the_rate_stage(
     assert got["replicates"] == 3
     assert [entry["replicate"] for entry in got["per_replicate"]] == ["c0", "c1", "c2"]
     spread = got["spread"]["B"]
-    assert spread["n"] == 12                 # three replicates times four stage-1 variants
+    assert spread["n"] == 3                  # one coefficient per co-culture replicate, nothing mixed in
     assert spread["median"] == pytest.approx(2.0e-10, rel=0.25)
     assert spread["sd"] is not None and spread["sd"] >= 0
-    assert "B" in got["stage_one_spread"]
+
+    # stage 1's own error, on its own design: three monoculture replicates, bootstrapped
+    assert got["stage_one_n"] == 3
+    assert got["stage_one_method"].startswith("bootstrap of 3 monoculture replicate(s)")
+    assert len(got["stage_one_draws"]) == integrated.STAGE_ONE_DRAWS
+    # and every replicate carries the exact derivative of its coefficient with respect to (rate, self)
+    assert [entry["replicate"] for entry in got["sensitivity"]] == ["c0", "c1", "c2"]
+    assert all("B" in entry for entry in got["sensitivity"])
+
+    # the arc statistics add the two: here the system is noiseless, so both parts are near zero
+    stats_here = integrated._arc_statistics(got, cos, "B")
+    assert stats_here["n"] == 3
+    assert stats_here["se"] == pytest.approx(
+        math.sqrt(stats_here["se_replicates"] ** 2 + stats_here["se_rate_stage"] ** 2), rel=1e-9)
+    assert stats_here["strength"] == pytest.approx(statistics.mean(stats_here["per_replicate"]))
 
     # and the R2 is of the whole fit against the measured log change, about zero, since y is zero at the
     # start by construction and the model has no intercept
@@ -401,3 +418,46 @@ def test_stage_one_takes_the_monocultures_of_this_experiments_own_condition():
     assert "E2" in arc["experiments"] and "E1" not in arc["experiments"]
     assert "E4" in arc["experiments"]
     assert not [row for row in skipped if "could not be identified" in row[1]]
+
+
+def test_disagreeing_monocultures_widen_the_arc_the_same_co_cultures_give():
+    """#142 item 2: `sd`, `se`, `p_value` and therefore the absence threshold were computed from the
+    co-culture replicates alone, so stage 1 was treated as exact in the one place that decides which arcs
+    reach a file. The same co-cultures now give a wider arc when the monocultures they rest on disagree.
+
+    Both runs use identical co-culture replicates. The first has three monocultures of one and the same
+    organism; the second has three that imply plateaus a factor of three apart, so stage 1 is the same
+    median with a real spread around it, and nothing about the co-cultures has changed.
+    """
+    r = [0.4, 0.3]
+    A = [[-4.0e-10, 2.0e-10], [0.0, -3.0e-10]]
+    cos = []
+    for k, start in enumerate((1.0e7, 1.1e7, 0.9e7)):
+        times, series = _simulate(r, A, [start, 5.0e8])
+        cos.append(_named(["A", "B"], times, series, f"c{k}"))
+
+    def monos_of(*selfs):
+        out = []
+        for k, own in enumerate(selfs):
+            times, series = _simulate([0.4], [[own]], [1.0e7])
+            out.append(_named(["A"], times, series, f"m{k}"))
+        return out
+
+    agreeing = integrated.two_stage("A", monos_of(-4.0e-10, -4.0e-10, -4.0e-10), cos, ["A", "B"])
+    spread_out = integrated.two_stage("A", monos_of(-2.0e-10, -4.0e-10, -6.0e-10), cos, ["A", "B"])
+    tight = integrated._arc_statistics(agreeing, cos, "B")
+    wide = integrated._arc_statistics(spread_out, cos, "B")
+
+    # the same co-culture replicates on both sides, so the replicate half is the same
+    assert tight["n"] == wide["n"] == 3
+    assert wide["se_replicates"] == pytest.approx(tight["se_replicates"], rel=0.3)
+    # and the monoculture stage's half is what differs, which is the whole point
+    assert tight["se_rate_stage"] == pytest.approx(0.0, abs=1e-9)
+    assert wide["se_rate_stage"] > 10 * (tight["se_rate_stage"] or 1e-12)
+    assert wide["se"] > tight["se"]
+    # it reaches the test and the dispersion the absence threshold reads, not only a reported field
+    assert wide["p_value"] > tight["p_value"]
+    assert wide["sd"] > tight["sd"]
+    # se stays the dispersion of the mean: se = sd / sqrt(n), the relation the rest of the tool assumes
+    for one in (tight, wide):
+        assert one["se"] == pytest.approx(one["sd"] / math.sqrt(one["n"]), rel=1e-9)

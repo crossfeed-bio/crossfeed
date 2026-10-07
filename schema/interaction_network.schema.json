@@ -405,6 +405,45 @@
             "number",
             "null"
           ]
+        },
+        "coefficient_sd": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "coefficient_n": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "coefficient_sd_from_rate_stage": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "se_replicates": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "se_rate_stage": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "rate_stage_method": {
+          "type": "string"
+        },
+        "rate_stage_n": {
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     },

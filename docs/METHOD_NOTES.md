@@ -392,25 +392,48 @@ important to ship something good". Three were structural rather than inherent, a
 1. **It carried no uncertainty at all.** Stage 2 pooled every co-culture replicate into one regression
    and treated stage 1's median rate and self-limitation as exact, so an arc had no sd, no standard
    error and no p-value, and the absence threshold returned "undetermined" for every one of them.
-   Stage 2 is now fitted once per co-culture replicate and once per leave-one-out of the monoculture
-   replicates; the median over that set is the coefficient and the spread over it is its uncertainty.
-   An arc now carries the mean and sd of its per-replicate log2 strengths, a one-sample t-test against
-   no effect, and so a q-value and a status from the same machinery as the specified comparison. Live on
-   the whole database: 20 of 23 arcs tested, 2 at q < 0.05, 5 comparisons dropped by the threshold.
-2. **Stage 1's error reached the partner coefficient unannounced.** It is inside `coefficient_sd`, and
+   An arc carries the mean and sd of its per-replicate log2 strengths, a t-test against no effect, and so
+   a q-value and a status from the same machinery as the specified comparison.
+   **REBUILT 2026-10-07 (#142 item 2).** The leave-one-out machinery described here is gone and the two
+   sources of error are now measured on disjoint designs and added:
+
+   * the **co-culture replicates**: one coefficient per replicate at stage 1's estimate, each turned into
+     a strength at that replicate's own partner level;
+   * **stage 1 itself**: its monoculture replicates resampled. Stage 2 solves a least squares whose design
+     does not depend on `(r_i, A_ii)` and whose right-hand side is affine in them, so each coefficient is
+     an affine function of the two and one extra solve per parameter gives the exact derivative. No refit
+     per resample is needed. Where stage 1 is the median of one fit per replicate the replicates are
+     bootstrapped (200 resamples, a fixed seed, so a published number is reproducible); where it is one
+     regression over all their rows the delete-one jackknife is used, which is consistent for a
+     least-squares estimate, with its `(n - 1) / n` scaling.
+
+   `se` is the square root of the two variances added, `sd` is `se * sqrt(n)` so that the tool's own
+   relation `se = sd / sqrt(n)` holds and the absence threshold reads a dispersion that carries both, and
+   `p_value` is a t statistic on `se` with a Satterthwaite degrees of freedom. Both halves are published
+   as `se_replicates` and `se_rate_stage`, with `rate_stage_method` naming the resampling.
+
+   Measured over the six studies that give arcs (2, 4, 6, 7, 13, 14), against the same code with stage 1
+   treated as exact: **20 arcs become 17** (three fall below the absence threshold and so leave the file),
+   **p < 0.05 goes from 12 arcs to 9** and **q < 0.05 from 8 to 5**, the largest `sd` grows by 8.3 times,
+   and on **5 of the 17** the monoculture stage contributes more of the variance than the co-culture
+   replicates do.
+2. **Stage 1's error reached the partner coefficient unannounced.** It was inside `coefficient_sd`, and
    `coefficient_sd_from_rate_stage` was meant to report its share.
-   **WITHDRAWN 2026-10-06, the same day: that field is not a share of anything, and the conclusion drawn
-   from it here was wrong.** The leave-one-out set is the total set minus one value per co-culture
-   replicate (the central variant), so it is a subset of what it is compared against and its ratio sits
-   just above 1 whatever the data does: shown three ways, including a case where the monoculture stage
-   contributes exactly zero variance and the field still reports about 102 per cent. Computed properly, as
-   the variance across stage-1 variants within a fixed replicate, the true share runs from 0.26 to 1.06
-   across the arcs of one study. The sentence this entry carried, that the monoculture stage dominates and
-   that the next improvement is more monoculture replicates, was read off that artifact and is not
-   supported. Worse, the spread the field belongs to is a delete-one jackknife of a median, which is not a
-   consistent variance estimator for that statistic (Efron 1979), and it is not jackknife-scaled.
-   And `sd`, `se`, `p_value`, `q_value`, `effect_over_sd` and `status` are all computed from the central
-   variant alone, so stage 1 is still treated as exact in the place that decides which arcs ship.
+   **WITHDRAWN 2026-10-06, the same day: that field was not a share of anything, and the conclusion drawn
+   from it here was wrong.** The leave-one-out set was the total set minus one value per co-culture
+   replicate (the central variant), so it was a subset of what it was compared against and its ratio sat
+   just above 1 whatever the data did: shown three ways, including a case where the monoculture stage
+   contributes exactly zero variance and the field still reported about 102 per cent. The sentence this
+   entry carried, that the monoculture stage dominates and that the next improvement is more monoculture
+   replicates, was read off that artifact and was not supported by it.
+   **RESOLVED 2026-10-07 by the rebuild in item 1 above.** `coefficient_sd` is now the spread over the
+   co-culture replicates alone and `coefficient_sd_from_rate_stage` the monoculture stage's own
+   contribution, from resampling that stage, so the two are disjoint designs and the second is no longer
+   a subset of the first. The jackknife of a median is gone, which is what Efron (1979, *Ann. Statist.*
+   7(1):1-26, section 3) rules out, and the jackknife that remains is of a least-squares estimate and is
+   scaled. On the measurement above the monoculture stage does dominate on 5 of 17 arcs, which is a
+   weaker and differently founded statement than the withdrawn one: it rests on the resampled stage
+   rather than on a ratio of nested sets.
 3. **The reported R2 answered a smaller question than its words.** It was stage 2's fit against stage
    1's residual; it is now the whole fit against the measured `ln(x_i(t) / x_i(0))`, computed about zero
    because the model has no intercept and y is zero at the start by construction. With that number in
@@ -470,8 +493,11 @@ co-culture rows slightly worse, and flips three signs. **Qualified 2026-10-06: t
 compare 23 arcs with 28, five of which only the pooled arm produces, while the sign row is restricted to
 the arcs both produce. On the paired subset the median spread is unchanged (0.361 against 0.359) and the
 worst falls from 3.49 to 1.64, so the conclusion stands and these two rows are not evidence for it as laid
-out.** The spread column is also the quantity withdrawn in the entry above, so it needs recomputing once
-that is fixed. That is what one outlying replicate does to a
+out.** **Superseded 2026-10-07: the spread rows measured the quantity withdrawn in the entry above, which
+has since been rebuilt on a different design, so they are of a number that no longer exists and are not to
+be read. They have not been recomputed, which would be a corpus-wide run of both arms; the decision below
+does not rest on them, since it rests on the three sign flips and on the arc counts, neither of which the
+rebuild touches.** That is what one outlying replicate does to a
 regression and not to a median, and this data has such replicates (one monoculture rate of 3.09 /h beside
 two of 0.36 and 0.37). The median is also the project's merge rule for replicates. **Decision: the median
 stays the estimate, and pooling is the fallback where no single replicate identifies the row at all.** On

@@ -340,19 +340,29 @@ EDGE_ATTRIBUTES = {
                    "it fitted, a per-capita effect in 1/(time x abundance)",
     "coefficient_unit": "the unit of that coefficient",
     "fit_r2": "how much of the organism's own log abundance change that fit explains",
-    "coefficient_sd": "the spread of the fitted coefficient over the estimates behind it: one per "
-                      "co-culture replicate, and one per replicate for each monoculture replicate left "
-                      "out of the rate stage. It is being rebuilt: the leave-one-out half is a jackknife "
-                      "of a median, which is not a consistent estimator of that spread, and the statistics "
-                      "that decide an arc (sd, se, p_value, q_value, status) use the co-culture "
-                      "replicates only, so they do not carry it",
-    "coefficient_n": "how many estimates of the coefficient that spread rests on, which is the number of "
-                     "co-culture replicates times the number of rate-stage variants, not a count of "
-                     "cultures: do not read it as a sample size",
-    "coefficient_sd_from_rate_stage": "being rebuilt and not to be read: it was meant to be the part of "
-                                      "coefficient_sd from the monoculture stage, and it is that same set "
-                                      "with one value per replicate removed, so it is near the whole "
-                                      "spread whatever the stage contributes",
+    "coefficient_sd": "the spread of the fitted coefficient over the co-culture replicates: one "
+                      "coefficient per replicate, at the rate stage's own estimate. The monoculture "
+                      "stage's contribution is a separate number beside it, measured on its own design, "
+                      "so the two are never mixed",
+    "coefficient_n": "the co-culture replicates behind that spread, which is a count of cultures",
+    "coefficient_sd_from_rate_stage": "the part of the coefficient's uncertainty that comes from the "
+                                      "monoculture stage, on its own design: that stage is resampled "
+                                      "over its monoculture replicates and the coefficient recomputed at "
+                                      "each resample, which it can be exactly, since it is an affine "
+                                      "function of the rate and the self-limitation",
+    "se_replicates": "the part of se that comes from the co-culture replicates: their spread over the "
+                     "square root of their number. With a derivation that fits the row, sd is the "
+                     "dispersion of one estimate including the monoculture stage, so that the tool's own "
+                     "relation se = sd / sqrt(n) holds and the absence threshold carries that stage too; "
+                     "the replicates' own scatter is this number times the square root of n",
+    "se_rate_stage": "the part of se that comes from the monoculture stage, from resampling it. se is "
+                     "the square root of the two variances added, and the p-value is a t statistic on "
+                     "it with a Satterthwaite degrees of freedom, so an arc whose monoculture stage is "
+                     "poorly determined is not tested as though that stage were exact",
+    "rate_stage_method": "how the monoculture stage was resampled for that number: a bootstrap of its "
+                         "replicates where the stage is the median of one fit per replicate, or a "
+                         "delete-one jackknife where it is one regression over all of their rows",
+    "rate_stage_n": "the monoculture replicates that resampling rests on",
     "fit_condition": "how well the fit was determined: the condition number of the normal equations of "
                      "its design, every column scaled, so a large number means the columns were too "
                      "close to tell apart. It is the square of the design's own condition number, and "

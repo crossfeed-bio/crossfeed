@@ -67,6 +67,12 @@ def _edge_line(net, e) -> str:
         parts.append(f"fitted coefficient {e.coefficient:.4g} {e.coefficient_unit}".strip())
         if e.fit_r2 is not None and e.fit_condition is not None:
             parts.append(f"fit r2 {e.fit_r2:.3f}, condition {e.fit_condition:.3g}")
+        # the two halves of the standard error, on their own designs, so a reader can see which stage the
+        # uncertainty comes from and that the rate stage reached the test at all (#142 item 2)
+        if getattr(e, "se_rate_stage", None) is not None:
+            parts.append(f"se {e.se_replicates:.3g} from the co-culture replicates and "
+                         f"{e.se_rate_stage:.3g} from the rate stage"
+                         + (f" ({e.rate_stage_method})" if e.rate_stage_method else ""))
     if getattr(e, "metric_with", None) is not None and getattr(e, "metric_without", None) is not None:
         parts.append(f"{name[e.target]} at {e.metric_with:.4g} with / {e.metric_without:.4g} without "
                      f"({e.metric})")

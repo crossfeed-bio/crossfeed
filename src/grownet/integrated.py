@@ -23,6 +23,7 @@ Standard library only: the normal equations of a design this small are solved by
 from __future__ import annotations
 
 import math
+import random
 import statistics
 
 # Above this condition number the columns are too close to tell apart, and the split between an
@@ -313,6 +314,67 @@ def _pooled_stage_one(target: str, replicates: list, max_condition: float):
     return rate, own, got["condition"]
 
 
+# How many times stage 1 is resampled when its estimate is a median of per-replicate fits. 200 is enough
+# for a standard error at this precision, and the draws are medians of values already computed, so the
+# cost is arithmetic rather than another fit. The seed is fixed because a published number has to be
+# reproducible: the same curves give the same standard error on every machine and every run.
+STAGE_ONE_DRAWS = 200
+STAGE_ONE_SEED = 20261007
+
+
+def _stage_one_draws(target: str, rates: list, selfs: list, usable: list, pooled_only: bool,
+                     max_condition: float) -> dict:
+    """{"values": [(rate, self), ...], "method", "n"}: stage 1 resampled over its monoculture replicates.
+
+    Stage 1's error has to reach the statistics that decide an arc, and how it is estimated depends on
+    how stage 1 was estimated.
+
+    When stage 1 is the median of one fit per monoculture replicate, the replicates are **bootstrapped**:
+    `STAGE_ONE_DRAWS` resamples with replacement, each giving the median of the resampled set. A
+    delete-one jackknife is not used there, because the jackknife is not a consistent variance estimator
+    for a median (Efron 1979, *Ann. Statist.* 7(1):1-26, section 3): with many replicates the
+    leave-one-out medians take two distinct values and the number collapses, which is what #142 item 3
+    measured.
+
+    When stage 1 is one regression over every monoculture row (`_pooled_stage_one`, the fallback where no
+    replicate identifies itself), the estimate is a least-squares solution and a **delete-one jackknife**
+    is consistent for it, scaled by (n - 1) / n on the sum of squares as a jackknife must be.
+
+    `values` is empty when stage 1 rests on too few replicates to resample at all, and the caller then
+    publishes the replicate spread alone and says what it rests on.
+    """
+    if pooled_only:
+        if len(usable) < 3:
+            return {"values": [], "n": len(usable), "variance_scale": 1.0,
+                    "method": "none: too few monoculture replicates to resample"}
+        left_out = []
+        for k in range(len(usable)):
+            got = _pooled_stage_one(target, [r for j, r in enumerate(usable) if j != k], max_condition)
+            if got is not None:
+                left_out.append((got[0], got[1]))
+        if len(left_out) < 3:
+            return {"values": [], "n": len(left_out), "variance_scale": 1.0,
+                    "method": "none: the pooled stage could not be refitted without a replicate"}
+        # a jackknife variance is ((n - 1) / n) * sum of squared deviations, which is (n - 1)^2 / n times
+        # the sample variance of the leave-one-out values. Without the scaling the number shrinks as
+        # replicates are added, which is what #142 item 3 measured.
+        scale = (len(left_out) - 1) ** 2 / len(left_out)
+        return {"values": left_out, "n": len(usable), "variance_scale": scale,
+                "method": "delete-one jackknife of the pooled monoculture regression"}
+    if len(rates) < 3:
+        return {"values": [], "n": len(rates), "variance_scale": 1.0,
+                "method": "none: too few monoculture replicates to resample"}
+    rng = random.Random(STAGE_ONE_SEED)
+    n = len(rates)
+    draws = []
+    for _ in range(STAGE_ONE_DRAWS):
+        picks = [rng.randrange(n) for _ in range(n)]
+        draws.append((statistics.median([rates[k] for k in picks]),
+                      statistics.median([selfs[k] for k in picks])))
+    return {"values": draws, "n": n, "variance_scale": 1.0,
+            "method": f"bootstrap of {n} monoculture replicate(s), {STAGE_ONE_DRAWS} resamples"}
+
+
 def two_stage(target: str, monocultures: list, cocultures: list, organisms: list,
               max_condition: float = MAX_CONDITION) -> dict:
     """The organism's row from its monocultures first, then its partners from the co-cultures.
@@ -383,22 +445,11 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
     # unannounced. Both are fixed by fitting stage 2 once per co-culture replicate and once per
     # leave-one-out of the monoculture replicates: the spread over that set carries the co-culture
     # replicate spread and stage 1's together, and the median over it is the estimate (2026-10-06).
-    variants = [(rate, own)]
-    if pooled_only and len(usable) >= 3:
-        for k in range(len(usable)):
-            left_out = _pooled_stage_one(target, [r for j, r in enumerate(usable) if j != k],
-                                         max_condition)
-            if left_out is not None:
-                variants.append((left_out[0], left_out[1]))
-    elif len(rates) >= 3:
-        for k in range(len(rates)):
-            kept_rates = [v for j, v in enumerate(rates) if j != k]
-            kept_selfs = [v for j, v in enumerate(selfs) if j != k]
-            variants.append((statistics.median(kept_rates), statistics.median(kept_selfs)))
+    draws = _stage_one_draws(target, rates, selfs, usable, pooled_only, max_condition)
 
-    per_replicate: list = []          # one {partner: value} per co-culture replicate, central variant
-    spread_values: dict = {}          # partner -> every value over replicates and stage-1 variants
-    stage_one_values: dict = {}       # partner -> values at a fixed replicate, varying stage 1 only
+    per_replicate: list = []          # one {partner: value} per co-culture replicate, at (rate, own)
+    sensitivity: list = []            # one {partner: (d/d rate, d/d own)} per co-culture replicate
+    spread_values: dict = {}          # partner -> one value per co-culture replicate
     pooled_rows, points, present = [], 0, []
     for i, replicate in enumerate(cocultures):
         built = design(replicate, target, [target, *partners])
@@ -413,27 +464,38 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
             if name not in present:
                 present.append(name)
         points += len(built["rows"])
-        central = {}
-        for which, (a_rate, a_self) in enumerate(variants):
-            rows = []
-            for row in built["rows"]:
-                # the monoculture's own numbers are known, so what is left to fit is the partners' effect
-                left = row["y"] - a_rate * row["time"] - a_self * row["integrals"][own_index]
-                rows.append({"y": left,
-                             "columns": [row["integrals"][here.index(name)] for name in mine]})
-            pooled_rows += rows if which == 0 else []
-            got = _least_squares(rows, len(mine))
-            if got["values"] is None or got["condition"] > max_condition:
-                continue
-            conditions.append(got["condition"])
-            for name, value in zip(mine, got["values"], strict=True):
-                spread_values.setdefault(name, []).append(value)
-                if which == 0:
-                    central[name] = value
-                else:
-                    stage_one_values.setdefault(name, []).append(value)
-        if central:
-            per_replicate.append({"replicate": replicate.name or str(i), **central})
+
+        def rows_at(a_rate, a_self, built=built, here=here, mine=mine, own_index=own_index):
+            # the monoculture's own numbers are known, so what is left to fit is the partners' effect
+            return [{"y": row["y"] - a_rate * row["time"] - a_self * row["integrals"][own_index],
+                     "columns": [row["integrals"][here.index(name)] for name in mine]}
+                    for row in built["rows"]]
+
+        rows = rows_at(rate, own)
+        pooled_rows += rows
+        got = _least_squares(rows, len(mine))
+        if got["values"] is None or got["condition"] > max_condition:
+            continue
+        conditions.append(got["condition"])
+        central = dict(zip(mine, got["values"], strict=True))
+        # Stage 2 solves a least squares whose right-hand side is affine in (rate, own) and whose design
+        # does not depend on them, so each coefficient is an affine function of the two and a single step
+        # gives the exact derivative, whatever the step is. Two more solves per replicate therefore carry
+        # stage 1's error into stage 2 exactly, where leaving it out made a partner coefficient read as
+        # though the monoculture stage were known (#142 item 2).
+        step_rate = 0.1 * abs(rate) or 1.0
+        step_own = 0.1 * abs(own) or 1e-12
+        by_rate = _least_squares(rows_at(rate + step_rate, own), len(mine))
+        by_own = _least_squares(rows_at(rate, own + step_own), len(mine))
+        slopes = {}
+        if by_rate["values"] is not None and by_own["values"] is not None:
+            for k, name in enumerate(mine):
+                slopes[name] = ((by_rate["values"][k] - got["values"][k]) / step_rate,
+                                (by_own["values"][k] - got["values"][k]) / step_own)
+        for name, value in central.items():
+            spread_values.setdefault(name, []).append(value)
+        per_replicate.append({"replicate": replicate.name or str(i), **central})
+        sensitivity.append({"replicate": replicate.name or str(i), **slopes})
 
     coefficients = {target: own}
     fitted = {name: statistics.median(values) for name, values in spread_values.items() if values}
@@ -461,11 +523,19 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
             "r2": _overall_r2(target, partners, cocultures, rate, own, coefficients),
             "condition": max(conditions) if conditions else float("inf"),
             "points": points, "stages": stages, "skipped": skipped, "reason": "",
-            # what the spread rests on: one value per co-culture replicate (central stage 1), every value
-            # over replicates and stage-1 variants, and the part of it that comes from stage 1 alone
+            # What the uncertainty rests on, as three disjoint things rather than one mixed set.
+            # `per_replicate` is one coefficient per co-culture replicate at the stage-1 estimate;
+            # `sensitivity` is each one's exact derivative with respect to (rate, own); `stage_one_draws`
+            # is stage 1 resampled over its own monoculture replicates. The caller combines them, since
+            # what it publishes is a log2 strength and not the coefficient (#142 item 2).
             "per_replicate": per_replicate,
+            "sensitivity": sensitivity,
+            "stage_one_draws": draws["values"],
+            "stage_one_method": draws["method"],
+            "stage_one_n": draws["n"],
+            "stage_one_variance_scale": draws["variance_scale"],
+            "self_limitation": own,
             "spread": {name: _spread(values) for name, values in spread_values.items()},
-            "stage_one_spread": {name: _spread(values) for name, values in stage_one_values.items()},
             "replicates": len(per_replicate)}
 
 
@@ -584,7 +654,6 @@ class IntegratedDeriver:
             strain_identities,
         )
         from .growth import SPIKE_FACTOR
-        from .stats import paired
 
         if self.client is None:
             raise ValueError("IntegratedDeriver needs a client: it reads each replicate's measured series")
@@ -705,18 +774,11 @@ class IntegratedDeriver:
                     # absence threshold and the multiple-testing correction act on it as they do on the
                     # specified comparison. Before this an integrated arc carried none of them and came
                     # out "undetermined" under every threshold (2026-10-06).
-                    per_rep = _strengths(got, reps, partner, got["rate"])
-                    spread = (got.get("spread") or {}).get(partner) or {}
-                    stage_one = (got.get("stage_one_spread") or {}).get(partner) or {}
-                    n_reps = len(per_rep)
-                    if n_reps >= 2:
-                        strength = statistics.mean(per_rep)
-                        sd = statistics.stdev(per_rep)
-                        se = sd / math.sqrt(n_reps)
-                        test = paired(per_rep, [0.0] * n_reps)
-                    else:
-                        sd = se = None
-                        test = None
+                    stats_here = _arc_statistics(got, reps, partner)
+                    n_reps = stats_here["n"]
+                    if stats_here["strength"] is not None:
+                        strength = stats_here["strength"]
+                    sd, se = stats_here["sd"], stats_here["se"]
                     quality = [SINGLE_REPLICATE] if n_reps < 2 else []
                     cautions = [TWO_REPLICATES] if n_reps == 2 else []
                     if unverified:
@@ -747,16 +809,21 @@ class IntegratedDeriver:
                         "n_with": len(reps), "n_without": len(monos),
                         "sd": None if sd is None else round(sd, 4),
                         "se": None if se is None else round(se, 4),
-                        "p_value": None if test is None else test["p"],
+                        "p_value": stats_here["p_value"],
                         "q_value": None, "significance": None,
                         "effect_over_sd": (None if (sd is None or not sd or strength is None)
                                            else round(abs(strength) / sd, 4)),
                         # the coefficient's own spread, in the coefficient's units: over co-culture
                         # replicates and over leave-one-out of the monoculture replicates together, with
                         # the part that comes from the monoculture stage alone beside it
-                        "coefficient_sd": spread.get("sd"),
-                        "coefficient_n": spread.get("n"),
-                        "coefficient_sd_from_rate_stage": stage_one.get("sd"),
+                        "coefficient_sd": stats_here["coefficient_sd"],
+                        "coefficient_n": n_reps,
+                        "coefficient_sd_from_rate_stage": stats_here["coefficient_sd_from_rate_stage"],
+                        # the two halves of `se`, on their own designs, and how stage 1 was resampled
+                        "se_replicates": stats_here["se_replicates"],
+                        "se_rate_stage": stats_here["se_rate_stage"],
+                        "rate_stage_method": got.get("stage_one_method", ""),
+                        "rate_stage_n": got.get("stage_one_n"),
                         # what this derivation adds: the coefficient itself and the fit behind it
                         "coefficient": coefficient,
                         "coefficient_unit": (f"1/({rate_unit_of(here)[2:]} x {partner_unit or unit})"
@@ -784,25 +851,111 @@ def _level_of(replicate, species: str):
     return mean_over(curve, curve.times[0], curve.times[-1])
 
 
-def _strengths(got: dict, cocultures: list, partner: str, rate: float) -> list:
-    """The comparable log2 strength this fit gives per co-culture replicate.
+def _log2_effect(coefficient: float, level: float, rate: float):
+    """The comparable log2 strength of a fitted coefficient: log2(1 + A_ij x_j / r_i), or None where the
+    fitted effect at least cancels the organism's own rate and no ratio exists."""
+    effect = coefficient * level / rate
+    return math.log2(1 + effect) if effect > -1 else None
 
-    One per replicate that identified the partner's effect, each from that replicate's own coefficient
-    and its own partner level, so the spread over them is a spread over replicates and the rest of the
-    tool can test it as it tests the specified comparison.
+
+def _arc_statistics(got: dict, cocultures: list, partner: str) -> dict:
+    """What an arc publishes about one partner's effect, with both sources of error in it.
+
+    {"n", "strength", "sd", "se", "se_replicates", "se_rate_stage", "p_value", "df",
+     "coefficient_sd", "coefficient_sd_from_rate_stage", "per_replicate"}.
+
+    Two things vary and they are measured on disjoint designs, which is why they are kept apart and then
+    added (#142 items 2 and 3):
+
+      * the **co-culture replicates**: one coefficient per replicate at stage 1's estimate, each turned
+        into a strength at that replicate's own partner level. Their spread over the mean is the part a
+        reader sees as `sd`, and `se_replicates` is that over the square root of their number.
+      * **stage 1 itself**: the monoculture replicates resampled (`_stage_one_draws`), each resample
+        giving another (rate, self-limitation). Stage 2's coefficient is affine in those two, so
+        `sensitivity` carries each replicate's exact derivative and no refit is needed; the strength is
+        recomputed at every draw, including the rate in its own denominator, and the spread of the mean
+        over draws is `se_rate_stage`.
+
+    `se` is the square root of the two variances added, and the t statistic that gives `p_value` uses it
+    with a Satterthwaite degrees of freedom, so an arc whose monoculture stage is poorly determined is no
+    longer tested as though that stage were exact. Before this, every one of these came from the
+    co-culture replicates alone (2026-10-07).
     """
+    from .stats import t_cdf
+    rate, own = got.get("rate"), got.get("self_limitation")
     by_name = {replicate.name or str(i): replicate for i, replicate in enumerate(cocultures)}
-    out = []
+    slopes = {entry["replicate"]: entry for entry in got.get("sensitivity") or ()}
+    rows = []                       # (coefficient, (d/d rate, d/d own), partner level, central strength)
     for entry in got.get("per_replicate") or ():
-        if partner not in entry:
+        if partner not in entry or not rate:
             continue
         replicate = by_name.get(entry["replicate"])
         level = _level_of(replicate, partner) if replicate is not None else None
-        if not level or not rate:
+        if not level:
             continue
-        effect = entry[partner] * level / rate
-        if effect > -1:
-            out.append(math.log2(1 + effect))
+        central = _log2_effect(entry[partner], level, rate)
+        if central is None:
+            continue
+        rows.append((entry[partner], (slopes.get(entry["replicate"]) or {}).get(partner), level, central))
+
+    out = {"n": len(rows), "strength": None, "sd": None, "se": None, "se_replicates": None,
+           "se_rate_stage": None, "p_value": None, "df": None, "coefficient_sd": None,
+           "coefficient_sd_from_rate_stage": None, "per_replicate": [row[3] for row in rows]}
+    if not rows:
+        return out
+    out["strength"] = statistics.mean(row[3] for row in rows)
+    if len(rows) < 2:
+        return out
+    sd = statistics.stdev(row[3] for row in rows)
+    out["coefficient_sd"] = statistics.stdev(row[0] for row in rows)
+    var_replicates = sd * sd / len(rows)
+    out["se_replicates"] = math.sqrt(var_replicates)
+
+    draws = got.get("stage_one_draws") or ()
+    scale = got.get("stage_one_variance_scale") or 1.0
+    strength_means, coefficient_means = [], []
+    if draws and own is not None and all(row[1] is not None for row in rows):
+        for draw_rate, draw_own in draws:
+            if not draw_rate:
+                continue
+            strengths, coefficients = [], []
+            for coefficient, (by_rate, by_own), level, _central in rows:
+                moved = coefficient + by_rate * (draw_rate - rate) + by_own * (draw_own - own)
+                here = _log2_effect(moved, level, draw_rate)
+                if here is None:
+                    strengths = []
+                    break
+                strengths.append(here)
+                coefficients.append(moved)
+            if len(strengths) == len(rows):
+                strength_means.append(statistics.mean(strengths))
+                coefficient_means.append(statistics.mean(coefficients))
+    var_stage = statistics.variance(strength_means) * scale if len(strength_means) >= 2 else 0.0
+    if len(coefficient_means) >= 2:
+        out["coefficient_sd_from_rate_stage"] = math.sqrt(statistics.variance(coefficient_means) * scale)
+    out["se_rate_stage"] = math.sqrt(var_stage)
+    out["se"] = math.sqrt(var_replicates + var_stage)
+    # `sd` is the dispersion of one estimate and `se` the dispersion of their mean, and the tool's own
+    # relation between them is se = sd / sqrt(n). Keeping that relation is what carries the rate stage
+    # into the absence threshold, which compares the effect with k * sd, and into effect_over_sd: the
+    # rate stage's error belongs to every replicate alike, so at replicate scale it is n times its
+    # contribution to the variance of the mean. The two halves stay published beside it, so the
+    # replicates' own scatter is still readable as se_replicates * sqrt(n) (#142 item 2).
+    out["sd"] = out["se"] * math.sqrt(len(rows))
+
+    df_replicates = len(rows) - 1
+    df_stage = max(1, (got.get("stage_one_n") or 1) - 1)
+    if var_stage > 0 and var_replicates > 0:
+        df = ((var_replicates + var_stage) ** 2
+              / (var_replicates ** 2 / df_replicates + var_stage ** 2 / df_stage))
+    else:
+        df = df_replicates if var_replicates > 0 else df_stage
+    out["df"] = df
+    if out["se"] > 0:
+        t = out["strength"] / out["se"]
+        out["p_value"] = min(1.0, 2.0 * (1.0 - t_cdf(abs(t), df)))
+    else:
+        out["p_value"] = 0.0 if out["strength"] else 1.0
     return out
 
 

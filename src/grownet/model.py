@@ -151,12 +151,17 @@ class Edge:
     coefficient_unit: str = ""
     fit_r2: float | None = None
     fit_condition: float | None = None
-    # the coefficient's own spread: over the co-culture replicates and over leave-one-out of the
-    # monoculture replicates the rate stage rests on, with the part from that stage alone beside it, so a
-    # reader can see which stage the uncertainty comes from
+    # the coefficient's own spread over the co-culture replicates, the replicates behind it, and the
+    # monoculture stage's contribution on its own design: two disjoint designs rather than one mixed set,
+    # so a reader can see which stage the uncertainty comes from (#142 item 2)
     coefficient_sd: float | None = None
     coefficient_n: int | None = None
     coefficient_sd_from_rate_stage: float | None = None
+    # the two halves of `se`, and how the monoculture stage was resampled for the second
+    se_replicates: float | None = None
+    se_rate_stage: float | None = None
+    rate_stage_method: str = ""
+    rate_stage_n: int | None = None
     merged_arcs: int | None = None  # arcs merged into this one (register item 14), None when not merged
     strength_range: tuple = ()    # (lowest, highest) log2 mean of the merged arcs
     supporting_pairs: int | None = None  # with genus merging: the distinct species (or strain) pairs behind it

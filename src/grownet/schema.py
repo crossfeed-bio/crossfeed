@@ -165,6 +165,15 @@ SCHEMA_DOC = {
                 "coefficient_unit": {"type": "string"},
                 "fit_r2": {"type": ["number", "null"]},
                 "fit_condition": {"type": ["number", "null"]},
+                # the coefficient's uncertainty, as two disjoint designs: the co-culture replicates, and
+                # the monoculture stage resampled over its own replicates (#142 item 2)
+                "coefficient_sd": {"type": ["number", "null"]},
+                "coefficient_n": {"type": ["integer", "null"]},
+                "coefficient_sd_from_rate_stage": {"type": ["number", "null"]},
+                "se_replicates": {"type": ["number", "null"]},
+                "se_rate_stage": {"type": ["number", "null"]},
+                "rate_stage_method": {"type": "string"},
+                "rate_stage_n": {"type": ["integer", "null"]},
             },
         },
         "study": {
