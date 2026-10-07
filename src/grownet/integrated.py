@@ -439,7 +439,8 @@ def _stage_one_draws(target: str, rates: list, selfs: list, usable: list, pooled
 
 
 def _measured_plateau(replicates: list, target: str, max_fall: float = None):
-    """(the plateau these monocultures of `target` certify, its unit, how many curves), or None.
+    """(the plateau these monocultures of `target` certify, its unit, how many curves, how far they had
+    fallen from their peak), or None.
 
     The same rule `derive._collect_capacity` applies to the measured path: certified by
     `reached_stationary`, taken as the curve's maximum, refused where the culture fell further from its
@@ -450,7 +451,7 @@ def _measured_plateau(replicates: list, target: str, max_fall: float = None):
     from .derive import CAPACITY_MAX_FALL
     from .growth import curve_features, fall_from_peak, reached_stationary
     limit = CAPACITY_MAX_FALL if max_fall is None else max_fall
-    values, unit = [], ""
+    values, falls, unit = [], [], ""
     for replicate in replicates:
         curve = replicate.curve(target)
         if curve is None or len(curve.times) < 2:
@@ -465,9 +466,13 @@ def _measured_plateau(replicates: list, target: str, max_fall: float = None):
         if curve.abundance_unit != unit:
             continue
         values.append(curve_features(curve)["max"])
+        falls.append(fall)
     if not values:
         return None
-    return statistics.median(values), unit, len(values)
+    # the fall travels with the plateau: `capacity_fall_from_peak` is documented as published beside the
+    # capacity, and on this path it was measured here and discarded, so the column was always empty
+    # (#155 item 2)
+    return statistics.median(values), unit, len(values), statistics.median(falls)
 
 
 def _scored(target, partners, cocultures, rate, own, coefficients, per_replicate) -> dict:
@@ -557,12 +562,14 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
     # fit throughout. The plateau comes from these monocultures, which are the ones of this co-culture's
     # own condition since item 1, so it is condition-matched by construction.
     self_limitation_source = "fitted from the monoculture time courses"
+    capacity_fall = None        # only a measured plateau has a curve whose fall can be measured
     if not (own < 0 and rate > 0):
         plateau = _measured_plateau(usable, target)
         if plateau is not None and rate > 0 and plateau[0] > 0:
             own = -rate / plateau[0]
             self_limitation_source = (f"-r/K at the measured plateau {plateau[0]:.4g} {plateau[1]} of "
                                       f"{plateau[2]} monoculture curve(s): the fit implies none")
+            capacity_fall = plateau[3]
             stages.append("self-limitation from the measured plateau")
         else:
             self_limitation_source = ("the fit implies no plateau and no monoculture of this condition "
@@ -692,6 +699,7 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
             # where the published self-limitation came from, so a reader is never left to assume that a
             # diagonal and the partners beside it were fitted together when they were not (#142 item 7)
             "self_limitation_source": self_limitation_source,
+            "capacity_fall": capacity_fall,
             "spread": {name: _spread(values) for name, values in spread_values.items()},
             "replicates": len(per_replicate)}
 
@@ -745,7 +753,7 @@ def fitted_rates(records: list) -> dict:
             "rates": [], "points": [], "studies": [], "per_study": {}, "other_units": [],
             "capacity_unit": "", "capacities": [], "capacity_points": [], "capacity_per_study": {},
             "other_capacity_units": [], "r2": [], "conditions": [], "self_sources": [], "media": [],
-            "stage_n": []})
+            "stage_n": [], "by_medium": {}})
         study = record.get("study_id", "")
         unit = record.get("fitted_rate_unit", "1/h")
         if unit != at["unit"]:
@@ -783,6 +791,24 @@ def fitted_rates(records: list) -> dict:
             if f"{study} ({capacity_unit})" not in at["other_capacity_units"]:
                 at["other_capacity_units"].append(f"{study} ({capacity_unit})")
             continue
+        # A capacity comes from ONE medium (Karoline, 2026-10-07): the plateau a fit implies sits beside
+        # off-diagonals measured in one medium, so plateaus are collected per medium and the medium with
+        # the most rows is the one published, as `derive.merge_rates` does it for the specified
+        # comparison. This path used to take the median over every row whatever the medium, so her
+        # decision held for `--derivation replicate` and not for the default: Comamonas testosteroni's
+        # capacity in SMGDB00000014 was the median of a row in minimal medium with 0.75 per cent linoleic
+        # acid and a row in the same medium with a tbhq antioxidant as well (#155 item 2).
+        from .media import key_from_label
+
+        label = record.get("medium") or ""
+        key = key_from_label(label)
+        one = at["by_medium"].setdefault(key, {"label": label, "values": [], "unit": capacity_unit,
+                                               "points": [], "per_study": {}, "falls": []})
+        one["values"].append(-rate / own)
+        one["points"].append(record.get("fit_points", 0))
+        if record.get("fitted_capacity_fall") is not None:
+            one["falls"].append(record["fitted_capacity_fall"])
+        one["per_study"].setdefault(study, []).append(-rate / own)
         at["capacities"].append(-rate / own)
         at["capacity_points"].append(record.get("fit_points", 0))
         at["capacity_per_study"].setdefault(study, []).append(-rate / own)
@@ -791,6 +817,15 @@ def fitted_rates(records: list) -> dict:
     for nid, at in gathered.items():
         if not at["rates"]:
             continue
+        # the medium with the most rows is the one published; a tie goes to the first label, so the
+        # choice does not depend on the order the rows arrived in. `merge_rates` chooses the same way.
+        order = sorted(at["by_medium"].items(), key=lambda kv: (-len(kv[1]["values"]), kv[1]["label"]))
+        chosen = order[0][1] if order else None
+        left_out = [(f"{len(other['values'])} fitted row(s) in {other['label']}",
+                     f"this organism's capacity is taken from {chosen['label']}, where more rows were "
+                     "fitted; plateaus are not pooled across media, since a capacity sits beside "
+                     "off-diagonals measured in one of them")
+                    for _key, other in order[1:]]
         out[nid] = {
             "name": at["name"], "rate": statistics.median(at["rates"]), "unit": at["unit"],
             # what the median rests on: the fitted rows, which is what this derivation has instead of
@@ -804,16 +839,24 @@ def fitted_rates(records: list) -> dict:
             "studies": sorted(at["studies"]),
             "per_study": {study: statistics.median(values) for study, values in at["per_study"].items()},
             "other_units": at["other_units"], "method": METRIC, "lag": None, "lag_method": "",
-            "capacity": statistics.median(at["capacities"]) if at["capacities"] else None,
-            "capacity_unit": at["capacity_unit"] if at["capacities"] else "",
-            "capacity_n": len(at["capacities"]),
+            "capacity": statistics.median(chosen["values"]) if chosen else None,
+            "capacity_unit": at["capacity_unit"] if chosen else "",
+            "capacity_n": len(chosen["values"]) if chosen else 0,
+            # one medium, never pooled (Karoline, 2026-10-07), and what else this organism has a
+            # plateau in, so a reader who wants that medium can ask for it in the second search box
+            "capacity_medium": chosen["label"] if chosen else "",
+            # only where the capacity is a measured plateau: a plateau the fit implies has no curve
+            "capacity_fall": (statistics.median(chosen["falls"])
+                              if (chosen and chosen["falls"]) else None),
+            "capacity_media": [chosen["label"]] if chosen else [],
+            "capacity_other_media": [other["label"] for _key, other in order[1:]],
             # the capacity is -r/A_ii from the same monoculture stage, so the curves behind it are that
             # stage's replicates, not the rows the median was taken over
-            "capacity_curves": (max(at["stage_n"]) if (at["stage_n"] and at["capacities"]) else None),
-            "capacity_points": sum(at["capacity_points"]) if at["capacities"] else 0,
-            "capacity_per_study": {study: statistics.median(values)
-                                   for study, values in at["capacity_per_study"].items()},
-            "other_capacity_units": at["other_capacity_units"], "capacity_left_out": [],
+            "capacity_curves": (max(at["stage_n"]) if (at["stage_n"] and chosen) else None),
+            "capacity_points": sum(chosen["points"]) if chosen else 0,
+            "capacity_per_study": ({study: statistics.median(values)
+                                    for study, values in chosen["per_study"].items()} if chosen else {}),
+            "other_capacity_units": at["other_capacity_units"], "capacity_left_out": left_out,
             # the fit behind the published parameters: the median R2 of the rows merged into them and the
             # worst conditioning among them, so neither reads as the property of one row
             "fit_r2": statistics.median(at["r2"]) if at["r2"] else None,
@@ -1128,6 +1171,7 @@ class IntegratedDeriver:
                         "fitted_rate": got["rate"], "fitted_rate_unit": rate_unit_of(curve),
                         "fitted_self": own, "fitted_self_unit": unit,
                         "fitted_self_source": got.get("self_limitation_source", ""),
+                        "fitted_capacity_fall": got.get("capacity_fall"),
                         "metric_with": got["rate"] + coefficient * (abundance or 0.0),
                         "metric_without": got["rate"],
                         "fit_r2": got["r2"], "fit_condition": got["condition"],

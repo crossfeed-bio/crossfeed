@@ -826,12 +826,15 @@ would be growth with a partner, which is the comparison, not the organism's own 
 curves give no rate is named on the page and in the report, never given a substitute number.</p>
 <p><strong>Three more quantities travel with a rate</strong>, which is what a gLV coefficient is made of:
 which estimator produced the rate; the <strong>lag</strong>, always from the Baranyi fit, the only
-estimator that has one, whichever one produced the rate; and the organism's monoculture
+estimator that has one, whichever one produced the rate, and empty under the default derivation, whose
+model has no lag term at all; and the organism's monoculture
 <strong>carrying capacity</strong>, the plateau of its curves, taken only from curves certified to have
 reached stationary phase and left in the abundance unit they were measured in. A culture that grew, peaked
 and then declined has stopped growing, so it is certified too and its plateau is that peak; how far those
 curves had fallen from their peak at the last measurement is published beside the capacity
-(<code>capacity_fall_from_peak</code>), and a curve that fell further than the
+(<code>capacity_fall_from_peak</code>), which is empty where the capacity is the plateau a fit implies
+rather than one a curve reached, since then there is no curve whose fall could be measured; and a curve
+that fell further than the
 <strong>Carrying capacity decline limit</strong> gives no capacity at all, because there the peak is a
 spike rather than a level the culture held. They are in
 <code>growth_rates.csv</code>, which names both estimators in its <code>method</code> and

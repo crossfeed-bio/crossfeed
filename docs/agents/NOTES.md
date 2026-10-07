@@ -15,6 +15,14 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-07 (#155 item 2): **a decision is not in force until every derivation applies it.** "A capacity
+  comes from one medium" was implemented in `derive.merge_rates` and not in `integrated.fitted_rates`,
+  which is the path the shipped default takes, so the decision held for the derivation nobody runs by
+  default. `fitted_rates` now keys fitted plateaus by `media.key_from_label` and chooses the medium with
+  the most rows, the same rule and the same tie-break as `merge_rates`. Four of the eight live carrying
+  capacities moved, up to 5.3 times. When a method decision lands, check both `merge_rates` and
+  `fitted_rates`: they are two merges of the same quantities and nothing links them.
+
 - 2026-10-07 (#155 item 13): **the gLV example moved, and the reason generalises.** SMGDB00000006 was
   chosen for the example because it was the one package whose matrix settled with every organism above
   zero. That was false (three of the five studies that yield a package settle) and the package was unsound:

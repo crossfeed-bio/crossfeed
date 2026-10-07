@@ -101,6 +101,24 @@ content.
   would claim it had no effect at all.
 
 ### Fixed
+- **A capacity came from one medium on one derivation and from several on the default** (#155 item 2).
+  Karoline's decision of 2026-10-07, that plateaus are not pooled across media because a capacity sits
+  beside off-diagonals measured in one of them, was in force for `--derivation replicate` and not for the
+  derivation that ships: `integrated.fitted_rates` collected the media for reporting and then took the
+  median over every fitted row whatever the medium, with `capacity_medium` unset and
+  `capacity_curves_left_out` empty. Fitted plateaus are now collected per medium, the medium with the
+  most rows is published and named, and the rest are named in `capacity_curves_left_out` instead of
+  pooled in. On the live All network four of the eight carrying capacities move: *Roseburia intestinalis*
+  by 5.3 times (3.835e9 to 7.268e8 Cells/mL), *Blautia hydrogenotrophica* by 2.5, *Comamonas
+  testosteroni* by 1.8 and *Agrobacterium tumefaciens* by 1.02, and each gLV diagonal, which is `-r/K`,
+  moves with its capacity. The rate itself is still the median over every row, since a rate is a property
+  of the organism in each medium it was measured in and only the plateau is the one the matrix sits on.
+- **`capacity_fall_from_peak` was always empty under the default derivation** (#155 item 2). The fall was
+  measured inside the measured-plateau rule and discarded, while the help said it is published beside the
+  capacity. It now travels with the plateau, and the help says it is empty where the capacity is the
+  plateau a fit implies rather than one a curve reached, since there no curve exists whose fall could be
+  measured. The help also says the lag column is empty under the default derivation, whose model has no
+  lag term at all.
 - **The gLV example rested on a monoculture fit that had failed, and the help called it the only one of
   its kind** (#155 item 13). The example moved from SMGDB00000006 to SMGDB00000002. Of the yoghurt pair's
   three *S. thermophilus* monoculture replicates two were refused for a negative rate and the third was

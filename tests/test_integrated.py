@@ -737,3 +737,66 @@ def test_the_rate_rule_does_not_claim_one_merge_where_there_are_two():
     assert "monoculture replicates" in matrix.rate_rule("integrated:two_stage")
     assert matrix.rate_rule("easylinear").endswith("median over replicates and studies; "
                                                    "batch experiments only")
+
+
+def _rate_record(medium, rate, own, study="S1", fall=None):
+    return {"target": "ncbi:1", "target_name": "A", "fitted_rate": rate, "fitted_self": own,
+            "fitted_rate_unit": "1/h", "fitted_self_unit": "Cells/mL", "study_id": study,
+            "rate_stage_n": 3, "fit_points": 7, "medium": medium, "fitted_capacity_fall": fall}
+
+
+def test_a_fitted_capacity_comes_from_one_medium_as_the_decision_says():
+    """Karoline, 2026-10-07: a capacity comes from one medium, and plateaus are not pooled across media,
+    since a capacity sits beside off-diagonals measured in one of them. `derive.merge_rates` did that for
+    the specified comparison; this path took the median over every fitted row whatever the medium, so the
+    decision held for one derivation and not for the default (#155 item 2).
+
+    Three rows: two in minimal medium with linoleic acid, one in the same medium with an antioxidant as
+    well. The plateaus a fit implies are -r/A_ii, so 0.4/4e-10 = 1e9 and 0.4/8e-10 = 5e8 in the first
+    medium and 0.4/1e-10 = 4e9 in the second. The first medium has more rows, so the capacity is the
+    median of its two, 7.5e8, and the other medium is named rather than pooled in. Pooling all three
+    would give 1e9, the median of the three.
+    """
+    acid = "Minimal medium (MM) (+0.75% linoleic acid)"
+    both = "Minimal medium (MM) (+0.0015mm tbhq antioxidant, +0.75% linoleic acid)"
+    got = integrated.fitted_rates([_rate_record(acid, 0.4, -4.0e-10), _rate_record(acid, 0.4, -8.0e-10),
+                                   _rate_record(both, 0.4, -1.0e-10)])["ncbi:1"]
+    assert got["capacity"] == pytest.approx(7.5e8)       # not 1e9, which is the median of all three
+    assert got["capacity_n"] == 2
+    assert got["capacity_medium"] == acid
+    assert got["capacity_media"] == [acid] and got["capacity_other_media"] == [both]
+    left_out = got["capacity_left_out"]
+    assert len(left_out) == 1 and "1 fitted row(s)" in left_out[0][0] and both in left_out[0][0]
+    assert "not pooled across media" in left_out[0][1]
+    # the rate itself is still the median over every row, whatever the medium: a rate is a property of
+    # the organism in each medium it was measured in, and only the plateau is the one the matrix sits on
+    assert got["rate"] == pytest.approx(0.4)
+
+
+def test_the_fall_from_peak_is_published_where_a_curve_reached_the_plateau():
+    """`capacity_fall_from_peak` is documented as published beside the capacity. On this path the fall
+    was measured inside `_measured_plateau` and discarded, so the column was always empty; it is now
+    carried where the capacity is a measured plateau, and stays empty where the fit implied one, since
+    there no curve exists whose fall could be measured (#155 item 2)."""
+    one = "Wilkins-Chalgren Anaerobe Broth"
+    measured = integrated.fitted_rates([_rate_record(one, 0.4, -4.0e-10, fall=1.33),
+                                        _rate_record(one, 0.4, -4.0e-10, fall=1.41)])["ncbi:1"]
+    assert measured["capacity_fall"] == pytest.approx(1.37)        # the median of the two
+    implied = integrated.fitted_rates([_rate_record(one, 0.4, -4.0e-10)])["ncbi:1"]
+    assert implied["capacity"] == pytest.approx(1.0e9) and implied["capacity_fall"] is None
+
+
+def test_the_measured_plateau_reports_how_far_its_curves_fell():
+    """One curve that ended at its peak and one that ended a third below it: the plateau is the median of
+    the two maxima and the fall is the median of the two falls."""
+    times = [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0]
+    held = [1.0e7 * min(math.exp(0.6 * t), 50.0) for t in times]          # rises, then holds
+    fell = [v for v in held[:-2]] + [held[-1] / 3.0, held[-1] / 3.0]      # rises, then falls to a third
+    reps = [_named(["A"], times, [[v] for v in held], "r1"),
+            _named(["A"], times, [[v] for v in fell], "r2")]
+    got = integrated._measured_plateau(reps, "A")
+    assert got is not None
+    plateau, unit, curves, fall = got
+    assert curves == 2 and unit == "Cells/mL"
+    assert plateau == pytest.approx(5.0e8)          # both peak at the same ceiling
+    assert fall == pytest.approx((1.0 + 3.0) / 2)   # one curve at its peak, one a third below it
