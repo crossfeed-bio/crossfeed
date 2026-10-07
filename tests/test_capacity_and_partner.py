@@ -420,3 +420,22 @@ def test_the_glv_payload_and_the_package_carry_the_quantities_beside_each_rate()
         assert row["method"] == "growth_rate:baranyi" and row["capacity_unit"] == "Cells/mL"
         readme = archive.read("README.txt").decode()
         assert "carrying capacity" in readme and "growth_rate:baranyi" in readme
+
+
+def test_the_report_calls_the_q_value_the_adjusted_p_and_names_significance_separately():
+    """The report printed `significance`, which is -log10(q), under the label "adjusted p". A reader
+    screening for "adjusted p < 0.05" therefore discarded every strongly supported arc and kept the ones
+    with q near 1, since the label ran the opposite way to the number (found 2026-10-07)."""
+    from grownet.mgrowthdb import records_to_network
+    from grownet.report import report_text
+    arc = {"source": "a", "target": "b", "source_name": "A", "target_name": "B",
+           "effect": "facilitation", "strength": 1.0, "status": "present", "outcome": "quantified",
+           "study_id": "S1", "metric": "auc", "evidence": "biculture",
+           "p_value": 0.004, "q_value": 0.006811, "significance": 2.1668}
+    net = records_to_network([arc])
+    text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "adjusted p (q) 0.00681" in text
+    assert "significance -log10(q) 2.17" in text
+    # and the old rendering, which read as a p-value above 1, is gone
+    assert "adjusted p 2.17" not in text

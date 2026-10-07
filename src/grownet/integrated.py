@@ -1200,27 +1200,32 @@ def _arc_statistics(got: dict, cocultures: list, partner: str) -> dict:
             if len(strengths) == len(rows):
                 strength_means.append(statistics.mean(strengths))
                 coefficient_means.append(statistics.mean(coefficients))
-    var_stage = statistics.variance(strength_means) * scale if len(strength_means) >= 2 else 0.0
+    resampled = len(strength_means) >= 2
+    var_stage = statistics.variance(strength_means) * scale if resampled else 0.0
     if len(coefficient_means) >= 2:
         out["coefficient_sd_from_rate_stage"] = math.sqrt(statistics.variance(coefficient_means) * scale)
-    out["se_rate_stage"] = math.sqrt(var_stage)
+    # None, not 0.0, where the stage was not resampled at all: 0 says it contributes no error, which is a
+    # statement, where what happened is that nothing was measured. `coefficient_sd_from_rate_stage` beside
+    # it was already None in that case, so the two fields contradicted each other about one unknown, and
+    # `rate_stage_method` says "none: too few monoculture replicates to resample" (found 2026-10-07).
+    out["se_rate_stage"] = math.sqrt(var_stage) if resampled else None
     out["se"] = math.sqrt(var_replicates + var_stage)
-    # `sd` is the co-culture replicates' own spread, which is what the field says it is everywhere and
-    # what the specified comparison puts there, so one name carries one quantity.
+    out["one_component"] = not resampled
+    # `sd` is what every field description says it is: the spread of **one** comparison. Write a
+    # replicate's strength as `mu + xi + eps_i`, where `xi` is the monoculture stage's error, shared by
+    # every replicate of this row, and `eps_i` the replicate's own. Then
     #
-    # It briefly carried `se * sqrt(n)` instead, to pull the monoculture stage into the absence
-    # threshold, and that was wrong: the stage's error is one `(r_i, A_ii)` shared by every replicate of
-    # the row, so it contributes the same amount to the variance of the mean however many replicates
-    # there are, which `se` has right. Multiplying it by n to express it "at replicate scale" invents a
-    # scatter no replicate has, and made the threshold `|mean| < k * sd` harder to pass the more
-    # co-culture replicates a row had. Measured on a noise-free simulation with the replicate spread at
-    # zero: `se` stayed 0.0336 from two replicates to six while `sd` grew 0.0476, 0.0583, 0.0673,
-    # 0.0752, 0.0824, so `|effect| / sd` fell from 10.0 to 5.8 as data was added (2026-10-07).
+    #     Var(one replicate) = Var(xi) + Var(eps)            <- `sd`, below
+    #     Var(their mean)    = Var(xi) + Var(eps) / n        <- `se`, above
     #
-    # So the monoculture stage reaches `p_value` and `q_value`, through `se`, and does not reach the
-    # absence threshold. Whether it should is a question about what k means and is Karoline's: the two
-    # halves are published as `se_replicates` and `se_rate_stage` so the choice can be made on numbers.
-    out["sd"] = sd
+    # so both carry the stage, `se` is not `sd / sqrt(n)`, and that relation never held for two variance
+    # components. It briefly carried `se * sqrt(n)`, which is `sqrt(n * Var(xi) + Var(eps))`: a component
+    # that was never divided by n cannot be multiplied by it to reach replicate scale, and the result grew
+    # with n, so the absence threshold `|mean| < k * sd` got harder to pass the more co-culture replicates
+    # a row had. Measured on a noise-free simulation with the replicate spread at zero, two replicates to
+    # six: `se` stayed 0.0336 throughout while that `sd` grew 0.0476, 0.0583, 0.0673, 0.0752, 0.0824
+    # (2026-10-07). The inflation was worst where the stage dominates, which is the live case.
+    out["sd"] = math.sqrt(var_stage + sd * sd)
 
     df_replicates = len(rows) - 1
     df_stage = max(1, (got.get("stage_one_n") or 1) - 1)

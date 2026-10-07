@@ -61,8 +61,14 @@ def _edge_line(net, e) -> str:
     else:
         parts.append(f"replicates {e.n_with if e.n_with is not None else '?'} with / "
                      f"{e.n_without if e.n_without is not None else '?'} without")
+    # the q-value under its own name, and `significance` under its own. This printed `significance`,
+    # which is -log10(q), labelled "adjusted p": a reader screening the report for "adjusted p < 0.05"
+    # therefore discarded every strongly supported arc and kept the ones with q near 1, since the label
+    # ran the opposite way to the number (found 2026-10-07; the line predates 0.3.0)
+    if e.q_value is not None:
+        parts.append(f"adjusted p (q) {e.q_value:.3g}")
     if e.significance is not None:
-        parts.append(f"adjusted p {e.significance:.3g}")
+        parts.append(f"significance -log10(q) {e.significance:.3g}")
     if getattr(e, "coefficient", None) is not None:
         parts.append(f"fitted coefficient {e.coefficient:.4g} {e.coefficient_unit}".strip())
         if e.fit_r2 is not None and e.fit_condition is not None:

@@ -478,13 +478,16 @@ def test_disagreeing_monocultures_widen_the_arc_the_same_co_cultures_give():
     assert wide["se"] > tight["se"]
     # it reaches the test, which is what decides a q-value and a significance
     assert wide["p_value"] > tight["p_value"]
-    # and `sd` is the co-culture replicates' own spread, so it is the SAME on both sides: the replicates
-    # are identical and only the monoculture stage differs. `sd` briefly carried `se * sqrt(n)` instead,
-    # to pull the stage into the absence threshold, and that made the threshold harder to pass the more
-    # co-culture replicates a row had, because a stage-1 error shared by every replicate was multiplied
-    # by their number (found 2026-10-07). So the stage reaches the test and not the threshold.
-    assert wide["sd"] == pytest.approx(tight["sd"], rel=1e-6)
-    assert wide["sd"] == pytest.approx(wide["se_replicates"] * math.sqrt(wide["n"]), rel=1e-9)
+    # `sd` is the spread of one comparison, so it carries the stage too and widens with it: the absence
+    # threshold reads it, and that is how the stage reaches the decision about presence.
+    assert wide["sd"] > tight["sd"]
+    # both components, and not `se * sqrt(n)`: a stage error shared by every replicate must not be
+    # multiplied by their number, which made the threshold harder to pass the more replicates a row had
+    for one in (tight, wide):
+        replicate_spread = one["se_replicates"] * math.sqrt(one["n"])
+        expected = math.sqrt((one["se_rate_stage"] or 0.0) ** 2 + replicate_spread ** 2)
+        assert one["sd"] == pytest.approx(expected, rel=1e-9)
+        assert one["sd"] != pytest.approx(one["se"] * math.sqrt(one["n"]), rel=1e-6) or not one["se_rate_stage"]
 
 
 def test_the_fitted_parameters_do_not_depend_on_the_order_of_the_rows():
