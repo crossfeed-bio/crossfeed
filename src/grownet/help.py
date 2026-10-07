@@ -973,8 +973,9 @@ from the address the page shows under its gLV control.</p>
 
 <h2 id="glv-assumptions">What a gLV model assumes</h2>
 <p>The parameters above are fitted from the curves and say what they rest on, and the model they are
-fitted to still makes two assumptions that growth data in batch culture does not satisfy. Neither is a defect in the fit;
-both are properties of the generalized Lotka-Volterra form itself, and both matter when a simulation is
+fitted to still makes two assumptions that growth data in batch culture does not satisfy. Neither is a
+defect in the fit; both are properties of the generalized Lotka-Volterra form itself, and both matter
+when a simulation is
 read as a prediction rather than as a summary of what was measured.</p>
 <p><strong>Every coefficient is constant in time.</strong> One number stands for the effect of j on i for
 the whole run. In a batch culture nothing about the environment is constant: the medium is consumed, the
