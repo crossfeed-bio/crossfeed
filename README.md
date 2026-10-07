@@ -415,11 +415,17 @@ which bounds the cell from below or from above, and the report prints the rule b
 diagonal is 0 here.
 `--glv FILE` (with `--report-rates --metric growth_rate`, or `--glv-mode`, which sets both) writes the parameters of a
 generalized Lotka-Volterra simulation as a zip, as **fitted coefficients**: one
-`interaction_matrix.<unit>.csv` per abundance unit, with `A[i][i] = -r_i / K_i` on the diagonal (K is the
-monoculture carrying capacity) and `A[i][j] = (r_with - r_without) / x_j` off it, the difference between
-i's own growth rate with j and without it over the partner's abundance across i's growth window, so a
-pair where one side did not grow is a measurement rather than a convention, and an organism that grows
-only with a partner gets `r_i = 0` and a self-limitation fitted at its plateau beside that partner;
+`interaction_matrix.<unit>.csv` per abundance unit. **What a cell is depends on the derivation, and the
+`README.txt` in the zip states the one that made it.** Under the default, every cell including the
+diagonal is a parameter of the least squares that fitted that organism's row, and the carrying capacity in
+`growth_rates.csv` is `-r_i / A[i][i]`, the plateau that fit implies; `capacity_source` says so per
+organism, and an organism whose fit implies no plateau has a measured one put in its place and is named
+under DIAGONALS THAT ARE NOT A FIT. Under `--derivation replicate` the direction is the other way round:
+`A[i][i] = -r_i / K_i` with K the plateau the curves were observed to hold, and
+`A[i][j] = (r_with - r_without) / x_j` off it, the difference between i's own growth rate with j and
+without it over the partner's abundance across i's growth window, so a pair where one side did not grow is
+a measurement rather than a convention, and an organism that grows only with a partner gets `r_i = 0` and
+a self-limitation fitted at its plateau beside that partner.
 `growth_rates.csv`, one rate per organism in the same order with how many values it rests on, and beside
 it the estimator, the Baranyi lag and the carrying capacity with its abundance unit, how many curves it
 rests on, how many gave none, and how far those curves had fallen from their peak
@@ -432,8 +438,8 @@ environment, so a package built from several media says so and points at the sec
 per-capita effect in 1/(time x abundance), so nothing in the package is a convention and nothing needs
 scaling; abundances are never converted between units, which is why each unit has its own matrix.
 
-**A second derivation, from the whole time course.** `--derivation integrated` (the page's Derivation
-setting) fits each organism's row rather than comparing replicate sets:
+**The default derivation, from the whole time course.** `--derivation integrated`, which is what runs
+unless the Derivation setting is changed, fits each organism's row rather than comparing replicate sets:
 `ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt)` is linear in the parameters, so one
 least-squares fit per organism gives its rate, its own limitation and every partner's coefficient at
 once, with no growth property, no log2 ratio, no plateau to certify and no partner abundance to divide by.
@@ -462,8 +468,9 @@ does not detail medium components well, their descriptions must also agree, apar
 number ("All 1" and "All 2" pool; "with initial acetate" and "without initial acetate" do not). The same
 reading of a description gives a medium its identity: its compartments' names without case, punctuation
 or a parenthesized abbreviation, plus every alteration the description states with its amount, plus the
-atmosphere where one is recorded. Over the whole database the names alone give 15 media and that rule
-gives 60, or 58 once the alias table below merges the two names it merges. It is what decides which plateaus a carrying capacity may be pooled over (one medium, never
+atmosphere where one is recorded. Reading the descriptions tells several times as many media apart as the
+names alone do, and the alias table below then merges the names that are one medium spelled two ways.
+It is what decides which plateaus a carrying capacity may be pooled over (one medium, never
 more), which chemostat a gLV package may be scored against, and what the second box reaches; where two
 studies spell one medium differently, grow**net** says the names differ and names the word rather than
 merging names that disagree. Two live names disagree with the others rather than being less complete, a
@@ -623,10 +630,14 @@ whole row from its time course: `ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integr
 the parameters, so one regression per organism gives its growth rate, its own self-limitation and every
 partner's per-capita coefficient together, in the units a gLV simulation reads. It is fitted in two
 stages, the monocultures first and then the co-cultures, because a single joint fit inside one experiment
-is not identified. Each arc carries the spread of its coefficient over the co-culture replicates and over
-leaving out each monoculture replicate in turn, the share of that spread which comes from the monoculture
-stage, how much of the organism's own log abundance change the fit explains, and the condition number of
-the design. A row whose fit explains less than predicting nothing does is refused and named.
+is not identified. Each arc carries two spreads measured on two disjoint designs and never mixed: the
+co-culture replicates' own scatter, and the monoculture stage's, from resampling those monocultures. They
+are added to give the standard error the t-test uses, with a Satterthwaite degrees of freedom, so an arc
+whose monoculture stage is poorly determined is not tested as though that stage were exact. Beside them an
+arc carries how much of the organism's own log abundance change the fit explains, the same for the row
+with every partner set to zero, the condition number of the design, the share of the measured course the
+rows cover, and the fractional change in the monoculture rate that would drive the coefficient to zero.
+A row whose fit explains less than predicting nothing does is refused and named.
 
 Why it is the default (Karoline, 2026-10-06): it is the form published work uses for this purpose, and it
 is not biased by construction. The alternative below estimates a coefficient as a difference of two

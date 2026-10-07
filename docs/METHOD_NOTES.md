@@ -460,15 +460,23 @@ important to ship something good". Three were structural rather than inherent, a
    contribution, from resampling that stage, so the two are disjoint designs and the second is no longer
    a subset of the first. The jackknife of a median is gone, which is what Efron (1979, *Ann. Statist.*
    7(1):1-26, section 3) rules out, and the jackknife that remains is of a least-squares estimate and is
-   scaled. On the measurement above the monoculture stage does dominate on 5 of 17 arcs, which is a
+   scaled. On the measurement above the monoculture stage did dominate on 5 of 17 arcs, which is a
    weaker and differently founded statement than the withdrawn one: it rests on the resampled stage
    rather than on a ratio of nested sets.
+   **Re-measured 2026-10-07 after the medium rule reached every match (`derive --live --all`): 14 arcs, 9
+   at p < 0.05 and 4 at q < 0.05, and the monoculture stage dominates on 8 of the 13 arcs that have both
+   halves, the fourteenth having too few monoculture replicates to resample.** The arc count fell from 22
+   because a co-culture in an altered medium is no longer compared with a monoculture that is not in it.
+   Every figure in this entry is of the live database on the day it was taken and has to be re-measured,
+   not repeated: the 17 above was true of a tree six commits older.
 3. **The reported R2 answered a smaller question than its words.** It was stage 2's fit against stage
    1's residual; it is now the whole fit against the measured `ln(x_i(t) / x_i(0))`, computed about zero
    because the model has no intercept and y is zero at the start by construction. With that number in
    hand, **a row whose fit explains less than predicting nothing does is refused**, which is a line at
-   zero rather than a tuned threshold. Live: 6 rows of 29 refused, and the survivors have a median R2 of
-   0.889.
+   zero rather than a tuned threshold. Live, 2026-10-06: 6 rows of 29 refused, and the survivors have a
+   median R2 of 0.889. Re-measured 2026-10-07 over `derive --live --all`: the surviving arcs have a
+   median `fit_r2` of 0.917, and **none** of them fails to beat its interaction-free null, which is what
+   makes the gate a line at zero rather than a filter that discards true absences.
 
 What this does to the comparison, measured the same day. Coverage: the default derivation gives 30 arcs,
 8 organism rows and 10 off-diagonal cells, every block with a positive equilibrium; the integrated form

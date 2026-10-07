@@ -120,6 +120,31 @@ content.
   removed compound makes another environment.
 
 ### Fixed
+- **The package README described the diagonal backwards under the default** (#155 item 11). The
+  off-diagonal prose was branched by derivation and the diagonal's was not, so a package from the
+  derivation that ships said `K_i` is "the plateau of the curves that reached stationary phase" when on
+  that path `A_ii` is a parameter of the fit and `K_i = -r_i / A_ii` is derived from it, the opposite
+  direction, while `capacity_source` in the same zip said "fitted from the monoculture time courses". The
+  diagonal now has its own words per derivation. The promised SELF-LIMITATION FITTED AT A CO-CULTURE
+  PLATEAU section was also unreachable on that path, because it is filled from `edge.target_capacity`
+  which the integrated derivation never sets, so the one diagonal in a package that is **not** a fit
+  appeared in no section at all; a DIAGONALS THAT ARE NOT A FIT section now names those organisms and
+  what was put in place of the plateau their fit did not imply.
+- **Shipped text quoted counts of mGrowthDB, and the counts were wrong** (#155 item 6). The help and the
+  README said the medium names alone give 15 media and the rule gives 60, or 58 with the alias table.
+  Measured over all 559 live experiments with the table on, which is the only way the tool runs, it is 13
+  and 57; the older figures predate the alias table and the rule that a stated amount of zero is not an
+  addition. Karoline's rule is that shipped text quotes no corpus numbers, since they depend on the state
+  of a database grownet does not control, so both passages now describe the rule without counting.
+- **The README and the register described machinery that had been deleted** (#155 item 12). The README
+  still said an arc carries the spread over "leaving out each monoculture replicate in turn" and "the
+  share of that spread" from the monoculture stage, which is the sentence the register formally withdrew
+  as not a share of anything; it now describes the two disjoint designs that replaced it. It headed the
+  integrated form "A second derivation" while calling it the default elsewhere, and gave the comparison's
+  formula as what `--glv` writes for every derivation. `docs/METHOD_NOTES.md`'s live figures are
+  re-measured: 14 arcs, 9 at p < 0.05, 4 at q < 0.05, the monoculture stage dominating on 8 of the 13
+  arcs that have both halves, and a median `fit_r2` of 0.917 with none failing to beat its
+  interaction-free null.
 - **A GraphML exported from the page carried none of the graph-level attributes** (#155 item 4). The
   Python writer reads them from a nested `meta`: `absence_rule` is `meta.absence.rule`, `absence_count`
   is `meta.absence.absent`, `statistics_test` is `meta.statistics.test`, and `hidden` is the counts

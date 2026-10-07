@@ -10,8 +10,10 @@ mGrowthDB names a medium per compartment and does not report its composition sys
 sugar, a removed carbon source or a supplement usually lives only in the experiment's description or name
 ("WC plus mucin beads", "RI_BH -Ac", "supplemented with 2g/L trehalose"). Matching on the medium name
 alone therefore puts different media together. Measured on the live database (2026-10-07, all 559
-experiments): the names alone give 15 media, this rule gives 60, and the alias table at the top of the
-next section brings that to 58 by merging the two names someone decided are one medium.
+experiments, with the alias table on, which is the only way the tool runs): the names alone give 13 media
+and this rule gives 57. Earlier comments here said 15 and 60, which came from a measurement taken before
+the alias table existed and before a stated amount of zero stopped counting as an addition; a count of
+mGrowthDB belongs in a comment with its date and nowhere a reader of a release can meet it.
 
 A medium's identity (`identity`) is:
 

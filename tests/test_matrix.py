@@ -234,3 +234,49 @@ def test_an_ill_conditioned_matrix_prints_no_equilibrium_and_says_why():
     assert condition_of(nearly) > MAX_EQUILIBRIUM_CONDITION
     assert condition_of([[-1.0e-10, 0.0], [0.0, -2.0e-10]]) < MAX_EQUILIBRIUM_CONDITION
     assert condition_of([[0.0, 0.0], [0.0, 0.0]]) == float("inf")
+
+
+def test_the_readme_states_the_diagonal_the_derivation_actually_produced():
+    """#155 item 11. The off-diagonal prose was branched by derivation and the diagonal's was not, so the
+    default's README said `K_i` is "the plateau of the curves that reached stationary phase" when on that
+    path `A_ii` is a parameter of the fit and `K = -r_i / A_ii` is derived from it, the opposite
+    direction. The same package's `growth_rates.csv` said `capacity_source = "fitted from the monoculture
+    time courses"` two files away.
+    """
+    from grownet import matrix
+
+    integrated = " ".join(matrix.DIAGONAL_PROSE["integrated"])
+    replicate = " ".join(matrix.DIAGONAL_PROSE["replicate"])
+    assert "FITTED, not divided" in integrated
+    assert "K_i = -r_i / A[i][i]" in integrated and "the plateau that fit implies" in integrated
+    assert "capacity_source" in integrated          # where a reader checks it per organism
+    # the comparison measures the plateau and divides, which is the other direction
+    assert "the plateau of the curves that reached stationary phase" in replicate
+    assert "FITTED, not divided" not in replicate
+    # and each names the section that holds the diagonals its own path cannot fit
+    assert "DIAGONALS THAT ARE NOT A FIT" in integrated
+    assert "SELF-LIMITATION FITTED AT A CO-CULTURE PLATEAU" in replicate
+
+
+def test_a_diagonal_that_is_not_a_fit_is_named_in_the_readme():
+    """The integrated path's equivalent of SELF-LIMITATION FITTED AT A CO-CULTURE PLATEAU, which is
+    populated from `edge.target_capacity` and so was unreachable there: an organism whose fit implies no
+    plateau has a measured one put in its place, and appeared in no section at all (#155 item 11)."""
+    from grownet import matrix
+
+    got = {"matrices": [], "censored_cells": [], "left_out": [], "pairs_left_out": [],
+           "across_units": [], "obligate_rows": [], "plateau_rows": [],
+           "rate_methods": ["integrated:two_stage"], "lag_methods": [],
+           "substituted_rows": [("Streptococcus thermophilus STpos",
+                                 "-r/K at the measured plateau 0.105 g/L of 1 monoculture curve(s): "
+                                 "the fit implies none")]}
+    net = _net([_arc("a", "b", 1.5)])
+    net.meta["settings"] = {"derivation": "integrated"}
+    text = matrix.readme_from(got, net, {})
+    heading = "\nDIAGONALS THAT ARE NOT A FIT\n"      # the section, not the prose that points at it
+    assert heading in text
+    assert "Streptococcus thermophilus STpos" in text and "the fit implies none" in text
+    assert "its A[i][i] came out at or above zero" in text
+    # and the section is absent when every diagonal is a fit, though the prose still names it
+    plain = matrix.readme_from({**got, "substituted_rows": []}, net, {})
+    assert heading not in plain and "DIAGONALS THAT ARE NOT A FIT below names" in plain

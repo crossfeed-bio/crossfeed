@@ -322,9 +322,11 @@ Rules for this file:
   count as matching medium." So the capacity merge is keyed by medium, and medium identity comes from
   foodnet's `media.identity`: the compartments' names normalized (case, punctuation and a parenthesized
   abbreviation removed), plus every alteration the experiment's description states, plus the atmosphere
-  where it is recorded. Measured on the live database (2026-10-07): the names alone give 15 media over the
-  559 experiments and the strict rule gives 60 (58 with the alias table below), which is what makes an organism's monocultures poolable
-  only within one chemistry.
+  where it is recorded. Measured on the live database (2026-10-07, over 559 experiments, alias table on):
+  the names alone give **13** media and the strict rule gives **57**, which is what makes an organism's
+  monocultures poolable only within one chemistry. The 15 and 60 recorded earlier were measured before the
+  alias table existed and before a stated amount of zero stopped being read as an addition; re-measure a
+  corpus count before repeating it.
   Implemented as `grownet.media` on 2026-10-07 (#142 item 16); the register's section 8 holds the
   measurements and the two faults of the rule it replaced. Keying alone took the chemostat validation
   from 2 scored to 1, since SMGDB00000005's A8 control records the bare "Wilkins-Chalgren", so Karoline

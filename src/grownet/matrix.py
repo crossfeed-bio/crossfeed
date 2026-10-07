@@ -288,6 +288,30 @@ def derivation_of(net: InteractionNetwork | None) -> str:
     return "replicate"
 
 
+# What the diagonal is, in each derivation's own words. The specified comparison measures a plateau and
+# divides: K_i is the thing observed and A_ii is derived from it. The integrated form fits A_ii as a
+# parameter of the row and K_i = -r_i / A_ii is the plateau that fit implies, which is the opposite
+# direction, and an organism whose fit implies none has a measured plateau put in instead.
+DIAGONAL_PROSE = {
+    "replicate": [
+        "  The diagonal is A[i][i] = -r_i / K_i, with K_i the organism's own monoculture carrying",
+        "      capacity, the plateau of the curves that reached stationary phase. An organism on its own",
+        "      therefore settles at K_i. Where no monoculture of it reached a certified plateau, its own",
+        "      plateau beside its partners fits the same balance, 0 = r_i + A[i][i] x_i + sum_j A[i][j] x_j",
+        "      there, and the organism is named under SELF-LIMITATION FITTED AT A CO-CULTURE PLATEAU.",
+    ],
+    "integrated": [
+        "  The diagonal is FITTED, not divided: A[i][i] is a parameter of the same least squares that",
+        "      gave r_i and the off-diagonals, so it is what the monoculture time courses imply about the",
+        "      organism's own limitation. The carrying capacity in growth_rates.csv is derived from it,",
+        "      K_i = -r_i / A[i][i], and is the plateau that fit implies rather than one a curve was",
+        "      observed to hold; capacity_source in that file says so for each organism.",
+        "      A fit whose A[i][i] is not negative implies no plateau at all. Then the measured plateau of",
+        "      the monocultures is put in its place where they certified one, which capacity_source also",
+        "      states and which the section DIAGONALS THAT ARE NOT A FIT below names.",
+    ],
+}
+
 # What an off-diagonal cell is, in each derivation's own words. The specified comparison takes a
 # difference of two separately fitted rates; the integrated form fits the whole row from the time course
 # and the cell is a parameter of that fit, so the comparison's formula is not what it holds.
@@ -869,6 +893,13 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             "censored_cells": [(_label(net.nodes[a]), _label(net.nodes[b]))
                                for (a, b), entry in values.items() if entry["censored"]],
             "metric": metrics[0] if metrics else "",
+            # the integrated path's equivalent of `plateau_rows`: an organism whose fit implied no
+            # plateau, so a measured one was put in its place. `plateau_rows` is populated from
+            # `edge.target_capacity`, which that derivation never sets, so the one diagonal in the
+            # package that is NOT a fit appeared in no section at all (#155 item 11)
+            "substituted_rows": sorted((rate.get("name") or nid, rate.get("capacity_source", ""))
+                                       for nid, rate in rates.items()
+                                       if "measured plateau" in (rate.get("capacity_source") or "")),
             "rate_methods": sorted({r.get("method", "") for r in rates.values() if r.get("method")}),
             "lag_methods": sorted({r.get("lag_method", "") for r in rates.values()
                                    if r.get("lag") is not None and r.get("lag_method")})}
@@ -898,7 +929,7 @@ def _rate_method_lines(got: dict) -> list:
              else "median over replicates and studies")
     lines = [f"  Growth rates: {named}, {merge}, batch monocultures only.",
              "      The estimator sets where this matrix settles as well as how fast a simulation",
-             f"      runs. The diagonal's r_i is {merge} while each",
+             "      runs. The diagonal's r_i is that merged rate, while each",
              "      off-diagonal uses its own comparison's two rates; x_j_star is the mean over the",
              "      window that estimator fitted in; and the rate guards reject different curves. So",
              "      the equilibrium below belongs to this estimator. The Growth rate method setting",
@@ -940,11 +971,10 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "      cells would hide that rather than settle it; the equilibrium of the fit is the solution of",
         "      A x = -r, and a negative entry there means this fit has no steady state with every",
         "      organism above zero. A simulation can still settle with fewer of them.",
-        "  The diagonal is fitted: A[i][i] = -r_i / K_i, with K_i the organism's own monoculture carrying",
-        "      capacity, the plateau of the curves that reached stationary phase. An organism on its own",
-        "      therefore settles at K_i. Where no monoculture of it reached a certified plateau, its own",
-        "      plateau beside its partners fits the same balance, 0 = r_i + A[i][i] x_i + sum_j A[i][j] x_j",
-        "      there, and the organism is named under SELF-LIMITATION FITTED AT A CO-CULTURE PLATEAU.",
+        # the diagonal in the derivation's own words too: it was unbranched and described the comparison's
+        # route, so the default's README said K_i is a plateau the curves reached when on that path A_ii
+        # is what the fit produced and K is derived from it (#155 item 11)
+        *DIAGONAL_PROSE[derivation_of(net)],
         # in the derivation's own words: the comparison's formula is not what an integrated cell holds
         *OFF_DIAGONAL[derivation_of(net)],
         "  ABUNDANCES ARE NEVER CONVERTED BETWEEN UNITS: a cell mass conversion would have to be",
@@ -1005,6 +1035,14 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
                   "  for them. Their own plateau beside their partners fits the same balance instead:",
                   "  0 = r_i + A[i][i] x_i + sum_j A[i][j] x_j there, with every abundance measured."]
         lines += [f"      {who}: {why}" for who, why in got["plateau_rows"]]
+        lines.append("")
+    if got.get("substituted_rows"):
+        lines += ["DIAGONALS THAT ARE NOT A FIT",
+                  "  The fit of these organisms implies no plateau: its A[i][i] came out at or above zero,",
+                  "  which is no self-limitation and no bounded state. The measured plateau of their",
+                  "  monocultures was put in its place, so their diagonal is -r_i / K_i with a K_i that was",
+                  "  observed, while every other diagonal here is a parameter the fit produced."]
+        lines += [f"      {who}: {why}" for who, why in got["substituted_rows"]]
         lines.append("")
     if got.get("obligate_rows"):
         lines += ["ORGANISMS THAT GROW ONLY WITH A PARTNER",
@@ -1167,6 +1205,7 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
             "across_units": [list(row) for row in got["across_units"]],
             "obligate_rows": [list(row) for row in got.get("obligate_rows", [])],
             "plateau_rows": [list(row) for row in got.get("plateau_rows", [])],
+            "substituted_rows": [list(row) for row in got.get("substituted_rows", [])],
             "from_the_ratio": [list(row) for row in got.get("from_the_ratio", [])],
             "media": media(net),
             "dropout_arcs": dropout_arcs(net),

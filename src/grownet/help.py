@@ -634,8 +634,9 @@ report its composition systematically: an added sugar, a removed carbon source o
 lives only in the experiment's description ("WC plus mucin beads", "minimal medium with 0.75% linoleic
 acid", "RI_BH -Ac"). So a medium's identity is its compartments' names, without case, punctuation or a
 parenthesized abbreviation, together with every alteration the description states, with the amount where
-one is stated, and the atmosphere where it is recorded. Over the whole database the names alone give 15
-media and this rule gives 60, or 58 once the alias table merges the two names it merges. Two media are
+one is stated, and the atmosphere where it is recorded. Reading the descriptions tells several times as
+many media apart as the names alone do, and the alias table then merges the names that are one medium
+spelled two ways. Two media are
 the same medium when those agree and not otherwise: a name
 that merely contains another is not a match, since "Wilkins-Chalgren Anaerobe Broth (WC)" and
 "Wilkins-Chalgren Anaerobe Broth (WC); Mucin" are a one-compartment design and a two-compartment one, and
