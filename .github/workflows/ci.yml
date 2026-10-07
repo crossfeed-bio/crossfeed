@@ -35,7 +35,10 @@ jobs:
       - name: release gate
         # with no tag it checks this tree's own version across pyproject.toml, the package, CITATION.cff
         # and r/DESCRIPTION, and the citation date against the changelog heading. It used to run only on
-        # the tag, so a drift was found when the release was already being cut (#142 item 15)
+        # the tag, so a drift was found when the release was already being cut (#142 item 15).
+        # It reads pyproject.toml with tomllib, which is 3.11 and newer, and the release itself runs on
+        # 3.12, so one version of the matrix is where this belongs.
+        if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'
         run: python packaging/check_release.py
       - name: tests
         run: pytest -q

@@ -14,7 +14,10 @@ import re
 import sys
 from pathlib import Path
 
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:          # Python 3.10: the release itself runs on 3.12
+    tomllib = None
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -90,6 +93,12 @@ def release_notes(tag: str, section: str) -> str:
 
 
 def main(argv) -> int:
+    # `make check` and CI run this with no tag on every build, and the oldest interpreter the project
+    # supports has no tomllib. Skipping cleanly is what lets the check live in the ordinary build at all
+    # (#142 item 15).
+    if tomllib is None:
+        print("release check: skipped, reading pyproject.toml needs Python 3.11 or newer")
+        return 0
     # With no tag, check the version this tree would release. The check used to appear only in
     # release.yml, invoked on $GITHUB_REF_NAME, so the gate that catches a citation date drifting from
     # the changelog fired for the first time when somebody pushed the tag, which is the moment it is most
