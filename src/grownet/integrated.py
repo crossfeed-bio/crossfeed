@@ -570,13 +570,17 @@ class IntegratedDeriver:
         from .adapter import replicates_for_experiment
         from .derive import (
             BATCH,
+            CONDITIONS_UNVERIFIED,
             SINGLE_REPLICATE,
             TWO_REPLICATES,
+            _choose_monocultures,
             _exp_id,
             _identity,
             _members,
+            conditions,
             cultivation,
             media_identity,
+            run_group,
             strain_identities,
         )
         from .growth import SPIKE_FACTOR
@@ -605,7 +609,17 @@ class IntegratedDeriver:
             if not reps:
                 continue
             if len(members) == 1:
-                monocultures.setdefault(members[0], []).append((exp, reps))
+                # keyed and grouped exactly as `derive._mono_index` keys and groups them, so stage 1
+                # pools only what the specified comparison would pool: identical recorded conditions and
+                # the same description apart from a run number. The shape is what `_choose_monocultures`
+                # reads: (replicates, strains, experiment ids, descriptions, names).
+                here = monocultures.setdefault((members[0], conditions(exp)), {}).setdefault(
+                    run_group(exp), ([], set(), [], [], []))
+                here[0].extend(reps)
+                here[1].add(members[0])
+                here[2].append(_exp_id(exp))
+                here[3].append(exp.get("description") or "")
+                here[4].append(exp.get("name") or "")
             elif len(members) == 2:
                 communities.append((exp, members, reps))
             else:
@@ -627,11 +641,27 @@ class IntegratedDeriver:
             medium = media_identity(exp)["label"]
             for target in members:
                 partners = [m for m in members if m != target]
-                monos = [rep for _, found in monocultures.get(target, []) for rep in found]
-                if not monos:
+                # Stage 1 used to be every monoculture replicate of this organism anywhere in the
+                # study, which pooled across chemically different experiments: on SMGDB00000014 that
+                # made one rate out of ten conditions whose implied plateaus span a factor of 5,500.
+                # It now follows the rule settled on #47 and recorded on #81, through the same two
+                # functions the specified comparison uses, so both derivations compare like with like
+                # (#142 item 1).
+                groups = monocultures.get((target, conditions(exp))) or {}
+                if not groups:
                     skipped.append((f"{target} in {exp.get('name') or _exp_id(exp)}",
-                                    "no monoculture of it to identify its own rate and limitation from"))
+                                    "no monoculture of it under this experiment's recorded conditions, so "
+                                    "its own rate and limitation cannot be identified for this condition"))
                     continue
+                chosen, how = _choose_monocultures(groups, exp)
+                if chosen is None:
+                    skipped.append((f"{target} in {exp.get('name') or _exp_id(exp)}", how))
+                    continue
+                monos, mono_experiments = chosen[0], list(chosen[2])
+                # several sets under these conditions, told apart only by their descriptions, and nothing
+                # recorded says which one this co-culture matches: the same caution the specified
+                # comparison carries there
+                unverified = len(groups) > 1 and how not in ("named", "qualifier", "wording")
                 got = two_stage(target, monos, reps, [target, *partners], self.max_condition)
                 skipped += got["skipped"]
                 if got["rate"] is None or not got["coefficients"]:
@@ -689,6 +719,8 @@ class IntegratedDeriver:
                         test = None
                     quality = [SINGLE_REPLICATE] if n_reps < 2 else []
                     cautions = [TWO_REPLICATES] if n_reps == 2 else []
+                    if unverified:
+                        cautions.append(CONDITIONS_UNVERIFIED)
                     src, tgt = _identity(identities, partner), _identity(identities, target)
                     records.append({
                         "source": src["id"], "source_name": partner,
@@ -709,7 +741,9 @@ class IntegratedDeriver:
                         "cultivation_mode": cultivation(exp),
                         "medium": medium, "condition": exp.get("name", ""),
                         "community": sorted(_identity(identities, m)["id"] for m in members),
-                        "experiments": [_exp_id(exp)],
+                        # the co-culture and the monoculture experiments the row rests on, as the
+                        # specified comparison records them
+                        "experiments": [_exp_id(exp), *mono_experiments],
                         "n_with": len(reps), "n_without": len(monos),
                         "sd": None if sd is None else round(sd, 4),
                         "se": None if se is None else round(se, 4),

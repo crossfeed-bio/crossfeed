@@ -356,3 +356,48 @@ def test_the_monoculture_stage_pools_the_replicates_only_when_none_of_them_fits_
     assert pooled["stages"][0] == "monoculture (replicates pooled)"
     assert pooled["rate"] == pytest.approx(0.4, rel=0.02)        # the same parameters, from the rows
     assert pooled["coefficients"]["A"] == pytest.approx(-4.0e-10, rel=0.05)
+
+
+def test_stage_one_takes_the_monocultures_of_this_experiments_own_condition():
+    """#142 item 1, Karoline's rule of #47 and #81: replicate sets pool only across experiments with
+    identical conditions, since interactions are environmentally specific. Stage 1 used to be every
+    monoculture replicate of the organism anywhere in the study, so an organism grown at two
+    concentrations gave one rate and one self-limitation over both; on SMGDB00000014 that pooled ten
+    chemically different experiments whose implied plateaus span a factor of 5,500.
+
+    Here A is grown alone at two concentrations: at the low one it plateaus at 1e9 (A_ii = -4e-10) and at
+    the high one at 1e8 (A_ii = -4e-9), ten times lower. The co-culture words its growth the way the high
+    one does, so stage 1 has to come from that monoculture alone, which `_choose_monocultures` picks by
+    wording as it does for the specified comparison.
+    """
+    from test_growth_rates import _client, _co, _mono
+
+    from grownet.integrated import IntegratedDeriver
+    low = _simulate([0.4], [[-4.0e-10]], [1.0e7])            # plateaus at 1e9
+    high = _simulate([0.4], [[-4.0e-9]], [1.0e7])            # plateaus at 1e8
+    co = _simulate([0.4, 0.3], [[-4.0e-9, 2.0e-9], [0.0, -3.0e-10]], [1.0e7, 5.0e7])
+    mono_b = _simulate([0.3], [[-3.0e-10]], [5.0e7])
+
+    def series(times, values, which=0):
+        return [(t, row[which], None) for t, row in zip(times, values, strict=True)]
+
+    client = _client({(1, "A"): series(*low), (2, "A"): series(*high), (3, "B"): series(*mono_b),
+                      (4, "A"): series(*co, 0), (4, "B"): series(*co, 1)})
+    low_exp = {**_mono("E1", "A", [(1, "r1")]),
+               "description": "A monoculture grown on a minimal medium with 0.05% acid"}
+    high_exp = {**_mono("E2", "A", [(2, "r1")]),
+                "description": "A monoculture grown on a minimal medium with 0.75% acid"}
+    mono_b_exp = {**_mono("E3", "B", [(3, "r1")]), "description": "B monoculture grown on a medium"}
+    co_exp = {**_co("E4", "A", "B", [(4, "r1")]),
+              "description": "A+B co-culture grown on a minimal medium with 0.75% acid"}
+    records, skipped = IntegratedDeriver(client=client).derive(
+        {"id": "S1"}, [low_exp, high_exp, mono_b_exp, co_exp])
+
+    arc = next(r for r in records if r["target_name"] == "A" and r["source_name"] == "B")
+    # the self-limitation of the condition this co-culture was grown in, not a median over both
+    assert arc["fitted_self"] == pytest.approx(-4.0e-9, rel=0.2)
+    assert arc["fitted_self"] < -2.0e-9                      # nowhere near the low condition's -4e-10
+    # and the row says which monoculture experiment it rests on, as the specified comparison does
+    assert "E2" in arc["experiments"] and "E1" not in arc["experiments"]
+    assert "E4" in arc["experiments"]
+    assert not [row for row in skipped if "could not be identified" in row[1]]
