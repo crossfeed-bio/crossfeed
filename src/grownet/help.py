@@ -342,7 +342,11 @@ EDGE_ATTRIBUTES = {
     "coefficient": "with a derivation that fits the row rather than comparing sets: the gLV coefficient "
                    "it fitted, a per-capita effect in 1/(time x abundance)",
     "coefficient_unit": "the unit of that coefficient",
-    "fit_r2": "how much of the organism's own log abundance change that fit explains",
+    "fit_r2": "how much of the organism's own log abundance change that fit explains, about zero, since "
+               "the model has no intercept, and over the replicates the fit actually used",
+    "fit_null_r2": "the same for the same row with every partner's effect set to zero: the line a fitted "
+                   "row has to beat to be a measurement of an interaction rather than of the organism's "
+                   "own growth, and the difference is how much the partners bought",
     "coefficient_sd": "the spread of the fitted coefficient over the co-culture replicates: one "
                       "coefficient per replicate, at the rate stage's own estimate. The monoculture "
                       "stage's contribution is a separate number beside it, measured on its own design, "

@@ -32,6 +32,37 @@ content.
 
 ### Changed
 ### Fixed
+- **A row the package publishes is now the row that was fitted** (#142 item 7). An organism whose fit
+  implies no plateau was given the measured one *after* its partners had been fitted against the fitted
+  self-limitation, so the published row satisfied no equation anyone had fitted and its R2 and condition
+  number described a row that was not published: on *S. thermophilus* the self term moved by 2.24 times
+  the whole partner coefficient the row's claim rested on, and in the opposite direction, and the
+  substitution manufactured an equilibrium in which that organism settles at twice the plateau that was
+  substituted in. It was not condition-matched either: on SMGDB00000013 it gave ancestral
+  *A. tumefaciens* the evolved line's plateau, 56 times the ancestral organism's own. The substitution
+  now happens before the partners are fitted, from the monocultures of the co-culture's own condition, and
+  `capacity_source` says where every diagonal came from, in the report, the rates CSV and the payload. The
+  second pass that re-read every study's monocultures to substitute afterwards is gone, with the crawl it
+  cost.
+- **A lag the Baranyi fit found and the guards discarded is no longer dropped in silence** (#142 item 8).
+  A lag at least half the run was discarded, which is the case where it matters most, and the fit then
+  paid for the flat start by trading the rate against the self-limitation: on a seven-point curve with a
+  7.97 h lag it returned a rate 31 times below the project's own estimator, a positive self-limitation, an
+  R2 of 0.909 and a condition number of 13, so every published gate passed it. A lag shorter than one
+  sampling interval cannot move the window and is not used either (56 of the 193 lags used were below
+  1e-6 h). Both guards now say what they did, a monoculture replicate whose lag was discarded for being
+  half the run is refused rather than contributing a rate, and an arc whose organism's own limitation came
+  out not negative carries a note saying it has no row in any matrix and why.
+- **An equilibrium is not printed from a matrix too ill-conditioned to solve** (#142 item 9). It was
+  solved with no condition estimate at all, `steady.solve`'s only test being an absolute pivot below
+  1e-300, and printed to four significant digits with a categorical verdict: a near-singular block
+  returned a number like 1e24 and had it reported as a steady state, and a change of 0.05 percent in one
+  coefficient flipped the verdict. `steady.condition_of` now measures it, nothing above 1e8 is printed,
+  the reason is given instead, and where an equilibrium is printed its condition number is printed beside
+  it. The fit's R2 is scored over the replicates stage 2 actually used, since a replicate the fit never
+  saw could otherwise discard a whole organism, and the interaction-free null is published beside it
+  (`fit_null_r2`), so a reader sees how much the partners bought: on study 7's rows, 0.542 against
+  -17.825 on one and 0.956 against 0.718 on another.
 - **A crash that took out a whole derivation** (#142 item 12, traced by Craig's agent on #134).
   `design` leaves a partner with no curve out of the columns, since a column of zeros would claim it was
   absent rather than unmeasured, so a replicate's rows are as wide as that replicate's own partners,

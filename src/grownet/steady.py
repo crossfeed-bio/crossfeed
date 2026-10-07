@@ -223,10 +223,42 @@ def find(client, net, progress=None) -> list:
     return out
 
 
+# How ill-conditioned a matrix may be and still have an equilibrium printed. A condition number of 1e8
+# means the solution can lose about eight of the sixteen digits a float carries, so a number printed to
+# four significant digits is then not a prediction of anything: constructed at the project's own scale, a
+# change of 0.05 percent in one coefficient flipped the categorical verdict, against a stated relative
+# spread of 0.33, and a near-singular block returned 1e24 reported as a steady state (#142 item 9).
+MAX_EQUILIBRIUM_CONDITION = 1.0e8
+
+
+def condition_of(rows: list) -> float:
+    """A condition number of a square matrix: the 1-norm of the matrix times the 1-norm of its inverse.
+
+    Infinity when it is singular. This is the standard library's own arithmetic throughout, like the rest
+    of the module, and the matrices are as small as a community is.
+    """
+    n = len(rows)
+    if not n:
+        return float("inf")
+    norm = max((sum(abs(rows[i][j]) for i in range(n)) for j in range(n)), default=0.0)
+    columns = []
+    for j in range(n):
+        unit = [1.0 if i == j else 0.0 for i in range(n)]
+        got = solve([row[:] for row in rows], unit)
+        if got is None:
+            return float("inf")
+        columns.append(got)
+    inverse_norm = max((sum(abs(c) for c in column) for column in columns), default=0.0)
+    return norm * inverse_norm if norm and inverse_norm else float("inf")
+
+
 def solve(rows: list, rhs: list):
     """The solution of `rows x = rhs` by Gaussian elimination with partial pivoting, or None if singular.
 
     Standard library only, like everything else here, and the systems are as small as the matrices are.
+    The caller checks `condition_of` before standing behind a solution: an absolute pivot above 1e-300 is
+    the only thing this refuses, and a matrix can be far too ill-conditioned for its answer to mean
+    anything while every pivot clears that.
     """
     n = len(rhs)
     work = [list(row) + [rhs[i]] for i, row in enumerate(rows)]

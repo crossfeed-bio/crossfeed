@@ -328,7 +328,8 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow(["organism", "growth_rate", "unit", "replicates", "studies", "method", "lag",
                      "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves",
-                     "capacity_curves_left_out", "capacity_fall_from_peak", "capacity_medium"])
+                     "capacity_curves_left_out", "capacity_fall_from_peak", "capacity_medium",
+                     "capacity_source"])
     order = labels(net) if net is not None else sorted(rates)
     for nid in order:
         rate = rates.get(nid)
@@ -352,7 +353,9 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
                          "" if rate.get("capacity_fall") is None else f"{rate['capacity_fall']:.4g}",
                          # one medium, never pooled: the diagonal and the cells beside it are of one
                          # environment (Karoline, 2026-10-07)
-                         rate.get("capacity_medium", "") if capacity is not None else ""])
+                         rate.get("capacity_medium", "") if capacity is not None else "",
+                         # fitted with the partners, or -r/K at a measured plateau (#142 item 7)
+                         rate.get("capacity_source", "")])
     return out.getvalue()
 
 
@@ -760,16 +763,33 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
     # computed inside the loop above it described the block before the removal, so a block that dropped a
     # row carried an equilibrium of the wrong length, which named an organism it does not hold and raised
     # on the package's own README (found 2026-10-06, round 2 of the review).
-    from .steady import solve
+    from .steady import MAX_EQUILIBRIUM_CONDITION, condition_of, solve
     for block in matrices:
         rate_of = [(rates.get(nid) or {}).get("rate") for nid in block["ids"]]
-        block["equilibrium"], block["not_above_zero"] = None, []
-        if all(r is not None for r in rate_of):
-            answer = solve([row[:] for row in block["matrix"]], [-r for r in rate_of])
-            if answer is not None:
-                block["equilibrium"] = answer
-                block["not_above_zero"] = [name for name, value
-                                           in zip(block["organisms"], answer, strict=True) if value <= 0]
+        block["equilibrium"], block["not_above_zero"], block["equilibrium_why_not"] = None, [], ""
+        block["equilibrium_condition"] = None
+        if not all(r is not None for r in rate_of):
+            block["equilibrium_why_not"] = "not every organism in this matrix has a growth rate"
+            continue
+        # how well the system is conditioned decides whether its solution is worth printing at all: a
+        # near-singular block used to return a number like 1e24 and have it reported as a steady state,
+        # and a change of 0.05 percent in one coefficient flipped the verdict (#142 item 9)
+        condition = condition_of(block["matrix"])
+        block["equilibrium_condition"] = None if condition == float("inf") else condition
+        if condition > MAX_EQUILIBRIUM_CONDITION:
+            block["equilibrium_why_not"] = (
+                f"this matrix is too ill-conditioned to solve: its condition number is "
+                f"{'infinite' if condition == float('inf') else format(condition, '.3g')}, above the "
+                f"{MAX_EQUILIBRIUM_CONDITION:.0e} this tool will stand behind, so an equilibrium computed "
+                "from it would carry fewer digits than it printed")
+            continue
+        answer = solve([row[:] for row in block["matrix"]], [-r for r in rate_of])
+        if answer is None:
+            block["equilibrium_why_not"] = "this matrix is singular, so it has no single equilibrium"
+            continue
+        block["equilibrium"] = answer
+        block["not_above_zero"] = [name for name, value
+                                   in zip(block["organisms"], answer, strict=True) if value <= 0]
     return {"matrices": matrices, "left_out": left_out, "pairs_left_out": pairs_left_out,
             "across_units": across, "floors": [],
             "from_absolute_rates": all(entry["how"] == "rates" for entry in values.values()),
@@ -873,7 +893,10 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
                      + (f", measured in {', '.join(block['media'])}" if block.get("media") else ""))
         # the equilibrium of this matrix, worked out here rather than left to the reader
         if block.get("equilibrium") is None:
-            lines.append("      where it settles: not computed, since an organism here has no rate")
+            # the reason, not a bare "not computed": too ill-conditioned, singular, or a missing rate
+            lines.append("      where it settles: NOT COMPUTED. "
+                         + (block.get("equilibrium_why_not")
+                            or "an organism here has no rate"))
         elif block.get("not_above_zero"):
             lines.append("      where it settles: NOWHERE WITH EVERY ORGANISM ABOVE ZERO. The solution of "
                          "A x = -r puts")
@@ -881,10 +904,14 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
                          "simulation of this matrix")
             lines.append("          settles with fewer organisms than it holds, or grows without bound.")
         else:
+            condition = block.get("equilibrium_condition")
             lines.append("      where it settles (the solution of A x = -r, in "
                          f"{block['abundance_unit']}): "
                          + ", ".join(f"{name} {value:.4g}" for name, value
-                                     in zip(block["organisms"], block["equilibrium"], strict=True)))
+                                     in zip(block["organisms"], block["equilibrium"], strict=True))
+                         + (f" [condition number {condition:.3g}: a relative change in the "
+                            "coefficients moves these numbers by up to that factor]"
+                            if condition else ""))
     if not got["matrices"]:
         lines.append("  NONE: no organism had both a growth rate and a carrying capacity (see below).")
     lines.append("")
@@ -999,6 +1026,8 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
                       # that it settles nowhere with every organism above zero
                       "equilibrium": (list(block["equilibrium"])
                                       if block.get("equilibrium") is not None else None),
+                      "equilibrium_condition": block.get("equilibrium_condition"),
+                      "equilibrium_why_not": block.get("equilibrium_why_not", ""),
                       "not_above_zero": list(block.get("not_above_zero") or []),
                       "pooled_media": [list(row) for row in (block.get("pooled_media") or ())]}
                      for block in got["matrices"]],
@@ -1018,7 +1047,8 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
              "carrying_capacity_media": list(rates[nid].get("capacity_media") or ()),
              "carrying_capacity_medium": rates[nid].get("capacity_medium", ""),
              "carrying_capacity_other_media": list(rates[nid].get("capacity_other_media") or ()),
-             "carrying_capacity_fall_from_peak": rates[nid].get("capacity_fall")}
+             "carrying_capacity_fall_from_peak": rates[nid].get("capacity_fall"),
+             "carrying_capacity_source": rates[nid].get("capacity_source", "")}
             for nid in order if nid in rates and (rates[nid] or {}).get("rate") is not None],
         "caveats": {
             # in the derivation's own words (#142 item 6): the comparison's formula is not what an

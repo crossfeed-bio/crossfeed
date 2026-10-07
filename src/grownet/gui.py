@@ -983,16 +983,11 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         # the derivation fitted a rate and a self-limitation per organism, and those are the parameters
         # that go with its coefficients (#127)
         organism_rates = {nid: entry for nid, entry in fitted.items() if nid in net.nodes}
-        # an organism whose fit implies no plateau keeps its row when its monocultures measured one
-        missing = {nid for nid, entry in organism_rates.items() if entry.get("capacity") is None}
-        if missing:
-            say(len(studies), len(studies), "Reading the monoculture plateaus the fit did not imply")
-            found, rate_skips = growth_rates(client, studies, wanted=missing,
-                                             rate_method=s["rate_method"], window=s["rate_window"],
-                                             spike_factor=s["spike_factor"], progress=say,
-                                             capacity_max_fall=s["capacity_max_fall"])
-            organism_rates, _ = integrated.fill_capacities(organism_rates, matrix.for_nodes(net, found))
-            skipped += rate_skips
+        # An organism whose fit implies no plateau is given the measured one inside `two_stage`, before
+        # its partners are fitted against it, from the monocultures of its own condition (#142 item 7).
+        # So there is no second pass here: it used to read every study's monocultures again to substitute
+        # a plateau afterwards, which cost a crawl and published a row no fit had produced.
+        # `self_limitation_source` on each row says where the diagonal came from, or why there is none.
         net.meta["growth_rates"] = matrix.rate_meta(net, organism_rates, integrated.METRIC)
     elif s["report_rates"]:
         say(len(studies), len(studies), "Reading the monoculture growth rates")

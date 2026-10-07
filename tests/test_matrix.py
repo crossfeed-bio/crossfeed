@@ -117,13 +117,14 @@ def test_the_rates_file_says_what_each_median_rests_on():
     # after it, so what those curves held at their last measurement travels with the number
     assert table[0] == ["organism", "growth_rate", "unit", "replicates", "studies", "method", "lag",
                         "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves",
-                        "capacity_curves_left_out", "capacity_fall_from_peak", "capacity_medium"]
+                        "capacity_curves_left_out", "capacity_fall_from_peak", "capacity_medium",
+                        "capacity_source"]
     # the lag names its own estimator, since it is Baranyi's whichever one produced the rate
     assert table[1] == ["A", "0.42", "1/h", "6", "S1 S2", "growth_rate:easylinear:5", "1.25", "baranyi",
-                        "2e+08", "Cells/mL", "4", "", "", ""]
+                        "2e+08", "Cells/mL", "4", "", "", "", ""]
     # a rate with none of the gLV quantities keeps its row and leaves them empty (#118)
     plain = list(csv.reader(io.StringIO(matrix.rates_csv({"a": {"rate": 0.42, "unit": "1/h"}}, net))))
-    assert plain[1] == ["A", "0.42", "1/h", "", "", "", "", "", "", "", "", "", "", ""]
+    assert plain[1] == ["A", "0.42", "1/h", "", "", "", "", "", "", "", "", "", "", "", ""]
 
     # and a capacity that rests on fewer curves than were read says how many gave none, so an empty or
     # thin capacity does not read as absence (found 2026-10-06)
@@ -132,7 +133,7 @@ def test_the_rates_file_says_what_each_median_rests_on():
                                                          ("A rep 3", "had not reached stationary phase")]}}
     # the fall from the peak and the medium are the last two columns since 2026-10-07, and this fixture
     # states neither
-    assert list(csv.reader(io.StringIO(matrix.rates_csv(thin, net))))[1][-3] == "2"
+    assert list(csv.reader(io.StringIO(matrix.rates_csv(thin, net))))[1][-4] == "2"
     assert len(table) == 2                    # b has no rate, so it has no row
 
 
@@ -220,3 +221,16 @@ def test_the_package_counts_the_arcs_a_glv_simulation_should_not_use():
     assert matrix.dropout_arcs(net) == 1
     direct = _net([_arc("a", "b", 1.5, evidence="biculture")])
     assert matrix.dropout_arcs(direct) == 0
+
+
+def test_an_ill_conditioned_matrix_prints_no_equilibrium_and_says_why():
+    """#142 item 9: the equilibrium was solved with no condition estimate, `steady.solve`'s only test
+    being an absolute pivot below 1e-300, and printed to four significant digits with a categorical
+    verdict. A near-singular block returned a number like 1e24 and had it reported as a steady state, and
+    a change of 0.05 percent in one coefficient flipped the verdict. The condition number now decides
+    whether the solution is printed at all, and is printed beside it when it is."""
+    from grownet.steady import MAX_EQUILIBRIUM_CONDITION, condition_of
+    nearly = [[-1.0e-10, -1.0e-10], [-1.0e-10, -1.0e-10 * (1 + 1e-12)]]
+    assert condition_of(nearly) > MAX_EQUILIBRIUM_CONDITION
+    assert condition_of([[-1.0e-10, 0.0], [0.0, -2.0e-10]]) < MAX_EQUILIBRIUM_CONDITION
+    assert condition_of([[0.0, 0.0], [0.0, 0.0]]) == float("inf")

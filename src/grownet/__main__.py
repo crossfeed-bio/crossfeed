@@ -268,19 +268,15 @@ def _rates_of(a, client, study_ids, net, skipped, records=None):
     from .integrated import fitted_rates
     fitted = fitted_rates(records or [])
     if fitted:
-        # an organism whose fit implies no plateau keeps its row when its monocultures measured one
-        from .integrated import fill_capacities
-        missing = [nid for nid, entry in fitted.items() if entry.get("capacity") is None]
-        if missing:
-            found, rate_skips = growth_rates(client, study_ids, wanted=set(missing),
-                                             rate_method=a.rate_method, window=a.rate_window,
-                                             spike_factor=a.spike_factor,
-                                             capacity_max_fall=a.capacity_max_fall)
-            fitted, filled = fill_capacities(fitted, matrix.for_nodes(net, found))
-            skipped += rate_skips
-            for name, value in filled:
-                print(f"{name}: the fit implies no plateau, so its self-limitation uses the measured "
-                      f"monoculture plateau {value:.4g}", file=sys.stderr)
+        # An organism whose fit implies no plateau is given the measured one inside `two_stage`, before
+        # its partners are fitted against it, from the monocultures of its own condition (#142 item 7).
+        # The second pass that used to read every study's monocultures and substitute a plateau afterwards
+        # published a row no fit had produced, and is gone; each row's `capacity_source` says where its
+        # diagonal came from, or why it has none.
+        for nid, entry in sorted(fitted.items()):
+            if entry.get("capacity") is None:
+                print(f"{entry.get('name', nid)}: {entry.get('capacity_source') or 'no plateau'}, so it "
+                      "has no self-limitation and no row in a matrix", file=sys.stderr)
         net.meta["growth_rates"] = matrix.rate_meta(net, fitted, INTEGRATED)
         return fitted, skipped
     found, rate_skips = growth_rates(client, study_ids, wanted=set(net.nodes),

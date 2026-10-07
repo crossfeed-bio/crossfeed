@@ -272,7 +272,7 @@ def test_the_fall_travels_into_the_report_and_the_rates_csv():
                               "capacity_n": 2, "capacity_fall": 4.0, "capacity_left_out": [],
                               "capacity_medium": "WC"}}
     row = list(csv_module.reader(io_module.StringIO(matrix.rates_csv(rates_found))))[1]
-    assert row[-2] == "4" and row[-1] == "WC"
+    assert row[-3] == "4" and row[-2] == "WC"
 
     from grownet.model import InteractionNetwork
     from grownet.report import report_text

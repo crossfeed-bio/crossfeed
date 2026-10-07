@@ -56,22 +56,54 @@ def _trapezoid(times: list, values: list) -> list:
 def lag_of(curve) -> float:
     """Where growth starts on this curve, from the Baranyi fit, or 0.0 when it has none to give.
 
+    `used_lag` is the same answer with the reason beside it, and is what `design` reads.
+    """
+    return used_lag(curve)["lag"]
+
+
+def used_lag(curve) -> dict:
+    """{"lag", "fitted", "why"}: where growth starts, what Baranyi said, and why the two differ.
+
     The integrated form has no lag term: a culture that sits at its inoculum for an hour and then grows
     makes `ln(x(T)/x(0))` smaller than the model expects, and the fit pays for it by trading the rate
     against the self-limitation, which is how r came out negative on SMGDB00000007. So the integral starts
     where growth starts, which is the lag #118 reports (Karoline, 2026-10-06, asking for exactly that use:
     "so the integrated form depends on identifying lag phase. what if Baranyi is used to determine r?").
+
+    Two guards, and both now say what they did (#142 item 8).
+
+      * **A lag shorter than one sampling interval cannot move the window**, since the rows start at a
+        measured point, so it is not used. Over the 928 batch curves in the database, 56 of the 193 lags
+        used were below 1e-6 h, which is no lag at all dressed as one.
+      * **A lag at least half the run is not used either**, because too little would be left to fit. That
+        is the case where the lag matters most, and discarding it silently left the fit to pay for the flat
+        start: on a seven-point curve with a 7.97 h lag the fit returned a rate 31 times below the
+        project's own estimator, a positive self-limitation, an R2 of 0.909 and a condition number of 13,
+        so every published gate passed it. `why` now names it, and `design` puts it in the row's reason so
+        the deriver can refuse the row.
     """
     from . import rates as rate_fits
 
     try:
         fit = rate_fits.baranyi_fit(list(curve.times), list(curve.values))
     except Exception:          # noqa: BLE001 - a curve the model rejects simply has no lag to report
-        return 0.0
+        return {"lag": 0.0, "fitted": None, "why": ""}
     lag = fit.get("lag") or 0.0
-    span = curve.times[-1] - curve.times[0]
-    # a lag longer than half the run would leave too little to fit, so it is not used
-    return lag if 0.0 < lag < 0.5 * span else 0.0
+    times = list(curve.times)
+    span = times[-1] - times[0]
+    interval = min((b - a for a, b in zip(times, times[1:], strict=False) if b > a), default=span)
+    if lag <= 0.0:
+        return {"lag": 0.0, "fitted": lag, "why": ""}
+    if lag < interval:
+        return {"lag": 0.0, "fitted": lag,
+                "why": (f"the Baranyi lag is {lag:.3g}, shorter than the {interval:.3g} between "
+                        "measurements, so it cannot move where the rows start")}
+    if lag >= 0.5 * span:
+        return {"lag": 0.0, "fitted": lag,
+                "why": (f"the Baranyi lag is {lag:.3g} of a {span:.3g} run, at least half of it, so too "
+                        "little would be left to fit and the rows start at the inoculum instead: the fit "
+                        "has to pay for the flat start by trading the rate against the self-limitation")}
+    return {"lag": lag, "fitted": lag, "why": ""}
 
 
 def growth_window(curve, start: float) -> float:
@@ -109,7 +141,8 @@ def design(replicate, target: str, organisms: list, start: float = None, end: fl
     own = replicate.curve(target)
     if own is None:
         return {"partners": [], "rows": [], "reason": f"{target} was not measured in this replicate"}
-    begin = lag_of(own) if start is None else start
+    lag = used_lag(own) if start is None else {"lag": start, "fitted": None, "why": ""}
+    begin = lag["lag"]
     stop = growth_window(own, begin) if end is None else end
     whole = list(own.times)
     keep = [k for k, t in enumerate(whole) if begin - 1e-9 <= t <= stop + 1e-9]
@@ -139,6 +172,12 @@ def design(replicate, target: str, organisms: list, start: float = None, end: fl
     if begin > whole[0] or stop < whole[-1]:
         reason = (f"the rows cover {begin:g} to {stop:g}, where growth starts and where it ends "
                   "(the model has no lag and no death)")
+    # a lag the Baranyi fit identified and the guards then discarded is the case where the lag matters
+    # most, and it used to be dropped in silence: the row carries it so the deriver can refuse the row
+    # (#142 item 8). It replaces the window note rather than appending to it, since it is the stronger
+    # thing to say about these rows.
+    if lag["why"]:
+        reason = lag["why"]
     if missing:
         reason = (f"{', '.join(missing)} not measured on the same time points in this replicate, so "
                   "no column for it")
@@ -256,35 +295,53 @@ def _spread(values: list) -> dict:
 
 
 def _overall_r2(target: str, partners: list, cocultures: list, rate: float, own: float,
-                coefficients: dict) -> float:
-    """How much of the organism's own log abundance change the whole fit explains, over its co-cultures.
+                coefficients: dict, used: list = None) -> dict:
+    """{"r2", "null_r2", "rows"}: how much of the organism's own log abundance change the fit explains,
+    and how much the same row with every partner's effect set to zero explains.
 
     `_least_squares` reports the R2 of the stage it ran, and stage 2 runs against stage 1's residual, so
     its number answers a smaller question than the help's words. This one compares the model's prediction,
     `r_i t + A_ii integral(x_i) + sum_j A_ij integral(x_j)`, with the measured `ln(x_i(t) / x_i(0))`.
+
+    Two things it now does that it did not (#142 item 9). It scores **only the replicates stage 2 used**,
+    given in `used`, since a replicate the fit never saw could otherwise discard a whole organism. And it
+    scores the **interaction-free null** beside the fit: the same rate and self-limitation with no partner
+    effects at all. The gate was "better than predicting nothing", which the null already cleared on 19 of
+    34 live rows, so the line was below "no interactions at all"; the null is the line a fitted row has to
+    beat to be a measurement of an interaction.
     """
-    ys, predicted = [], []
-    for replicate in cocultures:
+    names = None if used is None else {replicate.name or str(i) for i, replicate in enumerate(used)}
+    ys, predicted, without = [], [], []
+    for i, replicate in enumerate(cocultures):
+        if names is not None and (replicate.name or str(i)) not in names:
+            continue
         built = design(replicate, target, [target, *partners])
         here = built["partners"]
         if target not in here:
             continue
         own_index = here.index(target)
         for row in built["rows"]:
-            value = rate * row["time"] + own * row["integrals"][own_index]
+            alone = rate * row["time"] + own * row["integrals"][own_index]
+            value = alone
             for name in partners:
                 if name in here and name in coefficients:
                     value += coefficients[name] * row["integrals"][here.index(name)]
             ys.append(row["y"])
             predicted.append(value)
+            without.append(alone)
     if len(ys) < 2:
-        return float("nan")
+        return {"r2": float("nan"), "null_r2": float("nan"), "rows": len(ys)}
     # about zero rather than about the mean of y: the model has no intercept, because y is
     # ln(x_i(t) / x_i(0)) and is zero at the start by construction, so the fit is not allowed to move the
     # level and must not be scored as if it were (the uncentered R2 of a no-intercept regression)
     total = sum(y * y for y in ys)
-    residual = sum((y - f) ** 2 for y, f in zip(ys, predicted, strict=True))
-    return 1 - residual / total if total > 0 else float("nan")
+    if total <= 0:
+        return {"r2": float("nan"), "null_r2": float("nan"), "rows": len(ys)}
+
+    def score(fitted):
+        return 1 - sum((y - f) ** 2 for y, f in zip(ys, fitted, strict=True)) / total
+
+    return {"r2": score(predicted), "null_r2": score(without), "rows": len(ys)}
 
 
 def _pooled_stage_one(target: str, replicates: list, max_condition: float):
@@ -375,6 +432,46 @@ def _stage_one_draws(target: str, rates: list, selfs: list, usable: list, pooled
             "method": f"bootstrap of {n} monoculture replicate(s), {STAGE_ONE_DRAWS} resamples"}
 
 
+def _measured_plateau(replicates: list, target: str, max_fall: float = None):
+    """(the plateau these monocultures of `target` certify, its unit, how many curves), or None.
+
+    The same rule `derive._collect_capacity` applies to the measured path: certified by
+    `reached_stationary`, taken as the curve's maximum, refused where the culture fell further from its
+    peak than the decline limit, and never pooled across abundance units. These are the monocultures of
+    one condition, since that is what stage 1 is given since #142 item 1, so the plateau is of the same
+    condition as the fit it goes into.
+    """
+    from .derive import CAPACITY_MAX_FALL
+    from .growth import curve_features, fall_from_peak, reached_stationary
+    limit = CAPACITY_MAX_FALL if max_fall is None else max_fall
+    values, unit = [], ""
+    for replicate in replicates:
+        curve = replicate.curve(target)
+        if curve is None or len(curve.times) < 2:
+            continue
+        if reached_stationary(curve, curve.times[-1]) is not True:
+            continue
+        fall = fall_from_peak(curve, curve.times[-1])
+        if fall is None or (limit and fall > limit):
+            continue
+        if not unit:
+            unit = curve.abundance_unit
+        if curve.abundance_unit != unit:
+            continue
+        values.append(curve_features(curve)["max"])
+    if not values:
+        return None
+    return statistics.median(values), unit, len(values)
+
+
+def _scored(target, partners, cocultures, rate, own, coefficients, per_replicate) -> dict:
+    """{"r2", "null_r2", "scored_rows"} for the result of `two_stage`, over the replicates stage 2 used."""
+    used = [replicate for i, replicate in enumerate(cocultures)
+            if (replicate.name or str(i)) in {entry["replicate"] for entry in per_replicate}]
+    got = _overall_r2(target, partners, cocultures, rate, own, coefficients, used or None)
+    return {"r2": got["r2"], "null_r2": got["null_r2"], "scored_rows": got["rows"]}
+
+
 def two_stage(target: str, monocultures: list, cocultures: list, organisms: list,
               max_condition: float = MAX_CONDITION) -> dict:
     """The organism's row from its monocultures first, then its partners from the co-cultures.
@@ -397,6 +494,13 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
                             "integrated model does not describe this curve"))
             continue
         if fit["rate"] is None or target not in fit["coefficients"]:
+            skipped.append((f"{target} monoculture replicate {replicate.name or i}", fit["reason"]))
+            continue
+        # a lag the Baranyi fit identified and the guards discarded leaves the rows starting at the
+        # inoculum, and the fit pays for the flat start by trading the rate against the self-limitation.
+        # That is the one case where the lag matters most, so the replicate is refused rather than
+        # contributing a rate nothing can stand behind (#142 item 8)
+        if "Baranyi lag" in (fit.get("reason") or "") and "at least half" in fit["reason"]:
             skipped.append((f"{target} monoculture replicate {replicate.name or i}", fit["reason"]))
             continue
         rates.append(fit["rate"])
@@ -438,6 +542,25 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
     rate = statistics.median(rates)
     own = statistics.median(selfs)
     stages.append("monoculture (replicates pooled)" if pooled_only else "monoculture")
+
+    # A fit whose A_ii is not negative implies no plateau, and such an organism used to be given the
+    # measured one afterwards, in `fill_capacities`, **after** its partners had been fitted against the
+    # fitted A_ii. The published row then satisfied no equation anyone had fitted and its R2 described
+    # the row that was not published (#142 item 7). The substitution happens here instead, before stage
+    # 2, so the partners are fitted against the self-limitation the package publishes and the row is one
+    # fit throughout. The plateau comes from these monocultures, which are the ones of this co-culture's
+    # own condition since item 1, so it is condition-matched by construction.
+    self_limitation_source = "fitted from the monoculture time courses"
+    if not (own < 0 and rate > 0):
+        plateau = _measured_plateau(usable, target)
+        if plateau is not None and rate > 0 and plateau[0] > 0:
+            own = -rate / plateau[0]
+            self_limitation_source = (f"-r/K at the measured plateau {plateau[0]:.4g} {plateau[1]} of "
+                                      f"{plateau[2]} monoculture curve(s): the fit implies none")
+            stages.append("self-limitation from the measured plateau")
+        else:
+            self_limitation_source = ("the fit implies no plateau and no monoculture of this condition "
+                                      "certified one")
 
     partners = [name for name in organisms if name != target]
     # Stage 1 gives one (r, A_ii) per monoculture replicate, and stage 2 used to treat their median as
@@ -540,7 +663,7 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
             # how well the whole fit describes the organism's own log abundance change, which is what the
             # help says this number is. It used to be stage 2's own R2 against stage 1's residual, a
             # different and smaller question (2026-10-06).
-            "r2": _overall_r2(target, partners, cocultures, rate, own, coefficients),
+            **_scored(target, partners, cocultures, rate, own, coefficients, per_replicate),
             "condition": max(conditions) if conditions else float("inf"),
             "points": points, "stages": stages, "skipped": skipped, "reason": "",
             # What the uncertainty rests on, as three disjoint things rather than one mixed set.
@@ -555,6 +678,9 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
             "stage_one_n": draws["n"],
             "stage_one_variance_scale": draws["variance_scale"],
             "self_limitation": own,
+            # where the published self-limitation came from, so a reader is never left to assume that a
+            # diagonal and the partners beside it were fitted together when they were not (#142 item 7)
+            "self_limitation_source": self_limitation_source,
             "spread": {name: _spread(values) for name, values in spread_values.items()},
             "replicates": len(per_replicate)}
 
@@ -603,7 +729,7 @@ def fitted_rates(records: list) -> dict:
             "name": record.get("target_name", nid), "unit": record.get("fitted_rate_unit", "1/h"),
             "rates": [], "points": [], "studies": [], "per_study": {}, "other_units": [],
             "capacity_unit": "", "capacities": [], "capacity_points": [], "capacity_per_study": {},
-            "other_capacity_units": [], "r2": [], "conditions": []})
+            "other_capacity_units": [], "r2": [], "conditions": [], "self_sources": [], "media": []})
         study = record.get("study_id", "")
         unit = record.get("fitted_rate_unit", "1/h")
         if unit != at["unit"]:
@@ -619,6 +745,11 @@ def fitted_rates(records: list) -> dict:
             at["r2"].append(record["fit_r2"])
         if record.get("fit_condition") is not None:
             at["conditions"].append(record["fit_condition"])
+        source = record.get("fitted_self_source", "")
+        if source and source not in at["self_sources"]:
+            at["self_sources"].append(source)
+        if record.get("medium") and record["medium"] not in at["media"]:
+            at["media"].append(record["medium"])
         if not (own and own < 0 and rate > 0):
             continue
         capacity_unit = record.get("fitted_self_unit", "")
@@ -657,36 +788,36 @@ def fitted_rates(records: list) -> dict:
             # the fit behind the published parameters: the median R2 of the rows merged into them and the
             # worst conditioning among them, so neither reads as the property of one row
             "fit_r2": statistics.median(at["r2"]) if at["r2"] else None,
-            "fit_condition": max(at["conditions"]) if at["conditions"] else None}
+            "fit_condition": max(at["conditions"]) if at["conditions"] else None,
+            # where the self-limitation behind the diagonal came from, and the media the rows were
+            # measured in, so a reader of the package can see both (#142 items 6 and 7)
+            "capacity_source": "; ".join(at["self_sources"]),
+            "media": sorted(at["media"])}
     return out
 
 
 def fill_capacities(fitted: dict, measured: dict) -> tuple:
-    """(the fitted rates with a measured plateau where the fit implies none, what was filled).
+    """Retired 2026-10-07 (#142 item 7). Returns the rates unchanged and fills nothing.
 
-    The fit implies `K_i = -r_i / A_ii`, and a fit whose `A_ii` is not negative implies no plateau, which
-    used to leave that organism out of every matrix although its monocultures had reached a certified
-    plateau. The diagonal is `-r_i / K_i` either way, so the measured plateau is used there and named.
-    This is the same pairing the specified comparison makes, a fitted rate beside a measured plateau, and
-    it keeps an organism whose own limitation the time course did not pin (2026-10-06).
+    It used to give an organism whose fit implies no plateau the measured one, **after** that organism's
+    partners had been fitted against the fitted self-limitation. The published row then satisfied no
+    equation anyone had fitted, and its `fit_r2` and condition number described the row that was not
+    published: on *S. thermophilus* the self term moved by 2.24 times the whole partner coefficient the
+    row's claim rested on, and in the opposite direction, and the substitution manufactured an
+    equilibrium in which that organism settles at twice the plateau that was substituted in. It was not
+    condition-matched either: on SMGDB00000013 it gave ancestral *A. tumefaciens* the evolved line's
+    plateau, 56 times the ancestral organism's own.
+
+    The substitution now happens inside `two_stage`, before stage 2, from the monocultures of the
+    co-culture's own condition, so the partners are fitted against the self-limitation the package
+    publishes and the row is one fit throughout (`self_limitation_source` says which). An organism whose
+    condition-matched monocultures certified no plateau gets no diagonal and is named, as everything else
+    this tool cannot measure is.
+
+    The function is kept as a no-op for one release so that a caller outside the repository does not break
+    on an import, and it is in the register to be deleted with the next schema move.
     """
-    filled = []
-    for nid, entry in fitted.items():
-        if entry.get("capacity") is not None:
-            continue
-        other = measured.get(nid) or {}
-        if other.get("capacity") is None:
-            continue
-        entry["capacity"] = other["capacity"]
-        entry["capacity_unit"] = other.get("capacity_unit", "")
-        entry["capacity_n"] = other.get("capacity_n", 0)
-        entry["capacity_per_study"] = dict(other.get("capacity_per_study") or {})
-        entry["capacity_media"] = list(other.get("capacity_media") or ())
-        entry["capacity_fall"] = other.get("capacity_fall")
-        entry["capacity_left_out"] = list(other.get("capacity_left_out") or ())
-        entry["capacity_source"] = "the monoculture plateau: this fit implies none"
-        filled.append((entry.get("name", nid), entry["capacity"]))
-    return fitted, filled
+    return fitted, []
 
 
 class IntegratedDeriver:
@@ -836,16 +967,41 @@ class IntegratedDeriver:
                     skipped.append((f"{target} in {exp.get('name') or _exp_id(exp)}",
                                     got["reason"] or "its row could not be identified by this design"))
                     continue
-                # a fit that explains less of the organism's own log abundance change than predicting
-                # nothing does is not a measurement of anything. The line is zero, not a tuned
-                # threshold: it is where the model stops describing the curve (2026-10-06)
-                if got["r2"] is not None and got["r2"] == got["r2"] and got["r2"] < 0:
+                # The gate is that the model describes the curve at all: a row that explains less of the
+                # organism's own log abundance change than predicting nothing does is not a measurement.
+                # It is now scored over the replicates stage 2 actually used, since a replicate the fit
+                # never saw could otherwise discard a whole organism (#142 item 9).
+                #
+                # #142 item 9 also proposed gating on beating the interaction-free null. That is not done,
+                # and the reason is worth recording: a row whose partners genuinely have no effect does
+                # not beat that null, and refusing it would throw away a true absence, which the absence
+                # threshold exists to report. On the fake study of tests/test_integrated.py it refused the
+                # one row whose partner has a coefficient of exactly zero, which is a result and not a
+                # failure. So the null is published beside the fit as `fit_null_r2` instead, and a reader
+                # can see how much the partners bought while presence stays the threshold's decision.
+                fitted_r2 = got.get("r2")
+                if fitted_r2 is not None and fitted_r2 == fitted_r2 and fitted_r2 < 0:
+                    null_r2 = got.get("null_r2")
+                    beside = (f", against {null_r2:.3g} for the same row with no interactions at all"
+                              if null_r2 is not None and null_r2 == null_r2 else "")
                     skipped.append((f"{target} in {exp.get('name') or _exp_id(exp)}",
                                     f"the fitted row explains less of {target}'s log abundance change "
-                                    f"than predicting nothing does (R2 {got['r2']:.3g} about zero), so "
-                                    "the integrated model does not describe these curves"))
+                                    f"than predicting nothing does (R2 {fitted_r2:.3g} about zero over "
+                                    f"the {got.get('scored_rows', 0)} rows the fit used{beside}), so the "
+                                    "integrated model does not describe these curves"))
                     continue
                 own = got["coefficients"].get(target)
+                # a self-limitation that is not negative is the signature of a lag the model has no term
+                # for, and it leaves the organism with no plateau and no row in any matrix. The arcs are
+                # still measurements of the partners' effects, so they are kept and say so (#142 item 8)
+                row_notes = []
+                if own is not None and own >= 0:
+                    row_notes.append(
+                        f"this organism's own limitation came out at {own:.4g}, not negative, so the fit "
+                        "implies no plateau and it has no row in a matrix; a lag the model has no term "
+                        "for is the usual cause")
+                if got.get("self_limitation_source", "").startswith("-r/K"):
+                    row_notes.append(got["self_limitation_source"])
                 curve = reps[0].curve(target)
                 unit = curve.abundance_unit if curve is not None else ""
                 for partner in partners:
@@ -898,7 +1054,7 @@ class IntegratedDeriver:
                         # the mean and the spread, as it does for every other derivation
                         "status": None, "outcome": "quantified", "metric": METRIC,
                         "method": METHOD, "evidence": "biculture",
-                        "quality": quality, "cautions": cautions, "notes": [],
+                        "quality": quality, "cautions": cautions, "notes": list(row_notes),
                         "cultivation_mode": cultivation(exp),
                         "medium": medium, "condition": exp.get("name", ""),
                         "community": sorted(_identity(identities, m)["id"] for m in members),
@@ -929,9 +1085,13 @@ class IntegratedDeriver:
                                              if (partner_unit or unit) else ""),
                         "fitted_rate": got["rate"], "fitted_rate_unit": rate_unit_of(curve),
                         "fitted_self": own, "fitted_self_unit": unit,
+                        "fitted_self_source": got.get("self_limitation_source", ""),
                         "metric_with": got["rate"] + coefficient * (abundance or 0.0),
                         "metric_without": got["rate"],
                         "fit_r2": got["r2"], "fit_condition": got["condition"],
+                        # the same row with every partner's effect set to zero, so a reader sees how much
+                        # the partners bought and the gate above is not taken on trust (#142 item 9)
+                        "fit_null_r2": got.get("null_r2"),
                         "fit_points": got["points"], "fit_stages": list(got["stages"]),
                         "partner_abundance": abundance, "partner_abundance_unit": partner_unit or unit,
                         "partner_abundance_n": len(reps),

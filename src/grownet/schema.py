@@ -164,6 +164,7 @@ SCHEMA_DOC = {
                 "coefficient": {"type": ["number", "null"]},
                 "coefficient_unit": {"type": "string"},
                 "fit_r2": {"type": ["number", "null"]},
+                "fit_null_r2": {"type": ["number", "null"]},
                 "fit_condition": {"type": ["number", "null"]},
                 # the coefficient's uncertainty, as two disjoint designs: the co-culture replicates, and
                 # the monoculture stage resampled over its own replicates (#142 item 2)

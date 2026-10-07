@@ -152,6 +152,9 @@ class Edge:
     coefficient: float | None = None
     coefficient_unit: str = ""
     fit_r2: float | None = None
+    # the same row with every partner's effect set to zero: the line a fitted row has to beat to be a
+    # measurement of an interaction rather than of the organism's own growth (#142 item 9)
+    fit_null_r2: float | None = None
     fit_condition: float | None = None
     # the coefficient's own spread over the co-culture replicates, the replicates behind it, and the
     # monoculture stage's contribution on its own design: two disjoint designs rather than one mixed set,

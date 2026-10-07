@@ -313,32 +313,53 @@ def test_a_row_whose_fit_explains_less_than_nothing_is_refused_with_the_reason(m
     assert any("R2 -0.5" in reason for _, reason in skipped)
 
 
-def test_an_organism_whose_fit_implies_no_plateau_keeps_its_measured_one():
-    """A fit whose A_ii is not negative implies no plateau, and such an organism used to leave every
-    matrix although its monocultures had reached a certified one. The diagonal is -r_i / K_i either way,
-    so the measured plateau is used and named. Live, this is what brought two of the eight organisms of
-    the whole-database package back, with the four cells that go with them (2026-10-06).
+def test_a_fit_that_implies_no_plateau_takes_the_measured_one_before_its_partners_are_fitted(monkeypatch):
+    """#142 item 7. A fit whose A_ii is not negative implies no plateau, and such an organism used to be
+    given the measured one in `fill_capacities`, **after** its partners had been fitted against the fitted
+    A_ii: the published row then satisfied no equation anyone had fitted, and its R2 and condition number
+    described the row that was not published. On *S. thermophilus* the self term moved by 2.24 times the
+    whole partner coefficient the row's claim rested on, and in the opposite direction.
 
-    Hand computed: the fit gives A a rate of 0.4 and no usable self-limitation, the monocultures measured
-    a plateau of 1e9, so the capacity is 1e9 and the entry says where it came from.
+    The substitution happens inside `two_stage` now, before stage 2. A monoculture whose own fit implies
+    no plateau is contrived here by replacing `fit_row`, the way the R2 gate's test does, since a curve
+    that plateaus will ordinarily fit a negative A_ii; the curves themselves do reach a certified
+    plateau of 1e9, so the substitution has something to use.
     """
-    fitted = {"a": {"name": "A", "rate": 0.4, "capacity": None, "capacity_unit": "", "capacity_n": 0},
-              "b": {"name": "B", "rate": 0.2, "capacity": 5.0e8, "capacity_unit": "Cells/mL",
-                    "capacity_n": 3}}
-    measured = {"a": {"name": "A", "rate": 0.38, "capacity": 1.0e9, "capacity_unit": "Cells/mL",
-                      "capacity_n": 4, "capacity_media": ["WC"], "capacity_per_study": {"S1": 1.0e9}},
-                "b": {"name": "B", "rate": 0.21, "capacity": 9.9e8, "capacity_unit": "Cells/mL",
-                      "capacity_n": 4}}
-    filled, named = integrated.fill_capacities(fitted, measured)
+    # 40 h, long enough that the curve reaches its 1e9 plateau and holds it, so it certifies
+    times, series = _simulate([0.4], [[-4.0e-10]], [1.0e7], t_end=40.0)
+    monos = [_replicate(["A"], times, series) for _ in range(3)]
+    co_times, co_series = _simulate([0.4, 0.3], [[-4.0e-10, 2.0e-10], [0.0, -3.0e-10]], [1.0e7, 5.0e8])
+    cos = [_replicate(["A", "B"], co_times, co_series) for _ in range(2)]
 
-    assert filled["a"]["capacity"] == 1.0e9 and filled["a"]["capacity_unit"] == "Cells/mL"
-    assert filled["a"]["capacity_n"] == 4 and filled["a"]["capacity_media"] == ["WC"]
-    assert "implies none" in filled["a"]["capacity_source"]
-    assert named == [("A", 1.0e9)]
-    # the rate stays the fit's own, since that is the parameter the coefficients were fitted with
-    assert filled["a"]["rate"] == 0.4
-    # and an organism the fit did pin keeps the fit's plateau, untouched
-    assert filled["b"]["capacity"] == 5.0e8 and "capacity_source" not in filled["b"]
+    real = integrated.fit_row
+
+    def no_plateau(replicate, target, organisms, *args, **kwargs):
+        got = real(replicate, target, organisms, *args, **kwargs)
+        if got["coefficients"].get(target) is not None and len(organisms) == 1:
+            got["coefficients"][target] = 0.0        # a fit that implies no plateau
+        return got
+
+    monkeypatch.setattr(integrated, "fit_row", no_plateau)
+    got = integrated.two_stage("A", monos, cos, ["A", "B"])
+
+    assert "measured plateau" in got["self_limitation_source"]
+    assert "self-limitation from the measured plateau" in got["stages"]
+    # the published self-limitation is -r/K at the measured plateau, exactly
+    plateau = integrated._measured_plateau(monos, "A")
+    assert plateau is not None and plateau[0] == pytest.approx(1.0e9, rel=0.01)
+    assert got["coefficients"]["A"] == pytest.approx(-got["rate"] / plateau[0], rel=1e-9)
+    # and the partner was fitted against that number, not against the one the fit implied: the row the
+    # package publishes is the row that was fitted
+    assert got["coefficients"].get("B") is not None
+
+
+def test_the_retired_post_hoc_substitution_fills_nothing():
+    """`fill_capacities` is a no-op for one release so that an outside caller does not break on an
+    import. It published a row no fit had produced, which is why it is gone (#142 item 7)."""
+    fitted = {"a": {"name": "A", "rate": 0.4, "capacity": None, "capacity_unit": "", "capacity_n": 0}}
+    measured = {"a": {"name": "A", "rate": 0.38, "capacity": 1.0e9, "capacity_unit": "Cells/mL"}}
+    out, named = integrated.fill_capacities(fitted, measured)
+    assert named == [] and out["a"]["capacity"] is None
 
 
 def test_the_monoculture_stage_pools_the_replicates_only_when_none_of_them_fits_alone():
@@ -564,3 +585,25 @@ def test_the_pooled_fallback_uses_the_largest_set_of_replicates_sharing_their_pa
         if pooled:                                        # only when the fallback was the path taken
             assert "A, B, C" in pooled[0] or "B, C" in pooled[0]
         assert "C" not in got["coefficients"] or got["coefficients"].get("C") is not None
+
+
+def test_the_fit_is_scored_only_over_the_replicates_stage_two_used():
+    """#142 item 9: `_overall_r2` scored every co-culture replicate, including ones stage 2 had refused,
+    so a replicate the fit never saw could discard a whole organism through the R2 gate. It is now given
+    the replicates stage 2 used, and it scores the interaction-free null beside the fit."""
+    times, series = _simulate([0.4, 0.3], [[-4.0e-10, 2.0e-10], [0.0, -3.0e-10]], [1.0e7, 5.0e8])
+    mono_times, mono_series = _simulate([0.4], [[-4.0e-10]], [1.0e7], t_end=40.0)
+    monos = [_replicate(["A"], mono_times, mono_series) for _ in range(3)]
+    good = _named(["A", "B"], times, series, "c0")
+    # a replicate whose partner is flat at zero: stage 2 cannot identify it, so it is not used
+    flat = _named(["A", "B"], times, [[row[0], 0.0] for row in series], "c1")
+
+    got = integrated.two_stage("A", monos, [good, flat], ["A", "B"])
+    assert [entry["replicate"] for entry in got["per_replicate"]] == ["c0"]
+    only_good = integrated.two_stage("A", monos, [good], ["A", "B"])
+    # the same rows are scored either way, since the refused replicate is not scored
+    assert got["scored_rows"] == only_good["scored_rows"]
+    assert got["r2"] == pytest.approx(only_good["r2"], rel=1e-9)
+    # and the null is there to compare against: B does affect A, so the fit beats it
+    assert got["null_r2"] == got["null_r2"]            # not nan
+    assert got["r2"] > got["null_r2"]

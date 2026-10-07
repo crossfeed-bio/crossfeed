@@ -66,7 +66,11 @@ def _edge_line(net, e) -> str:
     if getattr(e, "coefficient", None) is not None:
         parts.append(f"fitted coefficient {e.coefficient:.4g} {e.coefficient_unit}".strip())
         if e.fit_r2 is not None and e.fit_condition is not None:
-            parts.append(f"fit r2 {e.fit_r2:.3f}, condition {e.fit_condition:.3g}")
+            # the same row with no interactions at all beside it, so a reader sees how much the partners
+            # bought rather than taking the fit's own R2 as evidence of an interaction (#142 item 9)
+            null = getattr(e, "fit_null_r2", None)
+            beside = f" (no interactions at all: {null:.3f})" if null is not None else ""
+            parts.append(f"fit r2 {e.fit_r2:.3f}{beside}, condition {e.fit_condition:.3g}")
         # the two halves of the standard error, on their own designs, so a reader can see which stage the
         # uncertainty comes from and that the rate stage reached the test at all (#142 item 2)
         if getattr(e, "se_rate_stage", None) is not None:
@@ -204,6 +208,10 @@ def report_text(result: dict) -> str:
             # off-diagonals measured in one of them (Karoline, 2026-10-07). The medium it came from is
             # said, and so is every other medium this organism has a plateau in, which the second box
             # can ask for.
+            # where the self-limitation behind the diagonal came from: fitted with the partners, or
+            # -r/K at a measured plateau because the fit implied none (#142 item 7)
+            if rate.get("capacity_source"):
+                extra.append(rate["capacity_source"])
             if rate.get("capacity_medium"):
                 extra.append(f"capacity measured in {rate['capacity_medium']}")
                 # more than one spelling means the alias table merged names that disagree, which is said

@@ -400,6 +400,12 @@
             "null"
           ]
         },
+        "fit_null_r2": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "fit_condition": {
           "type": [
             "number",
