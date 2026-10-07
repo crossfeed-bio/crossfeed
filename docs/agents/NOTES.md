@@ -204,6 +204,21 @@ Rules for this file:
 
 ## Decisions
 
+- 2026-10-07 (Karoline, #140), **a monoculture's culture-level trace may supply its growth rate and its
+  lag, and not its carrying capacity**: "yes to #140 with option 1". In a monoculture the culture-level
+  trace (OD, pH, flow cytometry on the whole culture) measures that single strain, and a growth rate is
+  the slope of a log, so it carries no abundance unit and cannot contaminate a ratio of two abundances;
+  a capacity would, which is why option 1 stops short of it and a count-based matrix still needs a
+  count-based capacity. The technique is recorded on the rate and in the report, and the trace is never
+  read on the co-culture side. What it buys, measured on 2026-10-06: seven studies hold monocultures whose
+  only traces are culture-level, `monoculture_rates` finds no rate for any organism of SMGDB00000026 and
+  reports 124 skips, and a species that does appear in a network draws its rate from fewer studies than
+  mGrowthDB holds. What it does not buy is arcs: six of the seven hold no co-culture at all and the
+  seventh has a ten-member community with no drop-out. The register gets item 40 with the implementation.
+  **Scheduled after 0.3.0** unless Karoline says otherwise: it is coverage rather than a fix, and items 1
+  and 2 of #142 re-run every published measurement, so landing it afterwards keeps those measurements
+  valid for one release instead of invalidating them twice.
+
 - 2026-10-07 (Karoline), **a carrying capacity and the cells beside it must share a medium**, which closes
   open decision 3 of #141: "capacity merge by medium is a good idea. in addition, we can do the stricter
   test that foodnet does; medium matches but contradicting extras, such as acetic acid or mucin, do not
