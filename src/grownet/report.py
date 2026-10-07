@@ -190,7 +190,8 @@ def report_text(result: dict) -> str:
                 extra.append(f"lag {rate['lag']:.3g} {rate.get('unit', '1/h').removeprefix('1/')}")
             if rate.get("capacity") is not None:
                 extra.append(f"carrying capacity {rate['capacity']:.4g} {rate.get('capacity_unit', '')}"
-                             f" from {rate.get('capacity_n', 0)} curve(s)")
+                             f" from {rate.get('capacity_n', 0)} "
+                             + ("row(s)" if rate.get("n_label") else "curve(s)"))
                 # a certified curve that grew, peaked and then declined has its peak recorded as the
                 # plateau, so what it held at the last measurement is published beside it (Karoline,
                 # 2026-10-07, closing open decision 4 of #141)
@@ -217,8 +218,10 @@ def report_text(result: dict) -> str:
             left = rate.get("capacity_left_out") or []
             if left:
                 extra.append(f"{len(left)} curve(s) gave no capacity")
+            # a derivation that fits each row has fitted rows rather than monoculture replicates, and
+            # says so, so the count is not read as a number of cultures (#142 item 4)
             lines.append(f"  - {rate.get('name', nid)}: {rate['rate']:.4g} {rate.get('unit', '')}, median of "
-                         f"{rate.get('n', 0)} monoculture replicate(s)"
+                         f"{rate.get('n', 0)} {rate.get('n_label', 'monoculture replicate(s)')}"
                          + (f" ({per_study})" if per_study else "")
                          + ("; " + ", ".join(extra) if extra else ""))
             for label in others:

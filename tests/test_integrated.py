@@ -461,3 +461,61 @@ def test_disagreeing_monocultures_widen_the_arc_the_same_co_cultures_give():
     # se stays the dispersion of the mean: se = sd / sqrt(n), the relation the rest of the tool assumes
     for one in (tight, wide):
         assert one["se"] == pytest.approx(one["sd"] / math.sqrt(one["n"]), rel=1e-9)
+
+
+def test_the_fitted_parameters_do_not_depend_on_the_order_of_the_rows():
+    """#142 item 4: `fitted_rates` kept the first row it met per organism (`nid in out: continue`), so an
+    organism's rate, the plateau the fit implies, the diagonal -r/K, the printed equilibrium and the
+    chemostat prediction were all "whichever arc the loop reached first". Every row is now merged by the
+    median, which is the rule register item 14 sets for arcs and `derive.merge_rates` follows for the
+    measured parameters.
+
+    A is fitted in three rows, with rates 0.2, 0.4 and 0.9 and plateaus 1e9, 2e9 and 3e9. The median of
+    each is what a package may publish, in any order the rows arrive.
+    """
+    rows = [
+        {"target": "a", "target_name": "A", "fitted_rate": 0.2, "fitted_self": -2.0e-10,
+         "fitted_rate_unit": "1/h", "fitted_self_unit": "Cells/mL", "study_id": "S1", "fit_points": 8,
+         "fit_r2": 0.9, "fit_condition": 10.0},
+        {"target": "a", "target_name": "A", "fitted_rate": 0.4, "fitted_self": -2.0e-10,
+         "fitted_rate_unit": "1/h", "fitted_self_unit": "Cells/mL", "study_id": "S1", "fit_points": 9,
+         "fit_r2": 0.8, "fit_condition": 40.0},
+        {"target": "a", "target_name": "A", "fitted_rate": 0.9, "fitted_self": -3.0e-10,
+         "fitted_rate_unit": "1/h", "fitted_self_unit": "Cells/mL", "study_id": "S2", "fit_points": 7,
+         "fit_r2": 0.7, "fit_condition": 25.0},
+    ]
+    forward = integrated.fitted_rates(rows)["a"]
+    backward = integrated.fitted_rates(list(reversed(rows)))["a"]
+    assert forward == backward                       # the whole entry, not only the rate
+
+    assert forward["rate"] == pytest.approx(0.4)     # the median of 0.2, 0.4 and 0.9
+    assert forward["capacity"] == pytest.approx(2.0e9)   # of 1e9, 2e9 and 3e9
+    assert forward["n"] == 3 and forward["capacity_n"] == 3
+    assert forward["n_label"] == "fitted row(s)"      # not replicates: this path has no cultures of its own
+    assert sorted(forward["studies"]) == ["S1", "S2"]
+    assert forward["per_study"]["S1"] == pytest.approx(0.3)    # each study's own median
+    assert forward["per_study"]["S2"] == pytest.approx(0.9)
+    assert forward["capacity_per_study"]["S1"] == pytest.approx(1.5e9)
+    assert forward["fit_r2"] == pytest.approx(0.8)             # the median R2 of the rows merged
+    assert forward["fit_condition"] == pytest.approx(40.0)     # and the worst conditioning among them
+
+    # keeping the first row would have given 0.2 and 1e9 one way and 0.9 and 3e9 the other
+    assert forward["rate"] != pytest.approx(rows[0]["fitted_rate"])
+    assert forward["rate"] != pytest.approx(rows[-1]["fitted_rate"])
+
+
+def test_a_fitted_rate_in_another_unit_is_named_not_converted():
+    """The rule the measured parameters follow across units, in the fitted ones too."""
+    rows = [
+        {"target": "a", "target_name": "A", "fitted_rate": 0.4, "fitted_self": -2.0e-10,
+         "fitted_rate_unit": "1/h", "fitted_self_unit": "Cells/mL", "study_id": "S1", "fit_points": 8},
+        {"target": "a", "target_name": "A", "fitted_rate": 9.6, "fitted_self": -2.0e-10,
+         "fitted_rate_unit": "1/day", "fitted_self_unit": "Cells/mL", "study_id": "S2", "fit_points": 8},
+        {"target": "a", "target_name": "A", "fitted_rate": 0.4, "fitted_self": -4.0e-10,
+         "fitted_rate_unit": "1/h", "fitted_self_unit": "g/L", "study_id": "S3", "fit_points": 8},
+    ]
+    got = integrated.fitted_rates(rows)["a"]
+    assert got["rate"] == pytest.approx(0.4) and got["unit"] == "1/h"
+    assert got["other_units"] == ["S2 (1/day)"]
+    assert got["capacity_unit"] == "Cells/mL" and got["capacity_n"] == 1
+    assert got["other_capacity_units"] == ["S3 (g/L)"]

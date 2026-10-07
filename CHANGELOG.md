@@ -31,6 +31,17 @@ content.
   always the solution of `A x = -r` and the reader had to work it out.
 
 ### Changed
+- **A fitted rate, plateau and diagonal are the median of every row behind them, not the first one**
+  (#142 item 4). `integrated.fitted_rates` kept the first row it met per organism, so an organism's rate,
+  the plateau its fit implies, the diagonal `-r/K`, the printed equilibrium and the chemostat prediction
+  were all "whichever arc the loop reached first". Every row is now merged by the median, which is the
+  rule register item 14 sets for arcs and `derive.merge_rates` follows for the measured parameters, with
+  each study's own median beside it, the studies sorted and unioned, and a rate in another time unit or a
+  plateau in another abundance unit named rather than converted. Measured live by feeding the rows in both
+  orders: the published rate differed by up to 1.42 times (*C. testosteroni* on SMGDB00000014) and the
+  plateau by up to 1.2 times, while on SMGDB00000004 and 6 the rows agree and the defect was invisible.
+  The count beside a fitted rate also says what it counts now, "2 fitted row(s)" rather than a number of
+  monoculture replicates the fitting path never had.
 - **The integrated form fits each organism's row from the monocultures of its own condition, and its
   statistics carry both stages' error** (#142 items 1 and 2). Two fixes to the derivation that is now the
   default. Stage 1 used to be every monoculture replicate of the organism anywhere in the study: it now

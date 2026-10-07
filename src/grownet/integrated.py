@@ -563,23 +563,81 @@ def fitted_rates(records: list) -> dict:
     own settles there, which is what the carrying capacity means. A fit whose `A_ii` is not negative
     implies no plateau and gives no capacity, so such an organism is left without one, as the rest of the
     tool leaves what it cannot measure.
+
+    An organism appears in as many rows as it has partners and conditions, so there are several fits of
+    its own rate and limitation. They are merged the way `derive.merge_rates` merges the measured ones
+    and the way register item 14 merges arcs: **the median**, with each study's own median beside it in
+    `capacity_per_study` and `per_study`, the studies unioned, and a rate in another time unit or a
+    plateau in another abundance unit named in `other_units` or `other_capacity_units` rather than
+    converted. It used to keep whichever row came first (`nid in out: continue`), so an organism's rate,
+    the plateau it implies, the diagonal `-r/K`, the printed equilibrium and the chemostat prediction
+    were all "whichever arc the loop reached first" (#142 item 4).
     """
-    out: dict = {}
+    gathered: dict = {}
     for record in records:
         nid, rate = record.get("target"), record.get("fitted_rate")
         own = record.get("fitted_self")
-        if nid is None or rate is None or nid in out:
+        if nid is None or rate is None:
             continue
-        capacity = -rate / own if own and own < 0 and rate > 0 else None
-        out[nid] = {"name": record.get("target_name", nid), "rate": rate,
-                    "unit": record.get("fitted_rate_unit", "1/h"), "n": record.get("fit_points", 0),
-                    "studies": [record.get("study_id", "")], "per_study": {}, "other_units": [],
-                    "method": METRIC, "lag": None, "lag_method": "",
-                    "capacity": capacity,
-                    "capacity_unit": record.get("fitted_self_unit", "") if capacity else "",
-                    "capacity_n": record.get("fit_points", 0) if capacity else 0,
-                    "capacity_per_study": {}, "other_capacity_units": [], "capacity_left_out": [],
-                    "fit_r2": record.get("fit_r2"), "fit_condition": record.get("fit_condition")}
+        at = gathered.setdefault(nid, {
+            "name": record.get("target_name", nid), "unit": record.get("fitted_rate_unit", "1/h"),
+            "rates": [], "points": [], "studies": [], "per_study": {}, "other_units": [],
+            "capacity_unit": "", "capacities": [], "capacity_points": [], "capacity_per_study": {},
+            "other_capacity_units": [], "r2": [], "conditions": []})
+        study = record.get("study_id", "")
+        unit = record.get("fitted_rate_unit", "1/h")
+        if unit != at["unit"]:
+            if f"{study} ({unit})" not in at["other_units"]:
+                at["other_units"].append(f"{study} ({unit})")
+            continue
+        at["rates"].append(rate)
+        at["points"].append(record.get("fit_points", 0))
+        at["per_study"].setdefault(study, []).append(rate)
+        if study and study not in at["studies"]:
+            at["studies"].append(study)
+        if record.get("fit_r2") is not None:
+            at["r2"].append(record["fit_r2"])
+        if record.get("fit_condition") is not None:
+            at["conditions"].append(record["fit_condition"])
+        if not (own and own < 0 and rate > 0):
+            continue
+        capacity_unit = record.get("fitted_self_unit", "")
+        if not at["capacity_unit"]:
+            at["capacity_unit"] = capacity_unit
+        if capacity_unit != at["capacity_unit"]:
+            if f"{study} ({capacity_unit})" not in at["other_capacity_units"]:
+                at["other_capacity_units"].append(f"{study} ({capacity_unit})")
+            continue
+        at["capacities"].append(-rate / own)
+        at["capacity_points"].append(record.get("fit_points", 0))
+        at["capacity_per_study"].setdefault(study, []).append(-rate / own)
+
+    out: dict = {}
+    for nid, at in gathered.items():
+        if not at["rates"]:
+            continue
+        out[nid] = {
+            "name": at["name"], "rate": statistics.median(at["rates"]), "unit": at["unit"],
+            # what the median rests on: the fitted rows, which is what this derivation has instead of
+            # monoculture replicates. `n_label` says so, because the report and the CSV read `n` as a
+            # count of replicates and this path never had any (it used to report time points under that
+            # name, and merging rows would have added them up)
+            "n": len(at["rates"]), "n_label": "fitted row(s)", "points": sum(at["points"]),
+            # sorted, so the whole entry is a function of the rows and not of the order they arrived in
+            "studies": sorted(at["studies"]),
+            "per_study": {study: statistics.median(values) for study, values in at["per_study"].items()},
+            "other_units": at["other_units"], "method": METRIC, "lag": None, "lag_method": "",
+            "capacity": statistics.median(at["capacities"]) if at["capacities"] else None,
+            "capacity_unit": at["capacity_unit"] if at["capacities"] else "",
+            "capacity_n": len(at["capacities"]),
+            "capacity_points": sum(at["capacity_points"]) if at["capacities"] else 0,
+            "capacity_per_study": {study: statistics.median(values)
+                                   for study, values in at["capacity_per_study"].items()},
+            "other_capacity_units": at["other_capacity_units"], "capacity_left_out": [],
+            # the fit behind the published parameters: the median R2 of the rows merged into them and the
+            # worst conditioning among them, so neither reads as the property of one row
+            "fit_r2": statistics.median(at["r2"]) if at["r2"] else None,
+            "fit_condition": max(at["conditions"]) if at["conditions"] else None}
     return out
 
 
