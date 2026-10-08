@@ -1365,14 +1365,28 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    adjacency matrix?"). Transferring is not possible: the plain matrix holds dimensionless log2 ratios and
    the package per-capita coefficients in 1/(time x abundance), and for a censored pair the ratio is
    infinite, which is why the convention existed. SETTLED the same day ("go with the bound in #129
-   following your recommendation"): the cell holds a **measured bound** from the rule that declared no
-   growth, which allows that side at most `factor` (1.5 by default) over its own measured start, so the
-   cell is bounded from below for an obligate pair and from above for an abolished one, flagged as a bound
-   and printed with its rule. `matrix.EXTREME` survives only as the fallback for a network derived before
-   this, named as such. Measured on SMGDB00000013: with the growth rate the bounds are +4.4 to +5.9 log2
-   rather than a flat +10; with the area under the curve one of them bounds nothing away from zero,
-   because a culture that did not grow still carries its inoculum's area, and that cell stays 0 with the
-   reason given.
+   following your recommendation"): the rule that declared no growth allows that side at most `factor`
+   (1.5 by default) over its own measured start, so the effect is bounded from below for an obligate pair
+   and from above for an abolished one. Measured on SMGDB00000013: with the growth rate the bounds are
+   +4.4 to +5.9 log2 rather than a flat +10; with the area under the curve one of them bounds nothing away
+   from zero, because a culture that did not grow still carries its inoculum's area.
+   **RE-SETTLED 2026-10-08 (Karoline), on where that bound goes: "NA, bound on the arc".** The bound was
+   measured on the live corpus first, which is what moved the decision: of 223 arcs, 15 are obligate and
+   none abolished; 3 of the 15 have no bound at all (two whose rule bounds nothing away from zero, one
+   zero from its first point) and the other 12 run 0.2292 to 4.6010, all 12 below the largest quantified
+   `|strength|` (7.0787), 11 of 12 inside the quantified range and 7 of 12 below the median quantified arc
+   (1.1814). So a bound printed in a cell sorts among the ratios instead of past them, and a reader
+   sorting by magnitude ranks the strongest effects in the set last. The matrix is the one output whose
+   cells cannot state what kind of number they hold, which is the same objection that retired +/-10: a
+   bound there is indistinguishable from data in the file that carries it. So **the plain matrix prints
+   `NA`** for every censored cell, which R reads as not a number rather than as no interaction, and the
+   measured bound travels on the arc (`strength_bound`, `bound_rule`), where it says it is a floor. The
+   three cells with no bound get the same `NA` instead of falling through to 0, and `matrix.bounded_cells`
+   names every NA cell with its bound, so the page says it beside the download and the report prints it
+   with its rule. The number 10 is now in no output; `matrix.EXTREME` survives only as the gate that says
+   an arc reports an effect it has no ratio for, and as the number a reader of a 0.2.0 package met. This
+   was settled before 0.3.0 shipped on purpose: the stack already implemented the bound in the cell, so
+   settling it afterwards would have changed what a cell means between two released versions.
 
 39. **An arc fitted from a community of three or more** (SETTLED; see the end of this item) (raised by the agent on 2026-10-06 while
    building #127, for Karoline and Craig). The integrated form fits a row with one column per partner, so

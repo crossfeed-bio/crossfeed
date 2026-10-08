@@ -42,10 +42,11 @@ RATE_UNIT = "1/h"
 # An obligate comparison (the target grows only with the source) and an abolished one (only without it)
 # have no log2 ratio at all, because one side did not grow, while the interaction they report is the
 # strongest there is. Karoline, 2026-10-03: "obligate and abolished arcs need to carry numbers reflecting
-# the strong effect, how about 10 with the appropriate sign?" So such an arc enters a matrix as +10
-# (obligate, the extreme of facilitation) or -10 (abolished, the extreme of inhibition). It is a stated
-# convention, not a measurement: as a log2 mean, 10 is a thousandfold difference, past anything the
-# quantified arcs reach, and the files say so.
+# the strong effect, how about 10 with the appropriate sign?" So such an arc used to enter a matrix as
+# +10 or -10, a stated convention rather than a measurement. **No output holds that number since #129
+# settled** (Karoline, 2026-10-08): the plain matrix leaves such a cell `NA` and the measured bound
+# travels on the arc. It survives here as the gate that says an arc reports an effect it has no ratio
+# for, and as the number a reader of a 0.2.0 package met.
 EXTREME = 10.0
 
 
@@ -78,29 +79,49 @@ def _extreme(edge):
     return -EXTREME if edge.outcome == ABOLISHED else None
 
 
+def _censored(edge) -> bool:
+    """Whether this arc reports an effect it has no ratio for, because one side did not grow.
+
+    Such an arc takes a cell without giving it a number. **#129 settled as `NA`** (Karoline, 2026-10-08,
+    choosing it over printing the measured bound there): the matrix is a lossy projection of the arcs, the
+    one output whose cells cannot say what kind of number they hold, so a bound printed in a cell is
+    indistinguishable from a ratio, which is the objection that retired +/-10 in the first place. The
+    bound stays where it can state itself, on the arc (`strength_bound`, `bound_rule`), and the matrix
+    says `NA`, which R reads as not a number rather than as no interaction. That also gives the three
+    arcs whose rule bounds nothing away from zero the same cell as the rest, instead of a 0 that says no
+    interaction about the strongest effect in the set.
+    """
+    if edge.strength is not None or edge.status == "absent":
+        return False
+    return edge.outcome in (OBLIGATE, ABOLISHED)
+
+
 def cells(net: InteractionNetwork) -> tuple:
     """({(affected, actor): value}, conflicts): one value per ordered pair, and the pairs left at 0.
 
     Arcs of a pair are merged by their median. An obligate or abolished arc has no ratio, so it carries
-    `EXTREME` with its sign and does not enter the median of the arcs that do have one (register item 14:
-    such arcs "join their direction and count without entering the median"); it decides a cell only when
-    no arc of the pair was quantified. A pair whose arcs disagree in sign is not merged (item 14 again):
-    it stays 0 and is returned in `conflicts`, so the README can name it.
+    its direction and no number, and does not enter the median of the arcs that do have one (register
+    item 14: such arcs "join their direction and count without entering the median"); it decides a cell
+    only when no arc of the pair was quantified, and then the value is **None**, which the CSV writes as
+    `NA` (#129, see `_censored`). A pair whose arcs disagree in sign is not merged (item 14 again): it
+    stays 0 and is returned in `conflicts`, so the README can name it. The direction of a censored arc
+    still counts in that disagreement, which is why it is kept rather than dropped.
     """
-    measured, extreme = {}, {}
+    measured, censored = {}, {}
     for edge in net.edges:
         pair = (edge.target, edge.source)
         if edge.status != "absent" and edge.strength is not None:
             measured.setdefault(pair, []).append(edge.strength)
-        elif (value := _extreme(edge)) is not None:
-            extreme.setdefault(pair, []).append(value)
+        elif _censored(edge):
+            censored.setdefault(pair, []).append(1.0 if edge.outcome == OBLIGATE else -1.0)
     values, conflicts = {}, []
-    for pair in list(measured) + [p for p in extreme if p not in measured]:
-        numbers = measured.get(pair, []) + extreme.get(pair, [])
-        if any(v > 0 for v in numbers) and any(v < 0 for v in numbers):
+    for pair in list(measured) + [p for p in censored if p not in measured]:
+        directions = measured.get(pair, []) + censored.get(pair, [])
+        if any(v > 0 for v in directions) and any(v < 0 for v in directions):
             conflicts.append(pair)
             continue
-        values[pair] = statistics.median(measured.get(pair) or extreme[pair])
+        numbers = measured.get(pair)
+        values[pair] = statistics.median(numbers) if numbers else None
     return values, conflicts
 
 
@@ -133,48 +154,49 @@ def dropout_arcs(net: InteractionNetwork) -> int:
 
 
 def counts(net: InteractionNetwork) -> dict:
-    """{"arcs", "cells", "organisms"}: how many arcs carry a number, how many cells they make, and how many
-    organisms the matrix has. A matrix holds one cell per ordered pair, so a network with several arcs for
-    one pair has fewer cells than arcs; the page and the README say so, rather than leaving two counts to
-    disagree (the lesson of the hidden arcs, Karoline, 2026-10-03)."""
+    """{"arcs", "cells", "organisms"}: how many arcs reach the matrix, how many cells they make, and how
+    many organisms the matrix has. A matrix holds one cell per ordered pair, so a network with several arcs
+    for one pair has fewer cells than arcs; the page and the README say so, rather than leaving two counts
+    to disagree (the lesson of the hidden arcs, Karoline, 2026-10-03). A censored arc reaches the matrix
+    and its cell holds `NA` rather than a number (#129), so it is counted here: a cell a reader sees is a
+    cell, whatever it holds."""
     values, _ = cells(net)
     in_a_cell = sum(1 for e in net.edges
-                    if (e.status != "absent" and e.strength is not None) or _extreme(e) is not None)
+                    if (e.status != "absent" and e.strength is not None) or _censored(e))
     return {"arcs": in_a_cell, "cells": len(values), "organisms": len(net.nodes)}
 
 
 def bounded_cells(net: InteractionNetwork) -> list:
-    """The cells that hold a measured bound rather than a ratio, as (affected, actor, value) labels.
+    """The cells the matrix leaves `NA`, as (affected, actor, bound) labels, the bound or None.
 
-    These are the pairs whose only arcs are obligate or abolished: no ratio exists, so the cell carries
-    the bound the no-growth rule puts on the side that did not grow (#129). A reader has to know which
-    numbers are bounds, so the report and the README name them.
+    These are the pairs whose only arcs are obligate or abolished: no ratio exists, so the cell holds no
+    number (#129). `bound` is the measured bound the no-growth rule put on the side that did not grow,
+    the median over the arcs of that pair, and None where the rule bounds nothing away from zero or there
+    was no start to multiply. Since the cell cannot say it is censored, this listing is how a reader of
+    the matrix learns which `NA`s are a comparison where one side did not grow, and how strong the effect
+    is at least: the page names them beside the download and the report prints each bound with its rule.
     """
-    return [row for row in _censored_cells(net) if row[2] not in (EXTREME, -EXTREME)]
-
-
-def by_convention(net: InteractionNetwork) -> list:
-    """The censored cells of a network old enough to have no bound, which fall back to `EXTREME`."""
-    return [row for row in _censored_cells(net) if row[2] in (EXTREME, -EXTREME)]
-
-
-def _censored_cells(net: InteractionNetwork) -> list:
-    """Every cell whose value comes from a comparison where one side did not grow."""
     values, _ = cells(net)
-    measured = {(e.target, e.source) for e in net.edges if e.status != "absent" and e.strength is not None}
-    pairs = []
+    bounds: dict = {}
     for edge in net.edges:
         pair = (edge.target, edge.source)
-        if _extreme(edge) is not None and pair not in measured and pair in values and pair not in pairs:
-            pairs.append(pair)
-    return [(_label(net.nodes[a]), _label(net.nodes[b]), values[(a, b)]) for a, b in pairs]
+        if _censored(edge) and values.get(pair, 0.0) is None:
+            size = getattr(edge, "strength_bound", None)
+            bounds.setdefault(pair, []).append(size)
+    out = []
+    for (a, b), sizes in bounds.items():
+        got = [s for s in sizes if s is not None]
+        out.append((_label(net.nodes[a]), _label(net.nodes[b]),
+                    statistics.median(got) if got else None))
+    return out
 
 
 def rows(net: InteractionNetwork, diagonal: float | None = None) -> tuple:
     """(names, matrix, conflicts): the square matrix, row by row, with `diagonal` on the diagonal.
 
     `diagonal` None leaves the diagonal at 0, which is the plain adjacency matrix. The gLV package does
-    not come through here: it fits its own diagonal (`coefficients`).
+    not come through here: it fits its own diagonal (`coefficients`). A censored cell holds **None**, not
+    a number, and the CSV writes it as `NA` (#129); `bounded_cells` names those cells.
     """
     order = labels(net)
     values, conflicts = cells(net)
@@ -258,7 +280,12 @@ def rate_meta(net: InteractionNetwork, rates: dict, method: str) -> str:
             "without_a_rate": sorted(_label(node) for nid, node in net.nodes.items() if nid not in rates)}
 
 
-def _number(value: float) -> str:
+def _number(value: float | None) -> str:
+    """A cell as the CSV writes it. None is a cell with no number, printed `NA` rather than 0: R reads
+    `NA` as not a number and propagates it, while 0 would say no interaction about a pair where one side
+    did not grow at all (#129)."""
+    if value is None:
+        return "NA"
     return "0" if value == 0 else f"{value:.4f}".rstrip("0").rstrip(".")
 
 

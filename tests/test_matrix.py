@@ -32,7 +32,9 @@ def _arc(source, target, strength, **extra):
 def _read(text):
     table = list(csv.reader(io.StringIO(text)))
     names = table[0][1:]
-    values = {(row[0], names[i]): float(cell) for row in table[1:] for i, cell in enumerate(row[1:])}
+    # a censored cell is written `NA` since #129 settled, which float() cannot read: it is kept as it is
+    values = {(row[0], names[i]): (cell if cell == "NA" else float(cell))
+              for row in table[1:] for i, cell in enumerate(row[1:])}
     return names, values
 
 
@@ -76,12 +78,16 @@ def test_an_absent_arc_is_zero():
 def test_an_obligate_arc_is_plus_ten_and_an_abolished_one_minus_ten():
     """Karoline, 2026-10-03: "obligate and abolished arcs need to carry numbers reflecting the strong
     effect, how about 10 with the appropriate sign?" Neither has a log2 ratio, since one side did not grow
-    at all, so the matrix states the extreme instead of leaving the cell at 0."""
+    at all. The stated extreme carried that cell until #129 settled on 2026-10-08: the cell is now `NA`,
+    the measured bound travels on the arc, and the number 10 is in no output. 0 would be wrong in the
+    other direction, since it reads as no interaction about the strongest effect there is."""
     arcs = [dict(_arc("a", "b", 1.0), strength=None, outcome="obligate", effect="facilitation"),
             dict(_arc("a", "c", 1.0), strength=None, outcome="abolished", effect="inhibition")]
-    _, values = _read(matrix.matrix_csv(_net(arcs)))
-    assert values[("B", "A")] == 10.0 and values[("C", "A")] == -10.0
-    assert matrix.EXTREME == 10.0
+    text = matrix.matrix_csv(_net(arcs))
+    _, values = _read(text)
+    assert values[("B", "A")] == "NA" and values[("C", "A")] == "NA"
+    assert not any(cell in ("10", "-10") for row in text.splitlines()[1:] for cell in row.split(",")[1:])
+    assert sorted(matrix.bounded_cells(_net(arcs))) == [("B", "A", None), ("C", "A", None)]
 
 
 def test_an_arc_with_no_ratio_does_not_pull_the_median_of_the_arcs_that_have_one():
@@ -92,17 +98,20 @@ def test_an_arc_with_no_ratio_does_not_pull_the_median_of_the_arcs_that_have_one
             dict(_arc("a", "b", 1.0, study_id="S2"), strength=None, outcome="obligate")]
     _, values = _read(matrix.matrix_csv(_net(arcs)))
     assert values[("B", "A")] == 1.5
-    assert matrix.by_convention(_net(arcs)) == []     # so the README does not call this cell a convention
+    assert matrix.bounded_cells(_net(arcs)) == []     # and the cell is not listed as censored either
 
 
-def test_an_extreme_that_contradicts_a_measured_arc_leaves_the_cell_at_zero():
-    # +10 from an obligate arc against a measured -2.0: the signs disagree, so the pair is not merged
+def test_a_censored_arc_that_contradicts_a_measured_arc_leaves_the_cell_at_zero():
+    # an obligate arc (facilitation, so positive) against a measured -2.0: the signs disagree, so the
+    # pair is not merged. The censored arc carries no number since #129 settled, and its DIRECTION still
+    # counts in the disagreement, which is what keeps this cell a conflict rather than -2.0
     arcs = [_arc("a", "b", -2.0, study_id="S1"),
             dict(_arc("a", "b", 1.0, study_id="S2"), strength=None, outcome="obligate")]
     net = _net(arcs)
     _, values = _read(matrix.matrix_csv(net))
-    assert values[("B", "A")] == 0.0
+    assert values[("B", "A")] == 0.0                  # a conflict is 0 and named, not NA
     assert matrix.rows(net)[2] == [("B", "A")]
+    assert matrix.bounded_cells(net) == []
 
 
 def test_the_rates_file_says_what_each_median_rests_on():
@@ -182,12 +191,12 @@ def test_a_genus_node_takes_the_median_rate_of_its_strains():
 
 
 def test_a_cell_with_no_ratio_is_named_as_such():
-    """A reader has to know which numbers were measured. Since #129 such a cell holds a measured bound,
-    and `by_convention` is left for a network derived before that, which still falls back to the stated
-    extreme; `tests/test_measured_bound.py` checks the bound itself."""
+    """A reader has to know which cells hold no number and why. Since #129 settled (2026-10-08) such a
+    cell is `NA` and `bounded_cells` names it, with the arc's measured bound where there is one; this arc
+    carries none, so the listing reports None. `tests/test_measured_bound.py` checks a real bound."""
     net = _net([dict(_arc("a", "b", 1.0), strength=None, outcome="obligate")])
-    assert matrix.by_convention(net) == [("B", "A", 10.0)]
-    assert matrix.bounded_cells(net) == []
+    assert matrix.bounded_cells(net) == [("B", "A", None)]
+    assert matrix.counts(net)["arcs"] == 1            # it reaches the matrix: a cell a reader sees
 
 
 def test_a_rate_is_reported_under_the_name_the_network_uses():
