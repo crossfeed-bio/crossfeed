@@ -287,3 +287,61 @@ def test_the_schema_and_validate_are_strict_in_the_same_direction():
         notes = []
         assert validate_document(newer, notes) == [], where
     assert notes and "from_the_future" in notes[0]
+
+
+def test_a_new_record_field_cannot_ship_under_an_unchanged_format_id():
+    """Craig's agent on #154, after #121 added optional arc fields under an unchanged format id and the
+    daily artifact reached installed readers that could not build them: "commit a manifest of the
+    format's declared fields, and have `checks/gate.py` fail when the live `Edge`, `Node` or `Study`
+    fields differ from the manifest while `SCHEMA` is unchanged ... it would have stopped #121 at the
+    gate rather than four days downstream."
+
+    The register entry asked for a convention. A convention is what #121 missed, so this is a check.
+    """
+    import json
+    import sys
+    from dataclasses import fields
+    from pathlib import Path
+
+    from grownet.model import SCHEMA, Edge, Node, Study
+
+    root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(root / "checks"))
+    from gate import check_format_fields  # noqa: E402
+
+    # the committed manifest describes the code as it stands
+    assert check_format_fields([]) == []
+    manifest = json.loads((root / "schema" / "format_fields.json").read_text(encoding="utf-8"))
+    assert manifest["current"] == SCHEMA
+    for kind, cls in (("edge", Edge), ("node", Node), ("study", Study)):
+        assert sorted(manifest["formats"][SCHEMA][kind]) == sorted(f.name for f in fields(cls)), kind
+
+    # and the check is what refuses the three ways this can go wrong, read off the manifest rather than
+    # by editing the live dataclasses, which the gate reads from the running package
+    def verdict(current, formats):
+        path = root / "schema" / "format_fields.json"
+        kept = path.read_text(encoding="utf-8")
+        try:
+            path.write_text(json.dumps({"current": current, "formats": formats}), encoding="utf-8")
+            return check_format_fields([])
+        finally:
+            path.write_text(kept, encoding="utf-8")
+
+    live = {k: sorted(f.name for f in fields(c))
+            for k, c in (("edge", Edge), ("node", Node), ("study", Study))}
+
+    # a field added to the code and not to the format: what #121 did
+    short = {**live, "edge": [f for f in live["edge"] if f != "rate_mismatch_to_zero"]}
+    problems = verdict(SCHEMA, {SCHEMA: short})
+    assert any("rate_mismatch_to_zero" in p and "move SCHEMA to a new id" in p for p in problems), problems
+
+    # a field the format records and the code dropped: breaking, and named as such
+    extra = {**live, "node": [*live["node"], "a_field_that_was_removed"]}
+    problems = verdict(SCHEMA, {SCHEMA: extra})
+    assert any("a_field_that_was_removed" in p and "has shipped is a breaking change" in p
+               for p in problems), problems
+
+    # the id moved and the manifest was not told
+    problems = verdict("grownet.interaction_network/v9", {"grownet.interaction_network/v9": live})
+    assert any("says the current format is" in p for p in problems), problems
+    assert any("has no entry for" in p for p in problems), problems
