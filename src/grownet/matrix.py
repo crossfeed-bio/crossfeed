@@ -59,24 +59,39 @@ def labels(net: InteractionNetwork) -> list:
     return [nid for nid, _ in sorted(net.nodes.items(), key=lambda item: (_label(item[1]).lower(), item[0]))]
 
 
-def _extreme(edge):
-    """The value of an arc that has no ratio, or None.
+def _reports_an_extreme(edge) -> bool:
+    """Whether the **gLV coefficient path** counts this arc as a comparison where one side did not grow.
 
-    Since #129 that is the **measured bound** the no-growth rule puts on the side that did not grow: at
-    least this much facilitation for an obligate comparison, at most this much inhibition for an abolished
-    one (`interaction.no_growth_bound`, carried as `strength_bound`). A network derived before that change
-    has no bound, and falls back to `EXTREME` so its censored arcs still show rather than reading as 0,
-    which would say no interaction about the strongest effect there is; the README names those cells.
+    It governs `_metrics` and `_pair_values`, which build the package's coefficients. It does **not**
+    govern the plain adjacency matrix: `_censored` governs that, and such a cell holds `NA` (#129). Both
+    functions ask "does this arc report an effect it has no ratio for", for different purposes, so they
+    name each other rather than leaving a maintainer to find out which output each one is about.
+
+    They differ on exactly one of the four shapes the no-growth rule can produce (probed by Craig's agent
+    on #174, 2026-10-08):
+
+      1. a measured bound           `_censored` yes, this yes
+      2. the rule bounds nothing    `_censored` yes, this **no**
+      3. older than the bound       `_censored` yes, this yes
+      4. quantified                 both no
+
+    Shape 2 is the arc whose bound does not separate the effect from zero, which needs a metric that
+    carries the inoculum of a culture that did not grow. With `auc` it happens: a flat culture still has
+    the area of its own start. Over the whole live corpus on the growth rate, **the only metric a package
+    can be built from**, it happens not at all: 10 censored arcs, every one shape 1 (measured 2026-10-08).
+    The divergence therefore changes no package today. It stays because the two paths decide different
+    things: whether a cell can hold a number, and whether a pair has a coefficient to fit at all.
+
+    The bound itself is on the arc (`strength_bound`, with `bound_rule`), and `EXTREME` is no longer
+    returned anywhere: it is kept as the number a reader of a 0.2.0 package met.
     """
     if edge.strength is not None or edge.status == "absent":
-        return None
+        return False
     if getattr(edge, "strength_bound", None) is not None:
-        return edge.strength_bound
+        return True
     if getattr(edge, "bound_rule", ""):
-        return None        # the rule was applied and bounds nothing away from zero: the cell stays 0
-    if edge.outcome == OBLIGATE:
-        return EXTREME
-    return -EXTREME if edge.outcome == ABOLISHED else None
+        return False       # shape 2: the rule was applied and bounds nothing away from zero
+    return edge.outcome in (OBLIGATE, ABOLISHED)
 
 
 def _censored(edge) -> bool:
@@ -90,6 +105,10 @@ def _censored(edge) -> bool:
     says `NA`, which R reads as not a number rather than as no interaction. That also gives the three
     arcs whose rule bounds nothing away from zero the same cell as the rest, instead of a 0 that says no
     interaction about the strongest effect in the set.
+
+    The gLV coefficient path asks the same question for its own reason and answers it in
+    `_reports_an_extreme`, which differs from this one on the arcs whose rule bounds nothing away from
+    zero. That function says which output each of the two governs.
     """
     if edge.strength is not None or edge.status == "absent":
         return False
@@ -501,7 +520,7 @@ def _metrics(net: InteractionNetwork) -> list:
     """The growth properties the arcs of this network were compared on, in order."""
     seen = []
     for edge in net.edges:
-        if edge.status == "absent" or (edge.strength is None and _extreme(edge) is None):
+        if edge.status == "absent" or (edge.strength is None and not _reports_an_extreme(edge)):
             continue
         name = edge.metric or ""
         if name not in seen:
@@ -543,7 +562,7 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
         if edge.status == "absent":
             continue
         quantified = edge.strength is not None
-        censored = _extreme(edge) is not None
+        censored = _reports_an_extreme(edge)
         # an arc can carry both its rates and no strength: the integrated form leaves `strength` None
         # whenever the fitted inhibition at least cancels the organism's own rate (log2 of a non-positive
         # number), which is the washout regime, so gating on `strength` alone dropped the strongest
