@@ -322,7 +322,12 @@ EDGE_ATTRIBUTES = {
                 "integrated model has no lag term and no death term and stops at the end of the plateau "
                 "after the maximum: the effect one organism has on another can change along the growth "
                 "curve, and the coefficient describes the phase inside the window)",
-    "notes": "other remarks, for example a replicate left out for a spike",
+    "notes": "other remarks, for example a replicate left out for a spike, the span of the course the "
+             "rows cover, or what each side of the comparison was inoculated at, measured from the first "
+             "time point because mGrowthDB's inoculum field is empty and its descriptions are not "
+             "systematic. A starting density is reported and never matched on: the two sides of a "
+             "comparison are not meant to begin at the same density, so refusing a comparison for that "
+             "would discard measurements rather than confounds",
     "evidence": "biculture (monoculture against a two-member co-culture: a direct interaction) or dropout "
                 "(a community against the same community without the source: direct or indirect)",
     "community": "the members of the culture the arc comes from: the pair for a co-culture, the full "

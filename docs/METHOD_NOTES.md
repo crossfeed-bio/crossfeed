@@ -563,6 +563,36 @@ parameter they had. No R2 comparison is quoted above for that reason.
 ## Open decisions
 
 
+- **Settled 2026-10-08 (#81's residue): a starting density is reported, not matched on.** Karoline:
+  "descriptions of inoculum density in mGrowthDB aren't systematic; how about falling back on a time point
+  zero if it exists if there is no description on the inoculum?" The fallback is right about where the
+  number lives: `inoculumConcentration` is empty in every experiment checked, the density is sometimes in
+  the description and sometimes only in the experiment's name, and the first measured abundance is the
+  thing itself. What to do with it was decided by measurement.
+  **It would split nothing.** At the level that actually pools, `(organism, conditions, medium, run
+  group)`, **no monoculture set in the corpus holds more than one experiment**: `run_group` already
+  separates SMGDB00000018's `Growth A mono 1e5` from `1e7`, and `_choose_monocultures` picks between them.
+  An earlier measurement at the coarser condition-key level showed spreads of 49 to 84 times and was not
+  a pooling at all.
+  **And in the condition key it would cost arcs.** Over the 39 comparisons the tool makes, the co-culture
+  and monoculture first abundances agree to a median of **1.17 times**, exactly 1.00 where a study
+  inoculates both sides to one density (SMGDB00000013), and differ by more than 3 times in **6**, up to
+  7.43 (SMGDB00000014's *A. tumefaciens*, 1.5e5 against 6.6e5). Those six are a deliberate choice about
+  how to start a co-culture, so a 3-times rule in the key would lose about a seventh of the arcs for no
+  gain.
+  So each arc carries a note giving both sides and the factor between them, and says plainly when that
+  factor is above 3. On the live All network all 12 arcs carry it, the median factor is 2.16 and the
+  warning fires on **4 of the 12**: *S. thermophilus* on *L. delbrueckii* at 7.43 (0.007 g/L against
+  0.052) and at 5.20, *R. intestinalis* on *F. duncaniae* at 4.70, and *B. hydrogenotrophica* on
+  *R. intestinalis* at 4.47. A third of the published network rests on a comparison whose two sides did
+  not begin at the same density, which nothing said before. `starting_densities` in `grownet.integrated`. A field was considered and refused: the
+  `format-fields` gate now makes any new record field move the format id, which is too high a price for a
+  diagnostic, and `notes` already carries the fitted window for the same reason.
+  **What makes this live rather than latent is #140.** SMGDB00000015 varies starting density over five
+  orders of magnitude and is the study this residue was found in, and it derives nothing today because its
+  measurements are at the bioreplicate level rather than per strain. That is #140's subject, so landing
+  #140 is what brings those curves in.
+
 - **Settled 2026-10-08 (#160): a monoculture fit is refused for model failure, not for the rate's sign.**
   Karoline took Craig's agent's option 2. The guard read the sign of the fitted rate; it now reads the
   sign of the self-limitation, because a non-negative `A_ii` is no self-limitation, so the fit implies no

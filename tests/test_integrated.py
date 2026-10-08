@@ -872,3 +872,44 @@ def test_a_monoculture_fit_is_refused_for_model_failure_not_for_the_rates_sign()
         why = dict(got["skipped"])
         key = next(k for k in why if "failed" in k)
         assert "rate of -0.05" in why[key] and "which is not growth" in why[key]
+
+
+def test_an_arc_says_what_each_side_was_inoculated_at():
+    """Karoline, 2026-10-08: "descriptions of inoculum density in mGrowthDB aren't systematic; how about
+    falling back on a time point zero if it exists if there is no description on the inoculum?"
+
+    mGrowthDB's compartment record has an `inoculumConcentration` field and it is empty in every
+    experiment checked, and the starting density is sometimes in the description and sometimes only in the
+    experiment's name. The first measured abundance is the thing itself, so the arc reports it for both
+    sides of its comparison.
+
+    It is **reported and not matched on**, which measurement settled: over the 39 comparisons the tool
+    makes the two sides agree to a median of 1.17 times and differ by more than 3 times in 6, up to 7.43.
+    Those six are a choice about how to start a co-culture rather than a confound to refuse, so a starting
+    density in the condition key would have lost a seventh of the arcs.
+    """
+    times, series = _simulate([0.4], [[-4.0e-10]], [1.0e7], t_end=40.0)
+    monos = [_named(["A"], times, series, f"m{k}") for k in range(3)]
+    co_times, co_series = _simulate([0.4, 0.3], [[-4.0e-10, 2.0e-10], [0.0, -3.0e-10]], [1.0e7, 5.0e8])
+    cos = [_named(["A", "B"], co_times, co_series, f"c{k}") for k in range(2)]
+
+    # both sides start at 1e7, so the ratio is 1 and nothing is flagged
+    same = integrated.starting_densities(cos, monos, "A")
+    assert same["co"] == pytest.approx(1.0e7) and same["mono"] == pytest.approx(1.0e7)
+    assert same["ratio"] == pytest.approx(1.0) and same["unit"] == "Cells/mL"
+
+    # a co-culture started five times thinner than its monocultures, which is what study 14 does
+    thin_times, thin_series = _simulate([0.4, 0.3], [[-4.0e-10, 2.0e-10], [0.0, -3.0e-10]],
+                                        [2.0e6, 5.0e8])
+    thin = [_named(["A", "B"], thin_times, thin_series, f"t{k}") for k in range(2)]
+    got = integrated.starting_densities(thin, monos, "A")
+    assert got["co"] == pytest.approx(2.0e6) and got["mono"] == pytest.approx(1.0e7)
+    assert got["ratio"] == pytest.approx(5.0)
+
+    # an organism with no curve on one side gives nothing rather than a number from one side
+    assert integrated.starting_densities(cos, monos, "B") == {}      # B has no monoculture here
+    assert integrated.starting_densities([], monos, "A") == {}
+
+    # and abundances in different units are not divided by each other
+    other = [_named(["A"], times, series, "u", unit="OD600")]
+    assert integrated.starting_densities(cos, other, "A") == {}

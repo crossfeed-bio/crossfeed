@@ -35,6 +35,19 @@ content.
   every organism above zero. Nothing about the coefficients changed because of it; the equilibrium was
   always the solution of `A x = -r` and the reader had to work it out.
 
+### Added
+- **Each arc says what both sides of its comparison were inoculated at** (#81, Karoline on 2026-10-08).
+  mGrowthDB's `inoculumConcentration` is empty in every experiment checked and its descriptions state a
+  starting density unsystematically, so the number is taken from the first measured abundance, which the
+  curves always carry. The note gives both sides and the factor between them, and says plainly when that
+  factor is above 3, so a reader can see that an arc rests on a monoculture started several times denser
+  than its co-culture. It is **reported and never matched on**: across the comparisons the tool makes the
+  two sides agree to a median of 1.17 times and differ by more than 3 times in 6 of 39, and those six are
+  a choice about how to start a co-culture rather than a confound, so putting a starting density in the
+  condition key would discard measurements. On the live All network **all 12 arcs carry the note and the
+  warning fires on 4 of them**, the largest being a co-culture started 7.43 times thinner than the
+  monocultures it is compared with.
+
 ### Changed
 - **A monoculture fit is refused for model failure rather than for the rate's sign** (#160, Karoline on
   2026-10-08, taking Craig's agent's option 2). A non-negative `A_ii` is no self-limitation: the fit
