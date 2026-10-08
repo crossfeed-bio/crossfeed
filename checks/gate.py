@@ -262,10 +262,16 @@ def check_format_fields(_rels):
     in_source = re.search(r'^SCHEMA\s*=\s*["\'](?P<id>[^"\']+)["\']',
                           _read("src/grownet/model.py") or "", re.M)
     if in_source and in_source.group("id") != SCHEMA:
-        bad.append(f"src/grownet/model.py says SCHEMA is {in_source.group('id')!r} and the imported "
-                   f"module says {SCHEMA!r}: your bytecode is stale, so this check is reading code that "
-                   "is no longer on disk and its verdict means nothing. Remove the __pycache__ "
-                   "directories under src/grownet and run the gate again")
+        # and nothing else is reported, because nothing else can be trusted: every verdict below comes
+        # from the same import, including the field comparison that is this check's actual job and the
+        # thing that catches the #121 mistake. Reporting them anyway produced a line that said
+        # "model.py says /v3" while model.py said /v2 on disk, and prescribed moving the manifest's
+        # `current` to an id the source does not contain, which is the line a developer acts on (Craig's
+        # agent on #176, having reproduced the stale import against the real mechanism)
+        return bad + [f"src/grownet/model.py says SCHEMA is {in_source.group('id')!r} and the imported "
+                      f"module says {SCHEMA!r}: your bytecode is stale, so this check is reading code "
+                      "that is no longer on disk and its verdict means nothing. Remove the __pycache__ "
+                      "directories under src/grownet and run the gate again"]
     if manifest.get("current") != SCHEMA:
         bad.append(f"schema/format_fields.json says the current format is "
                    f"{manifest.get('current')!r} and model.py says {SCHEMA!r}: set `current` to the id "

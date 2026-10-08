@@ -375,3 +375,9 @@ def test_the_format_check_refuses_to_answer_from_stale_bytecode(monkeypatch):
     assert any("__pycache__" in p for p in problems), problems
     # and it names both ids, so the reader can see which way round it is
     assert any("grownet.interaction_network/v9" in p and on_disk in p for p in problems), problems
+
+    # and it is the ONLY problem reported, because every other verdict this function can reach comes
+    # from the same poisoned import, the field comparison included. Reported together, the manifest line
+    # said "model.py says /v9" while the file said otherwise and prescribed moving `current` to an id
+    # the source does not contain (Craig's agent on #176)
+    assert len(problems) == 1, problems
