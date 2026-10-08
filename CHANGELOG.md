@@ -17,7 +17,11 @@ content.
   one setting away, `--derivation replicate`, and it is what a sparsely sampled study can still give: the
   integrated form needs a time course, so a study measured at two or three points now yields nothing by
   default and the page says which setting to change.
-- **The network format id moves to `grownet.interaction_network/v2`** (#121, Craig's agent's trace).
+- **The network format id moves to `grownet.interaction_network/v3`** (#121, Craig's agent's trace, and
+  #155 item 1). It moved twice inside this release, `/v1` to `/v2` to `/v3`, because each step added
+  optional arc fields and **a field addition moves the id whether or not the id it moves from was
+  released**. No release carries `/v2`; a reader still accepts it, and `grownet validate` names it. The
+  rest of this entry is why the first move happened.
   Files from 0.1.x (`/v0`) and 0.2.x (`/v1`) stay valid and `grownet validate` still names the version it
   read. The id is what `published.fresh` checks before an installed copy uses the daily All network, and
   #118 added optional arc fields that an installed 0.2.0 cannot build, because it builds each arc from
@@ -36,6 +40,22 @@ content.
   always the solution of `A x = -r` and the reader had to work it out.
 
 ### Added
+- **An arc's error carries a third component: which monoculture set stage 1 was given** (#155 item 1,
+  Karoline on 2026-10-08, taking Craig's agent's recommendation). The condition matcher resolves a
+  monoculture set per co-culture experiment, so one organism in one study can enter two arcs with two
+  different stage-1 rates: on SMGDB00000007 *Roseburia* enters one arc at 0.5091 /h and another at 0.6521,
+  17 per cent apart. Each arc took its own as though the other did not exist. The spread of those selected
+  rates is now a measured third variance component, `se_rate_selection`, with the spread itself in
+  `rate_selection_spread` and both named in the arc's notes with the rates behind them. **It moves `se`,
+  `sd`, `p_value` and the degrees of freedom only**: `strength`, the effect and the status stay as fitted,
+  because the point estimate is what it is and the confidence in it was what was overstated. It needs no
+  number from the reader. On the live corpus **9 of 16 arcs widen** and one loses significance at
+  `q < 0.05` (3 arcs to 2); no arc changes status. It is a **lower bound** on what an arc assumes, since
+  the gap each arc takes on trust is between a monoculture and a co-culture the monocultures were never
+  grown in, and the notes say so. Where two arcs of one organism took nearly the same rate and still imply
+  mismatches of opposite sign, the arc says that too: they cannot both be the rate being wrong, so for at
+  least one the implied mismatch is growth that depends on the partner. No live arc meets that condition
+  today.
 - **Every growth rate is published with the doubling time it implies** (#173, Karoline on 2026-10-08).
   `ln(2) / r` in the time unit of the rate, as the appended `doubling_time` column of `growth_rates.csv`
   and beside each rate in the report. No stage of the derivation asks whether a rate is plausible: the

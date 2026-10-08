@@ -27,10 +27,17 @@ from dataclasses import asdict, dataclass, field, fields
 # edge fields, and an installed 0.2.0 builds its edges with `Edge(**e)`, which raises on a field it does
 # not know: under an unchanged id that copy would accept the daily artifact and then fail on it, inside
 # the All button, within a day of the cron republishing from this branch (Craig's agent, on #121).
-SCHEMA = "grownet.interaction_network/v2"
+# It moves again to v3 before 0.3.0 ships, for the same reason: #155 item 1 adds two optional edge fields
+# (`se_rate_selection`, `rate_selection_spread`), and a field addition moves the id whether or not the id
+# it moves from was ever released. v2 was never tagged: it existed on unreleased main and on the daily All
+# artifact built from it, which `published.fresh` refuses under a different id anyway. Moving rather than
+# amending v2's entry keeps the rule absolute, since the one thing that made #121 possible was an
+# exception to it (2026-10-08).
+SCHEMA = "grownet.interaction_network/v3"
 # Older ids a reader still accepts, newest first. A v0 document is valid: its `significance` means what v0
 # said it means, which is why `grownet validate` names the version it read.
-PREVIOUS_SCHEMAS = ("grownet.interaction_network/v1", "grownet.interaction_network/v0")
+PREVIOUS_SCHEMAS = ("grownet.interaction_network/v2", "grownet.interaction_network/v1",
+                    "grownet.interaction_network/v0")
 KNOWN_SCHEMAS = (SCHEMA, *PREVIOUS_SCHEMAS)
 EFFECTS = ("facilitation", "inhibition", "neutral")
 # what an edge was derived from: a mono versus bi-culture comparison (a direct interaction), or a full
@@ -167,9 +174,16 @@ class Edge:
     # arc against the two things the model cannot check for itself
     fit_window_share: float | None = None
     rate_mismatch_to_zero: float | None = None
-    # the two halves of `se`, and how the monoculture stage was resampled for the second
+    # the parts of `se`, and how the monoculture stage was resampled for the second. The third is the
+    # spread of the monoculture rates the condition matcher selected for this organism elsewhere in the
+    # same study, which is a measured scale for how much stage 1 moves when the matched condition moves
+    # (#155 item 1): `rate_selection_spread` is that spread in rate units and `se_rate_selection` is what
+    # it contributes to `se`. Both are None where the organism has one selected rate in the study, which
+    # is most arcs.
     se_replicates: float | None = None
     se_rate_stage: float | None = None
+    se_rate_selection: float | None = None
+    rate_selection_spread: float | None = None
     rate_stage_method: str = ""
     rate_stage_n: int | None = None
     merged_arcs: int | None = None  # arcs merged into this one (register item 14), None when not merged

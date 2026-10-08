@@ -132,18 +132,21 @@ def test_a_document_from_the_previous_version_is_still_valid_and_named():
     meaning. A file written by 0.1.x stays valid, since nothing about its own content changed; what it
     must not do is pass for a v1 file, which is what the id now tells a reader. It moved again to v2 with
     the optional arc fields of #118, so that an installed 0.2.0 reads the daily network as a format it
-    does not know and derives live rather than failing on a field it cannot build (#121)."""
+    does not know and derives live rather than failing on a field it cannot build (#121), and to v3 before
+    0.3.0 shipped with the two optional fields of #155 item 1. A field addition moves the id whether or
+    not the id it moves from was released; v2 never was."""
     from grownet.model import KNOWN_SCHEMAS, PREVIOUS_SCHEMAS, SCHEMA
     from grownet.schema import validate_document
-    assert SCHEMA == "grownet.interaction_network/v2"
-    assert PREVIOUS_SCHEMAS == ("grownet.interaction_network/v1", "grownet.interaction_network/v0")
+    assert SCHEMA == "grownet.interaction_network/v3"
+    assert PREVIOUS_SCHEMAS == ("grownet.interaction_network/v2", "grownet.interaction_network/v1",
+                                "grownet.interaction_network/v0")
     assert KNOWN_SCHEMAS == (SCHEMA, *PREVIOUS_SCHEMAS)
 
     doc = {"schema": SCHEMA, "nodes": [], "edges": [], "studies": []}
     assert validate_document(doc) == []
     for older in PREVIOUS_SCHEMAS:
         assert validate_document({**doc, "schema": older}) == []
-    problems = validate_document({**doc, "schema": "grownet.interaction_network/v3"})
+    problems = validate_document({**doc, "schema": "grownet.interaction_network/v9"})
     assert problems and "expected one of" in problems[0]
 
     # and a document from a later version is read as far as it goes rather than raising on a field this

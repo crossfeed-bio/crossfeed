@@ -298,12 +298,13 @@ When Cytoscape is not running, the command says so and names the port instead of
 ## The output format
 
 `derive` emits one JSON document: the neutral interaction network. Its `schema` field names the format,
-`grownet.interaction_network/v2` since 0.3.0. It moved to `/v1` in 0.2.0 because `significance` changed
+`grownet.interaction_network/v3` since 0.3.0. It moved to `/v1` in 0.2.0 because `significance` changed
 meaning, from the corrected p-value to -log10 of it, and a reader that branches on the id would otherwise
-misread those numbers; it moved to `/v2` because optional edge fields were added and an installed 0.2.0
-builds its edges from every field a document carries, so it has to read the daily network as a format it
-does not know and derive live instead. Files from 0.1.x (`/v0`) and 0.2.x (`/v1`) are still valid, and
-`grownet validate` names the version it read. It is the contract downstream tools
+misread those numbers; it moved to `/v2` and then `/v3` because optional edge fields were added and an
+installed 0.2.0 builds its edges from every field a document carries, so it has to read the daily network
+as a format it does not know and derive live instead. A field addition moves the id whether or not the id
+it moves from was released, which is why 0.3.0 ships `/v3` and no release carries `/v2`. Files from 0.1.x
+(`/v0`) and 0.2.x (`/v1`) are still valid, and `grownet validate` names the version it read. It is the contract downstream tools
 read, and it is pinned by a JSON Schema at
 [`schema/interaction_network.schema.json`](schema/interaction_network.schema.json). Its `meta` records
 the tool, `tool_version` and `derived_on` (the date: mGrowthDB changes, so the same version can derive a
@@ -315,7 +316,7 @@ studies and each study's own median, and `without_a_rate`, the organisms that ha
 
 ```json
 {
-  "schema": "grownet.interaction_network/v2",
+  "schema": "grownet.interaction_network/v3",
   "meta": {"tool": "grownet", "tool_version": "0.1.0", "derived_on": "2026-09-27",
            "derived_at": "2026-09-27T14:15:53+02:00", "source_db": "mGrowthDB (live)",
            "settings": {"metric": "auc", "...": "..."}, "data": {"...": "..."}},

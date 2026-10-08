@@ -398,9 +398,19 @@ EDGE_ATTRIBUTES = {
                      "relation se = sd / sqrt(n) holds and the absence threshold carries that stage too; "
                      "the replicates' own scatter is this number times the square root of n",
     "se_rate_stage": "the part of se that comes from the monoculture stage, from resampling it. se is "
-                     "the square root of the two variances added, and the p-value is a t statistic on "
+                     "the square root of the variances added, and the p-value is a t statistic on "
                      "it with a Satterthwaite degrees of freedom, so an arc whose monoculture stage is "
                      "poorly determined is not tested as though that stage were exact",
+    "se_rate_selection": "the part of se that comes from which monoculture set the condition matcher "
+                         "gave stage 1. Where a study holds several sets for one organism, its arcs can "
+                         "be matched to different ones, and the rates those sets fit differ; this is "
+                         "what that spread moves the mean strength by. Empty where the organism has one "
+                         "selected rate in the study, which is most arcs. It is a lower bound on what "
+                         "the arc assumes, since the gap it stands for is between a monoculture and a "
+                         "co-culture the monocultures were never grown in",
+    "rate_selection_spread": "the spread of those selected rates, in the rate's own units, which is the "
+                             "measured scale behind se_rate_selection. The arc's notes name the rates "
+                             "and say how far apart they are",
     "rate_stage_method": "how the monoculture stage was resampled for that number: a bootstrap of its "
                          "replicates where the stage is the median of one fit per replicate, or a "
                          "delete-one jackknife where it is one regression over all of their rows",
@@ -1098,12 +1108,13 @@ give others; the report beside the download says what was read and when.</p>
 
 <h2 id="attributes">Arc and node attributes</h2>
 <p>Every downloaded network, JSON or GraphML, carries these for each arc (edge) and node. A network
-names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v2</code>
+names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v3</code>
 since 0.3.0. It moved to <code>/v1</code> in 0.2.0 because <code>significance</code> changed meaning, from
-the corrected p-value to -log10 of it, and to <code>/v2</code> because optional arc fields were added and
-an installed 0.2.0 builds its arcs from every field a file carries, so it must read a newer daily network
-as a format it does not know and derive live instead. A file from 0.1.x says <code>/v0</code> and one from
-0.2.x <code>/v1</code>; both are still valid, read with their own meaning. The network
+the corrected p-value to -log10 of it, and to <code>/v2</code> and then <code>/v3</code> because optional
+arc fields were added and an installed 0.2.0 builds its arcs from every field a file carries, so it must
+read a newer daily network as a format it does not know and derive live instead. A file from 0.1.x says
+<code>/v0</code> and one from 0.2.x <code>/v1</code>; both are still valid, read with their own meaning,
+and so is <code>/v2</code>, which no release ever carried. The network
 itself records the tool, <code>tool_version</code>, the date and time it was derived (<code>derived_on</code>,
 <code>derived_at</code>), every setting used, and the version of the data: mGrowthDB publishes no version of
 the whole database, so <code>meta.data</code> holds when it was read and each study's upload and

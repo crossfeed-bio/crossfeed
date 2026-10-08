@@ -13,6 +13,7 @@
   "properties": {
     "schema": {
       "enum": [
+        "grownet.interaction_network/v3",
         "grownet.interaction_network/v2",
         "grownet.interaction_network/v1",
         "grownet.interaction_network/v0"
@@ -477,6 +478,18 @@
           ]
         },
         "se_rate_stage": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "se_rate_selection": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "rate_selection_spread": {
           "type": [
             "number",
             "null"
