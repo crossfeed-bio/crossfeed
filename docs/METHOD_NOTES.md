@@ -563,6 +563,34 @@ parameter they had. No R2 comparison is quoted above for that reason.
 ## Open decisions
 
 
+- **Settled 2026-10-08 (#154), the daily artifact.** The four options were: publish only from a tag, gate
+  the cron on the newest released reader, make `fresh` a version check as well as a format check, or keep
+  the discipline of moving the id with any field addition. **Taken: the fourth, mechanised, and the third
+  dropped as redundant.**
+  - The field half of the discipline is now `checks/gate.py`'s `format-fields` check against
+    `schema/format_fields.json` (#168), so adding or removing a field under an unchanged id fails the
+    build. Craig's agent asked for this rather than a register entry, on the grounds that the entry is
+    what #121 missed, and that is right.
+  - **Option 3 was already implemented.** It proposed that a reader refuse an artifact newer than itself,
+    recorded by `tool_version`. Craig's agent amended it to key on the format id instead, because
+    `tool_version` is the package version and a 0.3.1 patch would send every installed 0.3.0 to live
+    derivation permanently for a release that changed nothing about the format. Checked against the code:
+    `published.fresh` already requires `payload["network"]["schema"] == SCHEMA`, exact equality, so an
+    installed copy already refuses any artifact whose format id is not precisely its own. The amendment
+    describes current behavior and the option adds nothing.
+  - **What the gate cannot cover is a change of MEANING**, which is what caused the first id move: `/v0`
+    to `/v1` was `significance` going from the corrected p-value to -log10 of it, same name, same type.
+    So the convention survives, narrowed to that case, and is in AGENTS.md as a hard rule rather than a
+    note here.
+  - The emergency procedure is in RELEASING.md: delete the `all_result.json` asset and every copy derives
+    live. Written down because it was found under pressure, and because the obvious alternative, landing a
+    fix before the next scheduled run, is not available: the cron declares 03:17 UTC and has fired at
+    09:12 to 10:31 on five consecutive days.
+  - The cron itself is unchanged, and nothing here gives up the daily artifact that #96 exists for.
+  **One scheduling consequence, which is Karoline's and not settled here:** the artifact is derived by
+  `main`, which is not a released version, so until the 0.3.0 stack lands `main` derives with none of its
+  fixes while publishing under a `/v2` id that a released 0.3.0 reader accepts as current.
+
 - **Should `reached_stationary` read its "stopped growing" condition on log abundance?** It compares an
   absolute change over the last fifth of the window with a tenth of the **linear** rise from inoculum to
   peak, so a culture decaying exponentially passes as soon as its level is small beside its peak:

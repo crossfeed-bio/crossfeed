@@ -106,6 +106,14 @@ derivation method). Labels are created by a maintainer; if one is missing, say s
 - **The neutral format is a contract.** If `src/grownet/model.py` changes, regenerate the schema
   (`python -m grownet schema --out schema/interaction_network.schema.json`) and keep it backward
   compatible where possible.
+  **Adding or removing a field moves the format id**, and `checks/gate.py`'s `format-fields` check
+  enforces that against `schema/format_fields.json`, so you cannot forget it. **Changing what a field
+  MEANS moves the id too, and no check can see that**: the name and the type stay the same, so the gate
+  passes. `/v0` to `/v1` was exactly this, `significance` going from the corrected p-value to -log10 of
+  it, and an installed reader that trusts the id reads the new numbers as the old quantity. So a change
+  of meaning is the one part of this contract that is still a rule you have to keep rather than a check
+  that keeps it for you: move the id, record the new id in the manifest, and say in the changelog what
+  the field used to mean (2026-10-08, after #121 and #154).
 - **No runtime dependencies.** Code under `src/` imports only the standard library and grownet.
 - **Nothing public bearing a collaborator's name or affiliation** without their sign-off.
 - **Security problems are reported privately** (see [SECURITY.md](SECURITY.md)), never in a public issue,

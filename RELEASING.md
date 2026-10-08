@@ -79,6 +79,29 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
 5. **Check as a user would:** `uv tool install grownet` then `grownet gui` on a clean machine, and the zip on
    a Windows machine. A version on PyPI cannot be replaced: a mistake is fixed with a new version.
 
+## If the daily All artifact is broken
+
+The `all-network` workflow publishes `all_result.json` as an asset of the `all-network` release, from
+`main`, once a day. Every installed copy reads it when it is less than a day old and speaks that copy's
+format id. If a bad artifact goes out, **delete that one asset**:
+
+```bash
+gh release delete-asset all-network all_result.json --yes
+```
+
+`published.fetch` then gets nothing, returns `None`, and every copy derives live, which is the designed
+fallback and is what the All button does when GitHub is unreachable. `all_network.json` and
+`all_report.txt` can stay: nothing reads them to decide anything. Verify with
+`python -c "from grownet.published import fetch; print(fetch())"`, which should print `None`.
+
+This was found under pressure on 2026-10-07, when #121's arc fields went out under an unchanged format id
+and the All button raised for every installed 0.2.0. It is written down because it is not obvious from
+the workflow, and because the obvious alternative is not available: **do not plan to beat the next
+scheduled run.** The cron says `17 3 * * *` and has never fired near it. Five consecutive days ran at
+10:19, 10:22, 10:31, 09:51 and 09:12 UTC, six to seven hours late and varying by over an hour, because
+GitHub treats schedules as best effort. Anyone racing the clock cannot tell whether they have twelve
+hours or none (Craig's agent, correcting his own estimate on #154).
+
 ## After the first release: signing the Windows program
 
 The program is unsigned, so Windows warns on first start (the zip's README and the README explain it
