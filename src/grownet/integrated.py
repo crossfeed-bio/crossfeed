@@ -1374,7 +1374,16 @@ def starting_densities(cocultures: list, monocultures: list, target: str) -> dic
 #   Roseburia    SMGDB00000007   0.5091, 0.6521    17.4%   arcs DISAGREE in sign
 #
 # So the line at 10 per cent sits above both agreeing cases and below both disagreeing ones, and nothing
-# is flagged today. That is the discipline Craig's agent's own correction asked for: it withdrew the case
+# is flagged today. **What calibrates the line is that gap, not either endpoint.** Sorted, the four cases
+# are bimodal and the split is exactly on sign agreement: 4.28 and 4.66 against 16.48 and 17.42, a factor
+# of 3.5, with 0.10 inside it. On this corpus a wide spread predicts disagreement and a narrow one
+# predicts agreement, which is an observed relationship rather than two numbers to sit between (Craig's
+# agent's observation on #177, from the measured table). **And no positive case tests the value**: the
+# flag needs disagreeing signs with a spread BELOW the line, every disagreeing case here sits above it, so
+# it fires on 0 of 4. Read 0.10 as a point inside a measured gap, not as a calibrated threshold, and
+# re-measure the four before moving it.
+#
+# That is also the discipline Craig's agent's own correction asked for: it withdrew the case
 # whose selected rates were far apart, because arcs that far apart can legitimately carry two different
 # rate errors, and both of today's disagreeing cases are that case. The argument itself rests on two arcs
 # of one organism sharing a stage-1 estimate and still implying opposite mismatches, which one rate error
