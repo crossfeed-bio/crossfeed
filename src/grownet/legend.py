@@ -64,6 +64,8 @@ NOTES = [
                               "continuous_culture: a chemostat or serial dilution, compared on max, which "
                               "that mode suits. untested: "
                               "with the q-value filter on, an arc without a p-value, kept unjudged. "
+                              "window_partial: the fitted rows cover less than half the measured course, "
+                              "so the coefficient describes the growth phase and not what came after it. "
                               "The edge keeps its status and is drawn."),
     ("Not drawn by default", "the quality flags strains_pooled, removed_member_detected and non_batch. The "
                              "comparison itself is in doubt, so such an edge is never read as an absence of "
@@ -72,8 +74,9 @@ NOTES = [
                            "set was emptied by exclusions. Both are reported with a reason instead."),
     ("neutral", "a log2 mean of exactly zero: no direction, and always absent. There is no neutral edge in "
                 "the sense of a weak one."),
-    ("Support, not decision", "each edge carries Welch's t-test corrected for multiple testing. Presence "
-                              "follows the threshold k, never the test."),
+    ("Support, not decision", "each edge carries the test its derivation ran, corrected for multiple "
+                              "testing; the network's meta.statistics names it. Presence follows the "
+                              "threshold k, never the test."),
 ]
 
 

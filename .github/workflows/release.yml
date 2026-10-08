@@ -1,7 +1,8 @@
 name: release
 
 # Runs only when a maintainer pushes a version tag (v0.1.0, ...). It checks the tag against the version and
-# the changelog, builds and tests everything, publishes to PyPI through trusted publishing (no password or
+# the changelog, runs the linter, the guardrail gate and the whole suite before anything is published,
+# builds and tests the wheel on Linux, Windows and macOS, publishes to PyPI through trusted publishing (no password or
 # token is stored anywhere), and creates the GitHub release with the Windows program attached. The one-time
 # setup and the steps are in RELEASING.md.
 
@@ -13,6 +14,12 @@ permissions:
   contents: read
 
 jobs:
+  # The gate before anything is published. It used to run `check_release.py` alone, so the job graph was
+  # check -> dist -> install -> pypi with no suite, no guardrail gate and no linter anywhere in it:
+  # ci.yml does fire on a tag, but the two workflows are independent and nothing linked them, so a tag
+  # whose suite was red still reached PyPI, held back only by the optional environment approval. A
+  # version on PyPI cannot be replaced, which makes this the one failure here that cannot be undone
+  # (#155 item 7).
   check:
     runs-on: ubuntu-latest
     steps:
@@ -20,6 +27,11 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      # the same three `make check` runs, in the same order, before the tag is believed
+      - run: ruff check .
+      - run: python checks/gate.py
+      - run: pytest -q
       - run: python packaging/check_release.py "$GITHUB_REF_NAME" notes.md
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

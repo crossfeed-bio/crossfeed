@@ -11,8 +11,8 @@ abstract: >-
 repository-code: "https://github.com/crossfeed-bio/crossfeed"
 url: "https://github.com/crossfeed-bio/crossfeed"
 license: Apache-2.0
-version: 0.2.0
-date-released: "2026-10-04"
+version: 0.3.0
+date-released: "2026-10-07"
 keywords:
   - microbial interactions
   - cross-feeding

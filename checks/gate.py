@@ -213,6 +213,68 @@ def check_schema_contract(_rels):
     return bad
 
 
+def check_format_fields(_rels):
+    """Refuse a change to a record's declared fields that the format manifest does not match.
+
+    Craig's agent on #154, after #121 added optional arc fields under an unchanged format id and the
+    daily artifact reached installed readers that could not build them: "commit a manifest of the
+    format's declared fields, and have `checks/gate.py` fail when the live `Edge`, `Node` or `Study`
+    fields differ from the manifest while `SCHEMA` is unchanged. Updating the manifest then becomes the
+    deliberate act that makes a format change visible in review, and it would have stopped #121 at the
+    gate rather than four days downstream."
+
+    The manifest records a field set per format id, so the only ways to pass after adding a field are to
+    take it back out, or to move `SCHEMA` and record the new id's set. Editing the entry of an id that
+    has already shipped is possible and is meant to be: it rewrites what a released format carried, and
+    it shows up as exactly that in review.
+
+    Skips rather than fails when grownet is not importable, as the other import-dependent check does.
+    """
+    src = os.path.join(ROOT, "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    try:
+        import json
+        from dataclasses import fields
+
+        from grownet.model import SCHEMA, Edge, Node, Study
+    except Exception as e:  # noqa: BLE001 - the gate must not crash if the package is absent
+        print(f"    (format-fields skipped: grownet not importable: {e})")
+        return []
+
+    path = os.path.join(ROOT, "schema", "format_fields.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            manifest = json.load(f)
+    except OSError:
+        return ["schema/format_fields.json is missing: it records the fields each format id declares"]
+
+    bad = []
+    if manifest.get("current") != SCHEMA:
+        bad.append(f"schema/format_fields.json says the current format is "
+                   f"{manifest.get('current')!r} and model.py says {SCHEMA!r}: set `current` to the id "
+                   "the code writes, and give that id its own entry under `formats`")
+    recorded = (manifest.get("formats") or {}).get(SCHEMA)
+    if recorded is None:
+        return bad + [f"schema/format_fields.json has no entry for {SCHEMA!r}. Moving the format id is "
+                      "how a field addition reaches a reader safely, so record what the new id declares"]
+    live = {"edge": Edge, "node": Node, "study": Study}
+    for kind, cls in live.items():
+        here = sorted(f.name for f in fields(cls))
+        there = sorted(recorded.get(kind) or [])
+        added, gone = sorted(set(here) - set(there)), sorted(set(there) - set(here))
+        if added:
+            bad.append(f"{cls.__name__} declares {', '.join(added)}, which {SCHEMA} does not. A reader "
+                       "of this format builds each record from every field a document carries, so a new "
+                       "field reaches an installed copy as an error: move SCHEMA to a new id and record "
+                       "that id's fields in schema/format_fields.json")
+        if gone:
+            bad.append(f"{SCHEMA} records {', '.join(gone)} for {cls.__name__} and the code no longer "
+                       "declares them: removing a field from a format that has shipped is a breaking "
+                       "change, so move SCHEMA to a new id rather than editing this one's entry")
+    return bad
+
+
 def check_claims(_rels):
     """Delegate to checks/claims_check.py: the docs a stranger reads agree with the code and with each
     other. Kept in its own file because its retired-claim list grows as claims are corrected, and that
@@ -242,6 +304,7 @@ CHECKS = [
     ("self-contained", check_self_contained),
     ("house-style", check_house_style),
     ("schema-contract", check_schema_contract),
+    ("format-fields", check_format_fields),
     ("claims", check_claims),
     ("merge-markers", check_merge_markers),
 ]

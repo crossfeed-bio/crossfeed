@@ -9,8 +9,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packaging"))
 from check_release import check, main, release_notes  # noqa: E402
 
 
-def _repo(tmp_path, version="0.1.0", code="0.1.0", heading="## [0.1.0] (2026-10-01)", cited=None):
+def _repo(tmp_path, version="0.1.0", code="0.1.0", heading="## [0.1.0] (2026-10-01)", cited=None,
+          r_version=None):
     (tmp_path / "src" / "grownet").mkdir(parents=True)
+    # the R companion's own version, which RELEASING.md calls the only signal an installed R copy is out
+    # of date, so the check reads it too (#142 item 10)
+    (tmp_path / "r").mkdir(parents=True)
+    (tmp_path / "r" / "DESCRIPTION").write_text(f"Package: grownet\nVersion: {r_version or version}\n")
     (tmp_path / "pyproject.toml").write_text(f'[project]\nname = "grownet"\nversion = "{version}"\n')
     (tmp_path / "src" / "grownet" / "__init__.py").write_text(f'__version__ = "{code}"\n')
     # the citation names the version too: 0.1.0 shipped while CITATION.cff still said 0.0.2
@@ -47,7 +52,8 @@ def test_the_release_notes_start_with_how_to_get_past_the_windows_warning(tmp_pa
     assert "**More info** link" in notes and "only then does a **Run anyway** button appear" in notes
     assert notes.endswith("### Added\n- the first release")
     import check_release
-    monkeypatch.setattr(check_release, "check", lambda tag: check(tag, _repo(tmp_path)))
+    monkeypatch.setattr(check_release, "check",
+                        lambda tag, **kw: check(tag, _repo(tmp_path), **kw))
     out = tmp_path / "notes.md"
     assert main(["v0.1.0", str(out)]) == 0
     assert out.read_text(encoding="utf-8") == notes + "\n"
@@ -93,3 +99,91 @@ def test_what_a_user_reads_describes_a_release_not_our_branches():
     if branch and branch != "main" and branch != "HEAD":
         for what, text in shipped.items():
             assert branch not in text, f"{what} names the branch {branch!r}, which no release will have"
+
+
+def test_the_r_package_version_is_part_of_the_release_check(tmp_path):
+    """#142 item 10: `check_release.py` did not read `r/DESCRIPTION`, which RELEASING.md calls the only
+    signal an installed R copy is out of date, so a release could ship an R package that cannot tell a
+    reader to update."""
+    problems, _ = check("v0.1.0", _repo(tmp_path, r_version="0.0.9"))
+    assert any("r/DESCRIPTION says Version 0.0.9" in p for p in problems), problems
+
+
+def test_the_check_runs_with_no_tag_against_this_tree(tmp_path, capsys):
+    """#142 item 15: the check appeared only in release.yml, on $GITHUB_REF_NAME, so the gate that
+    catches a citation date drifting from the changelog fired for the first time when somebody pushed the
+    tag. With no argument it checks the version this tree would release, which is what `make check` and
+    CI now run on every build."""
+    from check_release import current_version
+    assert current_version() == __import__("grownet").__version__
+    assert main([]) == 0
+    assert "is ready" in capsys.readouterr().out
+
+
+def test_a_tree_in_development_can_be_green_and_honest_at_once(tmp_path):
+    """#155 item 8. With no tag the check asks about the version this tree would release, and a tree in
+    development marks that version unreleased, which is the Keep a Changelog convention this file follows.
+    Treating that as a problem left two green states: leave the version at the last released one, or mark
+    the next release released before it is. The tree took the second and a test pinned it.
+
+    So "still marks unreleased" is a problem only when a release is actually being cut.
+    """
+    repo = _repo(tmp_path, heading="## [0.1.0] (unreleased)")
+    assert check("v0.1.0", repo, releasing=False)[0] == []
+    problems, _ = check("v0.1.0", repo, releasing=True)
+    assert any("still marks 0.1.0 unreleased" in p for p in problems)
+
+
+def test_a_date_in_the_future_is_refused_however_it_is_written(tmp_path):
+    """#155 item 8. The agreement check read only the parenthesized date, so `## [0.1.0] - 2099-01-01`
+    was invisible to it: the heading and CITATION.cff could disagree in silence. And two files agreeing
+    with each other is not either being right, so a date that has not happened yet is refused.
+    """
+    import datetime
+
+    today = datetime.date(2026, 10, 7)
+    # the dash form is read, so a disagreement in it is caught
+    dashed = _repo(tmp_path / "a", heading="## [0.1.0] - 2026-10-02")
+    problems, _ = check("v0.1.0", dashed, today=today)
+    assert any("CHANGELOG.md says 2026-10-02" in p for p in problems), problems
+    # a date in the future is refused even when both files carry it
+    ahead = _repo(tmp_path / "b", heading="## [0.1.0] (2099-01-01)")
+    (ahead / "CITATION.cff").write_text('cff-version: 1.2.0\ntitle: grownet\nversion: 0.1.0\n'
+                                        'date-released: "2099-01-01"\n', encoding="utf-8")
+    problems, _ = check("v0.1.0", ahead, today=today)
+    assert sum("in the future" in p for p in problems) == 2, problems
+    # and a release with no date at all is refused when one is being cut
+    undated = _repo(tmp_path / "c", heading="## [0.1.0]")
+    assert any("gives no date" in p for p in check("v0.1.0", undated, today=today)[0])
+    assert not any("gives no date" in p for p in check("v0.1.0", undated, releasing=False, today=today)[0])
+
+
+def test_this_tree_dates_its_release_no_earlier_than_its_newest_commit():
+    """The dates said 2026-10-06 while every commit of the release was 2026-10-07, and because the two
+    files agreed with each other the gate was silent (#155 item 8). This reads the tree, so it keeps
+    them honest rather than only consistent."""
+    import datetime
+    import re
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    changelog = root.joinpath("CHANGELOG.md").read_text(encoding="utf-8")
+    version = re.search(r'^__version__ = "([^"]+)"', root.joinpath("src", "grownet", "__init__.py")
+                        .read_text(encoding="utf-8"), re.M).group(1)
+    section = re.search(rf"^## \[{re.escape(version)}\]([^\n]*)", changelog, re.M)
+    assert section, f"CHANGELOG.md has no section for {version}"
+    if "unreleased" in section.group(1).lower():
+        # the documented process (RELEASING.md) dates the section in the release pull request, so a tree
+        # in development carries no date and there is nothing to compare. Requiring one here would be the
+        # same trap as #155 item 8: a check that cannot be green and honest at once, which is what made
+        # this tree carry a date while it was unreleased in the first place.
+        return
+    heading = re.search(r"([0-9]{4}-[0-9]{2}-[0-9]{2})", section.group(1))
+    assert heading, f"CHANGELOG.md gives {version} neither a date nor 'unreleased'"
+    dated = datetime.date.fromisoformat(heading.group(1))
+    newest = subprocess.run(["git", "log", "-1", "--format=%cs"], capture_output=True, text=True,
+                            cwd=root).stdout.strip()
+    if newest:                      # a tarball has no git history, and then there is nothing to compare
+        assert dated >= datetime.date.fromisoformat(newest), (
+            f"the release is dated {dated} and its newest commit is {newest}")

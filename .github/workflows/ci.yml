@@ -32,6 +32,14 @@ jobs:
         run: ruff check .
       - name: guardrail gate
         run: python checks/gate.py
+      - name: release gate
+        # with no tag it checks this tree's own version across pyproject.toml, the package, CITATION.cff
+        # and r/DESCRIPTION, and the citation date against the changelog heading. It used to run only on
+        # the tag, so a drift was found when the release was already being cut (#142 item 15).
+        # It reads pyproject.toml with tomllib, which is 3.11 and newer, and the release itself runs on
+        # 3.12, so one version of the matrix is where this belongs.
+        if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'
+        run: python packaging/check_release.py
       - name: tests
         run: pytest -q
 
@@ -52,6 +60,14 @@ jobs:
           /tmp/clean/bin/pip install dist/*.whl
           /tmp/clean/bin/grownet --help
           python packaging/smoke.py /tmp/clean/bin/grownet gui --no-browser
+      - name: the source distribution carries what its own tests read
+        # the sdist ships tests/, and it shipped without the schema, the fixtures and the page, so its
+        # suite could not pass for anyone building from it (a distribution, conda-forge). The wheel is
+        # what every other step installs, so nothing here caught it (found 2026-10-06).
+        run: |
+          python -m pip install pytest
+          mkdir -p /tmp/sdist && tar xzf dist/*.tar.gz -C /tmp/sdist --strip-components=1
+          cd /tmp/sdist && python -m pytest -q
 
   r-package:
     # the R companion package in r/, checked the way CRAN does (#112). R and its two dependencies come from

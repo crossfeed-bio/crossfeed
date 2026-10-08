@@ -2,10 +2,13 @@
 \alias{glv_rates}
 \title{The growth rates}
 \usage{
-glv_rates(x, missing = NULL)
+glv_rates(x, unit = NULL, missing = NULL)
 }
 \arguments{
 \item{x}{gLV parameters from \code{\link{grownet_listen}} or \code{\link{grownet_glv}}.}
+
+\item{unit}{The abundance unit of the matrix whose organisms are wanted, as in
+\code{\link{glv_matrix}}. Only needed when the parameters hold more than one matrix.}
 
 \item{missing}{A number to use for the organisms that have no rate, or \code{NULL} to leave them
 \code{NA}. Giving one is a choice about data that is not there, so it is never made for you.}
@@ -14,8 +17,9 @@ glv_rates(x, missing = NULL)
 A named numeric vector in the row order of the matrix.
 }
 \description{
-Each organism's maximum specific growth rate in monoculture, as grownet derived it: the median over the
-replicates and studies that have one. An organism that has none is \code{NA}, since a simulation needs a
+Each organism's growth rate as grownet derived it: the maximum specific growth rate in monoculture,
+median over the replicates and studies that have one, or, with the integrated derivation, the rate that
+fit found. It is the \code{r_i} the diagonal of the matrix was fitted against. An organism that has none is \code{NA}, since a simulation needs a
 number nobody measured here.
 }
 \examples{

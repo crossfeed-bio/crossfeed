@@ -31,6 +31,14 @@ _KEYS = [
     ("g_derived_on", "graph", "derived_on", "string"),
     ("g_derived_at", "graph", "derived_at", "string"),
     ("g_provisional", "graph", "provisional", "string"),
+    # the absence rule and its threshold k, and how many arcs were suppressed and why. An absent arc is an
+    # edge and travels as one, but without k there is nothing to calibrate it against, and the Cytoscape
+    # layered network is built on this route (Craig's agent on #136, #142 item 15)
+    ("g_absence_rule", "graph", "absence_rule", "string"),
+    ("g_absence_k", "graph", "absence_k", "double"),
+    ("g_absence_count", "graph", "absence_count", "int"),
+    ("g_hidden", "graph", "hidden", "string"),
+    ("g_statistics_test", "graph", "statistics_test", "string"),
     ("n_name", "node", "name", "string"),
     # Gephi takes a node's label from an attribute called label (Cytoscape uses name): the same strain name
     ("n_label", "node", "label", "string"),
@@ -69,6 +77,30 @@ _KEYS = [
     ("e_partner_abundance", "edge", "partner_abundance", "double"),
     ("e_partner_abundance_unit", "edge", "partner_abundance_unit", "string"),
     ("e_partner_abundance_n", "edge", "partner_abundance_n", "int"),
+    ("e_metric_with", "edge", "metric_with", "double"),
+    ("e_metric_without", "edge", "metric_without", "double"),
+    ("e_target_capacity", "edge", "target_capacity", "double"),
+    ("e_target_capacity_unit", "edge", "target_capacity_unit", "string"),
+    ("e_target_capacity_n", "edge", "target_capacity_n", "int"),
+    ("e_strength_bound", "edge", "strength_bound", "double"),
+    ("e_bound_rule", "edge", "bound_rule", "string"),
+    ("e_coefficient", "edge", "coefficient", "double"),
+    ("e_coefficient_unit", "edge", "coefficient_unit", "string"),
+    ("e_fit_r2", "edge", "fit_r2", "double"),
+    ("e_fit_condition", "edge", "fit_condition", "double"),
+    # the fit's own null and its uncertainty, on the same route the rest of the arc travels: Cytoscape is
+    # where a reader looks at these numbers, and they were emitted in the JSON and nowhere else
+    ("e_fit_null_r2", "edge", "fit_null_r2", "double"),
+    # the share of the measured course the rows cover, and the rate mismatch that would zero the arc
+    ("e_fit_window_share", "edge", "fit_window_share", "double"),
+    ("e_rate_mismatch_to_zero", "edge", "rate_mismatch_to_zero", "double"),
+    ("e_coefficient_sd", "edge", "coefficient_sd", "double"),
+    ("e_coefficient_n", "edge", "coefficient_n", "int"),
+    ("e_coefficient_sd_from_rate_stage", "edge", "coefficient_sd_from_rate_stage", "double"),
+    ("e_se_replicates", "edge", "se_replicates", "double"),
+    ("e_se_rate_stage", "edge", "se_rate_stage", "double"),
+    ("e_rate_stage_method", "edge", "rate_stage_method", "string"),
+    ("e_rate_stage_n", "edge", "rate_stage_n", "int"),
     ("e_merged_arcs", "edge", "merged_arcs", "int"),
     ("e_strength_range", "edge", "strength_range", "string"),
     ("e_supporting_pairs", "edge", "supporting_pairs", "int"),
@@ -101,6 +133,16 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
     graph.set("edgedefault", "directed")
     for key in ("tool", "tool_version", "derived_on", "derived_at", "provisional"):
         _data(graph, f"g_{key}", net.meta.get(key))
+    # the absence rule, its threshold and the suppressed counts, so an edge marked absent can be read
+    # against the k that marked it, and the test the derivation ran (#142 item 15)
+    absence = net.meta.get("absence") or {}
+    _data(graph, "g_absence_rule", absence.get("rule"))
+    _data(graph, "g_absence_k", absence.get("k"))
+    _data(graph, "g_absence_count", absence.get("absent"))
+    hidden = net.meta.get("hidden") or {}
+    _data(graph, "g_hidden", "; ".join(f"{name} {count}" for name, count in sorted(hidden.items()))
+          if hidden else None)
+    _data(graph, "g_statistics_test", (net.meta.get("statistics") or {}).get("test"))
 
     from .cytoscape import display_weight, genus, genus_colors, line_style  # the style's own columns
     colors = genus_colors(net)
@@ -162,6 +204,22 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(ed, "e_partner_abundance", e.partner_abundance)
         _data(ed, "e_partner_abundance_unit", e.partner_abundance_unit)
         _data(ed, "e_partner_abundance_n", e.partner_abundance_n)
+        _data(ed, "e_metric_with", e.metric_with)
+        _data(ed, "e_metric_without", e.metric_without)
+        _data(ed, "e_target_capacity", e.target_capacity)
+        _data(ed, "e_target_capacity_unit", e.target_capacity_unit)
+        _data(ed, "e_target_capacity_n", e.target_capacity_n)
+        _data(ed, "e_strength_bound", e.strength_bound)
+        _data(ed, "e_bound_rule", e.bound_rule)
+        _data(ed, "e_coefficient", e.coefficient)
+        _data(ed, "e_coefficient_unit", e.coefficient_unit)
+        _data(ed, "e_fit_r2", e.fit_r2)
+        _data(ed, "e_fit_condition", e.fit_condition)
+        for name in ("fit_null_r2", "coefficient_sd", "coefficient_n",
+                     "coefficient_sd_from_rate_stage", "se_replicates", "se_rate_stage",
+                     "rate_stage_method", "rate_stage_n", "fit_window_share",
+                     "rate_mismatch_to_zero"):
+            _data(ed, f"e_{name}", getattr(e, name, None))
 
     if pretty:
         ET.indent(root)

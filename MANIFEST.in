@@ -1,0 +1,21 @@
+# What the source distribution carries beyond the package itself. The sdist ships `tests/`, and those
+# tests read files outside `src/`: without these lines a packager building from the sdist (a distribution,
+# conda-forge) sees ten failures for missing fixtures, schema and examples, and CI never catches it
+# because it installs the wheel (found 2026-10-06).
+include CHANGELOG.md CITATION.cff NOTICE
+# every file under schema/, not the one by name: `format_fields.json` was added and the sdist shipped
+# without it, so `checks/gate.py`'s format-fields check failed for anyone building from the source
+# archive while the wheel was fine. A named include is one more place to remember (2026-10-08).
+recursive-include schema *.json
+include docs/legend.svg
+recursive-include tests *.py *.json *.csv *.svg
+recursive-include checks *.py
+recursive-include packaging *.py
+recursive-include examples *
+recursive-include gui *.html *.css *.js *.svg
+include r/README.md r/DESCRIPTION r/NAMESPACE
+recursive-include r/R *.R
+recursive-include r/man *.Rd
+recursive-include r/tests *.R
+global-exclude *.pyc
+global-exclude __pycache__/*

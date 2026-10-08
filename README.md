@@ -161,7 +161,7 @@ python -m grownet schema [--out FILE]
   derived once a day by `.github/workflows/all-network.yml` (the `all-network` release), when that is
   less than a day old, and derives live otherwise; `--no-published` always derives live.
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
-- `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the baseline (see below).
+- `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of either built-in one (see below).
 - The command line does everything the local page does: every advanced setting has its option, and the
   page's outputs are `--out FILE` (with `--format`), `--to-cytoscape`, `--report FILE` (the same report the
   page shows), and, with `--report-rates`, `--rates FILE` and `--glv FILE`. `grownet derive --help` lists
@@ -173,13 +173,14 @@ python -m grownet schema [--out FILE]
   column, and a cell holding the log2 mean of the comparison, so `A[i][j]` is the effect of j on i. Each
   organism appears once, so arcs of one pair are merged across conditions and studies by their median, a
   pair whose arcs disagree in sign is left at 0, and an empty cell or an arc below the absence threshold
-  is 0. An obligate interaction carries +10 and an abolished one -10, a stated extreme, since neither has
-  a log2 ratio: one side did not grow at all.
+  is 0. An obligate or abolished interaction has no log2 ratio, since one side did not grow at all, so its
+  cell holds a measured bound from the no-growth rule instead: at least this much facilitation, or at most
+  this much inhibition, with the rule printed in the report.
 - `--report-rates` also reports each organism's maximum specific growth rate in monoculture (the median
   over the replicates and studies that have one, batch monocultures only), which `--rates FILE` writes as
-  CSV. With it, `--glv FILE` writes the parameters of a generalized Lotka-Volterra simulation: a zip of the
-  interaction matrix with -1 on the diagonal, the matching growth rates and a README stating the
-  conventions. The numbers are effect sizes, not fitted gLV coefficients.
+  CSV. With it, `--glv FILE` writes the parameters of a generalized Lotka-Volterra simulation: a zip of one
+  matrix of fitted per-capita coefficients per abundance unit, the matching growth rates and a README
+  stating every formula. It needs the comparison to be on the growth rate, which `--glv-mode` sets.
 - `--out FILE` writes the network to a file instead of stdout; attribution and skipped pairs print to
   stderr.
 - `validate FILE` checks a network document against the neutral-format schema and exits non-zero if it
@@ -211,10 +212,15 @@ resolves them to taxon ids from mGrowthDB's own strain records, finds the studie
 the interactions, and shows them as a table. The second is optional and says **where** to look: a medium,
 matched as text against the medium name mGrowthDB records, the experiment description and its name (so
 `wilkins` finds every spelling of Wilkins-Chalgren), an experiment id or a study id. Naming a comparison
-keeps the monocultures it is made against, and every arc records its `medium`.
+keeps the monocultures it is made against, and every arc records its `medium`. One word can reach several
+media, because a medium with a sugar added or a carbon source left out is another environment and
+mGrowthDB states that only in the description: those are told apart, never pooled, and the report names
+every medium a search read, so name an experiment id to read one of them alone.
 
-**Four buttons.** Find interactions; Example, which fills the first box with a pair that gives a result;
-All, which derives every study in mGrowthDB; and the gLV mode switch, which sets what a simulation needs
+**Five buttons.** Find interactions; Example, which fills the first box with a pair that gives a result;
+All, which derives every study in mGrowthDB; gLV example, which fills both boxes and the settings for a
+package that simulates and runs it (the help walks that package through miaSim step by step); and the gLV
+mode switch, which sets what a simulation needs
 (growth rates on, drop-out communities off) and switches back when pressed again. Every setting sits
 behind "Advanced settings", with the same defaults the command line uses.
 
@@ -243,7 +249,7 @@ remotes::install_github("crossfeed-bio/crossfeed", subdir = "r")
 library(grownet)
 glv <- grownet_listen()                 # then press Get gLV parameters, Send to R
 glv                                     # prints what it holds and what to read before simulating
-args <- as_miasim(glv_scale(glv))
+args <- as_miasim(glv)
 # miaSim simulates with stochasticity and migration on; for the deterministic model, call it
 # yourself with stochastic = FALSE and migration_p = 0
 tse <- do.call(miaSim::simulateGLV, c(args, list(x0 = rep(0.1, args$n_species))))
@@ -259,10 +265,11 @@ being used and cannot see it; installing from a clone needs no GitHub access at 
 `remotes::install_local("<the repository>/r")`, or `R CMD INSTALL r` in a terminal.
 
 The caveats travel as data rather than as text to be read first: the object prints them every time,
-`glv_matrix()` warns and names the cells that hold the stated extreme (+10 obligate, -10 abolished) and
-takes `placeholders = "na"` or `"zero"` to convert them, `glv_scale()` brings off-diagonal cells that
-outweigh the self-limitation down to a size a simulation survives, and `as_miasim()` stops when an
-organism has no growth rate, since a simulation cannot invent one. `grownet derive ... --report-rates --to-r` does the same from the command line, and `grownet_glv(url)` reads the parameters from the page
+`glv_matrix()` takes one matrix per abundance unit (`unit = ` picks one when the organisms were counted in
+more than one way), `glv_rates()` the matching rates, `glv_scale()` is unnecessary for fitted coefficients
+and says so (it stays for the effect-size parameters of 0.2.0 and
+earlier, which the package still reads), and `as_miasim()` stops when an organism has no growth rate,
+since a simulation cannot invent one. `grownet derive ... --report-rates --to-r` does the same from the command line, and `grownet_glv(url)` reads the parameters from the page
 when no port can be opened. The R package's own README is [`r/README.md`](r/README.md).
 
 ## Send it to Cytoscape
@@ -371,7 +378,7 @@ taxon's rank, and a few records still carry a species-level id, which mGrowthDB 
 
 `effect` is the direction, one of `facilitation`, `inhibition`, `neutral`; the default derivation uses
 `neutral` only for a mean of exactly zero, which has no direction and is always absent (see below), and it
-remains for the retired baseline and existing files. `strength` and `significance` are your
+remains for files written by earlier versions. `strength` and `significance` are your
 method's numbers (or `null`). **The three numbers of the test run in two directions, so read the names:**
 `p_value` is the raw p-value, `q_value` is that value corrected for multiple testing (smaller is stronger
 evidence), and `significance` is `-log10(q_value)` (larger is stronger evidence, 0 at q = 1, capped at 15
@@ -400,18 +407,51 @@ table: the organisms in the header row and in the first column, and `A[i][j]` th
 affected, columns the actor), so `dx_i/dt = x_i (r_i + sum_j A[i][j] x_j)` reads in that order. A matrix
 holds one cell per ordered pair, so arcs of one pair merge across conditions and studies by their median,
 and a pair whose arcs disagree in sign is left at 0. An empty cell and an arc below the absence threshold
-are 0; an obligate interaction is +10 and an abolished one -10, a stated extreme rather than a measured
-ratio, since one side did not grow at all. The diagonal is 0 here.
-`--glv FILE` (with `--report-rates`) writes the parameters of a generalized Lotka-Volterra simulation as a
-zip: `interaction_matrix.csv`, the same matrix with -1 on the diagonal by convention for self-limitation;
+are 0; an obligate or abolished interaction carries a measured bound rather than a ratio, since one side
+did not grow at all: the no-growth rule allows that side at most its factor over its own measured start,
+which bounds the cell from below or from above, and the report prints the rule behind each one. The
+diagonal is 0 here.
+`--glv FILE` (with `--report-rates --metric growth_rate`, or `--glv-mode`, which sets both) writes the parameters of a
+generalized Lotka-Volterra simulation as a zip, as **fitted coefficients**: one
+`interaction_matrix.<unit>.csv` per abundance unit. **What a cell is depends on the derivation, and the
+`README.txt` in the zip states the one that made it.** Under the default, every cell including the
+diagonal is a parameter of the least squares that fitted that organism's row, and the carrying capacity in
+`growth_rates.csv` is `-r_i / A[i][i]`, the plateau that fit implies; `capacity_source` says so per
+organism, and an organism whose fit implies no plateau has a measured one put in its place and is named
+under DIAGONALS THAT ARE NOT A FIT. Under `--derivation replicate` the direction is the other way round:
+`A[i][i] = -r_i / K_i` with K the plateau the curves were observed to hold, and
+`A[i][j] = (r_with - r_without) / x_j` off it, the difference between i's own growth rate with j and
+without it over the partner's abundance across i's growth window, so a pair where one side did not grow is
+a measurement rather than a convention, and an organism that grows only with a partner gets `r_i = 0` and
+a self-limitation fitted at its plateau beside that partner.
 `growth_rates.csv`, one rate per organism in the same order with how many values it rests on, and beside
-it the estimator, the Baranyi lag and the monoculture carrying capacity with its abundance unit; and
-`README.txt`, which states every convention, names the pairs left at 0 for disagreeing in sign, the cells
-that hold the stated extreme, the organisms without a rate, and the media the arcs were measured in. A
-simulation is of one environment, so a package built from several media says so and points at the second
-box. The numbers are effect sizes, not fitted
-gLV coefficients: a gLV coefficient is a per-capita effect in absolute units, so scale them for your
-model.
+it the estimator, the Baranyi lag and the carrying capacity with its abundance unit, how many curves it
+rests on, how many gave none, and how far those curves had fallen from their peak
+(`capacity_fall_from_peak`: 1 is a curve that ended at its peak). The matrix CSV keeps four significant
+digits and `/glv.json` carries the raw float, so the two routes agree to four significant digits and no
+more: a reader who diffs them will find a difference in the fifth, and neither is wrong. And `README.txt`,
+which states every formula and unit, names the pairs left at 0 for disagreeing in sign, every organism and
+effect that could not be fitted and why, and the media the arcs were measured in. A simulation is of one
+environment, so a package built from several media says so and points at the second box. Every cell is a
+per-capita effect in 1/(time x abundance), so nothing in the package is a convention and nothing needs
+scaling; abundances are never converted between units, which is why each unit has its own matrix.
+
+**The default derivation, from the whole time course.** `--derivation integrated`, which is what runs
+unless the Derivation setting is changed, fits each organism's row rather than comparing replicate sets:
+`ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt)` is linear in the parameters, so one
+least-squares fit per organism gives its rate, its own limitation and every partner's coefficient at
+once, with no growth property, no log2 ratio, no plateau to certify and no partner abundance to divide by.
+The monocultures identify `r_i` and `A_ii` and are held fixed while the co-cultures give the partners. The
+model has no lag term and no death term, so the rows start where growth starts and stop where it ends.
+Every arc carries the coefficient, the residual and the condition number of its fit; a row the design
+cannot identify, and a community of three or more members, are reported rather than derived.
+
+**Scoring the package against a chemostat.** `--steady-check` (with `--report-rates --live`) scores the
+gLV parameters against the steady states mGrowthDB holds for these organisms in continuous culture: a
+chemostat satisfies `A x = -(r - D)` at steady state with D the dilution rate it records, and those
+numbers were never used to fit the parameters. The comparison goes into the report and into the package as
+`steady_state_check.txt`, predicted against observed per organism, with every chemostat it could not use
+and why. It is off by default, since it reads curves a search does not otherwise need.
 
 **Drop-out designs.** A community of three or more members, together with experiments holding the same
 community without one member under the same conditions, gives an arc from each removed member to each
@@ -423,7 +463,18 @@ usually environmentally specific; under different conditions they give separate 
 of those conditions, so a comparison never mixes media, and the second box on the page (`--conditions`) is
 how you look at one of them rather than all. Because mGrowthDB
 does not detail medium components well, their descriptions must also agree, apart from a trailing run
-number ("All 1" and "All 2" pool; "with initial acetate" and "without initial acetate" do not).
+number ("All 1" and "All 2" pool; "with initial acetate" and "without initial acetate" do not). The same
+reading of a description gives a medium its identity: its compartments' names without case, punctuation
+or a parenthesized abbreviation, plus every alteration the description states with its amount, plus the
+atmosphere where one is recorded. Reading the descriptions tells several times as many media apart as the
+names alone do, and the alias table below then merges the names that are one medium spelled two ways.
+It is what decides which plateaus a carrying capacity may be pooled over (one medium, never
+more), which chemostat a gLV package may be scored against, and what the second box reaches; where two
+studies spell one medium differently, grow**net** says the names differ and names the word rather than
+merging names that disagree. Two live names disagree with the others rather than being less complete, a
+misspelling and a short form of one medium, and those are merged by a hand-curated alias table
+(`grownet.media.WORD_ALIASES` and `NAME_ALIASES`). It is the only place the tool calls two names that
+disagree one medium, so it says so wherever it changed an answer.
 Each arc is compared over its own window, the target's curves in the two sets, so one short curve
 elsewhere in the design does not shorten every arc. A design does not
 need every drop-out. mGrowthDB still measures the removed member in a drop-out experiment; that curve is
@@ -501,7 +552,8 @@ set without growth is zero from its first time point, so no growth cannot be tol
 counts below detection. Such an edge keeps its `status` and is exported. With `--max-adjusted-p`, an arc
 with no p-value carries `untested`: the filter kept it without judging it.
 `notes` inform without disqualifying, for example a replicate left out for an implausible spike. Every
-comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2 values:
+comparison with at least two replicates per side is also tested, with the test its derivation runs and
+`meta.statistics` names (Welch's t-test on the per-replicate log2 values for the specified comparison):
 `p_value` is the raw value, `q_value` the adjusted one (Benjamini-Hochberg by default,
 Benjamini-Yekutieli with `--correction by`) across all comparisons tested in the derivation: one study
 with `derive STUDY`, every study a search reads with `--species`, `--all` or the page, absent and
@@ -571,11 +623,32 @@ before you implement one.
 
 ## How the derivation works
 
-`ReplicateDeriver` (`src/grownet/derive.py`) is the default. It reads each replicate's measured growth
-curve from mGrowthDB and compares replicate sets on the log2 scale, over the area under the curve by
-default (`--metric max` for maximal abundance, `--metric growth_rate` for the maximum specific growth
-rate). Every edge therefore carries a spread, not just a number:
-its mean, standard deviation, standard error, and the replicate counts behind each side.
+`IntegratedDeriver` (`src/grownet/integrated.py`) is the default since 0.3.0. It fits each organism's
+whole row from its time course: `ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt)` is linear in
+the parameters, so one regression per organism gives its growth rate, its own self-limitation and every
+partner's per-capita coefficient together, in the units a gLV simulation reads. It is fitted in two
+stages, the monocultures first and then the co-cultures, because a single joint fit inside one experiment
+is not identified. Each arc carries two spreads measured on two disjoint designs and never mixed: the
+co-culture replicates' own scatter, and the monoculture stage's, from resampling those monocultures. They
+are added to give the standard error the t-test uses, with a Satterthwaite degrees of freedom, so an arc
+whose monoculture stage is poorly determined is not tested as though that stage were exact. Beside them an
+arc carries how much of the organism's own log abundance change the fit explains, the same for the row
+with every partner set to zero, the condition number of the design, the share of the measured course the
+rows cover, and the fractional change in the monoculture rate that would drive the coefficient to zero.
+A row whose fit explains less than predicting nothing does is refused and named.
+
+Why it is the default (Karoline, 2026-10-06): it is the form published work uses for this purpose, and it
+is not biased by construction. The alternative below estimates a coefficient as a difference of two
+separately fitted rates divided by one partner mean, and that quantity is the coefficient plus a term in
+the organism's own density, which is set by the inoculum rather than by the partner.
+
+`ReplicateDeriver` (`src/grownet/derive.py`) is the alternative, `--derivation replicate`, and the
+comparison the collaboration specified. It reads each replicate's measured growth curve from mGrowthDB
+and compares replicate sets on the log2 scale, over the area under the curve by default (`--metric max`
+for maximal abundance, `--metric growth_rate` for the maximum specific growth rate). Every edge
+therefore carries a spread, not just a number: its mean, standard deviation, standard error, and the
+replicate counts behind each side. It needs only two measurements per set, so it is what a sparsely
+sampled study can still give.
 
 Curves are compared over a shared time window, so no curve is extrapolated: from the common first time
 point to the earliest last time point among the curves compared, with the value at that end interpolated
@@ -599,8 +672,11 @@ implausible spike. Low-quality edges are computed and then hidden at output, wit
 to show them; `meta.hidden` says how many were left out, so a network file never quietly under-reports.
 Single-replicate edges are the exception: they are shown, flagged, and marked by the Cytoscape style.
 
-Each comparison with at least two replicates per side also gets Welch's t-test on the per-replicate log2
-values, reported as `p_value`, as `q_value` (the correction over every comparison tested in the
+Each comparison with at least two replicates per side is also tested, with the test its derivation runs
+and `meta.statistics` names: Welch's t-test on the per-replicate log2 values for the specified comparison,
+and for the integrated form, which compares no sets, its fitted log2 strength against no effect over a
+standard error carrying both the co-culture replicates and the monoculture stage. It is reported as
+`p_value`, as `q_value` (the correction over every comparison tested in the
 derivation, Benjamini-Hochberg by default, in `meta.statistics`) and as `significance`, which is
 `-log10(q_value)`. The test supports an edge when significant and decides nothing unless
 `--max-adjusted-p` is given: with two or three replicates a real
@@ -622,8 +698,10 @@ hidden absent arc per genus pair. With both on, the arcs of each pair are merged
 a pair measured in several studies counts once. The genus is the first word of the name mGrowthDB records,
 not NCBI's lineage (register item 24).
 
-`BaselineDeriver` remains only as the retired placeholder, reachable with `--deriver`. The open method
-choices, and who settled each, are in [docs/METHOD_NOTES.md](docs/METHOD_NOTES.md).
+The placeholder derivation grow**net** shipped before either real method existed was deleted in 0.3.0;
+what it did is recorded in [docs/METHOD_NOTES.md](docs/METHOD_NOTES.md), where the register's
+`[baseline]` tags say which option it took in each menu. The open method choices, and who settled
+each, are in the same file.
 
 ## Guardrails
 

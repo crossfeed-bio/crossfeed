@@ -92,6 +92,17 @@ def send(payload: dict, port: int = DEFAULT_PORT, timeout: float = 30.0) -> dict
                      "grownet R package") from None
     if not isinstance(answer, dict) or not answer.get("received"):
         raise RError(f"the listener on port {port} did not confirm the parameters: {text[:200]!r}")
+    # an R package older than the payload reads no organisms out of it and still answers "received", so
+    # the page said it had sent n organisms while the R session held an empty matrix (found 2026-10-06).
+    # The check is here because this is the side that can be upgraded.
+    sent = sum(len(block.get("organisms") or ()) for block in (payload.get("matrices") or ()))
+    if sent and not answer.get("organisms"):
+        # "send again" could not work on its own: the listener stops after one payload, so the reader
+        # has to start it again before anything can arrive (#142 item 10)
+        raise RError(f"the R session received the parameters and read no organisms out of them, so its "
+                     f"grownet package is older than this one ({payload.get('format', 'the payload')}). "
+                     'In R: remotes::install_github("crossfeed-bio/crossfeed", subdir = "r"), then '
+                     'library(grownet) and grownet_listen() again, and send once that is waiting.')
     return answer
 
 

@@ -25,8 +25,24 @@ def _value(key: str, value) -> str:
     return "none" if value == "" else str(value)
 
 
+def _bound_line(e) -> str:
+    """How the report writes a censored arc's cell: a bound, with the rule that produced it (#129)."""
+    size = getattr(e, "strength_bound", None)
+    if size is None:
+        return ""
+    direction = "at least" if size > 0 else "at most"
+    return f"{direction} log2 {size:+.4g}" + (f" [{e.bound_rule}]" if e.bound_rule else "")
+
+
 def _mean_sd(e) -> str:
     if e.strength is None:
+        bound = _bound_line(e)
+        if bound:
+            return f"no ratio (one side did not grow), so the cell is a bound: {bound}"
+        # a ratio is also undefined when both sides grew and the fitted effect at least cancels the
+        # organism's own rate, which is not "one side did not grow" (found 2026-10-06)
+        if e.outcome not in ("obligate", "abolished"):
+            return "no log2 ratio: the fitted effect at least cancels this organism's own growth rate"
         return "no ratio (one side did not grow)"
     return f"log2 mean {e.strength:+.2f}" + ("" if e.sd is None else f" +/- {e.sd:.2f}")
 
@@ -45,8 +61,34 @@ def _edge_line(net, e) -> str:
     else:
         parts.append(f"replicates {e.n_with if e.n_with is not None else '?'} with / "
                      f"{e.n_without if e.n_without is not None else '?'} without")
+    # the q-value under its own name, and `significance` under its own. This printed `significance`,
+    # which is -log10(q), labelled "adjusted p": a reader screening the report for "adjusted p < 0.05"
+    # therefore discarded every strongly supported arc and kept the ones with q near 1, since the label
+    # ran the opposite way to the number (found 2026-10-07; the line predates 0.3.0)
+    if e.q_value is not None:
+        parts.append(f"adjusted p (q) {e.q_value:.3g}")
     if e.significance is not None:
-        parts.append(f"adjusted p {e.significance:.3g}")
+        parts.append(f"significance -log10(q) {e.significance:.3g}")
+    if getattr(e, "coefficient", None) is not None:
+        parts.append(f"fitted coefficient {e.coefficient:.4g} {e.coefficient_unit}".strip())
+        if e.fit_r2 is not None and e.fit_condition is not None:
+            # the same row with no interactions at all beside it, so a reader sees how much the partners
+            # bought rather than taking the fit's own R2 as evidence of an interaction (#142 item 9)
+            null = getattr(e, "fit_null_r2", None)
+            beside = f" (no interactions at all: {null:.3f})" if null is not None else ""
+            parts.append(f"fit r2 {e.fit_r2:.3f}{beside}, condition {e.fit_condition:.3g}")
+        # the two halves of the standard error, on their own designs, so a reader can see which stage the
+        # uncertainty comes from and that the rate stage reached the test at all (#142 item 2)
+        if getattr(e, "se_rate_stage", None) is not None:
+            parts.append(f"se {e.se_replicates:.3g} from the co-culture replicates and "
+                         f"{e.se_rate_stage:.3g} from the rate stage"
+                         + (f" ({e.rate_stage_method})" if e.rate_stage_method else ""))
+    if getattr(e, "metric_with", None) is not None and getattr(e, "metric_without", None) is not None:
+        parts.append(f"{name[e.target]} at {e.metric_with:.4g} with / {e.metric_without:.4g} without "
+                     f"({e.metric})")
+    if getattr(e, "partner_abundance", None) is not None:
+        parts.append(f"{name[e.source]} at {e.partner_abundance:.4g} "
+                     f"{e.partner_abundance_unit} over the window")
     parts.append(f"condition {e.condition}")
     if e.medium:
         parts.append(f"medium {e.medium}")
@@ -158,14 +200,56 @@ def report_text(result: dict) -> str:
                 extra.append(f"lag {rate['lag']:.3g} {rate.get('unit', '1/h').removeprefix('1/')}")
             if rate.get("capacity") is not None:
                 extra.append(f"carrying capacity {rate['capacity']:.4g} {rate.get('capacity_unit', '')}"
-                             f" from {rate.get('capacity_n', 0)} curve(s)")
+                             f" from {rate.get('capacity_n', 0)} "
+                             + ("row(s)" if rate.get("n_label") else "curve(s)"))
+                # a certified curve that grew, peaked and then declined has its peak recorded as the
+                # plateau, so what it held at the last measurement is published beside it (Karoline,
+                # 2026-10-07, closing open decision 4 of #141)
+                fall = rate.get("capacity_fall")
+                if fall is not None and fall > 1.01:
+                    extra.append(f"those curves ended at 1/{fall:.3g} of their peak (median)")
+            # the help promises that every curve giving no capacity is named here with its reason, and
+            # nothing rendered them: an empty carrying capacity read as absence (found 2026-10-06)
+            # a capacity comes from one medium and is never pooled across them, since it sits beside
+            # off-diagonals measured in one of them (Karoline, 2026-10-07). The medium it came from is
+            # said, and so is every other medium this organism has a plateau in, which the second box
+            # can ask for.
+            # where the self-limitation behind the diagonal came from: fitted with the partners, or
+            # -r/K at a measured plateau because the fit implied none (#142 item 7)
+            if rate.get("capacity_source"):
+                extra.append(rate["capacity_source"])
+            if rate.get("capacity_medium"):
+                extra.append(f"capacity measured in {rate['capacity_medium']}")
+                # more than one spelling means the alias table merged names that disagree, which is said
+                spellings = [name for name in (rate.get("capacity_medium_spellings") or [])
+                             if name != rate["capacity_medium"]]
+                if spellings:
+                    extra.append("also recorded as " + ", ".join(spellings)
+                                 + ", read as one medium by the alias table")
+            others = rate.get("capacity_other_media") or []
+            if others:
+                extra.append(f"{len(others)} other medium(s) hold a plateau of this organism, named below")
+            left = rate.get("capacity_left_out") or []
+            if left:
+                extra.append(f"{len(left)} curve(s) gave no capacity")
+            # a derivation that fits each row has fitted rows rather than monoculture replicates, and
+            # says so, so the count is not read as a number of cultures (#142 item 4)
             lines.append(f"  - {rate.get('name', nid)}: {rate['rate']:.4g} {rate.get('unit', '')}, median of "
-                         f"{rate.get('n', 0)} monoculture replicate(s)"
+                         f"{rate.get('n', 0)} {rate.get('n_label', 'monoculture replicate(s)')}"
                          + (f" ({per_study})" if per_study else "")
                          + ("; " + ", ".join(extra) if extra else ""))
+            for label in others:
+                lines.append(f"      a plateau in {label} is not pooled into the capacity above")
+            for label, why in left:
+                lines.append(f"      no capacity from {label}: {why}")
         missing = rates.get("without_a_rate") or []
         if missing:
             lines.append("  no growth rate (a gLV simulation needs one from elsewhere): " + ", ".join(missing))
+        lines.append("")
+
+    if result.get("steady") is not None:
+        from .steady import as_text
+        lines += as_text(result["steady"]).splitlines()
         lines.append("")
 
     skips = condensed(result["skipped"])

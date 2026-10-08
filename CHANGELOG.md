@@ -6,7 +6,17 @@ content.
 
 ## [Unreleased]
 
-### Changed
+## [0.3.0] (unreleased)
+
+### Upgrading
+- **The default derivation is now the integrated form** (`--derivation integrated`, Karoline,
+  2026-10-06): each organism's row is fitted from its whole time course rather than from a difference of
+  two separately fitted growth rates divided by one partner mean. It is the form published work fits for
+  this purpose, and the difference form's coefficient carries the organism's own density as a confound,
+  which no number of replicates removes. The specified comparison of replicate sets is unchanged and is
+  one setting away, `--derivation replicate`, and it is what a sparsely sampled study can still give: the
+  integrated form needs a time course, so a study measured at two or three points now yields nothing by
+  default and the page says which setting to change.
 - **The network format id moves to `grownet.interaction_network/v2`** (#121, Craig's agent's trace).
   Files from 0.1.x (`/v0`) and 0.2.x (`/v1`) stay valid and `grownet validate` still names the version it
   read. The id is what `published.fresh` checks before an installed copy uses the daily All network, and
@@ -14,10 +24,539 @@ content.
   every field a document carries. Under the unchanged id that copy would have accepted the next daily
   artifact and then raised inside the All button, with the derive-live fallback never reached. With the id
   moved it reads the artifact as a format it does not know and derives live, which is what the fallback is
-  for. Two readers are hardened with it: a field a reader does not know is now dropped rather than raising,
-  and any failure to read the published network means derive live.
+  for. A reader of its own is unaffected: nothing an older field means has changed, and the new fields are
+  optional. Two readers are hardened with it: **every** record kind now drops a field it does not know
+  rather than raising, nodes and studies as well as arcs, and any failure to read the published network
+  means derive live.
+- **Reinstall the R companion package** when you upgrade: `remotes::install_github("crossfeed-bio/crossfeed", subdir = "r")`.
+  A 0.2.0 R package reads no organisms out of a 0.3.0 payload. Send to R now says so and names that
+  command rather than reporting a successful send into an empty matrix.
+- **A gLV package now states where its matrix settles**, and says plainly when it settles nowhere with
+  every organism above zero. Nothing about the coefficients changed because of it; the equilibrium was
+  always the solution of `A x = -r` and the reader had to work it out.
 
 ### Added
+- **Each arc says what both sides of its comparison were inoculated at** (#81, Karoline on 2026-10-08).
+  mGrowthDB's `inoculumConcentration` is empty in every experiment checked and its descriptions state a
+  starting density unsystematically, so the number is taken from the first measured abundance, which the
+  curves always carry. The note gives both sides and the factor between them, and says plainly when that
+  factor is above 3, so a reader can see that an arc rests on a monoculture started several times denser
+  than its co-culture. It is **reported and never matched on**: across the comparisons the tool makes the
+  two sides agree to a median of 1.17 times and differ by more than 3 times in 6 of 39, and those six are
+  a choice about how to start a co-culture rather than a confound, so putting a starting density in the
+  condition key would discard measurements. On the live All network **all 12 arcs carry the note and the
+  warning fires on 4 of them**, the largest being a co-culture started 7.43 times thinner than the
+  monocultures it is compared with.
+
+### Changed
+- **A monoculture fit is refused for model failure rather than for the rate's sign** (#160, Karoline on
+  2026-10-08, taking Craig's agent's option 2). A non-negative `A_ii` is no self-limitation: the fit
+  implies no plateau and an unbounded culture, which is the direct answer to whether the model describes
+  the curve. The old guard read the sign of the rate, which on SMGDB00000006's *S. thermophilus* kept the
+  one replicate of three whose rate happened to land above zero while all three had fitted a **positive**
+  self-limitation; because only a near-zero positive survives such a cut, the survivor is biased toward
+  zero by construction, which produced a published rate of 0.0109 /h, a 64 hour doubling time for a dairy
+  starter. A non-positive rate is still refused.
+  Three things move on the live corpus. *S. thermophilus* loses its rate, so SMGDB00000006 yields a
+  one-organism matrix rather than a pair. *A. tumefaciens*'s rate moves from 0.1022 to **0.1579 /h**,
+  because two of its three replicates had fitted tiny positive self-limitations and were contributing to
+  the median unnoticed. And the All network goes from 14 arcs to 12: the two lost are
+  *L. delbrueckii* -> *S. thermophilus* (q 0.024, which was significant) and
+  *Comamonas* -> *A. tumefaciens* in metalworking fluid (q 0.064, which was not). **A significant arc is
+  withdrawn**, and that is the point rather than a cost: it rested on a rate of 0.0109 /h that only a
+  sign cut on the wrong statistic had kept.
+
+### Removed
+- **The retired `BaselineDeriver` is gone** (#139). It was the placeholder grownet shipped before either
+  real derivation existed: one summarized `growthRate` per culture, `log2(co / mono)` with a fixed
+  deadband, no replicates, no spread, no test. It had been off the default path since #34 and reachable
+  only through `--deriver`, and the seam it was built to demonstrate now holds two real derivations.
+  `interactions_from_experiments`, `_strain_growth`, `DEADBAND` and the baseline's own method label go
+  with it, each having had no other caller. Nothing user-facing changes: no default path and no
+  documented workflow used it, and `derive SMGDB00000004 --live` gives the same network as before, to the
+  byte apart from its two timestamps. What it did is recorded in `docs/METHOD_NOTES.md`, where the
+  register's `[baseline]` tags say which option the first implementation took in each menu.
+
+### Fixed
+- **Fifteen smaller things, from the two reviews** (#142 items 10, 14 and 15). A reader drops a field it
+  does not know for **nodes and studies** as well as edges, so the 0.2.0-against-0.3.0 failure is no
+  longer armed for the next release that adds one. The shipped JSON Schema and the model agreed in
+  neither direction, which nothing asserted: `merged_arcs`, `strength_range`, `supporting_pairs` and
+  `merged_pairs` were emitted and undeclared, and a test now closes the loop for all three record kinds.
+  `grownet validate` names a key the format does not declare, which is the only place a misspelling can
+  be caught now that the reader drops it. `_least_squares` scores its stage about zero, since the model
+  has no intercept, and its docstring says its condition number is of the normal equations and not of the
+  design, which differ by a square. A co-culture replicate refused for too few usable points says that,
+  rather than the informational window note that replaced the real cause 196 times over the corpus.
+  `rbridge.send`'s refusal tells the reader to run `grownet_listen()` again, which "send again" needed
+  and did not say. `check_release.py` reads `r/DESCRIPTION`, which RELEASING.md calls the only signal an
+  installed R copy is out of date, and runs **on every build** with no tag, in `make check` and in CI,
+  instead of firing first when somebody pushes the tag. The drop-out setting says it applies to the
+  comparison of replicate sets only, since the default derivation refuses a community of three or more,
+  and the prefetch no longer reads those designs under the default. The one-unit-per-organism invariant
+  is re-checked in `matrix.py` rather than assumed, with the comment pointing at `derive` where it is
+  enforced, and `plateaus()` names a plateau it leaves out instead of dropping it on a bare `continue`.
+  GraphML carries the absence rule and its threshold, the suppressed counts and the test the derivation
+  ran, so an edge marked absent can be read against the `k` that marked it on the route Cytoscape uses,
+  along with the fit's null R2 and the two halves of its standard error. The eight `meta` keys that said
+  "a promise of the format" say what is true instead, that a current derivation writes them and their
+  meaning is fixed, since a `required` list would break older artifacts. And a test asserts that the
+  package's matrix CSV and `/glv.json` carry the same numbers to four significant digits, which the
+  README now states, since the CSV is `.4g` and the payload is the raw float.
+- **A row the package publishes is now the row that was fitted** (#142 item 7). An organism whose fit
+  implies no plateau was given the measured one *after* its partners had been fitted against the fitted
+  self-limitation, so the published row satisfied no equation anyone had fitted and its R2 and condition
+  number described a row that was not published: on *S. thermophilus* the self term moved by 2.24 times
+  the whole partner coefficient the row's claim rested on, and in the opposite direction, and the
+  substitution manufactured an equilibrium in which that organism settles at twice the plateau that was
+  substituted in. It was not condition-matched either: on SMGDB00000013 it gave ancestral
+  *A. tumefaciens* the evolved line's plateau, 56 times the ancestral organism's own. The substitution
+  now happens before the partners are fitted, from the monocultures of the co-culture's own condition, and
+  `capacity_source` says where every diagonal came from, in the report, the rates CSV and the payload. The
+  second pass that re-read every study's monocultures to substitute afterwards is gone, with the crawl it
+  cost.
+- **A lag the Baranyi fit found and the guards discarded is no longer dropped in silence** (#142 item 8).
+  A lag at least half the run was discarded, which is the case where it matters most, and the fit then
+  paid for the flat start by trading the rate against the self-limitation: on a seven-point curve with a
+  7.97 h lag it returned a rate 31 times below the project's own estimator, a positive self-limitation, an
+  R2 of 0.909 and a condition number of 13, so every published gate passed it. A lag shorter than one
+  sampling interval cannot move the window and is not used either (56 of the 193 lags used were below
+  1e-6 h). Both guards now say what they did, a monoculture replicate whose lag was discarded for being
+  half the run is refused rather than contributing a rate, and an arc whose organism's own limitation came
+  out not negative carries a note saying it has no row in any matrix and why.
+- **An equilibrium is not printed from a matrix too ill-conditioned to solve** (#142 item 9). It was
+  solved with no condition estimate at all, `steady.solve`'s only test being an absolute pivot below
+  1e-300, and printed to four significant digits with a categorical verdict: a near-singular block
+  returned a number like 1e24 and had it reported as a steady state, and a change of 0.05 percent in one
+  coefficient flipped the verdict. `steady.condition_of` now measures it, nothing above 1e8 is printed,
+  the reason is given instead, and where an equilibrium is printed its condition number is printed beside
+  it. The fit's R2 is scored over the replicates stage 2 actually used, since a replicate the fit never
+  saw could otherwise discard a whole organism, and the interaction-free null is published beside it
+  (`fit_null_r2`), so a reader sees how much the partners bought: on study 7's rows, 0.542 against
+  -17.825 on one and 0.956 against 0.718 on another.
+- **A crash that took out a whole derivation** (#142 item 12, traced by Craig's agent on #134).
+  `design` leaves a partner with no curve out of the columns, since a column of zeros would claim it was
+  absent rather than unmeasured, so a replicate's rows are as wide as that replicate's own partners,
+  while the pooled fallback in `two_stage` asked for the union of partners across replicates.
+  `_least_squares` indexed past the short rows and raised `IndexError`, which nothing caught: the call
+  sits inside the loop over every target organism in every experiment, so one organism in one experiment
+  ended the run for all of them. The shape is ordinary: monocultures of A with co-cultures A+B and A+C,
+  which is pairwise co-culture in a community of three. Only replicates that measured the same partners
+  are pooled now, the largest such set being used and every other named in the report, because padding
+  the short rows with zeros would reintroduce the claim `design` refuses and dropping a partner's column
+  would claim it had no effect at all.
+
+### Upgrading
+- **The strict medium rule now decides every match, not only the capacity** (Karoline, 2026-10-07: "the
+  strict medium matching (exclusion of cases with modifications e.g. mucin addition) should be applied
+  everywhere where medium matching is done"). `conditions` compares the compartment records, and
+  mGrowthDB states a supplement, an added sugar or a removed carbon source only in the **description**,
+  which `media.identity` reads and `conditions` does not. So `conditions` alone put chemically different
+  experiments under one key: on SMGDB00000014 a single `conditions` value covers twelve media, and the
+  monocultures of all twelve were offered to one co-culture, to be told apart afterwards by the wording
+  of their descriptions. One function, `derive.condition_key`, now answers "is this the same condition"
+  for the monoculture index both derivations read, the drop-out designs and the run variants, so the rule
+  cannot hold in one path and not another.
+  **This removes arcs**, and that is the rule working: on the live All network 22 arcs become 14. All
+  eight are SMGDB00000004's, whose co-cultures are recorded in mMCB with and without initial acetate
+  while its monocultures are recorded in plain mMCB, so a comparison across them would read the acetate's
+  effect as the partner's. **No arc with an adjusted p-value below 0.05 is lost** (four before, four
+  after). Where a comparison is refused this way the report says so instead of reporting missing data: it
+  names the medium that was measured, what it has that this experiment does not, and that an added or
+  removed compound makes another environment.
+
+### Fixed
+- **`grownet validate` and the shipped JSON Schema were strict in opposite directions** (#155 item 5). A
+  document with one undeclared **record** key was INVALID to `validate` and valid to the schema, where
+  draft-07 reads an omitted `additionalProperties` as allowing anything; meanwhile the document **root**
+  carried `additionalProperties: false`, so an undeclared top-level key was the other way round, and the
+  standalone viewer, which preserves unknown top-level fields on export, could write a file the schema
+  rejected. Both halves are permissive now, which is what the schema's own sentence promises. An
+  undeclared key is a **note** rather than a problem: calling it a problem also skipped the
+  referential-integrity pass, which runs only when there are none, so one unrecognised field turned off
+  the check that catches an edge citing a study the document does not hold.
+- **The decline limit did not reach the co-culture plateau** (#155 item 10). `derive.target_capacity` is
+  the other place a plateau becomes a self-limitation and was the only one that did not refuse a curve
+  whose peak it had long since lost: 18 live values rested on curves past the limit, several with every
+  curve behind the value past it. The limit now applies there too, and the advanced setting reaches it,
+  which it did not before, so one setting means one thing.
+- **Smaller ones** (#155 item 14). `q_value` was rounded to six **decimal places**, so an adjusted
+  p-value below 5e-7 published as exactly `0.0`, the strongest q there is, and `significance` came out
+  infinite; it is six significant figures now. `published.fetch_from`'s guard covered the fetch and the
+  JSON parse while the `TypeError` its own comment describes comes from `from_payload`, which sat outside
+  it; the whole read is inside now. `meta.study_id` was emitted by every single-study derivation and
+  declared nowhere, because the schema-agreement test covered node, edge and study and not `meta`;
+  `_meta_problems` also ignored an undeclared key in silence while `_unknown_keys` called one a problem
+  three lines away, and both are notes now. `derived_on` was documented as UTC and has always been the
+  local date. `--glv`'s help demanded `--metric growth_rate`, which only the specified comparison needs.
+  `r/README.md` quoted a `print(x)` line the R code cannot produce.
+- **The release workflow published to PyPI without running the suite, the gate or the linter** (#155
+  item 7). Its job graph was `check` -> `dist` -> `install` -> `pypi`, where `check` ran only
+  `check_release.py` and `install` ran `grownet --help` and the smoke script. `ci.yml` does fire on a tag,
+  but the two workflows are independent and nothing linked them, so a tag whose suite was red still
+  reached PyPI, held back only by the optional environment approval. A version on PyPI cannot be replaced,
+  which makes it the one failure in that workflow that cannot be undone. `check` now runs `ruff`,
+  `checks/gate.py` and the whole suite before the tag is believed, and both the workflow's own header and
+  RELEASING.md said otherwise and now say what happens.
+- **The release gate could not be green and honest at the same time** (#155 item 8). With no tag it
+  synthesised `v{version}` and ran the full tag check, including "CHANGELOG.md still marks {version}
+  unreleased", so any tree whose in-development version was marked unreleased failed `make check`, which
+  is the Keep a Changelog convention the file follows. The only green states were to leave the version at
+  the last released one or to mark the next release released before it is; the tree took the second and a
+  test pinned it. That check now applies only when a release is being cut. Two more holes with it: the
+  date agreement read only a parenthesised date, so `## [0.3.0] - 2099-01-01` passed in silence against a
+  different date in `CITATION.cff`, and two files agreeing with each other is not either being right, so
+  a date in the future is now refused. The tree was wrong in exactly that way, dating the release
+  2026-10-06 while every commit in it was 2026-10-07 and both files agreed; both now say 2026-10-07, and
+  a test compares the release's date with the newest commit rather than only the two files with each
+  other.
+- **The package README described the diagonal backwards under the default** (#155 item 11). The
+  off-diagonal prose was branched by derivation and the diagonal's was not, so a package from the
+  derivation that ships said `K_i` is "the plateau of the curves that reached stationary phase" when on
+  that path `A_ii` is a parameter of the fit and `K_i = -r_i / A_ii` is derived from it, the opposite
+  direction, while `capacity_source` in the same zip said "fitted from the monoculture time courses". The
+  diagonal now has its own words per derivation. The promised SELF-LIMITATION FITTED AT A CO-CULTURE
+  PLATEAU section was also unreachable on that path, because it is filled from `edge.target_capacity`
+  which the integrated derivation never sets, so the one diagonal in a package that is **not** a fit
+  appeared in no section at all; a DIAGONALS THAT ARE NOT A FIT section now names those organisms and
+  what was put in place of the plateau their fit did not imply.
+- **Shipped text quoted counts of mGrowthDB, and the counts were wrong** (#155 item 6). The help and the
+  README said the medium names alone give 15 media and the rule gives 60, or 58 with the alias table.
+  Measured over all 559 live experiments with the table on, which is the only way the tool runs, it is 13
+  and 57; the older figures predate the alias table and the rule that a stated amount of zero is not an
+  addition. Karoline's rule is that shipped text quotes no corpus numbers, since they depend on the state
+  of a database grownet does not control, so both passages now describe the rule without counting.
+- **The README and the register described machinery that had been deleted** (#155 item 12). The README
+  still said an arc carries the spread over "leaving out each monoculture replicate in turn" and "the
+  share of that spread" from the monoculture stage, which is the sentence the register formally withdrew
+  as not a share of anything; it now describes the two disjoint designs that replaced it. It headed the
+  integrated form "A second derivation" while calling it the default elsewhere, and gave the comparison's
+  formula as what `--glv` writes for every derivation. `docs/METHOD_NOTES.md`'s live figures are
+  re-measured: 14 arcs, 9 at p < 0.05, 4 at q < 0.05, the monoculture stage dominating on 8 of the 13
+  arcs that have both halves, and a median `fit_r2` of 0.917 with none failing to beat its
+  interaction-free null.
+- **A GraphML exported from the page carried none of the graph-level attributes** (#155 item 4). The
+  Python writer reads them from a nested `meta`: `absence_rule` is `meta.absence.rule`, `absence_count`
+  is `meta.absence.absent`, `statistics_test` is `meta.statistics.test`, and `hidden` is the counts
+  joined. The viewer looked up the flat names directly on `meta`, so four came back empty and `hidden`
+  was written as `[object Object]`. The purpose of adding them was that an absent arc can be read against
+  the `k` that marked it on the route Cytoscape uses, and on that route there was no `k`. The viewer now
+  resolves them the same way, and writes a double whose value is whole as a float, so 2.4e8 is
+  `240000000.0` on both routes rather than differing by a formatting artifact.
+  The test that keeps the two writers equal built its network with no `meta` and a record carrying none
+  of the fitted fields, so every key this release added was skipped on both sides and the equality held
+  vacuously. Its fixture now carries a full `meta` and all thirty-odd arc fields, which is what found the
+  two float cases above.
+- **A stated amount of zero was read as something added** (#155 item 3). SMGDB00000014 states its
+  no-fatty-acid arms as "0% linoleic acid" and "0% oleic acid", and the amount pattern matched the stated
+  zero, so each became a medium with a compound added at zero: two media that do not exist. Neither was
+  plain minimal medium and neither matched the other, though all three are the same plain medium. An
+  addition now needs an amount above zero, in `media.alterations` and in `key_from_label`, which reverses
+  the label it writes, so a network derived before the rule reads as the plain medium rather than
+  disagreeing with a freshly derived one. SMGDB00000014 holds 11 media instead of 12, and the four
+  experiments of the two phantom arms join plain minimal medium.
+  **This changes no number in today's corpus**: the growth rates and all three interaction matrices of
+  the live All package are byte-identical before and after, and SMGDB00000014's three arcs are unchanged.
+  The item recorded an 18.4-fold change to *A. tumefaciens*'s carrying capacity, which was true when it
+  was written and is not now: keying capacities by medium and the strict rule moved that capacity to
+  metalworking fluid, a medium these arms were never in.
+- **The `conditions_unverified` caution had silently stopped firing on drop-out arcs.** `_variants` keys
+  by community and condition, and `_dropout` looked that key up with one element fewer than it was built
+  with, so the lookup missed every time and defaulted to "one variant": two full communities told apart
+  only by their descriptions were no longer cautioned. Found by a test while the key gained the medium.
+- **A capacity came from one medium on one derivation and from several on the default** (#155 item 2).
+  Karoline's decision of 2026-10-07, that plateaus are not pooled across media because a capacity sits
+  beside off-diagonals measured in one of them, was in force for `--derivation replicate` and not for the
+  derivation that ships: `integrated.fitted_rates` collected the media for reporting and then took the
+  median over every fitted row whatever the medium, with `capacity_medium` unset and
+  `capacity_curves_left_out` empty. Fitted plateaus are now collected per medium, the medium with the
+  most rows is published and named, and the rest are named in `capacity_curves_left_out` instead of
+  pooled in. On the live All network four of the eight carrying capacities move: *Roseburia intestinalis*
+  by 5.3 times (3.835e9 to 7.268e8 Cells/mL), *Blautia hydrogenotrophica* by 2.5, *Comamonas
+  testosteroni* by 1.8 and *Agrobacterium tumefaciens* by 1.02, and each gLV diagonal, which is `-r/K`,
+  moves with its capacity. The rate itself is still the median over every row, since a rate is a property
+  of the organism in each medium it was measured in and only the plateau is the one the matrix sits on.
+- **`capacity_fall_from_peak` was always empty under the default derivation** (#155 item 2). The fall was
+  measured inside the measured-plateau rule and discarded, while the help said it is published beside the
+  capacity. It now travels with the plateau, and the help says it is empty where the capacity is the
+  plateau a fit implies rather than one a curve reached, since there no curve exists whose fall could be
+  measured. The help also says the lag column is empty under the default derivation, whose model has no
+  lag term at all.
+- **The gLV example rested on a monoculture fit that had failed, and the help called it the only one of
+  its kind** (#155 item 13). The example moved from SMGDB00000006 to SMGDB00000002. Of the yoghurt pair's
+  three *S. thermophilus* monoculture replicates two were refused for a negative rate and the third was
+  kept at 0.0109 /h, a 64 hour doubling time for a dairy starter, while all three fitted a **positive**
+  self-limitation and so failed in the same way; its carrying capacity had to be taken from one measured
+  curve; and the package's steady state inverted the co-culture it was fitted from by about 90 times. The
+  claim that it was "the only package in the database whose matrix settles with every organism above
+  zero" was false: of the five studies that yield a package of two organisms or more, three settle. The
+  new example's rates are each the median of three monoculture replicates that were all kept and all
+  fitted a negative self-limitation, and its steady state puts both organisms below their own monoculture
+  plateaus in the order the co-culture measured. The walkthrough now ends by holding the simulated steady
+  state against that co-culture, which is the step that catches a package settling where the data never
+  was, and the shipped text no longer claims the example is unique.
+- **`growth_rates.csv` counted fitted rows under `replicates`** (#155 item 13). The column has meant
+  monoculture replicates since 0.2.0, where it was right because the only derivation compared replicate
+  sets. The integrated form merges fitted rows instead, and its row count went into that column, so a
+  rate resting on three monocultures read as resting on one culture and a rate resting on one read the
+  same way. It now holds the replicates the rate stage fitted, `capacity_curves` holds the curves behind
+  the capacity on the same basis, and the row count stays in the text report, which already named it
+  "fitted row(s)". The package README and the recorded rate rule no longer say "median over replicates"
+  of a derivation that takes a median of medians.
+
+### Added
+- **What a gLV model assumes, stated where a reader meets the parameters** (Karoline, 2026-10-07). Two
+  assumptions belong to the form rather than to the fit: every coefficient is constant in time, which a
+  batch culture does not satisfy because the medium is consumed and metabolites accumulate, so an effect
+  can change in size and in sign along the growth curve; and interactions are pairwise and add up, so a
+  higher-order interaction, where a third organism changes how the first two affect each other, has no
+  term in the model. The help has a section of its own, "What a gLV model assumes", ahead of the
+  walkthrough; the package README has "WHAT THIS MODEL ASSUMES"; and the payload carries both as data
+  under `caveats.model_assumptions`, so the zip and the R object say it without the page. Modeling a
+  coefficient that varies with time or with the community stays out of scope; `docs/METHOD_NOTES.md`
+  records the design that answers it instead.
+
+- **Every fitted arc now says how large a rate mismatch would explain it away, and how much of the course
+  it rests on** (Karoline, 2026-10-07). The monoculture rate is held fixed while the partners are fitted,
+  so the arc is the only parameter left to absorb a difference between the rate an organism had alone and
+  the rate it had beside its partner, and no growth curve measures that difference. `rate_mismatch_to_zero`
+  is the fractional change in that rate which would drive the arc's coefficient to zero, exactly and
+  signed, from the derivatives the fit already computes: an arc at 0.5 survives a 50 per cent error in the
+  rate, an arc at 0.04 does not survive 4 per cent. Checked against a simulation with a known mismatch
+  planted in it, where it recovers 0.1109 against the true 0.1111.
+- **A `window_partial` caution, and the share of the course a fit covers** (Karoline, 2026-10-07: "the
+  effect 1 organism has on another can change along the growth curve. this is not something we treat here,
+  but something we can warn about"). The integrated model has no lag term and no death term, so the rows
+  start where growth starts and stop at the end of the plateau after the maximum: a course measured well
+  past its peak is fitted on the early part of itself, and grownet fits one constant coefficient per arc,
+  so an effect that changes along the curve is reported as whatever it was inside the window.
+  `fit_window_share` is the fraction of the measured span the rows cover, a note names both spans, and an
+  arc below half carries the caution. On SMGDB00000002 both arcs between *Roseburia intestinalis* and
+  *Bacteroides thetaiotaomicron* are fitted on 0 to 32 of 120 measured hours and now say so.
+- **A gLV example button, and the steps to simulate it** (Karoline, 2026-10-07). Beside All, **gLV
+  example** fills both boxes and the one setting a package cannot be built without, and runs the search.
+  The study it picks was chosen by running every study that yields a package: SMGDB00000006, two
+  organisms in one abundance unit, both with a fitted rate and a plateau, and the only package in the
+  database whose matrix settles with every organism above zero. The help has a section of its own, "The
+  gLV example, step by step", which installs miaSim, listens in R, prints the matrix and the equilibrium,
+  runs `simulateGLV` deterministically and says what to expect, with the numbers this search gives today
+  and a note that mGrowthDB changes. The route above it stays generic; only the numbers are the
+  example's.
+
+### Changed
+- **The gLV package states the formula its own derivation fitted** (#142 item 6). `README.txt` inside the
+  package, the payload's `caveats.coefficients`, the R package's printout and its `glv_matrix`
+  documentation, the help's gLV section and the About page's 0.3.0 entry all said an off-diagonal cell is
+  `(r_with - r_without) / x_j` over a rate window, which is the comparison's formula and not what the
+  integrated form fits: there a cell is a parameter of the fit of the whole row,
+  `ln(x_i(T) / x_i(0)) = r_i T + sum_j A[i][j] integral(x_j dt)`. The package text now follows the
+  derivation that made it, `caveats.derivation` names it, the R package prints the package's own sentence
+  rather than one of its own, and the static R documentation gives both. The About page also no longer
+  calls the integrated form a second derivation in Advanced settings: it is the default, and the setting
+  switches to the comparison.
+- **A network says what test its own derivation ran, not what the specified comparison runs** (#142
+  items 5 and 11). `meta.statistics` and `meta.provisional` were module constants copied into every
+  network, so a file derived by the integrated form claimed Welch's two-sided t-test on per-replicate
+  log2 values and a comparison of replicate sets, neither of which that form does, and the claim
+  traveled into the JSON, GraphML, the Cytoscape legend, the page, the report and the daily artifact. A
+  derivation now states both, as it already states its `name` and its `method`, and `output_meta` reads
+  them from the derivation that made the records. The ten other places a reader meets the claim say which
+  derivation runs Welch: the arc glossary, the help's statistics section, the correction setting on the
+  page and the command line, the Cytoscape legend, `model.py`'s own documentation of `p_value`, the
+  standalone viewer and the README. `checks/claims_check.py` holds it as a retired claim, so text that
+  says an edge carries Welch's test without naming the derivation fails the build.
+  **And the reason it survived twelve commits is fixed too:** every page, command-line, report, export and
+  threshold test asked for `derivation=replicate`, because the double they share measures two points per
+  set, so the derivation that produces the daily artifact and every default user's file was covered end to
+  end nowhere. `tests/test_default_end_to_end.py` serves simulated gLV time courses, runs the page's own
+  `run_query` with nothing overridden, and asserts both halves: the search gives arcs, and the report, the
+  page, the GraphML and `meta` all describe the derivation that made them.
+- **A fitted rate, plateau and diagonal are the median of every row behind them, not the first one**
+  (#142 item 4). `integrated.fitted_rates` kept the first row it met per organism, so an organism's rate,
+  the plateau its fit implies, the diagonal `-r/K`, the printed equilibrium and the chemostat prediction
+  were all "whichever arc the loop reached first". Every row is now merged by the median, which is the
+  rule register item 14 sets for arcs and `derive.merge_rates` follows for the measured parameters, with
+  each study's own median beside it, the studies sorted and unioned, and a rate in another time unit or a
+  plateau in another abundance unit named rather than converted. Measured live by feeding the rows in both
+  orders: the published rate differed by up to 1.42 times (*C. testosteroni* on SMGDB00000014) and the
+  plateau by up to 1.2 times, while on SMGDB00000004 and 6 the rows agree and the defect was invisible.
+  The count beside a fitted rate also says what it counts now, "2 fitted row(s)" rather than a number of
+  monoculture replicates the fitting path never had.
+- **The integrated form fits each organism's row from the monocultures of its own condition, and its
+  statistics carry both stages' error** (#142 items 1 and 2). Two fixes to the derivation that is now the
+  default. Stage 1 used to be every monoculture replicate of the organism anywhere in the study: it now
+  follows the rule settled on #47, identical recorded conditions and the same description apart from a run
+  number, through the same two functions the specified comparison uses, so both derivations compare like
+  with like. On SMGDB00000014 the arc at 0.75 percent linoleic acid is gone, refused by the R2 gate that
+  it had passed only because stage 1 handed it a rate from the conditions where the organism does grow;
+  the TBHQ arc's coefficient nearly doubles and its reverse direction becomes identifiable. On
+  SMGDB00000007 five arcs become six and every coefficient moves, the largest by 3.2 times. And `sd`,
+  `se`, `p_value`, `q_value` and the absence threshold used to be computed from the co-culture replicates
+  alone, so the monoculture stage was treated as exact in the one place that decides which arcs reach a
+  file: that stage is now resampled over its own replicates, each co-culture replicate carries the exact
+  derivative of its coefficient with respect to the stage's two numbers, and the two variances are added.
+  Both halves are published (`se_replicates`, `se_rate_stage`, `rate_stage_method`, `rate_stage_n`), and
+  `coefficient_sd` and `coefficient_sd_from_rate_stage` now mean what they say, on disjoint designs.
+  Measured over the six studies that give arcs: 20 arcs become 17, p < 0.05 goes from 12 to 9, q < 0.05
+  from 8 to 5, the largest sd grows 8.3 times, and on 5 of the 17 the monoculture stage contributes more
+  of the variance than the co-culture replicates do.
+- **What counts as one medium is a rule now, and it decides every medium comparison** (Karoline,
+  2026-10-07, closing the open decision on #141 and then: "foodnet's strict medium rule should be applied
+  in general in case someone specifies it in the 2nd search box (because such changes alter
+  interactions)"). mGrowthDB names a medium per compartment and states an added sugar, a removed carbon
+  source or a supplement only in the experiment's description, so a medium's identity (`grownet.media`) is
+  its compartments' names without case, punctuation or a parenthesized abbreviation, plus every alteration
+  the description states with its amount, plus the atmosphere where one is recorded. Over the whole
+  database the names alone give 15 media and this rule gives 60, or 58 once the alias table below merges
+  the two names it merges. Four things follow. **A carrying capacity
+  comes from one medium**, the one with the most certified curves, named in `capacity_medium`, with every
+  other medium's plateaus named rather than pooled in, which is the decision itself: a diagonal sits
+  beside off-diagonals measured in one environment. **Every arc records the medium it was measured in**
+  with its alterations, so SMGDB00000014's twelve chemistries no longer all read "Minimal medium (MM)".
+  **A gLV package is scored against a chemostat only when the two media are the same by this rule**, which
+  replaces a subset rule over the names' words that was not transitive and that matched a two-compartment
+  design to one of its own compartments; where two studies spell one medium differently the report now
+  says the names differ and names the word, instead of asserting that the environments do. Two live names
+  do disagree with the others rather than being less complete, SMGDB00000001's "Anerobe" and
+  SMGDB00000005's bare "Wilkins-Chalgren", and keying alone took the chemostat validation from 2 scored to
+  1, so those two are merged by a **hand-curated alias table** (`grownet.media.WORD_ALIASES` and
+  `NAME_ALIASES`, Karoline's call of 2026-10-07) rather than by a looser match, which would also merge
+  names differing by a digit. It is the one place the tool calls two names that disagree one medium, so it
+  is never silent: a chemostat scored across an alias says which entry did it, a capacity whose curves
+  were recorded under several spellings names them all, and the label a reader sees is always what the
+  study wrote. **The second
+  box** still matches a medium as text, because mGrowthDB's names are prose, but says how many media one
+  word reached, and the monocultures it keeps alongside a named comparison must now share the medium and
+  not only the recorded conditions. The rule is foodnet's, the sister tool's, with one adaptation: foodnet
+  also reads "+X" in an experiment's **name**, which is safe for a tool that reads monocultures and is not
+  for grownet, where `At+Ct` and `LB+STneg` name community members and would have split two studies into
+  media that do not exist.
+- **A carrying capacity says how far its curves fell from their peak, and the worst of them are refused**
+  (Karoline, 2026-10-07, closing the open decision on #141). `reached_stationary` certifies a culture that
+  grew, reached a peak and then declined, because it has stopped growing, and the plateau recorded for it
+  is that peak. Measured over all 1,331 per-strain batch curves in the database, 443 certify and 417 of
+  them end more than 10 percent below their peak, the median one at a third of its peak, so a decline is
+  the ordinary shape of a batch culture and refusing every declining curve would leave 20 of the 29
+  organism-study pairs that have a capacity with none. The tail is a different matter: one certified curve
+  hands over a peak 82 million times its last value. So the peak stays, the fall is published beside it in
+  the report, in `growth_rates.csv` (`capacity_fall_from_peak`) and in the gLV payload, and a curve that
+  fell further than the new **Carrying capacity decline limit** gives no capacity and is named with the
+  others that gave none. The limit is an advanced setting and `--capacity-max-fall F`, 10 by default,
+  which reads as "the culture still holds a tenth of its peak at the last measurement"; 0 keeps every
+  certified plateau, as 0.2.0 did.
+- **Send to R and `/glv.json` carry the same numbers as the zip** (#120): the payload is
+  `grownet.glv/v1`, with `matrices`, one per abundance unit, holding fitted coefficients, the rates with
+  the estimator, the lag and the carrying capacity beside each, and every caveat as a field: the cells
+  from a comparison where one side did not grow, the pairs left at 0 for disagreeing in sign, the
+  organisms and effects that could not be fitted, the media, the drop-out count and the standing note
+  that a fit can have no bounded state. The R package reads v1 and still reads v0, says which kind it
+  holds, and gained `unit =` on `glv_matrix()`, `glv_rates()`, `as_miasim()` and `glv_scale()` for the
+  organisms counted in another unit; `glv_scale()` now warns when it is called on fitted coefficients,
+  since their units already match the diagonal and scaling hides an unbounded fit rather than settling
+  it. `glv_write()` writes one matrix per unit and anything the payload carried beside the numbers, such
+  as the steady-state check. The page, the help and both READMEs say one thing rather than two, and the
+  effect-size README that only this route still used is gone.
+- **An organism with no certified monoculture plateau is fitted at its co-culture plateau** (#124 item 2,
+  Karoline's "complete #124" of 2026-10-06), rather than left out of the package. The balance is the one
+  #123 introduced for an organism that grows only with a partner, `0 = r_i + A_ii x_i + sum_j A_ij x_j` at
+  its plateau, with every abundance measured; where it comes out at or above zero, which means the
+  partners suppress the organism harder than its own rate, the organism is still named instead. Measured:
+  SMGDB00000004's package now holds all three of its organisms and five fitted cells rather than two
+  organisms and one, because B. hydrogenotrophica never settles alone in that study. **Each matrix also
+  names the media its own arcs came from** (item 5), which keeps media together in one matrix per unit
+  rather than fragmenting the corpus into one matrix per medium, since the second box already holds a
+  search to one environment.
+- **A censored cell of the plain adjacency matrix holds a measured bound, not the stated +/-10** (#129,
+  Karoline's decision of 2026-10-06: "go with the bound in #129 following your recommendation"). A pair is
+  censored because the no-growth rule judged one side not to have grown, and that rule bounds that side's
+  own metric: at most its factor (1.5 by default) over its own measured start, which bounds the cell from
+  below for an obligate pair and from above for an abolished one. The arc carries the bound and the rule
+  behind it (`strength_bound`, `bound_rule`), the report prints both, and the gLV payload lists the
+  bounded cells beside the conventional ones a network derived earlier still has. Where the rule bounds
+  nothing away from zero, which happens with the area under the curve because a culture that did not grow
+  still carries the area of its own inoculum, the cell stays 0 and says which growth property bounds it
+  tightly. Measured on SMGDB00000013: with the growth rate the seven censored arcs come out between +4.4
+  and +5.9 log2, in place of a flat +10, which as a log2 mean claimed a thousandfold effect.
+- **Every cell of the gLV package comes from absolute rates, and an obligate pair is a measurement**
+  (#123, her decision of 2026-10-06 after asking "Do we keep obligates despite the lack of a floor? If
+  not, how can we keep them?"). The formula she settled is the same number written as a difference,
+  `A_ij = (r_with - r_without) / x_j`, and that form is defined where the ratio is not: an obligate pair
+  measured 0 without the actor and an abolished one 0 with it, so **the floor and the stated extreme are
+  both gone from the package**, and such a cell enters the median of its pair like any other measurement.
+  An organism that grows only with a partner now gets a whole row: `r_i = 0` by measurement, and its
+  self-limitation fitted at the plateau it reaches beside that partner, `0 = A_ii x_i + sum_j A_ij x_j`
+  there. Both rates behind every arc, and the target's own plateau in the co-culture, travel on the arc,
+  in the schema, in GraphML, in the Cytoscape style and in the report, so every cell can be rebuilt by
+  hand. A cell also no longer mixes sources: it used one experiment's ratio with a rate averaged over
+  every study, and now both rates come from the same comparison. A network saved before this change
+  carries no absolute rates and still converts through the ratio, with the README naming those cells.
+  Measured: on SMGDB00000013 four censored pairs become measurements and one of them enters the matrix;
+  on the whole corpus the cells move by up to a third and the chemostat check stays in the same range
+  (1.6 and 3.2 times the observed steady state of SMGDB00000005's control).
+- **The gLV package holds fitted coefficients, one matrix per abundance unit** (#119, Karoline's decision
+  on #116). The diagonal is `A[i][i] = -r_i / K_i` with K the monoculture carrying capacity, and an
+  off-diagonal cell is `A[i][j] = r_i (2^L - 1) / x_j` with L the log2 ratio of i's growth rate with j
+  over without it and x_j the partner's abundance over i's growth window, so every cell is a per-capita
+  effect in 1/(time x abundance). No convention is left in the package: no -1 diagonal, no +/-10, and
+  nothing to scale. The zip holds one `interaction_matrix.<unit>.csv` per abundance unit, since a cell
+  mass conversion would have to be invented while the dynamics are the same in any unit, and the README
+  names every organism and effect that could not be fitted and why. An obligate or abolished pair takes a
+  derived floor, the largest magnitude measured in the same run, rather than a stated extreme.
+  A package therefore needs the comparison to be on the growth rate: **gLV mode now also sets the growth
+  property to `growth_rate`**, `--glv` says which setting to change when it cannot convert, and the page
+  says the same instead of failing. The rate estimator stays the reader's own setting, easylinear by
+  default (Karoline, 2026-10-06: "use the lag from Baranyi and easylinear since it works better (users can
+  always enforce Baranyi in the advanced options)"), and **the lag is always the Baranyi fit's**, the only
+  estimator that has one, with `growth_rates.csv` naming both in `method` and `lag_method`. Measured on
+  #116: every cell of a row carries the factor r_i, so the estimator sets how fast a simulation moves and
+  nothing about where it settles. The plain adjacency matrix
+  (`--format matrix`) is unchanged, and so is Send to R, which carries the effect-size matrix until the
+  conversion reaches it (#120). Checked live: the converted matrix of SMGDB00000004 and of the whole
+  corpus simulates in miaSim with no scaling and settles exactly at the solution of `A x = -r`.
+
+### Added
+- **A second derivation, from the whole time course** (#127, Karoline's "OK for 3, as an advanced option"
+  of 2026-10-06). `--derivation integrated`, or Derivation in Advanced settings, fits each organism's row
+  instead of comparing replicate sets: `ln(x_i(T)/x_i(0)) = r_i T + sum_j A_ij integral(x_j dt)` is linear
+  in the parameters, so one least-squares fit per organism gives its rate, its own limitation and every
+  partner's coefficient at once, with no growth property, no log2 ratio, no plateau to certify and no
+  partner abundance to divide by. The monocultures identify `r_i` and `A_ii` and are held fixed while the
+  co-cultures give the partners, since inside one experiment those columns rise too nearly together. The
+  model has no lag term and no death term, so the rows start where growth starts (the Baranyi lag of #118)
+  and stop where it ends (the plateau rule of register item 29). Every arc carries the coefficient, the
+  residual and the condition number of its fit, and the growth rates and capacities of such a run come
+  from the same fit, the capacity being the plateau it implies. A row the design cannot identify, and a
+  community of three or more members, are reported rather than derived. The default derivation is
+  unchanged. Measured on SMGDB00000007 against the steady state of SMGDB00000005's control: the integrated
+  fit lands all three organisms at 0.41, 0.73 and 2.69 times the observed abundance, where the specified
+  comparison gives 1.60 and 3.26 and fits B. hydrogenotrophica to wash out although the chemostat holds
+  it; its implied plateaus (8.9e8, 1.2e9, 8.6e8 cells/mL) sit within about 15 percent of the measured
+  ones, which never enter the fit.
+- **The page says before the download when a package will hold several matrices** (#130, Karoline's
+  decision of 2026-10-06 on the unit question): how many matrices, which abundance units, and that no
+  effect between them was measured, since organisms counted differently were never grown together. No
+  conversion between units is applied, by her decision, and the result section's text about the package
+  now describes the fitted coefficients it holds rather than the convention it used to.
+- **A gLV package can be scored against mGrowthDB's chemostat steady states** (#125, from Karoline's
+  suggestion of 2026-10-06 and her go-ahead on the shortlist of #124). A continuous culture satisfies
+  `A x = -(r - D)` at steady state with the dilution rate it records, and those numbers were never used to
+  fit the parameters, so they test them. **Check against chemostat steady states** in Advanced settings,
+  or `--steady-check`, puts predicted against observed per organism into the report and into the package
+  as `steady_state_check.txt`, and names every chemostat it could not use with the reason: no dilution
+  rate recorded, a perturbed run, another abundance unit, another medium, or no organism in common. It
+  only reports: no coefficient or rate changes because of it. Off by default, since it reads the curves of
+  chemostats a search does not otherwise need. Measured live on SMGDB00000007's package: against
+  SMGDB00000005's `A8 control`, B. thetaiotaomicron lands at 1.6 times the observed steady state and
+  R. intestinalis at 3.2, while B. hydrogenotrophica is fitted to wash out where the chemostat holds it;
+  against SMGDB00000011's six-member run, 10 and 30 times, with the three organisms the package does not
+  hold named as not scored.
+- **Smaller things that came with the above**, each with its own setting or column: the rate estimator a
+  reader chooses now reports the Baranyi lag beside it whichever one produced the rate, and
+  `growth_rates.csv` names both (`method` and `lag_method`); gLV mode sets three settings rather than two,
+  adding the growth property it needs; `--steady-check` and `--derivation` join the command line, matching
+  the page's two new Advanced settings; the report prints both rates behind every arc, the partner
+  abundance it divides by, the bound behind a censored cell, and the condition number and residual of a
+  fitted row, so every number in a package can be rebuilt from it by hand.
 - **The quantities a fitted gLV coefficient is made of, measured and reported** (#118, from Karoline's
   decision on #116). Every growth rate now travels with the estimator that produced it, the lag the
   Baranyi fit estimated, and the organism's monoculture carrying capacity: the plateau of its curves,

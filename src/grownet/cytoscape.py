@@ -112,6 +112,15 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
                 # the partner's abundance over the target's growth window, for a gLV coefficient (#118)
                 "partner_abundance": getattr(edge, "partner_abundance", None),
                 "partner_abundance_unit": getattr(edge, "partner_abundance_unit", ""),
+                # the two absolute rates a coefficient is the difference of (#123)
+                "metric_with": getattr(edge, "metric_with", None),
+                "metric_without": getattr(edge, "metric_without", None),
+                # a censored arc's cell is a bound, not a ratio (#129)
+                "strength_bound": getattr(edge, "strength_bound", None),
+                # what a reader needs to judge a fitted arc: how much of the course it rests on, and the
+                # rate mismatch that would explain it away (Karoline, 2026-10-07, and #155 item 1)
+                "fit_window_share": getattr(edge, "fit_window_share", None),
+                "rate_mismatch_to_zero": getattr(edge, "rate_mismatch_to_zero", None),
                 "quality": " ".join(edge.quality), "cautions": " ".join(edge.cautions),
                 "notes": "; ".join(edge.notes), "community": " ".join(edge.community),
                 "experiments": " ".join(edge.experiments), "study_ids": " ".join(edge.study_ids),
@@ -261,7 +270,8 @@ OPTIONAL_EDGE_COLUMNS = (("p_value", "Double"), ("q_value", "Double"), ("signifi
                          ("strength", "Double"), ("weight", "Double"), ("effect_over_sd", "Double"),
                          ("sd", "Double"), ("se", "Double"), ("n_with", "Integer"),
                          ("n_without", "Integer"), ("merged_arcs", "Integer"),
-                         ("supporting_pairs", "Integer"))
+                         ("supporting_pairs", "Integer"), ("fit_window_share", "Double"),
+                         ("rate_mismatch_to_zero", "Double"))
 
 
 def _declare_columns(root: str, suid, timeout: float) -> list:

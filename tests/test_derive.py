@@ -1,4 +1,4 @@
-"""Offline tests for the provisional baseline derivation (synthetic experiment dicts, no network)."""
+"""Offline tests for the specified comparison of replicate sets (synthetic dicts, no network)."""
 import math
 
 import pytest
@@ -12,7 +12,6 @@ from grownet.derive import (
     adjust_significance,
     classify,
     effect_over_sd,
-    interactions_from_experiments,
     interactions_from_replicates,
     output_meta,
     significance_of,
@@ -44,71 +43,6 @@ def _co(a, b, cond, gr_a, gr_b):
             "bioreplicates": [{"name": "Average", "measurementContexts": [
                 {"techniqueType": "qpcr", "subject": {"type": "strain", "name": a}, "growthRate": gr_a},
                 {"techniqueType": "qpcr", "subject": {"type": "strain", "name": b}, "growthRate": gr_b}]}]}
-
-
-def test_pairwise_derivation():
-    # A alone 0.30; with B, A grows 0.66 (facilitated); B ~ unchanged (0.31)
-    exps = [_mono(A, 0.30), _mono(B, 0.30), _co(A, B, "FP_BH", 0.66, 0.31)]
-    recs, skipped = interactions_from_experiments(STUDY, exps)
-    assert skipped == []
-    net = records_to_network(recs, meta={"slice": "test"})
-    assert net.validate() == []
-    # B -> A is facilitation (0.66 vs 0.30 -> log2 > 1)
-    ba = next(e for e in net.edges if e.source == _gs(B) and e.target == _gs(A))
-    assert ba.effect == "facilitation" and ba.strength > 1
-    # A -> B is neutral (0.31 vs 0.30 -> tiny log2, within the deadband)
-    ab = next(e for e in net.edges if e.source == _gs(A) and e.target == _gs(B))
-    assert ab.effect == "neutral"
-    # every edge is qualitative (no significance test yet) and carries the provisional method note
-    assert all(e.significance is None and "PROVISIONAL" in e.method for e in net.edges)
-
-
-def test_missing_mono_is_skipped():
-    # co-culture present but no mono for either strain -> both directions skipped, no fabrication
-    exps = [_co(A, B, "FP_BH", 0.66, 0.31)]
-    recs, skipped = interactions_from_experiments(STUDY, exps)
-    assert recs == []
-    assert all("no mono growth" in reason for _, reason in skipped)
-
-
-def test_three_member_skipped():
-    exps = [{"id": "E", "name": "ABC",
-             "communityStrains": [{"name": A}, {"name": B}, {"name": "Roseburia intestinalis L1-82"}],
-             "bioreplicates": []}]
-    recs, skipped = interactions_from_experiments(STUDY, exps)
-    assert recs == []
-    assert any(">2 members" in reason for _, reason in skipped)
-
-
-def test_baseline_edges_are_biculture_evidence():
-    exps = [_mono(A, 0.30), _mono(B, 0.30), _co(A, B, "FP_BH", 0.66, 0.31)]
-    recs, _ = interactions_from_experiments(STUDY, exps)
-    net = records_to_network(recs)
-    assert net.edges and all(e.evidence == "biculture" for e in net.edges)
-    assert all(e.community == tuple(sorted([_gs(A), _gs(B)])) for e in net.edges)
-
-
-def test_two_strains_of_one_species_report_the_dropped_monoculture():
-    # Nodes are keyed at genus and species, so both A2-165 and the second strain key to
-    # "faecalibacterium prausnitzii". Only the last monoculture read is used, and the baseline
-    # says so instead of dropping one silently.
-    A2 = "Faecalibacterium prausnitzii L2-6"
-    exps = [_mono(A, 0.30), _mono(A2, 0.90), _mono(B, 0.30), _co(A, B, "FP_BH", 0.66, 0.31)]
-    recs, skipped = interactions_from_experiments(STUDY, exps)
-    dropped = [(label, reason) for label, reason in skipped if label.startswith("monoculture ")]
-    assert len(dropped) == 1
-    label, reason = dropped[0]
-    assert label == f"monoculture {A}"                 # the one whose value was replaced
-    assert A2 in reason and _gs(A) in reason           # names the replacement and the shared key
-    # behavior is unchanged: the last monoculture read (0.90) is the one compared against
-    ba = next(r for r in recs if r["source"] == _gs(B) and r["target"] == _gs(A))
-    assert ba["effect"] == "inhibition"                # log2(0.66 / 0.90) < -0.25
-
-
-def test_one_strain_per_species_reports_nothing():
-    exps = [_mono(A, 0.30), _mono(B, 0.30), _co(A, B, "FP_BH", 0.66, 0.31)]
-    _, skipped = interactions_from_experiments(STUDY, exps)
-    assert [s for s in skipped if s[0].startswith("monoculture ")] == []
 
 
 # ---- the replicate comparison (#36) --------------------------------------------------------------
@@ -575,11 +509,15 @@ def test_experiments_whose_descriptions_differ_are_not_pooled():
     exps[0]["description"], exps[1]["description"] = "all strains, run 1", "all strains, run 2"
     records, _ = interactions_from_replicates(client, study, exps)
     assert _by_arc(records)[(C, A)]["n_with"] == 4                        # pooled
-    exps[0]["description"], exps[1]["description"] = "all strains with acetate", "all strains without acetate"
+    # Karoline, 2026-10-07, the strict rule everywhere: a supplement stated in the description makes
+    # another medium, so a full community that states one is not compared with a drop-out that does not.
+    # Both runs state it here, in media the drop-outs are not in, so neither arc is derived and the
+    # refusal names the medium that was there. "with initial acetate" rather than "with acetate": the
+    # reader of descriptions catches the first and not the second, which is its own open question.
+    exps[0]["description"] = "all strains with initial acetate"
+    exps[1]["description"] = "all strains without initial acetate"
     records, _ = interactions_from_replicates(client, study, exps)
-    ca = [r for r in records if (r["source_name"], r["target_name"]) == (C, A)]
-    assert len(ca) == 2 and all(r["n_with"] == 2 for r in ca)            # two arcs, one per full community
-    assert {tuple(r["experiments"]) for r in ca} == {("E_full 1", "E_without C"), ("E_full 2", "E_without C")}
+    assert [r for r in records if (r["source_name"], r["target_name"]) == (C, A)] == []
 
 
 def test_an_obligate_edge_counts_its_replicates_without_growth_and_is_shown():
@@ -721,19 +659,26 @@ def _described(name, species, description):
     return exp
 
 
-def test_monocultures_told_apart_only_by_their_descriptions_are_not_pooled():
-    # SMGDB00000014's shape: A grown alone with and without a supplement, under identical recorded
-    # conditions. Pooling them would compare the co-culture with a mix of conditions; neither names the
-    # co-culture, so none is guessed and the pair says why.
+def test_a_monoculture_in_an_altered_medium_is_not_offered_to_a_co_culture_in_the_plain_one():
+    """SMGDB00000014's shape: A grown alone with and without a supplement, under identical recorded
+    conditions.
+
+    Karoline, 2026-10-07: "the strict medium matching (exclusion of cases with modifications e.g. mucin
+    addition) should be applied everywhere where medium matching is done." A supplement stated in the
+    description makes another medium, so these are not two sets of one condition to be told apart by
+    their wording: they are two conditions. The co-culture is in the plain medium, so it is compared with
+    the plain monoculture and the oleic one is not offered to it at all. Before the rule reached the
+    monoculture index both were offered and neither was chosen, and the pair was refused.
+    """
     exps = [_described("A plain", [A], "A on minimal medium"), _described("A oleic", [A], "A with 1% oleic acid"),
             _described("B alone", [B], "B on minimal medium"), _described("co", [A, B], "A and B")]
     curves = {("A plain", A): [(1, 1), (1, 1.4)], ("A oleic", A): [(1, 6), (1, 7)],
               ("B alone", B): [(1, 1), (1, 1.4)], ("co", A): [(1, 3), (1, 3.8)], ("co", B): [(1, 1), (1, 1.4)]}
-    records, skipped = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S"}, exps)
-    assert records == []
-    reason = next(r for label, r in skipped if label.startswith(f"{A} with {B}"))
-    assert "2 monoculture sets" in reason and "told apart only by their descriptions" in reason
-    assert "none is guessed" in reason
+    records, _ = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S"}, exps)
+    arc = _by_arc(records)[(B, A)]
+    assert "E_A plain" in arc["experiments"] and "E_A oleic" not in arc["experiments"]
+    # and it is not cautioned, because nothing was ambiguous: the media decided it
+    assert "conditions_unverified" not in arc["cautions"]
 
 
 def test_the_monoculture_set_whose_description_names_the_co_culture_is_used():
@@ -750,19 +695,23 @@ def test_the_monoculture_set_whose_description_names_the_co_culture_is_used():
     assert "conditions_unverified" not in arc["cautions"]
 
 
-def test_co_cultures_differing_only_in_description_are_cautioned():
-    # SMGDB00000004's shape: RI_BH +Ac and -Ac under identical recorded conditions, one monoculture set per
-    # strain. At most one of them matches the monocultures, and nothing recorded says which.
+def test_co_cultures_in_an_altered_medium_have_no_monoculture_to_compare_with():
+    # SMGDB00000004's shape: RI_BH +Ac and -Ac under identical recorded conditions, one monoculture set
+    # per strain, and the acetate stated only on the co-cultures.
     exps = [_described("mono A", [A], "A"), _described("mono B", [B], "B"),
             _described("co +Ac", [A, B], "A and B with initial acetate"),
             _described("co -Ac", [A, B], "A and B without initial acetate")]
     curves = {("mono A", A): [(1, 1), (1, 1.4)], ("mono B", B): [(1, 1), (1, 1.4)]}
     for n in ("co +Ac", "co -Ac"):
         curves.update({(n, A): [(1, 3), (1, 3.8)], (n, B): [(1, 1), (1, 1.4)]})
-    records, _ = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S"}, exps)
-    assert len(records) == 4 and all("conditions_unverified" in r["cautions"] for r in records)
-    edges, meta = output_meta(records)
-    assert meta["hidden"]["low_quality"] == 0                      # a caution: shown, not hidden
+    records, skipped = interactions_from_replicates(_SeriesClient(exps, curves), {"id": "S"}, exps)
+    # Karoline, 2026-10-07: the strict rule everywhere. "with initial acetate" and "without initial
+    # acetate" are two media and the monocultures are in neither, so there is nothing to compare rather
+    # than two comparisons to caution. The refusal names the medium that was there instead.
+    assert records == []
+    reason = next(r for _label, r in skipped if "same base medium" in r)
+    assert "acetate" in reason and "another environment" in reason
+    assert "Name that experiment in the second box" in reason
 
 
 def test_a_pair_with_one_co_culture_is_not_cautioned():

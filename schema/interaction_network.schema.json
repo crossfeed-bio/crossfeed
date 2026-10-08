@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/crossfeed-bio/crossfeed/blob/main/schema/interaction_network.schema.json",
+  "$id": "https://raw.githubusercontent.com/crossfeed-bio/crossfeed/main/schema/interaction_network.schema.json",
   "title": "grownet interaction network",
   "description": "The neutral, openly citable interaction-network format grownet emits from mGrowthDB co-growth data. Interactions are directed and condition-specific, and every edge carries the studies it was derived from (edge-level attribution).",
   "type": "object",
@@ -10,7 +10,6 @@
     "edges",
     "studies"
   ],
-  "additionalProperties": false,
   "properties": {
     "schema": {
       "enum": [
@@ -20,7 +19,94 @@
       ]
     },
     "meta": {
-      "type": "object"
+      "type": "object",
+      "description": "how this network was made. The keys described as part of the format are the ones a current derivation always writes, and what they mean does not change; the others are recorded because they are useful, and may change with what they describe. Neither kind is required here, because one shape validates /v0, /v1 and /v2 and an older artifact does not carry every key a current one does. Keys not declared here are allowed, so a network from a later version still validates.",
+      "properties": {
+        "tool": {
+          "type": "string",
+          "description": "part of the format, and written by every current derivation: the tool that derived this network"
+        },
+        "tool_version": {
+          "type": "string",
+          "description": "part of the format, and written by every current derivation: its version"
+        },
+        "derived_on": {
+          "type": "string",
+          "description": "part of the format, and written by every current derivation: the local date it was derived; derived_at beside it carries the offset"
+        },
+        "derived_at": {
+          "type": "string",
+          "description": "part of the format, and written by every current derivation: when it was derived, to the second"
+        },
+        "source_db": {
+          "type": "string",
+          "description": "part of the format, and written by every current derivation: where the growth data came from, and whether live or a fixture"
+        },
+        "provisional": {
+          "type": "string",
+          "description": "part of the format, and written by every current derivation: present while the derivation method is provisional, saying so in words"
+        },
+        "absence": {
+          "type": "object",
+          "description": "part of the format, and written by every current derivation: the absence threshold this network was written with: k, and how many comparisons fell below it"
+        },
+        "statistics": {
+          "type": "object",
+          "description": "part of the format, and written by every current derivation: the test behind p_value and q_value, the correction used and how many comparisons it ran over"
+        },
+        "query": {
+          "type": "string",
+          "description": "recorded, not promised: what was searched: species, all, or a study"
+        },
+        "species": {
+          "type": "array",
+          "description": "recorded, not promised: the names typed into the search"
+        },
+        "studies": {
+          "type": "array",
+          "description": "recorded, not promised: the studies the search read"
+        },
+        "study_id": {
+          "type": "string",
+          "description": "recorded, not promised: the one study this network was derived from, where a derivation read a single study"
+        },
+        "settings": {
+          "type": "object",
+          "description": "recorded, not promised: every setting the run used"
+        },
+        "selection": {
+          "type": "object",
+          "description": "recorded, not promised: what the second box asked for: media, experiments or studies"
+        },
+        "no_growth": {
+          "type": "object",
+          "description": "recorded, not promised: the no-growth rule's own numbers"
+        },
+        "filters": {
+          "type": "object",
+          "description": "recorded, not promised: what was filtered out of the output"
+        },
+        "hidden": {
+          "type": "object",
+          "description": "recorded, not promised: how many arcs were hidden, and why"
+        },
+        "merge": {
+          "type": "object",
+          "description": "recorded, not promised: what merging parallel arcs did"
+        },
+        "genus": {
+          "type": "object",
+          "description": "recorded, not promised: what merging to the genus level did"
+        },
+        "data": {
+          "type": "object",
+          "description": "recorded, not promised: the data version: the API, when it was read, and what the database reported about itself"
+        },
+        "growth_rates": {
+          "type": "object",
+          "description": "recorded, not promised: the growth rates reported beside the network, with the rule they were derived by and the organisms that have none"
+        }
+      }
     },
     "nodes": {
       "type": "array",
@@ -235,7 +321,8 @@
               "stationary_unchecked",
               "zero_at_start",
               "untested",
-              "continuous_culture"
+              "continuous_culture",
+              "window_partial"
             ]
           }
         },
@@ -261,6 +348,144 @@
           "type": "string"
         },
         "partner_abundance_n": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "metric_with": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "metric_without": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "target_capacity": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "target_capacity_unit": {
+          "type": "string"
+        },
+        "target_capacity_n": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "strength_bound": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "bound_rule": {
+          "type": "string"
+        },
+        "coefficient": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "coefficient_unit": {
+          "type": "string"
+        },
+        "fit_r2": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fit_null_r2": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fit_window_share": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "rate_mismatch_to_zero": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "merged_arcs": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "strength_range": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "supporting_pairs": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "merged_pairs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fit_condition": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "coefficient_sd": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "coefficient_n": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "coefficient_sd_from_rate_stage": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "se_replicates": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "se_rate_stage": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "rate_stage_method": {
+          "type": "string"
+        },
+        "rate_stage_n": {
           "type": [
             "integer",
             "null"

@@ -1,12 +1,12 @@
 Package: grownet
 Title: Receive grownet gLV Parameters in R
-Version: 0.1.0
+Version: 0.3.0
 Authors@R: person("The grownet authors", role = c("aut", "cre"),
                   email = "noreply@example.com")
 Description: Receives generalized Lotka-Volterra parameters from grownet, the tool that derives
     microbial interaction networks from mGrowthDB growth curves, either by listening on a local port
     for the page's "Send to R" button or by fetching them from the page itself. The parameters arrive
-    with their caveats as data: which cells are stated extremes rather than measured ratios, which
+    with their caveats as data: which cells come from a comparison where one side did not grow, which
     pairs were left at zero because their arcs disagree in sign, and which organisms have no growth
     rate. Those caveats are printed on arrival, warned about when the matrix is taken, and a missing
     growth rate stops a simulation rather than passing unnoticed. The package assumes no simulator:

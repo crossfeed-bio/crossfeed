@@ -108,7 +108,8 @@ def test_the_command_line_species_search_gives_the_pages_network(monkeypatch, ca
     out = tmp_path / "net.json"
     names = ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"]
     # both sides keep the absences, so the comparison is about the arcs, not about the new default
-    assert main(["derive", "--live", "--species", *names, "--out", str(out), "--include-absent"]) == 0
+    assert main(["derive", "--live", "--species", *names, "--out", str(out), "--include-absent",
+                 "--derivation", "replicate"]) == 0
     cli = json.loads(out.read_text(encoding="utf-8"))
     page = json.loads(_query(entries=names)["network"].to_json())
     assert cli["edges"] == page["edges"] and cli["nodes"] == page["nodes"]
@@ -120,9 +121,11 @@ def test_the_command_line_all_gives_the_pages_all_network(monkeypatch, capsys, t
     # `derive --live --all` and the page's All button: the same edges, and the report says what was asked
     monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", FakeClient)
     out, report = tmp_path / "all.json", tmp_path / "all.txt"
-    assert main(["derive", "--live", "--all", "--merge-genera", "--out", str(out), "--report", str(report)]) == 0
+    assert main(["derive", "--live", "--all", "--merge-genera", "--derivation", "replicate",
+                 "--out", str(out), "--report", str(report)]) == 0
     cli = json.loads(out.read_text(encoding="utf-8"))
-    page = json.loads(gui.run_query(FakeClient(), [], {"merge_genera": True}, all_studies=True)["network"].to_json())
+    page = json.loads(gui.run_query(FakeClient(), [], {"merge_genera": True, "derivation": "replicate"},
+                                    all_studies=True)["network"].to_json())
     assert cli["edges"] == page["edges"] and cli["edges"] and cli["meta"]["query"] == "all"
     assert {n["identity"] for n in cli["nodes"]} == {"genus"}
     assert "query: all of mGrowthDB" in report.read_text(encoding="utf-8")
@@ -206,16 +209,22 @@ def test_the_help_explains_how_a_chemostat_is_treated():
 def test_the_help_explains_the_matrix_the_growth_rates_and_the_glv_package():
     """Karoline, 2026-10-03: "please make sure all of this is in the CLI and documented". Every convention
     a reader of those files needs is on the help page, in the words the files themselves use."""
-    from grownet import matrix
     html = help.render_help("tok", gui.DEFAULTS, gui.EXAMPLE)
     section = html[html.index("The matrix, the growth rates and gLV"):]
     section = section[section.index("<h2 id=\"glv\">"):section.index("<h2 id=\"settings\">")]
     assert "A[i][j]" in section.replace("&#x27;", "'") and "rows are affected" in section
     assert "median" in section and "disagree in sign" in section      # how arcs of one pair are merged
-    assert "+10" in section and "-10" in section                      # the obligate and abolished extremes
-    assert f"{matrix._number(matrix.DIAGONAL)} on the diagonal" in section or "-1" in section
     assert "monoculture" in section and "chemostat" in section        # where a rate comes from, and not
-    assert "not fitted gLV coefficients" in section
+    # what the package holds since #119, #123 and #129: coefficients, with no convention left in it, and
+    # a measured bound where the plain matrix used to carry a stated extreme
+    assert "per-capita" in section and "1/(time x abundance)" in section
+    assert "measured bound" in section and "no-growth rule" in section
+    assert "-r_i / K_i" in section and "(r_with - r_without) / x_j" in section
+    # the phrase survives only where the page says what replaced it
+    for sentence in section.split("."):
+        if "stated extreme" in sentence:
+            assert "instead of the stated extreme it used to carry" in sentence \
+                or "no floor and no stated extreme" in sentence
     # the command line section shows both new outputs, so the page and the terminal say the same
     cli = html[html.index("<h2 id=\"cli\">"):]
     assert "--format matrix" in cli and "--report-rates" in cli and "--glv" in cli
@@ -304,3 +313,63 @@ def test_the_about_page_logs_what_each_release_brought():
     for version, _, lines in RELEASES:
         assert f">{version} <" in page
         assert lines[0][:40] in page
+
+
+def test_the_glv_example_section_gives_every_step_of_running_it_in_miasim():
+    """Karoline, 2026-10-07: "The help, while being generic, should provide all the steps to run this
+    example with miaSim." Generic means the route above it, which holds for any package; this section is
+    that route with one search's numbers in it, and a reader should not need anything the page does not
+    say."""
+    page = gui.render_help("tok")
+    # the anchor is "glv-walkthrough", not "glv-example": the latter collided with the branch name this
+    # work was written on, which test_release.py refuses in shipped text and rightly
+    section = page[page.index('<h2 id="glv-walkthrough">'):]
+    section = section[:section.index("<h2 ", 10)] if "<h2 " in section[10:] else section
+    # the button, the command line that does the same, and the study it reads. The study moved from
+    # SMGDB00000006 to SMGDB00000002 (#155 item 13): the yoghurt pair's package rested on one of three
+    # monoculture replicates, all three of which fitted a positive self-limitation, and its equilibrium
+    # inverted the co-culture it was fitted from. Her requirement is the steps, not the study.
+    assert "gLV example" in section and "SMGDB00000002" in section
+    assert "--report-rates" in section and "--glv" in section
+    # installing miaSim is part of the steps: it is a Bioconductor package, not a CRAN one
+    assert "BiocManager::install" in section and "miaSim" in section
+    # the three calls a simulation needs, and the deterministic settings spelled out
+    for call in ("grownet_listen()", "glv_matrix(glv)", "glv_rates(glv)", "as_miasim(glv)",
+                 "miaSim::simulateGLV", "stochastic = FALSE", "migration_p = 0"):
+        assert call in section, call
+    # what to expect, so a reader can tell it worked, and where the numbers come from
+    assert "solve(A, -r)" in section
+    assert "7.323e8" in section and "3.634e8" in section
+    # and the step that holds the prediction against the data, which is what a reader needs to catch a
+    # package that settles somewhere the co-culture never was: agreeing with `solve(A, -r)` only says
+    # the simulation and the package agree with each other
+    assert "measured peaks" in section and "rate_mismatch_to_zero" in section
+    # and that the numbers are of the database as it is, not a promise
+    assert "mGrowthDB changes" in section
+
+
+def test_the_help_states_what_a_glv_model_assumes():
+    """Karoline, 2026-10-07: "let's add some caveats about the assumptions of gLV, especially the
+    higher-order interactions and constant interaction coefficients. In batch, the medium changes, so the
+    environment changes, and with it the species interactions."
+
+    These are properties of the form, not defects in the fit, so they are stated as such and in the two
+    places a reader meets the parameters: the page and the package the download carries.
+    """
+    import re
+
+    page = gui.render_help("tok")
+    section = page[page.index('<h2 id="glv-assumptions">'):]
+    section = section[:section.index("<h2 ", 10)]
+    section = re.sub(r"\s+", " ", section)      # the prose wraps, so the phrases below span line breaks
+    assert "constant in time" in section
+    assert "change in size and in sign along the growth curve" in section
+    assert "Higher-order interactions" in section and "third organism" in section
+    # the batch argument, in her terms: the medium changes, so the environment does
+    for phrase in ("medium is consumed", "metabolites accumulate", "late stationary phase"):
+        assert phrase in section, phrase
+    # tied to the fields that say how much of the course a coefficient rests on
+    assert "fit_window_share" in section and "window_partial" in section
+    # and it is in the table of contents, so a reader meets it before the walkthrough
+    assert 'href="#glv-assumptions"' in page
+    assert page.index('href="#glv-assumptions"') < page.index('href="#glv-walkthrough"')

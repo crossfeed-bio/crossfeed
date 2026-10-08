@@ -10,16 +10,29 @@ Windows program.
 CITATION.cff is checked because 0.1.0 shipped while it still said 0.0.2: nothing read it, so nothing
 caught it, and a citation that misstates the version is exactly the kind of thing a reader trusts.
 """
+import datetime
 import re
 import sys
 from pathlib import Path
 
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:          # Python 3.10: the release itself runs on 3.12
+    tomllib = None
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def check(tag: str, root: Path = ROOT) -> tuple:
+def check(tag: str, root: Path = ROOT, releasing: bool = True, today=None) -> tuple:
+    """(problems, the release notes) for `tag`.
+
+    `releasing` says whether a release is actually being cut. With no tag `make check` asks about the
+    version this tree would release, and a tree in development marks that version unreleased, which is
+    the Keep a Changelog convention this file follows. Treating that as a problem left two green states,
+    leaving the version at the last released one or marking the next release released before it is, and
+    the tree took the second and a test pinned it: the gate could not be green and honest at once
+    (#155 item 8).
+    """
     version = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
     init = (root / "src" / "grownet" / "__init__.py").read_text(encoding="utf-8")
     code_version = re.search(r'__version__ = "([^"]+)"', init).group(1)
@@ -43,10 +56,46 @@ def check(tag: str, root: Path = ROOT) -> tuple:
         problems.append(f"CHANGELOG.md has no section for {version}")
         notes = ""
     else:
-        if "unreleased" in section.group(1).lower():
+        if "unreleased" in section.group(1).lower() and releasing:
             problems.append(f"CHANGELOG.md still marks {version} unreleased")
         notes = section.group(2).strip()
+        # 0.3.0 was prepared with 0.2.0's release date still in CITATION.cff, which nothing read: the
+        # citation widget and every generated BibTeX entry take the date from there (found 2026-10-06).
+        # either spelling of the date, since the one this file demanded was not the only one Keep a
+        # Changelog uses: with only the parenthesized form read, `## [0.3.0] - 2099-01-01` passed the
+        # agreement check in silence while CITATION.cff said something else (#155 item 8)
+        heading = re.search(r"[(-]\s*([0-9]{4}-[0-9]{2}-[0-9]{2})\)?", section.group(1))
+        if dated and heading and dated.group(1) != heading.group(1):
+            problems.append(f"CITATION.cff dates the release {dated.group(1)}, CHANGELOG.md says "
+                            f"{heading.group(1)}")
+        # the two agreeing with each other is not the same as either being right: a date in the future
+        # is a placeholder nobody replaced, and both files carried one release's date into the next
+        # before (found 2026-10-06). Compared against the day the check runs, so it needs no network.
+        now = today or datetime.date.today()
+        for where, found in (("CHANGELOG.md", heading), ("CITATION.cff", dated)):
+            if not found:
+                continue
+            when = datetime.date.fromisoformat(found.group(1))
+            if when > now:
+                problems.append(f"{where} dates the release {found.group(1)}, which is in the future")
+        if releasing and not heading:
+            problems.append(f"CHANGELOG.md gives no date for {version}")
+    # The R companion is versioned separately and RELEASING.md calls r/DESCRIPTION the only signal an
+    # installed R copy is out of date, so a release that forgets it ships a package that cannot tell a
+    # reader to update (#142 item 10).
+    description = (root / "r" / "DESCRIPTION").read_text(encoding="utf-8")
+    r_version = re.search(r"^Version: *(.+)$", description, re.M)
+    if not r_version:
+        problems.append("r/DESCRIPTION has no Version")
+    elif r_version.group(1).strip() != version:
+        problems.append(f"r/DESCRIPTION says Version {r_version.group(1).strip()}, pyproject.toml says "
+                        f"{version}")
     return problems, notes
+
+
+def current_version(root: Path = ROOT) -> str:
+    """The version this working tree would release, for a check that is not given a tag."""
+    return tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
 
 
 # First on every release page, where Windows users download the program: it is unsigned until the project
@@ -69,8 +118,22 @@ def release_notes(tag: str, section: str) -> str:
 
 
 def main(argv) -> int:
+    # `make check` and CI run this with no tag on every build, and the oldest interpreter the project
+    # supports has no tomllib. Skipping cleanly is what lets the check live in the ordinary build at all
+    # (#142 item 15).
+    if tomllib is None:
+        print("release check: skipped, reading pyproject.toml needs Python 3.11 or newer")
+        return 0
+    # With no tag, check the version this tree would release. The check used to appear only in
+    # release.yml, invoked on $GITHUB_REF_NAME, so the gate that catches a citation date drifting from
+    # the changelog fired for the first time when somebody pushed the tag, which is the moment it is most
+    # expensive to act on: the release is being cut and the fix means retagging (Craig's agent on #138,
+    # #142 item 15). `make check` runs it with no argument on every build.
+    releasing = bool(argv) and argv[0] not in ("--current", "")
+    if not releasing:
+        argv = [f"v{current_version()}", *argv[1:]]
     tag, notes_file = argv[0], (argv[1] if len(argv) > 1 else None)
-    problems, notes = check(tag)
+    problems, notes = check(tag, releasing=releasing)
     for p in problems:
         print(f"release check: {p}", file=sys.stderr)
     if problems:

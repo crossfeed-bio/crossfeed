@@ -42,7 +42,7 @@ OUTCOMES = ("quantified", "obligate", "abolished", "no_growth")
 QUALITY_FLAGS = ("single_replicate", "strains_pooled", "non_batch", "removed_member_detected")
 # cautions a reader should see that do not make an edge low quality: it keeps its status and is shown
 CAUTIONS = ("two_replicates", "conditions_unverified", "stationary_phase_differs", "stationary_unchecked",
-            "zero_at_start", "untested", "continuous_culture")
+            "zero_at_start", "untested", "continuous_culture", "window_partial")
 # what a node's id rests on: the NCBI taxon id of the strain, or genus and species of its name (#23)
 IDENTITIES = ("ncbi", "name", "genus")
 # whether a comparison counts as an interaction under the absence threshold (grownet.derive.absence)
@@ -103,9 +103,11 @@ class Edge:
     target: str                   # Node.id of the affected organism
     effect: str                   # one of EFFECTS
     strength: float | None = None       # e.g. a growth log-ratio
-    # The three numbers of the test, in one direction each (Karoline, 2026-10-03): p_value is Welch's raw
-    # value, q_value the same after correction for multiple testing, and significance -log10(q_value), so
-    # that a larger significance means stronger evidence and a continuous style can map it.
+    # The three numbers of the test, in one direction each (Karoline, 2026-10-03): p_value is the raw
+    # value of whatever test the derivation ran, which `meta.statistics.test` names (Welch's t-test on the
+    # per-replicate log2 values for the specified comparison), q_value the same after correction for
+    # multiple testing, and significance -log10(q_value), so that a larger significance means stronger
+    # evidence and a continuous style can map it.
     significance: float | None = None   # -log10(q_value): larger is stronger, 0 at q = 1
     q_value: float | None = None        # p_value corrected for multiple testing (Benjamini-Hochberg or -Yekutieli)
     p_value: float | None = None        # the unadjusted p-value the correction started from
@@ -134,6 +136,42 @@ class Edge:
     partner_abundance: float | None = None
     partner_abundance_unit: str = ""      # the abundance unit it was measured in, never converted
     partner_abundance_n: int | None = None  # co-culture replicates behind the median
+    # The metric itself in each set, which `strength` is the log2 ratio of: a set that did not grow has 0
+    # here, so a censored pair is a measurement rather than a floor (#123).
+    metric_with: float | None = None
+    metric_without: float | None = None
+    target_capacity: float | None = None       # the target's own plateau in the co-culture
+    target_capacity_unit: str = ""
+    target_capacity_n: int | None = None
+    # A censored comparison has no ratio, so its cell holds a measured bound from the no-growth rule
+    # instead of a stated extreme: at least this much facilitation, or at most this much inhibition (#129).
+    strength_bound: float | None = None
+    bound_rule: str = ""
+    # What a derivation that fits the row rather than comparing sets has to say for itself (#127): the
+    # coefficient it fitted, in 1/(time x abundance), and how well that fit was determined.
+    coefficient: float | None = None
+    coefficient_unit: str = ""
+    fit_r2: float | None = None
+    # the same row with every partner's effect set to zero: the line a fitted row has to beat to be a
+    # measurement of an interaction rather than of the organism's own growth (#142 item 9)
+    fit_null_r2: float | None = None
+    fit_condition: float | None = None
+    # the coefficient's own spread over the co-culture replicates, the replicates behind it, and the
+    # monoculture stage's contribution on its own design: two disjoint designs rather than one mixed set,
+    # so a reader can see which stage the uncertainty comes from (#142 item 2)
+    coefficient_sd: float | None = None
+    coefficient_n: int | None = None
+    coefficient_sd_from_rate_stage: float | None = None
+    # the share of the measured course the fitted rows cover, and the fractional change in the
+    # monoculture rate that would drive this arc's coefficient to zero: what a reader needs to judge an
+    # arc against the two things the model cannot check for itself
+    fit_window_share: float | None = None
+    rate_mismatch_to_zero: float | None = None
+    # the two halves of `se`, and how the monoculture stage was resampled for the second
+    se_replicates: float | None = None
+    se_rate_stage: float | None = None
+    rate_stage_method: str = ""
+    rate_stage_n: int | None = None
     merged_arcs: int | None = None  # arcs merged into this one (register item 14), None when not merged
     strength_range: tuple = ()    # (lowest, highest) log2 mean of the merged arcs
     supporting_pairs: int | None = None  # with genus merging: the distinct species (or strain) pairs behind it
@@ -211,11 +249,16 @@ class InteractionNetwork:
     @classmethod
     def from_dict(cls, d: dict) -> InteractionNetwork:
         net = cls(meta=d.get("meta", {}), schema=d.get("schema", SCHEMA))
-        for s in d.get("studies", []):
-            net.add_study(Study(**s))
-        for n in d.get("nodes", []):
-            net.add_node(Node(**n))
+        # a field this reader does not know is dropped for every record kind, not only for edges: Node
+        # and Study raised on one, so the 0.2.0-against-0.3.0 failure stayed armed for the next release
+        # that adds a node or study field (#142 item 10)
+        known_nodes = {f.name for f in fields(Node)}
+        known_studies = {f.name for f in fields(Study)}
         known = {f.name for f in fields(Edge)}
+        for s in d.get("studies", []):
+            net.add_study(Study(**{k: v for k, v in s.items() if k in known_studies}))
+        for n in d.get("nodes", []):
+            net.add_node(Node(**{k: v for k, v in n.items() if k in known_nodes}))
         for e in d.get("edges", []):
             # a field this reader does not know is dropped rather than raising, so a newer document is
             # read as far as it can be: `Edge(**e)` is what would have made 0.2.0 fail on a 0.3.0 network

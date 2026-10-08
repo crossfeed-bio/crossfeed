@@ -11,12 +11,21 @@ What the box takes, one entry per line, matched with OR:
   * an **experiment id** (`EMGDB000000031`) or a **study id** (`SMGDB00000004`), recognized by their shape;
   * anything else is a **medium**, matched case-insensitively as a substring.
 
-A medium is matched against three things, because mGrowthDB spreads the environment over them. Every
-experiment today does carry a structured `mediumName` on its compartments (559 of 559 when this was
-written), so that is matched first; the spellings differ between studies though (Wilkins-Chalgren appears
-four ways, one of them misspelled), which is why the match is a substring and not an equality. The
-experiment's description and name are matched too, since what distinguishes experiments inside one study
-lives only there: study 2 runs BT_WC and BT_MUCIN on one medium, study 4 runs +Ac and -Ac.
+A medium entry is still matched as text, because mGrowthDB's names and descriptions are prose and a reader
+should be able to type a word. What that word reaches is a different question: one word can reach several
+media, since an added sugar or a removed carbon source makes another environment, and SMGDB00000026 varies
+the sugars in "Wilkins-Chalgren" seventeen ways. Those are told apart by `media.identity` and never pooled,
+and `derive.select_experiments` names every medium a selection read, so a reader who typed one word sees
+how many environments came back (Karoline, 2026-10-07: "foodnet's strict medium rule should be applied in
+general in case someone specifies it in the 2nd search box (because such changes alter interactions)").
+
+A medium is matched against three things, because mGrowthDB spreads the environment over them: the
+medium's strict label (its `mediumName` per compartment, with every alteration its description states),
+the description, and the experiment's own name. Every experiment today does carry a structured
+`mediumName` (559 of 559 when this was written), but the spellings differ between studies
+(Wilkins-Chalgren appears four ways, one of them misspelled), which is why the match is a substring and
+not an equality. The description and the name are matched because what distinguishes experiments inside
+one study often lives only there: study 2 runs BT_WC and BT_MUCIN, study 4 runs +Ac and -Ac.
 
 Selecting does not change how an interaction is derived. A comparison already never mixes media, because
 the compartment record that carries the medium is part of the conditions two replicate sets must share
@@ -81,8 +90,14 @@ def medium_url(exp: dict) -> str:
 
 
 def _text(exp: dict) -> str:
-    """Where a medium is looked for: its name, the description, and the experiment's own name."""
-    return " \n".join([medium_of(exp), exp.get("description") or "", exp.get("name") or ""]).casefold()
+    """Where a medium is looked for: its strict label, the description, and the experiment's own name.
+
+    The label is `media.identity`'s, so it carries every alteration the description states and a reader
+    can type one ("mucin", "linoleic acid") and reach the media that have it (Karoline, 2026-10-07).
+    """
+    from .media import identity
+    return " \n".join([identity(exp)["label"], exp.get("description") or "",
+                        exp.get("name") or ""]).casefold()
 
 
 def matched_by(exp: dict, selection: dict) -> str:

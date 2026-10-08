@@ -23,7 +23,7 @@ import urllib.parse
 import webbrowser
 from collections import Counter
 
-from . import __version__, brand, interaction, matrix, rates, rbridge
+from . import __version__, brand, integrated, interaction, matrix, rates, rbridge, steady
 from . import help as help_page
 from . import published as daily
 from . import selection as selecting
@@ -33,6 +33,7 @@ from .cytoscape import CytoscapeError, send, style_xml
 from .derive import (
     ABSENCE_THRESHOLD,
     ABSENT,
+    CAPACITY_MAX_FALL,
     PROVISIONAL,
     derive_interactions,
     genus_species,
@@ -50,7 +51,24 @@ TITLE = brand.NAME
 # species that derive a non-empty network, for the Example button (Karoline's proposal, #73). The first is
 # taxon 411483, which mGrowthDB holds under both its names after the 2022 reclassification.
 EXAMPLE = ("Faecalibacterium duncaniae", "Blautia hydrogenotrophica")
+# A search that gives a gLV package anyone can simulate, chosen by building the package of every study
+# that yields one and scoring them (2026-10-07, Karoline: "include a gLV example button in the GUI that
+# configures everything for a working gLV example"). Five studies give a package of two organisms or
+# more, three of those settle with every organism above zero, and SMGDB00000002 is the soundest of the
+# three: each rate is the median of three monoculture replicates that were all kept and all fitted a
+# negative self-limitation (0.777, 0.859, 0.798 and 0.673, 0.671, 0.634 per hour), no capacity had to be
+# substituted, and the equilibrium puts both organisms below their own monoculture plateaus in the order
+# the co-culture measured.
+#
+# It replaced SMGDB00000006, the yoghurt pair, which was wrong on all three counts: of S. thermophilus's
+# three monoculture replicates two were refused for a negative rate and the third was kept at 0.0109 /h,
+# a 64 hour doubling time for a dairy starter, while all three fitted a POSITIVE self-limitation and so
+# failed the same way; its plateau had to be taken from one measured curve; and the equilibrium inverted
+# the co-culture it was fitted from by about 90 times (2026-10-07, #155 item 13).
+GLV_EXAMPLE = ("Bacteroides thetaiotaomicron", "Roseburia intestinalis")
+GLV_EXAMPLE_STUDY = "SMGDB00000002"
 METRICS = ("auc", "max", "growth_rate")
+DERIVATIONS = ("replicate", "integrated")
 
 
 def metric_name(s: dict) -> str:
@@ -67,10 +85,23 @@ def metric_name(s: dict) -> str:
 INPUT_EXAMPLES = ("Blautia hydrogenotrophica", "Faecalibacterium duncaniae A2-165", "Bacteroides", "411483")
 DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window": rates.DEFAULT_WINDOW,
             "spike_factor": SPIKE_FACTOR, "absence_threshold": ABSENCE_THRESHOLD,
+            # how far a certified curve may have fallen from its peak and still give a carrying capacity
+            # (Karoline, 2026-10-07, closing open decision 4 of #141: "the factor ... should go in the
+            # advanced settings. please choose a sensible default for it"). See derive.CAPACITY_MAX_FALL
+            # for the measurement behind the 10.
+            "capacity_max_fall": CAPACITY_MAX_FALL,
             "include_low_quality": False, "include_absent": False, "correction": "bh",
             # off by default: a rate costs a fit per monoculture curve, and most searches do not need
             # one. The gLV mode button turns it on (Karoline, 2026-10-04)
             "report_rates": False,
+            # off by default too: the check reads the curves of chemostats the search never needed (#125)
+            "steady_check": False,
+            # the integrated form, Karoline's decision of 2026-10-06: "By default, grownet should do
+            # what is 'correct' i.e. more defensible mathematically". It fits each organism's row from the
+            # whole time course, so a coefficient is not a difference of two separately fitted rates
+            # divided by one partner mean, which carries the organism's own density as a confound. The
+            # specified comparison of replicate sets is the alternative, and keeps everything it had.
+            "derivation": "integrated",
             "include_dropout": True,
             "include_non_batch": False, "conditions": "", "exclude_studies": "", "only_entered": True,
             "merge_arcs": False, "min_studies": 1, "merge_genera": False,
@@ -147,6 +178,7 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
     checked = " checked" if s["only_entered"] else ""
     low = " checked" if s["include_low_quality"] else ""
     rates_on = " checked" if s["report_rates"] else ""
+    steady_on = " checked" if s.get("steady_check") else ""
     dropout = " checked" if s["include_dropout"] else ""
     absent = " checked" if s["include_absent"] else ""
     non_batch = " checked" if s["include_non_batch"] else ""
@@ -154,6 +186,8 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
                           for c, label in (("bh", "Benjamini-Hochberg"), ("by", "Benjamini-Yekutieli")))
     options = "".join(f"<option value=\"{m}\"{' selected' if s['metric'] == m else ''}>{m}</option>"
                       for m in METRICS)
+    derivations = "".join(f"<option value=\"{d}\"{' selected' if s.get('derivation', 'replicate') == d else ''}>"
+                          f"{d}</option>" for d in DERIVATIONS)
     rate_methods = "".join(f"<option value=\"{m}\"{' selected' if s['rate_method'] == m else ''}>{m}</option>"
                            for m in rates.METHODS)
     return f"""<details>
@@ -167,6 +201,13 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   <span class="muted">with growth_rate: easylinear (default), the steepest part of the log curve, as mGrowthDB
   computes the rates it reports; or baranyi, a fitted growth model, where a curve the model does not describe
   is left out and reported</span></div>
+<div class="row"><label>Derivation
+  <select name="derivation">{derivations}</select></label>
+  <span class="muted">replicate, the specified comparison: a growth property of the replicates with the
+  partner against those without it. Or integrated, which fits each organism's row from the whole time
+  course, ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt), over its growth phase; it needs no
+  growth property and gives the gLV coefficients directly, and it reports every row its design cannot
+  identify</span></div>
 <div class="row"><label>Growth rate window
   <input name="rate_window" type="text" size="6" value="{_esc(s['rate_window'])}"></label>
   <span class="muted">with easylinear: the points in each fitted window (default 5, as mGrowthDB)</span></div>
@@ -175,10 +216,17 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   <span class="muted">each organism's maximum specific growth rate in monoculture, as its own download and
   as the rates a gLV simulation takes; off by default, since a rate costs a fit per curve. gLV mode turns
   it on</span></div>
+<div class="row"><label><input type="checkbox" name="steady_check" value="1"{steady_on}>
+  Check against chemostat steady states</label>
+  <span class="muted">score the gLV parameters against the steady states mGrowthDB holds for these
+  organisms in continuous culture: a chemostat satisfies A x = -(r - D) there and was never used to fit
+  them. Needs Report growth rates, and reads curves the search did not need</span></div>
 <div class="row"><label><input type="checkbox" name="include_dropout" value="1"{dropout}>
   Include drop-out communities</label>
   <span class="muted">arcs from a community compared with the same community without one member, labeled
-  evidence dropout; on by default. Such an arc may act through a third species, so gLV mode unticks it</span></div>
+  evidence dropout; on by default. Such an arc may act through a third species, so gLV mode unticks it.
+  The comparison of replicate sets only: the default derivation refuses a community of three or more, so
+  with it this setting changes nothing</span></div>
 <div class="row"><label><input type="checkbox" name="include_low_quality" value="1"{low}>
   Show low-quality edges</label>
   <span class="muted">pooled strains, a chemostat curve, or a drop-out whose removed member was still detected;
@@ -200,7 +248,7 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   zero; 0 marks only a mean of exactly zero absent</span></div>
 <div class="row"><label>Multiple testing correction
   <select name="correction">{corrections}</select></label>
-  <span class="muted">how the p-values of Welch's t-test are adjusted: Benjamini-Hochberg (default) or the
+  <span class="muted">how the p-values of the test the derivation ran are adjusted: Benjamini-Hochberg (default) or the
   more conservative Benjamini-Yekutieli. The adjustment runs across every comparison of this search
   together: all arcs of all the studies it reads, absent and low-quality ones included, not study by study.
   So an arc's q-value can change with the other studies a search reads (All reads every
@@ -216,6 +264,11 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   <input name="spike_factor" type="text" size="6" value="{_esc(s['spike_factor'])}"></label>
   <span class="muted">leave out a curve with one or two points this many times above both neighbors;
   0 keeps all</span></div>
+<div class="row"><label>Carrying capacity decline limit
+  <input name="capacity_max_fall" type="text" size="6" value="{_esc(s['capacity_max_fall'])}"></label>
+  <span class="muted">a monoculture that grew, peaked and then declined has stopped growing, and its
+  plateau is recorded as the peak; leave out a curve that ends below 1/this of its peak, where the peak
+  was not a level the culture held; 0 keeps every certified plateau</span></div>
 <div class="row"><label>No-growth alpha
   <input name="no_growth_alpha" type="text" size="6" value="{_esc(_no_growth(s, 'alpha'))}"></label>
   <span class="muted">before any comparison, grownet checks that a species grew: across the replicate
@@ -275,17 +328,21 @@ derived from mGrowthDB growth data on this machine; nothing is uploaded.</p>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in selecting.EXAMPLES)}</p>
 <textarea id="conditions" name="conditions" rows="5">{_esc(conditions)}</textarea>
 <p class="hint">One per line. A medium is matched as text, so "wilkins" finds every spelling of
-Wilkins-Chalgren; an id (SMGDB..., EMGDB...) picks that study or experiment. Empty means every medium.</p>
+Wilkins-Chalgren <em>and</em> every variant of it: a medium with a sugar added or a carbon source left out
+is another environment, so those stay apart and the report names every medium the search read. An id
+(SMGDB..., EMGDB...) picks that study or experiment, which is how to read one medium alone. Empty means
+every medium.</p>
 </div>
 </div>
 <div class="bar"><button class="primary" type="submit">Find interactions</button>
 <button type="submit" name="example" value="1">Example</button>
 <button type="submit" name="all" value="1">All</button>
+<button type="submit" name="glv_example" value="1">gLV example</button>
 <button type="submit" name="glv_mode" value="1" class="switch{glv_on}" aria-pressed="{glv_pressed}"
 ><span class="track"><span class="knob"></span></span>gLV mode</button>
-<span class="muted">All derives every study in mGrowthDB, ignoring the boxes (half a minute or so).
-gLV mode sets what a simulation needs, growth rates on and drop-out communities off; press it again to
-switch back.</span></div>
+<span class="muted">All derives every study, ignoring the boxes (half a minute or so). gLV example fills
+the boxes and settings for a package that simulates, and runs it. gLV mode sets growth rates on and
+drop-out communities off; press it again to switch back.</span></div>
 {_settings_block(settings or {}, token, job)}
 </form>{below}""", token, refresh, job)
 
@@ -469,20 +526,33 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
             f"number make {count['cells']} cell(s) over {count['organisms']} organism(s): arcs of one pair from "
             "different conditions or studies merge by their median.</p>")
     rate_hint = ("<p class=\"hint\">The growth rates are each organism's maximum specific growth rate in "
-                 "monoculture, the median over the replicates and studies that have one. The gLV package holds "
-                 "the interaction matrix (-1 on the diagonal), the matching growth rates and a README stating "
-                 "what the numbers are.</p>") if organism_rates else ""
+                 "monoculture, the median over the replicates and studies that have one, with the lag and the "
+                 "carrying capacity beside each. The gLV package holds fitted per-capita coefficients, one "
+                 "matrix per abundance unit, the matching growth rates and a README stating every formula "
+                 "and naming whatever could not be fitted.</p>") if organism_rates else ""
+    units = matrix.abundance_units(result["network"], organism_rates)
+    # nothing is converted between abundance units, so a search spanning several writes several matrices,
+    # and the page says so before the download rather than only in the package (Karoline, 2026-10-06)
+    unit_hint = (f"<p class=\"hint\">These organisms are counted in {len(units)} abundance units "
+                 f"({_esc(', '.join(units))}), so the package will hold {len(units)} matrices, one per "
+                 "unit: a cell is per-capita, in 1/(time x abundance), and nothing is converted between "
+                 "units because a cell mass conversion would have to be invented. No effect between them "
+                 "was measured either, since organisms counted differently were never grown together, so "
+                 "they are separate systems rather than one matrix with corners missing.</p>"
+                 if len(units) > 1 else "")
     r_hint = (f"<p class=\"hint\">Send to R needs an R session waiting for it: install the companion package "
               f"once with <code>{_esc(rbridge.INSTALL_R)}</code> (if that answers 404, see the help), then run "
               f"<code>library(grownet); glv &lt;- grownet_listen()</code> and "
-              f"press this. What arrives prints its own caveats, warns when the matrix holds a stated extreme, "
+              f"press this. What arrives prints its own caveats, names every cell from a comparison where "
+              f"one side did not grow, "
               f"and refuses to build a simulation for an organism with no growth rate "
               f"(<a href=\"/help?token={t}{tail}#glv\">the help explains it</a>). Without a listener, read the "
               f"same parameters in R with <code>glv &lt;- grownet_glv(&quot;{_esc(_glv_url(token, result))}"
               f"&quot;)</code>.</p>") if organism_rates and has_edges else ""
     missing_rate = _without_a_rate(result)
     return (f"<div class=\"bar outputs\">{download if has_edges else ''}{cytoscape if has_edges else ''}"
-            f"{report}{rates_file}{glv}</div>{hint if has_edges else ''}{rate_hint}{r_hint}{missing_rate}")
+            f"{report}{rates_file}{glv}</div>{hint if has_edges else ''}{rate_hint}{unit_hint}{r_hint}"
+            f"{missing_rate}")
 
 
 def _glv_url(token: str, result: dict) -> str:
@@ -523,6 +593,16 @@ def _empty_reason(result: dict) -> str:
     """Why a search came back empty, with what the second box left out said first (#113)."""
     reason = _empty_reason_core(result)
     s = result.get("settings", {})
+    # the default derivation fits a row from a time course, so a sparsely sampled study gives it nothing
+    # where the specified comparison needs only two measurements per set. Say which setting moves, as the
+    # page does everywhere else (Karoline's decision of 2026-10-06 made this the common case)
+    if s.get("derivation", "integrated") == "integrated" and any(
+            "too few to fit a row" in why or "usable time point" in why
+            for _, why in result.get("skipped", ())):
+        reason += (" These curves are too sparsely sampled for the default derivation, which fits each "
+                   "organism's row from its whole time course. The specified comparison of replicate "
+                   "sets needs only two measurements per set: set Derivation to replicate in Advanced "
+                   "settings to use it.")
     unmatched = len([r for _, r in result.get("skipped", ()) if "no experiment of this study matches" in r])
     if s.get("conditions") and unmatched and "second box" not in reason:
         studies = len(result.get("studies", ()))
@@ -659,17 +739,28 @@ def _no_growth(s: dict, which: str) -> float:
 
 
 # What the page says when the mode is switched on and off.
-GLV_MODE_MESSAGE = ("gLV mode on: growth rates on, drop-out communities off. Both are in Advanced "
-                    "settings, and pressing gLV mode again switches them back. Name one medium in the "
-                    "second box to keep a simulation to one environment.")
-GLV_MODE_OFF_MESSAGE = ("gLV mode off: growth rates off and drop-out communities included again, which "
-                        "are the defaults.")
+GLV_MODE_MESSAGE = ("gLV mode on: growth rates on, drop-out communities off, and the comparison on the "
+                    "growth rate, which is what a fitted coefficient is made of. All three are in "
+                    "Advanced settings, and pressing gLV mode again switches them back. Name one medium "
+                    "in the second box to keep a simulation to one environment.")
+GLV_MODE_OFF_MESSAGE = ("gLV mode off: growth rates off, drop-out communities included again and the "
+                        "comparison back on the area under the curve, which are the defaults.")
+
+
+def chosen_deriver(settings: dict, client=None):
+    """The derivation a search runs, or None for the specified comparison, which `derive_interactions`
+    builds itself. The integrated form of #127 is the advanced alternative Karoline approved."""
+    if (settings or {}).get("derivation") != "integrated":
+        return None
+    from .integrated import IntegratedDeriver
+    return IntegratedDeriver(client=client, spike_factor=settings.get("spike_factor"),
+                             include_non_batch=settings.get("include_non_batch", False))
 
 
 def glv_mode_on(settings: dict) -> bool:
     """Whether the settings are the ones gLV mode sets."""
     s = {**DEFAULTS, **(settings or {})}
-    return bool(s["report_rates"]) and not s["include_dropout"]
+    return bool(s["report_rates"]) and not s["include_dropout"] and s["metric"] == "growth_rate"
 
 
 def glv_mode(settings: dict, on: bool = True) -> dict:
@@ -678,9 +769,13 @@ def glv_mode(settings: dict, on: bool = True) -> dict:
     toggles ("Do I click a 2nd time to switch it off?").
     """
     if on:
-        return {**settings, "report_rates": True, "include_dropout": False}
+        # the coefficients of #119 need the comparison to be on a GROWTH RATE, which auc and max cannot
+        # produce. The rate method is left alone: easylinear by default, since Karoline chose it on
+        # 2026-10-06 ("easylinear since it works better"), with the lag still Baranyi's, and anyone who
+        # wants Baranyi rates sets it in Advanced settings.
+        return {**settings, "report_rates": True, "include_dropout": False, "metric": "growth_rate"}
     return {**settings, "report_rates": DEFAULTS["report_rates"],
-            "include_dropout": DEFAULTS["include_dropout"]}
+            "include_dropout": DEFAULTS["include_dropout"], "metric": DEFAULTS["metric"]}
 
 
 def parse_settings(form: dict) -> dict:
@@ -698,6 +793,10 @@ def parse_settings(form: dict) -> dict:
         pass
     try:
         settings["spike_factor"] = abs(float(form.get("spike_factor", [""])[0]))
+    except ValueError:
+        pass
+    try:
+        settings["capacity_max_fall"] = abs(float(form.get("capacity_max_fall", [""])[0]))
     except ValueError:
         pass
     settings["include_low_quality"] = bool(form.get("include_low_quality"))
@@ -733,6 +832,10 @@ def parse_settings(form: dict) -> dict:
     settings["exclude_studies"] = form.get("exclude_studies", [""])[0].strip()
     settings["only_entered"] = bool(form.get("only_entered"))
     settings["report_rates"] = bool(form.get("report_rates"))
+    settings["steady_check"] = bool(form.get("steady_check"))
+    derivation = form.get("derivation", [""])[0]
+    if derivation in DERIVATIONS:
+        settings["derivation"] = derivation
     return settings
 
 
@@ -832,17 +935,25 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # with "only the species entered", only what can give an interaction between them is read (identical
     # networks, checked against reading everything); read it all first, a few requests at a time
     narrowed = keep if (only_entered and narrow) else None
+    # one instance for the whole search, so the network's statistics and the arcs come from the same
+    # derivation rather than from a fresh object per study
+    deriver = chosen_deriver(s, client)
     from .fetch import prefetch_studies
     prefetch_studies(client, studies, s["include_non_batch"], progress=lambda d, t, m: say(d, t, m),
-                     keep=narrowed, dropout=s["include_dropout"])
+                     # the default derivation refuses a community of three or more, so prefetching the
+                     # drop-out designs reads curves nothing can use (#142 item 10)
+                     keep=narrowed,
+                     dropout=s["include_dropout"] and s["derivation"] != "integrated")
     for i, study_id in enumerate(studies):
         say(i, len(studies), f"Reading {study_id} ({i + 1} of {len(studies)})")
         try:
-            recs, skips = derive_interactions(client, study_id, metric=metric_name(s),
+            recs, skips = derive_interactions(client, study_id, deriver=deriver,
+                                              metric=metric_name(s),
                                               spike_factor=s["spike_factor"], dropout=s["include_dropout"],
                                               include_non_batch=s["include_non_batch"],
                                               no_growth_alpha=s["no_growth_alpha"],
                                               no_growth_factor=s["no_growth_factor"], keep=narrowed,
+                                              capacity_max_fall=s["capacity_max_fall"],
                                               selection=selection)
         except MGrowthDBError as e:
             errors.append(f"{study_id}: {e}")
@@ -867,10 +978,12 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         errors.append(f"{len(failed)} replicate(s) or growth curve(s) could not be read from mGrowthDB "
                       f"(for example {failed[0][0]}: {failed[0][1]}); the result is incomplete, so run the "
                       "search again")
+    # the derivation that made these records says what it tests and what is provisional in it: the words
+    # used to be the specified comparison's whatever had derived the network (#142 item 5)
     kept, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"],
                               s["no_growth_alpha"], s["no_growth_factor"], s["merge_arcs"], s["min_studies"],
                               s["merge_genera"], support_level(names), s["max_adjusted_p"],
-                              s["include_absent"])
+                              s["include_absent"], deriver=deriver)
     # output_meta sets each record's status in place, so the arcs it left out below the threshold are still
     # here to show in their own section: the page reports them, the file holds what the page counts
     absent_records = [] if s["include_absent"] else [r for r in records if r.get("status") == ABSENT]
@@ -888,15 +1001,39 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # monoculture, median over replicates and studies (Karoline, 2026-10-03). They travel in the network's
     # meta, so a downloaded network carries the rates it was reported with.
     organism_rates = {}
-    if s["report_rates"]:
+    fitted = integrated.fitted_rates(records) if s.get("derivation") == "integrated" else {}
+    if fitted:
+        # the derivation fitted a rate and a self-limitation per organism, and those are the parameters
+        # that go with its coefficients (#127)
+        organism_rates = {nid: entry for nid, entry in fitted.items() if nid in net.nodes}
+        # An organism whose fit implies no plateau is given the measured one inside `two_stage`, before
+        # its partners are fitted against it, from the monocultures of its own condition (#142 item 7).
+        # So there is no second pass here: it used to read every study's monocultures again to substitute
+        # a plateau afterwards, which cost a crawl and published a row no fit had produced.
+        # `self_limitation_source` on each row says where the diagonal came from, or why there is none.
+        net.meta["growth_rates"] = matrix.rate_meta(net, organism_rates, integrated.METRIC)
+    elif s["report_rates"]:
         say(len(studies), len(studies), "Reading the monoculture growth rates")
         found, rate_skips = growth_rates(client, studies, wanted=rate_nodes,
                                          rate_method=s["rate_method"], window=s["rate_window"],
-                                         spike_factor=s["spike_factor"], progress=say)
+                                         spike_factor=s["spike_factor"], progress=say,
+                                         capacity_max_fall=s["capacity_max_fall"])
         organism_rates = matrix.for_nodes(net, found)
         skipped += rate_skips
         net.meta["growth_rates"] = matrix.rate_meta(
             net, organism_rates, rates.method_name(s["rate_method"], s["rate_window"]))
+    # the steady-state check (#125): a chemostat satisfies A x = -(r - D) there, and those numbers were
+    # never used to fit the parameters, so they test them. Off unless asked for: it reads the curves of
+    # chemostats this search did not need.
+    checked = None
+    if s.get("steady_check") and organism_rates:
+        say(len(studies), len(studies), "Reading the chemostat steady states")
+        try:
+            got = matrix.coefficients(net, organism_rates)
+        except matrix.CannotConvert as e:
+            errors.append(f"no steady-state check: {e}")
+        else:
+            checked = steady.check(got, organism_rates, steady.find(client, net, progress=say))
     say(len(studies), len(studies), "Preparing the result")
     return {"entries": names, "settings": dict(s), "resolved": resolved["resolved"],
             "reasons": resolved["reasons"], "suggestions": resolved["suggestions"], "excluded": left_out,
@@ -904,7 +1041,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
             "partners_only": partners_only,
             "unresolved": resolved["unresolved"], "taxon_ids": resolved["taxon_ids"], "studies": studies,
             "network": net, "absent": records_to_network(absent_records) if absent_records else None,
-            "rates": organism_rates,
+            "rates": organism_rates, "steady": checked,
             "skipped": skipped, "errors": errors, "hidden": extra["hidden"], "absence": extra["absence"]}
 
 
@@ -1053,12 +1190,35 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                        f"{TITLE}_growth_rates.csv")
         elif path == "/glv.json":
             # what the R package fetches, and what Send to R posts: the same numbers as the zip, with the
-            # caveats as data and the README text (#110)
-            self._send(json.dumps(matrix.glv_payload(result["network"], organism_rates), indent=1),
-                       "application/json; charset=utf-8")
+            # caveats as data and the README text (#110, converted on #120)
+            payload = self._payload(result, organism_rates)
+            if payload is not None:
+                self._send(json.dumps(payload, indent=1), "application/json; charset=utf-8")
         else:
-            self._send(matrix.glv_package(result["network"], organism_rates), "application/zip",
-                       f"{TITLE}_glv_parameters.zip")
+            self._package(result, organism_rates)
+
+    def _payload(self, result, organism_rates):
+        """The gLV payload, or None when the page has already said which setting to change (#119)."""
+        try:
+            return matrix.glv_payload(result["network"], organism_rates, self._extra(result))
+        except matrix.CannotConvert as e:
+            self._send(render_result(self.token, result, message=f"No gLV parameters: {e}"))
+            return None
+
+    def _extra(self, result) -> dict:
+        """The files a package or a payload carries beside the numbers: the steady-state check (#125)."""
+        return ({"steady_state_check.txt": steady.as_text(result["steady"])}
+                if result.get("steady") is not None else {})
+
+    def _package(self, result, organism_rates) -> None:
+        """The zip, or the page saying which setting to change: a package of coefficients needs the
+        comparison to be on a growth rate (#119)."""
+        try:
+            zipped = matrix.glv_package(result["network"], organism_rates, self._extra(result))
+        except matrix.CannotConvert as e:
+            self._send(render_result(self.token, result, message=f"No gLV package: {e}"))
+            return
+        self._send(zipped, "application/zip", f"{TITLE}_glv_parameters.zip")
 
     def _glv(self, query: dict, form: dict) -> None:
         """The page's one gLV control: the zip, or the parameters posted into a listening R session."""
@@ -1069,10 +1229,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                                                        "and run the search again."))
             return
         if form.get("to", ["zip"])[0] != "r":
-            self._send(matrix.glv_package(result["network"], organism_rates), "application/zip",
-                       f"{TITLE}_glv_parameters.zip")
+            self._package(result, organism_rates)
             return
-        payload = matrix.glv_payload(result["network"], organism_rates)
+        payload = self._payload(result, organism_rates)
+        if payload is None:
+            return
         try:
             answer = rbridge.send(payload)
         except rbridge.RError as e:
@@ -1081,7 +1242,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         caveats = payload["caveats"]
         note = (f"Sent to R: {answer.get('organisms', 0)} organism(s), "
                 f"{answer.get('growth_rates', 0)} growth rate(s), "
-                f"{len(caveats['placeholders'])} placeholder cell(s). The R session printed what it holds "
+                f"{len(caveats['censored_cells'])} cell(s) from a comparison where one side did not "
+                "grow. The R session printed what it holds "
                 "and what to read before simulating.")
         self._send(render_result(self.token, result, message=note))
 
@@ -1166,6 +1328,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if form.get("example"):
             self._send(render_form(self.token, "\n".join(EXAMPLE), settings,
                                    conditions=settings.get("conditions", "")))
+            return
+        if form.get("glv_example"):
+            # everything a working simulation needs, and then the search itself: the two organisms, the
+            # study they are in so nothing else is read, and growth rates on, which a package cannot be
+            # built without. The help's gLV section runs this package through miaSim step by step.
+            settings = {**settings, "report_rates": True, "conditions": GLV_EXAMPLE_STUDY}
+            job = self._start(list(GLV_EXAMPLE), settings)
+            job["thread"].join(self.wait)
+            self._redirect(f"/?token={self.token}&job={job['id']}#result")
             return
         if form.get("all"):
             job = self._start([], settings, all_studies=True)

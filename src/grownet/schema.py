@@ -25,24 +25,104 @@ from .model import (
     InteractionNetwork,
 )
 
+# The committed copy of the schema, inside a checkout. It is for the repository's own tools, the gate
+# and the tests: an installed copy has no such file (the path would land above site-packages), and
+# nothing in `src/` reads it, because `schema_json()` writes the same document from the code. The sdist
+# carries it through MANIFEST.in so a packager can run the tests (found missing 2026-10-06).
 SCHEMA_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "schema", "interaction_network.schema.json",
 )
 
+# What `meta` holds (#117, Craig while approving 0.2.0: "`meta` is still unconstrained in the schema ...
+# the release that moves the version is the natural place to declare those sub-properties").
+#
+# Two kinds of key, said in the descriptions so a reader knows which to depend on:
+#   * a **promise**: the format states it and a later version will not change its meaning silently;
+#   * **recorded**: written because it is useful to have, and free to change with the thing it describes
+#     (the settings of a run, for example, change whenever a setting is added).
+#
+# It stays permissive on purpose: no `additionalProperties`, so a network written by a later version, the
+# fixtures and the daily All network all keep validating. Declaring a key constrains its type, not its
+# presence.
+META_DESCRIPTION = ("how this network was made. The keys described as part of the format are the ones a "
+                    "current derivation always writes, and what they mean does not change; the others "
+                    "are recorded because they are useful, and may change with what they describe. "
+                    "Neither kind is required here, because one shape validates /v0, /v1 and /v2 and an "
+                    "older artifact does not carry every key a current one does. Keys not declared here "
+                    "are allowed, so a network from a later version still validates.")
+# Craig's agent, on #136: eight keys said "a promise of the format" while `meta` has no `required` list,
+# so `meta = {}` validates and the word did work the file does not back. A `required` list is the wrong
+# fix, since it would apply to /v0 and /v1 too and an older artifact without `statistics` or `absence`
+# would start failing, against what #141 promises about 0.1.x and 0.2.x files. So the wording says what
+# is true: a current derivation writes these, and their meaning is fixed (#142 item 15).
+_PROMISE = "part of the format, and written by every current derivation: "
+_RECORDED = "recorded, not promised: "
+META_PROPERTIES = {
+    "tool": {"type": "string", "description": _PROMISE + "the tool that derived this network"},
+    "tool_version": {"type": "string", "description": _PROMISE + "its version"},
+    # `provenance` takes it from `datetime.now().astimezone()`, so it is the LOCAL date of whoever ran
+    # the derivation; `derived_at` beside it carries the time with its offset, which is what says which
+    # day that was anywhere else. The description said UTC, which it has never been (#155 item 14).
+    "derived_on": {"type": "string", "description": _PROMISE + "the local date it was derived; "
+                                                    "derived_at beside it carries the offset"},
+    "derived_at": {"type": "string", "description": _PROMISE + "when it was derived, to the second"},
+    "source_db": {"type": "string",
+                  "description": _PROMISE + "where the growth data came from, and whether live or a "
+                                            "fixture"},
+    "provisional": {"type": "string",
+                    "description": _PROMISE + "present while the derivation method is provisional, "
+                                              "saying so in words"},
+    "absence": {"type": "object",
+                "description": _PROMISE + "the absence threshold this network was written with: k, and "
+                                          "how many comparisons fell below it"},
+    "statistics": {"type": "object",
+                   "description": _PROMISE + "the test behind p_value and q_value, the correction used "
+                                             "and how many comparisons it ran over"},
+    "query": {"type": "string", "description": _RECORDED + "what was searched: species, all, or a study"},
+    "species": {"type": "array", "description": _RECORDED + "the names typed into the search"},
+    "studies": {"type": "array", "description": _RECORDED + "the studies the search read"},
+    # a single-study derivation records which study it was, and this was emitted and undeclared: the
+    # agreement test covered node, edge and study and not `meta`, so nothing compared the two (#155 item 14)
+    "study_id": {"type": "string", "description": _RECORDED + "the one study this network was derived "
+                                                  "from, where a derivation read a single study"},
+    "settings": {"type": "object", "description": _RECORDED + "every setting the run used"},
+    "selection": {"type": "object",
+                  "description": _RECORDED + "what the second box asked for: media, experiments or "
+                                             "studies"},
+    "no_growth": {"type": "object", "description": _RECORDED + "the no-growth rule's own numbers"},
+    "filters": {"type": "object", "description": _RECORDED + "what was filtered out of the output"},
+    "hidden": {"type": "object", "description": _RECORDED + "how many arcs were hidden, and why"},
+    "merge": {"type": "object", "description": _RECORDED + "what merging parallel arcs did"},
+    "genus": {"type": "object", "description": _RECORDED + "what merging to the genus level did"},
+    "data": {"type": "object",
+             "description": _RECORDED + "the data version: the API, when it was read, and what the "
+                                        "database reported about itself"},
+    "growth_rates": {"type": "object",
+                     "description": _RECORDED + "the growth rates reported beside the network, with the "
+                                                "rule they were derived by and the organisms that have "
+                                                "none"},
+}
+
 SCHEMA_DOC = {
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "$id": "https://github.com/crossfeed-bio/crossfeed/blob/main/schema/interaction_network.schema.json",
+    "$id": "https://raw.githubusercontent.com/crossfeed-bio/crossfeed/main/schema/interaction_network.schema.json",
     "title": "grownet interaction network",
     "description": ("The neutral, openly citable interaction-network format grownet emits from "
                     "mGrowthDB co-growth data. Interactions are directed and condition-specific, and "
                     "every edge carries the studies it was derived from (edge-level attribution)."),
     "type": "object",
     "required": ["schema", "nodes", "edges", "studies"],
-    "additionalProperties": False,
+    # Permissive here too, for the same reason it is permissive inside `meta` and inside every record:
+    # a network written by a later version still validates. `additionalProperties: False` at this one
+    # level made the document root the strictest part of the schema while `node`, `study` and `edge`
+    # declared nothing of the kind, so a future top-level key was invalid to the schema and valid to
+    # `grownet validate`, and a future record key was the other way round. The standalone viewer
+    # deliberately preserves unknown top-level fields on export, so it could write a file this schema
+    # rejected (#155 item 5).
     "properties": {
         "schema": {"enum": list(KNOWN_SCHEMAS)},
-        "meta": {"type": "object"},
+        "meta": {"type": "object", "description": META_DESCRIPTION, "properties": META_PROPERTIES},
         "nodes": {"type": "array", "items": {"$ref": "#/definitions/node"}},
         "edges": {"type": "array", "items": {"$ref": "#/definitions/edge"}},
         "studies": {"type": "array", "items": {"$ref": "#/definitions/study"}},
@@ -95,6 +175,35 @@ SCHEMA_DOC = {
                 "partner_abundance": {"type": ["number", "null"]},
                 "partner_abundance_unit": {"type": "string"},
                 "partner_abundance_n": {"type": ["integer", "null"]},
+                "metric_with": {"type": ["number", "null"]},
+                "metric_without": {"type": ["number", "null"]},
+                "target_capacity": {"type": ["number", "null"]},
+                "target_capacity_unit": {"type": "string"},
+                "target_capacity_n": {"type": ["integer", "null"]},
+                "strength_bound": {"type": ["number", "null"]},
+                "bound_rule": {"type": "string"},
+                "coefficient": {"type": ["number", "null"]},
+                "coefficient_unit": {"type": "string"},
+                "fit_r2": {"type": ["number", "null"]},
+                "fit_null_r2": {"type": ["number", "null"]},
+                "fit_window_share": {"type": ["number", "null"]},
+                "rate_mismatch_to_zero": {"type": ["number", "null"]},
+                # merging parallel arcs and merging to the genus: emitted since 0.2.0 and declared only
+                # now, which is the drift `tests/test_schema.py` closes the loop on (#142 item 10)
+                "merged_arcs": {"type": ["integer", "null"]},
+                "strength_range": {"type": "array", "items": {"type": "number"}},
+                "supporting_pairs": {"type": ["integer", "null"]},
+                "merged_pairs": {"type": "array", "items": {"type": "string"}},
+                "fit_condition": {"type": ["number", "null"]},
+                # the coefficient's uncertainty, as two disjoint designs: the co-culture replicates, and
+                # the monoculture stage resampled over its own replicates (#142 item 2)
+                "coefficient_sd": {"type": ["number", "null"]},
+                "coefficient_n": {"type": ["integer", "null"]},
+                "coefficient_sd_from_rate_stage": {"type": ["number", "null"]},
+                "se_replicates": {"type": ["number", "null"]},
+                "se_rate_stage": {"type": ["number", "null"]},
+                "rate_stage_method": {"type": "string"},
+                "rate_stage_n": {"type": ["integer", "null"]},
             },
         },
         "study": {
@@ -120,11 +229,68 @@ def _objs(x):
     return x if isinstance(x, list) and all(isinstance(i, dict) for i in x) else None
 
 
-def validate_document(doc) -> list:
+_META_TYPES = {"string": str, "array": list, "object": dict}
+
+
+def _meta_problems(meta: dict, notes: list = None) -> list:
+    """Where a declared key of `meta` holds the wrong kind of value. A key this schema does not declare is
+    left alone, which is what keeps a network from a later version valid here (#117).
+
+    An undeclared key goes to `notes`, as `_unknown_keys` does for a record: the two sat in the same
+    function treating the same situation differently, one silent and one calling the file invalid, and
+    both are now a note (#155 item 14 and item 5).
+    """
+    problems = []
+    for key, value in sorted(meta.items()):
+        declared = META_PROPERTIES.get(key)
+        if declared is None:
+            if notes is not None:
+                notes.append(f"meta has {key!r}, which this version of the format does not declare: a "
+                             "reader of this version ignores it, so check the spelling or the version")
+            continue
+        if value is None:
+            continue
+        kind = _META_TYPES[declared["type"]]
+        if not isinstance(value, kind) or isinstance(value, bool):
+            problems.append(f"meta.{key} must be {declared['type']}, not {type(value).__name__}")
+    return problems
+
+
+def declared_keys(kind: str) -> set:
+    """The keys the shipped JSON Schema declares for "node", "edge" or "study"."""
+    return set(SCHEMA_DOC.get("definitions", {}).get(kind, {}).get("properties") or {})
+
+
+def _unknown_keys(lists: dict) -> list:
+    """Every key in the document that no record kind declares, named with where it is.
+
+    The model drops such a key when it reads the file, so nothing else reports it. A newer document read
+    by an older grownet will have keys this copy does not know, which is the point of dropping them, so
+    the message says the version rather than calling the file invalid.
+    """
+    out = []
+    for key, kind in (("nodes", "node"), ("edges", "edge"), ("studies", "study")):
+        declared = declared_keys(kind)
+        if not declared:
+            continue
+        for i, item in enumerate(lists.get(key, [])):
+            for name in sorted(set(item) - declared):
+                out.append(f"{key}[{i}] has {name!r}, which this version of the format does not declare: "
+                           "a reader of this version drops it, so check the spelling or the version")
+    return out
+
+
+def validate_document(doc, notes: list = None) -> list:
     """Return every problem with `doc` as a grownet interaction-network document (empty list = valid).
 
     Dependency-free. Checks the top-level shape, per-item required fields and the effect enum, the
     non-empty study_ids on every edge, and (when the shape is sound) referential integrity via the model.
+
+    A key no record kind declares is **not** a problem. It goes to `notes` when one is passed, because the
+    reader drops it and this document is from a version this copy does not know: calling it invalid
+    contradicted the schema's own promise that a network from a later version still validates, and it
+    skipped the referential-integrity pass below, which runs only when there are no problems. So one
+    unrecognized field turned off every remaining check (#155 item 5).
     """
     if not isinstance(doc, dict):
         return ["document is not a JSON object"]
@@ -134,6 +300,8 @@ def validate_document(doc) -> list:
         problems.append(f"schema is {doc.get('schema')!r}, expected one of {list(KNOWN_SCHEMAS)}")
     if "meta" in doc and not isinstance(doc["meta"], dict):
         problems.append("meta must be an object")
+    elif "meta" in doc:
+        problems += _meta_problems(doc["meta"], notes)
 
     lists = {}
     for key in ("nodes", "edges", "studies"):
@@ -142,6 +310,12 @@ def validate_document(doc) -> list:
             problems.append(f"{key} must be a list of objects")
         else:
             lists[key] = lst
+
+    # a key no record kind declares: the reader drops it rather than raising, which is what keeps an
+    # older copy of grownet working on a newer file, so `validate` is the only place a misspelling is
+    # caught at all and it has to name it (#142 item 10). Named, not refused (#155 item 5).
+    if notes is not None:
+        notes += _unknown_keys(lists)
 
     for i, n in enumerate(lists.get("nodes", [])):
         if not n.get("id"):

@@ -76,6 +76,8 @@ def fetch_from(opener, now: datetime.datetime | None = None) -> dict | None:
     # does with None. `from_payload` is inside the guard because that is where an unreadable document
     # raises: a field a reader does not know used to come out of `Edge(**e)` as a TypeError, which is
     # neither OSError nor ValueError, so it left the All button by exception (Craig's agent, on #121).
+    # #155 item 14 found the same thing on this branch, which did not yet carry #143's fix, so the two
+    # lines fixed it independently; this is #143's wording, which is the one with the attribution.
     try:
         with opener(URL, timeout=TIMEOUT) as response:
             payload = json.loads(response.read().decode("utf-8"))

@@ -5,21 +5,16 @@ comparing a strain's growth ALONE vs WITH a partner, under one condition. The CO
 scientific choice owned by the collaboration (K. Faust): which growth metric, how to read a per-strain
 signal inside a community, and the significance test.
 
-That choice plugs in through the `Deriver` interface. The default is `ReplicateDeriver`, the method the
-collaboration specified and settled (docs/METHOD_NOTES.md): replicate growth curves compared on the log2
-scale, with the rules recorded there. `BaselineDeriver` remains only as the retired placeholder that first
-ran the seam end to end, reachable with `--deriver`; another method drops in the same way, without touching
-the network model or the pipeline.
+That choice plugs in through the `Deriver` interface, and two methods are in it. `IntegratedDeriver`
+(grownet.integrated) is the default since 0.3.0: each organism's whole row fitted from its time course.
+`ReplicateDeriver`, in this module, is the comparison of replicate sets the collaboration specified and
+settled (docs/METHOD_NOTES.md), one setting away as `--derivation replicate`. Another method drops in the
+same way, without touching the network model or the pipeline.
 
-The retired baseline v0, for the record:
-  * metric: per-strain `growthRate` (1/h), a RATE that travels better across techniques than an absolute
-    AUC. The mono and co techniques are recorded per edge; a technique mismatch is FLAGGED, not hidden.
-  * mono growth: the strain's growthRate in its single-strain experiment (community-level context).
-  * co growth: the strain's growthRate in a PAIRWISE (2-member) co-culture, from the per-strain context
-    (subject.type == "strain"). Co-cultures with more than two members are SKIPPED (not a clean pairwise
-    attribution). A missing per-strain context skips that strain, with a reason; nothing is fabricated.
-  * strength = log2(co / mono); effect by sign with a documented deadband; NO significance test yet, so
-    every edge is qualitative (significance = None), recorded as such by the neutral model.
+The retired `BaselineDeriver` that first ran this seam end to end was deleted in 0.3.0 (#139): the seam
+has two real derivations now and needs no placeholder to demonstrate it. What it did is in
+docs/METHOD_NOTES.md, where the register's `[baseline]` tags record which option it took in each menu.
+
 """
 from __future__ import annotations
 
@@ -27,8 +22,9 @@ import json
 import math
 import re
 from collections import Counter
-from statistics import median
+from statistics import mean, median
 
+from . import media as media_rules
 from . import rates
 from . import selection as selecting
 from .adapter import replicates_for_experiment
@@ -37,6 +33,7 @@ from .growth import (
     GrowthCurve,
     Replicate,
     curve_features,
+    fall_from_peak,
     mean_over,
     reached_stationary,
     spike,
@@ -56,10 +53,6 @@ from .mgrowthdb import MGrowthDBClient, MGrowthDBError
 from .model import genus_name
 from .stats import CORRECTIONS, welch
 
-METHOD = ("crossfeed baseline v0 (PROVISIONAL): log2(growthRate co / mono), pairwise co-cultures only, "
-          "no significance test; comparison method to be scoped with K. Faust")
-DEADBAND = 0.25   # |log2 ratio| below this reads neutral in the baseline (documented, provisional)
-
 
 def genus_species(name: str) -> str:
     """Genus + species key for matching a strain across experiments (drops the strain designation)."""
@@ -69,107 +62,8 @@ def genus_species(name: str) -> str:
 _gs = genus_species   # short alias used throughout this module
 
 
-def _strain_growth(exp: dict, want_strain: str = None, metric: str = "growthRate"):
-    """(value, technique) for a strain's growth in an experiment, or (None, None).
-
-    mono (want_strain is None): the community-level context (subject.type == 'bioreplicate').
-    co (want_strain given): the per-strain context (subject.type == 'strain', genus+species match).
-    Prefers a bioreplicate named like 'Average(...)' when present.
-    """
-    result = (None, None)
-    brs = exp.get("bioreplicates", [])
-    ordered = sorted(brs, key=lambda b: 0 if str(b.get("name", "")).startswith("Average") else 1)
-    for br in ordered:
-        for mc in br.get("measurementContexts", []):
-            val = mc.get(metric)
-            if val is None:
-                continue
-            sub = mc.get("subject") or {}
-            if want_strain is None:
-                if sub.get("type") == "bioreplicate":
-                    result = (val, mc.get("techniqueType"))
-                    return result
-            else:
-                if sub.get("type") == "strain" and _gs(sub.get("name", "")) == _gs(want_strain):
-                    result = (val, mc.get("techniqueType"))
-                    return result
-    return result
-
-
 def _members(exp: dict) -> list:
     return [s.get("name", "") for s in exp.get("communityStrains", [])]
-
-
-def interactions_from_experiments(study: dict, exps: list, study_id: str = None,
-                                  metric: str = "growthRate", deadband: float = DEADBAND):
-    """Pure derivation, no network: return (records, skipped) from a study dict and its experiment dicts.
-    `records` feed grownet.mgrowthdb.records_to_network; `skipped` lists (label, reason) for everything
-    the data did not cleanly support. This is the PROVISIONAL baseline; see the module docstring."""
-    study_id = study_id or study.get("id")
-
-    records, skipped = [], []
-
-    monos = {}        # genus+species -> (value, technique)
-    mono_strain = {}  # genus+species -> the strain name whose value is held
-    for e in exps:
-        mem = _members(e)
-        if len(mem) == 1:
-            v, tech = _strain_growth(e, None, metric)
-            if v is not None:
-                key = _gs(mem[0])
-                held = mono_strain.get(key)
-                if held is not None and held != mem[0]:
-                    # Nodes are keyed at genus and species, so strains of one species share a key and only
-                    # the last monoculture read is used. Which one to keep is a method choice (METHOD_NOTES
-                    # setting 7), so the baseline keeps its behavior and reports what it dropped.
-                    skipped.append((f"monoculture {held}",
-                                    f"another strain of the same species ({mem[0]}) also has a monoculture; "
-                                    f"both key to '{key}' and only the last is used"))
-                monos[key] = (v, tech)
-                mono_strain[key] = mem[0]
-
-    study_meta = {
-        "study_citation": study.get("name", study_id),
-        "study_url": study.get("url", ""),
-        "study_license": "",   # per-study license is not exposed in the study endpoint; TODO resolve with mGrowthDB
-    }
-    for e in exps:
-        mem = _members(e)
-        if len(mem) < 2:
-            continue
-        if len(mem) > 2:
-            skipped.append((e.get("name", e.get("id")), "co-culture has >2 members; not a clean pairwise attribution"))
-            continue
-        cond = e.get("name", "")
-        a, b = mem[0], mem[1]
-        for focal, partner in ((a, b), (b, a)):
-            mono = monos.get(_gs(focal))
-            co_v, co_tech = _strain_growth(e, focal, metric)
-            if mono is None:
-                skipped.append((f"{partner}->{focal} [{cond}]", f"no mono growth for {focal}"))
-                continue
-            if co_v is None:
-                skipped.append((f"{partner}->{focal} [{cond}]", f"no per-strain co-culture growth for {focal}"))
-                continue
-            mono_v, mono_tech = mono
-            if mono_v <= 0 or co_v <= 0:
-                skipped.append((f"{partner}->{focal} [{cond}]", "non-positive growth value"))
-                continue
-            strength = math.log2(co_v / mono_v)
-            effect = "neutral" if abs(strength) < deadband else ("facilitation" if strength > 0 else "inhibition")
-            if mono_tech != co_tech:
-                note = METHOD + f"; TECHNIQUE MISMATCH mono={mono_tech} co={co_tech}"
-            else:
-                note = METHOD + f"; technique {co_tech}"
-            records.append({
-                "source": _gs(partner), "source_name": partner,
-                "target": _gs(focal), "target_name": focal,
-                "effect": effect, "strength": round(strength, 4), "significance": None,
-                "condition": cond, "method": note,
-                "evidence": "biculture", "community": sorted([_gs(a), _gs(b)]),
-                "study_id": study_id, **study_meta,
-            })
-    return records, skipped
 
 
 REPLICATE_METHOD = ("crossfeed replicate v1: mean log2({metric} in co-culture) minus mean log2({metric} in "
@@ -177,6 +71,11 @@ REPLICATE_METHOD = ("crossfeed replicate v1: mean log2({metric} in co-culture) m
                     "reported and corrected for multiple testing, not used to decide")
 PRESENT, ABSENT = "present", "absent"
 ABSENCE_THRESHOLD = 1.0    # k: absent when |log2 mean| < k * sd. k = 1 is the mean plus or minus sd rule
+# What a network says about its own statistics. These are the **specified comparison's**: a derivation
+# that tests something else says so through its own `statistics` attribute, which `output_meta` reads
+# (#142 item 5). They were a module constant copied into every network, so a file derived by the
+# integrated form claimed Welch's test over replicate sets, which that form does not run, and the claim
+# travelled into the JSON, GraphML, the Cytoscape legend, the page and the daily artifact.
 STATISTICS = {"test": "Welch's two-sided t-test on the per-replicate log2 values",
               "correction": "{name} over every comparison tested in this derivation",
               "role": "reported as support for an edge; presence is decided by the absence threshold"}
@@ -206,6 +105,13 @@ TWO_REPLICATES = "two_replicates"
 # experiments that differ only in their description (a supplement, a lineage) under identical recorded
 # conditions, where nothing recorded says which monoculture or drop-out matches which (Karoline, 2026-09-27)
 CONDITIONS_UNVERIFIED = "conditions_unverified"
+# the rows of an integrated fit cover less than half the measured course, because the model has no lag
+# term and no death term and so stops at the end of the plateau after the maximum. The effect one
+# organism has on another can change along the growth curve, competition first and facilitation later;
+# that is not treated here, and this says the coefficient describes the phase inside the window rather
+# than the whole course (Karoline, 2026-10-07: "this is not something we treat here, but something we
+# can warn about", with SMGDB00000002's Roseburia and Bacteroides as her example)
+WINDOW_PARTIAL = "window_partial"
 # with max as the measure (Karoline, 2026-09-28): one set reached stationary phase and the other did not,
 # so the maximum of one may still be rising; or the curves are too sparse to tell
 STATIONARY_DIFFERS, STATIONARY_UNCHECKED = "stationary_phase_differs", "stationary_unchecked"
@@ -234,6 +140,35 @@ def stationary_cautions(stationary, method: str, outcome: str) -> list:
     if None in verdicts:
         return [STATIONARY_UNCHECKED]
     return [STATIONARY_DIFFERS] if verdicts[0] != verdicts[1] else []
+
+
+def condition_key(exp: dict):
+    """What counts as the same condition: the recorded conditions AND the medium by the strict rule.
+
+    Karoline, 2026-10-07: "the strict medium matching (exclusion of cases with modifications e.g. mucin
+    addition) should be applied everywhere where medium matching is done." `conditions` compares the
+    compartment records, and mGrowthDB states an added sugar, a removed carbon source or a supplement only
+    in the **description**, which `media.identity` reads and `conditions` does not. So `conditions` alone
+    put chemically different experiments under one key: on SMGDB00000014 a single `conditions` value
+    covers twelve media, from plain minimal medium to minimal medium with 0.75 per cent linoleic acid and
+    a tbhq antioxidant, and the monocultures of all twelve were offered to one co-culture, to be told
+    apart afterwards by the wording of their descriptions.
+
+    Every place that asks "is this the same condition" uses this, so the strict rule cannot hold in one
+    path and not another: the monoculture index both derivations read, the drop-out designs, and the run
+    variants.
+    """
+    return conditions(exp), media_identity(exp)["key"]
+
+
+def media_identity(exp: dict) -> dict:
+    """The medium an experiment ran in, by the strict rule (`media.identity`).
+
+    One place, so every medium comparison in the tool means the same thing: the capacity merge, the
+    chemostat check, the second box and what an arc says it was measured in (Karoline, 2026-10-07:
+    "foodnet's strict medium rule should be applied in general").
+    """
+    return media_rules.identity(exp)
 
 
 def conditions(exp: dict) -> str:
@@ -294,9 +229,14 @@ def select_experiments(exps, selection, skipped) -> list:
     if selecting.empty(selection):
         return list(exps)
     kept = [e for e in exps if selecting.matches(e, selection)]
-    wanted_conditions = {conditions(e) for e in kept if len(_members(e)) > 1}
+    # the monocultures a kept comparison needs: the same recorded conditions AND the same medium by the
+    # strict rule, since `conditions` compares the compartment records and mGrowthDB states an added sugar
+    # or a removed carbon source only in the description. Without the medium, naming one chemistry of
+    # SMGDB00000014 pulled in the monocultures of all twelve (Karoline, 2026-10-07)
+    wanted = {condition_key(e) for e in kept if len(_members(e)) > 1}
     added = [e for e in exps
-             if e not in kept and len(_members(e)) == 1 and conditions(e) in wanted_conditions]
+             if e not in kept and len(_members(e)) == 1
+             and condition_key(e) in wanted]
     if added:
         skipped.append(("monocultures kept alongside the experiments named",
                         ", ".join(sorted(_exp_id(e) for e in added))
@@ -304,6 +244,16 @@ def select_experiments(exps, selection, skipped) -> list:
     if not kept:
         skipped.append((f"study {study_ids_of(exps)}",
                         "no experiment of this study matches the media, experiments or studies entered"))
+    # a medium is matched as text, so one word reaches every medium whose name or description holds it,
+    # and an added or removed compound makes another environment: say how many were read, since that is
+    # what the strict rule is for (Karoline, 2026-10-07, "because such changes alter interactions")
+    if selection.get("media"):
+        labels = sorted({media_identity(e)["label"] for e in kept})
+        if len(labels) > 1:
+            skipped.append(("media matched by " + ", ".join(selection["media"]),
+                            f"{len(labels)} different media, which are different environments and give "
+                            "separate arcs, never one pooled set: " + "; ".join(labels)
+                            + ". Name an experiment id in the second box to read one of them alone"))
     return kept + added
 
 
@@ -377,8 +327,12 @@ def _identity(identities: dict, name: str) -> dict:
 
 
 def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, identities=None) -> dict:
-    """(node id, conditions) -> {run group: (monoculture replicates, the distinct strain names pooled under
-    it, the ids of the experiments they come from, their descriptions, their names)}.
+    """(node id, conditions, medium key) -> {run group: (monoculture replicates, the distinct strain names
+    pooled under it, the ids of the experiments they come from, their descriptions, their names)}.
+
+    The medium is part of the key by the strict rule (`condition_key`), so a monoculture in an unaltered
+    medium is never offered to a co-culture in an altered one. `why_no_monoculture` turns a miss into a
+    reason that names the medium that was there instead.
 
     Monocultures are pooled only when they are replicates: identical recorded conditions AND the same
     description apart from a run number (`run_group`), the rule communities already follow (Karoline, on
@@ -394,7 +348,7 @@ def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, ident
             continue
         replicates, skips = replicates_for_experiment(client, exp, spike_factor)
         skipped += skips
-        key = (_identity(identities, members[0])["id"], conditions(exp))
+        key = (_identity(identities, members[0])["id"], *condition_key(exp))
         reps, strains, ids, descriptions, names = index.setdefault(key, {}).setdefault(
             run_group(exp), ([], set(), [], [], []))
         reps.extend(replicates)
@@ -402,7 +356,7 @@ def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, ident
         ids.append(_exp_id(exp))
         descriptions.append(exp.get("description") or exp.get("name") or "")
         names.append(exp.get("name") or "")
-    for (key, _), groups in index.items():
+    for (key, *_rest), groups in index.items():
         for _, (_, strains, _, _, _) in groups.items():
             if len(strains) > 1 and not key.startswith("ncbi:"):
                 skipped.append((f"monocultures of {key}", f"{len(strains)} strains pooled into one monoculture set "
@@ -452,6 +406,56 @@ def partner_abundance(replicate, target: str, partner: str, rate_method: str = N
     return {"value": value, "unit": partner_curve.abundance_unit, "window": (start, end), "reason": ""}
 
 
+def target_capacity(replicates, target: str, max_fall: float = None) -> dict:
+    """{"value", "unit", "n", "skipped"}: the target's own plateau in these co-culture replicates.
+
+    An organism that does not grow alone has no monoculture carrying capacity, so its self-limitation
+    cannot be fitted the usual way. What it does have is a plateau beside its partner, and at that plateau
+    the gLV balance reads `0 = r_i + A_ii x_i + sum_j A_ij x_j`, which fits `A_ii` (#123). Only curves
+    `reached_stationary` certifies count, as in #118, and the median runs over the replicates that have
+    one; abundances in different units are reported rather than converted.
+
+    **The decline limit applies here too** (Karoline, 2026-10-07, `CAPACITY_MAX_FALL`). This is the other
+    place a plateau becomes a self-limitation, and it was the only one that did not refuse a curve whose
+    peak it had long since lost: `reached_stationary` certifies a culture that grew, peaked and declined,
+    on purpose, and the limit is what keeps a peak that was held for one measurement out of a carrying
+    capacity. Without it 18 live values rested on curves past the limit, several of them with every curve
+    behind the value past it: SMGDB00000007's `bhbt` B. thetaiotaomicron fell by 67 to 159 times on all
+    six (#155 item 10).
+    """
+    limit = CAPACITY_MAX_FALL if max_fall is None else max_fall
+    values, unit, skipped = [], "", []
+    for i, replicate in enumerate(replicates):
+        curve = replicate.curve(target)
+        label = f"{target} in co-culture: replicate {replicate.name or i}"
+        if curve is None:
+            skipped.append((label, "no curve for this organism in this replicate"))
+            continue
+        settled = reached_stationary(curve, curve.times[-1])
+        if settled is not True:
+            skipped.append((label, "the curve is too sparse or does not rise, so stationary phase cannot "
+                                   "be judged" if settled is None else
+                                   "the curve had not reached stationary phase"))
+            continue
+        fall = fall_from_peak(curve, curve.times[-1])
+        if fall is None:
+            skipped.append((label, "the curve ends at zero or below, so what it held cannot be read "
+                                   "from it"))
+            continue
+        if limit and fall > limit:
+            skipped.append((label, f"the curve ends at 1/{fall:.3g} of its peak, further than the "
+                                   f"{limit:g} times allowed: the peak is not a level this culture held"))
+            continue
+        unit = unit or curve.abundance_unit
+        if curve.abundance_unit != unit:
+            skipped.append((label, f"the plateau is in {curve.abundance_unit} and the others in {unit}; "
+                                   "left out rather than converted"))
+            continue
+        values.append(curve_features(curve)["max"])
+    return {"value": median(values) if values else None, "unit": unit if values else "",
+            "n": len(values), "skipped": skipped}
+
+
 def partner_abundances(replicates, target: str, partner: str, rate_method: str = None,
                        window: int = None) -> dict:
     """The same over a replicate set: the median of the replicates that have one, with the rest reported.
@@ -486,8 +490,73 @@ def partner_abundances(replicates, target: str, partner: str, rate_method: str =
 # Monocultures only, and batch monocultures only: a rate from a co-culture is the organism's growth with a
 # partner, which is the comparison, not the organism's own rate; and under dilution the rate a curve shows
 # is the dilution rate (`METRICS_FOR_CONTINUOUS_CULTURE`).
+# How far a certified curve may have fallen from its peak and still give a carrying capacity: the window
+# maximum divided by the last measured value. `reached_stationary` certifies a culture that grew, peaked
+# and then declined, because it has stopped growing, and the plateau recorded for it is the peak. On the
+# live database (2026-10-07, all 1,331 per-strain batch curves) 443 certify and 417 of them, 94 percent,
+# end more than 10 percent below their peak: the median certified curve ends at a third of its peak and
+# the upper quartile at a tenth, so a decline is the ordinary shape of a batch culture of gut anaerobes
+# and refusing every declining curve would take 20 of the 29 organism-study pairs that have a capacity
+# down to none (Karoline, 2026-10-07: "I agree Craig's approach is too harsh"). The tail is a different
+# matter: A. tumefaciens in SMGDB00000014 certifies with a peak of 8.2e7 against a last value of 1, and
+# 18 curves fall by more than a thousandfold, where the peak is a spike and not a level anything held.
+# 10 is the line between them and reads as a sentence: the culture still holds a tenth of its peak at the
+# last measurement. It refuses 112 of the 443 and leaves 2 of the 29 pairs with no capacity, both in
+# SMGDB00000012 and both named in `capacity_left_out`. The page and --capacity-max-fall can move it; 0
+# switches the refusal off and keeps every certified plateau, as the tool did before 0.3.0.
+CAPACITY_MAX_FALL = 10.0
+
+
+def _collect_capacity(entry: dict, curve, label: str, medium: dict | None = None,
+                      max_fall: float = CAPACITY_MAX_FALL) -> None:
+    """Add this curve's plateau to an organism's capacities for the medium it was measured in, or say why
+    it gives none.
+
+    The plateau is certified by `reached_stationary` and taken as the curve's maximum. Every curve that
+    gives none is named in `capacity_left_out`, which is what the help promises a reader. A curve that
+    has fallen further from its peak than `max_fall` gives none either: see `CAPACITY_MAX_FALL`.
+
+    `medium` is a `media.identity` result. Plateaus are collected per medium and never pooled across
+    media, Karoline's decision of 2026-10-07: a capacity sits on the diagonal beside off-diagonals
+    measured in one medium, so the two have to be the same medium. `merge_rates` chooses which.
+    """
+    settled = reached_stationary(curve, curve.times[-1])
+    if settled is not True:
+        entry["capacity_left_out"].append(
+            (label, "the curve is too sparse or does not rise, so stationary phase cannot be judged"
+             if settled is None else "the curve had not reached stationary phase"))
+        return
+    fall = fall_from_peak(curve, curve.times[-1])
+    if fall is None:
+        entry["capacity_left_out"].append(
+            (label, "the curve ends at zero or below, so what it held cannot be read from it"))
+        return
+    if max_fall and fall > max_fall:
+        entry["capacity_left_out"].append(
+            (label, f"the curve ends at 1/{fall:.3g} of its peak, further than the {max_fall:g} times "
+                    "allowed: the peak is not a level this culture held"))
+        return
+    medium = medium or {"key": "unnamed medium", "label": "unnamed medium"}
+    at = entry["capacity_by_medium"].setdefault(
+        medium["key"], {"label": medium["label"], "unit": curve.abundance_unit,
+                        "values": [], "falls": [], "curves": [], "labels": []})
+    # the alias table can make two spellings one medium, so every spelling behind a capacity is kept and
+    # reported: a merge grownet made by hand is never silent (Karoline, 2026-10-07)
+    if medium["label"] not in at["labels"]:
+        at["labels"].append(medium["label"])
+    if curve.abundance_unit != at["unit"]:
+        entry["capacity_left_out"].append(
+            (label, f"the plateau is in {curve.abundance_unit}, and this organism's others in "
+                    f"{at['unit']}; left out rather than converted"))
+        return
+    at["values"].append(curve_features(curve)["max"])
+    at["falls"].append(fall)
+    at["curves"].append(label)
+
+
 def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window: int = None,
-                      spike_factor: float = SPIKE_FACTOR, identities=None) -> tuple:
+                      spike_factor: float = SPIKE_FACTOR, identities=None,
+                      capacity_max_fall: float = CAPACITY_MAX_FALL) -> tuple:
     """({node id: {"name", "values", "unit", "replicates"}}, skipped): a rate per monoculture replicate.
 
     `wanted`, when given, is the node ids to read, so a search reads the rates of the organisms in its
@@ -512,8 +581,10 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
         replicates, skips = replicates_for_experiment(client, exp, spike_factor)
         skipped += skips
         entry = found.setdefault(node["id"], {"name": name, "values": [], "unit": "", "replicates": [],
-                                              "method": method, "lags": [], "capacities": [],
-                                              "capacity_unit": "", "capacity_left_out": []})
+                                              "method": method, "lag_method": rates.LAG_METHOD,
+                                              "lags": [], "capacity_by_medium": {},
+                                              "capacity_left_out": []})
+        medium = media_identity(exp)
         for i, rep in enumerate(replicates):
             label = f"{name} monoculture [{exp.get('name', '') or _exp_id(exp)}], replicate {rep.name or i}"
             curve = rep.curve(name)
@@ -522,14 +593,21 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
                 continue
             if spike(curve, spike_factor):
                 skipped.append((label, "implausible spike in the curve; no growth rate from it"))
+                entry["capacity_left_out"].append(
+                    (label, "implausible spike in the curve, which would raise its maximum"))
                 continue
+            # a plateau is a property of the curve, so it is collected whether or not the chosen
+            # estimator can fit this curve's slope. It used to sit after these refusals, which made the
+            # carrying capacity, and so every diagonal, depend on the rate estimator (found 2026-10-06).
             try:
                 value = feature(curve.times, curve.values)
             except rates.RateUnavailable as e:
                 skipped.append((label, f"no growth rate: {e}"))
+                _collect_capacity(entry, curve, label, medium, capacity_max_fall)
                 continue
             if value <= 0:
                 skipped.append((label, f"non-positive growth rate ({value:g})"))
+                _collect_capacity(entry, curve, label, medium, capacity_max_fall)
                 continue
             unit = f"1/{curve.time_unit}"
             if not entry["unit"]:
@@ -537,36 +615,27 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
             if unit != entry["unit"]:
                 skipped.append((label, f"growth rate in {unit}, and this organism's other rates are in "
                                        f"{entry['unit']}; left out rather than converted"))
+                _collect_capacity(entry, curve, label, medium, capacity_max_fall)
                 continue
             entry["values"].append(value)
             entry["replicates"].append(rep.name or str(i))
-            # the lag, when the method has one: gLV has no lag, so the integrated form starts where it ends
-            if method.startswith("growth_rate:baranyi"):
-                try:
-                    entry["lags"].append(rates.baranyi_fit(curve.times, curve.values)["lag"])
-                except rates.RateUnavailable:
-                    pass
-            # the carrying capacity: the plateau, and only where the curve is certified to have reached one
-            settled = reached_stationary(curve, curve.times[-1])
-            if settled is not True:
-                entry["capacity_left_out"].append(
-                    (label, "the curve is too sparse or does not rise, so stationary phase cannot be judged"
-                     if settled is None else "the curve had not reached stationary phase"))
-                continue
-            capacity = curve_features(curve)["max"]
-            if not entry["capacity_unit"]:
-                entry["capacity_unit"] = curve.abundance_unit
-            if curve.abundance_unit != entry["capacity_unit"]:
-                entry["capacity_left_out"].append(
-                    (label, f"the plateau is in {curve.abundance_unit}, and this organism's others in "
-                            f"{entry['capacity_unit']}; left out rather than converted"))
-                continue
-            entry["capacities"].append(capacity)
-    return {nid: e for nid, e in found.items() if e["values"]}, skipped
+            # the lag always comes from the Baranyi fit, the only estimator that has one, whichever
+            # estimator produced the rate (Karoline, 2026-10-06: "use the lag from Baranyi and easylinear
+            # since it works better"). A curve the Baranyi guards reject keeps its rate and has no lag.
+            try:
+                entry["lags"].append(rates.baranyi_fit(curve.times, curve.values)["lag"])
+            except rates.RateUnavailable:
+                pass
+            _collect_capacity(entry, curve, label, medium, capacity_max_fall)
+    # an organism is kept when it has a rate or a certified plateau: a study where the estimator fitted
+    # no rate still measured the plateau, and dropping it there made the capacity estimator-dependent
+    # across studies as well (found 2026-10-06)
+    return {nid: e for nid, e in found.items() if e["values"] or e["capacity_by_medium"]}, skipped
 
 
 def growth_rates(client, study_ids, wanted=None, rate_method: str = None, window: int = None,
-                 spike_factor: float = SPIKE_FACTOR, progress=None) -> tuple:
+                 spike_factor: float = SPIKE_FACTOR, progress=None,
+                 capacity_max_fall: float = CAPACITY_MAX_FALL) -> tuple:
     """(rates, skipped) over several studies: each study's monoculture rates, merged by `merge_rates`.
 
     The studies are the ones the search read, so their experiments and curves are already cached and no
@@ -582,7 +651,8 @@ def growth_rates(client, study_ids, wanted=None, rate_method: str = None, window
         except MGrowthDBError as e:
             skipped.append((f"growth rates of {study_id}", f"could not be read: {e}"))
             continue
-        found, skips = monoculture_rates(client, exps, wanted, rate_method, window, spike_factor)
+        found, skips = monoculture_rates(client, exps, wanted, rate_method, window, spike_factor,
+                                         capacity_max_fall=capacity_max_fall)
         per_study.append((study_id, found))
         skipped += skips
     return merge_rates(per_study), skipped
@@ -602,49 +672,86 @@ def merge_rates(per_study) -> dict:
     from curves certified to have reached stationary phase, left out rather than converted across
     abundance units, with every curve left out and why in `capacity_left_out`; a curve can give a rate
     and no capacity, so these stay out of `skipped`, where the rate itself was not left out), `lag` with
-    `lag_n` (from the Baranyi fit, absent for a method that has none), and `method`, the estimator the
-    rate came from. Each is None when nothing qualified.
+    `lag_n` and `lag_method` (always the Baranyi fit, the only estimator that has a lag, whichever one
+    produced the rate), and `method`, the estimator the rate came from. Each is None when nothing
+    qualified.
+
+    **A capacity comes from one medium**, Karoline's decision of 2026-10-07: plateaus are collected per
+    medium (`media.identity`) and the medium with the most certified curves is the one published, named
+    in `capacity_medium`, with every other medium's curves named in `capacity_left_out` rather than
+    pooled in. `capacity_media` therefore holds exactly one label, and `capacity_other_media` says what
+    else this organism has a plateau in, so a reader who wants that medium can ask for it in the second
+    box. Pooling plateaus over media was how this worked before 0.3.0, and it put a diagonal from two
+    chemistries beside off-diagonals measured in one of them.
     """
     merged: dict = {}
     for study_id, found in per_study:
         for nid, entry in found.items():
             at = merged.setdefault(nid, {"name": entry["name"], "unit": entry["unit"], "values": [],
                                          "studies": [], "per_study": {}, "other_units": [],
-                                         "method": entry.get("method", ""), "lags": [], "capacities": [],
-                                         "capacity_unit": "", "capacity_per_study": {},
-                                         "other_capacity_units": [], "capacity_left_out": []})
-            if entry["unit"] != at["unit"]:
+                                         "method": entry.get("method", ""), "lags": [],
+                                         "lag_method": entry.get("lag_method", ""),
+                                         "by_medium": {}, "capacity_left_out": []})
+            if entry["values"] and entry["unit"] != at["unit"]:
                 at["other_units"].append(f"{study_id} ({entry['unit']})")
                 continue
-            at["values"] += list(entry["values"])
-            at["studies"].append(study_id)
-            at["per_study"][study_id] = median(entry["values"])
+            if entry["values"]:
+                at["values"] += list(entry["values"])
+                at["studies"].append(study_id)
+                at["per_study"][study_id] = median(entry["values"])
             at["lags"] += list(entry.get("lags") or [])
             at["capacity_left_out"] += list(entry.get("capacity_left_out") or [])
-            capacities = list(entry.get("capacities") or [])
-            if capacities:
-                unit = entry.get("capacity_unit") or ""
-                if not at["capacity_unit"]:
-                    at["capacity_unit"] = unit
-                if unit != at["capacity_unit"]:
-                    at["other_capacity_units"].append(f"{study_id} ({unit})")
-                else:
-                    at["capacities"] += capacities
-                    at["capacity_per_study"][study_id] = median(capacities)
+            for key, found_here in (entry.get("capacity_by_medium") or {}).items():
+                one = at["by_medium"].setdefault(key, {"label": found_here["label"],
+                                                       "unit": found_here["unit"], "values": [],
+                                                       "falls": [], "curves": [], "per_study": {},
+                                                       "other_units": [], "labels": []})
+                if found_here["unit"] != one["unit"]:
+                    one["other_units"].append(f"{study_id} ({found_here['unit']})")
+                    continue
+                for spelling in found_here.get("labels") or ():
+                    if spelling not in one["labels"]:
+                        one["labels"].append(spelling)
+                one["values"] += list(found_here["values"])
+                one["falls"] += list(found_here["falls"])
+                one["curves"] += list(found_here["curves"])
+                one["per_study"][study_id] = median(found_here["values"])
     out = {}
     for nid, at in merged.items():
         if not at["values"]:
             continue
+        # the medium with the most certified curves is the one published; a tie goes to the first label,
+        # so the choice does not depend on the order the studies were read in
+        order = sorted(at["by_medium"].items(), key=lambda kv: (-len(kv[1]["values"]), kv[1]["label"]))
+        chosen = order[0][1] if order else None
+        left_out = list(at["capacity_left_out"])
+        for _key, other in order[1:]:
+            left_out.append((f"{len(other['values'])} curve(s) in {other['label']}",
+                             f"this organism's capacity is taken from {chosen['label']}, where more "
+                             "curves reached a plateau; plateaus are not pooled across media, since a "
+                             "capacity sits beside off-diagonals measured in one of them"))
         out[nid] = {"name": at["name"], "rate": median(at["values"]), "unit": at["unit"],
                     "n": len(at["values"]), "studies": at["studies"], "per_study": at["per_study"],
                     "other_units": at["other_units"], "method": at["method"],
                     "lag": median(at["lags"]) if at["lags"] else None, "lag_n": len(at["lags"]),
-                    "capacity": median(at["capacities"]) if at["capacities"] else None,
-                    "capacity_unit": at["capacity_unit"] if at["capacities"] else "",
-                    "capacity_n": len(at["capacities"]),
-                    "capacity_per_study": at["capacity_per_study"],
-                    "other_capacity_units": at["other_capacity_units"],
-                    "capacity_left_out": at["capacity_left_out"]}
+                    "lag_method": at["lag_method"] if at["lags"] else "",
+                    "capacity": median(chosen["values"]) if chosen else None,
+                    "capacity_unit": chosen["unit"] if chosen else "",
+                    "capacity_n": len(chosen["values"]) if chosen else 0,
+                    # how far the curves behind this plateau had fallen from their peak, merged the same
+                    # way as the plateau itself: 1 is a curve that ended at its peak (Karoline, 2026-10-07)
+                    "capacity_fall": median(chosen["falls"]) if chosen and chosen["falls"] else None,
+                    "capacity_per_study": dict(chosen["per_study"]) if chosen else {},
+                    "other_capacity_units": list(chosen["other_units"]) if chosen else [],
+                    "capacity_left_out": left_out,
+                    # one medium, never pooled (Karoline, 2026-10-07): the label of the medium the
+                    # plateau was measured in, and what else this organism has a plateau in
+                    "capacity_medium": chosen["label"] if chosen else "",
+                    # every spelling the plateaus behind it were recorded under: more than one means the
+                    # alias table merged two names that disagree, which is said rather than assumed
+                    "capacity_medium_spellings": list(chosen["labels"]) if chosen else [],
+                    "capacity_media": [chosen["label"]] if chosen else [],
+                    "capacity_other_media": [other["label"] for _key, other in order[1:]]}
     return out
 
 
@@ -706,6 +813,32 @@ def _choose_monocultures(groups: dict, exp: dict):
     return None, (f"{len(groups)} monoculture sets under this experiment's recorded conditions, told apart only by "
                   f"their descriptions ({labels}); none names this co-culture, so which one matches it is not "
                   "known and none is guessed")
+
+
+def why_no_monoculture(index, node_id: str, exp: dict, base: str) -> str:
+    """Why this experiment has no monoculture set, naming a medium that differs only in what was added.
+
+    "No monoculture under this experiment's recorded conditions" is true and unhelpful when the
+    monoculture is there in the unaltered medium: on SMGDB00000004 the co-cultures are recorded in mMCB
+    with and without initial acetate while the monocultures are recorded in plain mMCB, so the strict
+    rule refuses the comparison. The reader deserves to know that is what happened rather than that the
+    data is missing (Karoline, 2026-10-07: "the strict medium matching ... should be applied everywhere
+    where medium matching is done").
+    """
+    from .media import differing_alterations_of_keys
+
+    cond, key = condition_key(exp)
+    for other in sorted({other for (nid, other_cond, other) in index
+                         if nid == node_id and other_cond == cond and other != key}):
+        differ = differing_alterations_of_keys(key, other)
+        if differ is None:
+            continue
+        mine, theirs = differ
+        return (f"{base}; one was measured in the same base medium with {theirs or 'nothing added'} "
+                f"where this experiment has {mine or 'nothing added'}, and an added or removed compound "
+                "makes another environment, so the two are not compared. Name that experiment in the "
+                "second box to read it on its own")
+    return base
 
 
 def _exp_id(exp: dict) -> str:
@@ -780,9 +913,49 @@ def absence(mean, sd, outcome: str, k: float = ABSENCE_THRESHOLD):
     return ABSENT if abs(mean) < k * sd else PRESENT
 
 
+def absolute_values(c: dict) -> tuple:
+    """(with, without): the metric itself in each set, not its log2 ratio (#123).
+
+    The comparison is a difference of means of log2 values, so 2 to that mean is the geometric mean of
+    the metric in that set, and the ratio of the two is exactly the arc's strength. A set that did not
+    grow has no log2 values and its value is 0, which is what the outcomes obligate and abolished record:
+    `A_ij = (r_with - r_without) / x_j_star` is then a measurement where the log2 ratio does not exist.
+    """
+    with_log2, without_log2 = c.get("with_log2") or [], c.get("without_log2") or []
+    outcome = c.get("outcome")
+    first = 2 ** mean(with_log2) if with_log2 else (0.0 if outcome == ABOLISHED else None)
+    second = 2 ** mean(without_log2) if without_log2 else (0.0 if outcome == OBLIGATE else None)
+    return first, second
+
+
+def bounded_strength(c: dict) -> tuple:
+    """(the log2 bound a censored comparison's cell holds, the rule behind it), or (None, "").
+
+    A censored comparison has no ratio, because one side did not grow. The no-growth rule that said so
+    bounds that side's metric (`interaction.no_growth_bound`), so the cell holds a measured bound rather
+    than a stated extreme (#129): the growing side's own geometric mean over that bound, with the sign of
+    the outcome. An obligate pair gives a lower bound (at least this much facilitation) and an abolished
+    one an upper bound (at most this much inhibition).
+    """
+    bound = c.get("bound") or {}
+    if not bound.get("value"):
+        return None, ""
+    growing = c["with_log2"] if c["outcome"] == OBLIGATE else c["without_log2"]
+    if not growing:
+        return None, ""
+    size = mean(growing) - math.log2(bound["value"])
+    if size <= 0:
+        # the bound is weaker than the measurement it is compared with, so it does not put the effect
+        # away from zero. That happens with an area, where a culture that did not grow still carries the
+        # area of its own inoculum; `max` and a growth rate are bounded tightly (#129).
+        return None, (f"{bound['rule']}, which does not bound this effect away from zero: the cell is 0, "
+                      "and a comparison on the maximum or on the growth rate bounds it tightly")
+    return (round(size, 4) if c["outcome"] == OBLIGATE else round(-size, 4)), bound["rule"]
+
+
 def _record(source: str, target: str, c: dict, method: str, quality: list, cautions: list, notes: list,
             cond: str, evidence: str, community, experiments, study_id, study_meta, identities=None,
-            mode: str = BATCH, medium: str = "", partner: dict = None) -> dict:
+            mode: str = BATCH, medium: str = "", partner: dict = None, capacity: dict = None) -> dict:
     """One edge record from a comparison `c` (mean, sd, se, n_with, n_without, outcome, with_log2,
     without_log2), the shape `records_to_network` reads.
 
@@ -791,6 +964,8 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
     so a comparison whose partner was not measured keeps its arc, with the reason beside it.
     """
     mean, sd = c["mean"], c["sd"]
+    _absolute = absolute_values(c)
+    _bound = bounded_strength(c)
     test = welch(c["with_log2"], c["without_log2"])
     ratio = effect_over_sd(mean, sd)
     identities = identities or {}
@@ -818,6 +993,13 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
         "partner_abundance_unit": (partner or {}).get("unit", ""),
         "partner_abundance_n": (partner or {}).get("n"),
         "partner_abundance_left_out": list((partner or {}).get("skipped", ())),
+        # the two absolute numbers the strength is the ratio of, and the target's own plateau in the
+        # co-culture, which together fit a row that a ratio cannot (#123)
+        "metric_with": _absolute[0], "metric_without": _absolute[1],
+        "strength_bound": _bound[0], "bound_rule": _bound[1],
+        "target_capacity": (capacity or {}).get("value"),
+        "target_capacity_unit": (capacity or {}).get("unit", ""),
+        "target_capacity_n": (capacity or {}).get("n"),
         "condition": cond, "method": REPLICATE_METHOD.format(metric=method),
         "evidence": evidence, "community": sorted(_identity(identities, m)["id"] for m in community),
         "experiments": list(experiments),
@@ -837,7 +1019,8 @@ def _no_growth_kwargs(no_growth) -> dict:
 
 
 def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, records, skipped,
-              identities=None, no_growth=None, variants=1) -> None:
+              identities=None, no_growth=None, variants=1,
+              capacity_max_fall: float = CAPACITY_MAX_FALL) -> None:
     """The edges of one two-member co-culture against the monocultures of its members."""
     a, b = _members(exp)
     cond = exp.get("name", "")
@@ -845,7 +1028,7 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
     skipped += skips
     sets, pooled, origin, matched = {}, {}, {}, set()
     for species in (a, b):
-        key = (_identity(identities or {}, species)["id"], conditions(exp))
+        key = (_identity(identities or {}, species)["id"], *condition_key(exp))
         groups = monos.get(key, {})
         chosen, how = _choose_monocultures(groups, exp) if groups else (None, "")
         why = "" if chosen else how
@@ -854,7 +1037,10 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
         found, strains, ids = (chosen[0], chosen[1], chosen[2]) if chosen else ([], set(), [])
         if not groups:
             skipped.append((f"{a} with {b} [{cond}]",
-                            f"no monoculture replicates for {species} under this experiment's conditions"))
+                            why_no_monoculture(
+                                monos, key[0], exp,
+                                f"no monoculture replicates for {species} under this experiment's "
+                                "conditions")))
         elif not chosen:
             skipped.append((f"{a} with {b} [{cond}]", f"{species}: {why}"))
         sets[species] = _renamed(found, species)
@@ -882,7 +1068,8 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
             continue
         c = {"mean": side["mean"], "sd": side["sd"], "se": side["se"], "outcome": side["outcome"],
              "n_with": side["n_co"], "n_without": side["n_mono"],
-             "with_log2": side["co_log2"], "without_log2": side["mono_log2"]}
+             "with_log2": side["co_log2"], "without_log2": side["mono_log2"],
+             "bound": side.get("bound")}
         quality, cautions = _replicate_flags(c["n_with"], c["n_without"])
         cautions += stationary_cautions(side.get("stationary"), method, c["outcome"])
         cautions += zero_start_cautions(side.get("zero_start"), c["outcome"])
@@ -905,7 +1092,8 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
         records.append(_record(source, target, c, method, quality, cautions,
                                _spike_notes(result["flagged"], target), cond, "biculture", (a, b),
                                [_exp_id(exp), *origin[target]], study_id, study_meta, identities, mode,
-                               selecting.medium_of(exp), partner))
+                               media_identity(exp)["label"], partner,
+                               target_capacity(co_reps, target, capacity_max_fall)))
 
 
 def run_group(exp: dict) -> str:
@@ -935,7 +1123,7 @@ def dropout_designs(exps, skipped) -> list:
     for exp in exps:
         members = frozenset(_members(exp))
         if len(members) >= 2:
-            groups = by_condition.setdefault(conditions(exp), {}).setdefault(members, {})
+            groups = by_condition.setdefault(condition_key(exp), {}).setdefault(members, {})
             groups.setdefault(run_group(exp), []).append(exp)
     designs, used = [], set()
     for communities in by_condition.values():
@@ -1026,7 +1214,7 @@ def _variants(exps) -> dict:
     study holds: more than one means experiments that differ only in their description."""
     groups = {}
     for exp in exps:
-        groups.setdefault((frozenset(_members(exp)), conditions(exp)), set()).add(run_group(exp))
+        groups.setdefault((frozenset(_members(exp)), *condition_key(exp)), set()).add(run_group(exp))
     return {key: len(g) for key, g in groups.items()}
 
 
@@ -1075,15 +1263,17 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
                 CONTINUOUS_CULTURE if method in METRICS_FOR_CONTINUOUS_CULTURE else NON_BATCH)
         # the full community or this drop-out comes in variants told apart only by their descriptions, so
         # which drop-out goes with which full community is not recorded (Karoline, 2026-09-27)
-        key = conditions(full_exps[0])
-        if (variants or {}).get((frozenset(members), key), 1) > 1 or \
-                (variants or {}).get((frozenset(members - {removed}), key), 1) > 1:
+        # the same key `_variants` builds, which carries the medium by the strict rule: looking up a
+        # 2-tuple against a 3-tuple missed every time and silently turned the caution off (2026-10-07)
+        key = condition_key(full_exps[0])
+        if (variants or {}).get((frozenset(members), *key), 1) > 1 or \
+                (variants or {}).get((frozenset(members - {removed}), *key), 1) > 1:
             cautions.append(CONDITIONS_UNVERIFIED)
         cond = ", ".join(e.get("name", "") for e in drops[removed])
         experiments = [_exp_id(e) for e in [*full_exps, *drops[removed]]]
         records.append(_record(removed, target, arc, method, quality, cautions, notes, cond, arc["evidence"],
                                members, experiments, study_id, study_meta, identities, mode,
-                               selecting.medium_of(full_exps[0])))
+                               media_identity(full_exps[0])["label"]))
 
 
 def _wanted(exps, keep) -> set:
@@ -1124,7 +1314,7 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
                                  method: str = "auc", spike_factor: float = SPIKE_FACTOR,
                                  dropout: bool = True, include_non_batch: bool = False,
                                  no_growth_alpha: float = None, no_growth_factor: float = None, keep=None,
-                                 selection=None):
+                                 selection=None, capacity_max_fall: float = CAPACITY_MAX_FALL):
     """The specified comparison, run on a study: (records, skipped).
 
     Two designs give edges. Each two-member co-culture is compared with the monoculture replicates of
@@ -1175,7 +1365,9 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
                                     "not derived: the partner is not among the species entered"))
                 continue
             _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, records, skipped,
-                      identities, no_growth, variants[(frozenset(_members(exp)), conditions(exp))])
+                      identities, no_growth,
+                      variants[(frozenset(_members(exp)), *condition_key(exp))],
+                      capacity_max_fall)
     if dropout:
         for design in dropout_designs(exps, skipped):
             if wanted is not None and len(design[0] & wanted) < 2:
@@ -1220,7 +1412,10 @@ def adjust_significance(records, correction: str = "bh") -> int:
     tested = [r for r in records if r.get("p_value") is not None]
     adjust = CORRECTIONS[correction][1]
     for record, adjusted in zip(tested, adjust([r["p_value"] for r in tested]), strict=True):
-        record["q_value"] = round(adjusted, 6)
+        # significant figures, not decimal places: `round(q, 6)` published an adjusted p below 5e-7 as
+        # exactly 0.0, which is the strongest q-value there is and passes any filter, and `significance`
+        # then came out as infinity. A strong result should not be rounded into a certainty (#155 item 14)
+        record["q_value"] = float(f"{adjusted:.6g}") if adjusted else 0.0
         record["significance"] = significance_of(record["q_value"])
     return len(tested)
 
@@ -1464,7 +1659,8 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
                 absence_threshold: float = ABSENCE_THRESHOLD, no_growth_alpha: float = None,
                 no_growth_factor: float = None, merge_arcs: bool = False, min_studies: int = 1,
                 merge_genera: bool = False, support_level: str = "species",
-                max_adjusted_p: float | None = None, include_absent: bool = False) -> tuple:
+                max_adjusted_p: float | None = None, include_absent: bool = False,
+                deriver=None) -> tuple:
     """(edges, meta) for writing a network.
 
     Sets each record's `status` from the absence threshold k (None, undetermined, for a low-quality
@@ -1473,6 +1669,11 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
     how many edges each rule touched. `meta.no_growth` records the no-growth rule the derivation ran with,
     since the count of obligate and abolished edges depends on it (#37); pass the same values given to
     the derivation.
+
+    `deriver` is the derivation that made these records, and `meta.statistics` and `meta.provisional`
+    come from it: a derivation states what it tests and what is provisional about it, as it already
+    states its `name` and `method`. Without it the specified comparison's words are used, which is what
+    every network said before 2026-10-07 whatever had derived it (#142 item 5).
     """
     for record in records:
         # a low-quality edge is never read as the absence of an interaction (Karoline, on #40; #50)
@@ -1485,7 +1686,8 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
         hidden["not_significant"] = significance_filter["left_out"]
     edges, merge = merge_parallel(edges, merge_arcs, min_studies)
     edges, genus = merge_genus(edges, merge_genera, support_level)
-    statistics = {**STATISTICS, "correction": STATISTICS["correction"].format(name=CORRECTIONS[correction][0]),
+    said = dict(getattr(deriver, "statistics", None) or STATISTICS)
+    statistics = {**said, "correction": said["correction"].format(name=CORRECTIONS[correction][0]),
                   "tests": tests, "filter": significance_filter}
     if max_adjusted_p is not None:
         statistics["role"] = (f"presence is decided by the absence threshold, and an interaction whose "
@@ -1493,7 +1695,8 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
                               "(the q-value filter)")
     # how many the threshold marked absent, whether or not they are in the file
     absent = hidden["absent"] + sum(1 for e in edges if e.get("status") == ABSENT)
-    provisional = PROVISIONAL + ("" if max_adjusted_p is None else FILTER_NOTE.format(q=max_adjusted_p))
+    base = getattr(deriver, "provisional", None) or PROVISIONAL
+    provisional = base + ("" if max_adjusted_p is None else FILTER_NOTE.format(q=max_adjusted_p))
     meta = {"provisional": provisional, "statistics": statistics,
             "absence": {"rule": "absent when |log2 mean| < k * sd", "k": absence_threshold, "absent": absent},
             "no_growth": {**rule_meta(no_growth_alpha, no_growth_factor),
@@ -1520,6 +1723,11 @@ class Deriver:
 
     name = "abstract"
     method = ""
+    # what a network derived this way says about its own statistics and about what is provisional in it.
+    # None means the specified comparison's words, which is what every derivation used to claim whether
+    # or not it ran that test (#142 item 5): a derivation that tests something else states it here.
+    statistics = None
+    provisional = None
 
     def derive(self, study: dict, exps: list):
         """Return (records, skipped). `records` is a list of dicts for records_to_network; `skipped` is a
@@ -1533,15 +1741,18 @@ class ReplicateDeriver(Deriver):
     Reads each replicate's measured series through `grownet.adapter`, compares the replicate sets with
     `grownet.interaction.interaction_strength` (area under the curve by default; maximal abundance or a
     growth rate selectable), and emits edges carrying the standard error and the replicate counts. This is the default
-    for a live derivation; `BaselineDeriver` remains only as the retired placeholder it always was.
+    for a live derivation; the integrated form of #127 is the default since 0.3.0.
     """
 
     name = "replicate-v1"
     needs_client = True
+    statistics = STATISTICS
+    provisional = PROVISIONAL
 
     def __init__(self, method: str = "auc", spike_factor: float = SPIKE_FACTOR, client=None,
                  dropout: bool = True, include_non_batch: bool = False, no_growth_alpha: float = None,
-                 no_growth_factor: float = None, keep=None, selection=None):
+                 no_growth_factor: float = None, keep=None, selection=None,
+                 capacity_max_fall: float = CAPACITY_MAX_FALL):
         self.keep = keep
         self.selection = selection
         self.method = method
@@ -1551,6 +1762,9 @@ class ReplicateDeriver(Deriver):
         self.include_non_batch = include_non_batch
         self.no_growth_alpha = no_growth_alpha
         self.no_growth_factor = no_growth_factor
+        # the decline limit reaches the co-culture plateau too, which is the other place a plateau
+        # becomes a self-limitation and the only one that did not refuse a lost peak (#155 item 10)
+        self.capacity_max_fall = capacity_max_fall
 
     def derive(self, study: dict, exps: list):
         if self.client is None:
@@ -1558,35 +1772,23 @@ class ReplicateDeriver(Deriver):
         return interactions_from_replicates(self.client, study, exps, study.get("id"),
                                             self.method, self.spike_factor, self.dropout,
                                             self.include_non_batch, self.no_growth_alpha,
-                                            self.no_growth_factor, self.keep, self.selection)
-
-
-class BaselineDeriver(Deriver):
-    """The provisional v0 baseline: log2(growthRate co / mono), pairwise co-cultures only, no significance
-    test. A transparent placeholder that runs the seam end to end; meant to be replaced by the method
-    agreed with K. Faust."""
-
-    name = "baseline-v0"
-    method = METHOD
-
-    def __init__(self, metric: str = "growthRate", deadband: float = DEADBAND):
-        self.metric = metric
-        self.deadband = deadband
-
-    def derive(self, study: dict, exps: list):
-        return interactions_from_experiments(study, exps, study.get("id"), self.metric, self.deadband)
+                                            self.no_growth_factor, self.keep, self.selection,
+                                            self.capacity_max_fall)
 
 
 def derive_interactions(client: MGrowthDBClient, study_id: str, deriver: Deriver = None,
                         metric: str = "auc", spike_factor: float = SPIKE_FACTOR, dropout: bool = True,
                         include_non_batch: bool = False, no_growth_alpha: float = None,
-                        no_growth_factor: float = None, keep=None, selection=None):
+                        no_growth_factor: float = None, keep=None, selection=None,
+                        capacity_max_fall: float = CAPACITY_MAX_FALL):
     """Fetch a study and its experiments from the API, then derive interactions with `deriver`
-    (default: ReplicateDeriver, the specified comparison). `metric`, `spike_factor` and `dropout` configure
-    the default deriver only. A deriver that reads measured series says so with `needs_client`."""
+    (default: ReplicateDeriver, the specified comparison). `metric`, `spike_factor`, `dropout` and
+    `capacity_max_fall` configure the default deriver only. A deriver that reads measured series says so
+    with `needs_client`."""
     deriver = deriver or ReplicateDeriver(method=metric, spike_factor=spike_factor, dropout=dropout,
                                          include_non_batch=include_non_batch, no_growth_alpha=no_growth_alpha,
-                                         no_growth_factor=no_growth_factor, keep=keep, selection=selection)
+                                         no_growth_factor=no_growth_factor, keep=keep, selection=selection,
+                                         capacity_max_fall=capacity_max_fall)
     if getattr(deriver, "needs_client", False) and getattr(deriver, "client", None) is None:
         deriver.client = client
     if getattr(deriver, "needs_client", False):

@@ -17,6 +17,7 @@ from collections import Counter
 
 from .adapter import condensed, unread
 from .attribution import render_attribution
+from .derive import CAPACITY_MAX_FALL
 from .mgrowthdb import MGrowthDBError, records_to_network
 from .schema import schema_json, validate_document
 
@@ -95,14 +96,24 @@ def _rate_flags(a) -> str:
     for flag, path in (("--rates", a.rates), ("--glv", a.glv), ("--to-r", a.to_r)):
         if path and not a.report_rates:
             return f"{flag} writes the growth rates of the run, so it needs --report-rates"
+    if a.steady_check and not a.report_rates:
+        return "--steady-check scores the growth rates and coefficients of the run, so it needs --report-rates"
+    if a.glv and a.metric != "growth_rate" and not a.deriver and a.derivation == "replicate":
+        # a coefficient divides by a log2 ratio of growth rates, so the area or the maximum cannot make
+        # one (#119); --glv-mode sets both at once
+        return ("--glv writes fitted gLV coefficients, and a coefficient needs the log2 ratio of a "
+                f"growth rate, not of {a.metric}: add --metric growth_rate, or use --glv-mode")
     return ""
 
 
 def _derive(a):
     if a.glv_mode:
-        # the button sets both, and says so, rather than leaving a reader to remember them (#113)
-        a.report_rates, a.no_dropout = True, True
-        print("gLV mode: growth rates on, drop-out communities off", file=sys.stderr)
+        # the button sets them, and says so, rather than leaving a reader to remember them (#113). The
+        # the metric came with the coefficients of #119: L is the log2 ratio of a growth rate. The rate
+        # method is the reader's own setting (easylinear by default), with the lag always Baranyi's.
+        a.report_rates, a.no_dropout, a.metric = True, True, "growth_rate"
+        print("gLV mode: growth rates on, drop-out communities off, the comparison on the growth rate",
+              file=sys.stderr)
     problem = _rate_flags(a)
     if problem:
         print(problem, file=sys.stderr)
@@ -120,8 +131,14 @@ def _derive(a):
     if a.live:
         from .derive import derive_interactions, output_meta
         from .mgrowthdb import MGrowthDBClient
-        deriver = _load_deriver(a.deriver) if a.deriver else None
         client = MGrowthDBClient()
+        # --derivation picks the integrated form here as it does on the search path. It was read only by
+        # the pre-flight guard and by --species, so `derive <STUDY> --derivation integrated` quietly ran
+        # the default derivation and recorded nothing (found 2026-10-06).
+        from .gui import chosen_deriver
+        deriver = _load_deriver(a.deriver) if a.deriver else chosen_deriver(
+            {"derivation": a.derivation, "spike_factor": a.spike_factor,
+             "include_non_batch": a.include_non_batch}, client)
         try:
             from .selection import parse as parse_selection
             records, skipped = derive_interactions(client, a.study, deriver=deriver,
@@ -130,15 +147,20 @@ def _derive(a):
                                                    include_non_batch=a.include_non_batch,
                                                    no_growth_alpha=a.no_growth_alpha,
                                                    no_growth_factor=a.no_growth_factor,
+                                                   capacity_max_fall=a.capacity_max_fall,
                                                    selection=parse_selection(a.conditions))
             records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold,
                                          a.no_growth_alpha, a.no_growth_factor, a.merge_arcs, a.min_studies,
                                          a.merge_genera, max_adjusted_p=a.max_adjusted_p,
-                                         include_absent=a.include_absent)
+                                         include_absent=a.include_absent,
+                                         # the derivation says what it tests (#142 item 5)
+                                         deriver=deriver)
             extra["settings"] = {"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
+                                 "derivation": a.derivation,
                                  "merge_arcs": a.merge_arcs, "min_studies": a.min_studies,
                                  "merge_genera": a.merge_genera,
                                  "spike_factor": a.spike_factor,
+                                 "capacity_max_fall": a.capacity_max_fall,
                                  "absence_threshold": a.absence_threshold,
                                  "include_low_quality": a.include_low_quality, "correction": a.correction,
                                  "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
@@ -168,9 +190,9 @@ def _derive(a):
         print(f"warning: {errors[0]}", file=sys.stderr)
     organism_rates = {}
     if a.report_rates:
-        organism_rates, skipped = _rates_of(a, client, [a.study], net, skipped)
+        organism_rates, skipped = _rates_of(a, client, [a.study], net, skipped, records)
     result = {"study": a.study, "entries": [], "resolved": [], "unresolved": [], "studies": [a.study],
-              "rates": organism_rates,
+              "rates": organism_rates, "client": client if a.live else None,
               "skipped": skipped, "errors": errors, "network": net}
     return _emit(a, net, skipped, extra, a.study, result)
 
@@ -190,7 +212,7 @@ def _derive_species(a):
     from .gui import DEFAULTS, run_query
     from .mgrowthdb import MGrowthDBClient
     settings = {**DEFAULTS, "metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
-                "spike_factor": a.spike_factor,
+                "spike_factor": a.spike_factor, "capacity_max_fall": a.capacity_max_fall,
                 "absence_threshold": a.absence_threshold, "include_low_quality": a.include_low_quality,
                 "include_absent": a.include_absent,
                 "correction": a.correction, "include_dropout": not a.no_dropout,
@@ -198,11 +220,14 @@ def _derive_species(a):
                 "conditions": "\n".join([*a.conditions, *(a.study or "").split(",")]).strip(),
                 "only_entered": not a.all_partners, "exclude_studies": a.exclude_studies,
                 "merge_arcs": a.merge_arcs, "min_studies": a.min_studies, "merge_genera": a.merge_genera,
-                "report_rates": a.report_rates, "no_growth_alpha": a.no_growth_alpha,
+                "report_rates": a.report_rates, "derivation": a.derivation,
+                "no_growth_alpha": a.no_growth_alpha,
                 "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p}
+    client = MGrowthDBClient()
     try:
-        result = run_query(MGrowthDBClient(), a.species or [], settings, all_studies=a.all_studies,
+        result = run_query(client, a.species or [], settings, all_studies=a.all_studies,
                            published=not a.no_published)
+        result["client"] = client
     except MGrowthDBError as e:
         print(f"live fetch failed: {e}", file=sys.stderr)
         return 1
@@ -230,14 +255,35 @@ def _derive_species(a):
     return _emit(a, net, result["skipped"], extra, label, result)
 
 
-def _rates_of(a, client, study_ids, net, skipped):
+def _rates_of(a, client, study_ids, net, skipped, records=None):
     """(rates by node id, skipped): the monoculture growth rates of these studies, keyed by the network's
-    own nodes, with the network's meta recording them as the page does."""
+    own nodes, with the network's meta recording them as the page does.
+
+    A derivation that fits each row carries its own rate and self-limitation on every arc (#127), and
+    those are the parameters that go with its coefficients, so they are used when they are there rather
+    than fitting the monocultures a second way.
+    """
     from . import matrix, rates
     from .derive import growth_rates
+    from .integrated import METRIC as INTEGRATED
+    from .integrated import fitted_rates
+    fitted = fitted_rates(records or [])
+    if fitted:
+        # An organism whose fit implies no plateau is given the measured one inside `two_stage`, before
+        # its partners are fitted against it, from the monocultures of its own condition (#142 item 7).
+        # The second pass that used to read every study's monocultures and substitute a plateau afterwards
+        # published a row no fit had produced, and is gone; each row's `capacity_source` says where its
+        # diagonal came from, or why it has none.
+        for nid, entry in sorted(fitted.items()):
+            if entry.get("capacity") is None:
+                print(f"{entry.get('name', nid)}: {entry.get('capacity_source') or 'no plateau'}, so it "
+                      "has no self-limitation and no row in a matrix", file=sys.stderr)
+        net.meta["growth_rates"] = matrix.rate_meta(net, fitted, INTEGRATED)
+        return fitted, skipped
     found, rate_skips = growth_rates(client, study_ids, wanted=set(net.nodes),
                                      rate_method=a.rate_method, window=a.rate_window,
-                                     spike_factor=a.spike_factor)
+                                     spike_factor=a.spike_factor,
+                                     capacity_max_fall=a.capacity_max_fall)
     organism_rates = matrix.for_nodes(net, found)
     net.meta["growth_rates"] = matrix.rate_meta(net, organism_rates,
                                                 rates.method_name(a.rate_method, a.rate_window))
@@ -278,10 +324,33 @@ def _emit(a, net, skipped, extra, label, result):
         with open(a.rates, "w", encoding="utf-8") as f:
             f.write(rates_csv(organism_rates, net))
         print(f"wrote the growth rates to {a.rates}: {len(organism_rates)} organism(s)", file=sys.stderr)
+    checked = []
+    if a.steady_check and organism_rates:
+        # a chemostat steady state is an independent test of the parameters: it satisfies A x = -(r - D)
+        # and was never used to fit them (#125)
+        from . import steady
+        from .matrix import CannotConvert, coefficients
+        try:
+            got = coefficients(net, organism_rates)
+        except CannotConvert as e:
+            print(f"no steady-state check: {e}", file=sys.stderr)
+        else:
+            found = steady.find(result["client"], net) if result.get("client") is not None else []
+            checked = steady.check(got, organism_rates, found)
+            scored = sum(1 for one in checked if one["used"])
+            print(f"steady-state check: {scored} chemostat(s) scored, {len(checked) - scored} not "
+                  "(the report says why each)", file=sys.stderr)
+            result["steady"] = checked
+            if a.report:
+                from .report import report_text
+                with open(a.report, "w", encoding="utf-8") as f:
+                    f.write(report_text(result))
     if a.glv:
+        from . import steady as steady_module
         from .matrix import glv_package
+        extra_files = {"steady_state_check.txt": steady_module.as_text(checked)} if a.steady_check else None
         with open(a.glv, "wb") as f:
-            f.write(glv_package(net, organism_rates))
+            f.write(glv_package(net, organism_rates, extra_files))
         print(f"wrote the gLV parameters to {a.glv}: the interaction matrix, the growth rates and a README",
               file=sys.stderr)
 
@@ -363,7 +432,8 @@ def _style(a):
 def _validate(a):
     with open(a.file, encoding="utf-8") as f:
         doc = json.load(f)
-    problems = validate_document(doc)
+    notes = []
+    problems = validate_document(doc, notes)
     if problems:
         print(f"INVALID: {a.file}", file=sys.stderr)
         for p in problems:
@@ -371,9 +441,20 @@ def _validate(a):
         return 1
     from .model import SCHEMA
     read = doc.get("schema")
-    older = "" if read == SCHEMA else (
-        f" (schema {read}: `significance` there is the corrected p-value, not -log10 of it)")
+    # The note belongs to /v0 alone: that is where `significance` is the corrected p-value. It moved to
+    # -log10 of it in /v1, which is why the id moved then, and /v2 changed no field's meaning at all. The
+    # test was `read != SCHEMA`, so the /v2 bump silently extended the note to /v1 files and told their
+    # readers the opposite of the truth, in the one command that exists to say how to read a file
+    # (found 2026-10-07).
+    older = (" (schema grownet.interaction_network/v0: `significance` there is the corrected p-value, "
+             "not -log10 of it)") if read == "grownet.interaction_network/v0" else ""
+    if read != SCHEMA and not older:
+        older = f" (schema {read}; `significance` means what it means in {SCHEMA})"
     print(f"valid: {a.file}{older}")
+    # a field this version does not declare: the reader drops it, so the file is valid and the note is
+    # the only place a misspelling or a newer version shows up at all
+    for note in notes:
+        print(f"  note: {note}")
     return 0
 
 
@@ -443,9 +524,14 @@ def build_parser() -> argparse.ArgumentParser:
     settings.add_argument("--rate-method", choices=["easylinear", "baranyi"], default="easylinear",
                           help="with --metric growth_rate: easylinear (default), the steepest part of the log "
                                "curve as mGrowthDB computes its reported rates, or baranyi, a fitted growth "
-                               "model; a curve the model does not describe is left out and reported")
+                               "model; a curve the model does not describe is left out and reported. The lag "
+                               "reported beside a rate comes from the Baranyi fit either way")
     settings.add_argument("--rate-window", type=int, default=5, metavar="N",
                           help="with easylinear: the points in each fitted window (default 5, as mGrowthDB)")
+    settings.add_argument("--derivation", choices=["replicate", "integrated"], default="integrated",
+                          help="integrated (default), which fits each organism's row from the whole time "
+                               "course and gives the gLV coefficients directly; or replicate, the "
+                               "specified comparison of replicate sets (the page's Derivation setting)")
     settings.add_argument("--metric", choices=["auc", "max", "growth_rate"], default="auc",
                           help="the growth property compared: auc, the area under the curve (default); max, the "
                                "maximal abundance; or growth_rate, the maximum specific growth rate")
@@ -471,9 +557,10 @@ def build_parser() -> argparse.ArgumentParser:
                                "its effect is small against its spread, |log2 mean| < K * sd; default 1, the "
                                "mean plus or minus sd crossing zero; 0 marks only a mean of exactly zero absent")
     settings.add_argument("--correction", choices=["bh", "by"], default="bh",
-                          help="multiple testing correction of the reported p-values (Welch's t-test on the "
-                               "per-replicate log2 values), over every comparison one derivation tests: bh "
-                               "(Benjamini-Hochberg, default) or by (Benjamini-Yekutieli)")
+                          help="multiple testing correction of the reported p-values, whichever test the "
+                               "derivation ran (the network's meta.statistics names it), over every "
+                               "comparison one derivation tests: bh (Benjamini-Hochberg, default) or by "
+                               "(Benjamini-Yekutieli)")
     settings.add_argument("--max-adjusted-p", type=_probability, default=None, metavar="Q",
                           help="also leave out interactions whose adjusted p-value is above Q (for example "
                                "0.05); arcs without a p-value are kept, marked untested. Off by default: with "
@@ -482,6 +569,11 @@ def build_parser() -> argparse.ArgumentParser:
     settings.add_argument("--spike-factor", type=float, default=100.0, metavar="F",
                           help="leave out a growth curve with one or two points F times above both neighbors "
                                "(default 100; 0 keeps every curve)")
+    settings.add_argument("--capacity-max-fall", type=float, default=CAPACITY_MAX_FALL, metavar="F",
+                          help="a monoculture that grew, peaked and then declined has stopped growing, so its "
+                               "carrying capacity is recorded as that peak; leave out a curve whose last "
+                               "measurement is below 1/F of its peak, where the peak was not a level the "
+                               "culture held (default 10; 0 keeps every certified plateau)")
     settings.add_argument("--no-growth-alpha", type=float, default=None, metavar="ALPHA",
                           help="before any comparison, check that a species grew: across the replicate growth "
                                "curves of that species in one culture condition, the rise from the first time "
@@ -493,12 +585,14 @@ def build_parser() -> argparse.ArgumentParser:
                                "stricter; 0 leaves the test alone)")
 
     settings.add_argument("--glv-mode", action="store_true",
-                          help="the page's gLV mode button: report growth rates and leave out drop-out "
-                               "communities, which is what a generalized Lotka-Volterra simulation needs")
+                          help="the page's gLV mode button: report growth rates, leave out drop-out "
+                               "communities, and compare the growth rate, which is what a fitted "
+                               "generalized Lotka-Volterra coefficient is made of")
     settings.add_argument("--report-rates", action="store_true",
-                          help="also report each organism's maximum specific growth rate in monoculture, the "
-                               "median over replicates and studies (the page's Report growth rates); needed "
-                               "for --glv")
+                          help="also report each organism's maximum specific growth rate in monoculture, "
+                               "the median over replicates and studies, with the lag and the monoculture "
+                               "carrying capacity beside it (the page's Report growth rates); needed for "
+                               "--glv")
     settings.add_argument("--merge-arcs", action="store_true",
                           help="merge the arcs of each source and target, across conditions and studies, into "
                                "one with the median log2 mean and its range; arcs whose signs disagree are not "
@@ -515,8 +609,8 @@ def build_parser() -> argparse.ArgumentParser:
     outputs.add_argument("--format", choices=["json", "graphml", "matrix"], default="json",
                          help="the network format: json (the neutral format, default), matrix (the adjacency "
                               "matrix as CSV: one cell per ordered pair, holding the effect of the column on "
-                              "the row, arcs of a pair merged by their median, +10 for an obligate "
-                              "interaction and -10 for an abolished one) or graphml "
+                              "the row, arcs of a pair merged by their median, and a measured bound from "
+                              "the no-growth rule for an obligate or abolished pair) or graphml "
                               "(Cytoscape, "
                               "Gephi, igraph, networkx)")
     outputs.add_argument("--out", metavar="FILE", help="write the network to FILE (default: the screen)")
@@ -529,8 +623,15 @@ def build_parser() -> argparse.ArgumentParser:
                          help="write the growth rates to FILE as CSV (needs --report-rates)")
     outputs.add_argument("--glv", metavar="FILE",
                          help="write the parameters of a generalized Lotka-Volterra simulation to FILE, a zip "
-                              "of the interaction matrix (-1 on the diagonal), the matching growth rates and a "
-                              "README (needs --report-rates)")
+                              "of one matrix of fitted coefficients per abundance unit, the matching growth "
+                              "rates and a README (needs --report-rates; under --derivation replicate it "
+                              "also needs --metric growth_rate, which the default derivation does not, "
+                              "and --glv-mode sets both)")
+    outputs.add_argument("--steady-check", action="store_true",
+                         help="score the gLV parameters against the chemostat steady states mGrowthDB "
+                              "holds for these organisms: the report gets the comparison and the zip a "
+                              "steady_state_check.txt. It reads curves the search did not need, so it is "
+                              "off unless asked for (needs --report-rates)")
     outputs.add_argument("--to-r", action="store_true",
                          help="also send the gLV parameters into an R session waiting for them (the page's "
                               "Send to R; in R: library(grownet); grownet_listen()). Needs --report-rates")

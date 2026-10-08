@@ -1,10 +1,9 @@
-"""The pluggable derivation seam: the baseline matches the pure function, and a custom method plugs in."""
+"""The pluggable derivation seam: the two real derivations are reachable through it, and a custom
+method plugs in. The retired baseline it was first demonstrated with is gone (#139)."""
 from grownet.derive import (
-    BaselineDeriver,
     Deriver,
     ReplicateDeriver,
     derive_interactions,
-    interactions_from_experiments,
 )
 
 A = "Faecalibacterium prausnitzii A2-165"
@@ -38,12 +37,6 @@ class _FakeClient:
         return self._exps[experiment_id]
 
 
-def test_baseline_deriver_matches_pure_function():
-    exps = [_mono(A, 0.30), _mono(B, 0.30), _co(A, B, "FP_BH", 0.66, 0.31)]
-    study = {"id": "S"}
-    assert BaselineDeriver().derive(study, exps) == interactions_from_experiments(study, exps, "S")
-
-
 def test_custom_deriver_is_honored():
     class Stub(Deriver):
         name = "stub"
@@ -56,15 +49,6 @@ def test_custom_deriver_is_honored():
     records, skipped = derive_interactions(client, "S", deriver=Stub())
     assert records == [{"tag": "stub", "study": "S", "n_exps": 1}]
     assert skipped == []
-
-
-def test_derive_interactions_runs_the_retired_baseline_when_asked():
-    exps = [_mono(A, 0.30), _mono(B, 0.30), _co(A, B, "FP_BH", 0.66, 0.31)]
-    study = {"id": "S", "experiments": [{"id": "E_" + A}, {"id": "E_" + B}, {"id": "E_FP_BH"}]}
-    client = _FakeClient(study, exps)
-    records, skipped = derive_interactions(client, "S", deriver=BaselineDeriver())
-    assert any(r["effect"] == "facilitation" for r in records)
-    assert all("PROVISIONAL" in r["method"] for r in records)
 
 
 def test_the_default_is_the_replicate_comparison():

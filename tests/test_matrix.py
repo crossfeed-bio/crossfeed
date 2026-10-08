@@ -6,6 +6,10 @@ arcs of one pair are merged across studies by their median, and a pair whose arc
 at 0 and named. Then, on the first build: "obligate and abolished arcs need to carry numbers reflecting
 the strong effect, how about 10 with the appropriate sign?", so a comparison with no ratio enters the
 matrix as +10 (obligate) or -10 (abolished).
+
+Those conventions are the **adjacency matrix**, which is what this file checks. The gLV package left them
+behind on #119, on her decision on #116: it holds fitted coefficients, one matrix per abundance unit, and
+`tests/test_glv_coefficients.py` checks it.
 """
 import csv
 import io
@@ -104,32 +108,56 @@ def test_an_extreme_that_contradicts_a_measured_arc_leaves_the_cell_at_zero():
 def test_the_rates_file_says_what_each_median_rests_on():
     net = _net([_arc("a", "b", 1.5)])
     rates = {"a": {"rate": 0.42, "unit": "1/h", "n": 6, "studies": ["S1", "S2"],
-                   "method": "growth_rate:baranyi", "lag": 1.25, "capacity": 2.0e8,
-                   "capacity_unit": "Cells/mL", "capacity_n": 4}}
+                   "method": "growth_rate:easylinear:5", "lag": 1.25, "lag_method": "baranyi",
+                   "capacity": 2.0e8, "capacity_unit": "Cells/mL", "capacity_n": 4}}
     table = list(csv.reader(io.StringIO(matrix.rates_csv(rates, net))))
+    # capacity_curves_left_out added 2026-10-06: an empty capacity read as absence, because the curves
+    # that gave none were collected and never shown where the capacity is read
+    # capacity_fall_from_peak added 2026-10-07: the plateau is the peak of a curve that may have declined
+    # after it, so what those curves held at their last measurement travels with the number
     assert table[0] == ["organism", "growth_rate", "unit", "replicates", "studies", "method", "lag",
-                        "carrying_capacity", "capacity_unit", "capacity_curves"]
-    assert table[1] == ["A", "0.42", "1/h", "6", "S1 S2", "growth_rate:baranyi", "1.25", "2e+08",
-                        "Cells/mL", "4"]
+                        "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves",
+                        "capacity_curves_left_out", "capacity_fall_from_peak", "capacity_medium",
+                        "capacity_source"]
+    # the lag names its own estimator, since it is Baranyi's whichever one produced the rate
+    assert table[1] == ["A", "0.42", "1/h", "6", "S1 S2", "growth_rate:easylinear:5", "1.25", "baranyi",
+                        "2e+08", "Cells/mL", "4", "", "", "", ""]
     # a rate with none of the gLV quantities keeps its row and leaves them empty (#118)
     plain = list(csv.reader(io.StringIO(matrix.rates_csv({"a": {"rate": 0.42, "unit": "1/h"}}, net))))
-    assert plain[1] == ["A", "0.42", "1/h", "", "", "", "", "", "", ""]
+    assert plain[1] == ["A", "0.42", "1/h", "", "", "", "", "", "", "", "", "", "", "", ""]
+
+    # and a capacity that rests on fewer curves than were read says how many gave none, so an empty or
+    # thin capacity does not read as absence (found 2026-10-06)
+    thin = {"a": {"rate": 0.42, "unit": "1/h", "capacity": 2.0e8, "capacity_unit": "Cells/mL",
+                  "capacity_n": 1, "capacity_left_out": [("A rep 2", "had not reached stationary phase"),
+                                                         ("A rep 3", "had not reached stationary phase")]}}
+    # the fall from the peak and the medium are the last two columns since 2026-10-07, and this fixture
+    # states neither
+    assert list(csv.reader(io.StringIO(matrix.rates_csv(thin, net))))[1][-4] == "2"
     assert len(table) == 2                    # b has no rate, so it has no row
 
 
-def test_the_package_holds_the_two_files_and_a_readme_that_states_the_conventions():
-    net = _net([_arc("a", "b", 1.5), _arc("b", "a", -0.5)])
+def test_the_package_holds_a_matrix_the_rates_and_a_readme():
+    """The three files, and the README's standing content. What the numbers in them are is #119's, in
+    tests/test_glv_coefficients.py: coefficients, so the package needs growth-rate arcs."""
+    rate = {"rate": 0.4, "n": 3, "unit": "1/h", "method": "growth_rate:baranyi", "capacity": 1.0e9,
+            "capacity_unit": "Cells/mL", "capacity_n": 3}
+    net = _net([_arc("a", "b", 1.5, metric="growth_rate:baranyi", partner_abundance=2.0e8,
+                     partner_abundance_unit="Cells/mL"),
+                _arc("b", "a", -0.5, metric="growth_rate:baranyi", partner_abundance=1.0e8,
+                     partner_abundance_unit="Cells/mL")])
     net.meta.update({"tool_version": "9.9.9", "absence": {"k": 1.0}, "source_db": "mGrowthDB (live)"})
-    with zipfile.ZipFile(io.BytesIO(matrix.glv_package(net, {"a": {"rate": 0.4, "n": 3}}))) as archive:
-        assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv", "interaction_matrix.csv"]
+    with zipfile.ZipFile(io.BytesIO(matrix.glv_package(net, {"a": rate}))) as archive:
+        assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv",
+                                              "interaction_matrix.Cells_per_mL.csv"]
         readme = archive.read("README.txt").decode()
-        _, values = _read(archive.read("interaction_matrix.csv").decode())
-    assert values[("A", "A")] == -1.0 and values[("B", "A")] == 1.5 and values[("A", "B")] == -0.5
+        _, values = _read(archive.read("interaction_matrix.Cells_per_mL.csv").decode())
+    # only A has a rate and a capacity, so only A is in the matrix: -0.4 / 1e9
+    assert values == {("A", "A"): -4.0e-10}
     assert "A[i][j] is the effect of j on i" in readme
-    assert "not a fitted glv coefficient" in readme.lower()
     assert "k = 1.0" in readme
-    # an organism without a rate is named, since a simulation needs one from elsewhere
-    assert "B" in readme.split("no growth rate")[1]
+    # an organism that cannot be fitted is named, since a simulation needs its parameters from elsewhere
+    assert "B: no growth rate" in readme
 
 
 def test_the_order_is_stable_so_two_runs_line_up():
@@ -153,13 +181,13 @@ def test_a_genus_node_takes_the_median_rate_of_its_strains():
     assert "roseburia" not in aligned            # no monoculture of any Roseburia strain, so no rate
 
 
-def test_a_cell_that_holds_the_convention_says_so_in_the_readme():
-    # a reader has to know which numbers were measured and which are the stated extreme
+def test_a_cell_with_no_ratio_is_named_as_such():
+    """A reader has to know which numbers were measured. Since #129 such a cell holds a measured bound,
+    and `by_convention` is left for a network derived before that, which still falls back to the stated
+    extreme; `tests/test_measured_bound.py` checks the bound itself."""
     net = _net([dict(_arc("a", "b", 1.0), strength=None, outcome="obligate")])
     assert matrix.by_convention(net) == [("B", "A", 10.0)]
-    readme = matrix.readme(net, {}, [], [], matrix.by_convention(net))
-    assert "CONVENTIONS, NOT MEASUREMENTS" in readme
-    assert "A on B: 10" in readme.split("CONVENTIONS, NOT MEASUREMENTS")[1]
+    assert matrix.bounded_cells(net) == []
 
 
 def test_a_rate_is_reported_under_the_name_the_network_uses():
@@ -172,22 +200,17 @@ def test_a_rate_is_reported_under_the_name_the_network_uses():
     assert "Faecalibacterium duncaniae" in matrix.rates_csv(matrix.for_nodes(net, rates), net)
 
 
-def test_the_files_name_the_media_the_arcs_came_from():
+def test_the_network_says_which_media_its_arcs_came_from():
     """Karoline, 2026-10-04: a gLV simulation is of one environment, so the package says which media its
     numbers were measured in, and says it loudly when there is more than one."""
     one = _net([dict(_arc("a", "b", 1.5), medium="mMCB")])
     one.meta.update({"tool_version": "9.9.9", "absence": {"k": 1.0}})
     assert matrix.media(one) == ["mMCB"]
-    assert "Every arc was measured in one medium: mMCB." in matrix.readme(one, {}, [], [])
 
     mixed = _net([dict(_arc("a", "b", 1.5), medium="mMCB"),
                   dict(_arc("b", "a", -0.5, study_id="S2"), medium="Wilkins-Chalgren")])
     mixed.meta.update({"tool_version": "9.9.9", "absence": {"k": 1.0}})
     assert matrix.media(mixed) == ["mMCB", "Wilkins-Chalgren"]
-    text = matrix.readme(mixed, {}, [], [])
-    assert "THESE ARCS COME FROM 2 MEDIA" in text and "second box" in text
-    # and a program reading the payload sees the same, as data
-    assert matrix.glv_payload(mixed, {})["caveats"]["media"] == ["mMCB", "Wilkins-Chalgren"]
 
 
 def test_the_package_counts_the_arcs_a_glv_simulation_should_not_use():
@@ -196,10 +219,64 @@ def test_the_package_counts_the_arcs_a_glv_simulation_should_not_use():
     net = _net([_arc("a", "b", 1.5, evidence="dropout"), _arc("b", "a", 1.0, evidence="biculture")])
     net.meta.update({"tool_version": "9.9.9", "absence": {"k": 1.0}})
     assert matrix.dropout_arcs(net) == 1
-    text = matrix.readme(net, {}, [], [])
-    assert "1 ARC(S) COME FROM DROP-OUT DESIGNS" in text and "Include drop-out communities" in text
-    assert matrix.glv_payload(net, {})["caveats"]["dropout_arcs"] == 1
-    # a package without any says so plainly, so a reader knows the question was asked
     direct = _net([_arc("a", "b", 1.5, evidence="biculture")])
-    direct.meta.update({"tool_version": "9.9.9", "absence": {"k": 1.0}})
-    assert "none comes from a drop-out design" in matrix.readme(direct, {}, [], [])
+    assert matrix.dropout_arcs(direct) == 0
+
+
+def test_an_ill_conditioned_matrix_prints_no_equilibrium_and_says_why():
+    """#142 item 9: the equilibrium was solved with no condition estimate, `steady.solve`'s only test
+    being an absolute pivot below 1e-300, and printed to four significant digits with a categorical
+    verdict. A near-singular block returned a number like 1e24 and had it reported as a steady state, and
+    a change of 0.05 percent in one coefficient flipped the verdict. The condition number now decides
+    whether the solution is printed at all, and is printed beside it when it is."""
+    from grownet.steady import MAX_EQUILIBRIUM_CONDITION, condition_of
+    nearly = [[-1.0e-10, -1.0e-10], [-1.0e-10, -1.0e-10 * (1 + 1e-12)]]
+    assert condition_of(nearly) > MAX_EQUILIBRIUM_CONDITION
+    assert condition_of([[-1.0e-10, 0.0], [0.0, -2.0e-10]]) < MAX_EQUILIBRIUM_CONDITION
+    assert condition_of([[0.0, 0.0], [0.0, 0.0]]) == float("inf")
+
+
+def test_the_readme_states_the_diagonal_the_derivation_actually_produced():
+    """#155 item 11. The off-diagonal prose was branched by derivation and the diagonal's was not, so the
+    default's README said `K_i` is "the plateau of the curves that reached stationary phase" when on that
+    path `A_ii` is a parameter of the fit and `K = -r_i / A_ii` is derived from it, the opposite
+    direction. The same package's `growth_rates.csv` said `capacity_source = "fitted from the monoculture
+    time courses"` two files away.
+    """
+    from grownet import matrix
+
+    integrated = " ".join(matrix.DIAGONAL_PROSE["integrated"])
+    replicate = " ".join(matrix.DIAGONAL_PROSE["replicate"])
+    assert "FITTED, not divided" in integrated
+    assert "K_i = -r_i / A[i][i]" in integrated and "the plateau that fit implies" in integrated
+    assert "capacity_source" in integrated          # where a reader checks it per organism
+    # the comparison measures the plateau and divides, which is the other direction
+    assert "the plateau of the curves that reached stationary phase" in replicate
+    assert "FITTED, not divided" not in replicate
+    # and each names the section that holds the diagonals its own path cannot fit
+    assert "DIAGONALS THAT ARE NOT A FIT" in integrated
+    assert "SELF-LIMITATION FITTED AT A CO-CULTURE PLATEAU" in replicate
+
+
+def test_a_diagonal_that_is_not_a_fit_is_named_in_the_readme():
+    """The integrated path's equivalent of SELF-LIMITATION FITTED AT A CO-CULTURE PLATEAU, which is
+    populated from `edge.target_capacity` and so was unreachable there: an organism whose fit implies no
+    plateau has a measured one put in its place, and appeared in no section at all (#155 item 11)."""
+    from grownet import matrix
+
+    got = {"matrices": [], "censored_cells": [], "left_out": [], "pairs_left_out": [],
+           "across_units": [], "obligate_rows": [], "plateau_rows": [],
+           "rate_methods": ["integrated:two_stage"], "lag_methods": [],
+           "substituted_rows": [("Streptococcus thermophilus STpos",
+                                 "-r/K at the measured plateau 0.105 g/L of 1 monoculture curve(s): "
+                                 "the fit implies none")]}
+    net = _net([_arc("a", "b", 1.5)])
+    net.meta["settings"] = {"derivation": "integrated"}
+    text = matrix.readme_from(got, net, {})
+    heading = "\nDIAGONALS THAT ARE NOT A FIT\n"      # the section, not the prose that points at it
+    assert heading in text
+    assert "Streptococcus thermophilus STpos" in text and "the fit implies none" in text
+    assert "its A[i][i] came out at or above zero" in text
+    # and the section is absent when every diagonal is a fit, though the prose still names it
+    plain = matrix.readme_from({**got, "substituted_rows": []}, net, {})
+    assert heading not in plain and "DIAGONALS THAT ARE NOT A FIT below names" in plain

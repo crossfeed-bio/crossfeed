@@ -102,13 +102,42 @@ def test_the_viewer_writes_the_same_graphml_as_the_command_line(tmp_path):
         r"const flagsOf=[^\n]*\n", r"const GENUS_COLORS=[^\n]*\n", r"const GENUS_QUALIFIERS=[^\n]*\n",
         r"const cap=[^\n]*\n", r"const genusOf=.*?\};\n", r"const lineStyleOf=.*?\};\n",
         r"const displayWeightOf=[^\n]*\n", r"const pyFloat=[^\n]*\n",
-        r"function graphmlValue\(attr,v\)\{.*?\n\}\n", r"function toGraphML\(net\)\{.*?\n\}\n"))
+        r"function graphmlValue\(attr,v,ty\)\{.*?\n\}\n",
+        # the graph-level resolver: flat key names over a nested meta (#155 item 4)
+        r"const GRAPH_META=\{.*?\};\n", r"function graphMeta\(meta,nm\)\{.*?\}\n",
+        r"function toGraphML\(net\)\{.*?\n\}\n"))
+    # Every key this release added has to be carried by the fixture, or the two writers agree about
+    # nothing. The test used to build its network with no `meta` at all and a record holding none of the
+    # fitted fields, so each new key was skipped on both sides and the equality held vacuously: that is
+    # how the viewer came to write four graph-level attributes as nothing and one as "[object Object]"
+    # while this test passed (#155 item 4).
     record = {"source": "ncbi:1", "target": "ncbi:2", "source_name": "Blautia a", "target_name": "Roseburia b",
               "source_taxon_id": "1", "effect": "inhibition", "strength": -1.25, "weight": 1.25, "sd": 0.5,
-              "status": "present", "quality": ["single_replicate"], "notes": ["one note", "two"],
-              "cautions": ["two_replicates"], "experiments": ["E1", "E2"], "study_id": "S1",
-              "strength_range": [-2, -0.5], "merged_arcs": 2, "n_with": 3}
-    net = records_to_network([record])
+              "se": 0.25, "status": "present", "quality": ["single_replicate"], "notes": ["one note", "two"],
+              "cautions": ["two_replicates", "window_partial"], "experiments": ["E1", "E2"],
+              "study_id": "S1", "strength_range": [-2, -0.5], "merged_arcs": 2, "n_with": 3,
+              # what the integrated derivation adds, including this release's own fields
+              "coefficient": -4.351e-10, "coefficient_unit": "1/(h x Cells/mL)",
+              "coefficient_sd": 1.2e-10, "coefficient_n": 3,
+              "coefficient_sd_from_rate_stage": 3.4e-11,
+              "se_replicates": 0.2, "se_rate_stage": 0.15,
+              "rate_stage_method": "bootstrap of 3 monoculture replicate(s), 200 resamples",
+              "rate_stage_n": 3, "fit_r2": 0.9994, "fit_null_r2": 0.9879, "fit_condition": 227.6,
+              "fit_window_share": 0.2667, "rate_mismatch_to_zero": -0.1498,
+              "partner_abundance": 2.4e8, "partner_abundance_unit": "Cells/mL", "partner_abundance_n": 3,
+              "metric_with": 0.52, "metric_without": 0.8, "target_capacity": 9.13e8,
+              "target_capacity_unit": "Cells/mL", "target_capacity_n": 3,
+              "strength_bound": -1.5, "bound_rule": "no-growth rule",
+              "medium": "Wilkins-Chalgren Anaerobe Broth (WC)", "cultivation_mode": "batch",
+              "outcome": "quantified", "metric": "integrated:two_stage", "evidence": "biculture",
+              "community": ["ncbi:1", "ncbi:2"], "p_value": 0.0042, "q_value": 0.0068,
+              "significance": 2.1675, "effect_over_sd": 2.5, "n_without": 3,
+              "supporting_pairs": 1, "merged_pairs": ["Blautia a -> Roseburia b"]}
+    # and the graph-level meta the viewer was reading at the wrong depth
+    meta = {"absence": {"rule": "|log2 mean| < k sd", "k": 1.0, "absent": 7},
+            "hidden": {"low_quality": 2, "absent": 7},
+            "statistics": {"test": "two-sided t-test of the fitted log2 strength against no effect"}}
+    net = records_to_network([record], meta)
     doc = json.loads(net.to_json())
     script = tmp_path / "run.js"
     script.write_text(js + f"\nprocess.stdout.write(toGraphML({json.dumps(doc)}));", encoding="utf-8")
@@ -124,3 +153,31 @@ def test_the_viewer_writes_the_same_graphml_as_the_command_line(tmp_path):
                       for d in el.findall(ns + "data"))
         return keys, data
     assert content(ours) == content(to_graphml(net))
+
+
+def test_the_viewer_accepts_every_network_the_tool_writes():
+    """gui/index.html once rejected every file grownet writes: its guard tested the schema id against
+    `crossfeed.interaction_network` after the rename, so "unexpected schema" came out of a file the tool
+    had just produced (found 2026-10-06, fixed on #141). Nothing pinned the guard, so this runs the line
+    itself with Node against every id a reader may meet, including the gLV payload's, which belongs to the
+    other download and must still be refused."""
+    import json
+    import re
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    import pytest
+
+    from grownet.model import KNOWN_SCHEMAS
+    if not shutil.which("node"):
+        pytest.skip("node is not installed")
+    page = (Path(__file__).resolve().parents[1] / "gui" / "index.html").read_text(encoding="utf-8")
+    guard = re.search(r"^.*unexpected schema.*$", page, re.M).group(0).strip()
+    accept = [*KNOWN_SCHEMAS, "crossfeed.interaction_network/v0"]   # the id before the rename stays valid
+    refuse = ["grownet.glv/v1", "grownet.all_result/v1", "other/v1"]
+    js = ("function check(s){const d={schema:s};try{" + guard + "return 'yes';}catch(e){return 'no';}}"
+          "console.log(JSON.stringify(" + json.dumps(accept + refuse) + ".map(check)));")
+    got = json.loads(subprocess.run(["node", "-e", js], capture_output=True, text=True,
+                                    check=True).stdout)
+    assert got == ["yes"] * len(accept) + ["no"] * len(refuse)

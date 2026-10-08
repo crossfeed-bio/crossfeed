@@ -49,7 +49,10 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
 1. **A release pull request** that:
    - sets the version in `pyproject.toml` and in `src/grownet/__init__.py` (`__version__`);
    - turns `## [x.y.z] (unreleased)` in `CHANGELOG.md` into `## [x.y.z] (YYYY-MM-DD)`, and starts a new
-     unreleased section above it if work continues.
+     unreleased section above it if work continues;
+   - sets `version:` and `date-released:` in `CITATION.cff` to the same version and the same date. The
+     check refuses a mismatch, and it is the file the citation widget and every generated BibTeX entry
+     read: 0.3.0 was prepared with 0.2.0's date still in it, which nothing read at the time.
    - bumps `Version:` in `r/DESCRIPTION` when anything in `r/` changed, since the R package is installed
      from GitHub and its version is the only signal an installed copy is out of date.
    `python packaging/check_release.py vX.Y.Z` must say the tag is ready, and `make check` must pass:
@@ -63,9 +66,11 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
    git push origin vX.Y.Z
    ```
 
-3. **Watch the workflow** (Actions, "release"). It checks the tag, builds and tests the wheel on Linux,
-   Windows and macOS, builds and starts the Windows program, then waits for approval of the `pypi`
-   environment. Approve it; it publishes to PyPI and creates the GitHub release, with the notes taken from
+3. **Watch the workflow** (Actions, "release"). It checks the tag against the version and the changelog
+   and runs the linter, the guardrail gate and the whole suite before anything is published, then builds
+   and tests the wheel on Linux, Windows and macOS, builds and starts the Windows program, and waits for
+   approval of the `pypi` environment. Until 2026-10-07 the first of those was the only check in this
+   workflow, so a tag whose suite was red could reach PyPI with nothing but that approval in the way. Approve it; it publishes to PyPI and creates the GitHub release, with the notes taken from
    the changelog and the wheel, the source archive and `grownet-vX.Y.Z-windows.zip` attached.
 4. **Refresh the daily All network** (Actions, "all-network", Run workflow). The page and `derive --all`
    read the published network only when it is less than a day old and speaks the current format, so until a
@@ -73,6 +78,29 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
    release that changes the format id.
 5. **Check as a user would:** `uv tool install grownet` then `grownet gui` on a clean machine, and the zip on
    a Windows machine. A version on PyPI cannot be replaced: a mistake is fixed with a new version.
+
+## If the daily All artifact is broken
+
+The `all-network` workflow publishes `all_result.json` as an asset of the `all-network` release, from
+`main`, once a day. Every installed copy reads it when it is less than a day old and speaks that copy's
+format id. If a bad artifact goes out, **delete that one asset**:
+
+```bash
+gh release delete-asset all-network all_result.json --yes
+```
+
+`published.fetch` then gets nothing, returns `None`, and every copy derives live, which is the designed
+fallback and is what the All button does when GitHub is unreachable. `all_network.json` and
+`all_report.txt` can stay: nothing reads them to decide anything. Verify with
+`python -c "from grownet.published import fetch; print(fetch())"`, which should print `None`.
+
+This was found under pressure on 2026-10-07, when #121's arc fields went out under an unchanged format id
+and the All button raised for every installed 0.2.0. It is written down because it is not obvious from
+the workflow, and because the obvious alternative is not available: **do not plan to beat the next
+scheduled run.** The cron says `17 3 * * *` and has never fired near it. Five consecutive days ran at
+10:19, 10:22, 10:31, 09:51 and 09:12 UTC, six to seven hours late and varying by over an hour, because
+GitHub treats schedules as best effort. Anyone racing the clock cannot tell whether they have twelve
+hours or none (Craig's agent, correcting his own estimate on #154).
 
 ## After the first release: signing the Windows program
 
