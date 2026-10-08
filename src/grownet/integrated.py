@@ -1357,13 +1357,32 @@ def starting_densities(cocultures: list, monocultures: list, target: str) -> dic
     return {"co": a, "mono": b, "ratio": max(a, b) / min(a, b), "unit": unit or mono_unit}
 
 
-# How close two selected rates have to be for a contradiction between their arcs to mean something. Craig's
-# agent's argument on #155 item 1 rests on two arcs of one organism sharing a stage-1 estimate and still
-# implying opposite rate mismatches, which cannot both be rate error; his own correction the same day
-# withdrew the one case where the two selected rates were 42 per cent apart, since arcs that far apart can
-# legitimately carry different errors. The two cases the argument survives on are 1.0 and 7.2 per cent, so
-# the line sits above them and well below the withdrawn one. It is a judgement and it is only used to
-# decide whether to SAY something on the arc.
+# How close two selected rates have to be for a contradiction between their arcs to mean something, as a
+# share of their median: `stdev(selected rates) / median(selected rates)`, the same quantity the note
+# prints. **Which rates matters**, and it is the trap in this issue's history: these are the stage-1 rates
+# of the monoculture sets `_choose_monocultures` picked, not the per-condition rates of #155's bias table,
+# and the two estimators give different numbers for one organism (Roseburia in SMGDB00000007: 0.5091 and
+# 0.6521 here, 0.5365 and 0.7624 there). The statistic matters too: on a pair, `stdev` is the range over
+# root two, so a ratio like `max/min - 1` runs about 1.4 times higher and drifts further as the pair
+# spreads.
+#
+# Measured here, live, 2026-10-08. Four organisms in the corpus have more than one selected set:
+#
+#   Bacteroides  SMGDB00000007   0.7387, 0.7848    4.28%   arcs agree in sign
+#   Blautia      SMGDB00000007   0.2672, 0.2854    4.66%   arcs agree in sign
+#   Comamonas    SMGDB00000014   0.1193 to 0.1688  16.5%   arcs DISAGREE in sign
+#   Roseburia    SMGDB00000007   0.5091, 0.6521    17.4%   arcs DISAGREE in sign
+#
+# So the line at 10 per cent sits above both agreeing cases and below both disagreeing ones, and nothing
+# is flagged today. That is the discipline Craig's agent's own correction asked for: it withdrew the case
+# whose selected rates were far apart, because arcs that far apart can legitimately carry two different
+# rate errors, and both of today's disagreeing cases are that case. The argument itself rests on two arcs
+# of one organism sharing a stage-1 estimate and still implying opposite mismatches, which one rate error
+# cannot produce. **L. delbrueckii, the case the argument is strongest on, has a single selected set in
+# this corpus**, so under this measure it is not a case for or against the line at all; its figures in
+# the issue thread come from the other estimator.
+#
+# It is a judgement, it only decides whether to SAY something on the arc, and it never moves a number.
 CONTRADICTION_SPREAD = 0.10
 
 

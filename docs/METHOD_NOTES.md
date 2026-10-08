@@ -601,10 +601,23 @@ parameter they had. No R2 comparison is quoted above for that reason.
   data to test it and untestable where there is not. His first version of that claim pooled the four
   studies and said no shared offset exists, which these arcs cannot establish; he withdrew it the same day.
   **The contradiction flag**: where two arcs of one organism took nearly the same rate (within
-  `integrated.CONTRADICTION_SPREAD`, 10 per cent) and still imply mismatches of opposite sign, the arcs say
-  so, since they cannot both be the rate being wrong. The 10 per cent line sits above the two cases his
-  argument survives on (1.0 and 7.2 per cent) and below the one he withdrew (42 per cent). **No live arc
-  meets it today**: the two organisms with mixed signs have selected rates 17.4 and 16.5 per cent apart.
+  `integrated.CONTRADICTION_SPREAD`, 10 per cent of the median selected rate) and still imply mismatches of
+  opposite sign, the arcs say so, since they cannot both be the rate being wrong.
+  **The quantity matters and it is the trap in this thread.** The flag reads the stage-1 rates of the
+  monoculture sets the condition matcher picked, measured as `stdev / median`. The bias table of #155 item
+  1 reports a per-condition fit instead, a different estimator, which gives different numbers for the same
+  organism (Roseburia in SMGDB00000007: 0.5091 and 0.6521 here against 0.5365 and 0.7624 there); and a
+  ratio such as `max/min - 1` runs about 1.4 times higher than `stdev/median` on a pair, since `stdev` of
+  two values is their range over root two. Craig's agent's figures of 1.0 and 7.2 per cent are on that
+  other scale and were quoted in the code comment before it was restated (his finding on #177, 2026-10-08;
+  his replacement figures do not reproduce either, so the ones below are measured here).
+  **Measured live, 2026-10-08.** Four organisms have more than one selected set: Bacteroides in
+  SMGDB00000007 at 4.28 per cent and Blautia at 4.66, whose arcs agree in sign; Comamonas in
+  SMGDB00000014 at 16.5 per cent and Roseburia in SMGDB00000007 at 17.4, whose arcs disagree. So the line
+  at 10 sits above both agreeing cases and below both disagreeing ones, and **no live arc is flagged**,
+  which is his correction doing its work: he withdrew the case whose rates were far apart, and both of
+  today's disagreeing cases are that case. *L. delbrueckii*, the case the argument is strongest on, has a
+  **single** selected set in this corpus, so under this measure it is neither for nor against the line.
 
 - **Partly settled 2026-10-08 (#173): no stage bounds a growth rate for plausibility, and the implied
   doubling time is now published.** The guards on a rate are identifiability, model fit, growth above zero
