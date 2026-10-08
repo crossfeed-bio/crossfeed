@@ -45,6 +45,9 @@ RELEASES = (
         "on the arc, which can say it is a bound where a cell cannot.",
         "A growth rate now travels with the lag the Baranyi fit found, the estimator that produced it "
         "and the organism's carrying capacity, which are the three numbers a coefficient is made of.",
+        "Every growth rate is printed with the doubling time it implies, in the rates file and in the "
+        "report. No stage of the derivation asks whether a rate is plausible, and 47 hours is rejected "
+        "at a glance where 0.0147 per hour is not.",
         "A package can be scored against the chemostat steady states mGrowthDB holds for the same "
         "organisms, which were never used to fit it: predicted against observed, per organism.",
         "A gLV example button beside All: it fills both boxes and the settings for a package that "
@@ -886,7 +889,8 @@ its plateau beside its partners in the same way, rather than left out, and the R
 partners suppress it harder than its own rate there is named instead, since a self-limitation at or above
 zero is not one. The package also carries
 <code>growth_rates.csv</code> (one rate per organism, in the same order, with how many values it rests on,
-and beside it the estimator, the lag and the carrying capacity); and <code>README.txt</code>, which states
+and beside it the estimator, the lag, the carrying capacity and the <strong>doubling time</strong> the rate
+implies, <code>ln(2) / r</code> in the time unit of the rate); and <code>README.txt</code>, which states
 every formula and unit, names any pair left at 0 for disagreeing in sign, names every organism and every
 effect that could not be fitted and why, and names the media the arcs were measured in: a simulation is of
 one environment, so a package built from several media says so in capitals and points at the second box

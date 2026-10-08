@@ -578,10 +578,13 @@ def test_the_growth_rates_are_their_own_download_and_bring_the_glv_control(serve
     assert headers["Content-Type"].startswith("text/csv")
     rows = [line.split(",") for line in table.strip().splitlines()]
     assert rows[0][:5] == ["organism", "growth_rate", "unit", "replicates", "studies"]
-    # and the quantities a gLV coefficient is made of, beside them (#118)
+    # and the quantities a gLV coefficient is made of, beside them (#118), then the doubling time,
+    # appended 2026-10-08 (#173, Karoline): no stage judges whether a rate is plausible, so the rate is
+    # printed in the form a reader judges at a glance. Appended last, so a reader parsing by index is
+    # unaffected
     assert rows[0][5:] == ["method", "lag", "lag_method", "carrying_capacity", "capacity_unit",
                            "capacity_curves", "capacity_curves_left_out", "capacity_fall_from_peak",
-                           "capacity_medium", "capacity_source"]
+                           "capacity_medium", "capacity_source", "doubling_time"]
     assert [row[0] for row in rows[1:]] == sorted([A, B])
     assert dict(zip([r[0] for r in rows[1:]], [r[1] for r in rows[1:]], strict=True))[A] == "0.4"
 
@@ -671,7 +674,7 @@ def test_the_command_line_writes_the_matrix_the_rates_and_the_glv_package(monkey
     assert rates_file.read_text(encoding="utf-8").splitlines()[0] == (
         "organism,growth_rate,unit,replicates,studies,method,lag,lag_method,carrying_capacity,"
         "capacity_unit,capacity_curves,capacity_curves_left_out,capacity_fall_from_peak,"
-        "capacity_medium,capacity_source")
+        "capacity_medium,capacity_source,doubling_time")
     with zipfile.ZipFile(io.BytesIO(package.read_bytes())) as archive:
         assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv",
                                               "interaction_matrix.Cells_per_mL.csv"]

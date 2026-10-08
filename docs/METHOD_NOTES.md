@@ -563,6 +563,32 @@ parameter they had. No R2 comparison is quoted above for that reason.
 ## Open decisions
 
 
+- **Partly settled 2026-10-08 (#173): no stage bounds a growth rate for plausibility, and the implied
+  doubling time is now published.** The guards on a rate are identifiability, model fit, growth above zero
+  and the R2 gate against the interaction-free null. A rate's **magnitude** is never questioned anywhere in
+  `two_stage`, `fitted_rates` or the matrix builder, so a fit that describes its curve well can publish a
+  biologically impossible rate with nothing to catch it.
+  **Measured first, on the live corpus**: of 134 monoculture replicate fits, 123 pass every guard. Rates
+  run 0.0147 to 0.8831 /h, median 0.2245; doubling times 0.78 to 47.05 h, median 3.09. Three are slower
+  than a 24 hour doubling and **all three are SMGDB00000018** (*Shewanella* 47.05 h, *Aeromonas* 34.68,
+  *Vibrio* 29.77), with *Pluralibacter* from the same study next at 16.80 h and then a cliff: the fifth
+  slowest is *Comamonas* at 7.28 h, from another study. All four have a **negative** self-limitation, so
+  #160's guard does not touch them.
+  **Settled now (Karoline, 2026-10-08, taking Craig's agent's recommendation): publish the doubling time.**
+  `rates.doubling_time` is ln(2) / r in the time unit of the rate, printed in `growth_rates.csv` as the
+  appended `doubling_time` column and in the report beside each rate. It catches nothing automatically and
+  it is not a guard: it converts an uninspectable number into an inspectable one, since `0.0147 /h` passes
+  a reader's eye and "47 hours" does not. The exposure it addresses is real even where no arc is: that
+  study derives no arcs today, so no matrix cell rests on those fits, but the rate itself publishes in the
+  rates table and in the report whatever the matrix does.
+  **Still open, and his framing of it is the one to build on**: a bound that keys on the **study** rather
+  than on an organism's own replicates. Four organisms of one study are slow together, which is a property
+  of the study (a medium, a temperature, a reading interval, an annotation) rather than four independent
+  implausibilities, and "every fit in this study is five to fifteen times slower than the corpus median"
+  is an internal comparison that needs no citation, where a fixed per-taxon bound does. It should be a
+  **tripwire** that flags such a study, not a refusal, and it waits until something published rests on
+  these fits. A cited bound stays off the table until a specific organism in a specific claim needs one.
+
 - **Settled 2026-10-08 (#81's residue): a starting density is reported, not matched on.** Karoline:
   "descriptions of inoculum density in mGrowthDB aren't systematic; how about falling back on a time point
   zero if it exists if there is no description on the inoculum?" The fallback is right about where the
