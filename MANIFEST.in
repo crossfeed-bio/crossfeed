@@ -3,7 +3,10 @@
 # conda-forge) sees ten failures for missing fixtures, schema and examples, and CI never catches it
 # because it installs the wheel (found 2026-10-06).
 include CHANGELOG.md CITATION.cff NOTICE
-include schema/interaction_network.schema.json
+# every file under schema/, not the one by name: `format_fields.json` was added and the sdist shipped
+# without it, so `checks/gate.py`'s format-fields check failed for anyone building from the source
+# archive while the wheel was fine. A named include is one more place to remember (2026-10-08).
+recursive-include schema *.json
 include docs/legend.svg
 recursive-include tests *.py *.json *.csv *.svg
 recursive-include checks *.py

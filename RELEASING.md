@@ -49,7 +49,10 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
 1. **A release pull request** that:
    - sets the version in `pyproject.toml` and in `src/grownet/__init__.py` (`__version__`);
    - turns `## [x.y.z] (unreleased)` in `CHANGELOG.md` into `## [x.y.z] (YYYY-MM-DD)`, and starts a new
-     unreleased section above it if work continues.
+     unreleased section above it if work continues;
+   - sets `version:` and `date-released:` in `CITATION.cff` to the same version and the same date. The
+     check refuses a mismatch, and it is the file the citation widget and every generated BibTeX entry
+     read: 0.3.0 was prepared with 0.2.0's date still in it, which nothing read at the time.
    - bumps `Version:` in `r/DESCRIPTION` when anything in `r/` changed, since the R package is installed
      from GitHub and its version is the only signal an installed copy is out of date.
    `python packaging/check_release.py vX.Y.Z` must say the tag is ready, and `make check` must pass:

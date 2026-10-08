@@ -171,9 +171,16 @@ def test_this_tree_dates_its_release_no_earlier_than_its_newest_commit():
     changelog = root.joinpath("CHANGELOG.md").read_text(encoding="utf-8")
     version = re.search(r'^__version__ = "([^"]+)"', root.joinpath("src", "grownet", "__init__.py")
                         .read_text(encoding="utf-8"), re.M).group(1)
-    heading = re.search(rf"^## \[{re.escape(version)}\][^\n]*?([0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}})",
-                        changelog, re.M)
-    assert heading, f"CHANGELOG.md gives no date for {version}"
+    section = re.search(rf"^## \[{re.escape(version)}\]([^\n]*)", changelog, re.M)
+    assert section, f"CHANGELOG.md has no section for {version}"
+    if "unreleased" in section.group(1).lower():
+        # the documented process (RELEASING.md) dates the section in the release pull request, so a tree
+        # in development carries no date and there is nothing to compare. Requiring one here would be the
+        # same trap as #155 item 8: a check that cannot be green and honest at once, which is what made
+        # this tree carry a date while it was unreleased in the first place.
+        return
+    heading = re.search(r"([0-9]{4}-[0-9]{2}-[0-9]{2})", section.group(1))
+    assert heading, f"CHANGELOG.md gives {version} neither a date nor 'unreleased'"
     dated = datetime.date.fromisoformat(heading.group(1))
     newest = subprocess.run(["git", "log", "-1", "--format=%cs"], capture_output=True, text=True,
                             cwd=root).stdout.strip()
