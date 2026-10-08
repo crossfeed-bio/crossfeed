@@ -112,6 +112,13 @@ CONDITIONS_UNVERIFIED = "conditions_unverified"
 # than the whole course (Karoline, 2026-10-07: "this is not something we treat here, but something we
 # can warn about", with SMGDB00000002's Roseburia and Bacteroides as her example)
 WINDOW_PARTIAL = "window_partial"
+# An integrated arc whose held monoculture rate has nothing in the study to check it against: the organism
+# has one matched monoculture set there, so no spread of selected rates exists and `se_rate_selection` is
+# empty. The arc is still a measurement; what it lacks is any internal scale for the one assumption the
+# design cannot test, that the monoculture rate is the rate the organism had in co-culture. Craig's agent
+# on #155 item 1, whose sentence this is: such an arc should be "flagged as uncheckable rather than as
+# checked and passed" (Karoline, 2026-10-08).
+RATE_UNCHECKED = "rate_unchecked"
 # with max as the measure (Karoline, 2026-09-28): one set reached stationary phase and the other did not,
 # so the maximum of one may still be rising; or the curves are too sparse to tell
 STATIONARY_DIFFERS, STATIONARY_UNCHECKED = "stationary_phase_differs", "stationary_unchecked"

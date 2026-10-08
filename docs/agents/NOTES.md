@@ -196,6 +196,27 @@ Rules for this file:
   measurements like that spread belong in issue comments and in this file, not in the help, the README or
   a generated package README.
 
+- 2026-10-08 (Karoline's decision): **what the data cannot settle lives in `docs/LIMITATIONS.md`, and the
+  statistics are support.** Her framing, which is the one to apply to the rest of the register: "if p-val
+  computation is indefensible, we do not report p-values and comment on the weakness", and these questions
+  are "not blocking gLV parameterisation in general, just things to be aware about".
+  The rule the file states, which the tool already followed in four places: where the data cannot settle a
+  question, publish the measurement and name the weakness. `NA` in a censored cell with the bound on the
+  arc, `capacity_fall` beside a plateau, `fit_window_share` on an arc, the gLV assumptions in the README.
+  **Do not quietly widen that rule into changing what a number means**: withholding a number or
+  documenting a weakness is free, redefining a field moves the format id.
+  On the p-value: the arithmetic is defensible and the reading was not. `status` comes from the absence
+  threshold (`derive.absence`), and the q-value filter is off unless a user sets it, so p and q already
+  decided nothing. What was missing was that for the integrated form the null holds the monoculture rate,
+  which these designs do not measure. So the help page says it where the fields are described and as a
+  third reason the p-value does not decide; the report prints the mismatch that would explain an arc away
+  beside the q-value; and `RATE_UNCHECKED` ("rate_unchecked") marks an arc whose organism has one matched
+  monoculture set in its study. 7 of 16 live arcs carry it, the other 9 carry the lower bound in `se`.
+  **Adding a caution value touches five places**: `derive.py` (the constant), `model.CAUTIONS`, the legend
+  text (then `make legend`, or `test_the_shipped_file_is_what_the_code_draws` fails), `help.py`'s caution
+  list and the viewer's comment in `gui/index.html`. A test parametrised over `CAUTIONS` catches the ones
+  you forget.
+
 - 2026-10-08 (#155 item 1, Karoline's decision): **an arc's error has a third component, the spread of
   the monoculture rates the condition matcher selected for that organism in that study.**
   `_choose_monocultures` resolves a set per co-culture experiment, so one organism in one study can enter

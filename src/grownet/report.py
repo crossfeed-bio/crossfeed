@@ -77,6 +77,19 @@ def _edge_line(net, e) -> str:
         parts.append(f"adjusted p (q) {e.q_value:.3g}")
     if e.significance is not None:
         parts.append(f"significance -log10(q) {e.significance:.3g}")
+    # beside the test, what the test assumed. For a derivation that holds the monoculture rate, the
+    # fractional error in that rate which would move this arc's coefficient to zero is the number a
+    # reader can act on, where a q-value is conditional on the rate being right (Karoline, 2026-10-08:
+    # "if p-val computation is indefensible, we do not report p-values and comment on the weakness").
+    # It is printed next to the q-value rather than at the end of the line for that reason.
+    if getattr(e, "rate_mismatch_to_zero", None) is not None:
+        parts.append(f"a {abs(e.rate_mismatch_to_zero) * 100:.3g} per cent error in the held rate "
+                     f"({e.rate_mismatch_to_zero:+.3g}) would explain this arc away")
+    if "rate_unchecked" in (e.cautions or ()):
+        parts.append("and nothing in this study checks that rate against another matched condition")
+    elif getattr(e, "se_rate_selection", None) is not None:
+        parts.append(f"se carries {e.se_rate_selection:.3g} from which monoculture set was matched "
+                     f"(their rates spread {e.rate_selection_spread:.3g}), a lower bound on that gap")
     if getattr(e, "coefficient", None) is not None:
         parts.append(f"fitted coefficient {e.coefficient:.4g} {e.coefficient_unit}".strip())
         if e.fit_r2 is not None and e.fit_condition is not None:

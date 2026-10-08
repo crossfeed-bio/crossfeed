@@ -417,7 +417,10 @@ const isHiddenByDefault=e=>flagsOf(e).some(f=>HIDDEN_BY_DEFAULT.includes(f));
 // other did not, or too few points to tell), "zero_at_start" (a set without growth that is zero from its
 // first point), "continuous_culture" (a chemostat or serial dilution arc compared on max, the measure that
 // mode suits; with auc or a growth rate such an arc is low quality instead), "untested" (with the adjusted p-value filter on: an arc without a p-value, which the
-// filter kept unjudged) and "window_partial" (an integrated fit whose rows cover less than half the
+// filter kept unjudged), "rate_unchecked" (an integrated arc whose organism has one matched monoculture
+// set in its study, so nothing there measures how much its fitted rate moves with the condition: the one
+// assumption the design cannot test is unchecked rather than checked, and rate_mismatch_to_zero says how
+// large a mismatch would explain the arc away) and "window_partial" (an integrated fit whose rows cover less than half the
 // measured course, because the model has no lag term and no death term and stops at the end of the
 // plateau after the maximum: the coefficient describes that phase, and an effect that changes along the
 // growth curve is not treated): all are worth knowing and none disqualifies, so every caution

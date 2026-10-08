@@ -299,11 +299,18 @@ EDGE_ATTRIBUTES = {
               "replicate or a low-quality edge)",
     "p_value": "the unadjusted p-value of the test the derivation ran, which the network's "
                "meta.statistics names: Welch's two-sided t-test on the per-replicate log2 values for the "
-               "specified comparison of replicate sets",
+               "specified comparison of replicate sets. It is SUPPORT and it decides nothing: the status "
+               "comes from the absence threshold, and the q-value filter is off unless you set it. Read "
+               "it with what it rests on, which is two or three replicates, and with what it assumes: "
+               "for the integrated form the null holds the monoculture rate as the rate the organism had "
+               "in co-culture, which no growth curve in these designs measures, so rate_mismatch_to_zero "
+               "beside it says how large a mismatch would explain the arc away and rate_unchecked marks "
+               "an arc with nothing in its study to check that against",
     "q_value": "that p-value corrected for multiple testing over every comparison of the search, the q "
-               "on the page (see How an interaction is decided)",
-    "significance": "-log10 of the q-value: larger is stronger evidence, 0 at q = 1, and a style can map "
-                    "it continuously. It is capped at 15 for a q-value of zero",
+               "on the page (see How an interaction is decided). Support, like the p-value it comes from",
+    "significance": "-log10 of the q-value: larger is stronger evidence against the test's own null, 0 at "
+                    "q = 1, and a style can map it continuously. It is capped at 15 for a q-value of "
+                    "zero. It is a restatement of the q-value and inherits what that rests on",
     "outcome": "quantified (a ratio was computed), obligate (the target grows only with the source), "
                "abolished (only without it), or no_growth",
     "metric": "the growth property compared: auc, max, or a growth rate with its rule "
@@ -325,7 +332,13 @@ EDGE_ATTRIBUTES = {
                 "window_partial (the fitted rows cover less than half the measured course, because the "
                 "integrated model has no lag term and no death term and stops at the end of the plateau "
                 "after the maximum: the effect one organism has on another can change along the growth "
-                "curve, and the coefficient describes the phase inside the window)",
+                "curve, and the coefficient describes the phase inside the window), rate_unchecked (an "
+                "arc of the integrated form whose organism has one matched monoculture set in its study, "
+                "so nothing there measures how much its fitted rate moves when the matched condition "
+                "moves: se and the p-value carry the replicates and the monoculture stage, and the one "
+                "assumption this design cannot test, that the monoculture rate is the rate the organism "
+                "had in co-culture, is unchecked rather than checked. rate_mismatch_to_zero says how "
+                "large a mismatch would explain the arc away)",
     "notes": "other remarks, for example a replicate left out for a spike, the span of the course the "
              "rows cover, or what each side of the comparison was inoculated at, measured from the first "
              "time point because mGrowthDB's inoculum field is empty and its descriptions are not "
@@ -806,7 +819,22 @@ Lachnoclostridium symbiosum about 29-fold (log2 mean -4.85), with a q-value of 0
 study was derived alone. Second, an adjusted p-value depends on the other comparisons in the same search:
 the same arc gets another value when other studies are read alongside it. Deriving all of mGrowthDB
 together, two arcs of SMGDB00000004 passed 0.05 that did not when the study was derived alone, and two of
-SMGDB00000007 failed that passed. The absence threshold judges each arc on its own data only.</p>
+SMGDB00000007 failed that passed. The absence threshold judges each arc on its own data only.
+<strong>Third, for the integrated form the test's null assumes something these designs do not measure.</strong>
+That derivation holds the monoculture rate fixed and fits the partners around it, so the null is "no
+effect, <em>given</em> that the organism grew at its monoculture rate in the co-culture too". No growth
+curve in a monoculture-versus-co-culture design measures whether it did: the co-culture is a condition the
+monocultures were never grown in. Two numbers are published beside the p-value for that reason.
+<code>rate_mismatch_to_zero</code> says how large a fractional error in that rate would move the arc's
+coefficient to zero, so an arc needing 0.5 survives a 50 per cent error and one needing 0.04 does not.
+And where the study matched the organism to more than one monoculture set, the spread of the rates those
+sets fit is carried in <code>se</code> as a third component (<code>se_rate_selection</code>), which is a
+measured but <em>lower</em> bound on the gap, since it compares two monoculture conditions rather than a
+monoculture with a co-culture. An arc whose organism has only one matched set in its study carries the
+<code>rate_unchecked</code> caution: nothing there checks that assumption, which is different from
+checking it and passing. So read a p-value here as support for an effect under a stated assumption, not
+as evidence that the assumption holds. The questions grownet cannot settle from these designs are listed
+together in <code>docs/LIMITATIONS.md</code>, with what it publishes instead of each.</p>
 <p><strong>The filter.</strong> Filter on the q-value, in Advanced settings and off by default,
 also leaves out every interaction whose q-value is above a threshold (0.05 unless you type
 another). Use it for a network whose false discovery rate is controlled, knowing that it misses effects

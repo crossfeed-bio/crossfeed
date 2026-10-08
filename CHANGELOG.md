@@ -40,6 +40,24 @@ content.
   always the solution of `A x = -r` and the reader had to work it out.
 
 ### Added
+- **What the data cannot settle is listed on its own, in `docs/LIMITATIONS.md`** (Karoline on 2026-10-08:
+  "if p-val computation is indefensible, we do not report p-values and comment on the weakness"). Six
+  questions, each with what is not known, what grownet publishes instead of a number that would imply it
+  was settled, what would settle it, and what it blocks, which is nothing in every case: the held
+  monoculture rate, whether a fitted growth rate is plausible, what the absence threshold means inside a
+  matrix, which partner abundance a coefficient is divided by, when a culture has reached stationary
+  phase, and whether a gLV model describes these communities at all. It states the rule the rest of the
+  tool already follows, that where the data cannot settle a question grownet publishes the measurement and
+  names the weakness, and it is linked from the README and the help page.
+- **The statistics are labeled as support, and an arc says what its test assumed.** The p-value and the
+  q-value decide nothing and never did: the status comes from the absence threshold and the q-value filter
+  is off unless you set it. The help page now says that where the fields are described, and adds the third
+  reason the p-value does not decide, which is specific to the default derivation: its null assumes the
+  organism grew at its monoculture rate in the co-culture, and no growth curve in these designs measures
+  whether it did. So the report prints, beside the q-value, how large an error in that rate would explain
+  the arc away, and a new caution **`rate_unchecked`** marks an arc whose organism has one matched
+  monoculture set in its study, where nothing checks that assumption at all. 7 of 16 live arcs carry it;
+  the other 9 carry the measured lower bound instead.
 - **An arc's error carries a third component: which monoculture set stage 1 was given** (#155 item 1,
   Karoline on 2026-10-08, taking Craig's agent's recommendation). The condition matcher resolves a
   monoculture set per co-culture experiment, so one organism in one study can enter two arcs with two

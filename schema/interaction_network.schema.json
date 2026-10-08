@@ -323,7 +323,8 @@
               "zero_at_start",
               "untested",
               "continuous_culture",
-              "window_partial"
+              "window_partial",
+              "rate_unchecked"
             ]
           }
         },
