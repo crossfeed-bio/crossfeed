@@ -15,6 +15,23 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-08 (#139): **the retired `BaselineDeriver` is deleted**, on Karoline's word of 2026-10-06
+  ("delete it after the stack lands") and her ask of 2026-10-08. Gone: `BaselineDeriver`,
+  `interactions_from_experiments`, `_strain_growth`, `DEADBAND`, `derive.METHOD` (the baseline's own
+  label, which had no caller once the class went), the nine-line description of its rules in the module
+  docstring, and eight tests. Kept: the `Deriver` seam and `--deriver`, which the integrated form uses,
+  and the register's `[baseline]` tags, which record which option the first implementation took in each
+  menu.
+  **The issue's deletion list was stale and following it literally would have been bad.** It said
+  "tests/test_derive.py is entirely about that comparison", which was true when it was written; that file
+  now holds 72 tests of which 48 drive `interactions_from_replicates` and only 6 touched the baseline,
+  including four rewritten the day before for the strict medium rule. Read what a task says to delete
+  against the tree, not against the tree it was written on.
+  The acceptance check held: `derive SMGDB00000004 --live` gives output identical to before the deletion
+  apart from `meta.derived_at` and `meta.data.retrieved_at`. Note for whoever repeats it, because it cost
+  me a false alarm: there are **two** timestamps in a network's meta, and popping only `derived_at` leaves
+  a diff that looks like a regression.
+
 - 2026-10-07 (#155 items 5, 9, 10, 14): **the last of the third review's findings.** Four are worth
   carrying forward.
   **A validator that refuses what the reader accepts turns off its own other checks.** An undeclared

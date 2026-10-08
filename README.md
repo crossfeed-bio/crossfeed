@@ -161,7 +161,7 @@ python -m grownet schema [--out FILE]
   derived once a day by `.github/workflows/all-network.yml` (the `all-network` release), when that is
   less than a day old, and derives live otherwise; `--no-published` always derives live.
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
-- `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the baseline (see below).
+- `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of either built-in one (see below).
 - The command line does everything the local page does: every advanced setting has its option, and the
   page's outputs are `--out FILE` (with `--format`), `--to-cytoscape`, `--report FILE` (the same report the
   page shows), and, with `--report-rates`, `--rates FILE` and `--glv FILE`. `grownet derive --help` lists
@@ -378,7 +378,7 @@ taxon's rank, and a few records still carry a species-level id, which mGrowthDB 
 
 `effect` is the direction, one of `facilitation`, `inhibition`, `neutral`; the default derivation uses
 `neutral` only for a mean of exactly zero, which has no direction and is always absent (see below), and it
-remains for the retired baseline and existing files. `strength` and `significance` are your
+remains for files written by earlier versions. `strength` and `significance` are your
 method's numbers (or `null`). **The three numbers of the test run in two directions, so read the names:**
 `p_value` is the raw p-value, `q_value` is that value corrected for multiple testing (smaller is stronger
 evidence), and `significance` is `-log10(q_value)` (larger is stronger evidence, 0 at q = 1, capped at 15
@@ -698,8 +698,10 @@ hidden absent arc per genus pair. With both on, the arcs of each pair are merged
 a pair measured in several studies counts once. The genus is the first word of the name mGrowthDB records,
 not NCBI's lineage (register item 24).
 
-`BaselineDeriver` remains only as the retired placeholder, reachable with `--deriver`. The open method
-choices, and who settled each, are in [docs/METHOD_NOTES.md](docs/METHOD_NOTES.md).
+The placeholder derivation grow**net** shipped before either real method existed was deleted in 0.3.0;
+what it did is recorded in [docs/METHOD_NOTES.md](docs/METHOD_NOTES.md), where the register's
+`[baseline]` tags say which option it took in each menu. The open method choices, and who settled
+each, are in the same file.
 
 ## Guardrails
 

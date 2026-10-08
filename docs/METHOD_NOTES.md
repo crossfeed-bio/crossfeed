@@ -81,10 +81,12 @@ counts, outcome, metric, `quality` flags and `notes`.
 
 ### The retired placeholder
 
-`BaselineDeriver` remains only as the placeholder it always was, reachable with `--deriver` and no longer
-the default. What follows describes it, and is kept because networks derived before 2026-09-21 came from
-it. `src/crossfeed/derive.py` (`BaselineDeriver`) is a
-transparent placeholder that runs the seam end to end on real data. For each pairwise (two-member)
+`BaselineDeriver` was **deleted in 0.3.0** (#139, Karoline on 2026-10-06: "delete it after the stack
+lands"). It is no longer reachable by `--deriver` or by anything else, and the seam it was built to
+demonstrate now holds two real derivations. What follows describes what it did, and is kept for two
+reasons: networks derived before 2026-09-21 came from it, and the register's `[baseline]` tags below
+record which option the first implementation took in each menu, which is history worth reading. It was a
+transparent placeholder that ran the seam end to end on real data. For each pairwise (two-member)
 co-culture it reads mGrowthDB's reported per-strain `growthRate`, and sets
 
     strength = log2(growthRate in co-culture / growthRate in monoculture)

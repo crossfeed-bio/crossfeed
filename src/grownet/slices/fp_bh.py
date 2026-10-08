@@ -5,7 +5,9 @@ mGrowthDB study, turn it into a single interaction network in the neutral format
 edge level, and emit it for Syntropa to consume.
 
   --live      fetch the real study (SMGDB00000004, published/open) from the mGrowthDB API and derive the
-              interactions with the PROVISIONAL baseline (grownet.derive). Needs network.
+              interactions with the default derivation. Needs network. It said "the PROVISIONAL baseline"
+              until that placeholder was deleted in 0.3.0 (#139); this path has run the real derivation
+              since the seam gained one.
   --fixture   run the downstream seam offline on a small SYNTHETIC example (no network, used by CI).
 """
 from __future__ import annotations

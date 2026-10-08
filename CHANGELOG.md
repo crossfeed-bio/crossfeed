@@ -35,7 +35,17 @@ content.
   every organism above zero. Nothing about the coefficients changed because of it; the equilibrium was
   always the solution of `A x = -r` and the reader had to work it out.
 
-### Changed
+### Removed
+- **The retired `BaselineDeriver` is gone** (#139). It was the placeholder grownet shipped before either
+  real derivation existed: one summarized `growthRate` per culture, `log2(co / mono)` with a fixed
+  deadband, no replicates, no spread, no test. It had been off the default path since #34 and reachable
+  only through `--deriver`, and the seam it was built to demonstrate now holds two real derivations.
+  `interactions_from_experiments`, `_strain_growth`, `DEADBAND` and the baseline's own method label go
+  with it, each having had no other caller. Nothing user-facing changes: no default path and no
+  documented workflow used it, and `derive SMGDB00000004 --live` gives the same network as before, to the
+  byte apart from its two timestamps. What it did is recorded in `docs/METHOD_NOTES.md`, where the
+  register's `[baseline]` tags say which option the first implementation took in each menu.
+
 ### Fixed
 - **Fifteen smaller things, from the two reviews** (#142 items 10, 14 and 15). A reader drops a field it
   does not know for **nodes and studies** as well as edges, so the 0.2.0-against-0.3.0 failure is no
