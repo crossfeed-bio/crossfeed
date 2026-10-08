@@ -250,6 +250,22 @@ def check_format_fields(_rels):
         return ["schema/format_fields.json is missing: it records the fields each format id declares"]
 
     bad = []
+    # This check reads the LIVE dataclasses, which is what makes it meaningful and also means its verdict
+    # can be served from a stale `.pyc`, and the stale direction is a PASS. CPython invalidates bytecode
+    # on (source mtime in whole seconds, source size), and two format ids of the same length are the same
+    # size, so editing an id and reverting it inside one second leaves bytecode CPython considers current:
+    # a developer who runs the gate, sees it fail, reverts and runs it again. CI is safe, since a fresh
+    # clone has no `__pycache__`, and the exposure is exactly the local run, where this guard is worth
+    # most. So the id is read out of the source as text and compared with the imported one, which turns a
+    # silent false pass into a loud failure (Craig's agent, #168, having hit it by accident while testing
+    # this check against the #121 mistake on the released head).
+    in_source = re.search(r'^SCHEMA\s*=\s*["\'](?P<id>[^"\']+)["\']',
+                          _read("src/grownet/model.py") or "", re.M)
+    if in_source and in_source.group("id") != SCHEMA:
+        bad.append(f"src/grownet/model.py says SCHEMA is {in_source.group('id')!r} and the imported "
+                   f"module says {SCHEMA!r}: your bytecode is stale, so this check is reading code that "
+                   "is no longer on disk and its verdict means nothing. Remove the __pycache__ "
+                   "directories under src/grownet and run the gate again")
     if manifest.get("current") != SCHEMA:
         bad.append(f"schema/format_fields.json says the current format is "
                    f"{manifest.get('current')!r} and model.py says {SCHEMA!r}: set `current` to the id "

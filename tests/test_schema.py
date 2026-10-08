@@ -345,3 +345,33 @@ def test_a_new_record_field_cannot_ship_under_an_unchanged_format_id():
     problems = verdict("grownet.interaction_network/v9", {"grownet.interaction_network/v9": live})
     assert any("says the current format is" in p for p in problems), problems
     assert any("has no entry for" in p for p in problems), problems
+
+
+def test_the_format_check_refuses_to_answer_from_stale_bytecode(monkeypatch):
+    """Its verdict comes from the live dataclasses, so a stale `.pyc` can answer for code that is no
+    longer on disk, and that answer is a PASS.
+
+    Craig's agent hit it by accident on #168 while testing this check against the #121 mistake: CPython
+    invalidates bytecode on (source mtime in whole seconds, source size), and two format ids of the same
+    length are the same size, so editing an id and reverting it inside one second leaves bytecode CPython
+    considers current. A developer who runs the gate, sees it fail, reverts and runs it again meets it.
+
+    So the id is read out of `model.py` as text and compared with the imported one. Here the imported one
+    is moved instead of the file, which is the same disagreement the stale bytecode produces.
+    """
+    import sys
+    from pathlib import Path
+
+    import grownet.model
+
+    root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(root / "checks"))
+    from gate import check_format_fields  # noqa: E402
+
+    on_disk = grownet.model.SCHEMA
+    monkeypatch.setattr(grownet.model, "SCHEMA", "grownet.interaction_network/v9")
+    problems = check_format_fields([])
+    assert any("your bytecode is stale" in p for p in problems), problems
+    assert any("__pycache__" in p for p in problems), problems
+    # and it names both ids, so the reader can see which way round it is
+    assert any("grownet.interaction_network/v9" in p and on_disk in p for p in problems), problems
