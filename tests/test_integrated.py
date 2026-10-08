@@ -320,10 +320,19 @@ def test_a_fit_that_implies_no_plateau_takes_the_measured_one_before_its_partner
     described the row that was not published. On *S. thermophilus* the self term moved by 2.24 times the
     whole partner coefficient the row's claim rested on, and in the opposite direction.
 
-    The substitution happens inside `two_stage` now, before stage 2. A monoculture whose own fit implies
-    no plateau is contrived here by replacing `fit_row`, the way the R2 gate's test does, since a curve
-    that plateaus will ordinarily fit a negative A_ii; the curves themselves do reach a certified
-    plateau of 1e9, so the substitution has something to use.
+    The substitution happens inside `two_stage` now, before stage 2.
+
+    **Which route reaches it changed on 2026-10-08** (#160, Craig's agent's option 2). A single
+    monoculture replicate whose fit implies no plateau is now refused outright, because a non-negative
+    A_ii says the model does not describe that curve, so the per-replicate route to the substitution is
+    gone. What remains, and what this test drives, is the pooled fallback: where no replicate's own rows
+    identify the row, the rows are pooled, and if *that* fit implies no plateau the measured one is still
+    the rescue. Refusing an individual bad curve and rescuing a stage where every curve together implies
+    no plateau are different judgements, and both are kept.
+
+    So the contrivance is on `_pooled_stage_one` rather than on `fit_row`, since a curve that plateaus
+    will ordinarily fit a negative A_ii. The curves themselves do reach a certified plateau of 1e9, so
+    the substitution has something to use.
     """
     # 40 h, long enough that the curve reaches its 1e9 plateau and holds it, so it certifies
     times, series = _simulate([0.4], [[-4.0e-10]], [1.0e7], t_end=40.0)
@@ -331,15 +340,19 @@ def test_a_fit_that_implies_no_plateau_takes_the_measured_one_before_its_partner
     co_times, co_series = _simulate([0.4, 0.3], [[-4.0e-10, 2.0e-10], [0.0, -3.0e-10]], [1.0e7, 5.0e8])
     cos = [_replicate(["A", "B"], co_times, co_series) for _ in range(2)]
 
-    real = integrated.fit_row
+    # no replicate's own fit is usable, so stage 1 falls to the pooled rows ...
+    monkeypatch.setattr(integrated, "fit_row",
+                        lambda *a, **k: {"rate": None, "coefficients": {}, "r2": float("nan"),
+                                         "condition": float("inf"), "points": 0,
+                                         "reason": "contrived: this replicate gives nothing"})
+    # ... and the pooled fit implies no plateau, which is the case the substitution exists for
+    real_pooled = integrated._pooled_stage_one
 
-    def no_plateau(replicate, target, organisms, *args, **kwargs):
-        got = real(replicate, target, organisms, *args, **kwargs)
-        if got["coefficients"].get(target) is not None and len(organisms) == 1:
-            got["coefficients"][target] = 0.0        # a fit that implies no plateau
-        return got
+    def no_plateau(target, replicates, max_condition):
+        got = real_pooled(target, replicates, max_condition)
+        return None if got is None else (got[0], 0.0, got[2])
 
-    monkeypatch.setattr(integrated, "fit_row", no_plateau)
+    monkeypatch.setattr(integrated, "_pooled_stage_one", no_plateau)
     got = integrated.two_stage("A", monos, cos, ["A", "B"])
 
     assert "measured plateau" in got["self_limitation_source"]
@@ -800,3 +813,62 @@ def test_the_measured_plateau_reports_how_far_its_curves_fell():
     assert curves == 2 and unit == "Cells/mL"
     assert plateau == pytest.approx(5.0e8)          # both peak at the same ceiling
     assert fall == pytest.approx((1.0 + 3.0) / 2)   # one curve at its peak, one a third below it
+
+
+def test_a_monoculture_fit_is_refused_for_model_failure_not_for_the_rates_sign():
+    """#160, Karoline taking Craig's agent's option 2 on 2026-10-08.
+
+    The guard used to refuse a monoculture replicate whose fitted RATE was not positive. His argument,
+    which the live data bears out: that is selection rather than filtering, and it selects for noise. On
+    SMGDB00000006's *S. thermophilus* the three replicates fitted rates -0.1121, -0.1051 and +0.0109
+    with self-limitations +4.357, +4.276 and +1.595. The self-limitation agrees, all three failing the
+    same way; only the rate's sign disagrees. So the old guard keyed on the unstable statistic and kept
+    whichever replicate landed above zero, and because only a near-zero positive can survive that cut,
+    the survivor is biased toward zero by construction. The output of a selection then published as a
+    measurement, with `rate_stage_n` 1.
+
+    A non-negative `A_ii` is no self-limitation, so the fit implies no plateau and an unbounded culture,
+    and that is the direct answer to "does the model describe this curve". A non-positive rate is still
+    refused, because the whole row divides by it.
+    """
+    times, series = _simulate([0.4], [[-4.0e-10]], [1.0e7], t_end=40.0)
+    good = _named(["A"], times, series, "good")
+    co_times, co_series = _simulate([0.4, 0.3], [[-4.0e-10, 2.0e-10], [0.0, -3.0e-10]], [1.0e7, 5.0e8])
+    cos = [_named(["A", "B"], co_times, co_series, f"c{k}") for k in range(2)]
+
+    # a replicate whose fit has failed in the way STpos's three did: a positive self-limitation, and a
+    # small positive rate that the old guard would have waved through
+    real = integrated.fit_row
+
+    def failed(replicate, target, organisms, *args, **kwargs):
+        got = real(replicate, target, organisms, *args, **kwargs)
+        if replicate.name == "failed" and len(organisms) == 1:
+            got["rate"], got["coefficients"][target] = 0.0109, 1.595
+        return got
+
+    import pytest as _pytest
+    with _pytest.MonkeyPatch.context() as m:
+        m.setattr(integrated, "fit_row", failed)
+        failing = _named(["A"], times, series, "failed")
+        got = integrated.two_stage("A", [good, failing], cos, ["A", "B"])
+        why = dict(got["skipped"])
+        key = next(k for k in why if "failed" in k)
+        assert "self-limitation of 1.595" in why[key]
+        assert "implies no plateau" in why[key] and "whatever its rate came out as" in why[key]
+        # the good replicate alone carries the stage, so the failed one's near-zero rate is nowhere near
+        assert got["rate"] == pytest.approx(0.4, rel=0.02)
+        assert got["stage_one_n"] == 1
+
+    # and a non-positive rate is still refused, on its own wording
+    def no_growth(replicate, target, organisms, *args, **kwargs):
+        got = real(replicate, target, organisms, *args, **kwargs)
+        if replicate.name == "failed" and len(organisms) == 1:
+            got["rate"], got["coefficients"][target] = -0.05, -4.0e-10
+        return got
+
+    with _pytest.MonkeyPatch.context() as m:
+        m.setattr(integrated, "fit_row", no_growth)
+        got = integrated.two_stage("A", [good, _named(["A"], times, series, "failed")], cos, ["A", "B"])
+        why = dict(got["skipped"])
+        key = next(k for k in why if "failed" in k)
+        assert "rate of -0.05" in why[key] and "which is not growth" in why[key]

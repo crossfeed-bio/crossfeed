@@ -563,6 +563,33 @@ parameter they had. No R2 comparison is quoted above for that reason.
 ## Open decisions
 
 
+- **Settled 2026-10-08 (#160): a monoculture fit is refused for model failure, not for the rate's sign.**
+  Karoline took Craig's agent's option 2. The guard read the sign of the fitted rate; it now reads the
+  sign of the self-limitation, because a non-negative `A_ii` is no self-limitation, so the fit implies no
+  plateau and an unbounded culture, which is the direct answer to "does the model describe this curve".
+  A non-positive rate is still refused, since the row divides by it.
+  His argument, which the data bears out: the old guard was selection rather than filtering, and it
+  selected for noise. SMGDB00000006's *S. thermophilus* fitted rates -0.1121, -0.1051 and +0.0109 with
+  self-limitations +4.357, +4.276 and +1.595, so the self-limitation agreed that all three had failed and
+  only the rate's sign disagreed. Only a near-zero positive can survive a sign cut, so the survivor is
+  biased toward zero by construction, which is where 0.0109 /h came from.
+  **Two effects on the live corpus, one of them unpredicted.** *S. thermophilus* loses its rate, so
+  SMGDB00000006 yields a one-organism matrix rather than a pair, as he expected. And
+  *A. tumefaciens*'s published rate moves **0.1022 to 0.1579 /h**, a factor of 1.5, because two of its
+  three replicates (AtEv2, AtEv3) had fitted tiny positive self-limitations, 4.2e-11 and 2.3e-12, and
+  were contributing to the median unnoticed. A rate 35 per cent low is the kind of thing a sign cut on a
+  different statistic cannot see.
+  The All network goes from 14 arcs to 12, and from 4 at q below 0.05 to 3. The two lost are
+  *L. delbrueckii* -> *S. thermophilus* (q 0.0243, significant) and *Comamonas* -> *A. tumefaciens* in
+  metalworking fluid (q 0.0640, not). Withdrawing a significant arc is the intended effect here: it
+  rested on the rate a sign cut on the wrong statistic had kept.
+  **One consequence for #142 item 7.** The measured-plateau substitution exists for a stage whose fit
+  implies no plateau, which is exactly what this guard now refuses, so the per-replicate route to it is
+  gone. It survives through the pooled fallback: where no replicate's own rows identify the row, the rows
+  are pooled, and if that fit implies no plateau the measured one is still the rescue. Refusing one bad
+  curve and rescuing a stage where every curve together implies no plateau are different judgements, and
+  both are kept. The test for item 7 now drives the pooled route, which is the reachable one.
+
 - **Settled 2026-10-08 (#154), the daily artifact.** The four options were: publish only from a tag, gate
   the cron on the newest released reader, make `fresh` a version check as well as a format check, or keep
   the discipline of moving the id with any field addition. **Taken: the fourth, mechanised, and the third

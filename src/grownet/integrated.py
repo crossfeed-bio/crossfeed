@@ -498,14 +498,38 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
     usable = []        # the monoculture replicates whose own fit describes them, pooled below
     for i, replicate in enumerate(monocultures):
         fit = fit_row(replicate, target, [target], max_condition)
-        if fit["rate"] is not None and fit["rate"] <= 0:
-            # a non-positive rate from a monoculture is the model failing on that curve, not a measurement
+        if fit["rate"] is None or target not in fit["coefficients"]:
+            skipped.append((f"{target} monoculture replicate {replicate.name or i}", fit["reason"]))
+            continue
+        # A monoculture fit is refused when the model does not describe the curve, which the SIGN OF THE
+        # SELF-LIMITATION says directly: a non-negative A_ii is no self-limitation, so the fit implies no
+        # plateau and an unbounded culture, and `matrix.py` already refuses to build a row from it.
+        #
+        # It used to be refused on the sign of the RATE instead (Karoline, 2026-10-08, taking Craig's
+        # agent's option 2 on #160). On SMGDB00000006's S. thermophilus the three replicates fitted rates
+        # -0.1121, -0.1051 and +0.0109 with self-limitations +4.357, +4.276 and +1.595: the
+        # self-limitation agrees, all three failing the same way, and only the rate's sign disagrees. So
+        # the old guard keyed on the unstable statistic and kept whichever replicate landed on the right
+        # side of zero. That is selection, not filtering, and it selects for noise: only a near-zero
+        # positive can survive the cut, so the survivor is biased toward zero by construction, which is
+        # where 0.0109 /h came from, a 64 hour doubling time for a dairy starter. The output of a
+        # selection then publishes as a measurement, with `rate_stage_n` 1 and the arc tested as though
+        # stage 1 were exact.
+        #
+        # A non-positive rate is still refused, because a rate at or below zero is not growth and the
+        # whole row divides by it. The change is that a positive rate no longer rescues a fit the
+        # self-limitation says has failed.
+        own = fit["coefficients"][target]
+        if own is not None and own >= 0:
+            skipped.append((f"{target} monoculture replicate {replicate.name or i}",
+                            f"the fit gives a self-limitation of {own:.4g}, which is not negative: it "
+                            "implies no plateau and no bounded culture, so the integrated model does not "
+                            "describe this curve, whatever its rate came out as"))
+            continue
+        if fit["rate"] <= 0:
             skipped.append((f"{target} monoculture replicate {replicate.name or i}",
                             f"the fit gives a rate of {fit['rate']:.4g}, which is not growth: the "
                             "integrated model does not describe this curve"))
-            continue
-        if fit["rate"] is None or target not in fit["coefficients"]:
-            skipped.append((f"{target} monoculture replicate {replicate.name or i}", fit["reason"]))
             continue
         # a lag the Baranyi fit identified and the guards discarded leaves the rows starting at the
         # inoculum, and the fit pays for the flat start by trading the rate against the self-limitation.

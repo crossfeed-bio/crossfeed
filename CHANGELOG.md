@@ -35,6 +35,24 @@ content.
   every organism above zero. Nothing about the coefficients changed because of it; the equilibrium was
   always the solution of `A x = -r` and the reader had to work it out.
 
+### Changed
+- **A monoculture fit is refused for model failure rather than for the rate's sign** (#160, Karoline on
+  2026-10-08, taking Craig's agent's option 2). A non-negative `A_ii` is no self-limitation: the fit
+  implies no plateau and an unbounded culture, which is the direct answer to whether the model describes
+  the curve. The old guard read the sign of the rate, which on SMGDB00000006's *S. thermophilus* kept the
+  one replicate of three whose rate happened to land above zero while all three had fitted a **positive**
+  self-limitation; because only a near-zero positive survives such a cut, the survivor is biased toward
+  zero by construction, which produced a published rate of 0.0109 /h, a 64 hour doubling time for a dairy
+  starter. A non-positive rate is still refused.
+  Three things move on the live corpus. *S. thermophilus* loses its rate, so SMGDB00000006 yields a
+  one-organism matrix rather than a pair. *A. tumefaciens*'s rate moves from 0.1022 to **0.1579 /h**,
+  because two of its three replicates had fitted tiny positive self-limitations and were contributing to
+  the median unnoticed. And the All network goes from 14 arcs to 12: the two lost are
+  *L. delbrueckii* -> *S. thermophilus* (q 0.024, which was significant) and
+  *Comamonas* -> *A. tumefaciens* in metalworking fluid (q 0.064, which was not). **A significant arc is
+  withdrawn**, and that is the point rather than a cost: it rested on a rate of 0.0109 /h that only a
+  sign cut on the wrong statistic had kept.
+
 ### Removed
 - **The retired `BaselineDeriver` is gone** (#139). It was the placeholder grownet shipped before either
   real derivation existed: one summarized `growthRate` per culture, `log2(co / mono)` with a fixed
