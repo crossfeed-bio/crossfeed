@@ -618,14 +618,16 @@ parameter they had. No R2 comparison is quoted above for that reason.
   which is his correction doing its work: he withdrew the case whose rates were far apart, and both of
   today's disagreeing cases are that case. *L. delbrueckii*, the case the argument is strongest on, has a
   **single** selected set in this corpus, so under this measure it is neither for nor against the line.
-  **What calibrates the line is the gap, not either endpoint, and no positive case tests its value.** The
-  four cases are bimodal and the split is exactly on sign agreement, 4.28 and 4.66 against 16.48 and
-  17.42, a factor of 3.5 with 0.10 inside it: on this corpus a wide spread predicts disagreement and a
-  narrow one predicts agreement, which is an observed relationship rather than two endpoints to sit
-  between (his observation on #177, read off the measured table). Since the flag needs disagreeing signs
-  with a spread below the line and every disagreeing case sits above it, it fires on 0 of 4, so the exact
-  value is untested by any firing case and the separation does the work. Anyone moving it should
-  re-measure the four first.
+  **What places the line is the gap, not either endpoint, and no positive case tests its value.** The four
+  cases separate cleanly on sign agreement, 4.28 and 4.66 against 16.48 and 17.42, a factor of 3.5 with
+  0.10 inside the gap rather than on top of a case. **The ordering is not evidence that a wide spread
+  drives disagreement**: with four cases split two and two there are six label assignments, and perfect
+  separation arises one time in six by chance, one in three in either direction. He offered the
+  "predicts" framing and then withdrew it under his own permutation test, which is the right call at
+  n = 4; a fifth repeated organism would make it testable. Since the flag needs disagreeing signs with a
+  spread below the line and every disagreeing case sits above it, it fires on 0 of 4, so the exact value
+  is untested by any firing case and the separation does the work. Anyone moving it should re-measure the
+  four first.
 
 - **Partly settled 2026-10-08 (#173): no stage bounds a growth rate for plausibility, and the implied
   doubling time is now published.** The guards on a rate are identifiability, model fit, growth above zero
