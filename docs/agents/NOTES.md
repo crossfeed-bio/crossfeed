@@ -986,3 +986,9 @@ and the README: that is the one mistake this style can make.
   merged (each condition and study is its own edge), so an edge's `study_ids` has one entry today.
 - The gate scans every tracked file, including this one: no dashes as punctuation, US spelling, no
   absolute local paths.
+- Overriding one method of a standard library class means rewriting the rest of that method's body, and
+  the rest is where a divergence hides. `_HTTPSConnection.connect` exists only to choose the address, and
+  it handed TLS `self.host` where `http.client` hands it `self._tunnel_host or self.host`, so a proxied
+  connection would have verified the certificate against the proxy (Craig's agent on #184; unreachable
+  here, since nothing calls `set_tunnel`). Read the installed source of what you override, copy the rest
+  of it, and state in the docstring which single thing differs.

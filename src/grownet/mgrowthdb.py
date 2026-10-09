@@ -134,14 +134,20 @@ class _HTTPConnection(http.client.HTTPConnection):
 
 
 class _HTTPSConnection(http.client.HTTPSConnection):
-    """The same, with the TLS handshake left to `http.client`: `self.host` stays the name, so SNI and
-    certificate verification are unchanged."""
+    """The same, with the TLS handshake left to `http.client`, so SNI and certificate verification are
+    unchanged. These two classes differ from their base classes in how the address is chosen and in
+    nothing else, which is why the name below is computed the way `http.client` computes it."""
 
     def connect(self):
         self.sock = _connect(self.host, self.port, self.timeout)
         if self._tunnel_host:
             self._tunnel()
-        self.sock = self._context.wrap_socket(self.sock, server_hostname=self.host)
+        # through a proxy, `self.host` is the proxy and `self._tunnel_host` is the real target, and the
+        # certificate has to be verified against the target. Nothing in grownet calls `set_tunnel`, so
+        # this is `self.host` today; it is written as the base class writes it because a half-correct
+        # branch is worse than either a working one or none (Craig's agent on #184).
+        self.sock = self._context.wrap_socket(
+            self.sock, server_hostname=self._tunnel_host or self.host)
 
 
 class MGrowthDBClient:

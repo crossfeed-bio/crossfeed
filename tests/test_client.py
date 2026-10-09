@@ -219,3 +219,34 @@ def test_when_no_family_answers_the_last_error_is_raised(monkeypatch):
     monkeypatch.setattr(mgrowthdb, "_ANSWERED", {})
     with pytest.raises(OSError, match="Connection refused"):
         mgrowthdb._connect("down.example", 443, 30.0)
+
+
+def test_tls_verifies_the_name_the_certificate_has_to_match(monkeypatch):
+    """`connect()` is overridden to choose the address, and must hand TLS the name the base class hands
+    it: the host normally, and the tunnel target when a proxy is in the way, because that is the name the
+    certificate has to match. Nothing in grownet calls `set_tunnel`, so the second case is unreachable
+    today and this test is what keeps the override faithful to `http.client` (Craig's agent on #184).
+    """
+    from grownet import mgrowthdb
+
+    class _Recorder:
+        def __init__(self):
+            self.names = []
+
+        def wrap_socket(self, sock, server_hostname=None):
+            self.names.append(server_hostname)
+            return sock
+
+    monkeypatch.setattr(mgrowthdb, "_connect", lambda host, port, timeout: "a socket")
+
+    plain = mgrowthdb._HTTPSConnection("mgrowthdb.example", 443)
+    plain._context = _Recorder()
+    plain.connect()
+    assert plain._context.names == ["mgrowthdb.example"]        # no proxy: the host itself
+
+    proxied = mgrowthdb._HTTPSConnection("proxy.kuleuven.be", 3128)
+    proxied.set_tunnel("mgrowthdb.example", 443)
+    proxied._tunnel = lambda: None                              # the CONNECT itself is not what is tested
+    proxied._context = _Recorder()
+    proxied.connect()
+    assert proxied._context.names == ["mgrowthdb.example"]      # not "proxy.kuleuven.be"
