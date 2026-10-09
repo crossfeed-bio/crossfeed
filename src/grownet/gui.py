@@ -520,11 +520,24 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
            "<option value=\"r\">Send to R</option></select></form>"
            if organism_rates and has_edges else "")
     count = matrix.counts(result["network"])
+    # a cell cannot say that it holds no number because one side did not grow, so the page says it here,
+    # beside the download that writes those cells (#129, settled by Karoline 2026-10-08)
+    na = matrix.bounded_cells(result["network"])
+    na_hint = ""
+    if na:
+        named = "; ".join(f"{actor} on {affected}"
+                          + ("" if size is None else f" (at {'least' if size > 0 else 'most'} log2 "
+                                                     f"{size:+.4g})")
+                          for affected, actor, size in na[:6])
+        more = "" if len(na) <= 6 else f", and {len(na) - 6} more"
+        na_hint = (f" {len(na)} cell(s) hold <code>NA</code> rather than a number, because one side did not "
+                   f"grow at all and no ratio exists: {named}{more}. The arc carries the measured bound the "
+                   "no-growth rule puts on that side, and the report prints it with its rule.")
     hint = ("<p class=\"hint\">Send to Cytoscape needs Cytoscape running on this machine; the network arrives in "
             "the legend's style. The report holds every setting and every reason a pair gave no edge. The "
-            f"adjacency matrix holds one cell per ordered pair, so this search's {count['arcs']} arc(s) with a "
-            f"number make {count['cells']} cell(s) over {count['organisms']} organism(s): arcs of one pair from "
-            "different conditions or studies merge by their median.</p>")
+            f"adjacency matrix holds one cell per ordered pair, so this search's {count['arcs']} arc(s) that "
+            f"reach it make {count['cells']} cell(s) over {count['organisms']} organism(s): arcs of one pair "
+            f"from different conditions or studies merge by their median.{na_hint}</p>")
     rate_hint = ("<p class=\"hint\">The growth rates are each organism's maximum specific growth rate in "
                  "monoculture, the median over the replicates and studies that have one, with the lag and the "
                  "carrying capacity beside each. The gLV package holds fitted per-capita coefficients, one "

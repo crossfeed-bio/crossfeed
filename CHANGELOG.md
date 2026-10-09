@@ -36,6 +36,19 @@ content.
   always the solution of `A x = -r` and the reader had to work it out.
 
 ### Added
+- **A censored cell of the plain adjacency matrix is `NA`, and its bound travels on the arc** (#129,
+  Karoline on 2026-10-08). A pair whose only arcs are obligate or abolished has no log2 ratio, because one
+  side did not grow. Such a cell used to hold +/-10 by convention, and within this release it briefly held
+  the measured bound the no-growth rule puts on that side. It now holds **`NA`**: measured on the live
+  corpus, 11 of the 12 bounds land inside the range of the quantified arcs and 7 below their median, so a
+  bound printed in a cell sorts among the ratios rather than past them, and nothing in a CSV cell can say
+  that a number is a floor rather than a measurement, which is the same objection that retired +/-10. `NA`
+  is what R reads as not a number, where 0 would read as no interaction about the strongest effect in the
+  set. The bound itself is unchanged and is on the arc (`strength_bound`, `bound_rule`): the report prints
+  it with its rule, the page names every cell left `NA` beside the download, and `matrix.bounded_cells`
+  gives the listing as data. The three censored cells whose rule bounds nothing away from zero now read
+  `NA` too, where they fell through to 0. **A reader of the matrix must handle `NA`**, and a pair left at 0
+  for disagreeing in sign is still 0, named as a conflict.
 - **What a study holds is kept between runs and reused while its `uploadedAt` is unchanged** (#182).
   Until now every run read everything again: a corpus run sends 3738 requests (2195 bioreplicate records,
   930 series, 559 experiments, 54 studies) and a single study 153. The rule was that measurements are read

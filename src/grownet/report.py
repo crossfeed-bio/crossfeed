@@ -26,24 +26,31 @@ def _value(key: str, value) -> str:
 
 
 def _bound_line(e) -> str:
-    """How the report writes a censored arc's cell: a bound, with the rule that produced it (#129)."""
+    """How the report writes a censored arc's bound, with the rule that produced it (#129).
+
+    The cell of such a pair is `NA`, because a matrix cell cannot say that a number is a floor, so this
+    report is where the bound is stated (Karoline, 2026-10-08).
+    """
     size = getattr(e, "strength_bound", None)
+    rule = f" [{e.bound_rule}]" if getattr(e, "bound_rule", "") else ""
     if size is None:
-        return ""
+        return rule.strip()
     direction = "at least" if size > 0 else "at most"
-    return f"{direction} log2 {size:+.4g}" + (f" [{e.bound_rule}]" if e.bound_rule else "")
+    return f"{direction} log2 {size:+.4g}" + rule
 
 
 def _mean_sd(e) -> str:
     if e.strength is None:
         bound = _bound_line(e)
-        if bound:
-            return f"no ratio (one side did not grow), so the cell is a bound: {bound}"
+        if bound and getattr(e, "strength_bound", None) is not None:
+            return f"no ratio (one side did not grow), so the cell is NA and the arc carries the bound: {bound}"
         # a ratio is also undefined when both sides grew and the fitted effect at least cancels the
         # organism's own rate, which is not "one side did not grow" (found 2026-10-06)
         if e.outcome not in ("obligate", "abolished"):
             return "no log2 ratio: the fitted effect at least cancels this organism's own growth rate"
-        return "no ratio (one side did not grow)"
+        # no bound either: the rule says why, and the cell is NA rather than 0, which would read as no
+        # interaction about the strongest effect in the set (#129)
+        return "no ratio (one side did not grow), so the cell is NA" + (f": {bound}" if bound else "")
     return f"log2 mean {e.strength:+.2f}" + ("" if e.sd is None else f" +/- {e.sd:.2f}")
 
 
