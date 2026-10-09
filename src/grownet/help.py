@@ -270,6 +270,9 @@ CLI_ONLY = {
                  "does",
     "--all": "every study in mGrowthDB, with every partner, as the page's All button (with --live)",
     "--no-published": "with --all, derive live instead of reading the network derived once a day",
+    "--no-cache": "read everything from mGrowthDB again, instead of reusing what an earlier run read for "
+                  "a study whose uploadedAt has not changed. Responses are kept in the user cache "
+                  "directory, never in the repository, and GROWNET_CACHE overrides where",
     "--live": "fetch from the mGrowthDB API (the normal case)",
     "--fixture": "derive from a JSON list of interaction records instead (offline, for testing)",
     "--deriver": "plug in your own derivation method, given as module:ClassName (one study at a time)",
