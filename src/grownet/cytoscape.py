@@ -131,6 +131,28 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
                 "se_rate_stage": getattr(edge, "se_rate_stage", None),
                 "se_rate_selection": getattr(edge, "se_rate_selection", None),
                 "rate_selection_spread": getattr(edge, "rate_selection_spread", None),
+                # the gLV coefficient and what is known about it, the fit it came out of, the monoculture
+                # stage behind it, the target's capacity, and the rule behind a censored arc's bound.
+                # Every one of these was in the file and in GraphML and not here, found by comparing the
+                # two emitters rather than by looking: naming the four error components above was what
+                # the round trip caught, and sixteen fields were short by the same mistake (Craig's agent
+                # on #181, who asked for the comparison that finds them)
+                "coefficient": getattr(edge, "coefficient", None),
+                "coefficient_unit": getattr(edge, "coefficient_unit", ""),
+                "coefficient_sd": getattr(edge, "coefficient_sd", None),
+                "coefficient_n": getattr(edge, "coefficient_n", None),
+                "coefficient_sd_from_rate_stage": getattr(edge, "coefficient_sd_from_rate_stage", None),
+                "fit_r2": getattr(edge, "fit_r2", None),
+                "fit_null_r2": getattr(edge, "fit_null_r2", None),
+                "fit_condition": getattr(edge, "fit_condition", None),
+                "rate_stage_method": getattr(edge, "rate_stage_method", ""),
+                "rate_stage_n": getattr(edge, "rate_stage_n", None),
+                "partner_abundance_n": getattr(edge, "partner_abundance_n", None),
+                "target_capacity": getattr(edge, "target_capacity", None),
+                "target_capacity_unit": getattr(edge, "target_capacity_unit", ""),
+                "target_capacity_n": getattr(edge, "target_capacity_n", None),
+                "bound_rule": getattr(edge, "bound_rule", ""),
+                "method": getattr(edge, "method", ""),
                 "quality": " ".join(edge.quality), "cautions": " ".join(edge.cautions),
                 "notes": "; ".join(edge.notes), "community": " ".join(edge.community),
                 "experiments": " ".join(edge.experiments), "study_ids": " ".join(edge.study_ids),
@@ -276,6 +298,12 @@ def _post(url: str, payload, timeout: float = 30.0):
 # as 0.0 and 0 is the strongest q-value there is. The column is then declared here instead, so every arc
 # carries all of them and a reader can style or filter on any one, with the cells of the arcs that have no
 # value genuinely empty (Karoline, 2026-10-03; checked against Cytoscape 3.10.3).
+# Every number the payload sends that an arc may not carry, so the table holds the column whatever this
+# particular network happens to contain. The rule is exactly that, and it needs no judgment: a payload
+# field whose `Edge` field is declared `float | None` or `int | None` belongs here, which a test asserts
+# in both directions. It used to hold 18 of the 33, and a round trip through Cytoscape 3.10.4 showed what
+# that costs: a network where no arc carries a capacity arrived with no `target_capacity` column at all,
+# so a reader filtering on it finds nothing rather than nothing-yet (measured 2026-10-09, #181).
 OPTIONAL_EDGE_COLUMNS = (("p_value", "Double"), ("q_value", "Double"), ("significance", "Double"),
                          ("strength", "Double"), ("weight", "Double"), ("effect_over_sd", "Double"),
                          ("sd", "Double"), ("se", "Double"), ("n_with", "Integer"),
@@ -283,7 +311,19 @@ OPTIONAL_EDGE_COLUMNS = (("p_value", "Double"), ("q_value", "Double"), ("signifi
                          ("supporting_pairs", "Integer"), ("fit_window_share", "Double"),
                          ("rate_mismatch_to_zero", "Double"), ("se_replicates", "Double"),
                          ("se_rate_stage", "Double"), ("se_rate_selection", "Double"),
-                         ("rate_selection_spread", "Double"))
+                         ("rate_selection_spread", "Double"),
+                         # the gLV coefficient and its error
+                         ("coefficient", "Double"), ("coefficient_sd", "Double"),
+                         ("coefficient_n", "Integer"), ("coefficient_sd_from_rate_stage", "Double"),
+                         # the fit the coefficient came out of, and the monoculture stage behind it
+                         ("fit_r2", "Double"), ("fit_null_r2", "Double"), ("fit_condition", "Double"),
+                         ("rate_stage_n", "Integer"),
+                         # the absolute numbers a ratio hides, the partner's abundance, the target's
+                         # capacity, and a censored arc's bound
+                         ("metric_with", "Double"), ("metric_without", "Double"),
+                         ("partner_abundance", "Double"), ("partner_abundance_n", "Integer"),
+                         ("target_capacity", "Double"), ("target_capacity_n", "Integer"),
+                         ("strength_bound", "Double"))
 
 
 def _declare_columns(root: str, suid, timeout: float) -> list:

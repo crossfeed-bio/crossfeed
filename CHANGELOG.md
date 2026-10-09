@@ -157,6 +157,18 @@ content.
   no value for one leaves the cell empty rather than reading as zero. The test that checks a column is not
   declared twice now reads the list from the sender rather than repeating it, which is what let this
   through: the list in the test was shorter than the list in the code and nothing compared the two.
+  **That guard was still the wrong direction, and the right one found sixteen more** (Craig's agent on
+  #181): comparing the test's list with the sender's cannot see a sender that is short, which is what
+  happened. GraphML's key table and the Cytoscape payload both answer "what do we emit for an arc", so
+  they are compared with each other, and the payload was missing the **gLV coefficient**, its error, its
+  unit and its count, the fit's `r2`, null `r2` and condition number, the monoculture stage's method and
+  count, the partner-abundance count, the target's capacity with its unit and count, the rule behind a
+  censored arc's bound, and the derivation method. All sixteen are sent now, and `evidence` is the one
+  field that travels under another name, as the interaction column Cytoscape merges parallel edges on,
+  which the test checks rather than excuses. The column declaration was completed the same way: it held 18
+  of the 33 numbers an arc may lack, so a network whose arcs carry no capacity arrived with no
+  `target_capacity` column at all. Measured by the same round trip, the edge table goes from **47 columns
+  to 64**.
 - **Fifteen smaller things, from the two reviews** (#142 items 10, 14 and 15). A reader drops a field it
   does not know for **nodes and studies** as well as edges, so the 0.2.0-against-0.3.0 failure is no
   longer armed for the next release that adds one. The shipped JSON Schema and the model agreed in

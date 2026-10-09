@@ -372,3 +372,91 @@ def test_a_column_cytoscape_already_has_is_not_declared_again(cyrest):
     sent = send(_net(), port=port)
     assert sent["columns"] == []
     assert not [p for verb, p, _ in seen if verb == "POST" and p.endswith("/tables/defaultedge/columns")]
+
+
+def _arc_with_every_field():
+    """One arc carrying a value for every field `Edge` declares, so each emitter is asked for all of them.
+
+    The payload drops a number that is None, so a field left empty would look like a field not sent.
+    """
+    from dataclasses import fields
+
+    from grownet.model import Edge
+
+    kinds = {"str": "x", "str | None": "x", "float | None": 1.5, "int | None": 2, "tuple": ("x",)}
+    given = {}
+    for f in fields(Edge):
+        kind = str(f.type)
+        assert kind in kinds, f"{f.name} is declared {kind!r}, which this test cannot fill in: add it"
+        given[f.name] = kinds[kind]
+    given.update(source="ncbi:1", target="ncbi:2", strength_range=(1.0, 2.0))
+    return Edge(**given)
+
+
+def test_what_graphml_emits_for_an_arc_the_cytoscape_payload_emits_too():
+    """Both lists answer the same question, "what do we emit for an arc", and a field added to one and not
+    the other is the defect that has now happened twice: #142 item 2, and four error components that
+    reached the file and GraphML and stopped at the Cytoscape table (#181).
+
+    The improved list test beside this one compares the test's own list with the sender's, which guards
+    test against sender. It cannot see the failure that happened, where the sender itself was short. So
+    this compares the two senders, GraphML's key table against what the payload actually carries, and
+    neither side is restated here (Craig's agent on #181, who established that both lists were decided
+    already, so the comparison needs no judgment call).
+    """
+    from grownet.export import _KEYS
+    from grownet.model import InteractionNetwork
+
+    # one field travels under another name, on purpose: the interaction column is what decides whether
+    # Cytoscape's merge collapses parallel edges, so a biculture arc and a drop-out arc for one pair stay
+    # apart. It is the only exception, and it is checked below rather than taken.
+    under_another_key = {"evidence": "interaction"}
+    arc = _arc_with_every_field()
+    net = InteractionNetwork(nodes={"ncbi:1": Node(id="ncbi:1", name="A sp."),
+                                    "ncbi:2": Node(id="ncbi:2", name="B sp.")},
+                             edges=[arc], meta={})
+    data = network_json(net)["elements"]["edges"][0]["data"]
+    payload = set(data)
+    graphml = {name for _kid, kind, name, _type in _KEYS if kind == "edge"}
+
+    missing = sorted(graphml - payload - set(under_another_key))
+    assert not missing, ("GraphML emits these edge fields and the Cytoscape payload does not: "
+                         f"{missing}. Add them to the payload in cytoscape.py, and to "
+                         "OPTIONAL_EDGE_COLUMNS when an arc may lack them")
+    # and the exception is real: the value travels, under the other key, and it is still needed
+    for field, key in under_another_key.items():
+        assert data[key] == getattr(arc, field), f"{field} does not reach Cytoscape as {key}"
+        assert field not in payload, f"{field} is sent under its own name now: drop the exception"
+
+
+def test_every_optional_number_the_payload_sends_is_declared_as_a_column():
+    """`_declare_columns` exists so the edge table holds a column whatever this network happens to carry.
+    The rule is exactly "a number an arc may not have", which the `Edge` declaration answers rather than
+    a person: `float | None` and `int | None`. Asserted in both directions, so the list can neither fall
+    behind the payload nor keep a name the payload stopped sending.
+
+    It held 18 of the 33 and a round trip showed the cost: a network whose arcs carry no capacity arrived
+    with no `target_capacity` column at all (Cytoscape 3.10.4, 2026-10-09, #181).
+    """
+    from dataclasses import fields
+
+    from grownet.cytoscape import OPTIONAL_EDGE_COLUMNS
+    from grownet.model import Edge, InteractionNetwork
+
+    net = InteractionNetwork(nodes={"ncbi:1": Node(id="ncbi:1", name="A sp."),
+                                    "ncbi:2": Node(id="ncbi:2", name="B sp.")},
+                             edges=[_arc_with_every_field()], meta={})
+    payload = set(network_json(net)["elements"]["edges"][0]["data"])
+    declared = {name: kind for name, kind in OPTIONAL_EDGE_COLUMNS}
+    wanted = {"float | None": "Double", "int | None": "Integer"}
+    optional = {f.name: wanted[str(f.type)] for f in fields(Edge)
+                if str(f.type) in wanted and f.name in payload}
+
+    assert not sorted(set(optional) - set(declared)), (
+        f"the payload sends these numbers and nothing declares their column: "
+        f"{sorted(set(optional) - set(declared))}. Add them to OPTIONAL_EDGE_COLUMNS")
+    assert not sorted(set(declared) - set(optional)), (
+        f"these columns are declared and the payload does not send them as optional numbers: "
+        f"{sorted(set(declared) - set(optional))}. Drop them, or send them")
+    wrong = {n: (declared[n], optional[n]) for n in optional if declared[n] != optional[n]}
+    assert not wrong, f"declared with the wrong Cytoscape type: {wrong}"
