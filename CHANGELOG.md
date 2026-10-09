@@ -6,7 +6,7 @@ content.
 
 ## [Unreleased]
 
-## [0.3.0] (unreleased)
+## [0.3.0] (2026-10-09)
 
 ### Upgrading
 - **The default derivation is now the integrated form** (`--derivation integrated`, Karoline,
