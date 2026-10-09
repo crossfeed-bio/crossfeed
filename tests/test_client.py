@@ -100,3 +100,153 @@ def test_one_open_connection_serves_many_requests():
         httpd.shutdown()
     assert paths[3] == "/api/v1/study/S3.json"
     assert len(_KeepAlive.connections) == 1              # ten requests, one connection
+
+
+def test_a_black_holed_ipv6_address_costs_three_seconds_and_then_ipv4(monkeypatch):
+    """mGrowthDB publishes an AAAA and an A record, and on some networks the IPv6 address is a black hole.
+
+    Measured at KU Leuven on 2026-10-09 against `mgrowthdb.gbiomed.kuleuven.be`: the IPv6 address never
+    answers and macOS takes 17.5 seconds to say so, while IPv4 connects in 14 milliseconds. `getaddrinfo`
+    returns IPv6 first and `socket.create_connection`, which `http.client` uses, walks the addresses in
+    that order with the full timeout on each, so every new connection paid 17.5 seconds: six times in a
+    cold run, one per worker thread. Live after this change: the first request takes 3.1 seconds and every
+    later connection 0.09, because the family that answered is remembered.
+
+    Here both families are faked, so the test needs no network: the v6 socket times out, the v4 one
+    connects, and what is checked is the order, the timeout each attempt was given, and the memory.
+    """
+    import socket as socket_module
+
+    from grownet import mgrowthdb
+
+    V6, V4 = ("2a02::5", 443, 0, 0), ("134.58.134.5", 443)
+    attempts = []
+
+    class _Socket:
+        def __init__(self, family, kind, proto):
+            self.family, self.timeout = family, None
+
+        def settimeout(self, t):
+            self.timeout = t
+
+        def connect(self, address):
+            attempts.append((self.family, self.timeout, address))
+            if self.family == socket_module.AF_INET6:
+                raise TimeoutError("timed out")       # the black hole, after `timeout` seconds
+
+        def close(self):
+            pass
+
+    def fake_getaddrinfo(host, port, *a, **kw):
+        return [(socket_module.AF_INET6, socket_module.SOCK_STREAM, 6, "", V6),
+                (socket_module.AF_INET, socket_module.SOCK_STREAM, 6, "", V4)]
+
+    monkeypatch.setattr(mgrowthdb.socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(mgrowthdb.socket, "socket", _Socket)
+    monkeypatch.setattr(mgrowthdb, "_ANSWERED", {})
+
+    sock = mgrowthdb._connect("mgrowthdb.example", 443, 30.0)
+    assert sock.family == socket_module.AF_INET           # IPv4 answered, so IPv4 is what comes back
+    assert sock.timeout == 30.0                           # and it carries the caller's timeout, not 3
+    assert [(f, t) for f, t, _a in attempts] == [
+        (socket_module.AF_INET6, mgrowthdb.FIRST_TRY),    # 3 seconds on the unproven family, not 30
+        (socket_module.AF_INET, mgrowthdb.FIRST_TRY)]
+    assert mgrowthdb._ANSWERED["mgrowthdb.example"] == socket_module.AF_INET
+
+    # the second connection does not wait at all: the remembered family is tried first and gets the full
+    # timeout, since it is the one expected to work
+    attempts.clear()
+    mgrowthdb._connect("mgrowthdb.example", 443, 30.0)
+    assert [(f, t) for f, t, _a in attempts] == [(socket_module.AF_INET, 30.0)]
+
+
+def test_nothing_forces_ipv4_so_an_ipv6_only_network_still_works(monkeypatch):
+    """Forcing IPv4 would break a network that has only IPv6, so the order is a preference and both
+    families are still tried. Here only the AAAA record exists and it answers."""
+    import socket as socket_module
+
+    from grownet import mgrowthdb
+
+    attempts = []
+
+    class _Socket:
+        def __init__(self, family, kind, proto):
+            self.family, self.timeout = family, None
+
+        def settimeout(self, t):
+            self.timeout = t
+
+        def connect(self, address):
+            attempts.append(self.family)
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(mgrowthdb.socket, "getaddrinfo",
+                        lambda *a, **kw: [(socket_module.AF_INET6, socket_module.SOCK_STREAM, 6, "",
+                                           ("2a02::5", 443, 0, 0))])
+    monkeypatch.setattr(mgrowthdb.socket, "socket", _Socket)
+    monkeypatch.setattr(mgrowthdb, "_ANSWERED", {})
+    sock = mgrowthdb._connect("v6only.example", 443, 30.0)
+    assert sock.family == socket_module.AF_INET6 and attempts == [socket_module.AF_INET6]
+    assert mgrowthdb._ANSWERED["v6only.example"] == socket_module.AF_INET6
+
+
+def test_when_no_family_answers_the_last_error_is_raised(monkeypatch):
+    """A network failure must stay a network failure, so `_request`'s retry rule and its message still
+    apply rather than a new exception type leaking out."""
+    import socket as socket_module
+
+    from grownet import mgrowthdb
+
+    class _Socket:
+        def __init__(self, family, kind, proto):
+            self.family = family
+
+        def settimeout(self, t):
+            pass
+
+        def connect(self, address):
+            raise OSError(61, "Connection refused")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(mgrowthdb.socket, "getaddrinfo",
+                        lambda *a, **kw: [(socket_module.AF_INET, socket_module.SOCK_STREAM, 6, "",
+                                           ("134.58.134.5", 443))])
+    monkeypatch.setattr(mgrowthdb.socket, "socket", _Socket)
+    monkeypatch.setattr(mgrowthdb, "_ANSWERED", {})
+    with pytest.raises(OSError, match="Connection refused"):
+        mgrowthdb._connect("down.example", 443, 30.0)
+
+
+def test_tls_verifies_the_name_the_certificate_has_to_match(monkeypatch):
+    """`connect()` is overridden to choose the address, and must hand TLS the name the base class hands
+    it: the host normally, and the tunnel target when a proxy is in the way, because that is the name the
+    certificate has to match. Nothing in grownet calls `set_tunnel`, so the second case is unreachable
+    today and this test is what keeps the override faithful to `http.client` (Craig's agent on #184).
+    """
+    from grownet import mgrowthdb
+
+    class _Recorder:
+        def __init__(self):
+            self.names = []
+
+        def wrap_socket(self, sock, server_hostname=None):
+            self.names.append(server_hostname)
+            return sock
+
+    monkeypatch.setattr(mgrowthdb, "_connect", lambda host, port, timeout: "a socket")
+
+    plain = mgrowthdb._HTTPSConnection("mgrowthdb.example", 443)
+    plain._context = _Recorder()
+    plain.connect()
+    assert plain._context.names == ["mgrowthdb.example"]        # no proxy: the host itself
+
+    proxied = mgrowthdb._HTTPSConnection("proxy.kuleuven.be", 3128)
+    proxied.set_tunnel("mgrowthdb.example", 443)
+    proxied._tunnel = lambda: None                              # the CONNECT itself is not what is tested
+    proxied._context = _Recorder()
+    proxied.connect()
+    assert proxied._context.names == ["mgrowthdb.example"]      # not "proxy.kuleuven.be"

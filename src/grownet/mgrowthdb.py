@@ -23,6 +23,7 @@ import http.client
 import io
 import json
 import os
+import socket
 import threading
 import time
 import urllib.error
@@ -60,6 +61,93 @@ class _Status(Exception):
 
 # what a dropped or refused connection raises below urllib: retried like a network error
 _NETWORK = (OSError, http.client.HTTPException)
+
+
+# mGrowthDB publishes both an AAAA and an A record, and on some networks the IPv6 address is a black hole:
+# the packets go nowhere and the connection sits until the operating system gives up. Measured at KU Leuven
+# on 2026-10-09, from `mgrowthdb.gbiomed.kuleuven.be`: the IPv6 address never answers and macOS takes
+# **17.5 seconds** to say so, while the IPv4 address connects in 14 milliseconds. `getaddrinfo` returns the
+# IPv6 address first, and `socket.create_connection`, which `http.client` uses, tries the addresses in that
+# order with the full timeout on each, so every new connection paid 17.5 seconds. With one kept-open
+# connection per thread and six workers, a cold run paid it six times.
+#
+# So the first address of each family gets a short attempt and the next family is tried as soon as it
+# fails, and the family that answered is remembered for the rest of the process, so only the first
+# connection can wait at all. **Nothing forces IPv4**: a network with only IPv6 is served exactly as
+# before, because the order is a preference and both families are still tried. (The sibling tool foodnet
+# met this first, on the same network and the same API.)
+FIRST_TRY = 3.0            # seconds to wait on an unproven address family before trying the next
+_ANSWERED: dict = {}       # host -> the address family that connected, shared by every thread
+_ANSWERED_LOCK = threading.Lock()
+
+
+def _families(host: str) -> list:
+    """The address families to try for this host, the one that answered before first."""
+    with _ANSWERED_LOCK:
+        known = _ANSWERED.get(host)
+    return [known, socket.AF_INET6, socket.AF_INET] if known else [socket.AF_INET6, socket.AF_INET]
+
+
+def _connect(host: str, port: int, timeout: float | None):
+    """A connected socket, trying each address family in turn rather than every address in one order.
+
+    An unproven family gets `FIRST_TRY` seconds, so a black-holed address costs that and not the operating
+    system's own patience; a family that answered before gets the full timeout, since it is the one
+    expected to work. The socket comes back with the caller's timeout set, whichever family answered.
+    """
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except OSError:
+        raise
+    seen, last = [], None
+    for family in _families(host):
+        if family in seen:
+            continue
+        seen.append(family)
+        with _ANSWERED_LOCK:
+            proven = _ANSWERED.get(host) == family
+        for info_family, kind, proto, _canon, address in infos:
+            if info_family != family:
+                continue
+            sock = socket.socket(family, kind, proto)
+            sock.settimeout(timeout if proven or timeout is None else min(FIRST_TRY, timeout or FIRST_TRY))
+            try:
+                sock.connect(address)
+            except OSError as e:
+                last = e
+                sock.close()
+                continue
+            sock.settimeout(timeout)
+            with _ANSWERED_LOCK:
+                _ANSWERED[host] = family
+            return sock
+    raise last or OSError(f"no address of {host} could be connected to")
+
+
+class _HTTPConnection(http.client.HTTPConnection):
+    """`http.client`'s connection with the address-family fallback above in place of its own ordering."""
+
+    def connect(self):
+        self.sock = _connect(self.host, self.port, self.timeout)
+        if self._tunnel_host:                     # no proxy is configured anywhere in grownet
+            self._tunnel()
+
+
+class _HTTPSConnection(http.client.HTTPSConnection):
+    """The same, with the TLS handshake left to `http.client`, so SNI and certificate verification are
+    unchanged. These two classes differ from their base classes in how the address is chosen and in
+    nothing else, which is why the name below is computed the way `http.client` computes it."""
+
+    def connect(self):
+        self.sock = _connect(self.host, self.port, self.timeout)
+        if self._tunnel_host:
+            self._tunnel()
+        # through a proxy, `self.host` is the proxy and `self._tunnel_host` is the real target, and the
+        # certificate has to be verified against the target. Nothing in grownet calls `set_tunnel`, so
+        # this is `self.host` today; it is written as the base class writes it because a half-correct
+        # branch is worse than either a working one or none (Craig's agent on #184).
+        self.sock = self._context.wrap_socket(
+            self.sock, server_hostname=self._tunnel_host or self.host)
 
 
 class MGrowthDBClient:
@@ -125,7 +213,7 @@ class MGrowthDBClient:
         if fresh or conn is None:
             if conn is not None:
                 conn.close()
-            kind = http.client.HTTPSConnection if self._scheme == "https" else http.client.HTTPConnection
+            kind = _HTTPSConnection if self._scheme == "https" else _HTTPConnection
             conn = self._local.conn = kind(self._host, timeout=self.timeout)
         return conn
 
