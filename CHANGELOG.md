@@ -36,6 +36,18 @@ content.
   always the solution of `A x = -r` and the reader had to work it out.
 
 ### Added
+- **What a study holds is kept between runs and reused while its `uploadedAt` is unchanged** (#182).
+  Until now every run read everything again: a corpus run sends 3738 requests (2195 bioreplicate records,
+  930 series, 559 experiments, 54 studies) and a single study 153. The rule was that measurements are read
+  fresh, because mGrowthDB serves only the latest version of a study; what makes keeping them safe is that
+  a study's `uploadedAt` moves whenever it is revised, which **Karoline confirmed for the mGrowthDB team**:
+  "uploadedAt is kept fresh", and "it's coupled to study submission". So responses go to the user's own cache
+  directory (`GROWNET_CACHE` moves it, `--no-cache` keeps nothing, never inside the repository), each file
+  carrying the study and the stamp it was read at; **the study record is always read live**, because it is
+  the check; and a stamp that has moved drops everything kept for that study. Measured live on
+  SMGDB00000007: a first run sends 153 requests and a second sends **1**, deriving the same network. The
+  report says how much was read, how much was reused, and which studies were read again because their
+  stamp moved. The daily All workflow is unaffected, since its runners keep nothing.
 - **Each arc says what both sides of its comparison were inoculated at** (#81, Karoline on 2026-10-08).
   mGrowthDB's `inoculumConcentration` is empty in every experiment checked and its descriptions state a
   starting density unsystematically, so the number is taken from the first measured abundance, which the
