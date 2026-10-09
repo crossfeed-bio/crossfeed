@@ -55,7 +55,11 @@ content.
   grown in, and the notes say so. Where two arcs of one organism took nearly the same rate and still imply
   mismatches of opposite sign, the arc says that too: they cannot both be the rate being wrong, so for at
   least one the implied mismatch is growth that depends on the partner. No live arc meets that condition
-  today.
+  today. The spread is the **sample** standard deviation of those rates, which the field description and
+  the method notes now say rather than leaving it to the choice of function (Craig's agent on #177): which
+  sets a study holds and which one each arc was matched to is one realisation of a matching, so they are a
+  sample rather than the whole population, and the population form would be narrower by a factor of 1.41
+  where two sets were selected.
 - **Every growth rate is published with the doubling time it implies** (#173, Karoline on 2026-10-08).
   `ln(2) / r` in the time unit of the rate, as the appended `doubling_time` column of `growth_rates.csv`
   and beside each rate in the report. No stage of the derivation asks whether a rate is plausible: the

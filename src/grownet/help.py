@@ -410,7 +410,13 @@ EDGE_ATTRIBUTES = {
                          "co-culture the monocultures were never grown in",
     "rate_selection_spread": "the spread of those selected rates, in the rate's own units, which is the "
                              "measured scale behind se_rate_selection. The arc's notes name the rates "
-                             "and say how far apart they are",
+                             "and say how far apart they are. It is their sample standard deviation "
+                             "(dividing by n - 1): which sets a study holds, and which one each arc was "
+                             "matched to, is one realisation of a matching that could have gone "
+                             "otherwise, so they are a sample rather than the whole population of rates "
+                             "this organism could have been given. The population form would be smaller "
+                             "by sqrt(n / (n - 1)), a factor of 1.41 where two sets were selected, so "
+                             "this is the wider of the two readings",
     "rate_stage_method": "how the monoculture stage was resampled for that number: a bootstrap of its "
                          "replicates where the stage is the median of one fit per replicate, or a "
                          "delete-one jackknife where it is one regression over all of their rows",

@@ -594,6 +594,13 @@ parameter they had. No R2 comparison is quoted above for that reason.
   appear in several arcs of one study, which is 9 of 16 arcs here. For a single-arc organism there is no
   internal spread and the honest answer stays option 1 plus the per-arc sensitivity, flagged as
   uncheckable rather than checked and passed.
+  **The spread is the sample standard deviation** of the distinct selected rates, dividing by `n - 1`
+  (Craig's agent on #177, who asked for the basis to be stated rather than inferred from the function
+  name). Which sets a study holds, and which one the matcher paired with each co-culture, is one
+  realisation of a matching that could have gone otherwise, so these rates are a sample rather than the
+  population of rates the organism could have been given. The population form divides by `n` and is
+  smaller by `sqrt(n / (n - 1))`, a factor of 1.41 at the minimum `n` of 2, and `se_rate_selection` is
+  close to linear in the spread, so this reading is the wider and the more conservative one.
   **Option 4 (a rate per condition) stays out**, and his corrected reason is the one to record: a
   per-condition offset would be fitted within a study, and of the four studies with well-determined rates
   two are all-positive at n=2, where an offset is not excluded but cannot be fitted either, while the two

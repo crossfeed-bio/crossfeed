@@ -1420,6 +1420,17 @@ def _widen_by_rate_selection(pending: list) -> None:
         chosen = sorted(r for r in per_fit.values() if r)
         if len(chosen) < 2:
             continue
+        # `stdev` is the SAMPLE standard deviation, dividing by n - 1, and that is the intended basis:
+        # which monoculture sets this study happened to hold, and which the matcher happened to pair with
+        # each co-culture, is one realisation of a matching that could have gone otherwise, so these
+        # rates are a sample of the rates this organism could have been given rather than the whole
+        # population of them. `pstdev` would divide by n and give a spread smaller by sqrt(n / (n - 1)),
+        # which at the minimum n of 2 that the guard below admits is a factor of 1.41, and
+        # `se_rate_selection` is close to linear in the spread because it is measured by re-evaluating
+        # the strength at the rate plus and minus it. So the sample form is the wider and the more
+        # conservative of the two: a larger se, a larger p-value, fewer significant arcs. Written down
+        # because a reader should not have to infer a 41 per cent factor from a function name (Craig's
+        # agent on #177).
         spread = statistics.stdev(chosen)
         if not spread:
             continue
