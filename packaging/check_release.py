@@ -23,6 +23,11 @@ except ModuleNotFoundError:          # Python 3.10: the release itself runs on 3
 ROOT = Path(__file__).resolve().parents[1]
 
 
+# How many days before the day of the tag a release date may be. One: a tag pushed just after UTC midnight
+# from a tree prepared the evening before is the case this allows, and nothing else is.
+STALE_DATE_DAYS = 1
+
+
 def check(tag: str, root: Path = ROOT, releasing: bool = True, today=None) -> tuple:
     """(problems, the release notes) for `tag`.
 
@@ -78,6 +83,17 @@ def check(tag: str, root: Path = ROOT, releasing: bool = True, today=None) -> tu
             when = datetime.date.fromisoformat(found.group(1))
             if when > now:
                 problems.append(f"{where} dates the release {found.group(1)}, which is in the future")
+            # A date in the past passes every check above and can still be wrong, which is the state
+            # 0.3.0 sat in for a day: CITATION.cff said the day it was prepared and the changelog said
+            # nothing, so the two had nothing to disagree about and the date would have shipped as the
+            # release date of a release cut later. Both files carried one release's date into the next
+            # before. So on the day a tag is cut, the date has to be that day; one day of slack covers a
+            # tag pushed just after UTC midnight from a tree prepared the evening before (2026-10-09).
+            elif releasing and (now - when).days > STALE_DATE_DAYS:
+                problems.append(f"{where} dates the release {found.group(1)}, which is "
+                                f"{(now - when).days} days before today ({now}). A release is dated the "
+                                "day it is cut: set the date in CHANGELOG.md and CITATION.cff to today, "
+                                "or tag on the day they name")
         if releasing and not heading:
             problems.append(f"CHANGELOG.md gives no date for {version}")
     # The R companion is versioned separately and RELEASING.md calls r/DESCRIPTION the only signal an

@@ -106,6 +106,21 @@ content.
   gives the listing as data. The three censored cells whose rule bounds nothing away from zero now read
   `NA` too, where they fell through to 0. **A reader of the matrix must handle `NA`**, and a pair left at 0
   for disagreeing in sign is still 0, named as a conflict.
+- **What a study holds is kept between runs and reused while its `uploadedAt` is unchanged** (#182).
+  Until now every run read everything again: a corpus run sends 3738 requests (2195 bioreplicate records,
+  930 series, 559 experiments, 54 studies) and a single study 153. The rule was that measurements are read
+  fresh, because mGrowthDB serves only the latest version of a study; what makes keeping them safe is that
+  a study's `uploadedAt` moves whenever it is revised, which **Karoline confirmed for the mGrowthDB team**:
+  "uploadedAt is kept fresh", and "it's coupled to study submission". So responses go to the user's own cache
+  directory (`GROWNET_CACHE` moves it, `--no-cache` keeps nothing, never inside the repository), each file
+  carrying the study and the stamp it was read at; **the study record is always read live**, because it is
+  the check; and a stamp that has moved drops everything kept for that study. Measured live on
+  SMGDB00000007: a first run sends 153 requests and a second sends **1**, deriving the same network. The
+  report says how much was read, how much was reused, and which studies were read again because their
+  stamp moved, and those two counts are now incremented under the same lock as the rest of the shared
+  state, since one client serves six worker threads and `x += 1` is three steps (Craig's agent on #185);
+  an undercounted reuse makes a network look fresher than it is. The daily All workflow is unaffected,
+  since its runners keep nothing.
 - **Each arc says what both sides of its comparison were inoculated at** (#81, Karoline on 2026-10-08).
   mGrowthDB's `inoculumConcentration` is empty in every experiment checked and its descriptions state a
   starting density unsystematically, so the number is taken from the first measured abundance, which the
@@ -148,6 +163,31 @@ content.
   register's `[baseline]` tags say which option the first implementation took in each menu.
 
 ### Fixed
+- **The release check refuses a release date that is not the day of the tag** (found while preparing
+  0.3.0). A date in the past passed every check: the future-date guard does not see it, and the agreement
+  guard compares the changelog with `CITATION.cff`, which have nothing to disagree about while the
+  changelog says `(unreleased)` and gives no date. 0.3.0 sat in exactly that state, with `CITATION.cff`
+  naming the day it was prepared, and tagged later that date would have shipped as the release date, as one
+  release's date was carried into the next before. The check now asks that both files name the day the tag
+  is cut, with one day of slack for a tag pushed just after UTC midnight from a tree prepared the evening
+  before, and it says what to do. It is a release-day rule only: preparing a tree with an older date is
+  not a problem.
+- **A black-holed IPv6 address no longer costs 17 seconds on every connection** (found with the sibling
+  tool foodnet on the same network, 2026-10-09). mGrowthDB publishes an AAAA and an A record, and on some
+  networks the IPv6 address is a black hole: measured at KU Leuven, it never answers and the operating
+  system takes **17.5 seconds** to say so, while IPv4 connects in 14 milliseconds. `getaddrinfo` returns
+  IPv6 first and `http.client` walks the addresses in that order with the full timeout on each, so every
+  new connection paid it, once per worker thread in a cold run. Now an unproven address family gets three
+  seconds and the next family is tried as soon as it fails, and the family that answered is remembered for
+  the rest of the process, so only the first connection can wait at all. **Nothing forces IPv4**: a network
+  with only IPv6 is served as before, because the order is a preference and both families are still tried.
+  Measured end to end on the whole corpus: a cold `derive --all --live --no-published` went from **368
+  seconds to 113**, deriving a network identical apart from its timestamps. Overriding `connect()` to
+  choose the address meant writing the TLS handshake out again, and it handed the certificate check the
+  host rather than the tunnel target, which is the wrong name through a proxy (Craig's agent on #184).
+  Nothing in grownet configures a proxy, so the branch is unreachable and nothing was ever verified
+  against the wrong name; it now computes that name the way `http.client` computes it, so the only
+  difference from the base class is the address choice, and a test holds the override to it.
 - **Fifteen smaller things, from the two reviews** (#142 items 10, 14 and 15). A reader drops a field it
   does not know for **nodes and studies** as well as edges, so the 0.2.0-against-0.3.0 failure is no
   longer armed for the next release that adds one. The shipped JSON Schema and the model agreed in
