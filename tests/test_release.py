@@ -6,7 +6,13 @@ import pytest
 
 pytest.importorskip("tomllib")                      # Python 3.11 and newer; the release runs on 3.12
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packaging"))
+import datetime  # noqa: E402
+
 from check_release import check, main, release_notes  # noqa: E402
+
+# The fixture dates its release 2026-10-01, and the check now asks a release to be dated the day its tag
+# is cut, so every call that cuts one pins the clock to that day rather than drifting with the calendar.
+FIXTURE_DAY = datetime.date(2026, 10, 1)
 
 
 def _repo(tmp_path, version="0.1.0", code="0.1.0", heading="## [0.1.0] (2026-10-01)", cited=None,
@@ -27,7 +33,7 @@ def _repo(tmp_path, version="0.1.0", code="0.1.0", heading="## [0.1.0] (2026-10-
 
 
 def test_a_consistent_release_is_ready_and_its_notes_are_its_changelog_section(tmp_path):
-    problems, notes = check("v0.1.0", _repo(tmp_path))
+    problems, notes = check("v0.1.0", _repo(tmp_path), today=FIXTURE_DAY)
     assert problems == [] and notes == "### Added\n- the first release"
 
 
@@ -53,7 +59,7 @@ def test_the_release_notes_start_with_how_to_get_past_the_windows_warning(tmp_pa
     assert notes.endswith("### Added\n- the first release")
     import check_release
     monkeypatch.setattr(check_release, "check",
-                        lambda tag, **kw: check(tag, _repo(tmp_path), **kw))
+                        lambda tag, **kw: check(tag, _repo(tmp_path), today=FIXTURE_DAY, **kw))
     out = tmp_path / "notes.md"
     assert main(["v0.1.0", str(out)]) == 0
     assert out.read_text(encoding="utf-8") == notes + "\n"
@@ -132,6 +138,44 @@ def test_a_tree_in_development_can_be_green_and_honest_at_once(tmp_path):
     assert check("v0.1.0", repo, releasing=False)[0] == []
     problems, _ = check("v0.1.0", repo, releasing=True)
     assert any("still marks 0.1.0 unreleased" in p for p in problems)
+
+
+def test_a_date_in_the_past_is_refused_on_the_day_a_tag_is_cut(tmp_path):
+    """A past date passes every other check and can still be wrong, which is the state 0.3.0 sat in: on
+    2026-10-08 CITATION.cff said 2026-10-07, the day it was prepared, and the changelog said "(unreleased)"
+    and gave no date, so the two had nothing to disagree about and neither was in the future. Tagged a day
+    later, that date would have shipped as the release date.
+
+    So on the day a tag is cut the date has to be that day, with one day of slack for a tag pushed just
+    after UTC midnight from a tree prepared the evening before. Hand computed against a fixed today.
+    """
+    import datetime
+
+    today = datetime.date(2026, 10, 9)
+
+    def repo_dated(name, when):
+        root = _repo(tmp_path / name, heading=f"## [0.1.0] ({when})")
+        (root / "CITATION.cff").write_text('cff-version: 1.2.0\ntitle: grownet\nversion: 0.1.0\n'
+                                           f'date-released: "{when}"\n', encoding="utf-8")
+        return root
+
+    # the day itself, and the day before: both fine
+    for when in ("2026-10-09", "2026-10-08"):
+        assert not any("before today" in p
+                       for p in check("v0.1.0", repo_dated(when, when), today=today)[0]), when
+    # two days before: refused, with the remedy named
+    problems, _ = check("v0.1.0", repo_dated("stale", "2026-10-07"), today=today)
+    stale = [p for p in problems if "before today" in p]
+    assert len(stale) == 2, problems                       # both files carry it, both are named
+    assert all("2 days before today (2026-10-09)" in p for p in stale), stale
+    assert any("set the date in CHANGELOG.md and CITATION.cff to today" in p for p in stale)
+    # and it is a release-day rule only: preparing a tree with an older date is not a problem
+    assert not any("before today" in p
+                   for p in check("v0.1.0", repo_dated("prep", "2026-10-01"),
+                                  releasing=False, today=today)[0])
+    # the one-day slack is the constant, not a magic number in the message
+    from check_release import STALE_DATE_DAYS
+    assert STALE_DATE_DAYS == 1
 
 
 def test_a_date_in_the_future_is_refused_however_it_is_written(tmp_path):

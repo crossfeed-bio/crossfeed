@@ -15,6 +15,26 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-09 (#182, Karoline's decision): **what a study holds is kept between runs and reused while its
+  `uploadedAt` is unchanged.** The premise is hers, confirming for the mGrowthDB team, that "uploadedAt is
+  kept fresh", and that "it's coupled to study submission".
+  **Where the design went, and why the first version was wrong.** The first attempt kept a central index
+  (`studies.json`) mapping each URL to its study and stamp. It failed its own test: the index is written
+  when a study record is read, and the measurements are cached afterwards, so a second run found the
+  responses on disk and no ownership for them and read everything again. Writing the index after every
+  response is O(n^2) on a 3738-request corpus, and leaning on `atexit` loses a killed run. So **each kept
+  file carries its own `{"owner": [study, uploadedAt], "body": ...}`**: nothing to keep in step, nothing to
+  write at exit, and a half-finished run costs only re-reads.
+  **The ownership is learned from the records themselves**, since only `study/<id>.json` names its study in
+  its URL: a study lists its experiments, an experiment and a bioreplicate carry `studyId`, and a
+  bioreplicate lists its series. `_learn` therefore runs on a **kept** response as well as a fresh one, or
+  a reuse run would know nothing about the series it already has.
+  Three refusals are deliberate: an unattributable URL is never served, a study this run has not checked is
+  never served from, and a moved stamp deletes what it owned. `get_study` is always live, because it is the
+  check.
+  Live on SMGDB00000007: 153 requests, then **1**. `--no-cache` keeps nothing, `GROWNET_CACHE` moves the
+  directory, and docs/DATA_GOVERNANCE.md says what may never happen to those files.
+
 - 2026-10-08 (#139): **the retired `BaselineDeriver` is deleted**, on Karoline's word of 2026-10-06
   ("delete it after the stack lands") and her ask of 2026-10-08. Gone: `BaselineDeriver`,
   `interactions_from_experiments`, `_strain_growth`, `DEADBAND`, `derive.METHOD` (the baseline's own
@@ -1017,3 +1037,9 @@ and the README: that is the one mistake this style can make.
   merged (each condition and study is its own edge), so an edge's `study_ids` has one entry today.
 - The gate scans every tracked file, including this one: no dashes as punctuation, US spelling, no
   absolute local paths.
+- Overriding one method of a standard library class means rewriting the rest of that method's body, and
+  the rest is where a divergence hides. `_HTTPSConnection.connect` exists only to choose the address, and
+  it handed TLS `self.host` where `http.client` hands it `self._tunnel_host or self.host`, so a proxied
+  connection would have verified the certificate against the proxy (Craig's agent on #184; unreachable
+  here, since nothing calls `set_tunnel`). Read the installed source of what you override, copy the rest
+  of it, and state in the docstring which single thing differs.
