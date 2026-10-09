@@ -259,9 +259,20 @@ def check_format_fields(_rels):
     # most. So the id is read out of the source as text and compared with the imported one, which turns a
     # silent false pass into a loud failure (Craig's agent, #168, having hit it by accident while testing
     # this check against the #121 mistake on the released head).
-    in_source = re.search(r'^SCHEMA\s*=\s*["\'](?P<id>[^"\']+)["\']',
+    in_source = re.search(r'^SCHEMA\s*(?::[^=]+)?=\s*["\'](?P<id>[^"\']+)["\']',
                           _read("src/grownet/model.py") or "", re.M)
-    if in_source and in_source.group("id") != SCHEMA:
+    if in_source is None:
+        # the guard above cannot guard itself: with no id read out of the source there is nothing to
+        # compare the import against, and the old code then skipped the staleness test silently, which
+        # is the failure it exists to prevent. An annotation or a wrapped line is enough to do it:
+        # `SCHEMA: Final = "..."` imports fine and no longer matches a bare `^SCHEMA =`. So the check
+        # refuses instead, the way `email_link_check` refuses a file whose body it cannot recognize
+        # rather than passing it (Craig's agent on #176).
+        return bad + ["this check could not find the SCHEMA declaration in src/grownet/model.py, so it "
+                      "cannot tell whether the imported module is the code on disk and every verdict "
+                      "below it would be unverified. Keep the declaration as a single assignment of a "
+                      "literal, or widen the pattern in checks/gate.py to match the new form"]
+    if in_source.group("id") != SCHEMA:
         # and nothing else is reported, because nothing else can be trusted: every verdict below comes
         # from the same import, including the field comparison that is this check's actual job and the
         # thing that catches the #121 mistake. Reporting them anyway produced a line that said
