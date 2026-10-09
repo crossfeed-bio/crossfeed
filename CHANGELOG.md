@@ -36,6 +36,19 @@ content.
   always the solution of `A x = -r` and the reader had to work it out.
 
 ### Added
+- **A censored cell of the plain adjacency matrix is `NA`, and its bound travels on the arc** (#129,
+  Karoline on 2026-10-08). A pair whose only arcs are obligate or abolished has no log2 ratio, because one
+  side did not grow. Such a cell used to hold +/-10 by convention, and within this release it briefly held
+  the measured bound the no-growth rule puts on that side. It now holds **`NA`**: measured on the live
+  corpus, 11 of the 12 bounds land inside the range of the quantified arcs and 7 below their median, so a
+  bound printed in a cell sorts among the ratios rather than past them, and nothing in a CSV cell can say
+  that a number is a floor rather than a measurement, which is the same objection that retired +/-10. `NA`
+  is what R reads as not a number, where 0 would read as no interaction about the strongest effect in the
+  set. The bound itself is unchanged and is on the arc (`strength_bound`, `bound_rule`): the report prints
+  it with its rule, the page names every cell left `NA` beside the download, and `matrix.bounded_cells`
+  gives the listing as data. The three censored cells whose rule bounds nothing away from zero now read
+  `NA` too, where they fell through to 0. **A reader of the matrix must handle `NA`**, and a pair left at 0
+  for disagreeing in sign is still 0, named as a conflict.
 - **Each arc says what both sides of its comparison were inoculated at** (#81, Karoline on 2026-10-08).
   mGrowthDB's `inoculumConcentration` is empty in every experiment checked and its descriptions state a
   starting density unsystematically, so the number is taken from the first measured abundance, which the
@@ -78,6 +91,15 @@ content.
   register's `[baseline]` tags say which option the first implementation took in each menu.
 
 ### Fixed
+- **The release check refuses a release date that is not the day of the tag** (found while preparing
+  0.3.0). A date in the past passed every check: the future-date guard does not see it, and the agreement
+  guard compares the changelog with `CITATION.cff`, which have nothing to disagree about while the
+  changelog says `(unreleased)` and gives no date. 0.3.0 sat in exactly that state, with `CITATION.cff`
+  naming the day it was prepared, and tagged later that date would have shipped as the release date, as one
+  release's date was carried into the next before. The check now asks that both files name the day the tag
+  is cut, with one day of slack for a tag pushed just after UTC midnight from a tree prepared the evening
+  before, and it says what to do. It is a release-day rule only: preparing a tree with an older date is
+  not a problem.
 - **A black-holed IPv6 address no longer costs 17 seconds on every connection** (found with the sibling
   tool foodnet on the same network, 2026-10-09). mGrowthDB publishes an AAAA and an A record, and on some
   networks the IPv6 address is a black hole: measured at KU Leuven, it never answers and the operating

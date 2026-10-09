@@ -40,8 +40,9 @@ RELEASES = (
         "would have to be invented. The page says before the download when a package will hold more "
         "than one.",
         "A pair where one side did not grow is a measurement too, not a stated extreme: its coefficient "
-        "comes from the rate that was measured and the one that was 0, and in the plain adjacency matrix "
-        "such a cell now holds a measured bound from the no-growth rule instead of +/-10.",
+        "comes from the rate that was measured and the one that was 0. In the plain adjacency matrix such "
+        "a cell now holds NA instead of +/-10, and the measured bound the no-growth rule gives it travels "
+        "on the arc, which can say it is a bound where a cell cannot.",
         "A growth rate now travels with the lag the Baranyi fit found, the estimator that produced it "
         "and the organism's carrying capacity, which are the three numbers a coefficient is made of.",
         "A package can be scored against the chemostat steady states mGrowthDB holds for the same "
@@ -809,12 +810,17 @@ the actor. Each organism appears once, so arcs of one pair from several conditio
 by their median, the same rule the Merge arcs setting uses; a pair whose arcs disagree in sign is left at
 0 rather than averaged. An empty cell is 0, and so is an arc below the absence threshold, which the
 threshold judged no interaction. An obligate interaction (the affected organism grows only with the actor)
-has no log2 ratio at all, because one side did not grow, so its cell holds a <strong>measured bound</strong>
-instead of the stated extreme it used to carry: the no-growth rule allows that side at most its factor
-(1.5 by default) over its own measured start, which bounds the ratio from below for an obligate pair and
-from above for an abolished one. The report prints each bound with the rule behind it, and the arc says it
-is a bound (<code>strength_bound</code>). Such an arc sets a cell only when no arc of that pair was
-quantified. The diagonal of this matrix is 0; only the gLV package fits it.</p>
+has no log2 ratio at all, because one side did not grow, so its cell holds <strong>NA</strong>: neither a
+number, which a cell cannot mark as a bound, nor 0, which would read as no interaction about the strongest
+effect in the set. The effect is still measured, and it travels on the arc: the no-growth rule allows the
+side that did not grow at most its factor (1.5 by default) over its own measured start, which bounds the
+ratio from below for an obligate pair and from above for an abolished one. The arc carries that
+<strong>measured bound</strong>
+(<code>strength_bound</code>) with the rule behind it (<code>bound_rule</code>), the report prints it, and
+the page names every cell left NA beside the download. The cell holds NA rather than the bound because a
+cell cannot say which kind of number it holds, so a bound printed there is indistinguishable from a ratio,
+which is what was wrong with the stated extreme it used to carry. Such an arc sets a cell only when no arc of that
+pair was quantified. The diagonal of this matrix is 0; only the gLV package fits it.</p>
 <p><strong>A bound on an area is weaker than a bound on a rate</strong>, which matters when the growth
 property is the default area under the curve rather than the growth rate gLV mode sets. A culture that
 did not grow still carries the area of its own inoculum for the whole window, so the area the rule allows

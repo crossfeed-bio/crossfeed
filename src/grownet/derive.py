@@ -948,8 +948,9 @@ def bounded_strength(c: dict) -> tuple:
         # the bound is weaker than the measurement it is compared with, so it does not put the effect
         # away from zero. That happens with an area, where a culture that did not grow still carries the
         # area of its own inoculum; `max` and a growth rate are bounded tightly (#129).
-        return None, (f"{bound['rule']}, which does not bound this effect away from zero: the cell is 0, "
-                      "and a comparison on the maximum or on the growth rate bounds it tightly")
+        return None, (f"{bound['rule']}, which does not bound this effect away from zero: the arc carries "
+                      "no bound and its cell is NA, and a comparison on the maximum or on the growth rate "
+                      "bounds it tightly")
     return (round(size, 4) if c["outcome"] == OBLIGATE else round(-size, 4)), bound["rule"]
 
 

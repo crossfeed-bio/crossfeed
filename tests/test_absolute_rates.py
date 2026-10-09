@@ -162,14 +162,15 @@ def test_an_obligate_organism_without_a_co_culture_plateau_is_still_named():
     assert any(name == "A" and "plateau" in why for name, why in got["left_out"])
 
 
-def test_the_plain_adjacency_matrix_still_holds_the_log2_means_and_the_extremes():
-    """What stays as it is: only the package converts (#119, #123)."""
+def test_the_plain_adjacency_matrix_still_holds_the_log2_means_and_names_its_na_cells():
+    """What stays as it is: only the package converts (#119, #123). A censored cell holds `NA` since #129
+    settled, and the gLV package still fits that pair from the absolute rates."""
     arcs = [_arc("b", "a", 0.8, 0.4, x_j=2.0e8, strength=1.0),
             _arc("b", "c", 0.8, 0.0, x_j=2.0e8, outcome="obligate", strength=None)]
     table = list(csv.reader(io.StringIO(matrix.matrix_csv(_net(arcs)))))
     names = table[0][1:]
     assert float(table[1 + names.index("A")][1 + names.index("B")]) == pytest.approx(1.0)
-    assert float(table[1 + names.index("C")][1 + names.index("B")]) == matrix.EXTREME
+    assert table[1 + names.index("C")][1 + names.index("B")] == "NA"
 
 
 def test_the_package_says_which_rates_each_cell_came_from():
