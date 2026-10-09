@@ -196,20 +196,32 @@ Rules for this file:
   measurements like that spread belong in issue comments and in this file, not in the help, the README or
   a generated package README.
 
-- 2026-10-06 (#129, Karoline's decision): **a censored cell holds a measured bound, not +/-10.**
+- 2026-10-08 (#129, Karoline's decision, replacing the 2026-10-06 one): **a censored cell of the plain
+  matrix is `NA`, and the measured bound is on the arc.** The bound itself is unchanged:
   `interaction.no_growth_bound` turns the rule that said a side did not grow into a bound on that side's
-  metric (`max`: factor times its own start; `auc`: that over the window; a growth rate: ln(factor) / T),
-  `derive.bounded_strength` turns it into the signed log2 bound the cell holds, and `matrix._extreme`
-  prefers it over `EXTREME`, which now only serves a network derived before this change. An `auc`
-  comparison can leave the bound on the wrong side of zero, since a culture that did not grow still
-  carries its inoculum's area: the cell then stays 0 and says that the maximum or the growth rate bounds
-  it tightly. With the growth rate on SMGDB00000013 the bounds are +4.4 to +5.9 log2 in place of +10.
+  metric (`max`: factor times its own start; `auc`: that over the window; a growth rate: ln(factor) / T)
+  and `derive.bounded_strength` turns it into a signed log2 bound, now carried on the arc
+  (`strength_bound`, `bound_rule`) and nowhere else. What changed is the cell: `matrix._censored` decides
+  that a pair has no ratio, `cells` gives it the value `None` while keeping its DIRECTION for the
+  sign-disagreement test, and `_number` writes `NA`. `matrix.bounded_cells` lists every NA cell with its
+  bound for the page and the report; `by_convention` and `_censored_cells` are gone, and `EXTREME` reaches
+  no output at all now (it stays as the gate inside `_extreme` and as the number a 0.2.0 reader met).
+  **Why**, and it is the general lesson: the measured bound was right and its PLACE was wrong. Measured on
+  the live corpus, 11 of 12 bounds land inside the range of the quantified arcs and 7 below their median,
+  so in a cell they sort among the ratios instead of past them. A CSV cell cannot say that a number is a
+  floor, which is the same objection that retired +/-10, so an unannotated bound in a cell is +/-10 with
+  better provenance. Put a value where it can state what it is, and `NA` in the projection that cannot.
+  An `auc` comparison can leave the bound on the wrong side of zero, since a culture that did not grow
+  still carries its inoculum's area: the arc then has no bound and says that the maximum or the growth
+  rate bounds it tightly, and its cell is `NA` as well, where it used to fall through to 0.
+  With the growth rate on SMGDB00000013 the bounds are +4.4 to +5.9 log2 in place of +10.
+  **A reader of the matrix must handle `NA`**; a pair left at 0 for disagreeing in sign is still 0.
 
 - 2026-10-06 (#123, Karoline's decision): **every cell of the gLV package comes from absolute rates.**
   `A_ij = (r_with - r_without) / x_j_star`, the same formula as a difference, so a pair where one side did
-  not grow is a measurement: `matrix.floor_magnitude` is gone, `EXTREME` stays in the plain adjacency
-  matrix only, and a censored arc now enters the median of its pair (register item 14 kept it out while
-  it was a convention). `derive.absolute_values` takes the geometric mean of each set, 0 for a set that
+  not grow is a measurement: `matrix.floor_magnitude` is gone and a censored arc now enters the median of
+  its pair (register item 14 kept it out while it was a convention). `EXTREME` stayed in the plain
+  adjacency matrix then, and reaches no output since #129 settled on 2026-10-08. `derive.absolute_values` takes the geometric mean of each set, 0 for a set that
   did not grow; `derive.target_capacity` takes the target's own certified plateau in the co-culture; and
   `matrix.obligate_partners` turns those into a whole row for an organism that grows only with a partner
   (`r_i = 0`, `A_ii` from the plateau balance). Five new Edge fields carry it all. A network saved before
@@ -846,10 +858,13 @@ simulator takes (register item 32, Karoline 2026-10-03). What a later agent need
   on the diagonal; only the gLV package sets -1, by convention, for self-limitation.
 - One cell per ordered pair, so arcs of one pair merge across conditions and studies by their median,
   register item 14's rule, including its refusal to merge arcs of opposite sign: such a pair stays 0 and
-  the package README names it. An obligate or abolished arc has no ratio, so it carries `matrix.EXTREME`
-  with its sign, +10 or -10 (Karoline, 2026-10-03, after the first build left those cells at 0): a stated
-  extreme, not a measurement. It never enters the median of the arcs that do have a ratio, and
-  `matrix.by_convention` is the list the package README prints cell by cell. `matrix.counts` gives the page the arc-to-cell numbers, so a 6-arc
+  the package README names it. An obligate or abolished arc has no ratio, so its cell holds `NA`
+  (Karoline, 2026-10-08, after the first build left those cells at 0 and the convention and then the
+  measured bound each held them for a while): no number a reader could mistake for a ratio, and not 0,
+  which reads as no interaction. It never enters the median of the arcs that do have a ratio, its
+  direction still counts when a pair disagrees in sign, and `matrix.bounded_cells` is the listing of those
+  cells with each arc's measured bound, which the page prints beside the download.
+  `matrix.counts` gives the page the arc-to-cell numbers, so a 6-arc
   search that makes 2 cells says so instead of looking like the hidden-arcs mismatch again.
 - A reported growth rate (`derive.monoculture_rates`, `derive.merge_rates`, `derive.growth_rates`) is the
   maximum specific growth rate in monoculture by the chosen rate method, median over every monoculture
