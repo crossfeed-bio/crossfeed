@@ -68,13 +68,24 @@ def _reports_an_extreme(edge) -> bool:
     functions ask "does this arc report an effect it has no ratio for", for different purposes, so they
     name each other rather than leaving a maintainer to find out which output each one is about.
 
-    They differ on exactly one of the four shapes the no-growth rule can produce (probed by Craig's agent
-    on #174, 2026-10-08):
+    It is **built on `_censored`** so that the two can differ in one place only, by construction. They
+    did not at first: this one tested `strength_bound` before it ever looked at the outcome, so an arc
+    carrying a bound with an outcome that produces no bound counted here and not there, and the gLV path
+    built a coefficient for a pair whose adjacency cell held a number instead of `NA`. Nothing derives
+    that shape, since `interaction.py` attaches a bound only to an obligate or abolished comparison, but
+    nothing refuses it either: `Edge.validate` checks the outcome against its vocabulary and never relates
+    two fields, and both constructors that turn records into edges (`mgrowthdb.records_to_network`, the
+    public shape for supplied records, and `InteractionNetwork.from_dict`) read the two independently
+    (Craig's agent's fifth shape, #174, 2026-10-08). Such an arc is now named in the package rather than
+    counted: see `_pair_values`.
 
-      1. a measured bound           `_censored` yes, this yes
-      2. the rule bounds nothing    `_censored` yes, this **no**
-      3. older than the bound       `_censored` yes, this yes
-      4. quantified                 both no
+    The five shapes the no-growth rule and a supplied record can produce:
+
+      1. a measured bound                     `_censored` yes, this yes
+      2. the rule bounds nothing              `_censored` yes, this **no**
+      3. older than the bound                 `_censored` yes, this yes
+      4. quantified                           both no
+      5. a bound without a censoring outcome  both no, and the package names it
 
     Shape 2 is the arc whose bound does not separate the effect from zero, which needs a metric that
     carries the inoculum of a culture that did not grow. With `auc` it happens: a flat culture still has
@@ -86,13 +97,13 @@ def _reports_an_extreme(edge) -> bool:
     The bound itself is on the arc (`strength_bound`, with `bound_rule`), and `EXTREME` is no longer
     returned anywhere: it is kept as the number a reader of a 0.2.0 package met.
     """
-    if edge.strength is not None or edge.status == "absent":
+    if not _censored(edge):
         return False
     if getattr(edge, "strength_bound", None) is not None:
         return True
     if getattr(edge, "bound_rule", ""):
         return False       # shape 2: the rule was applied and bounds nothing away from zero
-    return edge.outcome in (OBLIGATE, ABOLISHED)
+    return True
 
 
 def _censored(edge) -> bool:
@@ -585,6 +596,17 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
         value, how = _per_arc(edge, ((rates or {}).get(edge.target) or {}).get("rate"))
         entry = per_pair.setdefault(pair, {"by_unit": {}, "reasons": [], "censored": False,
                                            "how": set(), "media": []})
+        # a bound without an outcome that produces one: the no-growth rule never ran on this comparison,
+        # so the bound is not its own and nothing here can say what the cell should hold. Nothing derives
+        # it and nothing refuses it either, so it is named rather than guessed at, which is the standard
+        # the capacity unit invariant below sets (Craig's agent's fifth shape, #174)
+        if (edge.strength is None and getattr(edge, "strength_bound", None) is not None
+                and not _censored(edge)):
+            entry["reasons"].append(
+                f"this arc carries a bound ({edge.strength_bound:+.4g}) with outcome "
+                f"{edge.outcome!r}, which the no-growth rule does not produce a bound for, so neither "
+                "the bound nor a cell can be read from it")
+            continue
         for name in (edge.medium or "").split("; "):
             if name and name not in entry["media"]:
                 entry["media"].append(name)

@@ -705,8 +705,11 @@ what it did is recorded in [docs/METHOD_NOTES.md](docs/METHOD_NOTES.md), where t
 each, are in the same file.
 
 **What the data cannot settle is listed on its own**, in
-[docs/LIMITATIONS.md](docs/LIMITATIONS.md): six questions, what grow**net** publishes instead of a number
-that would imply each was settled, what would settle it, and what it blocks (nothing, in every case). The
+[docs/LIMITATIONS.md](docs/LIMITATIONS.md): seven questions, what grow**net** publishes instead of a
+number that would imply each was settled, what would settle it, and what it blocks (nothing, in every
+case). The most general of them is that the tool **never establishes a mechanism**: an arc says a partner
+changed a growth outcome, not the route by which it did, which is why the output says effect rather than
+mechanism and why the tool's own name is still an open question (#71). The
 rule behind that file is the one the rest of the tool follows: where the data cannot settle a question,
 publish the measurement and name the weakness. A censored matrix cell is `NA` with its bound on the arc, a
 carrying capacity ships with how far its curves fell from their peak, an arc ships the share of the course

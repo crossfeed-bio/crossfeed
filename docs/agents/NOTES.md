@@ -205,6 +205,11 @@ Rules for this file:
   arc, `capacity_fall` beside a plateau, `fit_window_share` on an arc, the gLV assumptions in the README.
   **Do not quietly widen that rule into changing what a number means**: withholding a number or
   documenting a weakness is free, redefining a field moves the format id.
+  **Seven entries, not six**: Craig's agent read the file and found the omission, which is Karoline's own
+  point from #71, that the tool never establishes a mechanism. Entry 6 is the gLV functional form and
+  entry 7 is attribution; a perfect fit leaves attribution untouched. It also drafted and then **cut** a
+  claim that `facilitation` and `inhibition` read as mechanism, having checked `help.py`: they are defined
+  as directions, so the only place a reader meets a mechanism implication is the tool's name.
   On the p-value: the arithmetic is defensible and the reading was not. `status` comes from the absence
   threshold (`derive.absence`), and the q-value filter is off unless a user sets it, so p and q already
   decided nothing. What was missing was that for the integrated form the null holds the monoculture rate,

@@ -48,7 +48,13 @@ content.
   matrix, which partner abundance a coefficient is divided by, when a culture has reached stationary
   phase, and whether a gLV model describes these communities at all. It states the rule the rest of the
   tool already follows, that where the data cannot settle a question grownet publishes the measurement and
-  names the weakness, and it is linked from the README and the help page.
+  names the weakness, and it is linked from the README and the help page. A seventh entry, added after
+  Craig's agent read the first six, is the most general and the one with an open issue of its own: **the
+  tool never establishes a mechanism.** A non-zero coefficient cannot tell a metabolite handed over from a
+  pH shift, from competition for a shared resource, or from one organism sparing another a cost, and a
+  perfect fit leaves that exactly where it was. It is Karoline's own reason for #71, the naming question,
+  and the output already says effect rather than route: `facilitation` means the target grew more with the
+  source, and nothing in a file or on the page claims a mechanism.
 - **The statistics are labeled as support, and an arc says what its test assumed.** The p-value and the
   q-value decide nothing and never did: the status comes from the absence threshold and the q-value filter
   is off unless you set it. The help page now says that where the fields are described, and adds the third

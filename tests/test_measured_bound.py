@@ -111,6 +111,38 @@ def test_an_older_network_without_a_bound_still_shows_its_censored_cells():
     assert sorted(matrix.matrix_csv(net).splitlines()[1].split(",")[1:]) == ["0", "NA"]
 
 
+def test_a_bound_without_an_outcome_that_produces_one_is_named_rather_than_counted():
+    """The fifth shape (Craig's agent, #174). `interaction.py` attaches a bound only to an obligate or
+    abolished comparison, so nothing derives this. Nothing refuses it either: `Edge.validate` checks the
+    outcome against its vocabulary and never relates two fields, and both constructors that turn records
+    into edges read `strength_bound` and `outcome` independently. So a supplied record or a loaded file
+    can carry it.
+
+    Before this, the two censorship predicates disagreed on it: the gLV path counted the arc and built a
+    coefficient while the adjacency cell held a number instead of `NA`, so two outputs of one package
+    disagreed about whether the pair was measured. Now both say no and the package says why.
+    """
+    arc = {"source": "b", "target": "a", "source_name": "B", "target_name": "A",
+           "effect": "facilitation", "strength": None, "strength_bound": 5.415,
+           "bound_rule": "no growth without B: at most 1.5 times its own start over 6 h",
+           # the outcome a bound is never produced for, and one the vocabulary allows
+           "status": "present", "outcome": "no_growth", "study_id": "S1", "metric": "max",
+           "metric_with": 6.4e7, "metric_without": 0.0, "partner_abundance": 5.0e8,
+           "partner_abundance_unit": "Cells/mL"}
+    net = records_to_network([arc])
+    assert net.edges[0].validate() == []                   # the format allows the shape
+    assert matrix._censored(net.edges[0]) is False
+    assert matrix._reports_an_extreme(net.edges[0]) is False
+    # no cell and no NA: this arc says nothing about that pair
+    values, _ = matrix.cells(net)
+    assert values == {} and matrix.bounded_cells(net) == []
+
+    # and the package names it rather than passing over it, which is the standard the capacity unit
+    # invariant sets in the same file
+    _, _, unfitted = matrix._pair_values(net)
+    assert any("carries a bound" in why and "no_growth" in why for _pair, why in unfitted), unfitted
+
+
 def test_the_report_says_the_number_is_a_bound_and_where_it_came_from():
     from grownet.report import report_text
     arc = {"source": "b", "target": "a", "source_name": "B", "target_name": "A",

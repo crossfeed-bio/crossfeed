@@ -19,6 +19,8 @@ format id (see the format contract in [AGENTS.md](../AGENTS.md)).
 
 Each entry: **what is not known**, **what is published instead**, **what would settle it**, **what it
 blocks**. The settled method decisions, with their reasoning, are in [METHOD_NOTES.md](METHOD_NOTES.md).
+Entry 7, that the tool never establishes a mechanism, is the most general of them and has an open issue of
+its own: it is why the tool's name is still in question.
 
 ---
 
@@ -132,9 +134,35 @@ more than two members would let a higher-order term be fitted, which is a differ
 
 **Blocks.** Nothing. It is the standing caveat on every number in a gLV package.
 
+## 7. Why an arc exists
+
+**Not known, and the design cannot know it.** grownet observes that a partner's presence changed a growth
+outcome. It does not observe the route by which it did. **Even where the gLV fit is perfect, a non-zero
+coefficient cannot tell a metabolite handed from one organism to the other from a pH shift, from
+competition for a shared resource, or from one organism sparing another a cost.** The arc is identical in
+all four cases. This is not entry 6 in other words: that one is about the model's functional form, this
+one is about attribution, and a perfect fit leaves it exactly where it was.
+
+It is Karoline's own point, and it is why the tool's name is an open question (#71, 2026-09-27, her
+words): "we need to change the tool name. 'crossfeed' is misleading since species can interact for any
+reason, so it should be removed from the legend."
+
+**Published instead.** The effect's direction and its size, the medium every arc and every coefficient was
+measured in, and **no mechanism word anywhere in the output**: `facilitation` is defined as the target
+growing more with the source and `inhibition` as less, which is a direction and not a route. The legend is
+titled "Interaction network legend" for the same reason, and the name of the tool is the one place a
+reader still meets an implication the output never makes.
+
+**What would settle it.** A designed experiment rather than an observation: spent medium or a transwell to
+separate contact from diffusible, isotope labelling for a handoff, a defined-medium dropout for a required
+metabolite. None of that is in a growth-curve database.
+
+**Blocks.** Nothing. It is the standing caveat behind the tool's own naming question, and the reason every
+output says effect rather than mechanism.
+
 ---
 
 Each entry above is a live issue or a settled decision with its measurements: #155 item 1, #173, #124
-(items 1, 6 and 7), the `reached_stationary` decision in METHOD_NOTES, and the model assumptions the gLV
-package states. The numbers quoted here were measured on mGrowthDB as it stood on 2026-10-08 and move with
+(items 1, 6 and 7), the `reached_stationary` decision in METHOD_NOTES, the model assumptions the gLV
+package states, and #71, the naming question entry 7 belongs to. The numbers quoted here were measured on mGrowthDB as it stood on 2026-10-08 and move with
 it; the report beside any download says what was read and when.
