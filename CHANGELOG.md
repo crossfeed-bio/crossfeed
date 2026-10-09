@@ -78,6 +78,17 @@ content.
   register's `[baseline]` tags say which option the first implementation took in each menu.
 
 ### Fixed
+- **A black-holed IPv6 address no longer costs 17 seconds on every connection** (found with the sibling
+  tool foodnet on the same network, 2026-10-09). mGrowthDB publishes an AAAA and an A record, and on some
+  networks the IPv6 address is a black hole: measured at KU Leuven, it never answers and the operating
+  system takes **17.5 seconds** to say so, while IPv4 connects in 14 milliseconds. `getaddrinfo` returns
+  IPv6 first and `http.client` walks the addresses in that order with the full timeout on each, so every
+  new connection paid it, once per worker thread in a cold run. Now an unproven address family gets three
+  seconds and the next family is tried as soon as it fails, and the family that answered is remembered for
+  the rest of the process, so only the first connection can wait at all. **Nothing forces IPv4**: a network
+  with only IPv6 is served as before, because the order is a preference and both families are still tried.
+  Measured end to end on the whole corpus: a cold `derive --all --live --no-published` went from **368
+  seconds to 113**, deriving a network identical apart from its timestamps.
 - **Fifteen smaller things, from the two reviews** (#142 items 10, 14 and 15). A reader drops a field it
   does not know for **nodes and studies** as well as edges, so the 0.2.0-against-0.3.0 failure is no
   longer armed for the next release that adds one. The shipped JSON Schema and the model agreed in
