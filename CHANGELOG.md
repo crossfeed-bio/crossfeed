@@ -6,6 +6,21 @@ content.
 
 ## [Unreleased]
 
+### Fixed
+- **The page's Example gave an empty network** (Karoline, 2026-10-09, the day 0.3.0 was released). Two
+  causes, both of them in the button rather than in the derivation.
+  **It inherited whatever settings were in the form.** Pressing gLV mode and then Example ran the example
+  in gLV mode, which turns drop-out communities off; pressing the gLV example and then Example ran it with
+  that example's study still in the second box, so it searched one study that holds neither species.
+  Either gave no interactions, and nothing on the page said why. The Example now puts **every setting back
+  to its default** and says so, which is what a button that shows the tool working has to do.
+  **And its two species no longer have an arc between them under the shipped default.** What those two
+  hold is a drop-out comparison inside a three-member community, and the integrated form does not fit a
+  row from a community of three or more, so the default derivation has nothing to report for the pair.
+  The example is now the three organisms that are actually grown together, which is the smallest change
+  that keeps the biology and the studies: measured live, **three arcs over three organisms against none**.
+  The worked example in the README, the command line's help and the help page moved with it.
+
 ## [0.3.0] (2026-10-09)
 
 ### Upgrading

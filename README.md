@@ -155,7 +155,7 @@ python -m grownet schema [--out FILE]
   NCBI taxon ids) through mGrowthDB, derives every study holding them, and keeps the interactions between
   the species given (`--all-partners` keeps their other partners too). A genus alone ("Blautia") stands
   for every species of it that mGrowthDB holds. The page's Example, from the command line:
-  `grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"`.
+  `grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica" "Roseburia intestinalis"`.
 - `derive --live --all` does what the page's All button does: every study in mGrowthDB, with every
   partner (a study argument limits it to those studies). With the default settings it reads the network
   derived once a day by `.github/workflows/all-network.yml` (the `all-network` release), when that is
