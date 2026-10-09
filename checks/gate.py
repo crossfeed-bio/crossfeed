@@ -250,6 +250,39 @@ def check_format_fields(_rels):
         return ["schema/format_fields.json is missing: it records the fields each format id declares"]
 
     bad = []
+    # This check reads the LIVE dataclasses, which is what makes it meaningful and also means its verdict
+    # can be served from a stale `.pyc`, and the stale direction is a PASS. CPython invalidates bytecode
+    # on (source mtime in whole seconds, source size), and two format ids of the same length are the same
+    # size, so editing an id and reverting it inside one second leaves bytecode CPython considers current:
+    # a developer who runs the gate, sees it fail, reverts and runs it again. CI is safe, since a fresh
+    # clone has no `__pycache__`, and the exposure is exactly the local run, where this guard is worth
+    # most. So the id is read out of the source as text and compared with the imported one, which turns a
+    # silent false pass into a loud failure (Craig's agent, #168, having hit it by accident while testing
+    # this check against the #121 mistake on the released head).
+    in_source = re.search(r'^SCHEMA\s*(?::[^=]+)?=\s*["\'](?P<id>[^"\']+)["\']',
+                          _read("src/grownet/model.py") or "", re.M)
+    if in_source is None:
+        # the guard above cannot guard itself: with no id read out of the source there is nothing to
+        # compare the import against, and the old code then skipped the staleness test silently, which
+        # is the failure it exists to prevent. An annotation or a wrapped line is enough to do it:
+        # `SCHEMA: Final = "..."` imports fine and no longer matches a bare `^SCHEMA =`. So the check
+        # refuses instead, the way `email_link_check` refuses a file whose body it cannot recognize
+        # rather than passing it (Craig's agent on #176).
+        return bad + ["this check could not find the SCHEMA declaration in src/grownet/model.py, so it "
+                      "cannot tell whether the imported module is the code on disk and every verdict "
+                      "below it would be unverified. Keep the declaration as a single assignment of a "
+                      "literal, or widen the pattern in checks/gate.py to match the new form"]
+    if in_source.group("id") != SCHEMA:
+        # and nothing else is reported, because nothing else can be trusted: every verdict below comes
+        # from the same import, including the field comparison that is this check's actual job and the
+        # thing that catches the #121 mistake. Reporting them anyway produced a line that said
+        # "model.py says /v3" while model.py said /v2 on disk, and prescribed moving the manifest's
+        # `current` to an id the source does not contain, which is the line a developer acts on (Craig's
+        # agent on #176, having reproduced the stale import against the real mechanism)
+        return bad + [f"src/grownet/model.py says SCHEMA is {in_source.group('id')!r} and the imported "
+                      f"module says {SCHEMA!r}: your bytecode is stale, so this check is reading code "
+                      "that is no longer on disk and its verdict means nothing. Remove the __pycache__ "
+                      "directories under src/grownet and run the gate again"]
     if manifest.get("current") != SCHEMA:
         bad.append(f"schema/format_fields.json says the current format is "
                    f"{manifest.get('current')!r} and model.py says {SCHEMA!r}: set `current` to the id "
