@@ -196,6 +196,15 @@ Rules for this file:
   measurements like that spread belong in issue comments and in this file, not in the help, the README or
   a generated package README.
 
+- 2026-10-09: **a new arc field has to be added in five places, and a round trip is the only thing that
+  finds the fifth.** The file and the JSON Schema come from `model.Edge`, but three consumers name every
+  field themselves: `mgrowthdb.records_to_network` (a record dict to an `Edge`), `export.py` (the GraphML
+  keys and the loop that writes them), and `cytoscape.py` (the payload **and** `OPTIONAL_EDGE_COLUMNS`).
+  The viewer's `GRAPHML_KEYS` in `gui/index.html` is the fifth, and a test keeps it in step with
+  `export.py`. Tests caught the GraphML pair; **a live derive into Cytoscape 3.10.4 caught the Cytoscape
+  one**, where `se_replicates`, `se_rate_stage`, `se_rate_selection` and `rate_selection_spread` were all
+  missing, two of them since 0.3.0 was being prepared. Load the thing into its consumer, every time.
+
 - 2026-10-08 (Karoline's decision): **what the data cannot settle lives in `docs/LIMITATIONS.md`, and the
   statistics are support.** Her framing, which is the one to apply to the rest of the register: "if p-val
   computation is indefensible, we do not report p-values and comment on the weakness", and these questions

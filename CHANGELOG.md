@@ -144,6 +144,15 @@ content.
   register's `[baseline]` tags say which option the first implementation took in each menu.
 
 ### Fixed
+- **Send to Cytoscape carries the parts of an arc's error, which it did not** (found by a round trip
+  through Cytoscape 3.10.4, 2026-10-09). `se_replicates` and `se_rate_stage` have been in the file and in
+  GraphML since 0.3.0 was being prepared, and `se_rate_selection` and `rate_selection_spread` since #155
+  item 1, and none of the four reached the Cytoscape edge table: that payload names every field it sends,
+  so a field added anywhere else stops there. A reader in Cytoscape could style or filter on the total
+  `se` and not on which stage it came from. All four are sent now and declared as columns, so an arc with
+  no value for one leaves the cell empty rather than reading as zero. The test that checks a column is not
+  declared twice now reads the list from the sender rather than repeating it, which is what let this
+  through: the list in the test was shorter than the list in the code and nothing compared the two.
 - **Fifteen smaller things, from the two reviews** (#142 items 10, 14 and 15). A reader drops a field it
   does not know for **nodes and studies** as well as edges, so the 0.2.0-against-0.3.0 failure is no
   longer armed for the next release that adds one. The shipped JSON Schema and the model agreed in

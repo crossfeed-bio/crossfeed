@@ -364,9 +364,11 @@ def test_every_arc_carries_the_three_numbers_of_the_test_as_columns(cyrest):
 
 def test_a_column_cytoscape_already_has_is_not_declared_again(cyrest):
     port, seen = cyrest
-    _Handler.columns = ["p_value", "q_value", "significance", "sd", "se", "strength", "weight",
-                        "effect_over_sd", "n_with", "n_without", "merged_arcs", "supporting_pairs",
-                        "fit_window_share", "rate_mismatch_to_zero"]
+    # every column the sender would declare, read from the sender rather than listed here, so a field
+    # added to OPTIONAL_EDGE_COLUMNS cannot leave this test asserting about a shorter list than it
+    # declares (which is what happened when the error components were added, 2026-10-09)
+    from grownet.cytoscape import OPTIONAL_EDGE_COLUMNS
+    _Handler.columns = [name for name, _type in OPTIONAL_EDGE_COLUMNS]
     sent = send(_net(), port=port)
     assert sent["columns"] == []
     assert not [p for verb, p, _ in seen if verb == "POST" and p.endswith("/tables/defaultedge/columns")]

@@ -121,6 +121,16 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
                 # rate mismatch that would explain it away (Karoline, 2026-10-07, and #155 item 1)
                 "fit_window_share": getattr(edge, "fit_window_share", None),
                 "rate_mismatch_to_zero": getattr(edge, "rate_mismatch_to_zero", None),
+                # and where the error comes from, each part on its own design, so a reader can style or
+                # filter on the stage rather than on the total: the co-culture replicates, the monoculture
+                # stage resampled, and which monoculture set was matched (#142 item 2, #155 item 1). These
+                # were in the file and in GraphML and not here, which a round trip through Cytoscape 3.10.4
+                # found: this payload names every field, so a new one reaches the file and the page and
+                # stops at the Cytoscape table (2026-10-09)
+                "se_replicates": getattr(edge, "se_replicates", None),
+                "se_rate_stage": getattr(edge, "se_rate_stage", None),
+                "se_rate_selection": getattr(edge, "se_rate_selection", None),
+                "rate_selection_spread": getattr(edge, "rate_selection_spread", None),
                 "quality": " ".join(edge.quality), "cautions": " ".join(edge.cautions),
                 "notes": "; ".join(edge.notes), "community": " ".join(edge.community),
                 "experiments": " ".join(edge.experiments), "study_ids": " ".join(edge.study_ids),
@@ -271,7 +281,9 @@ OPTIONAL_EDGE_COLUMNS = (("p_value", "Double"), ("q_value", "Double"), ("signifi
                          ("sd", "Double"), ("se", "Double"), ("n_with", "Integer"),
                          ("n_without", "Integer"), ("merged_arcs", "Integer"),
                          ("supporting_pairs", "Integer"), ("fit_window_share", "Double"),
-                         ("rate_mismatch_to_zero", "Double"))
+                         ("rate_mismatch_to_zero", "Double"), ("se_replicates", "Double"),
+                         ("se_rate_stage", "Double"), ("se_rate_selection", "Double"),
+                         ("rate_selection_spread", "Double"))
 
 
 def _declare_columns(root: str, suid, timeout: float) -> list:
