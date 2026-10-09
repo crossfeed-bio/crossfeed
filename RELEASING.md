@@ -50,7 +50,9 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
    - sets the version in `pyproject.toml` and in `src/grownet/__init__.py` (`__version__`);
    - turns `## [x.y.z] (unreleased)` in `CHANGELOG.md` into `## [x.y.z] (YYYY-MM-DD)`, and starts a new
      unreleased section above it if work continues;
-   - sets `version:` and `date-released:` in `CITATION.cff` to the same version and the same date. The
+   - sets `version:` and `date-released:` in `CITATION.cff` to the same version and the same date, and
+     that date is **the day the tag is cut**: the release check refuses a date more than a day old, since
+     a date prepared earlier is otherwise invisible to every other check. The
      check refuses a mismatch, and it is the file the citation widget and every generated BibTeX entry
      read: 0.3.0 was prepared with 0.2.0's date still in it, which nothing read at the time.
    - bumps `Version:` in `r/DESCRIPTION` when anything in `r/` changed, since the R package is installed
