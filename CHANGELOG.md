@@ -78,6 +78,15 @@ content.
   register's `[baseline]` tags say which option the first implementation took in each menu.
 
 ### Fixed
+- **The release check refuses a release date that is not the day of the tag** (found while preparing
+  0.3.0). A date in the past passed every check: the future-date guard does not see it, and the agreement
+  guard compares the changelog with `CITATION.cff`, which have nothing to disagree about while the
+  changelog says `(unreleased)` and gives no date. 0.3.0 sat in exactly that state, with `CITATION.cff`
+  naming the day it was prepared, and tagged later that date would have shipped as the release date, as one
+  release's date was carried into the next before. The check now asks that both files name the day the tag
+  is cut, with one day of slack for a tag pushed just after UTC midnight from a tree prepared the evening
+  before, and it says what to do. It is a release-day rule only: preparing a tree with an older date is
+  not a problem.
 - **Fifteen smaller things, from the two reviews** (#142 items 10, 14 and 15). A reader drops a field it
   does not know for **nodes and studies** as well as edges, so the 0.2.0-against-0.3.0 failure is no
   longer armed for the next release that adds one. The shipped JSON Schema and the model agreed in
