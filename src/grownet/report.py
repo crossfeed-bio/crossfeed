@@ -11,6 +11,7 @@ from . import interaction
 from .adapter import condensed
 from .help import SETTINGS
 from .mgrowthdb import MGROWTHDB_API, NO_DATABASE_VERSION
+from .rates import doubling_time, time_unit
 
 
 def _value(key: str, value) -> str:
@@ -216,6 +217,11 @@ def report_text(result: dict) -> str:
         for nid, rate in sorted(organisms.items(), key=lambda kv: str(kv[1].get("name", kv[0])).lower()):
             per_study = "; ".join(f"{sid} {value:.4g}" for sid, value in sorted(rate.get("per_study", {}).items()))
             extra = []
+            # ln(2) / rate, so a rate no stage judges for plausibility is at least stated in the form a
+            # reader judges (#173): 0.0147 /h says nothing, 47 h says it at a glance
+            double = doubling_time(rate.get("rate"), rate.get("unit", "1/h"))
+            if double is not None:
+                extra.append(f"doubling {double:.4g} {time_unit(rate.get('unit', '1/h'))}")
             if rate.get("lag") is not None:
                 extra.append(f"lag {rate['lag']:.3g} {rate.get('unit', '1/h').removeprefix('1/')}")
             if rate.get("capacity") is not None:

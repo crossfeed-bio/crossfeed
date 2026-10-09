@@ -33,6 +33,7 @@ import zipfile
 from . import brand
 from .interaction import ABOLISHED, OBLIGATE
 from .model import InteractionNetwork, genus_name
+from .rates import doubling_time
 
 # The -1 a package used to carry on its diagonal by convention (Karoline, 2026-10-03). No output holds it
 # since #119: the package fits the diagonal from the data and the plain adjacency matrix leaves it at 0.
@@ -425,13 +426,18 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
     fitted (empty for an estimator with none), and the monoculture carrying capacity with its unit and
     how many curves it rests on (empty where no curve reached a certified plateau), and how many curves
     gave none, so an empty capacity does not read as absence.
+
+    The last column is the **doubling time**, ln(2) / rate in the time unit of the rate (#173). It is
+    derived from the column beside it and adds no measurement: a rate nothing in the derivation judges for
+    plausibility is at least printed in the form a reader judges at a glance. It is appended rather than
+    placed beside the rate so that a reader parsing this file by column index is unaffected.
     """
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow(["organism", "growth_rate", "unit", "replicates", "studies", "method", "lag",
                      "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves",
                      "capacity_curves_left_out", "capacity_fall_from_peak", "capacity_medium",
-                     "capacity_source"])
+                     "capacity_source", "doubling_time"])
     order = labels(net) if net is not None else sorted(rates)
     for nid in order:
         rate = rates.get(nid)
@@ -463,7 +469,11 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
                          # environment (Karoline, 2026-10-07)
                          rate.get("capacity_medium", "") if capacity is not None else "",
                          # fitted with the partners, or -r/K at a measured plateau (#142 item 7)
-                         rate.get("capacity_source", "")])
+                         rate.get("capacity_source", ""),
+                         # ln(2) / rate, in the time unit of the rate: the same number in the form a
+                         # reader rejects at a glance (#173)
+                         ("" if (double := doubling_time(rate["rate"], rate.get("unit", RATE_UNIT)))
+                          is None else f"{double:.4g}")])
     return out.getvalue()
 
 
@@ -1003,7 +1013,8 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "  interaction_matrix.<unit>.csv  one matrix per abundance unit, named after it; the header row",
         "                          and the first column are the organisms",
         "  growth_rates.csv        one growth rate per organism, with the estimator, the lag and the",
-        "                          monoculture carrying capacity behind it",
+        "                          monoculture carrying capacity behind it, and the doubling time the",
+        "                          rate implies, ln(2) / r, in the time unit of the rate",
         "",
         "THE COEFFICIENTS",
         "  A[i][j] is the effect of j on i, so rows are affected and columns are the actor:",

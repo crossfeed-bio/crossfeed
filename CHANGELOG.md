@@ -36,6 +36,15 @@ content.
   always the solution of `A x = -r` and the reader had to work it out.
 
 ### Added
+- **Every growth rate is published with the doubling time it implies** (#173, Karoline on 2026-10-08).
+  `ln(2) / r` in the time unit of the rate, as the appended `doubling_time` column of `growth_rates.csv`
+  and beside each rate in the report. No stage of the derivation asks whether a rate is plausible: the
+  guards are identifiability, model fit, growth above zero and the fit against the interaction-free null,
+  and a rate's magnitude is never questioned. Of 123 live monoculture fits that pass every guard, three
+  imply a doubling slower than 24 hours and all three are from one study, where `0.0147 /h` reads as a
+  number and 47 hours reads as a mistake. This catches nothing automatically and is not a guard; it puts
+  the fit in front of the reader who can catch it. The column is appended, so a reader parsing that file
+  by column index is unaffected.
 - **A censored cell of the plain adjacency matrix is `NA`, and its bound travels on the arc** (#129,
   Karoline on 2026-10-08). A pair whose only arcs are obligate or abolished has no log2 ratio, because one
   side did not grow. Such a cell used to hold +/-10 by convention, and within this release it briefly held

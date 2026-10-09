@@ -271,8 +271,9 @@ def test_the_fall_travels_into_the_report_and_the_rates_csv():
                               "lag_method": "", "capacity": 1.0e8, "capacity_unit": "Cells/mL",
                               "capacity_n": 2, "capacity_fall": 4.0, "capacity_left_out": [],
                               "capacity_medium": "WC"}}
-    row = list(csv_module.reader(io_module.StringIO(matrix.rates_csv(rates_found))))[1]
-    assert row[-3] == "4" and row[-2] == "WC"
+    table = list(csv_module.reader(io_module.StringIO(matrix.rates_csv(rates_found))))
+    row = dict(zip(table[0], table[1], strict=True))      # by name: columns are appended over time
+    assert row["capacity_fall_from_peak"] == "4" and row["capacity_medium"] == "WC"
 
     from grownet.model import InteractionNetwork
     from grownet.report import report_text

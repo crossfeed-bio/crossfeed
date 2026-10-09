@@ -265,6 +265,31 @@ def baranyi_fit(times, values) -> dict:
     return {"rate": rate, "lag": lag, "r2": r2, "start": xs[0], "end": xs[-1]}
 
 
+def doubling_time(rate: float | None, unit: str = "1/h") -> float | None:
+    """The time this rate doubles a population in, ln(2) / rate, or None where there is none.
+
+    Published beside every rate because no stage of the derivation asks whether a rate is plausible
+    (#173): the guards are identifiability, model fit, growth above zero and the R2 gate against the
+    interaction-free null, and a rate's MAGNITUDE is never questioned. `0.0147 /h` is inert on the page
+    and in the file, and nobody rejects it at a glance; the same number as 47 hours is rejected instantly
+    by anyone who knows the organism. So this converts an uninspectable number into an inspectable one,
+    which is the cheap half of that issue: it catches nothing automatically and it puts the fit in front
+    of the one reader who can (Craig's agent on #173, 2026-10-08, and it was right that this is worth
+    taking on its own rather than as a consolation).
+
+    The unit is the time unit of the rate, hours for the default `1/h`, so the number means what the rate
+    means and nothing is converted behind the reader's back.
+    """
+    if not rate or rate <= 0:
+        return None
+    return math.log(2) / rate
+
+
+def time_unit(unit: str = "1/h") -> str:
+    """The time unit of a rate: "h" for "1/h". The rate's own unit, never converted."""
+    return (unit or "1/h").removeprefix("1/")
+
+
 def method_name(rate_method: str = DEFAULT_METHOD, window: int = DEFAULT_WINDOW) -> str:
     """The metric name an edge records: "growth_rate:easylinear:5" or "growth_rate:baranyi"."""
     if rate_method not in METHODS:

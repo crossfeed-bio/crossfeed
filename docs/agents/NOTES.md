@@ -216,6 +216,22 @@ Rules for this file:
   measurements like that spread belong in issue comments and in this file, not in the help, the README or
   a generated package README.
 
+- 2026-10-08 (#173, Karoline's decision): **every growth rate publishes the doubling time it implies.**
+  `rates.doubling_time(rate, unit)` is ln(2) / r in the time unit of the rate, with `rates.time_unit` for
+  the unit's name. It is the appended last column of `growth_rates.csv` and an entry in the report's
+  growth-rates block. **It is reporting, not a guard**, and the reason is worth keeping: nothing anywhere
+  in `two_stage`, `fitted_rates` or the matrix builder compares a rate with anything outside its own fit,
+  so a rate's magnitude is never questioned, and `0.0147 /h` passes a reader's eye where "47 hours" does
+  not. Of 123 live monoculture fits that pass every guard, three imply a doubling slower than 24 hours and
+  all three are SMGDB00000018, which derives no arcs today: the exposure is in the rates table rather than
+  in any matrix cell, which is why a column there is the fix rather than a guard in the deriver.
+  The column is **appended**, so a reader parsing that file by index is unaffected; the tests that read it
+  now read it by name for the same reason (three of them were positional and broke).
+  Still open on #173: a **study-level** tripwire, which is the grouping that catches the motivating case,
+  since four organisms of one study are slow together and that is a property of the study. It waits until
+  something published rests on such fits. A cited per-taxon bound is not on the table until a specific
+  claim needs one.
+
 - 2026-10-08 (#129, Karoline's decision, replacing the 2026-10-06 one): **a censored cell of the plain
   matrix is `NA`, and the measured bound is on the arc.** The bound itself is unchanged:
   `interaction.no_growth_bound` turns the rule that said a side did not grow into a bound on that side's
