@@ -131,7 +131,8 @@ def _derive(a):
     if a.live:
         from .derive import derive_interactions, output_meta
         from .mgrowthdb import MGrowthDBClient
-        client = MGrowthDBClient()
+        # --no-cache reads everything again rather than reusing what an earlier run kept (#182)
+        client = MGrowthDBClient(**({"cache_dir": None} if a.no_cache else {}))
         # --derivation picks the integrated form here as it does on the search path. It was read only by
         # the pre-flight guard and by --species, so `derive <STUDY> --derivation integrated` quietly ran
         # the default derivation and recorded nothing (found 2026-10-06).
@@ -223,7 +224,7 @@ def _derive_species(a):
                 "report_rates": a.report_rates, "derivation": a.derivation,
                 "no_growth_alpha": a.no_growth_alpha,
                 "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p}
-    client = MGrowthDBClient()
+    client = MGrowthDBClient(**({"cache_dir": None} if a.no_cache else {}))
     try:
         result = run_query(client, a.species or [], settings, all_studies=a.all_studies,
                            published=not a.no_published)
@@ -502,6 +503,10 @@ def build_parser() -> argparse.ArgumentParser:
     what.add_argument("--no-published", action="store_true",
                       help="with --all, derive live even when the network derived once a day in the grownet "
                            "repository is less than a day old (it is used only with the default settings)")
+    what.add_argument("--no-cache", action="store_true",
+                      help="read everything from mGrowthDB again, instead of reusing what an earlier run "
+                           "read for a study whose uploadedAt has not changed. The kept responses live in "
+                           "the user cache directory (GROWNET_CACHE overrides it), never in the repository")
     what.add_argument("--conditions", nargs="+", default=[], metavar="NAME",
                       help="media, experiment ids or study ids to look at (the page's second box): a medium "
                            "is matched as text against the medium name, the description and the experiment "

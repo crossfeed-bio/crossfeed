@@ -119,7 +119,20 @@ def report_text(result: dict) -> str:
              f"tool: {meta.get('tool', 'grownet')} {meta.get('tool_version', '')}",
              f"data: {meta.get('source_db', 'mGrowthDB')}, {data.get('api', MGROWTHDB_API)}, read at "
              f"{data.get('retrieved_at', when).replace('T', ' ')}",
-             f"data version: {data.get('database_version', NO_DATABASE_VERSION)}", ""]
+             f"data version: {data.get('database_version', NO_DATABASE_VERSION)}"]
+    # what was read and what was reused, since a reader should be able to see that a network rests on
+    # measurements kept from an earlier run, and which studies were read again because mGrowthDB has a
+    # newer version of them (#182)
+    client = result.get("client")
+    if client is not None and getattr(client, "cache_dir", None):
+        reused, fetched = getattr(client, "reused", 0), getattr(client, "fetched", 0)
+        refreshed = getattr(client, "refreshed", []) or []
+        line = (f"reads: {fetched} from mGrowthDB, {reused} reused from an earlier run "
+                f"(kept while a study's uploadedAt is unchanged)")
+        if refreshed:
+            line += f"; read again because their uploadedAt moved: {', '.join(sorted(refreshed))}"
+        lines.append(line)
+    lines.append("")
 
     if result.get("study"):
         lines.append(f"study derived: {result['study']} (every species in it)")

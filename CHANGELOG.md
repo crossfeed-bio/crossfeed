@@ -49,6 +49,21 @@ content.
   gives the listing as data. The three censored cells whose rule bounds nothing away from zero now read
   `NA` too, where they fell through to 0. **A reader of the matrix must handle `NA`**, and a pair left at 0
   for disagreeing in sign is still 0, named as a conflict.
+- **What a study holds is kept between runs and reused while its `uploadedAt` is unchanged** (#182).
+  Until now every run read everything again: a corpus run sends 3738 requests (2195 bioreplicate records,
+  930 series, 559 experiments, 54 studies) and a single study 153. The rule was that measurements are read
+  fresh, because mGrowthDB serves only the latest version of a study; what makes keeping them safe is that
+  a study's `uploadedAt` moves whenever it is revised, which **Karoline confirmed for the mGrowthDB team**:
+  "uploadedAt is kept fresh", and "it's coupled to study submission". So responses go to the user's own cache
+  directory (`GROWNET_CACHE` moves it, `--no-cache` keeps nothing, never inside the repository), each file
+  carrying the study and the stamp it was read at; **the study record is always read live**, because it is
+  the check; and a stamp that has moved drops everything kept for that study. Measured live on
+  SMGDB00000007: a first run sends 153 requests and a second sends **1**, deriving the same network. The
+  report says how much was read, how much was reused, and which studies were read again because their
+  stamp moved, and those two counts are now incremented under the same lock as the rest of the shared
+  state, since one client serves six worker threads and `x += 1` is three steps (Craig's agent on #185);
+  an undercounted reuse makes a network look fresher than it is. The daily All workflow is unaffected,
+  since its runners keep nothing.
 - **Each arc says what both sides of its comparison were inoculated at** (#81, Karoline on 2026-10-08).
   mGrowthDB's `inoculumConcentration` is empty in every experiment checked and its descriptions state a
   starting density unsystematically, so the number is taken from the first measured abundance, which the
