@@ -234,7 +234,10 @@ def test_the_plain_adjacency_matrix_still_holds_the_log2_means():
     assert float(row[1 + names.index("B")]) == pytest.approx(1.0)       # the log2 mean, unconverted
     assert float(row[1 + names.index("A")]) == 0.0                      # and the 0 diagonal
     obligate = _net(PAIR + [dict(_arc("c", "a", None), outcome="obligate", effect="facilitation")])
-    assert matrix.EXTREME == 10.0 and ("10" in matrix.matrix_csv(obligate))
+    # and a censored cell is NA there, not the stated extreme (#129, settled 2026-10-08)
+    assert "NA" in matrix.matrix_csv(obligate)
+    assert not any(cell in ("10", "-10") for row in matrix.matrix_csv(obligate).splitlines()[1:]
+                   for cell in row.split(",")[1:])
 
 
 def test_the_coefficients_reproduce_a_known_equilibrium():

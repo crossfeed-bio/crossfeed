@@ -219,11 +219,13 @@ def test_the_help_explains_the_matrix_the_growth_rates_and_the_glv_package():
     # a measured bound where the plain matrix used to carry a stated extreme
     assert "per-capita" in section and "1/(time x abundance)" in section
     assert "measured bound" in section and "no-growth rule" in section
+    # and where that bound is, since #129 settled on 2026-10-08: on the arc, with NA in the cell
+    assert "NA" in section and "strength_bound" in section
     assert "-r_i / K_i" in section and "(r_with - r_without) / x_j" in section
     # the phrase survives only where the page says what replaced it
     for sentence in section.split("."):
         if "stated extreme" in sentence:
-            assert "instead of the stated extreme it used to carry" in sentence \
+            assert "which is what was wrong with the stated extreme it used to carry" in sentence \
                 or "no floor and no stated extreme" in sentence
     # the command line section shows both new outputs, so the page and the terminal say the same
     cli = html[html.index("<h2 id=\"cli\">"):]
