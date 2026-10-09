@@ -23,6 +23,8 @@ import http.client
 import io
 import json
 import os
+import socket
+import sys
 import threading
 import time
 import urllib.error
@@ -62,6 +64,127 @@ class _Status(Exception):
 _NETWORK = (OSError, http.client.HTTPException)
 
 
+# mGrowthDB publishes both an AAAA and an A record, and on some networks the IPv6 address is a black hole:
+# the packets go nowhere and the connection sits until the operating system gives up. Measured at KU Leuven
+# on 2026-10-09, from `mgrowthdb.gbiomed.kuleuven.be`: the IPv6 address never answers and macOS takes
+# **17.5 seconds** to say so, while the IPv4 address connects in 14 milliseconds. `getaddrinfo` returns the
+# IPv6 address first, and `socket.create_connection`, which `http.client` uses, tries the addresses in that
+# order with the full timeout on each, so every new connection paid 17.5 seconds. With one kept-open
+# connection per thread and six workers, a cold run paid it six times.
+#
+# So the first address of each family gets a short attempt and the next family is tried as soon as it
+# fails, and the family that answered is remembered for the rest of the process, so only the first
+# connection can wait at all. **Nothing forces IPv4**: a network with only IPv6 is served exactly as
+# before, because the order is a preference and both families are still tried. (The sibling tool foodnet
+# met this first, on the same network and the same API.)
+FIRST_TRY = 3.0            # seconds to wait on an unproven address family before trying the next
+_ANSWERED: dict = {}       # host -> the address family that connected, shared by every thread
+_ANSWERED_LOCK = threading.Lock()
+
+
+def _families(host: str) -> list:
+    """The address families to try for this host, the one that answered before first."""
+    with _ANSWERED_LOCK:
+        known = _ANSWERED.get(host)
+    return [known, socket.AF_INET6, socket.AF_INET] if known else [socket.AF_INET6, socket.AF_INET]
+
+
+def _connect(host: str, port: int, timeout: float | None):
+    """A connected socket, trying each address family in turn rather than every address in one order.
+
+    An unproven family gets `FIRST_TRY` seconds, so a black-holed address costs that and not the operating
+    system's own patience; a family that answered before gets the full timeout, since it is the one
+    expected to work. The socket comes back with the caller's timeout set, whichever family answered.
+    """
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except OSError:
+        raise
+    seen, last = [], None
+    for family in _families(host):
+        if family in seen:
+            continue
+        seen.append(family)
+        with _ANSWERED_LOCK:
+            proven = _ANSWERED.get(host) == family
+        for info_family, kind, proto, _canon, address in infos:
+            if info_family != family:
+                continue
+            sock = socket.socket(family, kind, proto)
+            sock.settimeout(timeout if proven or timeout is None else min(FIRST_TRY, timeout or FIRST_TRY))
+            try:
+                sock.connect(address)
+            except OSError as e:
+                last = e
+                sock.close()
+                continue
+            sock.settimeout(timeout)
+            with _ANSWERED_LOCK:
+                _ANSWERED[host] = family
+            return sock
+    raise last or OSError(f"no address of {host} could be connected to")
+
+
+class _HTTPConnection(http.client.HTTPConnection):
+    """`http.client`'s connection with the address-family fallback above in place of its own ordering."""
+
+    def connect(self):
+        self.sock = _connect(self.host, self.port, self.timeout)
+        if self._tunnel_host:                     # no proxy is configured anywhere in grownet
+            self._tunnel()
+
+
+class _HTTPSConnection(http.client.HTTPSConnection):
+    """The same, with the TLS handshake left to `http.client`, so SNI and certificate verification are
+    unchanged. These two classes differ from their base classes in how the address is chosen and in
+    nothing else, which is why the name below is computed the way `http.client` computes it."""
+
+    def connect(self):
+        self.sock = _connect(self.host, self.port, self.timeout)
+        if self._tunnel_host:
+            self._tunnel()
+        # through a proxy, `self.host` is the proxy and `self._tunnel_host` is the real target, and the
+        # certificate has to be verified against the target. Nothing in grownet calls `set_tunnel`, so
+        # this is `self.host` today; it is written as the base class writes it because a half-correct
+        # branch is worse than either a working one or none (Craig's agent on #184).
+        self.sock = self._context.wrap_socket(
+            self.sock, server_hostname=self._tunnel_host or self.host)
+
+
+# Measurements used to be read fresh on every run, because mGrowthDB serves only the latest version of a
+# study and a cached curve could silently be an old one. What makes keeping them safe is that a study's
+# `uploadedAt` moves whenever the study is revised, which **Karoline confirmed for the mGrowthDB team**
+# (2026-10-09): "I can confirm for the mGrowthDB team, that uploadedAt is kept fresh - it's coupled to
+# study submission."
+#
+# So: everything a study holds may be reused while that study's `uploadedAt` is unchanged, and the study
+# record itself is always read live, because it is the freshness check. A corpus run sends 3738 requests
+# (2195 bioreplicate records, 930 series, 559 experiments, 54 studies); with nothing changed it now sends
+# the 54 study records and nothing else. The daily All workflow runs on ephemeral runners, so it keeps
+# re-reading everything unless a cache is carried deliberately, which is the conservative default for the
+# one network published to readers (#182).
+CACHE_VERSION = 1          # the layout of the kept files; a change here abandons the old ones
+_DEFAULT = object()        # "cache_dir not given", so None can mean "keep nothing"
+
+
+def cache_home(app: str = NAME) -> str:
+    """Where kept responses go: the user's own cache directory, never inside the repository.
+
+    `GROWNET_CACHE` overrides it, and the usual per-system places are used otherwise. Only the standard
+    library is available here, so the paths are spelled out rather than taken from a package.
+    """
+    told = os.environ.get("GROWNET_CACHE")
+    if told:
+        return told
+    if sys.platform == "darwin":
+        base = os.path.expanduser("~/Library/Caches")
+    elif os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local")
+    else:
+        base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+    return os.path.join(base, app.lower(), f"v{CACHE_VERSION}")
+
+
 class MGrowthDBClient:
     """A thin read-only client over the mGrowthDB REST API (public endpoints, no auth needed).
 
@@ -71,61 +194,152 @@ class MGrowthDBClient:
       retries:  attempts on a transient failure (network error or HTTP 5xx) before giving up.
       backoff:  base seconds between retries (grows linearly with the attempt).
       cache:    keep an in-memory response cache for the life of the client.
-      cache_dir: optional directory for an on-disk JSON cache across runs (never inside the repo).
+      cache_dir: where to keep responses between runs. The default is `cache_home()`, the user's own
+                cache directory and never inside the repo; None or "" keeps nothing between runs.
     """
 
     def __init__(self, base_url: str = MGROWTHDB_API, timeout: int = 30, retries: int = 3,
-                 backoff: float = 0.5, cache: bool = True, cache_dir: str | None = None):
+                 backoff: float = 0.5, cache: bool = True, cache_dir: str | None = _DEFAULT):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.retries = max(1, int(retries))
         self.backoff = max(0.0, float(backoff))
         self._mem = {} if cache else None
-        self.cache_dir = cache_dir
+        self.cache_dir = cache_home() if cache_dir is _DEFAULT else (cache_dir or None)
+        # Each kept response carries the study it belongs to and the `uploadedAt` it was read at, in its
+        # own file, so there is no index to keep in step and a half-written run loses nothing: a response
+        # whose study has moved on is simply read again. What is in memory is only this run's knowledge.
+        self._uploaded: dict = {}      # study id -> uploadedAt, as this run read it live
+        self._of_record: dict = {}     # experiment or bioreplicate or context id -> study id
+        # `_index_lock` guards everything below it that the threads share. One client is passed to
+        # `fetch.prefetch_studies`, which runs its methods on `WORKERS` threads, and `x += 1` is a load, an
+        # add and a store with a thread switch possible between them, so the counters take it too: both are
+        # printed to a reader as the evidence that a network rests on kept responses (Craig's agent, #185).
+        self._index_lock = threading.Lock()
+        self.reused = 0                # responses served from the kept files, for the report
+        self.fetched = 0               # responses read from mGrowthDB
+        self.refreshed: list = []      # studies whose `uploadedAt` moved, so their responses were dropped
         # one kept-open connection per thread: a new HTTPS connection per request cost about 120 ms against
         # 55 ms on an open one, and the parallel prefetch (grownet.fetch) gives each worker its own
         self._local = threading.local()
         parsed = urllib.parse.urlsplit(self.base_url)
         self._scheme, self._host, self._prefix = parsed.scheme, parsed.netloc, parsed.path
-        if cache_dir:
-            os.makedirs(cache_dir, exist_ok=True)
+        if self.cache_dir:
+            try:
+                os.makedirs(self.cache_dir, exist_ok=True)
+            except OSError:
+                self.cache_dir = None          # an unwritable cache is no reason to fail a search
+
+    def _study_of(self, url: str) -> str:
+        """The study a URL belongs to, from the records already read, or "" when it cannot be told.
+
+        Only `study/<id>.json` names its study in the URL. An experiment, a bioreplicate and a series are
+        reached through records that carry `studyId` (or, for a series, through the bioreplicate that lists
+        it), so the client learns the ownership as it reads, from live responses and from kept ones alike.
+        A URL whose study cannot be told is never served from the kept files, because nothing can say
+        whether it is still current.
+        """
+        name = url.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        if url.endswith(".json") and "/study/" in url:
+            return name
+        return self._of_record.get(name, "")
+
+    def _learn(self, url: str, data) -> None:
+        """What a record says about ownership: a study lists its experiments, an experiment and a
+        bioreplicate carry `studyId`, and a bioreplicate lists the series it holds. Called for a kept
+        response as well as a fresh one, so a run that reads nothing still knows what belongs where."""
+        if not isinstance(data, dict):
+            return
+        sid = data.get("id") if "/study/" in url else data.get("studyId")
+        if not isinstance(sid, str) or not sid:
+            return
+        learned = {}
+        for key in ("experiments", "bioreplicates", "measurementContexts"):
+            for item in data.get(key) or []:
+                ident = item.get("id") if isinstance(item, dict) else item
+                if ident:
+                    learned[str(ident)] = sid
+        own = data.get("id")
+        if own and "/study/" not in url:
+            learned[str(own)] = sid
+        if learned:
+            with self._index_lock:
+                self._of_record.update(learned)
 
     def _disk_path(self, key: str) -> str:
         h = hashlib.sha256(key.encode("utf-8")).hexdigest()[:32]
         return os.path.join(self.cache_dir, f"{h}.json")
 
+    def _stale(self, path: str, owner) -> bool:
+        """Whether a kept response may no longer be used, and drop it when so.
+
+        `owner` is the study and the `uploadedAt` the response was read at, written beside it. It may be
+        used only when this run has read that study's `uploadedAt` live and the two agree. A study this run
+        has not checked is not served from, because the check is the guarantee; a study whose stamp has
+        moved has that response deleted, which is the revision case.
+        """
+        if not isinstance(owner, (list, tuple)) or len(owner) != 2:
+            return True
+        sid, uploaded = owner
+        live = self._uploaded.get(sid)
+        if live is None:
+            return True
+        if live != uploaded:
+            with self._index_lock:
+                if sid not in self.refreshed:
+                    self.refreshed.append(sid)
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            return True
+        return False
+
     def _cache_get(self, key: str):
         if self._mem is not None and key in self._mem:
             return self._mem[key]
-        if self.cache_dir:
-            p = self._disk_path(key)
-            if os.path.exists(p):
-                try:
-                    with open(p, encoding="utf-8") as f:
-                        data = json.load(f)
-                    if self._mem is not None:
-                        self._mem[key] = data
-                    return data
-                except (OSError, ValueError):
-                    return None
-        return None
+        if not self.cache_dir:
+            return None
+        path = self._disk_path(key)
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path, encoding="utf-8") as f:
+                kept = json.load(f)
+        except (OSError, ValueError):
+            return None
+        if not isinstance(kept, dict) or "body" not in kept or self._stale(path, kept.get("owner")):
+            return None
+        data = kept["body"]
+        if self._mem is not None:
+            self._mem[key] = data
+        self._learn(key, data)                 # so a series kept from an earlier run still knows its study
+        with self._index_lock:
+            self.reused += 1
+        return data
 
     def _cache_put(self, key: str, data) -> None:
         if self._mem is not None:
             self._mem[key] = data
-        if self.cache_dir:
-            try:
-                with open(self._disk_path(key), "w", encoding="utf-8") as f:
-                    json.dump(data, f)
-            except OSError:
-                pass
+        if not self.cache_dir:
+            return
+        self._learn(key, data)
+        sid = self._study_of(key)
+        uploaded = self._uploaded.get(sid) if sid else None
+        if not sid or uploaded is None:
+            return          # nothing to validate it against later, so it is not kept between runs
+        try:
+            with open(self._disk_path(key), "w", encoding="utf-8") as f:
+                json.dump({"owner": [sid, uploaded], "body": data}, f)
+        except OSError:
+            pass
 
     def _connection(self, fresh: bool = False):
         conn = getattr(self._local, "conn", None)
         if fresh or conn is None:
             if conn is not None:
                 conn.close()
-            kind = http.client.HTTPSConnection if self._scheme == "https" else http.client.HTTPConnection
+            kind = _HTTPSConnection if self._scheme == "https" else _HTTPConnection
             conn = self._local.conn = kind(self._host, timeout=self.timeout)
         return conn
 
@@ -177,6 +391,8 @@ class MGrowthDBClient:
         if cached is not None:
             return cached
         text = self._request(url, "text/csv").decode("utf-8")
+        with self._index_lock:
+            self.fetched += 1
         self._cache_put(url, text)
         return text
 
@@ -190,12 +406,32 @@ class MGrowthDBClient:
         if cached is not None:
             return cached
         data = json.loads(self._request(url, "application/json").decode("utf-8"))
+        with self._index_lock:
+            self.fetched += 1
         self._cache_put(url, data)
         return data
 
     def get_study(self, study_id: str) -> dict:
-        """Study metadata: id, name, projectId, description, publishedAt, experiments[{id, name}]."""
-        return self._get(f"study/{study_id}.json")
+        """Study metadata: id, name, projectId, description, publishedAt, experiments[{id, name}].
+
+        **Always read live when responses are kept between runs**, because its `uploadedAt` is what says
+        whether everything else kept for this study may still be used (#182). Within one run the in-memory
+        cache still serves it, so a study is read once however many times it is asked for.
+        """
+        url = f"{self.base_url}/study/{study_id}.json"
+        if self._mem is not None and url in self._mem:
+            return self._mem[url]
+        data = json.loads(self._request(url, "application/json").decode("utf-8"))
+        uploaded = data.get("uploadedAt", "")
+        with self._index_lock:
+            self.fetched += 1
+            self._uploaded[study_id] = uploaded
+        if self._mem is not None:
+            self._mem[url] = data
+        # reading it live is what tells the rest of this study's kept responses whether they may be used,
+        # and `_cache_put` now has the stamp to write beside this one
+        self._cache_put(url, data)
+        return data
 
     def get_experiment(self, experiment_id: str) -> dict:
         """Experiment: cultivationMode, communityStrains[], bioreplicates[] (each with measurementContexts)."""
