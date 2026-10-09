@@ -563,6 +563,23 @@ parameter they had. No R2 comparison is quoted above for that reason.
 ## Open decisions
 
 
+- **Settled 2026-10-09 (#182): measurements may be reused while a study's `uploadedAt` is unchanged.** The
+  rule until now was that measurements are read fresh on every run, because mGrowthDB serves only the
+  latest version of a study and a kept curve could silently be an old one. What was missing was any way to
+  tell. **Karoline, confirming for the mGrowthDB team**, that "uploadedAt is kept fresh", and that "it's
+  coupled to study submission". So the stamp is the test, and the rule
+  becomes: everything a study holds may be reused while its `uploadedAt` is unchanged, **the study record
+  itself is always read live** because it is the check, and a stamp that has moved drops everything kept
+  for that study.
+  **Measured on SMGDB00000007, live, the same day:** a first run sends 153 requests and a second sends
+  **1**. Over the whole corpus a run sends 3738 (2195 bioreplicate records, 930 series, 559 experiments,
+  54 studies), so an unchanged corpus costs the 54 study records and nothing else.
+  Three things are deliberate. A response whose study cannot be told is never served, since nothing can say
+  whether it is current, which is why each kept file carries its study and stamp rather than an index that
+  could fall out of step. A study this run has not checked is not served from, because the check is the
+  guarantee. And the daily All workflow runs on ephemeral runners, so it keeps reading everything unless a
+  cache is carried deliberately, which is the conservative default for the one network readers are handed.
+  Where the files live and what may never happen to them is in docs/DATA_GOVERNANCE.md.
 - **Settled 2026-10-08 (#155 item 1): the stage variance carries the spread of the monoculture rates the
   condition matcher selected.** The finding: stage 1 is held fixed in stage 2, so an arc is the only free
   parameter left to absorb a difference between the rate a monoculture grew at and the rate that organism
