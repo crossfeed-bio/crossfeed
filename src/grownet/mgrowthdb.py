@@ -123,6 +123,10 @@ class MGrowthDBClient:
         # whose study has moved on is simply read again. What is in memory is only this run's knowledge.
         self._uploaded: dict = {}      # study id -> uploadedAt, as this run read it live
         self._of_record: dict = {}     # experiment or bioreplicate or context id -> study id
+        # `_index_lock` guards everything below it that the threads share. One client is passed to
+        # `fetch.prefetch_studies`, which runs its methods on `WORKERS` threads, and `x += 1` is a load, an
+        # add and a store with a thread switch possible between them, so the counters take it too: both are
+        # printed to a reader as the evidence that a network rests on kept responses (Craig's agent, #185).
         self._index_lock = threading.Lock()
         self.reused = 0                # responses served from the kept files, for the report
         self.fetched = 0               # responses read from mGrowthDB
@@ -222,7 +226,8 @@ class MGrowthDBClient:
         if self._mem is not None:
             self._mem[key] = data
         self._learn(key, data)                 # so a series kept from an earlier run still knows its study
-        self.reused += 1
+        with self._index_lock:
+            self.reused += 1
         return data
 
     def _cache_put(self, key: str, data) -> None:
@@ -298,7 +303,8 @@ class MGrowthDBClient:
         if cached is not None:
             return cached
         text = self._request(url, "text/csv").decode("utf-8")
-        self.fetched += 1
+        with self._index_lock:
+            self.fetched += 1
         self._cache_put(url, text)
         return text
 
@@ -312,7 +318,8 @@ class MGrowthDBClient:
         if cached is not None:
             return cached
         data = json.loads(self._request(url, "application/json").decode("utf-8"))
-        self.fetched += 1
+        with self._index_lock:
+            self.fetched += 1
         self._cache_put(url, data)
         return data
 
@@ -327,9 +334,9 @@ class MGrowthDBClient:
         if self._mem is not None and url in self._mem:
             return self._mem[url]
         data = json.loads(self._request(url, "application/json").decode("utf-8"))
-        self.fetched += 1
         uploaded = data.get("uploadedAt", "")
         with self._index_lock:
+            self.fetched += 1
             self._uploaded[study_id] = uploaded
         if self._mem is not None:
             self._mem[url] = data

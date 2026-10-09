@@ -231,3 +231,52 @@ def test_an_unwritable_cache_directory_does_not_fail_a_search(tmp_path):
     blocker.write_text("not a directory")
     c = MGrowthDBClient(cache_dir=str(blocker / "under-a-file"))
     assert c.cache_dir is None
+
+
+def test_every_count_a_reader_is_shown_is_made_under_the_lock(tmp_path):
+    """`reused` and `fetched` are printed to a reader as the evidence that a network rests on responses
+    kept from an earlier run, and six worker threads share one client, so `x += 1` on them has to be
+    guarded like the two indexes are (Craig's agent on #185).
+
+    The invariant is tested rather than the symptom: 120000 unguarded increments across six threads lost
+    nothing in five trials on CPython 3.12, so a test that counted would pass either way and prove
+    nothing. This one refuses any write to either counter made outside `_index_lock`, which is
+    deterministic, and it keeps holding for an increment added somewhere else later.
+    """
+    class _Watched(MGrowthDBClient):
+        _watching = False
+
+        def _check(self, field):
+            # single-threaded here, so the lock being held at all means this thread holds it
+            assert self._index_lock.locked(), f"{field} was changed outside _index_lock"
+
+        @property
+        def reused(self):
+            return self._reused
+
+        @reused.setter
+        def reused(self, value):
+            if self._watching:
+                self._check("reused")
+            self._reused = value
+
+        @property
+        def fetched(self):
+            return self._fetched
+
+        @fetched.setter
+        def fetched(self, value):
+            if self._watching:
+                self._check("fetched")
+            self._fetched = value
+
+    _Study.seen, _Study.uploaded = [], "2025-10-27T16:53:37+00:00"
+    httpd, base = _serving()
+    try:
+        for expected_reads, expected_kept in ((4, 0), (1, 3)):
+            c = _Watched(base_url=base, cache_dir=str(tmp_path))
+            c._watching = True
+            _read_everything(c)                     # raises in the setter if any count escapes the lock
+            assert (c.fetched, c.reused) == (expected_reads, expected_kept)
+    finally:
+        httpd.shutdown()

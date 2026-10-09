@@ -47,7 +47,10 @@ content.
   the check; and a stamp that has moved drops everything kept for that study. Measured live on
   SMGDB00000007: a first run sends 153 requests and a second sends **1**, deriving the same network. The
   report says how much was read, how much was reused, and which studies were read again because their
-  stamp moved. The daily All workflow is unaffected, since its runners keep nothing.
+  stamp moved, and those two counts are now incremented under the same lock as the rest of the shared
+  state, since one client serves six worker threads and `x += 1` is three steps (Craig's agent on #185);
+  an undercounted reuse makes a network look fresher than it is. The daily All workflow is unaffected,
+  since its runners keep nothing.
 - **Each arc says what both sides of its comparison were inoculated at** (#81, Karoline on 2026-10-08).
   mGrowthDB's `inoculumConcentration` is empty in every experiment checked and its descriptions state a
   starting density unsystematically, so the number is taken from the first measured abundance, which the
