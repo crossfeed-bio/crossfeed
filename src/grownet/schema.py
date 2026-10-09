@@ -202,6 +202,11 @@ SCHEMA_DOC = {
                 "coefficient_sd_from_rate_stage": {"type": ["number", "null"]},
                 "se_replicates": {"type": ["number", "null"]},
                 "se_rate_stage": {"type": ["number", "null"]},
+                # and the third component, where the study matched this organism to more than one
+                # monoculture set: the spread of the rates those sets fitted, and what it contributes
+                # to `se` (#155 item 1)
+                "se_rate_selection": {"type": ["number", "null"]},
+                "rate_selection_spread": {"type": ["number", "null"]},
                 "rate_stage_method": {"type": "string"},
                 "rate_stage_n": {"type": ["integer", "null"]},
             },

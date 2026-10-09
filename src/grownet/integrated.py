@@ -987,6 +987,7 @@ class IntegratedDeriver:
             raise ValueError("IntegratedDeriver needs a client: it reads each replicate's measured series")
         spike = SPIKE_FACTOR if self.spike_factor is None else self.spike_factor
         records, skipped = [], []
+        pending: list = []        # (record, the fit behind it) for the rate-selection pass below
         identities = strain_identities(exps, [])
         # the replicates of every experiment, split into monocultures of one organism and communities
         monocultures: dict = {}
@@ -1229,6 +1230,12 @@ class IntegratedDeriver:
                         "partner_abundance_n": len(reps),
                         "study_id": study_id, **study_meta,
                     })
+                    # the record is widened below, once every row of this study is fitted and the spread
+                    # of each organism's selected monoculture rates is known
+                    pending.append({"record": records[-1], "got": got, "reps": reps,
+                                    "partner": partner, "target": target,
+                                    "label": f"{partner} -> {target}"})
+        _widen_by_rate_selection(pending)
         return records, skipped
 
 
@@ -1350,7 +1357,142 @@ def starting_densities(cocultures: list, monocultures: list, target: str) -> dic
     return {"co": a, "mono": b, "ratio": max(a, b) / min(a, b), "unit": unit or mono_unit}
 
 
-def _arc_statistics(got: dict, cocultures: list, partner: str) -> dict:
+# How close two selected rates have to be for a contradiction between their arcs to mean something, as a
+# share of their median: `stdev(selected rates) / median(selected rates)`, the same quantity the note
+# prints. **Which rates matters**, and it is the trap in this issue's history: these are the stage-1 rates
+# of the monoculture sets `_choose_monocultures` picked, not the per-condition rates of #155's bias table,
+# and the two estimators give different numbers for one organism (Roseburia in SMGDB00000007: 0.5091 and
+# 0.6521 here, 0.5365 and 0.7624 there). The statistic matters too: on a pair, `stdev` is the range over
+# root two, so a ratio like `max/min - 1` runs about 1.4 times higher and drifts further as the pair
+# spreads.
+#
+# Measured here, live, 2026-10-08. Four organisms in the corpus have more than one selected set:
+#
+#   Bacteroides  SMGDB00000007   0.7387, 0.7848    4.28%   arcs agree in sign
+#   Blautia      SMGDB00000007   0.2672, 0.2854    4.66%   arcs agree in sign
+#   Comamonas    SMGDB00000014   0.1193 to 0.1688  16.5%   arcs DISAGREE in sign
+#   Roseburia    SMGDB00000007   0.5091, 0.6521    17.4%   arcs DISAGREE in sign
+#
+# So the line at 10 per cent sits above both agreeing cases and below both disagreeing ones, and nothing
+# is flagged today. **What places the line is that gap, not either endpoint**: sorted, the four separate
+# cleanly on sign agreement, 4.28 and 4.66 against 16.48 and 17.42, a factor of 3.5, with 0.10 inside the
+# gap rather than on top of a case.
+# **That ordering is not yet evidence that a wide spread drives disagreement.** With four cases split two
+# and two there are six assignments of the labels, the observed layout is one of them, and perfect
+# separation arises one time in six by chance (one in three in either direction). So read the separation
+# as where the line sits and not as a relationship; a fifth repeated organism would make it testable
+# (Craig's agent's own framing on #177 and then its own permutation test of it, 2026-10-08).
+# **And no positive case tests the value**: the flag needs disagreeing signs with a spread BELOW the line,
+# every disagreeing case here sits above it, so it fires on 0 of 4. Read 0.10 as a point inside a measured
+# gap, not as a calibrated threshold, and re-measure the four before moving it.
+#
+# That is also the discipline Craig's agent's own correction asked for: it withdrew the case
+# whose selected rates were far apart, because arcs that far apart can legitimately carry two different
+# rate errors, and both of today's disagreeing cases are that case. The argument itself rests on two arcs
+# of one organism sharing a stage-1 estimate and still implying opposite mismatches, which one rate error
+# cannot produce. **L. delbrueckii, the case the argument is strongest on, has a single selected set in
+# this corpus**, so under this measure it is not a case for or against the line at all; its figures in
+# the issue thread come from the other estimator.
+#
+# It is a judgement, it only decides whether to SAY something on the arc, and it never moves a number.
+CONTRADICTION_SPREAD = 0.10
+
+
+def _widen_by_rate_selection(pending: list) -> None:
+    """Widen each arc's stage variance by the spread of its organism's selected monoculture rates.
+
+    `_choose_monocultures` resolves a monoculture set per co-culture experiment, so one organism in one
+    study can enter two arcs with two different stage-1 rates. That spread is a measurement of how much
+    stage 1 moves when the matched condition moves, for this organism in this study, and it is exactly the
+    quantity each arc assumes to be zero, so it is added as a third variance component rather than
+    discarded (Craig's agent's recommendation on #155 item 1; Karoline, 2026-10-08).
+
+    It reaches `se`, `sd`, `p_value` and the degrees of freedom, and nothing else: `strength`, the effect
+    and the status stay as fitted. Arcs of an organism with one selected rate in the study are untouched,
+    which is most of them. Where two arcs of one organism take nearly the same rate and still imply
+    opposite mismatches, the arc says so, since that contradiction is information a reader cannot
+    reconstruct from one arc.
+    """
+    by_target: dict = {}
+    for item in pending:
+        by_target.setdefault(item["target"], {})[id(item["got"])] = item["got"].get("rate")
+    for target, per_fit in by_target.items():
+        chosen = sorted(r for r in per_fit.values() if r)
+        if len(chosen) < 2:
+            continue
+        # `stdev` is the SAMPLE standard deviation, dividing by n - 1, and that is the intended basis:
+        # which monoculture sets this study happened to hold, and which the matcher happened to pair with
+        # each co-culture, is one realisation of a matching that could have gone otherwise, so these
+        # rates are a sample of the rates this organism could have been given rather than the whole
+        # population of them. `pstdev` would divide by n and give a spread smaller by sqrt(n / (n - 1)),
+        # which at the minimum n of 2 that the guard below admits is a factor of 1.41, and
+        # `se_rate_selection` is close to linear in the spread because it is measured by re-evaluating
+        # the strength at the rate plus and minus it. So the sample form is the wider and the more
+        # conservative of the two: a larger se, a larger p-value, fewer significant arcs. Written down
+        # because a reader should not have to infer a 41 per cent factor from a function name (Craig's
+        # agent on #177).
+        spread = statistics.stdev(chosen)
+        if not spread:
+            continue
+        mine = [item for item in pending if item["target"] == target]
+        relative = spread / statistics.median(chosen)
+        # the contradiction his argument turns on: these arcs take nearly the same rate and still imply
+        # mismatches of opposite sign, so they cannot both be stage 1 being wrong about this organism
+        mismatches = [(item["label"], item["record"].get("rate_mismatch_to_zero")) for item in mine]
+        signs = {m > 0 for _label, m in mismatches if m}
+        contradicts = len(signs) > 1 and relative <= CONTRADICTION_SPREAD
+        for item in mine:
+            widened = _arc_statistics(item["got"], item["reps"], item["partner"],
+                                      {"spread": spread, "n": len(chosen)})
+            if widened["se_rate_selection"] is None:
+                continue
+            record, strength = item["record"], widened["strength"]
+            record["se_rate_selection"] = round(widened["se_rate_selection"], 4)
+            record["rate_selection_spread"] = round(spread, 4)
+            record["sd"] = None if widened["sd"] is None else round(widened["sd"], 4)
+            record["se"] = None if widened["se"] is None else round(widened["se"], 4)
+            record["p_value"] = widened["p_value"]
+            record["effect_over_sd"] = (None if (not widened["sd"] or strength is None)
+                                        else round(abs(strength) / widened["sd"], 4))
+            record["notes"] = [*record["notes"],
+                               f"this organism's rate was matched to {len(chosen)} different monoculture "
+                               f"set(s) in this study, which fitted rates {', '.join(f'{r:.4g}' for r in chosen)}"
+                               f"; their spread ({spread:.4g}, {relative * 100:.3g} per cent of the "
+                               "median) is carried in this arc's se and p-value as a third component, "
+                               "and it is a lower bound on the gap this arc assumes to be zero, since "
+                               "the co-culture is a condition the monocultures were never grown in"]
+            if contradicts:
+                record["notes"] = [*record["notes"],
+                                   "two arcs of this organism in this study take nearly the same rate ("
+                                   f"{relative * 100:.3g} per cent apart) and imply rate mismatches of "
+                                   "opposite sign ("
+                                   + ", ".join(f"{label} {m:+.3g}" for label, m in mismatches if m)
+                                   + "), so they cannot both be the monoculture rate being wrong about "
+                                     "this organism: for at least one of them the implied mismatch is "
+                                     "measuring growth that depends on the partner"]
+
+
+def _strength_mean_at(rows: list, rate: float, at_rate: float):
+    """The mean strength these replicates give if stage 1's rate had been `at_rate`, or None.
+
+    Stage 2's coefficient is affine in the rate, so each replicate's exact derivative moves it with no
+    refit, exactly as the stage-1 draws do; the strength is then recomputed at `at_rate`, which also sits
+    in its own denominator. The self-limitation is held, because what is being varied here is the rate the
+    condition matcher selected, not the fit (#155 item 1).
+    """
+    out = []
+    for coefficient, slope, level, _central in rows:
+        if slope is None:
+            return None
+        moved = coefficient + slope[0] * (at_rate - rate)
+        here = _log2_effect(moved, level, at_rate)
+        if here is None:
+            return None
+        out.append(here)
+    return statistics.mean(out) if out else None
+
+
+def _arc_statistics(got: dict, cocultures: list, partner: str, rate_selection: dict = None) -> dict:
     """What an arc publishes about one partner's effect, with both sources of error in it.
 
     {"n", "strength", "sd", "se", "se_replicates", "se_rate_stage", "p_value", "df",
@@ -1368,10 +1510,26 @@ def _arc_statistics(got: dict, cocultures: list, partner: str) -> dict:
         recomputed at every draw, including the rate in its own denominator, and the spread of the mean
         over draws is `se_rate_stage`.
 
-    `se` is the square root of the two variances added, and the t statistic that gives `p_value` uses it
-    with a Satterthwaite degrees of freedom, so an arc whose monoculture stage is poorly determined is no
-    longer tested as though that stage were exact. Before this, every one of these came from the
-    co-culture replicates alone (2026-10-07).
+      * **which monoculture set stage 1 was given**, where the study holds more than one for this
+        organism. `_choose_monocultures` resolves a set per co-culture experiment, so two arcs of one
+        organism in one study can be matched to different sets, and on SMGDB00000007 the rates they
+        select differ by 42 per cent. `rate_selection` carries the spread of those selected rates, in rate
+        units, and this function re-evaluates the mean strength at the rate plus and minus that spread:
+        half the difference is `se_rate_selection`. It is a measured scale rather than an assumed one and
+        it needs no number from the reader (Craig's agent's recommendation on #155 item 1, Karoline's
+        decision 2026-10-08: option 3's mechanism with option 2's data).
+        It is a **lower bound** on what the arc actually assumes. The quantity each arc takes on trust is
+        the gap between the monoculture rate and the rate the organism had in co-culture, and the
+        co-culture is a condition the monocultures were never grown in at all, so the spread between two
+        matched monoculture conditions understates it rather than measuring it (his correction, same day).
+        None where the organism has one selected rate in the study, which is most arcs.
+
+    `se` is the square root of the variances added, and the t statistic that gives `p_value` uses it with a
+    Satterthwaite degrees of freedom over whichever components are present, so an arc whose monoculture
+    stage is poorly determined is no longer tested as though that stage were exact. Before this, every one
+    of these came from the co-culture replicates alone (2026-10-07). Only `se`, `sd`, `p_value` and the
+    degrees of freedom move: `strength`, the effect and the status are what they were, which is the right
+    division, since the point estimate is what it is and the confidence in it was what was overstated.
     """
     from .stats import t_cdf
     rate, own = got.get("rate"), got.get("self_limitation")
@@ -1391,7 +1549,8 @@ def _arc_statistics(got: dict, cocultures: list, partner: str) -> dict:
         rows.append((entry[partner], (slopes.get(entry["replicate"]) or {}).get(partner), level, central))
 
     out = {"n": len(rows), "strength": None, "sd": None, "se": None, "se_replicates": None,
-           "se_rate_stage": None, "p_value": None, "df": None, "coefficient_sd": None,
+           "se_rate_stage": None, "se_rate_selection": None, "rate_selection_spread": None,
+           "p_value": None, "df": None, "coefficient_sd": None,
            "coefficient_sd_from_rate_stage": None, "rate_mismatch_to_zero": None,
            "per_replicate": [row[3] for row in rows]}
     if not rows:
@@ -1433,8 +1592,26 @@ def _arc_statistics(got: dict, cocultures: list, partner: str) -> dict:
     # it was already None in that case, so the two fields contradicted each other about one unknown, and
     # `rate_stage_method` says "none: too few monoculture replicates to resample" (found 2026-10-07).
     out["se_rate_stage"] = math.sqrt(var_stage) if resampled else None
-    out["se"] = math.sqrt(var_replicates + var_stage)
-    out["one_component"] = not resampled
+
+    # the third component: how much the mean strength moves if stage 1 had been given one of this
+    # organism's other matched monoculture sets in this study, measured by their spread (#155 item 1)
+    var_selection = 0.0
+    spread = (rate_selection or {}).get("spread") or 0.0
+    if spread > 0 and rate and all(row[1] is not None for row in rows):
+        central = out["strength"]
+        up = _strength_mean_at(rows, rate, rate + spread)
+        # a spread wider than the rate itself would put the lower arm at or below zero, where there is no
+        # growth and no strength to compute, so that arm is dropped rather than clamped
+        down = _strength_mean_at(rows, rate, rate - spread) if rate - spread > 0 else None
+        if up is not None and down is not None:
+            var_selection = ((up - down) / 2.0) ** 2
+        elif up is not None:
+            var_selection = (up - central) ** 2
+        if var_selection:
+            out["rate_selection_spread"] = spread
+            out["se_rate_selection"] = math.sqrt(var_selection)
+    out["se"] = math.sqrt(var_replicates + var_stage + var_selection)
+    out["one_component"] = not resampled and not var_selection
     # `sd` is what every field description says it is: the spread of **one** comparison. Write a
     # replicate's strength as `mu + xi + eps_i`, where `xi` is the monoculture stage's error, shared by
     # every replicate of this row, and `eps_i` the replicate's own. Then
@@ -1449,15 +1626,22 @@ def _arc_statistics(got: dict, cocultures: list, partner: str) -> dict:
     # a row had. Measured on a noise-free simulation with the replicate spread at zero, two replicates to
     # six: `se` stayed 0.0336 throughout while that `sd` grew 0.0476, 0.0583, 0.0673, 0.0752, 0.0824
     # (2026-10-07). The inflation was worst where the stage dominates, which is the live case.
-    out["sd"] = math.sqrt(var_stage + sd * sd)
+    out["sd"] = math.sqrt(var_stage + var_selection + sd * sd)
 
     df_replicates = len(rows) - 1
     df_stage = max(1, (got.get("stage_one_n") or 1) - 1)
-    if var_stage > 0 and var_replicates > 0:
-        df = ((var_replicates + var_stage) ** 2
-              / (var_replicates ** 2 / df_replicates + var_stage ** 2 / df_stage))
+    df_selection = max(1, ((rate_selection or {}).get("n") or 1) - 1)
+    # Satterthwaite over whichever components are present, which is the same formula as before wherever
+    # the selection component is absent
+    parts = [(var_replicates, df_replicates), (var_stage, df_stage), (var_selection, df_selection)]
+    present = [(v, d) for v, d in parts if v > 0 and d > 0]
+    if len(present) > 1:
+        total = sum(v for v, _ in present)
+        df = total ** 2 / sum(v * v / d for v, d in present)
+    elif present:
+        df = present[0][1]
     else:
-        df = df_replicates if var_replicates > 0 else df_stage
+        df = df_replicates or df_stage
     out["df"] = df
     if out["se"] > 0:
         t = out["strength"] / out["se"]

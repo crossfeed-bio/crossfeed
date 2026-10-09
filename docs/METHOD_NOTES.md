@@ -580,6 +580,79 @@ parameter they had. No R2 comparison is quoted above for that reason.
   guarantee. And the daily All workflow runs on ephemeral runners, so it keeps reading everything unless a
   cache is carried deliberately, which is the conservative default for the one network readers are handed.
   Where the files live and what may never happen to them is in docs/DATA_GOVERNANCE.md.
+- **Settled 2026-10-08 (#155 item 1): the stage variance carries the spread of the monoculture rates the
+  condition matcher selected.** The finding: stage 1 is held fixed in stage 2, so an arc is the only free
+  parameter left to absorb a difference between the rate a monoculture grew at and the rate that organism
+  had in co-culture, and a few per cent of such a difference publishes a significant arc that is not
+  there. Measured on the live corpus, the implied mismatch among arcs whose monoculture rate is well
+  determined has a median absolute of 19.2 per cent, against an estimator noise floor of 8 to 16 per cent.
+  **Craig's agent's grouping changed what that number means**, and it is the part to keep. Grouped by
+  organism and study, two arcs of *L. delbrueckii* in SMGDB00000006 take stage-1 rates 1 per cent apart
+  (0.8618 and 0.8536) and imply mismatches of -83.5 and +129.8 per cent. One rate error shifts both arcs of
+  an organism the same way; it cannot move one down 84 per cent and the other up 130. What differs is the
+  co-culture rate, by a factor of 13.8, between two partners. So the 19.2 per cent is a mixture of two
+  populations and quoting it as rate-mismatch exposure counts part of the signal as noise.
+  **What is built**: option 1 (the conditionality stated on every arc, which `rate_mismatch_to_zero` and
+  the notes already do) plus his recommendation, option 3's mechanism with option 2's data. The condition
+  matcher resolves a monoculture set per co-culture experiment, so one organism in one study can enter two
+  arcs with two different stage-1 rates, and that spread is a measured scale for how much stage 1 moves
+  when the matched condition moves. It becomes a third variance component (`se_rate_selection`, with
+  `rate_selection_spread` beside it), reaching `se`, `sd`, `p_value` and the Satterthwaite degrees of
+  freedom and nothing else: `strength`, the effect and the status stay as fitted. No number comes from the
+  reader.
+  **Measured consequences** (live corpus, the default derivation, 2026-10-08): 9 of 16 arcs widen;
+  `q < 0.05` goes from 3 arcs to 2; no arc changes status. Two arcs' p-values fall very slightly
+  (0.01839 to 0.01817, 0.0001793 to 0.0001271) because a small third component raises the Satterthwaite
+  degrees of freedom more than it raises the variance, which is how that formula behaves and is worth
+  knowing before someone reads it as a bug.
+  **Two limits, both his**: the spread is a **lower bound** on what an arc assumes, since the gap each arc
+  takes on trust is between a monoculture and a co-culture the monocultures were never grown in, so the
+  spread between two matched monoculture conditions understates it; and it covers only organisms that
+  appear in several arcs of one study, which is 9 of 16 arcs here. For a single-arc organism there is no
+  internal spread and the honest answer stays option 1 plus the per-arc sensitivity, flagged as
+  uncheckable rather than checked and passed.
+  **The spread is the sample standard deviation** of the distinct selected rates, dividing by `n - 1`
+  (Craig's agent on #177, who asked for the basis to be stated rather than inferred from the function
+  name). Which sets a study holds, and which one the matcher paired with each co-culture, is one
+  realisation of a matching that could have gone otherwise, so these rates are a sample rather than the
+  population of rates the organism could have been given. The population form divides by `n` and is
+  smaller by `sqrt(n / (n - 1))`, a factor of 1.41 at the minimum `n` of 2, and `se_rate_selection` is
+  close to linear in the spread, so this reading is the wider and the more conservative one.
+  **Option 4 (a rate per condition) stays out**, and his corrected reason is the one to record: a
+  per-condition offset would be fitted within a study, and of the four studies with well-determined rates
+  two are all-positive at n=2, where an offset is not excluded but cannot be fitted either, while the two
+  carrying 8 of the 12 arcs are mixed in sign. So the offset is not identified wherever there is enough
+  data to test it and untestable where there is not. His first version of that claim pooled the four
+  studies and said no shared offset exists, which these arcs cannot establish; he withdrew it the same day.
+  **The contradiction flag**: where two arcs of one organism took nearly the same rate (within
+  `integrated.CONTRADICTION_SPREAD`, 10 per cent of the median selected rate) and still imply mismatches of
+  opposite sign, the arcs say so, since they cannot both be the rate being wrong.
+  **The quantity matters and it is the trap in this thread.** The flag reads the stage-1 rates of the
+  monoculture sets the condition matcher picked, measured as `stdev / median`. The bias table of #155 item
+  1 reports a per-condition fit instead, a different estimator, which gives different numbers for the same
+  organism (Roseburia in SMGDB00000007: 0.5091 and 0.6521 here against 0.5365 and 0.7624 there); and a
+  ratio such as `max/min - 1` runs about 1.4 times higher than `stdev/median` on a pair, since `stdev` of
+  two values is their range over root two. Craig's agent's figures of 1.0 and 7.2 per cent are on that
+  other scale and were quoted in the code comment before it was restated (his finding on #177, 2026-10-08;
+  his replacement figures do not reproduce either, so the ones below are measured here).
+  **Measured live, 2026-10-08.** Four organisms have more than one selected set: Bacteroides in
+  SMGDB00000007 at 4.28 per cent and Blautia at 4.66, whose arcs agree in sign; Comamonas in
+  SMGDB00000014 at 16.5 per cent and Roseburia in SMGDB00000007 at 17.4, whose arcs disagree. So the line
+  at 10 sits above both agreeing cases and below both disagreeing ones, and **no live arc is flagged**,
+  which is his correction doing its work: he withdrew the case whose rates were far apart, and both of
+  today's disagreeing cases are that case. *L. delbrueckii*, the case the argument is strongest on, has a
+  **single** selected set in this corpus, so under this measure it is neither for nor against the line.
+  **What places the line is the gap, not either endpoint, and no positive case tests its value.** The four
+  cases separate cleanly on sign agreement, 4.28 and 4.66 against 16.48 and 17.42, a factor of 3.5 with
+  0.10 inside the gap rather than on top of a case. **The ordering is not evidence that a wide spread
+  drives disagreement**: with four cases split two and two there are six label assignments, and perfect
+  separation arises one time in six by chance, one in three in either direction. He offered the
+  "predicts" framing and then withdrew it under his own permutation test, which is the right call at
+  n = 4; a fifth repeated organism would make it testable. Since the flag needs disagreeing signs with a
+  spread below the line and every disagreeing case sits above it, it fires on 0 of 4, so the exact value
+  is untested by any firing case and the separation does the work. Anyone moving it should re-measure the
+  four first.
+
 - **Partly settled 2026-10-08 (#173): no stage bounds a growth rate for plausibility, and the implied
   doubling time is now published.** The guards on a rate are identifiability, model fit, growth above zero
   and the R2 gate against the interaction-free null. A rate's **magnitude** is never questioned anywhere in

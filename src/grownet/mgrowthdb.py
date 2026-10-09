@@ -578,6 +578,8 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             fit_window_share=r.get("fit_window_share"),
             rate_mismatch_to_zero=r.get("rate_mismatch_to_zero"),
             se_replicates=r.get("se_replicates"), se_rate_stage=r.get("se_rate_stage"),
+            se_rate_selection=r.get("se_rate_selection"),
+            rate_selection_spread=r.get("rate_selection_spread"),
             rate_stage_method=r.get("rate_stage_method", "") or "",
             rate_stage_n=r.get("rate_stage_n"),
             merged_arcs=r.get("merged_arcs"), strength_range=tuple(r.get("strength_range", ())),

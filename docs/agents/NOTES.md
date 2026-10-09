@@ -216,6 +216,28 @@ Rules for this file:
   measurements like that spread belong in issue comments and in this file, not in the help, the README or
   a generated package README.
 
+- 2026-10-08 (#155 item 1, Karoline's decision): **an arc's error has a third component, the spread of
+  the monoculture rates the condition matcher selected for that organism in that study.**
+  `_choose_monocultures` resolves a set per co-culture experiment, so one organism in one study can enter
+  two arcs with two different stage-1 rates (SMGDB00000007's *Roseburia*: 0.5091 and 0.6521, 17 per cent
+  apart), and each arc used to take its own as if the other did not exist.
+  `integrated._widen_by_rate_selection` runs after every row of a study is fitted, because the spread is
+  only known then; it collects one rate per distinct fit, takes their sample standard deviation, and calls
+  `_arc_statistics` again with it. `_strength_mean_at` re-evaluates the mean strength at the rate plus and
+  minus the spread, moving each coefficient by its own exact derivative (stage 2 is affine in the rate), so
+  half the difference is `se_rate_selection`. It reaches `se`, `sd`, `p_value` and the Satterthwaite
+  degrees of freedom and **nothing else**; `strength`, the effect and the status stay as fitted.
+  **Three things to know before touching it.** A small third component can RAISE the Satterthwaite degrees
+  of freedom more than it raises the variance, so two live arcs' p-values fall slightly: that is the
+  formula, not a bug. The spread is a **lower bound** on what the arc assumes, since the co-culture is a
+  condition the monocultures were never grown in. And the pass needs the whole study, so it cannot move
+  into the per-arc loop.
+  New fields mean the id moved to `/v3`; `records_to_network` builds `Edge` field by field, so a new
+  record field has to be added there too or it reaches the document as None (caught by measuring the live
+  output rather than by a test).
+  Live, 2026-10-08: 9 of 16 arcs widen, `q < 0.05` goes 3 to 2, no status changes, and the contradiction
+  note fires on no arc, since both mixed-sign organisms select rates 17 per cent apart.
+
 - 2026-10-08 (#173, Karoline's decision): **every growth rate publishes the doubling time it implies.**
   `rates.doubling_time(rate, unit)` is ln(2) / r in the time unit of the rate, with `rates.time_unit` for
   the unit's name. It is the appended last column of `growth_rates.csv` and an entry in the report's
@@ -337,8 +359,15 @@ Rules for this file:
   whether a near-scarce denominator is withheld and above what stated ratio; whether a capacity and the
   cells beside it must share a medium; and whether `reached_stationary` should certify at the end of a
   curve rather than over its last fifth, since it accepts a declining culture and records its peak.
-- 2026-10-06: the id is **`grownet.interaction_network/v2`** from 0.3.0, and the entry below is why it
-  was `/v1`. It moved again for a reason about readers rather than fields: 0.3.0 adds optional edge
+- 2026-10-08: the id is **`grownet.interaction_network/v3`** from 0.3.0, and the entries below are why it
+  was `/v2` and `/v1`. It moved from `/v2` to `/v3` before 0.3.0 shipped, for the two optional edge fields
+  of #155 item 1 (`se_rate_selection`, `rate_selection_spread`). **A field addition moves the id whether
+  or not the id it moves from was ever released**, and amending the unreleased `/v2` entry of
+  `schema/format_fields.json` instead would have been the kind of exception that made #121 possible. So
+  `/v2` exists in `PREVIOUS_SCHEMAS` and in the manifest, no release carries it, and the rule stays
+  absolute.
+- 2026-10-06: `/v2` was the id for 0.3.0 until the above, and the entry below is why it was `/v1`. It
+  moved for a reason about readers rather than fields: 0.3.0 adds optional edge
   fields, an installed 0.2.0 builds its edges with `Edge(**e)` and raises on a field it does not know,
   and `published.fresh` would have accepted the daily artifact under the unchanged id and then failed on
   it. Under a new id that copy derives live, which is exactly what the sentence below says the check is
