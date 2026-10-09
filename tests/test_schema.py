@@ -384,3 +384,41 @@ def test_the_format_check_refuses_to_answer_from_stale_bytecode(monkeypatch):
     # said "model.py says /v9" while the file said otherwise and prescribed moving `current` to an id
     # the source does not contain (Craig's agent on #176)
     assert len(problems) == 1, problems
+
+
+def test_the_format_check_refuses_when_it_cannot_read_the_declaration(monkeypatch, tmp_path):
+    """The staleness guard above compares the imported id with the one in the source. It cannot guard
+    itself: with no id read out of the source there was nothing to compare and the guard silently did not
+    run, which is the failure it exists to prevent (Craig's agent on #176).
+
+    `SCHEMA: Final = "..."` is the case he named and the pattern now reads it. A declaration it genuinely
+    cannot read, a literal wrapped across lines, has to be refused rather than skipped, the way
+    `email_link_check` refuses a file whose body it cannot recognize.
+    """
+    import re
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(root / "checks"))
+    import gate  # noqa: E402
+
+    source = (root / "src" / "grownet" / "model.py").read_text(encoding="utf-8")
+    declaration = re.search(r'^SCHEMA\s*(?::[^=]+)?=\s*(["\'][^"\']+["\'])', source, re.M)
+    assert declaration, "the check's own pattern no longer matches the declaration it reads"
+
+    def reading(form):
+        """`model.py` as text with the declaration rewritten, leaving the real import alone."""
+        monkeypatch.setattr(gate, "_read",
+                            lambda rel: source.replace(declaration.group(0), form, 1)
+                            if rel.endswith("model.py") else gate._read(rel))
+        return gate.check_format_fields([])
+
+    # the form he named: annotated, still a single literal, and read
+    assert reading(f"SCHEMA: Final = {declaration.group(1)}") == []
+
+    # a form the pattern cannot read: refused, and it says what to do about it
+    problems = reading(f"SCHEMA = (\n    {declaration.group(1)}\n)")
+    assert len(problems) == 1, problems
+    assert "could not find the SCHEMA declaration" in problems[0]
+    assert "widen the pattern" in problems[0]
