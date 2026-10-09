@@ -1236,6 +1236,7 @@ class IntegratedDeriver:
                                     "partner": partner, "target": target,
                                     "label": f"{partner} -> {target}"})
         _widen_by_rate_selection(pending)
+        _flag_unchecked_rates(pending)
         return records, skipped
 
 
@@ -1408,10 +1409,15 @@ def _widen_by_rate_selection(pending: list) -> None:
     discarded (Craig's agent's recommendation on #155 item 1; Karoline, 2026-10-08).
 
     It reaches `se`, `sd`, `p_value` and the degrees of freedom, and nothing else: `strength`, the effect
-    and the status stay as fitted. Arcs of an organism with one selected rate in the study are untouched,
-    which is most of them. Where two arcs of one organism take nearly the same rate and still imply
+    and the status stay as fitted. Where two arcs of one organism take nearly the same rate and still imply
     opposite mismatches, the arc says so, since that contradiction is information a reader cannot
     reconstruct from one arc.
+
+    An arc this pass cannot widen, because its organism has one matched set in the study, carries the
+    `rate_unchecked` caution instead. It is not a worse measurement; it is one where the single assumption
+    this design cannot test has nothing in the study to check it against, and saying so is the difference
+    between flagging it as uncheckable and letting it read as checked and passed (Craig's agent on
+    #155 item 1).
     """
     by_target: dict = {}
     for item in pending:
@@ -1461,6 +1467,7 @@ def _widen_by_rate_selection(pending: list) -> None:
                                "median) is carried in this arc's se and p-value as a third component, "
                                "and it is a lower bound on the gap this arc assumes to be zero, since "
                                "the co-culture is a condition the monocultures were never grown in"]
+            item["widened"] = True
             if contradicts:
                 record["notes"] = [*record["notes"],
                                    "two arcs of this organism in this study take nearly the same rate ("
@@ -1470,6 +1477,26 @@ def _widen_by_rate_selection(pending: list) -> None:
                                    + "), so they cannot both be the monoculture rate being wrong about "
                                      "this organism: for at least one of them the implied mismatch is "
                                      "measuring growth that depends on the partner"]
+
+
+def _flag_unchecked_rates(pending: list) -> None:
+    """The `rate_unchecked` caution on every arc the widening pass could not reach (#155 item 1)."""
+    from .derive import RATE_UNCHECKED
+
+    for item in pending:
+        if item.get("widened"):
+            continue
+        record = item["record"]
+        if RATE_UNCHECKED in record["cautions"]:
+            continue
+        record["cautions"] = [*record["cautions"], RATE_UNCHECKED]
+        record["notes"] = [*record["notes"],
+                           "this organism has one matched monoculture set in this study, so nothing here "
+                           "measures how much its fitted rate moves with the matched condition: the "
+                           "se and the p-value carry the replicates and the monoculture stage, and the "
+                           "one assumption this design cannot test, that the rate holds in co-culture, "
+                           "is unchecked rather than checked. rate_mismatch_to_zero says how large a "
+                           "mismatch would explain this arc away"]
 
 
 def _strength_mean_at(rows: list, rate: float, at_rate: float):

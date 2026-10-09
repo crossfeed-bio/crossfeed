@@ -95,8 +95,10 @@ def _pending(records, fits):
 
 
 def _record(mismatch=None):
+    """The fields of a record these passes read and write, as `IntegratedDeriver.derive` builds them."""
     return {"strength": 0.5, "effect": "facilitation", "status": "present", "sd": 1.0, "se": 1.0,
-            "p_value": 0.5, "effect_over_sd": 0.5, "notes": [], "rate_mismatch_to_zero": mismatch}
+            "p_value": 0.5, "effect_over_sd": 0.5, "notes": [], "cautions": [],
+            "rate_mismatch_to_zero": mismatch}
 
 
 def test_two_matched_sets_widen_every_arc_of_that_organism_and_say_so():
@@ -128,7 +130,39 @@ def test_one_matched_set_leaves_the_arc_exactly_as_it_was():
     fits = [_fit(0.50)]
     records = [_record()]
     integrated._widen_by_rate_selection(_pending(records, fits))
-    assert records[0] == _record()                      # not one field touched
+    integrated._flag_unchecked_rates(_pending(records, fits))   # which only adds the caution and its note
+    assert records[0]["sd"] == 1.0 and records[0]["se"] == 1.0 and records[0]["p_value"] == 0.5
+    assert records[0]["strength"] == 0.5 and records[0]["status"] == "present"
+    assert "se_rate_selection" not in records[0] or records[0]["se_rate_selection"] is None
+
+
+def test_an_arc_with_nothing_to_check_its_rate_against_is_flagged_as_such():
+    """The pass cannot widen an arc whose organism has one matched set, and that arc is not simply left
+    alone: it carries `rate_unchecked`, because the one assumption this design cannot test has nothing in
+    the study to check it against. Craig's agent's words on #155 item 1, that such an arc should be
+    "flagged as uncheckable rather than as checked and passed"."""
+    from grownet.derive import RATE_UNCHECKED
+
+    alone = _pending([_record()], [_fit(0.50)])
+    integrated._widen_by_rate_selection(alone)
+    integrated._flag_unchecked_rates(alone)
+    record = alone[0]["record"]
+    assert RATE_UNCHECKED in record["cautions"]
+    assert record["se_rate_selection"] is None if "se_rate_selection" in record else True
+    note = next(n for n in record["notes"] if "one matched monoculture set" in n)
+    assert "unchecked rather than checked" in note and "rate_mismatch_to_zero" in note
+
+    # and an arc the pass did widen is not flagged: it has a measured, if lower-bound, scale
+    widened = _pending([_record(), _record()], [_fit(0.50), _fit(0.60)])
+    integrated._widen_by_rate_selection(widened)
+    integrated._flag_unchecked_rates(widened)
+    for item in widened:
+        assert RATE_UNCHECKED not in item["record"]["cautions"]
+        assert item["record"]["se_rate_selection"] > 0
+
+    # the caution is in the vocabulary a reader can look up, beside the others
+    from grownet.model import CAUTIONS
+    assert RATE_UNCHECKED in CAUTIONS
 
 
 def test_contradicting_arcs_say_so_only_when_they_took_nearly_the_same_rate():

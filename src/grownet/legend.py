@@ -66,6 +66,10 @@ NOTES = [
                               "with the q-value filter on, an arc without a p-value, kept unjudged. "
                               "window_partial: the fitted rows cover less than half the measured course, "
                               "so the coefficient describes the growth phase and not what came after it. "
+                              "rate unchecked: the organism has one matched monoculture set in its study, "
+                              "so nothing there measures how much its fitted rate moves with the "
+                              "condition, and the one assumption the design cannot test is unchecked "
+                              "rather than checked. "
                               "The edge keeps its status and is drawn."),
     ("Not drawn by default", "the quality flags strains_pooled, removed_member_detected and non_batch. The "
                              "comparison itself is in doubt, so such an edge is never read as an absence of "
