@@ -6,7 +6,7 @@ content.
 
 ## [Unreleased]
 
-## [0.3.0] (unreleased)
+## [0.3.0] (2026-10-09)
 
 ### Upgrading
 - **The default derivation is now the integrated form** (`--derivation integrated`, Karoline,
@@ -116,10 +116,12 @@ content.
   carrying the study and the stamp it was read at; **the study record is always read live**, because it is
   the check; and a stamp that has moved drops everything kept for that study. Measured live on
   SMGDB00000007: a first run sends 153 requests and a second sends **1**, deriving the same network. The
-  report says how much was read, how much was reused, and which studies were read again because their
-  stamp moved, and those two counts are now incremented under the same lock as the rest of the shared
-  state, since one client serves six worker threads and `x += 1` is three steps (Craig's agent on #185);
-  an undercounted reuse makes a network look fresher than it is. The daily All workflow is unaffected,
+  **command line's** report says how much was read, how much was reused, and which studies were read again
+  because their stamp moved, and those two counts are now incremented under the same lock as the rest of
+  the shared state, since one client serves six worker threads and `x += 1` is three steps (Craig's agent
+  on #185); an undercounted reuse makes a network look fresher than it is. **The page's report does not
+  carry that line yet** (#187): the page keeps the kept responses and the speed, and says nothing about
+  either, which is a gap in the reporting and not in the caching. The daily All workflow is unaffected,
   since its runners keep nothing.
 - **Each arc says what both sides of its comparison were inoculated at** (#81, Karoline on 2026-10-08).
   mGrowthDB's `inoculumConcentration` is empty in every experiment checked and its descriptions state a
