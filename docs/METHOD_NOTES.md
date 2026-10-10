@@ -42,16 +42,44 @@ weigh in, we settle each default together, and the settled value ships as the de
 
 ## What the default derivation does today
 
-**Status 2026-10-06.** `IntegratedDeriver` is the default for a live derivation, Karoline's decision:
+**Status 2026-10-10: each form has the job it is good at.** `ReplicateDeriver` is the default and is
+what produces a network; `IntegratedDeriver` is what **gLV mode** selects and is the only form that gives
+a gLV coefficient. Karoline: "the default one, when we don't want to do simulations, should be the
+lenient one that allows for drop-out communities... In all our discussions, I always thought that we were
+comparing derivers only for the gLV mode." She also asked that each form's weakness be written down,
+which is what the two paragraphs below are for. **Neither form is the stricter version of the other**,
+and the register should not be read as retiring either.
+
+**Why the 2026-10-06 decision does not settle the default.** That decision was
 "my decision would also be for the integrative form since it has support in publications and is not
 biased by construction. That weights heavier than low coverage on data currently in mGrowthDB. By
-default, grownet should do what is 'correct' i.e. more defensible mathematically." It fits each
-organism's row from its whole time course (#127), so a coefficient is not a difference of two separately
-fitted rates divided by one partner mean, a quantity that carries the organism's own density as a
-confound. Every arc carries the spread of its coefficient, what the fit explains, and the condition
-number; a row whose fit explains less than predicting nothing does is refused.
+default, grownet should do what is 'correct' i.e. more defensible mathematically." The argument is about
+the **coefficient**, and it is correct about the coefficient, which is why gLV mode uses that form. The
+evidence behind it was measured in gLV mode: the comparison table below records its own command,
+`derive SMGDB00000007 --live --glv-mode --derivation <either> --steady-check`, and `--glv-mode` sets
+`no_dropout` on **both** sides. So the table could not see what the integrated form costs a network, and
+the coverage traded away, 30 arcs against 23 in that comparison, is a gLV-mode number. Outside gLV mode
+the same trade is **145 arcs against 12** (whole corpus, live, 2026-10-09).
 
-**Status 2026-09-21, now the alternative (`--derivation replicate`).** `ReplicateDeriver` reads each
+**The integrated form's weakness: two kinds of evidence it cannot express.** It derives no arc from a
+community of three or more, which Craig declined on #127, so **no drop-out arc can exist under it**; and
+it has no no-growth rule at all, so there are **no censored arcs, no measured bounds and no `NA` cells**
+(`grep -c "obligate\|abolished\|no_growth"`: `derive.py` 40, `integrated.py` 0). On the corpus that is
+122 drop-out arcs and 12 censored bounds the default has and it does not. It also needs a time course, so
+a study measured at two or three points yields nothing under it.
+
+**The comparison's weakness: a coefficient confounded by the organism's own density.** A coefficient from
+it is a difference of two separately fitted growth rates divided by one partner mean, and that confound
+is not removed by more replicates. It is why a gLV package should not be built from it, and why gLV mode
+switches forms rather than only switching settings. Its arcs also carry no `se_rate_selection` and no
+`rate_unchecked` caution, both of which are the integrated form's machinery (#155 item 1).
+
+**What the integrated form does.** It fits each organism's row from its whole time course (#127), so a
+coefficient is not a difference of two separately fitted rates divided by one partner mean. Every arc
+carries the spread of its coefficient, what the fit explains, and the condition number; a row whose fit
+explains less than predicting nothing does is refused.
+
+**Status 2026-09-21, and the default again since 2026-10-10.** `ReplicateDeriver` reads each
 replicate's measured curve through `crossfeed.adapter` (#38) and compares replicate sets with
 `crossfeed.interaction.interaction_strength`, the comparison Karoline specified, so the defaults settled
 below are shipped behavior rather than intentions. Every edge carries its mean, `sd`, `se`, replicate
@@ -614,7 +642,7 @@ parameter they had. No R2 comparison is quoted above for that reason.
   **The spread is the sample standard deviation** of the distinct selected rates, dividing by `n - 1`
   (Craig's agent on #177, who asked for the basis to be stated rather than inferred from the function
   name). Which sets a study holds, and which one the matcher paired with each co-culture, is one
-  realisation of a matching that could have gone otherwise, so these rates are a sample rather than the
+  realization of a matching that could have gone otherwise, so these rates are a sample rather than the
   population of rates the organism could have been given. The population form divides by `n` and is
   smaller by `sqrt(n / (n - 1))`, a factor of 1.41 at the minimum `n` of 2, and `se_rate_selection` is
   close to linear in the spread, so this reading is the wider and the more conservative one.

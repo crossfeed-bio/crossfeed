@@ -133,6 +133,13 @@ def _read(rel: str) -> str:
 
 
 def check_default_deriver(problems: list) -> None:
+    """Whether the docs name the deriver the tool actually runs, and no longer name another one.
+
+    A phrase is read as a claim about the **nearest** deriver named within `WINDOW`, not about every
+    deriver in the window. Since 2026-10-10 the two have different jobs, so the sentence a reader needs
+    is "A is the default, B is what gLV mode selects", and both names sit in one paragraph: attributing
+    the phrase to every name in range made that correct sentence unwritable.
+    """
     current = default_deriver()
     retired = [c for c in deriver_classes() if c != current]
     named_somewhere = False
@@ -141,18 +148,23 @@ def check_default_deriver(problems: list) -> None:
         text = _read(rel)
         if not text:
             continue
-        for cls in deriver_classes():
-            for m in re.finditer(re.escape(cls), text):
-                window = text[max(0, m.start() - WINDOW):m.end() + WINDOW]
-                if not ASSERTS_DEFAULT.search(window):
-                    continue
-                line = text[:m.start()].count("\n") + 1
-                if cls == current:
-                    named_somewhere = True
-                elif cls in retired:
-                    problems.append(
-                        f"{rel}:{line}: calls `{cls}` the default, but the tool runs `{current}` when "
-                        f"the reader changes nothing. Say which one ships.")
+        mentions = [(m.start(), m.end(), cls) for cls in deriver_classes()
+                    for m in re.finditer(re.escape(cls), text)]
+        for claim in ASSERTS_DEFAULT.finditer(text):
+            near = [(start, end, cls) for start, end, cls in mentions
+                    if start - WINDOW <= claim.start() and claim.end() <= end + WINDOW]
+            if not near:
+                continue
+            # the one whose name sits closest to the phrase is the one the phrase is about
+            start, _end, cls = min(near, key=lambda x: min(abs(x[0] - claim.end()),
+                                                           abs(claim.start() - x[1])))
+            if cls == current:
+                named_somewhere = True
+            elif cls in retired:
+                line = text[:start].count("\n") + 1
+                problems.append(
+                    f"{rel}:{line}: calls `{cls}` the default, but the tool runs `{current}` when "
+                    f"the reader changes nothing. Say which one ships.")
     if not named_somewhere:
         problems.append(
             f"no doc in {', '.join(DOCS)} names `{current}` as the default, and it is what the tool "

@@ -624,8 +624,26 @@ before you implement one.
 
 ## How the derivation works
 
-`IntegratedDeriver` (`src/grownet/integrated.py`) is the default since 0.3.0. It fits each organism's
-whole row from its time course: `ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt)` is linear in
+**Two derivations, and which one runs when.** `ReplicateDeriver` (`src/grownet/derive.py`) is the default,
+and is what produces a network. `IntegratedDeriver` (`src/grownet/integrated.py`) is what gLV mode
+selects, and is the only form that gives a gLV coefficient. Neither is the stricter version of the
+other; each answers a different question, and each has a weakness the other does not.
+
+**What the comparison cannot do** is give a coefficient that is free of the organism's own density: a
+coefficient from it is a difference of two separately fitted growth rates divided by one partner mean,
+and that confound is not removed by more replicates. That is why gLV mode does not use it.
+
+**What the integrated form cannot do** is express two kinds of evidence a network rests on. It derives no
+arc from a community of three or more, so no **drop-out** arc exists under it; and it has no no-growth
+rule, so there are no **censored** arcs, no measured bounds and no `NA` cells. On the whole of mGrowthDB
+the comparison gives 145 arcs, 122 of them drop-out, with 12 censored bounds; the integrated form gives
+12 arcs and no bounds (measured 2026-10-09). That is why it is not the default.
+
+It was the default between 0.3.0 and 0.4.0. The comparison that chose it was run in gLV mode, where
+drop-out communities are off on both sides, so it measured the two forms on the question gLV mode asks
+and not on what a network loses (Karoline, 2026-10-10).
+
+`IntegratedDeriver` fits each organism's whole row from its time course: `ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt)` is linear in
 the parameters, so one regression per organism gives its growth rate, its own self-limitation and every
 partner's per-capita coefficient together, in the units a gLV simulation reads. It is fitted in two
 stages, the monocultures first and then the co-cultures, because a single joint fit inside one experiment

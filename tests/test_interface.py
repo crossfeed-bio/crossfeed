@@ -837,6 +837,8 @@ def test_glv_mode_on_the_command_line_sets_the_same_settings(capsys, monkeypatch
     assert captured["settings"]["include_dropout"] is False
     assert captured["settings"]["metric"] == "growth_rate"           # #119: L is a ratio of rates
     assert captured["settings"]["rate_method"] == "easylinear"      # hers, not the mode's
+    # and the form a coefficient should be fitted by, which is what the mode is for (2026-10-10)
+    assert captured["settings"]["derivation"] == "integrated"
 
 
 def test_the_page_and_the_command_line_mean_the_same_by_glv_mode():
@@ -844,9 +846,14 @@ def test_the_page_and_the_command_line_mean_the_same_by_glv_mode():
     from grownet.gui import DEFAULTS, glv_mode
     applied = glv_mode(dict(DEFAULTS))
     assert applied["report_rates"] is True and applied["include_dropout"] is False
-    # the two Karoline named, and the two the coefficients of #119 need; nothing else moves
+    # the two Karoline named, the metric the coefficients of #119 need, and the derivation that fits a
+    # coefficient rather than dividing a difference of two rates by one partner mean (2026-10-10);
+    # nothing else moves
     assert {k: v for k, v in applied.items() if DEFAULTS[k] != v} == {
-        "report_rates": True, "include_dropout": False, "metric": "growth_rate"}
+        "report_rates": True, "include_dropout": False, "metric": "growth_rate",
+        "derivation": "integrated"}
+    # and pressing it again puts every one of them back, the derivation included
+    assert glv_mode(applied, on=False) == dict(DEFAULTS)
 
 
 def test_the_name_is_never_styled_where_a_command_is_meant():

@@ -6,6 +6,46 @@ content.
 
 ## [Unreleased]
 
+### Upgrading
+- **The default derivation is the specified comparison again, and gLV mode selects the integrated form**
+  (Karoline, 2026-10-10: "the default one, when we don't want to do simulations, should be the lenient
+  one that allows for drop-out communities... In all our discussions, I always thought that we were
+  comparing derivers only for the gLV mode"). **Every network a reader derives without gLV mode changes,
+  and almost all of them grow.** On the whole of mGrowthDB the default goes from **12 arcs to 145**, of
+  which **122 are drop-out arcs**, over 24 organisms instead of 9, with **12 censored arcs and their
+  measured bounds** where there were none.
+
+  The reason is not that one form is better. Each answers a different question and **neither is the
+  stricter version of the other**, which is now written down for both. The integrated form derives no arc
+  from a community of three or more, which Craig declined on #127, so no drop-out arc can exist under it,
+  and it has no no-growth rule, so no censored arc, no measured bound and no `NA` cell. The comparison's
+  own weakness is the one that made the integrated form the default in 0.3.0, and it is unchanged and
+  still decisive **for a coefficient**: a coefficient from the comparison is a difference of two
+  separately fitted rates divided by one partner mean, carrying the organism's own density as a confound.
+  So a gLV package is still built by the integrated form, and gLV mode now switches the derivation as
+  well as the three settings it already switched.
+
+  **What changed is which evidence was weighed.** The comparison that chose the 0.3.0 default records its
+  own command, `derive SMGDB00000007 --live --glv-mode --derivation <either> --steady-check`, and
+  `--glv-mode` turns drop-out communities off on **both** sides, so it measured the two forms on the
+  question gLV mode asks. The coverage cost it weighed, 30 arcs against 23, is a gLV-mode number; outside
+  gLV mode the same trade is 145 against 12.
+
+  **To keep 0.3.0's behavior**, pass `--derivation integrated`, or press gLV mode on the page. Arcs from
+  the comparison carry no `se_rate_selection` and no `rate_unchecked` caution, which are the integrated
+  form's machinery; they carry `se`, `sd`, `p_value`, `q_value` and `effect_over_sd` from Welch's t-test
+  as they always have.
+
+### Fixed
+- **A network said the two derivations "can be read together"**, in `meta.provisional`, which travels into
+  the report, GraphML and every file. They are on the same scale and they are not interchangeable: one
+  gives drop-out and censored arcs and the other gives coefficients, and the sentence now says so.
+- **The claims gate could not express "A is the default, B is not"**. It read a phrase such as "is the
+  default" as a claim about **every** deriver named within 200 characters, so the one sentence a reader
+  now needs, naming both forms and their jobs, was unwritable without tripping it. A phrase is attributed
+  to the **nearest** deriver mention instead. The gate caught this change's own documentation drift
+  first, which is what it is for.
+
 ## [0.3.0] (2026-10-09)
 
 ### Upgrading
@@ -81,7 +121,7 @@ content.
   least one the implied mismatch is growth that depends on the partner. No live arc meets that condition
   today. The spread is the **sample** standard deviation of those rates, which the field description and
   the method notes now say rather than leaving it to the choice of function (Craig's agent on #177): which
-  sets a study holds and which one each arc was matched to is one realisation of a matching, so they are a
+  sets a study holds and which one each arc was matched to is one realization of a matching, so they are a
   sample rather than the whole population, and the population form would be narrower by a factor of 1.41
   where two sets were selected.
 - **Every growth rate is published with the doubling time it implies** (#173, Karoline on 2026-10-08).
@@ -306,7 +346,7 @@ content.
   standalone viewer, which preserves unknown top-level fields on export, could write a file the schema
   rejected. Both halves are permissive now, which is what the schema's own sentence promises. An
   undeclared key is a **note** rather than a problem: calling it a problem also skipped the
-  referential-integrity pass, which runs only when there are none, so one unrecognised field turned off
+  referential-integrity pass, which runs only when there are none, so one unrecognized field turned off
   the check that catches an edge citing a study the document does not hold.
 - **The decline limit did not reach the co-culture plateau** (#155 item 10). `derive.target_capacity` is
   the other place a plateau becomes a self-limitation and was the only one that did not refuse a curve

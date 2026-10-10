@@ -8,25 +8,35 @@ import os
 
 from test_gui import _query
 
-from grownet.gui import DEFAULTS, parse_settings, render_form
+from grownet.gui import DEFAULTS, glv_mode, parse_settings, render_form
 
 
-def test_the_derivation_defaults_to_the_integrated_form():
-    """Karoline, 2026-10-06, choosing it as the default: "my decision would also be for the integrative
-    form since it has support in publications and is not biased by construction. That weights heavier
-    than low coverage on data currently in mGrowthDB. By default, grownet should do what is 'correct'
-    i.e. more defensible mathematically." The specified comparison stays as the alternative and keeps
-    everything it had."""
-    assert DEFAULTS["derivation"] == "integrated"
-    assert parse_settings({"derivation": ["replicate"]})["derivation"] == "replicate"
-    assert parse_settings({"derivation": ["nonsense"]})["derivation"] == "integrated"
+def test_the_derivation_defaults_to_the_comparison_and_glv_mode_selects_the_integrated_form():
+    """Karoline, 2026-10-10: "the default one, when we don't want to do simulations, should be the lenient
+    one that allows for drop-out communities... I always thought that we were comparing derivers only for
+    the gLV mode."
+
+    She is right about the record: the table that chose the integrated form was measured with
+    `--glv-mode`, which turns drop-out communities off on both sides, so it could not see that the
+    integrated form derives no drop-out arc at all. On the corpus that is 145 arcs against 12, and 12
+    censored bounds against none.
+
+    Her decision of 2026-10-06 keeps its force where it was argued, which is the coefficient: "my
+    decision would also be for the integrative form since it has support in publications and is not
+    biased by construction." So gLV mode selects it, and nothing else does.
+    """
+    assert DEFAULTS["derivation"] == "replicate"
+    assert glv_mode({})["derivation"] == "integrated"
+    assert glv_mode(glv_mode({}), on=False)["derivation"] == "replicate"      # the button toggles back
+    assert parse_settings({"derivation": ["integrated"]})["derivation"] == "integrated"
+    assert parse_settings({"derivation": ["nonsense"]})["derivation"] == "replicate"
 
 
 def test_the_setting_is_in_advanced_settings_with_both_choices():
     page = render_form("tok")
     settings = page[page.index("<details>"):]
     assert 'name="derivation"' in settings
-    assert '<option value="integrated" selected>' in settings and 'value="replicate"' in settings
+    assert '<option value="replicate" selected>' in settings and 'value="integrated"' in settings
     assert "whole time course" in " ".join(settings.split())      # the muted text wraps in the source
 
 
@@ -51,7 +61,8 @@ def test_the_command_line_has_the_same_choice():
     options = {o for action in derive._actions for o in action.option_strings}
     assert "--derivation" in options
     action = next(a for a in derive._actions if a.dest == "derivation")
-    assert action.default == "integrated" and set(action.choices) == {"replicate", "integrated"}
+    assert action.default == "replicate" and set(action.choices) == {"replicate", "integrated"}
+    assert action.default == DEFAULTS["derivation"], "the page and the command line must agree"
 
 
 def test_the_choice_reaches_the_derivation_on_the_one_study_command(monkeypatch):
