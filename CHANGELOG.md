@@ -79,6 +79,12 @@ content.
 - **A network said the two derivations "can be read together"**, in `meta.provisional`, which travels into
   the report, GraphML and every file. They are on the same scale and they are not interchangeable: one
   gives drop-out and censored arcs and the other gives coefficients, and the sentence now says so.
+- **The claims gate had no test at all**, before or after its attribution rule was rewritten here
+  (pointed out reviewing #199). It has one now, covering the five shapes that matter against a tree the
+  test builds rather than against today's documents, including the case the rewrite loses: an appositive,
+  where the retired deriver is the subject of the claim and the shipped one sits nearer the phrase. That
+  one is recorded as a known hole rather than left to be discovered, and the test fails if the previous
+  attribution returns.
 - **The claims gate could not express "A is the default, B is not"**. It read a phrase such as "is the
   default" as a claim about **every** deriver named within 200 characters, so the one sentence a reader
   now needs, naming both forms and their jobs, was unwritable without tripping it. A phrase is attributed
