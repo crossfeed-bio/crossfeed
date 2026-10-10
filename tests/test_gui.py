@@ -340,6 +340,34 @@ def test_the_example_button_fills_the_box_with_species_that_work(server):
         assert "interaction(s)" in r.read().decode("utf-8")
 
 
+def test_the_example_puts_every_setting_back_to_its_default(server):
+    """The Example shows what the tool does with nothing changed, so it cannot inherit a mode.
+
+    It used to carry the posted settings through, and the two buttons beside it set some: after gLV mode
+    the example ran with drop-out communities off, and after the gLV example with that example's study
+    still in the second box. Either gave an empty network and the page said nothing about why
+    (Karoline, 2026-10-09).
+    """
+    base, token = server
+    pressed = urllib.parse.urlencode({
+        "species": "", "example": "1",
+        # what gLV mode leaves behind, and what the gLV example leaves in the second box
+        "report_rates": "1", "metric": "growth_rate", "conditions": "SMGDB00000002",
+        # and an ordinary setting a user may have changed
+        "absence_threshold": "3",
+    }).encode()
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=pressed, timeout=10) as r:
+        page = r.read().decode("utf-8")
+
+    assert 'aria-pressed="false"' in page                      # gLV mode off
+    assert "SMGDB00000002" not in page                         # the second box is empty again
+    assert 'name="absence_threshold" type="text" size="6" value="1.0"' in page   # not the 3 posted
+    assert '<option value="auc" selected' in page              # the default growth property
+    assert "checked" in page.split('name="include_dropout"')[1][:90]   # drop-out communities back on
+    for name in gui.EXAMPLE:
+        assert name in page
+
+
 def test_the_about_button_names_the_builders_as_agreed_and_links_the_repository(server):
     base, token = server
     assert f'href="/about?token={token}"' in _get(f"{base}/help?token={token}")    # on every page

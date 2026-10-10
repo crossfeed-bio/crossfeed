@@ -586,7 +586,8 @@ QA = (
      "Press Ctrl+C in the terminal where it runs."),
 )
 
-EXAMPLE_CLI = (f'{COMMAND} derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica" '
+EXAMPLE_CLI = (f'{COMMAND} derive --live --species "Faecalibacterium duncaniae" '
+               '"Blautia hydrogenotrophica" "Roseburia intestinalis" '
                '--out example.json --report example_report.txt --to-cytoscape')
 
 
