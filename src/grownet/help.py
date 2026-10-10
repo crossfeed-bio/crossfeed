@@ -823,9 +823,10 @@ obligate or abolished when the target did not grow on one side, since there is t
 (<code>p_value</code>). Which test depends on the derivation and the network says so in its
 <code>meta.statistics</code>: the comparison of replicate sets runs Welch's two-sided t-test on the
 per-replicate log2 values, and the integrated form, which compares no sets, tests its fitted log2
-strength against no effect over a standard error carrying both the co-culture replicates and the
-monoculture stage. The p-values are adjusted for
-multiple testing over every comparison one search tests: every arc of every study the search reads,
+strength against no effect over a standard error carrying the co-culture replicates, the
+monoculture stage, and the spread of the selected monoculture rates where there was more than one.
+The p-values are adjusted for multiple testing over every comparison one search tests: every arc of
+every study the search reads,
 absent and low-quality ones included, with Benjamini-Hochberg by default or Benjamini-Yekutieli
 (Multiple testing correction). The result is the <strong>adjusted p-value, which is what a q-value is</strong>:
 the file calls it <code>q_value</code> and the result table's column is headed q. The two names mean the

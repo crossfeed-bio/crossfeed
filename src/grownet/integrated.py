@@ -935,11 +935,16 @@ class IntegratedDeriver:
     needs_client = True
     # this form runs no Welch test and compares no replicate sets, so it says what it does run (#142
     # item 5). The t statistic is the one `_arc_statistics` builds: the mean of the per-replicate log2
-    # strengths over a standard error that carries the co-culture replicates and the monoculture stage.
+    # strengths over a standard error that carries the co-culture replicates, the monoculture stage and
+    # the spread of the selected monoculture rates. Saying "two components" here outlived #155 item 1,
+    # which added the third: on the corpus 6 of 12 arcs carried it and on one it was 83 per cent of the
+    # variance, while this sentence travels into the report, GraphML and every file (#202).
     statistics = {
         "test": "two-sided t-test of the fitted log2 strength against no effect, over a standard error "
-                "with two components: the co-culture replicates, and the monoculture stage resampled "
-                "over its own replicates (Satterthwaite degrees of freedom)",
+                "with up to three components: the co-culture replicates, the monoculture stage resampled "
+                "over its own replicates, and the spread of the monoculture rates the condition matcher "
+                "selected, where an organism had more than one (Satterthwaite degrees of freedom over "
+                "whichever are present)",
         "correction": "{name} over every comparison tested in this derivation",
         "role": "reported as support for an edge; presence is decided by the absence threshold",
     }
@@ -951,8 +956,9 @@ class IntegratedDeriver:
         "reports, though the two are not interchangeable: this form derives no arc from a community of "
         "three or more, so no drop-out arc, and it has no no-growth rule, so no censored arc and no "
         "measured bound. An interaction is reported when |mean| is at least "
-        "k standard deviations (the absence threshold, default 1), where the dispersion carries both the "
-        "co-culture replicates and the monoculture stage. The t-test, corrected for multiple testing, is "
+        "k standard deviations (the absence threshold, default 1), where the dispersion carries the "
+        "co-culture replicates, the monoculture stage, and the spread of the selected monoculture rates "
+        "where there was more than one. The t-test, corrected for multiple testing, is "
         "shown as supporting evidence and does not decide; with few replicates, more experiments may "
         "change any of these results (see docs/METHOD_NOTES.md in the grownet repository)."
     )
@@ -1527,7 +1533,7 @@ def _strength_mean_at(rows: list, rate: float, at_rate: float):
 
 
 def _arc_statistics(got: dict, cocultures: list, partner: str, rate_selection: dict = None) -> dict:
-    """What an arc publishes about one partner's effect, with both sources of error in it.
+    """What an arc publishes about one partner's effect, with every source of error in it.
 
     {"n", "strength", "sd", "se", "se_replicates", "se_rate_stage", "p_value", "df",
      "coefficient_sd", "coefficient_sd_from_rate_stage", "per_replicate"}.

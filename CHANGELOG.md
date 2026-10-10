@@ -37,6 +37,18 @@ content.
   as they always have.
 
 ### Fixed
+- **The integrated form told every reader its standard error had two components, and it has had three
+  since #155 item 1.** `_arc_statistics` returns `se_replicates`, `se_rate_stage` and
+  `se_rate_selection`, and takes Satterthwaite degrees of freedom over whichever are present, so the
+  third was being computed, published in the fields and omitted from the sentence that describes them.
+  The spread of the selected monoculture rates is not a footnote: on the corpus 6 of 12 arcs carried it,
+  and on one it was 83 per cent of the variance. **The claim stood in four places**, the `statistics`
+  description, the `provisional` sentence, `_arc_statistics`'s own docstring and the help page and README,
+  and the first two travel into `meta`, the report header, GraphML and every exported file, so a reader
+  met the wrong count before meeting any document. All four now say up to three and name the component,
+  and two tests hold them there: one reads the strings the deriver publishes, the other reads every
+  surface that describes the test to a reader, because what let this stand for two days was fixing one
+  copy and not reading the file.
 - **`derive --all --live` could answer with a network derived the other way.** The daily artifact is
   accepted on its format, its schema id and its age, and none of those can see which derivation filled
   the fields: a format id moves when a **field** changes meaning, and the derivation is not a field. So a

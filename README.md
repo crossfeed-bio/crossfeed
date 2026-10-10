@@ -699,7 +699,8 @@ Single-replicate edges are the exception: they are shown, flagged, and marked by
 Each comparison with at least two replicates per side is also tested, with the test its derivation runs
 and `meta.statistics` names: Welch's t-test on the per-replicate log2 values for the specified comparison,
 and for the integrated form, which compares no sets, its fitted log2 strength against no effect over a
-standard error carrying both the co-culture replicates and the monoculture stage. It is reported as
+standard error carrying the co-culture replicates, the monoculture stage and the spread of the
+selected monoculture rates where there was more than one. It is reported as
 `p_value`, as `q_value` (the correction over every comparison tested in the
 derivation, Benjamini-Hochberg by default, in `meta.statistics`) and as `significance`, which is
 `-log10(q_value)`. The test supports an edge when significant and decides nothing unless
