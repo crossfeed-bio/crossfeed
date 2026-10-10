@@ -357,7 +357,12 @@ class MGrowthDBClient:
                 if attempt == 1:
                     raise
                 continue                          # a kept-open connection the server had closed: reopen
-            if response.status >= 400:
+            if not 200 <= response.status < 300:
+                # anything that is not a representation: a 3xx above all. `http.client` does not follow
+                # redirects, unlike the `urllib.request` opener this replaced, so the body is empty and
+                # it used to reach `json.loads`, where the command line reported it as the user's own
+                # file being invalid JSON, with the exit code for a user error and no status on the
+                # error at all (RFC 9110 section 15.4; 2026-10-10)
                 raise _Status(response.status, response.reason)
             return body
         raise OSError("unreachable")               # not reached
@@ -370,6 +375,12 @@ class MGrowthDBClient:
             try:
                 return self._send(url, accept)
             except _Status as e:
+                if e.code < 400:
+                    # a redirect or anything else that is not a representation: not the reader's mistake
+                    # and not a server fault, so it is neither retried nor blamed on the id
+                    raise MGrowthDBError(
+                        f"mGrowthDB answered HTTP {e.code} for {url}, which is not a reply this client "
+                        f"follows (the API may have moved; API docs: {API_DOCS})", status=e.code) from None
                 if e.code < 500:
                     raise MGrowthDBError(
                         f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})",
@@ -422,7 +433,12 @@ class MGrowthDBClient:
         if self._mem is not None and url in self._mem:
             return self._mem[url]
         data = json.loads(self._request(url, "application/json").decode("utf-8"))
-        uploaded = data.get("uploadedAt", "")
+        # `or None` on purpose: a study with no stamp, or a blank one, is the study whose version
+        # nothing can establish, and it used to be the one cached hardest. `""` compared equal to itself
+        # on every later run, so `_stale` said current forever and a revised study was never re-read.
+        # None is what the rest of this already treats as "not checked", and nothing is kept for it
+        # (2026-10-10).
+        uploaded = data.get("uploadedAt") or None
         with self._index_lock:
             self.fetched += 1
             self._uploaded[study_id] = uploaded

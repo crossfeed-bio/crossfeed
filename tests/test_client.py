@@ -430,3 +430,79 @@ def test_every_count_a_reader_is_shown_is_made_under_the_lock(tmp_path):
             assert (c.fetched, c.reused) == (expected_reads, expected_kept)
     finally:
         httpd.shutdown()
+
+
+def test_a_study_with_no_uploadedAt_is_never_served_from_the_cache(tmp_path):
+    """The whole feature rests on `uploadedAt`: a response may be reused only while the study's stamp is
+    unchanged. A study that carries no stamp cannot answer that question, and it used to be cached
+    hardest of all: `data.get("uploadedAt", "")` made the stamp `""`, which compares equal to itself on
+    every later run, so `_stale` said current forever and a revised study was never read again
+    (2026-10-10).
+
+    `null` was already safe, because `.get` returned None and an unknown stamp is never served from. A
+    missing key and a blank string now behave the same way.
+    """
+    class _NoStamp(http.server.BaseHTTPRequestHandler):
+        value = {"n": 1000}
+        seen: list = []
+
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            _NoStamp.seen.append(self.path)
+            if self.path.endswith("/study/S1.json"):
+                body = json.dumps({"id": "S1", "experiments": [{"id": "E1"}]}).encode()   # no uploadedAt
+            elif self.path.endswith("/experiment/E1.json"):
+                body = json.dumps({"id": "E1", "studyId": "S1", "value": _NoStamp.value["n"]}).encode()
+            else:
+                self.send_error(404)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    _NoStamp.seen, _NoStamp.value = [], {"n": 1000}
+    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _NoStamp)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{httpd.server_address[1]}/api/v1"
+    try:
+        first = MGrowthDBClient(base_url=base, cache_dir=str(tmp_path))
+        first.get_study("S1")
+        assert first.get_experiment("E1")["value"] == 1000
+
+        _NoStamp.value["n"] = 9999            # the study is revised upstream
+        _NoStamp.seen = []
+        second = MGrowthDBClient(base_url=base, cache_dir=str(tmp_path))
+        second.get_study("S1")
+        assert second.get_experiment("E1")["value"] == 9999, "a stampless study was served from the cache"
+        assert second.reused == 0
+        assert [p.rsplit("/", 1)[-1] for p in _NoStamp.seen] == ["S1.json", "E1.json"]
+    finally:
+        httpd.shutdown()
+
+
+def test_a_reply_that_is_not_a_representation_is_an_mgrowthdb_error(monkeypatch):
+    """`_send` used to raise only on 4xx and 5xx, so a 3xx body, which is empty because `http.client`
+    does not follow redirects, reached `json.loads`. The command line has no handler for that and told
+    the user their own file was not valid JSON, with the exit code for a user error and no status on the
+    error (2026-10-10). RFC 9110 section 15.4: a 3xx means further action is needed, not a
+    representation.
+    """
+    for code in (301, 302, 304, 100):
+        _sending(monkeypatch, [m._Status(code, "Moved")])
+        c = MGrowthDBClient(retries=3, backoff=0, cache_dir=None)
+        with pytest.raises(MGrowthDBError) as raised:
+            c.get_study("S")
+        assert raised.value.status == code, "the status has to survive, so a caller can tell cases apart"
+        assert str(code) in str(raised.value)
+        assert "check the id" not in str(raised.value)      # it is not the reader's mistake
+
+    # and it is not retried: a redirect does not become a representation by asking again
+    calls = []
+    _sending(monkeypatch, [m._Status(301, "Moved")], calls)
+    with pytest.raises(MGrowthDBError):
+        MGrowthDBClient(retries=3, backoff=0, cache_dir=None).get_study("S")
+    assert len(calls) == 1

@@ -7,6 +7,26 @@ content.
 ## [Unreleased]
 
 ### Fixed
+- **A download could hand over a different search's network** (#189). Every output a reader takes away
+  (the four download formats, the report, the rates, the gLV package, Send to Cytoscape) is looked up by
+  the `job` in the request, and a request naming a search the server no longer had fell through to the
+  **most recently viewed** result instead. The page refused the same id and said so, while the download did not:
+  HTTP 200, the ordinary filename, and somebody else's matrix inside. Searches are pruned after twenty
+  (`KEPT_JOBS`), so a tab left open while you work in another meets it without doing anything unusual. A
+  request that names a search the server cannot produce is now refused, with the same words the page
+  uses; naming no search at all still means the latest one, which is what that fallback is for.
+- **A study with no `uploadedAt` was cached forever** (#190). The stamp was read with
+  `data.get("uploadedAt", "")`, so a missing or blank one became `""`, which compares equal to itself on
+  every later run: the freshness check said "current" forever and a revised study was never read again.
+  The guarantee the whole cache rests on was satisfied vacuously, and for exactly the studies whose
+  version nothing can establish. `null` was already safe; a missing key and a blank string now behave the
+  same way, and nothing is kept for such a study.
+- **A redirect from mGrowthDB was read as a growth curve** (#191). `_send` raised only on 4xx and 5xx, and
+  `http.client` does not follow redirects as the `urllib.request` opener it replaced did, so a 3xx body,
+  which is empty, reached `json.loads`. The command line has no handler for that and told the user **their
+  own file** was not valid JSON, with the exit code for a user error and no status on the error. Anything
+  that is not a representation now raises the client's own error, carrying its status, and it is not
+  retried, since a redirect does not become a representation by asking again.
 - **The page's Example gave an empty network** (Karoline, 2026-10-09, the day 0.3.0 was released). Two
   causes, both of them in the button rather than in the derivation.
   **It inherited whatever settings were in the form.** Pressing gLV mode and then Example ran the example
