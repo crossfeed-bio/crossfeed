@@ -639,7 +639,7 @@ rule, so there are no **censored** arcs, no measured bounds and no `NA` cells. O
 the comparison gives 145 arcs, 122 of them drop-out, with 12 censored bounds; the integrated form gives
 12 arcs and no bounds (measured 2026-10-09). That is why it is not the default.
 
-It was the default between 0.3.0 and 0.4.0. The comparison that chose it was run in gLV mode, where
+It was the default for one release, 0.3.0. The comparison that chose it was run in gLV mode, where
 drop-out communities are off on both sides, so it measured the two forms on the question gLV mode asks
 and not on what a network loses (Karoline, 2026-10-10).
 

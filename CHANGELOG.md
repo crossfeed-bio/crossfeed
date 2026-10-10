@@ -37,6 +37,22 @@ content.
   as they always have.
 
 ### Fixed
+- **The default derivation said nothing about its own two limits**, in the sentence that travels into
+  every report header, into GraphML and into a methods section. It named neither while it was the
+  alternative; as the default again it reaches every reader, and 122 of the 145 arcs on the live corpus
+  come from a drop-out design. `meta.provisional` now says that a drop-out arc means the removed member
+  affects the target **directly or through the others**, and that a coefficient from this comparison
+  carries the organism's own density as a confound, which is why gLV mode fits the row instead.
+- **`docs/LIMITATIONS.md` described the other derivation**, and promised fields the shipped default never
+  writes: `rate_mismatch_to_zero`, `se_rate_selection` and the `rate_unchecked` caution are on **0 of the
+  default's 145 arcs**, and `partner_abundance` on 23 of 145 rather than all of them, because a drop-out
+  comparison has no single partner whose level the effect is per unit of. Entries 1 and 4 say which
+  derivation they are about and what the default carries instead. **The claims gate could not see that
+  file at all** (`DOCS` in `checks/claims_check.py`), so the one document whose job is to name weaknesses
+  was the one nothing checked; it is in the list now.
+- **Five statements still called the integrated form the default**, including two in the R package's
+  shipped help, which a reader meets as `?glv_matrix`, and one that contradicted itself inside a single
+  sentence in `ReplicateDeriver`'s own docstring.
 - **A network said the two derivations "can be read together"**, in `meta.provisional`, which travels into
   the report, GraphML and every file. They are on the same scale and they are not interchangeable: one
   gives drop-out and censored arcs and the other gives coefficients, and the sentence now says so.
@@ -45,7 +61,6 @@ content.
   now needs, naming both forms and their jobs, was unwritable without tripping it. A phrase is attributed
   to the **nearest** deriver mention instead. The gate caught this change's own documentation drift
   first, which is what it is for.
-### Fixed
 - **The page's Example gave an empty network** (Karoline, 2026-10-09, the day 0.3.0 was released). Two
   causes, both of them in the button rather than in the derivation.
   **It inherited whatever settings were in the form.** Pressing gLV mode and then Example ran the example

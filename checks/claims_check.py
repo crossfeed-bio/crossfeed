@@ -37,8 +37,12 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# The docs a reader meets before they read any code.
-DOCS = ("README.md", "docs/METHOD_NOTES.md", "docs/agents/NOTES.md", "CONTRIBUTING.md")
+# The docs a reader meets before they read any code. `docs/LIMITATIONS.md` is here because it was not:
+# when the default derivation changed, the one document whose whole job is to name the tool's weaknesses
+# went on describing the other form's, and promising fields the shipped default never writes, while this
+# gate passed (2026-10-10).
+DOCS = ("README.md", "docs/METHOD_NOTES.md", "docs/agents/NOTES.md", "CONTRIBUTING.md",
+        "docs/LIMITATIONS.md")
 
 # Phrases that assert something is the current default, rather than mentioning it.
 ASSERTS_DEFAULT = re.compile(

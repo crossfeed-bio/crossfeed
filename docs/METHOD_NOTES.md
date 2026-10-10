@@ -628,7 +628,9 @@ parameter they had. No R2 comparison is quoted above for that reason.
   `rate_selection_spread` beside it), reaching `se`, `sd`, `p_value` and the Satterthwaite degrees of
   freedom and nothing else: `strength`, the effect and the status stay as fitted. No number comes from the
   reader.
-  **Measured consequences** (live corpus, the default derivation, 2026-10-08): 9 of 16 arcs widen;
+  **Measured consequences** (live corpus, the integrated form, which was the default when this was
+  measured and is gLV mode's since 2026-10-10; the comparison carries no `se_rate_selection` at all,
+  2026-10-08): 9 of 16 arcs widen;
   `q < 0.05` goes from 3 arcs to 2; no arc changes status. Two arcs' p-values fall very slightly
   (0.01839 to 0.01817, 0.0001793 to 0.0001271) because a small third component raises the Satterthwaite
   degrees of freedom more than it raises the variance, which is how that formula behaves and is worth
