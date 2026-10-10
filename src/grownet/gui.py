@@ -1070,6 +1070,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
 # searches kept for their pages, downloads and reports: the latest ones only, so a page left open all day
 # does not keep every result in memory (code review of 2026-09-28)
 GONE = "That search is no longer here; run it again."
+RUNNING = "That search is still running; this will be ready when it finishes."
 KEPT_JOBS = 20
 # the species list (and All's list of studies) is read again after this many seconds, so a study published
 # while the page runs is found without a restart (code review of 2026-09-28)
@@ -1162,8 +1163,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         return result
 
     def _gone(self, query: dict, otherwise: str) -> str:
-        """Why there is nothing to give back: a search that is gone, or none run yet."""
-        return GONE if query.get("job", [""])[0] else otherwise
+        """Why there is nothing to give back: a search still running, one that is gone, or none run yet.
+
+        A search that has not finished is refused for the same reason as one that is gone, since there is
+        nothing to hand over either way, but it must not be told to run again: it is running, and saying
+        so sends a reader to repeat work that is already under way (found reviewing #205, 2026-10-10).
+        """
+        named = query.get("job", [""])[0]
+        if not named:
+            return otherwise
+        job = self.state.get("jobs", {}).get(named)
+        return RUNNING if job and job.get("status") == "running" else GONE
 
     def _download(self, fmt: str, query: dict):
         result = self._result(query)

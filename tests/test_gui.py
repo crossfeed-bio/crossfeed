@@ -396,6 +396,24 @@ def test_a_download_for_a_search_the_server_lost_is_refused_not_substituted(serv
     assert gone not in _get(f"{base}/download?token={token}&format=matrix")
 
 
+def test_a_search_still_running_is_not_told_to_run_again():
+    """Refusing is right either way, since there is nothing to hand over, but "no longer here; run it
+    again" sends a reader to repeat work already under way. `status` takes two values in `gui.py`,
+    `running` and `done` (found reviewing #205, 2026-10-10)."""
+    from grownet.gui import GONE, RUNNING, _Handler
+
+    class _Probe:
+        state = {"jobs": {"run1": {"status": "running"}, "done1": {"status": "done"}}}
+        _gone = _Handler._gone
+
+    probe = _Probe()
+    assert probe._gone({"job": ["run1"]}, "nothing yet") == RUNNING
+    assert "run it again" not in RUNNING and "still running" in RUNNING
+    assert probe._gone({"job": ["done1"]}, "nothing yet") == GONE   # finished, but not the one served
+    assert probe._gone({"job": ["never heard of it"]}, "nothing yet") == GONE
+    assert probe._gone({}, "nothing yet") == "nothing yet"          # no job named: the plain case
+
+
 def test_the_about_button_names_the_builders_as_agreed_and_links_the_repository(server):
     base, token = server
     assert f'href="/about?token={token}"' in _get(f"{base}/help?token={token}")    # on every page
