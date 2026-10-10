@@ -368,6 +368,34 @@ def test_the_example_puts_every_setting_back_to_its_default(server):
         assert name in page
 
 
+def test_a_download_for_a_search_the_server_lost_is_refused_not_substituted(server):
+    """It used to answer with the most recently viewed result instead: HTTP 200, the ordinary filename,
+    and another search's network inside, while the page for the same job id said the search was gone.
+    `KEPT_JOBS` prunes after twenty searches, so a tab left open meets it without typing anything odd
+    (2026-10-10).
+
+    Every output a reader can take away goes through the same lookup, so each is checked here.
+    """
+    base, token = server
+    # one real search, so there IS a most recent result to be substituted
+    data = urllib.parse.urlencode({"species": f"{A}\n{B}", "only_entered": "1"}).encode()
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
+        assert "interaction(s)" in r.read().decode("utf-8")
+
+    gone = "That search is no longer here"
+    # the page already refused it; these are the routes that did not
+    assert gone in _get(f"{base}/?token={token}&job=deadbeef")
+    for route in ("/download?format=matrix", "/download?format=json", "/download?format=graphml",
+                  "/report.txt"):
+        sep = "&" if "?" in route else "?"
+        page = _get(f"{base}{route}{sep}token={token}&job=deadbeef")
+        assert gone in page, f"{route} answered with something for a search it does not have"
+        assert "," not in page.split("\n")[0] or "<" in page, f"{route} looks like a network, not a refusal"
+
+    # and naming no job at all still means the latest search, which is what the fallback is for
+    assert gone not in _get(f"{base}/download?token={token}&format=matrix")
+
+
 def test_the_about_button_names_the_builders_as_agreed_and_links_the_repository(server):
     base, token = server
     assert f'href="/about?token={token}"' in _get(f"{base}/help?token={token}")    # on every page
