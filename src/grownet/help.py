@@ -145,10 +145,12 @@ SETTINGS = {
                         "the target, directly or through other members, so it is labeled evidence dropout, "
                         "and the gLV mode button unticks it: a gLV coefficient is meant to be the direct "
                         "effect of one organism on another, which an arc that may act through a third "
-                        "species is not. It applies to the comparison of replicate sets only: the default "
-                        "derivation refuses a community of three or more members, since fitting a row "
-                        "inside one is a new kind of evidence and needs a decision first, so with it this "
-                        "setting changes nothing either way and the report says so."),
+                        "species is not. It governs the default derivation, where it decides most of the "
+                        "network: on the live corpus, with it the All network holds 145 arcs over 24 "
+                        "organisms and without it 23 arcs over 11, because 122 of those arcs are "
+                        "drop-out arcs. It changes nothing under the integrated form, which gLV mode "
+                        "selects: that one refuses a community of three or more members, since fitting a "
+                        "row inside one is a new kind of evidence and needs a decision first."),
     "include_non_batch": ("Include chemostat and serial dilution experiments", "--include-non-batch",
                           "What a continuous culture can be compared on depends on the growth measure. With "
                           "max it is derived without this setting: the level such a culture settles at is "

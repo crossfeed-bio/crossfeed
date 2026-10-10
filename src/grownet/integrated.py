@@ -1033,7 +1033,12 @@ class IntegratedDeriver:
                                 "(see the open decisions in docs/METHOD_NOTES.md)"))
 
         study_id = study.get("id")
-        study_meta = {"study_citation": study.get("citation", ""), "study_license": study.get("license", ""),
+        # `name` is what mGrowthDB calls the study's title; it has no `citation` key and never had, so
+        # this read an absent field and every study lost its citation on this path, in the JSON, the
+        # report's "cite the studies behind the edges you use" block and the page's Sources. The
+        # comparison reads `name` (derive.py:1349); these two must stay the same (2026-10-10).
+        study_meta = {"study_citation": study.get("name") or study.get("id", ""),
+                      "study_license": study.get("license", ""),
                       "study_url": study.get("url", "")}
         for exp, members, reps in communities:
             # the strict label, so an arc says which altered medium it was measured in and the capacity

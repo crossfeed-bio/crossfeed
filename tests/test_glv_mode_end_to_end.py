@@ -294,3 +294,35 @@ def test_every_default_arc_says_how_large_a_rate_mismatch_would_explain_it_away(
     # cancelled by a higher rate and an inhibition arc by a lower one: the mismatch carries the sign of
     # the coefficient. The planted-mismatch test in test_integrated.py checks the magnitude.
     assert (arc.rate_mismatch_to_zero > 0) == (arc.coefficient > 0)
+
+
+def test_both_derivations_cite_a_study_by_the_same_field():
+    """mGrowthDB's study record has no `citation` key and never had: its keys are id, name, projectId,
+    description, url, publishedAt, uploadedAt and experiments. The integrated path read `citation` and so
+    wrote an empty one for every study, in the JSON, in the report's "cite the studies behind the edges
+    you use" block and in the page's Sources, while the comparison read `name` and wrote the title. The
+    published All artifact carried accession numbers in place of titles (found 2026-10-10).
+
+    This asserts the two paths read the same field of the same record, which is the thing that drifted,
+    rather than asserting a string.
+    """
+    import inspect
+
+    from grownet import derive as replicate_path
+    from grownet import integrated as integrated_path
+
+    def cited_field(module) -> str:
+        source = inspect.getsource(module)
+        at = source.index('"study_citation"')
+        reads = source[at:at + 160]
+        for key in ("name", "citation", "title", "id"):
+            if f'get("{key}"' in reads:
+                return key
+        raise AssertionError(f"no study field read beside study_citation in {module.__name__}")
+
+    assert cited_field(replicate_path) == cited_field(integrated_path) == "name"
+
+    # and the record really has no `citation`, so reading one can only ever give nothing
+    record = {"id": "SMGDB00000002", "name": "A study title", "url": "https://doi.org/x"}
+    assert record.get("citation", "") == ""
+    assert (record.get("name") or record.get("id", "")) == "A study title"

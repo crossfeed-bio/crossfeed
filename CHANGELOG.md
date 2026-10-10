@@ -60,6 +60,18 @@ content.
   write the files beside it" covered `--glv` and not `--to-r`, which only mattered once the default
   stopped being the form where the metric is irrelevant. The command in `derive --help` was one of the
   two that hit it.
+- **Every study lost its citation under the integrated form**, which is what gLV mode selects and what
+  derived the published All artifact. `integrated.py` read `study.get("citation")`, a key mGrowthDB has
+  never had, while the comparison reads `name`, so the JSON's `studies[]`, the report's "cite the studies
+  behind the edges you use" block and the page's Sources all carried the accession number in place of the
+  title. Today's published `all_report.txt` ends with five such lines. A test now pins the two paths to
+  the same field of the same record, which is what drifted.
+- **The page's help said the drop-out setting "changes nothing either way"** under the default. It governs
+  most of the default network: with it the corpus gives 145 arcs over 24 organisms, without it 23 over 11,
+  because 122 of those arcs are drop-out arcs. The sentence was true of the integrated form and was left
+  pointing at the default when the default moved, so the one place a reader is told what that setting does
+  waved them past it. It now says what it does, with the measurement, and names the form it does not
+  govern.
 - **Three more places still described the integrated form as the default**, found by reviewing the three
   open changes as one tree rather than one at a time. The README's gLV section had the two derivations
   swapped, so the paragraph a reader consults to learn what `carrying_capacity` and `capacity_source` mean
