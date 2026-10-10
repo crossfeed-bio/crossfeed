@@ -50,7 +50,16 @@ from .taxonomy import TAXON_ID, resolve_species, species_index, split_entries
 TITLE = brand.NAME
 # species that derive a non-empty network, for the Example button (Karoline's proposal, #73). The first is
 # taxon 411483, which mGrowthDB holds under both its names after the 2022 reclassification.
-EXAMPLE = ("Faecalibacterium duncaniae", "Blautia hydrogenotrophica")
+# Three organisms that are grown together in mGrowthDB and whose arcs the shipped default can fit. The
+# pair this was until 0.3.0, the first two, now gives nothing: what those two hold between them is a
+# drop-out comparison inside a three-member community, and the integrated form does not fit a row from a
+# community of three or more (Craig declined that on #127), so the button that is supposed to show the
+# tool working showed an empty network. Adding the partner they are actually grown with is the smallest
+# change that keeps the biology and the studies: measured live on 2026-10-09, three arcs over three
+# organisms, against none (Karoline, 2026-10-09).
+EXAMPLE = ("Faecalibacterium duncaniae", "Blautia hydrogenotrophica", "Roseburia intestinalis")
+EXAMPLE_MESSAGE = ("Example: three species that are grown together, with every setting back to its "
+                   "default. Press Find interactions.")
 # A search that gives a gLV package anyone can simulate, chosen by building the package of every study
 # that yields one and scoring them (2026-10-07, Karoline: "include a gLV example button in the GUI that
 # configures everything for a working gLV example"). Five studies give a package of two organisms or
@@ -1358,8 +1367,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                                    conditions=settings.get("conditions", "")))
             return
         if form.get("example"):
-            self._send(render_form(self.token, "\n".join(EXAMPLE), settings,
-                                   conditions=settings.get("conditions", "")))
+            # The Example shows what the tool does with nothing changed, so it puts every setting back to
+            # its default rather than carrying the current ones through. It used to keep them, and the two
+            # buttons beside it set some: after gLV mode the example ran with drop-out communities off,
+            # and after the gLV example it ran with that example's study still in the second box. Either
+            # gave an empty network with nothing on the page to say why (Karoline, 2026-10-09).
+            self._send(render_form(self.token, "\n".join(EXAMPLE), dict(DEFAULTS),
+                                   message=EXAMPLE_MESSAGE, conditions=""))
             return
         if form.get("glv_example"):
             # everything a working simulation needs, and then the search itself: the two organisms, the

@@ -1,7 +1,8 @@
 """grownet command line: derive interaction networks from mGrowthDB.
 
   python -m grownet derive SMGDB00000004 --live                 # every species in one study
-  python -m grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica"
+  python -m grownet derive --live --species "Faecalibacterium duncaniae" \
+      "Blautia hydrogenotrophica" "Roseburia intestinalis"
   python -m grownet derive SMGDB00000004 --fixture records.json  # offline, from interaction records
   python -m grownet validate network.json                       # check a network against the schema
   python -m grownet schema --out interaction_network.schema.json # emit the neutral-format schema
@@ -23,7 +24,7 @@ from .schema import schema_json, validate_document
 
 DERIVE_EXAMPLES = """examples:
   the local page's Example, written to a file, with its report, and sent to Cytoscape:
-    grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica" \\
+    grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica" "Roseburia intestinalis" \\
         --out example.json --report example_report.txt --to-cytoscape
 
   a strain and a taxon id, every partner, as GraphML:
