@@ -121,9 +121,25 @@ def _derive(a):
         # and the integrated form, which is the one a coefficient should be fitted by (Karoline,
         # 2026-10-10). It is gLV mode that selects it, not the default, because it cannot express a
         # drop-out arc or a censored one and a network needs both.
-        a.derivation = "integrated"
+        #
+        # **An explicit `--derivation` wins**, because overriding it silently broke the one command the
+        # decision register prints as the record of its own measurement:
+        # `derive SMGDB00000007 --live --glv-mode --derivation <either> --steady-check` gave the same
+        # answer for both arms, so the table a reader checks with it read as though the two derivations
+        # were one. That command was added because two readers took the table for a fabrication when it
+        # was missing; overriding the flag unfixed it the same day (found 2026-10-10).
+        chosen = a.derivation
+        if chosen is None:
+            a.derivation = "integrated"
+        told = ("and the integrated form" if chosen is None else
+                f"and the {chosen} derivation, which you asked for and gLV mode does not override")
         print("gLV mode: growth rates on, drop-out communities off, the comparison on the growth rate, "
-              "and the integrated form", file=sys.stderr)
+              f"{told}", file=sys.stderr)
+    if a.derivation is None:
+        # the page and the command line must agree on what runs when nothing is chosen, so this reads
+        # the page's own defaults rather than repeating the value
+        from .gui import DEFAULTS
+        a.derivation = DEFAULTS["derivation"]
     problem = _rate_flags(a)
     if problem:
         print(problem, file=sys.stderr)
@@ -543,7 +559,8 @@ def build_parser() -> argparse.ArgumentParser:
                                "reported beside a rate comes from the Baranyi fit either way")
     settings.add_argument("--rate-window", type=int, default=5, metavar="N",
                           help="with easylinear: the points in each fitted window (default 5, as mGrowthDB)")
-    settings.add_argument("--derivation", choices=["replicate", "integrated"], default="replicate",
+    # None means "not given", so gLV mode can tell a reader's explicit choice from the default it fills
+    settings.add_argument("--derivation", choices=["replicate", "integrated"], default=None,
                           help="replicate (default), the specified comparison of replicate sets, the only "
                                "form that gives drop-out arcs and the no-growth rule's censored bounds; "
                                "or integrated, which fits each organism's row from the whole time course "

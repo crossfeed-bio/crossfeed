@@ -262,7 +262,11 @@ def test_the_page_and_the_command_line_start_from_the_same_defaults():
            "min_studies": a.min_studies, "merge_genera": a.merge_genera, "no_growth_alpha": a.no_growth_alpha,
            "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p,
            "report_rates": a.report_rates, "steady_check": a.steady_check,
-           "derivation": a.derivation}
+           # `--derivation` parses to None, meaning "not given", so gLV mode can tell a reader's own
+           # choice from one it filled in; what must match the page is the value a run resolves to
+           # (2026-10-10). `_derive` does this resolution.
+           "derivation": a.derivation if a.derivation is not None else gui.DEFAULTS["derivation"]}
+    assert a.derivation is None, "the flag carries no default of its own; the page's is the one default"
     assert set(cli) == set(gui.DEFAULTS)
     assert {k: v for k, v in cli.items() if v != gui.DEFAULTS[k]} == {}
 
@@ -929,3 +933,38 @@ def test_the_command_line_and_the_page_describe_the_same_settings():
     # the two derivations are both named, on the flag and in the help's settings table
     assert "integrated" in flag["--derivation"] and "replicate" in flag["--derivation"]
     assert "integrated" in help_page.SETTINGS["derivation"][2]
+
+
+def test_glv_mode_does_not_override_a_derivation_the_reader_asked_for(capsys):
+    """The decision register prints one command as the record of its own measurement:
+    `derive SMGDB00000007 --live --glv-mode --derivation <either> --steady-check`. That command was added
+    because two readers took the table beside it for a fabrication when it was missing. Making gLV mode
+    set the derivation then made both arms give the same answer, so the remedy for "this looks
+    unreproducible" was silently unfixed the same day (found 2026-10-10).
+
+    An explicit flag wins, and the banner says so. Without one, gLV mode selects the integrated form,
+    which is what a coefficient needs.
+    """
+    from grownet.__main__ import _derive, build_parser
+
+    def resolved(argv):
+        a = build_parser().parse_args(argv)
+        assert a.derivation is None or "--derivation" in argv
+        try:
+            _derive(a)                       # resolves the derivation, then fails on the missing input
+        except SystemExit:
+            pass
+        except Exception:                    # noqa: BLE001 - a later stage is not what this tests
+            pass
+        return a.derivation, capsys.readouterr().err
+
+    base = ["derive", "SMGDB00000007", "--fixture", "nothing.json"]
+    got, said = resolved(base + ["--glv-mode"])
+    assert got == "integrated" and "and the integrated form" in said
+
+    got, said = resolved(base + ["--glv-mode", "--derivation", "replicate"])
+    assert got == "replicate", "gLV mode overrode a derivation the reader asked for"
+    assert "which you asked for and gLV mode does not override" in said
+
+    got, _ = resolved(base + ["--glv-mode", "--derivation", "integrated"])
+    assert got == "integrated"

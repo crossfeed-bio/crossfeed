@@ -60,6 +60,16 @@ content.
   write the files beside it" covered `--glv` and not `--to-r`, which only mattered once the default
   stopped being the form where the metric is irrelevant. The command in `derive --help` was one of the
   two that hit it.
+- **gLV mode overrode a derivation the reader asked for, and that broke the decision register's own
+  reproduction command.** The register prints
+  `derive SMGDB00000007 --live --glv-mode --derivation <either> --steady-check` as the record of the
+  measurement behind its comparison table, and says in as many words that the command was added because
+  two readers had taken the table for a fabrication when it was missing. Making gLV mode set the
+  derivation, in this same set of changes, made both arms of that command give the identical answer, so
+  the remedy for "this looks unreproducible" was unfixed the same day it was relied on. An explicit
+  `--derivation` now wins and the banner says so; without one, gLV mode still selects the integrated
+  form. The flag's own default is `None`, meaning "not given", so the page and the command line still
+  resolve to one default from one place.
 - **`derive --help` shipped two examples the tool refuses**, and the README a third. Both gLV examples in
   the command line's own epilog used `--report-rates` and relied on the shipped derivation being the
   integrated form, so with the comparison back as the default they exit 2, as did the README's `--to-r`
