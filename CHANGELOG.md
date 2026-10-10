@@ -20,6 +20,15 @@ content.
   The example is now the three organisms that are actually grown together, which is the smallest change
   that keeps the biology and the studies: measured live, **three arcs over three organisms against none**.
   The worked example in the README, the command line's help and the help page moved with it.
+- **The release-date guard failed on every pull request from the morning after a release.** It reads
+  `__version__`, finds that section in the changelog, and refuses a date earlier than the tree's newest
+  commit, which is what catches a release dated before the work it contains (#155 item 8). After the
+  release, `__version__` still names the version that shipped and its section is still dated, so every
+  commit of the next cycle is newer than that date and the check failed on work that has nothing to do
+  with it. It asks the question only while the tree is the release being prepared now, and stops once
+  `## [Unreleased]` has content, which is what `RELEASING.md` says to start when work continues. A tag
+  would say it exactly, but `actions/checkout` fetches none, so a tag-based check would pass on a
+  developer's machine and skip in CI.
 
 ## [0.3.0] (2026-10-09)
 
