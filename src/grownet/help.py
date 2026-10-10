@@ -1097,7 +1097,8 @@ out.</p>
 <code>SMGDB00000002</code> so nothing else is read, Report growth rates goes on, and the search runs. On
 the command line the same run is
 <code>grownet derive --live --species "Bacteroides thetaiotaomicron" "Roseburia intestinalis"
---conditions SMGDB00000002 --report-rates --glv glv.zip</code>.</li>
+--conditions SMGDB00000002 --glv-mode --glv glv.zip</code>. The button presses gLV mode, so the
+command does too: without it the default derivation gives no coefficient and the run is refused.</li>
 <li><strong>Read what came out</strong> before simulating anything. Two organisms and two arcs, each
 inhibiting the other, which is the shape of a competition for one medium. The growth rates are 0.7981 /h
 for <em>B. thetaiotaomicron</em> at a plateau of 9.13e8 Cells/mL and 0.6707 /h for

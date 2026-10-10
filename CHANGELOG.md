@@ -60,6 +60,15 @@ content.
   write the files beside it" covered `--glv` and not `--to-r`, which only mattered once the default
   stopped being the form where the metric is irrelevant. The command in `derive --help` was one of the
   two that hit it.
+- **Three more places still described the integrated form as the default**, found by reviewing the three
+  open changes as one tree rather than one at a time. The README's gLV section had the two derivations
+  swapped, so the paragraph a reader consults to learn what `carrying_capacity` and `capacity_source` mean
+  described the wrong one, and `capacity_source` is empty under the default because nothing fits the
+  plateau there. The README also promised `growth_rates.csv` is "in the same order" as the matrix, which
+  is false for a multi-unit package and makes a positional join give a plausible, wrong simulation; the
+  organism column is the join key and the claim is gone. And the help's gLV walkthrough printed a command
+  line that exits 2 under the default, because the button was taught to press gLV mode and the command
+  beside it was not.
 - **The report did not carry what the derivation says about itself.** `meta.provisional` reached the JSON,
   GraphML and the page and never the report, which is the artifact `docs/LIMITATIONS.md` nominates as the
   one that travels with the output and the one a methods section is written from. So a reader could quote

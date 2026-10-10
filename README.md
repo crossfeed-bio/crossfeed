@@ -415,17 +415,18 @@ diagonal is 0 here.
 `--glv FILE` (with `--report-rates --metric growth_rate`, or `--glv-mode`, which sets both) writes the parameters of a
 generalized Lotka-Volterra simulation as a zip, as **fitted coefficients**: one
 `interaction_matrix.<unit>.csv` per abundance unit. **What a cell is depends on the derivation, and the
-`README.txt` in the zip states the one that made it.** Under the default, every cell including the
-diagonal is a parameter of the least squares that fitted that organism's row, and the carrying capacity in
-`growth_rates.csv` is `-r_i / A[i][i]`, the plateau that fit implies; `capacity_source` says so per
-organism, and an organism whose fit implies no plateau has a measured one put in its place and is named
-under DIAGONALS THAT ARE NOT A FIT. Under `--derivation replicate` the direction is the other way round:
+`README.txt` in the zip states the one that made it.** Under **gLV mode**, which selects the integrated
+form, every cell including the diagonal is a parameter of the least squares that fitted that organism's
+row, and the carrying capacity in `growth_rates.csv` is `-r_i / A[i][i]`, the plateau that fit implies;
+`capacity_source` says so per organism, and an organism whose fit implies no plateau has a measured one
+put in its place and is named under DIAGONALS THAT ARE NOT A FIT. Under the **default** derivation the
+direction is the other way round, and `capacity_source` is empty because nothing fitted the plateau:
 `A[i][i] = -r_i / K_i` with K the plateau the curves were observed to hold, and
 `A[i][j] = (r_with - r_without) / x_j` off it, the difference between i's own growth rate with j and
 without it over the partner's abundance across i's growth window, so a pair where one side did not grow is
 a measurement rather than a convention, and an organism that grows only with a partner gets `r_i = 0` and
 a self-limitation fitted at its plateau beside that partner.
-`growth_rates.csv`, one rate per organism in the same order with how many values it rests on, and beside
+`growth_rates.csv`, one rate per organism with how many values it rests on, and beside
 it the estimator, the Baranyi lag and the carrying capacity with its abundance unit, how many curves it
 rests on, how many gave none, and how far those curves had fallen from their peak
 (`capacity_fall_from_peak`: 1 is a curve that ended at its peak). The matrix CSV keeps four significant
