@@ -105,12 +105,25 @@ DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window":
             "report_rates": False,
             # off by default too: the check reads the curves of chemostats the search never needed (#125)
             "steady_check": False,
-            # the integrated form, Karoline's decision of 2026-10-06: "By default, grownet should do
-            # what is 'correct' i.e. more defensible mathematically". It fits each organism's row from the
-            # whole time course, so a coefficient is not a difference of two separately fitted rates
-            # divided by one partner mean, which carries the organism's own density as a confound. The
-            # specified comparison of replicate sets is the alternative, and keeps everything it had.
-            "derivation": "integrated",
+            # The specified comparison of replicate sets, and gLV mode selects the integrated form
+            # instead (Karoline, 2026-10-10). Each answers a different question and neither is the
+            # stricter version of the other.
+            #
+            # A NETWORK is what this default reports, and the comparison is the only form that can
+            # express two of its kinds of evidence: an arc from a community compared with the same
+            # community without one member, and the no-growth rule's censored arcs with their measured
+            # bounds. The integrated form refuses a community of three or more (Craig on #127), so no
+            # drop-out arc can exist under it, and it has no no-growth rule at all. On the whole corpus
+            # that is 145 arcs against 12, 122 of them drop-out, and 12 censored bounds against none
+            # (measured 2026-10-09).
+            #
+            # A gLV COEFFICIENT is what gLV mode reports, and there the integrated form is the right one
+            # for the reason Karoline gave on 2026-10-06: a coefficient from the comparison is a
+            # difference of two separately fitted rates divided by one partner mean, which carries the
+            # organism's own density as a confound. That argument is about the coefficient, and the
+            # comparison that settled it was run in gLV mode (`--glv-mode`), where drop-out communities
+            # are off on both sides, so it could not see what the default costs a network.
+            "derivation": "replicate",
             "include_dropout": True,
             "include_non_batch": False, "conditions": "", "exclude_studies": "", "only_entered": True,
             "merge_arcs": False, "min_studies": 1, "merge_genera": False,
@@ -212,8 +225,9 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   is left out and reported</span></div>
 <div class="row"><label>Derivation
   <select name="derivation">{derivations}</select></label>
-  <span class="muted">replicate, the specified comparison: a growth property of the replicates with the
-  partner against those without it. Or integrated, which fits each organism's row from the whole time
+  <span class="muted">replicate (the default), the specified comparison: a growth property of the
+  replicates with the partner against those without it, and the only one that gives a drop-out arc or a
+  censored one. Or integrated, which gLV mode selects and which fits each organism's row from the whole time
   course, ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt), over its growth phase; it needs no
   growth property and gives the gLV coefficients directly, and it reports every row its design cannot
   identify</span></div>
@@ -234,8 +248,8 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   Include drop-out communities</label>
   <span class="muted">arcs from a community compared with the same community without one member, labeled
   evidence dropout; on by default. Such an arc may act through a third species, so gLV mode unticks it.
-  The comparison of replicate sets only: the default derivation refuses a community of three or more, so
-  with it this setting changes nothing</span></div>
+  It applies to the default derivation only: the integrated form, which gLV mode selects, refuses a
+  community of three or more, so under that form this setting changes nothing</span></div>
 <div class="row"><label><input type="checkbox" name="include_low_quality" value="1"{low}>
   Show low-quality edges</label>
   <span class="muted">pooled strains, a chemostat curve, or a drop-out whose removed member was still detected;
@@ -350,8 +364,8 @@ every medium.</p>
 <button type="submit" name="glv_mode" value="1" class="switch{glv_on}" aria-pressed="{glv_pressed}"
 ><span class="track"><span class="knob"></span></span>gLV mode</button>
 <span class="muted">All derives every study, ignoring the boxes (half a minute or so). gLV example fills
-the boxes and settings for a package that simulates, and runs it. gLV mode sets growth rates on and
-drop-out communities off; press it again to switch back.</span></div>
+the boxes and settings for a package that simulates, and runs it. gLV mode sets the four settings a
+package needs, the derivation among them; press it again to switch back.</span></div>
 {_settings_block(settings or {}, token, job)}
 </form>{below}""", token, refresh, job)
 
@@ -615,16 +629,17 @@ def _empty_reason(result: dict) -> str:
     """Why a search came back empty, with what the second box left out said first (#113)."""
     reason = _empty_reason_core(result)
     s = result.get("settings", {})
-    # the default derivation fits a row from a time course, so a sparsely sampled study gives it nothing
+    # the integrated form fits a row from a time course, so a sparsely sampled study gives it nothing
     # where the specified comparison needs only two measurements per set. Say which setting moves, as the
-    # page does everywhere else (Karoline's decision of 2026-10-06 made this the common case)
-    if s.get("derivation", "integrated") == "integrated" and any(
+    # page does everywhere else. It is gLV mode that selects that form (2026-10-10), so this is what a
+    # reader meets when a package comes out empty rather than on an ordinary search.
+    if s.get("derivation", DEFAULTS["derivation"]) == "integrated" and any(
             "too few to fit a row" in why or "usable time point" in why
             for _, why in result.get("skipped", ())):
-        reason += (" These curves are too sparsely sampled for the default derivation, which fits each "
-                   "organism's row from its whole time course. The specified comparison of replicate "
-                   "sets needs only two measurements per set: set Derivation to replicate in Advanced "
-                   "settings to use it.")
+        reason += (" These curves are too sparsely sampled for the integrated derivation, which gLV mode "
+                   "selects and which fits each organism's row from its whole time course. The default "
+                   "comparison of replicate sets needs only two measurements per set: press gLV mode "
+                   "again, or set Derivation to replicate in Advanced settings.")
     unmatched = len([r for _, r in result.get("skipped", ()) if "no experiment of this study matches" in r])
     if s.get("conditions") and unmatched and "second box" not in reason:
         studies = len(result.get("studies", ()))
@@ -761,12 +776,14 @@ def _no_growth(s: dict, which: str) -> float:
 
 
 # What the page says when the mode is switched on and off.
-GLV_MODE_MESSAGE = ("gLV mode on: growth rates on, drop-out communities off, and the comparison on the "
-                    "growth rate, which is what a fitted coefficient is made of. All three are in "
-                    "Advanced settings, and pressing gLV mode again switches them back. Name one medium "
-                    "in the second box to keep a simulation to one environment.")
-GLV_MODE_OFF_MESSAGE = ("gLV mode off: growth rates off, drop-out communities included again and the "
-                        "comparison back on the area under the curve, which are the defaults.")
+GLV_MODE_MESSAGE = ("gLV mode on: growth rates on, drop-out communities off, the comparison on the "
+                    "growth rate, and the derivation on the integrated form, which is what a fitted "
+                    "coefficient is made of. All four are in Advanced settings, and pressing gLV mode "
+                    "again switches them back. Name one medium in the second box to keep a simulation "
+                    "to one environment.")
+GLV_MODE_OFF_MESSAGE = ("gLV mode off: growth rates off, drop-out communities included again, the "
+                        "comparison back on the area under the curve and the derivation back to the "
+                        "comparison of replicate sets, which are the defaults.")
 
 
 def chosen_deriver(settings: dict, client=None):
@@ -780,9 +797,16 @@ def chosen_deriver(settings: dict, client=None):
 
 
 def glv_mode_on(settings: dict) -> bool:
-    """Whether the settings are the ones gLV mode sets."""
+    """Whether the settings are the ones gLV mode sets.
+
+    Every setting `glv_mode` writes is read here. It read three while the mode wrote four, so the toggle
+    said "on" with the comparison selected, which is the one state in which a coefficient is NOT being
+    fitted by the form the mode exists to select, and pressing it then switched the mode off instead of
+    completing it (found reviewing #199, 2026-10-10).
+    """
     s = {**DEFAULTS, **(settings or {})}
-    return bool(s["report_rates"]) and not s["include_dropout"] and s["metric"] == "growth_rate"
+    return (bool(s["report_rates"]) and not s["include_dropout"] and s["metric"] == "growth_rate"
+            and s["derivation"] == "integrated")
 
 
 def glv_mode(settings: dict, on: bool = True) -> dict:
@@ -795,9 +819,14 @@ def glv_mode(settings: dict, on: bool = True) -> dict:
         # produce. The rate method is left alone: easylinear by default, since Karoline chose it on
         # 2026-10-06 ("easylinear since it works better"), with the lag still Baranyi's, and anyone who
         # wants Baranyi rates sets it in Advanced settings.
-        return {**settings, "report_rates": True, "include_dropout": False, "metric": "growth_rate"}
+        # and the integrated form, which is what a coefficient should be fitted by: it fits the row from
+        # the whole time course rather than dividing a difference of two rates by one partner mean
+        # (Karoline, 2026-10-10)
+        return {**settings, "report_rates": True, "include_dropout": False, "metric": "growth_rate",
+                "derivation": "integrated"}
     return {**settings, "report_rates": DEFAULTS["report_rates"],
-            "include_dropout": DEFAULTS["include_dropout"], "metric": DEFAULTS["metric"]}
+            "include_dropout": DEFAULTS["include_dropout"], "metric": DEFAULTS["metric"],
+            "derivation": DEFAULTS["derivation"]}
 
 
 def parse_settings(form: dict) -> dict:
@@ -908,7 +937,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     s = {**DEFAULTS, **(settings or {})}
     if all_studies and published and daily.usable(s, DEFAULTS):
         say(0, None, "Reading today's All network from the grownet repository")
-        found = daily.fetch()
+        found = daily.fetch(s)      # and only if it was derived the way this search would derive it
         if found:
             return found
     names = [] if all_studies else split_entries(entries)    # one per line, and at commas and semicolons
@@ -1358,9 +1387,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         if form.get("glv_example"):
             # everything a working simulation needs, and then the search itself: the two organisms, the
-            # study they are in so nothing else is read, and growth rates on, which a package cannot be
-            # built without. The help's gLV section runs this package through miaSim step by step.
-            settings = {**settings, "report_rates": True, "conditions": GLV_EXAMPLE_STUDY}
+            # study they are in so nothing else is read, and the whole of gLV mode. It used to add only
+            # the growth rates and rely on the shipped derivation being the integrated form; with the
+            # comparison back as the default it inherited that instead and the button produced a run no
+            # package can be built from, on a study chosen for the other form (found reviewing #199,
+            # 2026-10-10). It presses the mode rather than repeating parts of it, so the two cannot
+            # drift again. The help's gLV section runs this package through miaSim step by step.
+            settings = {**glv_mode(settings), "conditions": GLV_EXAMPLE_STUDY}
             job = self._start(list(GLV_EXAMPLE), settings)
             job["thread"].join(self.wait)
             self._redirect(f"/?token={self.token}&job={job['id']}#result")

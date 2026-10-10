@@ -53,6 +53,10 @@ RELEASES = (
         "A gLV example button beside All: it fills both boxes and the settings for a package that "
         "settles, and runs the search. The help walks that package through miaSim step by step, and "
         "ends by holding the simulated steady state against the co-culture it was fitted from.",
+        # 0.3.0 is tagged and published, so this says what 0.3.0 did and is not rewritten when the
+        # behavior changes afterwards: "a tagged version is never reused for changed content"
+        # (CHANGELOG's own preamble). The derivation went back to the comparison on 2026-10-10, and that
+        # belongs in the next version's entry, which the release pull request adds.
         "The default derivation fits each organism's whole row from the measured time course instead of "
         "comparing replicate sets, which needs no growth property and gives the coefficients directly. "
         "The comparison of replicate sets is Derivation in Advanced settings, or --derivation replicate, "
@@ -82,23 +86,31 @@ RELEASES = (
 
 # key in gui.DEFAULTS -> (label on the page, command line flag, what it does and when to change it)
 SETTINGS = {
-    "derivation": ("Derivation", "--derivation integrated|replicate",
-                   "How an interaction is derived. integrated (the default) fits each organism's whole "
-                   "row from the time course, ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt), "
-                   "over its growth phase, so it needs no growth property and no abundance of its own to "
-                   "divide by, and it gives the gLV coefficients directly. It is the default because it "
-                   "is the form published work fits for this purpose and because the alternative's "
-                   "coefficient carries the organism's own density as a confound. Each arc carries the "
-                   "spread of its coefficient over the co-culture replicates and over leaving out each "
-                   "monoculture replicate, how much of the organism's log abundance change the fit "
-                   "explains, and the condition number of the design; a row that explains less than "
-                   "predicting nothing does is refused and named, as is a row the design cannot "
-                   "identify, and a community of three or more is reported rather than derived, since an "
-                   "arc fitted inside one would be a new kind of evidence. It needs a time course: a "
-                   "study measured at two or three points gives it nothing. replicate is the comparison "
-                   "the collaboration specified, a growth property of the replicates with the partner "
-                   "against the replicates without it, and it needs only two measurements per set, so "
-                   "it is what a sparsely sampled study can still give."),
+    "derivation": ("Derivation", "--derivation replicate|integrated",
+                   "How an interaction is derived. The two answer different questions and neither is the "
+                   "stricter version of the other, so each is the default for its own job. "
+                   "replicate (the default) is the comparison the collaboration specified, a growth "
+                   "property of the replicates with the partner against the replicates without it. It "
+                   "needs only two measurements per set, so a sparsely sampled study still gives it "
+                   "something, and it is the only form that gives the two kinds of evidence a network "
+                   "rests on besides a biculture: an arc from a community compared with the same "
+                   "community without one member (drop-out), and a censored arc with the measured bound "
+                   "the no-growth rule puts on it. Its weakness is the coefficient: a coefficient from it "
+                   "is a difference of two separately fitted rates divided by one partner mean, which "
+                   "carries the organism's own density as a confound, and no number of replicates "
+                   "removes it. "
+                   "integrated, which gLV mode selects, fits each organism's whole row from the time "
+                   "course, ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt), over its growth "
+                   "phase, so it needs no growth property and no abundance of its own to divide by, and "
+                   "it gives the gLV coefficients directly. That is why a package is built from it. Each "
+                   "arc carries the spread of its coefficient over the co-culture replicates and over "
+                   "leaving out each monoculture replicate, how much of the organism's log abundance "
+                   "change the fit explains, and the condition number of the design; a row that explains "
+                   "less than predicting nothing does is refused and named, as is a row the design "
+                   "cannot identify. Its weaknesses are what it cannot express: a community of three or "
+                   "more is reported rather than derived, so it gives no drop-out arc at all, and it has "
+                   "no no-growth rule, so no censored arc and no measured bound. It also needs a time "
+                   "course: a study measured at two or three points gives it nothing."),
     "metric": ("Growth property", "--metric auc|max|growth_rate",
                "The growth property compared with and without the partner. The area under the curve (auc, "
                "the default) combines lag, rate and yield in one number; the maximal abundance (max) keeps "
@@ -428,7 +440,7 @@ EDGE_ATTRIBUTES = {
                              "measured scale behind se_rate_selection. The arc's notes name the rates "
                              "and say how far apart they are. It is their sample standard deviation "
                              "(dividing by n - 1): which sets a study holds, and which one each arc was "
-                             "matched to, is one realisation of a matching that could have gone "
+                             "matched to, is one realization of a matching that could have gone "
                              "otherwise, so they are a sample rather than the whole population of rates "
                              "this organism could have been given. The population form would be smaller "
                              "by sqrt(n / (n - 1)), a factor of 1.41 where two sets were selected, so "
@@ -890,8 +902,8 @@ would be growth with a partner, which is the comparison, not the organism's own 
 curves give no rate is named on the page and in the report, never given a substitute number.</p>
 <p><strong>Three more quantities travel with a rate</strong>, which is what a gLV coefficient is made of:
 which estimator produced the rate; the <strong>lag</strong>, always from the Baranyi fit, the only
-estimator that has one, whichever one produced the rate, and empty under the default derivation, whose
-model has no lag term at all; and the organism's monoculture
+estimator that has one, whichever one produced the rate, and empty under the integrated derivation,
+whose model has no lag term at all; and the organism's monoculture
 <strong>carrying capacity</strong>, the plateau of its curves, taken only from curves certified to have
 reached stationary phase and left in the abundance unit they were measured in. A culture that grew, peaked
 and then declined has stopped growing, so it is certified too and its plateau is that peak; how far those
@@ -954,9 +966,11 @@ grow without bound and come back as NA, which now says something about the measu
 fitted as facilitating each other more than each limits itself, rather than about a convention; the
 equilibrium of a fit is the solution of A x = -r, and a negative entry there means the fit has no positive
 steady state.</p>
-<p><strong>The default derivation, from the whole time course.</strong> It fits each organism's row
-instead of comparing replicate sets; <strong>Derivation</strong> in Advanced settings (or
-<code>--derivation replicate</code>) switches to the comparison of replicate sets, which is unchanged.
+<p><strong>The derivation gLV mode selects, from the whole time course.</strong> It fits each organism's
+row instead of comparing replicate sets; it is what <strong>gLV mode</strong> turns on, and
+<strong>Derivation</strong> in Advanced settings (or <code>--derivation integrated</code>) selects it
+without the rest of the mode. The default derivation is the comparison of replicate sets, which gives the
+drop-out and censored arcs this one cannot.
 Integrating dx_i/dt = x_i (r_i + sum_j A_ij x_j) gives
 ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt), which is linear in r_i and in every A_ij, so
 one least-squares fit per organism returns its whole row: no growth property, no log2 ratio, no
@@ -1083,7 +1097,8 @@ out.</p>
 <code>SMGDB00000002</code> so nothing else is read, Report growth rates goes on, and the search runs. On
 the command line the same run is
 <code>grownet derive --live --species "Bacteroides thetaiotaomicron" "Roseburia intestinalis"
---conditions SMGDB00000002 --report-rates --glv glv.zip</code>.</li>
+--conditions SMGDB00000002 --glv-mode --glv glv.zip</code>. The button presses gLV mode, so the
+command does too: without it the default derivation gives no coefficient and the run is refused.</li>
 <li><strong>Read what came out</strong> before simulating anything. Two organisms and two arcs, each
 inhibiting the other, which is the shape of a competition for one medium. The growth rates are 0.7981 /h
 for <em>B. thetaiotaomicron</em> at a plateau of 9.13e8 Cells/mL and 0.6707 /h for

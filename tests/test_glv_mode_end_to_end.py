@@ -1,21 +1,27 @@
-"""One search at the shipped defaults, end to end (#142 item 11).
+"""One search in gLV mode, end to end (#142 item 11).
 
-Every other page, command-line, report, export and threshold test asks for `derivation=replicate`,
-because the double those tests share measures two points per set, which is all the specified comparison
-needs and far too few to fit a row from a time course. So the derivation that actually produces the daily
-artifact and every default user's file was covered end to end nowhere, which is why #142 item 5 survived
-twelve commits: `meta.statistics` claimed Welch's t-test over replicate sets for networks derived by a
-form that compares no sets.
+The integrated form is what gLV mode selects, and it is the only form that produces a gLV coefficient, so
+every package a reader simulates comes through here. Every other page, command-line, report, export and
+threshold test asks for `derivation=replicate`, because the double those tests share measures two points
+per set, which is all the specified comparison needs and far too few to fit a row from a time course. So
+this form was covered end to end nowhere, which is why #142 item 5 survived twelve commits:
+`meta.statistics` claimed Welch's t-test over replicate sets for networks derived by a form that compares
+no sets.
 
-This file is the missing coverage. The double serves simulated gLV time courses, `run_query` runs at the
-shipped defaults with nothing overridden, and the test asserts both halves: the search gives arcs, and
-what the network says about itself describes the derivation that made them.
+This file is that coverage. The double serves simulated gLV time courses, `run_query` runs in gLV mode
+with nothing else overridden, and the test asserts both halves: the search gives arcs, and what the
+network says about itself describes the derivation that made them.
+
+**It ran at the shipped defaults until 2026-10-10**, when the default went back to the specified
+comparison and gLV mode became the way to reach the integrated form (Karoline: the comparison "should be
+the lenient one that allows for drop-out communities", and the two forms were only ever compared for gLV
+mode). The derivation under test is unchanged; only the route to it is.
 """
 import math
 
 import pytest
 
-from grownet.gui import DEFAULTS, run_query
+from grownet.gui import DEFAULTS, glv_mode, run_query
 
 A = "Faecalibacterium prausnitzii A2-165"
 B = "Blautia hydrogenotrophica DSM 10507"
@@ -94,9 +100,9 @@ class TimeCourseClient:
         return {"studies": [self.study_id]}
 
 
-def _default_query():
-    """Nothing overridden: whatever the page would do for a reader who changes no setting."""
-    return run_query(TimeCourseClient(), [A, B], {})
+def _glv_query():
+    """Nothing overridden beyond the gLV mode button: what the page does when a reader presses it."""
+    return run_query(TimeCourseClient(), [A, B], glv_mode({}))
 
 
 def _arc(result, source, target):
@@ -106,11 +112,12 @@ def _arc(result, source, target):
     return next(e for e in net.edges if named.get(e.source) == source and named.get(e.target) == target)
 
 
-def test_the_shipped_default_derives_arcs_from_a_time_course():
-    result = _default_query()
-    assert result["settings"]["derivation"] == DEFAULTS["derivation"] == "integrated"
+def test_glv_mode_derives_arcs_from_a_time_course():
+    result = _glv_query()
+    # gLV mode selects the integrated form; the default is the specified comparison (2026-10-10)
+    assert result["settings"]["derivation"] == "integrated" != DEFAULTS["derivation"]
     assert result["errors"] == [] and result["unresolved"] == []
-    assert result["network"].edges, "the shipped default derived nothing from a time course"
+    assert result["network"].edges, "gLV mode derived nothing from a time course"
     # B facilitates A, which is the only non-zero off-diagonal in the simulation
     facilitation = _arc(result, B, A)
     assert facilitation.effect == "facilitation" and facilitation.coefficient > 0
@@ -123,7 +130,7 @@ def test_what_the_network_says_about_itself_describes_the_derivation_that_made_i
     """#142 item 5, end to end: `meta.statistics` and `meta.provisional` used to be module constants
     copied into every network, so a file derived by the integrated form said it had run Welch's
     two-sided t-test on per-replicate log2 values and compared replicate sets."""
-    meta = _default_query()["network"].meta
+    meta = _glv_query()["network"].meta
     said = meta["statistics"]["test"]
     assert "Welch" not in said
     assert "fitted log2 strength" in said and "monoculture stage" in said
@@ -141,7 +148,7 @@ def test_the_report_the_page_and_the_export_all_carry_the_derivations_own_words(
     from grownet.export import to_graphml
     from grownet.gui import render_result
     from grownet.report import report_text
-    result = _default_query()
+    result = _glv_query()
 
     text = report_text(result)
     assert "Welch" not in text
@@ -156,7 +163,7 @@ def test_the_report_the_page_and_the_export_all_carry_the_derivations_own_words(
 
 def test_the_statistics_a_default_arc_carries_are_the_two_component_ones():
     """#142 item 2 end to end: an arc's `se` carries the monoculture stage, and says how much of it does."""
-    result = _default_query()
+    result = _glv_query()
     arc = _arc(result, B, A)
     assert arc.se is not None and arc.sd is not None
     assert arc.se_replicates is not None and arc.se_rate_stage is not None
@@ -174,7 +181,7 @@ def test_the_package_prose_states_the_formula_the_derivation_actually_fitted():
     import zipfile
 
     from grownet import matrix
-    result = _default_query()
+    result = _glv_query()
     net, rates = result["network"], result.get("rates") or {}
     assert matrix.derivation_of(net) == "integrated"
 
@@ -211,7 +218,7 @@ def test_the_zip_and_the_payload_carry_the_same_numbers_to_four_significant_digi
     import zipfile
 
     from grownet import matrix
-    result = _default_query()
+    result = _glv_query()
     net, rates = result["network"], result.get("rates") or {}
     payload = matrix.glv_payload(net, rates)
 
@@ -261,13 +268,13 @@ def test_an_arc_fitted_on_part_of_the_course_says_which_part():
     carries neither."""
     from grownet.derive import WINDOW_PARTIAL
 
-    arc = _arc(run_query(DeclineClient(), [A, B], {}), B, A)
+    arc = _arc(run_query(DeclineClient(), [A, B], glv_mode({})), B, A)
     assert arc.fit_window_share == pytest.approx(10.0 / 40.0, abs=0.05)
     assert WINDOW_PARTIAL in arc.cautions
     note = next(n for n in arc.notes if "the fit covers" in n)
     assert "of 0 to 40 h measured" in note and "no lag and no death term" in note
 
-    whole = _arc(_default_query(), B, A)
+    whole = _arc(_glv_query(), B, A)
     assert whole.fit_window_share > 0.9        # the plateau rule trims the flat tail of the last point
     assert WINDOW_PARTIAL not in whole.cautions
 
@@ -279,7 +286,7 @@ def test_every_default_arc_says_how_large_a_rate_mismatch_would_explain_it_away(
     share one rate, so the arc is real and survives a large mismatch: B facilitates A with
     A_AB = 2e-10, and the rate would have to move by tens of per cent to cancel it.
     """
-    arc = _arc(_default_query(), B, A)
+    arc = _arc(_glv_query(), B, A)
     assert arc.rate_mismatch_to_zero is not None
     assert abs(arc.rate_mismatch_to_zero) > 0.1, arc.rate_mismatch_to_zero
     # the sign says which way the held rate would have to move. A higher rate explains more of the

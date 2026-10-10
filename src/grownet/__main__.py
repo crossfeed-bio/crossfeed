@@ -99,11 +99,16 @@ def _rate_flags(a) -> str:
             return f"{flag} writes the growth rates of the run, so it needs --report-rates"
     if a.steady_check and not a.report_rates:
         return "--steady-check scores the growth rates and coefficients of the run, so it needs --report-rates"
-    if a.glv and a.metric != "growth_rate" and not a.deriver and a.derivation == "replicate":
+    wants_coefficients = [flag for flag, on in (("--glv", a.glv), ("--to-r", a.to_r)) if on]
+    if wants_coefficients and a.metric != "growth_rate" and not a.deriver and a.derivation == "replicate":
         # a coefficient divides by a log2 ratio of growth rates, so the area or the maximum cannot make
-        # one (#119); --glv-mode sets both at once
-        return ("--glv writes fitted gLV coefficients, and a coefficient needs the log2 ratio of a "
-                f"growth rate, not of {a.metric}: add --metric growth_rate, or use --glv-mode")
+        # one (#119); --glv-mode sets all of it at once. `--to-r` was left out of this guard while the
+        # integrated form was the default, where the metric does not matter, so with the comparison back
+        # as the default it wrote the whole network to stdout and then died with a CannotConvert
+        # traceback, which is the one thing this function exists to prevent (2026-10-10)
+        return (f"{wants_coefficients[0]} writes fitted gLV coefficients, and a coefficient needs the "
+                f"log2 ratio of a growth rate, not of {a.metric}: add --metric growth_rate, or use "
+                "--glv-mode, which also selects the derivation that fits the row")
     return ""
 
 
@@ -113,8 +118,12 @@ def _derive(a):
         # the metric came with the coefficients of #119: L is the log2 ratio of a growth rate. The rate
         # method is the reader's own setting (easylinear by default), with the lag always Baranyi's.
         a.report_rates, a.no_dropout, a.metric = True, True, "growth_rate"
-        print("gLV mode: growth rates on, drop-out communities off, the comparison on the growth rate",
-              file=sys.stderr)
+        # and the integrated form, which is the one a coefficient should be fitted by (Karoline,
+        # 2026-10-10). It is gLV mode that selects it, not the default, because it cannot express a
+        # drop-out arc or a censored one and a network needs both.
+        a.derivation = "integrated"
+        print("gLV mode: growth rates on, drop-out communities off, the comparison on the growth rate, "
+              "and the integrated form", file=sys.stderr)
     problem = _rate_flags(a)
     if problem:
         print(problem, file=sys.stderr)
@@ -534,10 +543,13 @@ def build_parser() -> argparse.ArgumentParser:
                                "reported beside a rate comes from the Baranyi fit either way")
     settings.add_argument("--rate-window", type=int, default=5, metavar="N",
                           help="with easylinear: the points in each fitted window (default 5, as mGrowthDB)")
-    settings.add_argument("--derivation", choices=["replicate", "integrated"], default="integrated",
-                          help="integrated (default), which fits each organism's row from the whole time "
-                               "course and gives the gLV coefficients directly; or replicate, the "
-                               "specified comparison of replicate sets (the page's Derivation setting)")
+    settings.add_argument("--derivation", choices=["replicate", "integrated"], default="replicate",
+                          help="replicate (default), the specified comparison of replicate sets, the only "
+                               "form that gives drop-out arcs and the no-growth rule's censored bounds; "
+                               "or integrated, which fits each organism's row from the whole time course "
+                               "and gives the gLV coefficients directly, which --glv-mode selects. "
+                               "Integrated derives no arc from a community of three or more, so no "
+                               "drop-out arc (the page's Derivation setting)")
     settings.add_argument("--metric", choices=["auc", "max", "growth_rate"], default="auc",
                           help="the growth property compared: auc, the area under the curve (default); max, the "
                                "maximal abundance; or growth_rate, the maximum specific growth rate")
@@ -630,9 +642,9 @@ def build_parser() -> argparse.ArgumentParser:
     outputs.add_argument("--glv", metavar="FILE",
                          help="write the parameters of a generalized Lotka-Volterra simulation to FILE, a zip "
                               "of one matrix of fitted coefficients per abundance unit, the matching growth "
-                              "rates and a README (needs --report-rates; under --derivation replicate it "
-                              "also needs --metric growth_rate, which the default derivation does not, "
-                              "and --glv-mode sets both)")
+                              "rates and a README (needs --report-rates; under the default derivation it "
+                              "also needs --metric growth_rate, which the integrated form does not, and "
+                              "--glv-mode sets all of them, the integrated form included)")
     outputs.add_argument("--steady-check", action="store_true",
                          help="score the gLV parameters against the chemostat steady states mGrowthDB "
                               "holds for these organisms: the report gets the comparison and the zip a "

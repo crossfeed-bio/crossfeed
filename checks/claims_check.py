@@ -37,13 +37,17 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# The docs a reader meets before they read any code.
-DOCS = ("README.md", "docs/METHOD_NOTES.md", "docs/agents/NOTES.md", "CONTRIBUTING.md")
+# The docs a reader meets before they read any code. `docs/LIMITATIONS.md` is here because it was not:
+# when the default derivation changed, the one document whose whole job is to name the tool's weaknesses
+# went on describing the other form's, and promising fields the shipped default never writes, while this
+# gate passed (2026-10-10).
+DOCS = ("README.md", "docs/METHOD_NOTES.md", "docs/agents/NOTES.md", "CONTRIBUTING.md",
+        "docs/LIMITATIONS.md")
 
 # Phrases that assert something is the current default, rather than mentioning it.
 ASSERTS_DEFAULT = re.compile(
-    r"is the default|as the default|the default for|default deriver|"
-    r"is still what|is what `?main`? runs|runs by default",
+    r"is the default|as the default|the default for|default deriver|default derivation|"
+    r"why it is the default|is still what|is what `?main`? runs|runs by default",
     re.I,
 )
 WINDOW = 200   # characters either side of a mention, for judging what a sentence is claiming
@@ -133,6 +137,13 @@ def _read(rel: str) -> str:
 
 
 def check_default_deriver(problems: list) -> None:
+    """Whether the docs name the deriver the tool actually runs, and no longer name another one.
+
+    A phrase is read as a claim about the **nearest** deriver named within `WINDOW`, not about every
+    deriver in the window. Since 2026-10-10 the two have different jobs, so the sentence a reader needs
+    is "A is the default, B is what gLV mode selects", and both names sit in one paragraph: attributing
+    the phrase to every name in range made that correct sentence unwritable.
+    """
     current = default_deriver()
     retired = [c for c in deriver_classes() if c != current]
     named_somewhere = False
@@ -141,18 +152,30 @@ def check_default_deriver(problems: list) -> None:
         text = _read(rel)
         if not text:
             continue
-        for cls in deriver_classes():
-            for m in re.finditer(re.escape(cls), text):
-                window = text[max(0, m.start() - WINDOW):m.end() + WINDOW]
-                if not ASSERTS_DEFAULT.search(window):
-                    continue
-                line = text[:m.start()].count("\n") + 1
-                if cls == current:
-                    named_somewhere = True
-                elif cls in retired:
-                    problems.append(
-                        f"{rel}:{line}: calls `{cls}` the default, but the tool runs `{current}` when "
-                        f"the reader changes nothing. Say which one ships.")
+        # a claim can name the derivation by its class or by the flag a reader types; both are mentions,
+        # because "**The default derivation.** `--derivation integrated`" names one without the class
+        # and went unchecked while this read class names alone (2026-10-10)
+        spellings = {cls: [cls] for cls in deriver_classes()}
+        for cls in spellings:
+            value = cls[:-len("Deriver")].lower() if cls.endswith("Deriver") else cls.lower()
+            spellings[cls].append(f"--derivation {value}")
+        mentions = [(m.start(), m.end(), cls) for cls, words in spellings.items()
+                    for word in words for m in re.finditer(re.escape(word), text)]
+        for claim in ASSERTS_DEFAULT.finditer(text):
+            near = [(start, end, cls) for start, end, cls in mentions
+                    if start - WINDOW <= claim.start() and claim.end() <= end + WINDOW]
+            if not near:
+                continue
+            # the one whose name sits closest to the phrase is the one the phrase is about
+            start, _end, cls = min(near, key=lambda x: min(abs(x[0] - claim.end()),
+                                                           abs(claim.start() - x[1])))
+            if cls == current:
+                named_somewhere = True
+            elif cls in retired:
+                line = text[:start].count("\n") + 1
+                problems.append(
+                    f"{rel}:{line}: calls `{cls}` the default, but the tool runs `{current}` when "
+                    f"the reader changes nothing. Say which one ships.")
     if not named_somewhere:
         problems.append(
             f"no doc in {', '.join(DOCS)} names `{current}` as the default, and it is what the tool "

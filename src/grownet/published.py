@@ -52,10 +52,22 @@ def usable(settings: dict, defaults: dict) -> bool:
     return all(settings.get(k) == v for k, v in defaults.items())
 
 
-def fresh(payload: dict, now: datetime.datetime | None = None) -> bool:
-    """Whether a published file is this format, this schema, and less than a day old."""
+def fresh(payload: dict, now: datetime.datetime | None = None, settings: dict | None = None) -> bool:
+    """Whether a published file is this format, this schema, less than a day old, and derived the way the
+    caller would derive it.
+
+    **The derivation is checked because the schema id cannot see it.** The artifact and a live run can
+    carry the same format, the same schema and entirely different networks: on 2026-10-10 the default
+    went back to the comparison of replicate sets and the published artifact was still the integrated
+    form's, 12 arcs against 145, with nothing between the reader and it. A format id moves when a FIELD
+    changes meaning; which derivation filled the fields is not a field.
+    """
     if payload.get("format") != FORMAT or payload.get("network", {}).get("schema") != SCHEMA:
         return False
+    if settings is not None:
+        made_by = (payload.get("network", {}).get("meta", {}).get("settings") or {}).get("derivation")
+        if made_by is not None and made_by != settings.get("derivation"):
+            return False
     try:
         derived = datetime.datetime.fromisoformat(payload["network"]["meta"]["derived_at"])
     except (KeyError, TypeError, ValueError):
@@ -64,13 +76,14 @@ def fresh(payload: dict, now: datetime.datetime | None = None) -> bool:
     return derived.tzinfo is not None and datetime.timedelta(0) <= now - derived < MAX_AGE
 
 
-def fetch() -> dict | None:
-    """Today's published All result, or None when there is none, it is a day old or more, or GitHub cannot
-    be reached: the caller then derives live."""
-    return fetch_from(urllib.request.urlopen)
+def fetch(settings: dict | None = None) -> dict | None:
+    """Today's published All result, or None when there is none, it is a day old or more, it was derived
+    by another derivation than `settings` asks for, or GitHub cannot be reached: the caller then derives
+    live."""
+    return fetch_from(urllib.request.urlopen, settings=settings)
 
 
-def fetch_from(opener, now: datetime.datetime | None = None) -> dict | None:
+def fetch_from(opener, now: datetime.datetime | None = None, settings: dict | None = None) -> dict | None:
     """`fetch` with the opener and the clock given, for tests."""
     # every failure to read the published network is a reason to derive live, which is what the caller
     # does with None. `from_payload` is inside the guard because that is where an unreadable document
@@ -81,6 +94,6 @@ def fetch_from(opener, now: datetime.datetime | None = None) -> dict | None:
     try:
         with opener(URL, timeout=TIMEOUT) as response:
             payload = json.loads(response.read().decode("utf-8"))
-        return from_payload(payload) if fresh(payload, now) else None
+        return from_payload(payload) if fresh(payload, now, settings) else None
     except Exception:          # noqa: BLE001 - any unreadable artifact means derive live
         return None

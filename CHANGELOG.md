@@ -6,7 +6,105 @@ content.
 
 ## [Unreleased]
 
+### Upgrading
+- **The default derivation is the specified comparison again, and gLV mode selects the integrated form**
+  (Karoline, 2026-10-10: "the default one, when we don't want to do simulations, should be the lenient
+  one that allows for drop-out communities... In all our discussions, I always thought that we were
+  comparing derivers only for the gLV mode"). **Every network a reader derives without gLV mode changes,
+  and almost all of them grow.** On the whole of mGrowthDB the default goes from **12 arcs to 145**, of
+  which **122 are drop-out arcs**, over 24 organisms instead of 9, with **15 censored arcs, 12 of them
+  carrying a measured bound**, where there were none of either.
+
+  The reason is not that one form is better. Each answers a different question and **neither is the
+  stricter version of the other**, which is now written down for both. The integrated form derives no arc
+  from a community of three or more, which Craig declined on #127, so no drop-out arc can exist under it,
+  and it has no no-growth rule, so no censored arc, no measured bound and no `NA` cell. The comparison's
+  own weakness is the one that made the integrated form the default in 0.3.0, and it is unchanged and
+  still decisive **for a coefficient**: a coefficient from the comparison is a difference of two
+  separately fitted rates divided by one partner mean, carrying the organism's own density as a confound.
+  So a gLV package is still built by the integrated form, and gLV mode now switches the derivation as
+  well as the three settings it already switched.
+
+  **What changed is which evidence was weighed.** The comparison that chose the 0.3.0 default records its
+  own command, `derive SMGDB00000007 --live --glv-mode --derivation <either> --steady-check`, and
+  `--glv-mode` turns drop-out communities off on **both** sides, so it measured the two forms on the
+  question gLV mode asks. The coverage cost it weighed, 30 arcs against 23, is a gLV-mode number; outside
+  gLV mode the same trade is 145 against 12.
+
+  **To keep 0.3.0's behavior**, pass `--derivation integrated`, or press gLV mode on the page. Arcs from
+  the comparison carry no `se_rate_selection` and no `rate_unchecked` caution, which are the integrated
+  form's machinery; they carry `se`, `sd`, `p_value`, `q_value` and `effect_over_sd` from Welch's t-test
+  as they always have.
+
 ### Fixed
+- **`derive --all --live` could answer with a network derived the other way.** The daily artifact is
+  accepted on its format, its schema id and its age, and none of those can see which derivation filled
+  the fields: a format id moves when a **field** changes meaning, and the derivation is not a field. So a
+  reader at the default would have been served 0.3.0's 12-arc integrated network in place of the 145 arcs
+  their own settings produce, until the scheduled workflow re-derived. The artifact's own
+  `settings.derivation` is now compared with the reader's, and an artifact from before that field existed
+  is still served, since its age and schema already protect it.
+- **gLV mode's own switch did not know about the fourth setting it sets.** `glv_mode_on` read three while
+  `glv_mode` wrote four, so with the comparison selected the toggle still said "on" (and `aria-pressed`
+  told a screen reader so) in the one state where a coefficient is *not* being fitted by the form the
+  mode exists to select; pressing it then switched the mode off rather than completing it. The page's two
+  messages and the caption beside the button said three settings as well, while the command line said
+  four.
+- **The gLV example button produced a run no package can be built from.** It set the growth rates and the
+  study and inherited the rest, which worked only while the shipped derivation happened to be the
+  integrated form. It presses gLV mode now, so the two cannot drift again. Its test asserted
+  `derivation == DEFAULTS["derivation"]`, which is true whatever the default is, which is why it passed
+  while the button broke; it asserts what the button has to achieve instead.
+- **`--to-r` wrote a whole network to stdout and then died with a traceback** when the comparison could
+  not give it coefficients. The guard that exists "so a run never writes a network and then refuses to
+  write the files beside it" covered `--glv` and not `--to-r`, which only mattered once the default
+  stopped being the form where the metric is irrelevant. The command in `derive --help` was one of the
+  two that hit it.
+- **Three more places still described the integrated form as the default**, found by reviewing the three
+  open changes as one tree rather than one at a time. The README's gLV section had the two derivations
+  swapped, so the paragraph a reader consults to learn what `carrying_capacity` and `capacity_source` mean
+  described the wrong one, and `capacity_source` is empty under the default because nothing fits the
+  plateau there. The README also promised `growth_rates.csv` is "in the same order" as the matrix, which
+  is false for a multi-unit package and makes a positional join give a plausible, wrong simulation; the
+  organism column is the join key and the claim is gone. And the help's gLV walkthrough printed a command
+  line that exits 2 under the default, because the button was taught to press gLV mode and the command
+  beside it was not.
+- **The report did not carry what the derivation says about itself.** `meta.provisional` reached the JSON,
+  GraphML and the page and never the report, which is the artifact `docs/LIMITATIONS.md` nominates as the
+  one that travels with the output and the one a methods section is written from. So a reader could quote
+  a derivation's limits only from a file they were not reading. The report prints it under "about this
+  derivation". (The commit that added those limits said they traveled into the report header; they did
+  not, and this is that claim made true.)
+- **The default derivation said nothing about its own two limits**, in the sentence that travels into
+  every report header, into GraphML and into a methods section. It named neither while it was the
+  alternative; as the default again it reaches every reader, and 122 of the 145 arcs on the live corpus
+  come from a drop-out design. `meta.provisional` now says that a drop-out arc means the removed member
+  affects the target **directly or through the others**, and that a coefficient from this comparison
+  carries the organism's own density as a confound, which is why gLV mode fits the row instead.
+- **`docs/LIMITATIONS.md` described the other derivation**, and promised fields the shipped default never
+  writes: `rate_mismatch_to_zero`, `se_rate_selection` and the `rate_unchecked` caution are on **0 of the
+  default's 145 arcs**, and `partner_abundance` on 23 of 145 rather than all of them, because a drop-out
+  comparison has no single partner whose level the effect is per unit of. Entries 1 and 4 say which
+  derivation they are about and what the default carries instead. **The claims gate could not see that
+  file at all** (`DOCS` in `checks/claims_check.py`), so the one document whose job is to name weaknesses
+  was the one nothing checked; it is in the list now.
+- **Five statements still called the integrated form the default**, including two in the R package's
+  shipped help, which a reader meets as `?glv_matrix`, and one that contradicted itself inside a single
+  sentence in `ReplicateDeriver`'s own docstring.
+- **A network said the two derivations "can be read together"**, in `meta.provisional`, which travels into
+  the report, GraphML and every file. They are on the same scale and they are not interchangeable: one
+  gives drop-out and censored arcs and the other gives coefficients, and the sentence now says so.
+- **The claims gate had no test at all**, before or after its attribution rule was rewritten here
+  (pointed out reviewing #199). It has one now, covering the five shapes that matter against a tree the
+  test builds rather than against today's documents, including the case the rewrite loses: an appositive,
+  where the retired deriver is the subject of the claim and the shipped one sits nearer the phrase. That
+  one is recorded as a known hole rather than left to be discovered, and the test fails if the previous
+  attribution returns.
+- **The claims gate could not express "A is the default, B is not"**. It read a phrase such as "is the
+  default" as a claim about **every** deriver named within 200 characters, so the one sentence a reader
+  now needs, naming both forms and their jobs, was unwritable without tripping it. A phrase is attributed
+  to the **nearest** deriver mention instead. The gate caught this change's own documentation drift
+  first, which is what it is for.
 - **The page's Example gave an empty network** (Karoline, 2026-10-09, the day 0.3.0 was released). Two
   causes, both of them in the button rather than in the derivation.
   **It inherited whatever settings were in the form.** Pressing gLV mode and then Example ran the example
@@ -105,7 +203,7 @@ content.
   least one the implied mismatch is growth that depends on the partner. No live arc meets that condition
   today. The spread is the **sample** standard deviation of those rates, which the field description and
   the method notes now say rather than leaving it to the choice of function (Craig's agent on #177): which
-  sets a study holds and which one each arc was matched to is one realisation of a matching, so they are a
+  sets a study holds and which one each arc was matched to is one realization of a matching, so they are a
   sample rather than the whole population, and the population form would be narrower by a factor of 1.41
   where two sets were selected.
 - **Every growth rate is published with the doubling time it implies** (#173, Karoline on 2026-10-08).
@@ -330,7 +428,7 @@ content.
   standalone viewer, which preserves unknown top-level fields on export, could write a file the schema
   rejected. Both halves are permissive now, which is what the schema's own sentence promises. An
   undeclared key is a **note** rather than a problem: calling it a problem also skipped the
-  referential-integrity pass, which runs only when there are none, so one unrecognised field turned off
+  referential-integrity pass, which runs only when there are none, so one unrecognized field turned off
   the check that catches an edge citing a study the document does not hold.
 - **The decline limit did not reach the co-culture plateau** (#155 item 10). `derive.target_capacity` is
   the other place a plateau becomes a self-limitation and was the only one that did not refuse a curve

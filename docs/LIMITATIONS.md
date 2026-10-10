@@ -33,7 +33,16 @@ per cent of such a difference can publish a significant arc that is not there. *
 monoculture-versus-co-culture design measures it**: the co-culture is a condition the monocultures were
 never grown in.
 
-**Published instead.** `rate_mismatch_to_zero` on every arc: the fractional error in the held rate that
+**Which derivation this is about.** The held rate is the integrated form's, which **gLV mode** selects,
+so everything in this entry is about an arc or a coefficient that form produced. The default derivation,
+the comparison of replicate sets, holds no rate and carries none of the fields below: on the live corpus
+`rate_mismatch_to_zero`, `se_rate_selection` and the `rate_unchecked` caution are on **0 of its 145 arcs**
+(measured 2026-10-10). Its own limits are the two the network's `provisional` sentence names, which the
+report prints under "about this derivation": a drop-out arc says the removed member affects the target
+directly or through the others, and a coefficient from the comparison carries the organism's own density
+as a confound.
+
+**Published instead** (in gLV mode). `rate_mismatch_to_zero` on every arc: the fractional error in the held rate that
 would move this arc's coefficient to zero, exactly, since the fit is affine in that rate. An arc needing
 0.5 survives a 50 per cent error; one needing 0.04 does not. Where a study matched the organism to more
 than one monoculture set, the spread of the rates those sets fitted enters `se` as a third component
@@ -90,9 +99,13 @@ The mean over the window the rate estimator fitted is what the package uses; the
 window's end and the mean over the whole course are all defensible and give different numbers.
 
 **Published instead.** The choice is stated in the package README and in the help page, the partner's
-abundance travels on every arc (`partner_abundance`, with its unit and the number of replicates behind
-it), and nothing is converted between abundance units: a search spanning several writes one matrix per
-unit rather than one matrix with invented conversions.
+abundance travels on **every arc that has one** (`partner_abundance`, with its unit and the number of
+replicates behind it), and nothing is converted between abundance units: a search spanning several writes
+one matrix per unit rather than one matrix with invented conversions. **An arc from a drop-out design
+carries no partner abundance**, because the comparison is a community against the same community without
+one member and there is no single partner whose level the effect is per unit of: on the live corpus that
+is 23 of 145 arcs with an abundance and 122 without (measured 2026-10-10). Such an arc reaches no
+coefficient matrix, which is why a package is built in gLV mode, where drop-out designs are off.
 
 **What would settle it.** Agreement on what `x_j_star` is, or a reader-supplied unit bridge, both open on
 #124.
