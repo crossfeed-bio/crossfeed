@@ -1,8 +1,8 @@
 # grownet: growth-curve derived interaction networks
 
 [![ci](https://github.com/crossfeed-bio/crossfeed/actions/workflows/ci.yml/badge.svg)](https://github.com/crossfeed-bio/crossfeed/actions/workflows/ci.yml)
-[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![python: 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/crossfeed-bio/crossfeed/blob/main/LICENSE)
+[![python: 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://github.com/crossfeed-bio/crossfeed/blob/main/pyproject.toml)
 
 grow**net** turns experimentally grounded microbial co-growth data from
 [mGrowthDB](https://mgrowthdb.gbiomed.kuleuven.be/) into directed interaction networks, in a neutral and
@@ -94,8 +94,8 @@ with `python3 -m pip uninstall grownet`, then run `pipx install --force grownet`
 ### To develop it
 
 From a clone, with Python 3.10 or newer: the setup and the checks are in
-[CONTRIBUTING.md](CONTRIBUTING.md#development-setup), and how a release is made in
-[RELEASING.md](RELEASING.md).
+[CONTRIBUTING.md](https://github.com/crossfeed-bio/crossfeed/blob/main/CONTRIBUTING.md#development-setup), and how a release is made in
+[RELEASING.md](https://github.com/crossfeed-bio/crossfeed/blob/main/RELEASING.md).
 
 ## Quickstart
 
@@ -174,8 +174,10 @@ python -m grownet schema [--out FILE]
   organism appears once, so arcs of one pair are merged across conditions and studies by their median, a
   pair whose arcs disagree in sign is left at 0, and an empty cell or an arc below the absence threshold
   is 0. An obligate or abolished interaction has no log2 ratio, since one side did not grow at all, so its
-  cell holds a measured bound from the no-growth rule instead: at least this much facilitation, or at most
-  this much inhibition, with the rule printed in the report.
+  cell holds **`NA`**: nothing in a cell can say that a number is a floor rather than a measurement. The
+  bound the no-growth rule puts on that side travels on the **arc** instead (`strength_bound`,
+  `bound_rule`), at least this much facilitation or at most this much inhibition, and the report prints it
+  with its rule. **A reader of the matrix has to handle `NA`.**
 - `--report-rates` also reports each organism's maximum specific growth rate in monoculture (the median
   over the replicates and studies that have one, batch monocultures only), which `--rates FILE` writes as
   CSV. With it, `--glv FILE` writes the parameters of a generalized Lotka-Volterra simulation: a zip of one
@@ -191,12 +193,12 @@ A `grownet` console command is installed too, so `grownet derive ...` works afte
 
 ## The legend
 
-One picture of what every arc, head, dash and flag means: [docs/legend.svg](docs/legend.svg). The local
+One picture of what every arc, head, dash and flag means: [docs/legend.svg](https://raw.githubusercontent.com/crossfeed-bio/crossfeed/main/docs/legend.svg). The local
 page links to it ("What the arcs mean"), and the same vocabulary is what the Cytoscape style draws (#25).
 It is generated from the code (`make legend`), and a test requires it to name every effect, outcome,
 quality flag, caution, evidence and status the model defines, so it cannot fall behind them.
 
-[![the legend](docs/legend.svg)](docs/legend.svg)
+[![the legend](https://raw.githubusercontent.com/crossfeed-bio/crossfeed/main/docs/legend.svg)](https://github.com/crossfeed-bio/crossfeed/blob/main/docs/legend.svg)
 
 ## The local page
 
@@ -239,7 +241,7 @@ stay there.
 Press the **gLV mode** switch beside All and the two settings a simulation needs are set in Advanced
 settings: **Report growth rates** on and **Include drop-out communities** off, since a drop-out arc may act
 through a third species (`--glv-mode` on the command line, or `--report-rates --no-dropout`). The result section's **gLV parameters** control then
-either downloads the zip or sends the parameters straight into a running R session. The companion package is in [`r/`](r), and it
+either downloads the zip or sends the parameters straight into a running R session. The companion package is in [`r/`](https://github.com/crossfeed-bio/crossfeed/tree/main/r), and it
 assumes no simulator: it hands over a plain matrix and a plain vector, with a helper that shapes them for
 [miaSim](https://bioconductor.org/packages/release/bioc/html/miaSim.html).
 
@@ -270,7 +272,7 @@ more than one way), `glv_rates()` the matching rates, `glv_scale()` is unnecessa
 and says so (it stays for the effect-size parameters of 0.2.0 and
 earlier, which the package still reads), and `as_miasim()` stops when an organism has no growth rate,
 since a simulation cannot invent one. `grownet derive ... --report-rates --to-r` does the same from the command line, and `grownet_glv(url)` reads the parameters from the page
-when no port can be opened. The R package's own README is [`r/README.md`](r/README.md).
+when no port can be opened. The R package's own README is [`r/README.md`](https://github.com/crossfeed-bio/crossfeed/blob/main/r/README.md).
 
 ## Send it to Cytoscape
 
@@ -306,7 +308,7 @@ as a format it does not know and derive live instead. A field addition moves the
 it moves from was released, which is why 0.3.0 ships `/v3` and no release carries `/v2`. Files from 0.1.x
 (`/v0`) and 0.2.x (`/v1`) are still valid, and `grownet validate` names the version it read. It is the contract downstream tools
 read, and it is pinned by a JSON Schema at
-[`schema/interaction_network.schema.json`](schema/interaction_network.schema.json). Its `meta` records
+[`schema/interaction_network.schema.json`](https://github.com/crossfeed-bio/crossfeed/blob/main/schema/interaction_network.schema.json). Its `meta` records
 the tool, `tool_version` and `derived_on` (the date: mGrowthDB changes, so the same version can derive a
 different network later), `derived_at` (the date and time), the data read (`meta.data`: the API, when,
 and each study's upload and publication dates) and every setting used; GraphML carries the tool, version,
@@ -408,10 +410,10 @@ table: the organisms in the header row and in the first column, and `A[i][j]` th
 affected, columns the actor), so `dx_i/dt = x_i (r_i + sum_j A[i][j] x_j)` reads in that order. A matrix
 holds one cell per ordered pair, so arcs of one pair merge across conditions and studies by their median,
 and a pair whose arcs disagree in sign is left at 0. An empty cell and an arc below the absence threshold
-are 0; an obligate or abolished interaction carries a measured bound rather than a ratio, since one side
-did not grow at all: the no-growth rule allows that side at most its factor over its own measured start,
-which bounds the cell from below or from above, and the report prints the rule behind each one. The
-diagonal is 0 here.
+are 0; an obligate or abolished interaction has no ratio, since one side did not grow at all, so its
+cell is **`NA`** and the bound travels on the arc: the no-growth rule allows that side at most its factor
+over its own measured start, which bounds the effect from below or from above, and the report prints the
+rule behind each one. The diagonal is 0 here.
 `--glv FILE` (with `--report-rates --metric growth_rate`, or `--glv-mode`, which sets both) writes the parameters of a
 generalized Lotka-Volterra simulation as a zip, as **fitted coefficients**: one
 `interaction_matrix.<unit>.csv` per abundance unit. **What a cell is depends on the derivation, and the
@@ -574,7 +576,7 @@ above its result, so a file read without the page still says how to read it. It 
 
 The derivation method is the scientific choice this collaboration exists to make: which growth metric, how
 to read a per-strain signal inside a community, and the significance test. The options are laid out as a
-menu in [docs/METHOD_NOTES.md](docs/METHOD_NOTES.md). Whatever you choose plugs in through one small
+menu in [docs/METHOD_NOTES.md](https://github.com/crossfeed-bio/crossfeed/blob/main/docs/METHOD_NOTES.md). Whatever you choose plugs in through one small
 interface, the `Deriver`, and nothing else in the pipeline changes.
 
 A `Deriver` is a class with one method, `derive(study, exps)`, that returns `(records, skipped)`. Here is
@@ -611,14 +613,14 @@ Run your method live on any study, with no glue code:
 python -m grownet derive SMGDB00000004 --live --deriver mymodule:MyDeriver
 ```
 
-Test it offline before you touch the network. [`examples/custom_deriver.py`](examples/custom_deriver.py)
+Test it offline before you touch the network. [`examples/custom_deriver.py`](https://github.com/crossfeed-bio/crossfeed/blob/main/examples/custom_deriver.py)
 is a complete, runnable Deriver on synthetic data:
 
 ```
 python examples/custom_deriver.py
 ```
 
-and [`tests/test_deriver.py`](tests/test_deriver.py) shows how to unit-test a method with a fake client,
+and [`tests/test_deriver.py`](https://github.com/crossfeed-bio/crossfeed/blob/main/tests/test_deriver.py) shows how to unit-test a method with a fake client,
 no network required. Changes to the method are scientific decisions, so please open an issue to discuss
 before you implement one.
 
@@ -629,10 +631,13 @@ whole row from its time course: `ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integr
 the parameters, so one regression per organism gives its growth rate, its own self-limitation and every
 partner's per-capita coefficient together, in the units a gLV simulation reads. It is fitted in two
 stages, the monocultures first and then the co-cultures, because a single joint fit inside one experiment
-is not identified. Each arc carries two spreads measured on two disjoint designs and never mixed: the
-co-culture replicates' own scatter, and the monoculture stage's, from resampling those monocultures. They
-are added to give the standard error the t-test uses, with a Satterthwaite degrees of freedom, so an arc
-whose monoculture stage is poorly determined is not tested as though that stage were exact. Beside them an
+is not identified. Each arc carries up to three spreads, measured on disjoint designs and never mixed:
+the co-culture replicates' own scatter; the monoculture stage's, from resampling those monocultures; and,
+where the condition matcher selected more than one monoculture set for that organism in that study, the
+spread of the rates those sets fit. They are added to give the standard error the t-test uses, with a
+Satterthwaite degrees of freedom over whichever are present, so an arc whose monoculture stage is poorly
+determined is not tested as though that stage were exact. The third is a lower bound on what the arc
+assumes and is empty for an organism with one selected set, which is most arcs. Beside them an
 arc carries how much of the organism's own log abundance change the fit explains, the same for the row
 with every partner set to zero, the condition number of the design, the share of the measured course the
 rows cover, and the fractional change in the monoculture rate that would drive the coefficient to zero.
@@ -700,12 +705,12 @@ a pair measured in several studies counts once. The genus is the first word of t
 not NCBI's lineage (register item 24).
 
 The placeholder derivation grow**net** shipped before either real method existed was deleted in 0.3.0;
-what it did is recorded in [docs/METHOD_NOTES.md](docs/METHOD_NOTES.md), where the register's
+what it did is recorded in [docs/METHOD_NOTES.md](https://github.com/crossfeed-bio/crossfeed/blob/main/docs/METHOD_NOTES.md), where the register's
 `[baseline]` tags say which option it took in each menu. The open method choices, and who settled
 each, are in the same file.
 
 **What the data cannot settle is listed on its own**, in
-[docs/LIMITATIONS.md](docs/LIMITATIONS.md): seven questions, what grow**net** publishes instead of a
+[docs/LIMITATIONS.md](https://github.com/crossfeed-bio/crossfeed/blob/main/docs/LIMITATIONS.md): seven questions, what grow**net** publishes instead of a
 number that would imply each was settled, what would settle it, and what it blocks (nothing, in every
 case). The most general of them is that the tool **never establishes a mechanism**: an arc says a partner
 changed a growth outcome, not the route by which it did, which is why the output says effect rather than
@@ -724,19 +729,19 @@ itself, a documented house style, and a schema contract that keeps the shipped s
 code. The tests run on Python 3.10 to 3.12 on Linux, and on Windows and macOS. Get the same checks locally
 with `make check`, or run them on every commit with `pre-commit install`. The R companion package has its
 own checks, `make r-check` where R is installed, and CI runs the same build and `R CMD check` on every
-push. See [CONTRIBUTING.md](CONTRIBUTING.md). Found a security issue?
-Report it privately (see [SECURITY.md](SECURITY.md)), not in a public issue.
+push. See [CONTRIBUTING.md](https://github.com/crossfeed-bio/crossfeed/blob/main/CONTRIBUTING.md). Found a security issue?
+Report it privately (see [SECURITY.md](https://github.com/crossfeed-bio/crossfeed/blob/main/SECURITY.md)), not in a public issue.
 
 ## Attribution and data governance
 
 mGrowthDB is open, so grow**net** pulls from it directly. Per-study licenses are respected by citing every
 study that supports a network at the edge level, rather than bundling. Unpublished collaborator data is
 used only for the agreed analysis and is never ingested into any downstream corpus. See
-[docs/DATA_GOVERNANCE.md](docs/DATA_GOVERNANCE.md).
+[docs/DATA_GOVERNANCE.md](https://github.com/crossfeed-bio/crossfeed/blob/main/docs/DATA_GOVERNANCE.md).
 
 A joint open source project of Syntropa and the KU Leuven Laboratory of Molecular Bacteriology
 (K. Faust, H. Zafeiropoulos). The local page's About says who built the tool. Contributions welcome.
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+Apache-2.0. See [LICENSE](https://github.com/crossfeed-bio/crossfeed/blob/main/LICENSE).

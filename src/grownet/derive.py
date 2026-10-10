@@ -939,10 +939,11 @@ def bounded_strength(c: dict) -> tuple:
     """(the log2 bound a censored comparison's cell holds, the rule behind it), or (None, "").
 
     A censored comparison has no ratio, because one side did not grow. The no-growth rule that said so
-    bounds that side's metric (`interaction.no_growth_bound`), so the cell holds a measured bound rather
-    than a stated extreme (#129): the growing side's own geometric mean over that bound, with the sign of
-    the outcome. An obligate pair gives a lower bound (at least this much facilitation) and an abolished
-    one an upper bound (at most this much inhibition).
+    bounds that side's metric (`interaction.no_growth_bound`), so the ARC carries a measured bound rather
+    than a stated extreme, while the matrix cell holds NA (#129, settled 2026-10-08): the growing side's
+    own geometric mean over that bound, with the sign of the outcome. An obligate pair gives a lower
+    bound (at least this much facilitation) and an abolished one an upper bound (at most this much
+    inhibition).
     """
     bound = c.get("bound") or {}
     if not bound.get("value"):

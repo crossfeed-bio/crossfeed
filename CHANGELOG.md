@@ -7,6 +7,24 @@ content.
 ## [Unreleased]
 
 ### Fixed
+- **Every relative link in the README was dead on PyPI, and the legend image was broken there** (#192).
+  The README is the long description on <https://pypi.org/project/grownet/>, and PyPI does not rewrite
+  relative URLs the way GitHub does, so all fifteen resolved against the project page: the limitations
+  statement, the method notes, the data-governance statement, `SECURITY.md` and its private route for
+  reporting a vulnerability, the contributing guide, the JSON Schema, the R package's README, and the one
+  picture of the visual vocabulary, which rendered as a broken image. They are absolute now, and the image
+  comes from `raw.githubusercontent.com`. It had shipped this way in 0.1.0, 0.2.0 and 0.3.0.
+- **The published error model said the standard error has two components; it has three** (#202). #155
+  item 1 added the spread of the selected monoculture rates in 0.3.0 and updated the field table, but not
+  the sentence in `meta.statistics.test`, the one in `meta.provisional`, or the README, all of which travel
+  to a reader. On the published corpus 6 of 12 arcs carried the third component, and on one it was **83
+  per cent of the variance** behind its q-value, so a reader reconstructing the test from the two named
+  parts got a different number from the published `p_value`.
+- **Four places still said a censored matrix cell holds a measured bound** (#203). It holds `NA`, settled
+  on #129, and the bound travels on the arc. The README said it twice, the `--format` help once and the
+  `strength_bound` field description once, which are the places a reader looks first, and two code
+  comments said it to the next maintainer. The changelog's own 0.3.0 note warns that a reader of the
+  matrix must handle `NA`.
 - **The page's Example gave an empty network** (Karoline, 2026-10-09, the day 0.3.0 was released). Two
   causes, both of them in the button rather than in the derivation.
   **It inherited whatever settings were in the form.** Pressing gLV mode and then Example ran the example
