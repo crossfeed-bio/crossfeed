@@ -1069,6 +1069,8 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
 
 # searches kept for their pages, downloads and reports: the latest ones only, so a page left open all day
 # does not keep every result in memory (code review of 2026-09-28)
+GONE = "That search is no longer here; run it again."
+RUNNING = "That search is still running; this will be ready when it finishes."
 KEPT_JOBS = 20
 # the species list (and All's list of studies) is read again after this many seconds, so a study published
 # while the page runs is found without a restart (code review of 2026-09-28)
@@ -1142,18 +1144,41 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         return render_result(self.token, job["result"])
 
     def _result(self, query: dict):
-        """The search a request names with job=, or the latest one when it names none."""
-        job = self.state.get("jobs", {}).get(query.get("job", [""])[0])
+        """The search a request names with job=, or the latest one when it names none.
+
+        **A request that names a search it cannot have is refused rather than answered with another
+        one.** It used to fall through to the most recently viewed result, so a tab whose search had been
+        pruned (`KEPT_JOBS`, after twenty more searches) downloaded somebody else's network under the
+        ordinary filename, with HTTP 200 and nothing to say so, while the page for the same job id said
+        plainly that the search was gone. Two tabs are enough to meet it (2026-10-10).
+        """
+        named = query.get("job", [""])[0]
+        job = self.state.get("jobs", {}).get(named)
+        if named and not (job and job.get("status") == "done"):
+            return None
         result = job["result"] if job and job.get("status") == "done" else self.state.get("result")
         if result is not None:
             # the port this page is served from, so the result can print the address R fetches from
             result["port"] = self.server.server_address[1]
         return result
 
+    def _gone(self, query: dict, otherwise: str) -> str:
+        """Why there is nothing to give back: a search still running, one that is gone, or none run yet.
+
+        A search that has not finished is refused for the same reason as one that is gone, since there is
+        nothing to hand over either way, but it must not be told to run again: it is running, and saying
+        so sends a reader to repeat work that is already under way (found reviewing #205, 2026-10-10).
+        """
+        named = query.get("job", [""])[0]
+        if not named:
+            return otherwise
+        job = self.state.get("jobs", {}).get(named)
+        return RUNNING if job and job.get("status") == "running" else GONE
+
     def _download(self, fmt: str, query: dict):
         result = self._result(query)
         if not result:
-            self._send(render_form(self.token, message="Nothing to download yet."))
+            self._send(render_form(self.token, message=self._gone(query, "Nothing to download yet.")))
         elif fmt == "graphml":
             self._send(to_graphml(result["network"]), "application/xml", f"{TITLE}_network.graphml")
         elif fmt == "matrix":
@@ -1194,7 +1219,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif parsed.path == "/report.txt":
             result = self._result(query)
             if not result:
-                self._send(render_form(self.token, message="No report yet: run a search first."))
+                self._send(render_form(self.token,
+                                       message=self._gone(query, "No report yet: run a search first.")))
             else:
                 self._send(report_text(result), "text/plain; charset=utf-8", f"{TITLE}_report.txt")
         else:
@@ -1273,7 +1299,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         """Send the network already computed, without deriving it again (#25)."""
         result = self._result(query)
         if not result:
-            return render_form(self.token, message="Nothing to send yet.")
+            return render_form(self.token, message=self._gone(query, "Nothing to send yet."))
         try:
             sent = send(result["network"], name=TITLE)
         except CytoscapeError as e:
