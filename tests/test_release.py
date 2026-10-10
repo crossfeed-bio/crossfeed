@@ -205,7 +205,20 @@ def test_a_date_in_the_future_is_refused_however_it_is_written(tmp_path):
 def test_this_tree_dates_its_release_no_earlier_than_its_newest_commit():
     """The dates said 2026-10-06 while every commit of the release was 2026-10-07, and because the two
     files agreed with each other the gate was silent (#155 item 8). This reads the tree, so it keeps
-    them honest rather than only consistent."""
+    them honest rather than only consistent.
+
+    **It asks the question only while the tree is the release being prepared** (2026-10-10). Afterwards
+    `__version__` still names the released version, its section is still dated, and every commit of the
+    next cycle is newer than that date, so this failed on every pull request from the morning after
+    0.3.0 shipped. The date of a release that has already happened is a fact about commits this tree no
+    longer ends at, and re-checking it against a moving HEAD can only go wrong.
+
+    The signal that the cycle has moved on is content under `## [Unreleased]`, which is what
+    `RELEASING.md` says to start when work continues. The tag would say it exactly, but
+    `actions/checkout` fetches no tags, so a tag-based check would pass locally and skip in CI, which is
+    worse than this. The hole left is a commit made after a release that adds nothing to the changelog:
+    it is rare, because every change here earns an entry, and it fails loudly rather than silently.
+    """
     import datetime
     import re
     import subprocess
@@ -225,6 +238,9 @@ def test_this_tree_dates_its_release_no_earlier_than_its_newest_commit():
         return
     heading = re.search(r"([0-9]{4}-[0-9]{2}-[0-9]{2})", section.group(1))
     assert heading, f"CHANGELOG.md gives {version} neither a date nor 'unreleased'"
+    unreleased = re.search(r"^## \[Unreleased\]\s*\n(.*?)(?=^## \[)", changelog, re.M | re.S)
+    if unreleased and unreleased.group(1).strip():
+        return          # the next cycle has begun; this release's date is a fact about commits behind us
     dated = datetime.date.fromisoformat(heading.group(1))
     newest = subprocess.run(["git", "log", "-1", "--format=%cs"], capture_output=True, text=True,
                             cwd=root).stdout.strip()
