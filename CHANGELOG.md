@@ -60,6 +60,12 @@ content.
   write the files beside it" covered `--glv` and not `--to-r`, which only mattered once the default
   stopped being the form where the metric is irrelevant. The command in `derive --help` was one of the
   two that hit it.
+- **The report did not carry what the derivation says about itself.** `meta.provisional` reached the JSON,
+  GraphML and the page and never the report, which is the artifact `docs/LIMITATIONS.md` nominates as the
+  one that travels with the output and the one a methods section is written from. So a reader could quote
+  a derivation's limits only from a file they were not reading. The report prints it under "about this
+  derivation". (The commit that added those limits said they traveled into the report header; they did
+  not, and this is that claim made true.)
 - **The default derivation said nothing about its own two limits**, in the sentence that travels into
   every report header, into GraphML and into a methods section. It named neither while it was the
   alternative; as the default again it reaches every reader, and 122 of the 145 arcs on the live corpus

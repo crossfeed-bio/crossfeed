@@ -37,7 +37,10 @@ never grown in.
 so everything in this entry is about an arc or a coefficient that form produced. The default derivation,
 the comparison of replicate sets, holds no rate and carries none of the fields below: on the live corpus
 `rate_mismatch_to_zero`, `se_rate_selection` and the `rate_unchecked` caution are on **0 of its 145 arcs**
-(measured 2026-10-10). Its own limits are the two in the network's `provisional` sentence and in entry 8.
+(measured 2026-10-10). Its own limits are the two the network's `provisional` sentence names, which the
+report prints under "about this derivation": a drop-out arc says the removed member affects the target
+directly or through the others, and a coefficient from the comparison carries the organism's own density
+as a confound.
 
 **Published instead** (in gLV mode). `rate_mismatch_to_zero` on every arc: the fractional error in the held rate that
 would move this arc's coefficient to zero, exactly, since the fit is affine in that rate. An arc needing
