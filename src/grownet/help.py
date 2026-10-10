@@ -53,10 +53,14 @@ RELEASES = (
         "A gLV example button beside All: it fills both boxes and the settings for a package that "
         "settles, and runs the search. The help walks that package through miaSim step by step, and "
         "ends by holding the simulated steady state against the co-culture it was fitted from.",
-        "gLV mode also selects the integrated derivation, which fits each organism's whole row from the "
-        "measured time course instead of comparing replicate sets: it needs no growth property and gives "
-        "the coefficients directly. The default derivation, the comparison of replicate sets, is what a "
-        "search uses otherwise, because it is the only one that gives drop-out and censored arcs.",
+        # 0.3.0 is tagged and published, so this says what 0.3.0 did and is not rewritten when the
+        # behavior changes afterwards: "a tagged version is never reused for changed content"
+        # (CHANGELOG's own preamble). The derivation went back to the comparison on 2026-10-10, and that
+        # belongs in the next version's entry, which the release pull request adds.
+        "The default derivation fits each organism's whole row from the measured time course instead of "
+        "comparing replicate sets, which needs no growth property and gives the coefficients directly. "
+        "The comparison of replicate sets is Derivation in Advanced settings, or --derivation replicate, "
+        "and is unchanged.",
         "Send to R and the R package carry the same numbers as the download, and the package reads the "
         "parameters of 0.2.0 as well, telling the two apart.",
     )),

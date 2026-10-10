@@ -46,8 +46,8 @@ DOCS = ("README.md", "docs/METHOD_NOTES.md", "docs/agents/NOTES.md", "CONTRIBUTI
 
 # Phrases that assert something is the current default, rather than mentioning it.
 ASSERTS_DEFAULT = re.compile(
-    r"is the default|as the default|the default for|default deriver|"
-    r"is still what|is what `?main`? runs|runs by default",
+    r"is the default|as the default|the default for|default deriver|default derivation|"
+    r"why it is the default|is still what|is what `?main`? runs|runs by default",
     re.I,
 )
 WINDOW = 200   # characters either side of a mention, for judging what a sentence is claiming
@@ -152,8 +152,15 @@ def check_default_deriver(problems: list) -> None:
         text = _read(rel)
         if not text:
             continue
-        mentions = [(m.start(), m.end(), cls) for cls in deriver_classes()
-                    for m in re.finditer(re.escape(cls), text)]
+        # a claim can name the derivation by its class or by the flag a reader types; both are mentions,
+        # because "**The default derivation.** `--derivation integrated`" names one without the class
+        # and went unchecked while this read class names alone (2026-10-10)
+        spellings = {cls: [cls] for cls in deriver_classes()}
+        for cls in spellings:
+            value = cls[:-len("Deriver")].lower() if cls.endswith("Deriver") else cls.lower()
+            spellings[cls].append(f"--derivation {value}")
+        mentions = [(m.start(), m.end(), cls) for cls, words in spellings.items()
+                    for word in words for m in re.finditer(re.escape(word), text)]
         for claim in ASSERTS_DEFAULT.finditer(text):
             near = [(start, end, cls) for start, end, cls in mentions
                     if start - WINDOW <= claim.start() and claim.end() <= end + WINDOW]

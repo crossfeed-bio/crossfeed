@@ -437,8 +437,9 @@ environment, so a package built from several media says so and points at the sec
 per-capita effect in 1/(time x abundance), so nothing in the package is a convention and nothing needs
 scaling; abundances are never converted between units, which is why each unit has its own matrix.
 
-**The default derivation, from the whole time course.** `--derivation integrated`, which is what runs
-unless the Derivation setting is changed, fits each organism's row rather than comparing replicate sets:
+**The derivation gLV mode selects, from the whole time course.** `--derivation integrated`, which gLV
+mode turns on and which the Derivation setting selects on its own, fits each organism's row rather than
+comparing replicate sets:
 `ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt)` is linear in the parameters, so one
 least-squares fit per organism gives its rate, its own limitation and every partner's coefficient at
 once, with no growth property, no log2 ratio, no plateau to certify and no partner abundance to divide by.
@@ -656,12 +657,13 @@ with every partner set to zero, the condition number of the design, the share of
 rows cover, and the fractional change in the monoculture rate that would drive the coefficient to zero.
 A row whose fit explains less than predicting nothing does is refused and named.
 
-Why it is the default (Karoline, 2026-10-06): it is the form published work uses for this purpose, and it
-is not biased by construction. The alternative below estimates a coefficient as a difference of two
-separately fitted rates divided by one partner mean, and that quantity is the coefficient plus a term in
-the organism's own density, which is set by the inoculum rather than by the partner.
+Why a coefficient comes from it (Karoline, 2026-10-06): it is the form published work uses for this
+purpose, and it is not biased by construction. The comparison estimates a coefficient as a difference of
+two separately fitted rates divided by one partner mean, and that quantity is the coefficient plus a term
+in the organism's own density, which is set by the inoculum rather than by the partner. That argument is
+about the coefficient, which is why gLV mode uses this form and the default does not.
 
-`ReplicateDeriver` (`src/grownet/derive.py`) is the alternative, `--derivation replicate`, and the
+`ReplicateDeriver` (`src/grownet/derive.py`) is the default, `--derivation replicate`, and the
 comparison the collaboration specified. It reads each replicate's measured growth curve from mGrowthDB
 and compares replicate sets on the log2 scale, over the area under the curve by default (`--metric max`
 for maximal abundance, `--metric growth_rate` for the maximum specific growth rate). Every edge

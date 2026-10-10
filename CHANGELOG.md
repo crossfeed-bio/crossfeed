@@ -12,8 +12,8 @@ content.
   one that allows for drop-out communities... In all our discussions, I always thought that we were
   comparing derivers only for the gLV mode"). **Every network a reader derives without gLV mode changes,
   and almost all of them grow.** On the whole of mGrowthDB the default goes from **12 arcs to 145**, of
-  which **122 are drop-out arcs**, over 24 organisms instead of 9, with **12 censored arcs and their
-  measured bounds** where there were none.
+  which **122 are drop-out arcs**, over 24 organisms instead of 9, with **15 censored arcs, 12 of them
+  carrying a measured bound**, where there were none of either.
 
   The reason is not that one form is better. Each answers a different question and **neither is the
   stricter version of the other**, which is now written down for both. The integrated form derives no arc
@@ -37,6 +37,29 @@ content.
   as they always have.
 
 ### Fixed
+- **`derive --all --live` could answer with a network derived the other way.** The daily artifact is
+  accepted on its format, its schema id and its age, and none of those can see which derivation filled
+  the fields: a format id moves when a **field** changes meaning, and the derivation is not a field. So a
+  reader at the default would have been served 0.3.0's 12-arc integrated network in place of the 145 arcs
+  their own settings produce, until the scheduled workflow re-derived. The artifact's own
+  `settings.derivation` is now compared with the reader's, and an artifact from before that field existed
+  is still served, since its age and schema already protect it.
+- **gLV mode's own switch did not know about the fourth setting it sets.** `glv_mode_on` read three while
+  `glv_mode` wrote four, so with the comparison selected the toggle still said "on" (and `aria-pressed`
+  told a screen reader so) in the one state where a coefficient is *not* being fitted by the form the
+  mode exists to select; pressing it then switched the mode off rather than completing it. The page's two
+  messages and the caption beside the button said three settings as well, while the command line said
+  four.
+- **The gLV example button produced a run no package can be built from.** It set the growth rates and the
+  study and inherited the rest, which worked only while the shipped derivation happened to be the
+  integrated form. It presses gLV mode now, so the two cannot drift again. Its test asserted
+  `derivation == DEFAULTS["derivation"]`, which is true whatever the default is, which is why it passed
+  while the button broke; it asserts what the button has to achieve instead.
+- **`--to-r` wrote a whole network to stdout and then died with a traceback** when the comparison could
+  not give it coefficients. The guard that exists "so a run never writes a network and then refuses to
+  write the files beside it" covered `--glv` and not `--to-r`, which only mattered once the default
+  stopped being the form where the metric is irrelevant. The command in `derive --help` was one of the
+  two that hit it.
 - **The default derivation said nothing about its own two limits**, in the sentence that travels into
   every report header, into GraphML and into a methods section. It named neither while it was the
   alternative; as the default again it reaches every reader, and 122 of the 145 arcs on the live corpus

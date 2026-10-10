@@ -225,8 +225,9 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   is left out and reported</span></div>
 <div class="row"><label>Derivation
   <select name="derivation">{derivations}</select></label>
-  <span class="muted">replicate, the specified comparison: a growth property of the replicates with the
-  partner against those without it. Or integrated, which fits each organism's row from the whole time
+  <span class="muted">replicate (the default), the specified comparison: a growth property of the
+  replicates with the partner against those without it, and the only one that gives a drop-out arc or a
+  censored one. Or integrated, which gLV mode selects and which fits each organism's row from the whole time
   course, ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt), over its growth phase; it needs no
   growth property and gives the gLV coefficients directly, and it reports every row its design cannot
   identify</span></div>
@@ -363,8 +364,8 @@ every medium.</p>
 <button type="submit" name="glv_mode" value="1" class="switch{glv_on}" aria-pressed="{glv_pressed}"
 ><span class="track"><span class="knob"></span></span>gLV mode</button>
 <span class="muted">All derives every study, ignoring the boxes (half a minute or so). gLV example fills
-the boxes and settings for a package that simulates, and runs it. gLV mode sets growth rates on and
-drop-out communities off; press it again to switch back.</span></div>
+the boxes and settings for a package that simulates, and runs it. gLV mode sets the four settings a
+package needs, the derivation among them; press it again to switch back.</span></div>
 {_settings_block(settings or {}, token, job)}
 </form>{below}""", token, refresh, job)
 
@@ -775,12 +776,14 @@ def _no_growth(s: dict, which: str) -> float:
 
 
 # What the page says when the mode is switched on and off.
-GLV_MODE_MESSAGE = ("gLV mode on: growth rates on, drop-out communities off, and the comparison on the "
-                    "growth rate, which is what a fitted coefficient is made of. All three are in "
-                    "Advanced settings, and pressing gLV mode again switches them back. Name one medium "
-                    "in the second box to keep a simulation to one environment.")
-GLV_MODE_OFF_MESSAGE = ("gLV mode off: growth rates off, drop-out communities included again and the "
-                        "comparison back on the area under the curve, which are the defaults.")
+GLV_MODE_MESSAGE = ("gLV mode on: growth rates on, drop-out communities off, the comparison on the "
+                    "growth rate, and the derivation on the integrated form, which is what a fitted "
+                    "coefficient is made of. All four are in Advanced settings, and pressing gLV mode "
+                    "again switches them back. Name one medium in the second box to keep a simulation "
+                    "to one environment.")
+GLV_MODE_OFF_MESSAGE = ("gLV mode off: growth rates off, drop-out communities included again, the "
+                        "comparison back on the area under the curve and the derivation back to the "
+                        "comparison of replicate sets, which are the defaults.")
 
 
 def chosen_deriver(settings: dict, client=None):
@@ -794,9 +797,16 @@ def chosen_deriver(settings: dict, client=None):
 
 
 def glv_mode_on(settings: dict) -> bool:
-    """Whether the settings are the ones gLV mode sets."""
+    """Whether the settings are the ones gLV mode sets.
+
+    Every setting `glv_mode` writes is read here. It read three while the mode wrote four, so the toggle
+    said "on" with the comparison selected, which is the one state in which a coefficient is NOT being
+    fitted by the form the mode exists to select, and pressing it then switched the mode off instead of
+    completing it (found reviewing #199, 2026-10-10).
+    """
     s = {**DEFAULTS, **(settings or {})}
-    return bool(s["report_rates"]) and not s["include_dropout"] and s["metric"] == "growth_rate"
+    return (bool(s["report_rates"]) and not s["include_dropout"] and s["metric"] == "growth_rate"
+            and s["derivation"] == "integrated")
 
 
 def glv_mode(settings: dict, on: bool = True) -> dict:
@@ -927,7 +937,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     s = {**DEFAULTS, **(settings or {})}
     if all_studies and published and daily.usable(s, DEFAULTS):
         say(0, None, "Reading today's All network from the grownet repository")
-        found = daily.fetch()
+        found = daily.fetch(s)      # and only if it was derived the way this search would derive it
         if found:
             return found
     names = [] if all_studies else split_entries(entries)    # one per line, and at commas and semicolons
@@ -1377,9 +1387,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         if form.get("glv_example"):
             # everything a working simulation needs, and then the search itself: the two organisms, the
-            # study they are in so nothing else is read, and growth rates on, which a package cannot be
-            # built without. The help's gLV section runs this package through miaSim step by step.
-            settings = {**settings, "report_rates": True, "conditions": GLV_EXAMPLE_STUDY}
+            # study they are in so nothing else is read, and the whole of gLV mode. It used to add only
+            # the growth rates and rely on the shipped derivation being the integrated form; with the
+            # comparison back as the default it inherited that instead and the button produced a run no
+            # package can be built from, on a study chosen for the other form (found reviewing #199,
+            # 2026-10-10). It presses the mode rather than repeating parts of it, so the two cannot
+            # drift again. The help's gLV section runs this package through miaSim step by step.
+            settings = {**glv_mode(settings), "conditions": GLV_EXAMPLE_STUDY}
             job = self._start(list(GLV_EXAMPLE), settings)
             job["thread"].join(self.wait)
             self._redirect(f"/?token={self.token}&job={job['id']}#result")

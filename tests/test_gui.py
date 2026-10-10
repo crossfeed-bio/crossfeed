@@ -638,8 +638,11 @@ def test_the_daily_all_network_is_used_when_fresh_and_the_settings_are_the_defau
     in_23_hours = published.fetch_from(opener, now=derived + datetime.timedelta(hours=23))
     assert in_23_hours["network"].edges == live["network"].edges and in_23_hours["skipped"] == live["skipped"]
     assert published.fetch_from(opener, now=derived + datetime.timedelta(hours=25)) is None   # a day: live
+    # `fetch` takes the search's settings now, so the artifact's own derivation can be compared with
+    # the one the reader asked for (2026-10-10)
     monkeypatch.setattr(published, "fetch",
-                        lambda: published.fetch_from(opener, now=derived + datetime.timedelta(hours=1)))
+                        lambda settings=None: published.fetch_from(
+                            opener, now=derived + datetime.timedelta(hours=1), settings=settings))
     r = run_query(FakeClient(), [], {}, all_studies=True)
     assert r["published"] == payload["network"]["meta"]["derived_at"] and r["all"]
     assert "derived once a day" in render_result("tok", r)
@@ -807,12 +810,17 @@ def test_opening_the_page_without_the_token_explains_itself(server):
 
 def test_the_glv_example_button_configures_everything_and_runs(server):
     """Karoline, 2026-10-07: "include a gLV example button in the GUI that configures everything for a
-    working gLV example". It fills both boxes and the one setting a package cannot be built without, and
-    runs the search, so a reader gets a package to simulate from one press.
+    working gLV example". It fills both boxes and presses gLV mode, and runs the search, so a reader gets
+    a package to simulate from one press.
 
-    The double here serves the fake study, not SMGDB00000006, so what this pins is the configuring: the
-    example's species in the first box, its study in the second, Report growth rates on, and the shipped
-    derivation untouched. The package the real study gives is what the help's steps walk through.
+    **It asserted `derivation == DEFAULTS["derivation"]` until 2026-10-10**, which is true whatever the
+    default is, so it passed while the button quietly stopped being able to build a package: the default
+    went back to the comparison, the button inherited it, and a comparison gives no gLV coefficient. The
+    assertion is now what the button has to achieve rather than what it happens to equal.
+
+    The double here serves the fake study, not SMGDB00000002, so what this pins is the configuring: the
+    example's species in the first box, its study in the second, and every setting gLV mode sets. The
+    package the real study gives is what the help's steps walk through.
     """
     import grownet.gui as gui
     base, token = server
@@ -823,9 +831,13 @@ def test_the_glv_example_button_configures_everything_and_runs(server):
 
     doc = json.loads(_get(f"{base}/download.json?token={token}"))
     said = doc["meta"]["settings"]
-    assert said["report_rates"] is True           # a package needs a rate per organism
     assert said["conditions"] == gui.GLV_EXAMPLE_STUDY
-    assert said["derivation"] == gui.DEFAULTS["derivation"]
+    # every setting the mode sets, because a package needs all of them: a rate per organism, no arc that
+    # may act through a third species, the comparison on a growth rate, and the form that fits the row
+    for key, value in gui.glv_mode(dict(gui.DEFAULTS)).items():
+        if gui.DEFAULTS[key] != value:
+            assert said[key] == value, f"the gLV example left {key} at {said[key]!r}"
+    assert said["derivation"] == "integrated" and gui.glv_mode_on(said)
     # the species it asked for are the example's, which the report of the run names
     report = _get(f"{base}/report.txt?token={token}")
     for name in gui.GLV_EXAMPLE:

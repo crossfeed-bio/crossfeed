@@ -528,8 +528,17 @@ def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
 
     # Karoline, 2026-10-04: "Do I click a 2nd time to switch it off?" Pressing it again restores both
     # defaults, and says so
-    again = press({"species": A, "glv_mode": "1", "report_rates": "1", "only_entered": "1",
-                   "metric": "growth_rate"})                            # what the page posts when on
+    # what the page posts when the mode is on, built from the mode itself rather than listed here: this
+    # list was one setting short the moment gLV mode began selecting the derivation too, and a short list
+    # makes the next press turn the mode ON again instead of off (2026-10-10)
+    from grownet.gui import DEFAULTS, glv_mode, glv_mode_on
+    posted = {"species": A, "glv_mode": "1", "only_entered": "1"}
+    on = glv_mode(dict(DEFAULTS))
+    assert glv_mode_on(on)
+    for key, value in on.items():
+        if DEFAULTS[key] != value and value is not False:
+            posted[key] = "1" if value is True else str(value)
+    again = press(posted)
     back = again[again.index("<details>"):]
     assert 'name="report_rates" value="1">' in back                      # off, its default
     assert 'name="include_dropout" value="1" checked' in back            # on, its default

@@ -99,11 +99,16 @@ def _rate_flags(a) -> str:
             return f"{flag} writes the growth rates of the run, so it needs --report-rates"
     if a.steady_check and not a.report_rates:
         return "--steady-check scores the growth rates and coefficients of the run, so it needs --report-rates"
-    if a.glv and a.metric != "growth_rate" and not a.deriver and a.derivation == "replicate":
+    wants_coefficients = [flag for flag, on in (("--glv", a.glv), ("--to-r", a.to_r)) if on]
+    if wants_coefficients and a.metric != "growth_rate" and not a.deriver and a.derivation == "replicate":
         # a coefficient divides by a log2 ratio of growth rates, so the area or the maximum cannot make
-        # one (#119); --glv-mode sets both at once
-        return ("--glv writes fitted gLV coefficients, and a coefficient needs the log2 ratio of a "
-                f"growth rate, not of {a.metric}: add --metric growth_rate, or use --glv-mode")
+        # one (#119); --glv-mode sets all of it at once. `--to-r` was left out of this guard while the
+        # integrated form was the default, where the metric does not matter, so with the comparison back
+        # as the default it wrote the whole network to stdout and then died with a CannotConvert
+        # traceback, which is the one thing this function exists to prevent (2026-10-10)
+        return (f"{wants_coefficients[0]} writes fitted gLV coefficients, and a coefficient needs the "
+                f"log2 ratio of a growth rate, not of {a.metric}: add --metric growth_rate, or use "
+                "--glv-mode, which also selects the derivation that fits the row")
     return ""
 
 

@@ -508,7 +508,8 @@ important to ship something good". Three were structural rather than inherent, a
    median `fit_r2` of 0.917, and **none** of them fails to beat its interaction-free null, which is what
    makes the gate a line at zero rather than a filter that discards true absences.
 
-What this does to the comparison, measured the same day. Coverage: the default derivation gives 30 arcs,
+What this does to the comparison, measured the same day. Coverage, **both sides in gLV mode**, so
+neither is the default of any release and the label below means the comparison: the comparison gives 30 arcs,
 8 organism rows and 10 off-diagonal cells, every block with a positive equilibrium; the integrated form
 gives 23 arcs, 6 organism rows and 9 cells, with one block settling nowhere with every organism above
 zero. Out of sample against SMGDB00000005's control, with the interaction-free null beside each. **The
