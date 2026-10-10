@@ -37,6 +37,19 @@ content.
   as they always have.
 
 ### Fixed
+- **The About page told a reader of this build that their default derivation is the integrated form.**
+  A test pins the newest entry of that log to `__version__`, so the list is read as "what your version
+  does", and `__version__` does not move until the next release: leaving the reversal for the next
+  version's entry meant the page contradicted `DEFAULTS["derivation"]` for everyone in between. The 0.3.0
+  entry now says what 0.3.0 did in the past tense and states the reversal beside it, which keeps the rule
+  that a tagged version is never reused for changed content without lying to the reader in front of it.
+- **Two tests passed on the thing they were written to catch.** The one pinning that both derivations
+  cite a study by the same field searched a window of source text for the first of four field names, and
+  the regression it documents names two of them in that window, so it returned the same answer for the
+  broken source and the fixed one; it now reads the assignment and proves it can tell them apart. The one
+  named for the report and the help naming the derivation asserted `"integrated" in render_help(...)`,
+  which `render_help` cannot know, since it takes no settings: both halves were properties of a static
+  table. It now checks the report follows the setting in both directions.
 - **The integrated form told every reader its standard error had two components, and it has had three
   since #155 item 1.** `_arc_statistics` returns `se_replicates`, `se_rate_stage` and
   `se_rate_selection`, and takes Satterthwaite degrees of freedom over whichever are present, so the

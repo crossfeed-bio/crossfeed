@@ -55,12 +55,19 @@ RELEASES = (
         "ends by holding the simulated steady state against the co-culture it was fitted from.",
         # 0.3.0 is tagged and published, so this says what 0.3.0 did and is not rewritten when the
         # behavior changes afterwards: "a tagged version is never reused for changed content"
-        # (CHANGELOG's own preamble). The derivation went back to the comparison on 2026-10-10, and that
-        # belongs in the next version's entry, which the release pull request adds.
-        "The default derivation fits each organism's whole row from the measured time course instead of "
-        "comparing replicate sets, which needs no growth property and gives the coefficients directly. "
-        "The comparison of replicate sets is Derivation in Advanced settings, or --derivation replicate, "
-        "and is unchanged.",
+        # (CHANGELOG's own preamble). The derivation went back to the comparison on 2026-10-10, and the
+        # next version's entry records that. What this sentence may NOT do is leave a reader of THIS
+        # build told that their own default is the other derivation: a test pins the newest entry to
+        # `__version__`, so this list is read as "what your version does", and `__version__` does not
+        # move until the release. So the change is stated here in the past tense rather than hidden
+        # behind it (found reviewing #199, 2026-10-10: the page said the integrated form was the
+        # default while `DEFAULTS["derivation"]` said the comparison).
+        "0.3.0 made the integrated form the default derivation: it fits each organism's whole row from "
+        "the measured time course instead of comparing replicate sets, which needs no growth property "
+        "and gives the coefficients directly.",
+        "That default was reversed after 0.3.0 was tagged. On this build the comparison of replicate "
+        "sets is the default again and gLV mode is what selects the integrated form; either one is "
+        "Derivation in Advanced settings, or --derivation.",
         "Send to R and the R package carry the same numbers as the download, and the package reads the "
         "parameters of 0.2.0 as well, telling the two apart.",
     )),

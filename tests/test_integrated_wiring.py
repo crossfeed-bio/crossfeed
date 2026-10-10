@@ -96,12 +96,23 @@ def test_the_choice_reaches_the_derivation_on_the_one_study_command(monkeypatch)
         assert isinstance(seen["deriver"], expected), choice
 
 
-def test_the_report_and_the_help_name_the_derivation(monkeypatch):
-    from grownet.gui import render_help
+def test_the_report_names_the_derivation_that_ran(monkeypatch):
+    """The report must name the derivation that produced the file, since the two answer different
+    questions and a reader cannot tell from the arcs which one they hold.
+
+    This also asserted `"integrated" in render_help("tok")`, under the name "and the help". That had no
+    force: `render_help` takes a token and a job and no settings (`gui.py:409`), so it cannot name the
+    derivation a search ran, and both halves of that assertion are properties of the static settings
+    table, true whatever any search does. The help page's own claim is checked where it belongs, in
+    tests/test_help.py, and the real property here is that the report FOLLOWS the setting, which the old
+    assertion never checked either way (found reviewing this test, 2026-10-10).
+    """
     from grownet.report import report_text
-    result = _query(derivation="integrated")
-    text = report_text(result)
-    assert "Derivation" in text or "derivation" in text
-    assert "integrated" in text
-    help_page = render_help("tok")
-    assert "integrated" in help_page and "time course" in help_page
+
+    integrated = report_text(_query(derivation="integrated"))
+    assert "derivation" in integrated.lower() and "integrated" in integrated
+
+    # and it says the other one when the other one ran, which is what makes the line informative
+    replicate = report_text(_query())
+    assert "integrated" not in replicate
+    assert "replicate" in replicate

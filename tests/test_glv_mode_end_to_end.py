@@ -307,22 +307,32 @@ def test_both_derivations_cite_a_study_by_the_same_field():
     rather than asserting a string.
     """
     import inspect
+    import re
 
     from grownet import derive as replicate_path
     from grownet import integrated as integrated_path
 
-    def cited_field(module) -> str:
-        source = inspect.getsource(module)
-        at = source.index('"study_citation"')
-        reads = source[at:at + 160]
-        for key in ("name", "citation", "title", "id"):
-            if f'get("{key}"' in reads:
-                return key
-        raise AssertionError(f"no study field read beside study_citation in {module.__name__}")
+    def cited_field(source: str) -> str:
+        """The field ASSIGNED to study_citation, not any field named near it.
 
-    assert cited_field(replicate_path) == cited_field(integrated_path) == "name"
+        This took a 160-character window after `"study_citation"` and returned the first of
+        ("name", "citation", "title", "id") that appeared anywhere in it. The regression it documents is
+        `{"study_citation": study.get("citation", ""), "study_name": study.get("name", "")}`, whose window
+        holds both, and "name" was checked first, so the helper returned "name" for the broken source and
+        for the fixed one alike: the test passed on the exact bug it was written for (found reviewing this
+        test, 2026-10-10). It now reads the assignment.
+        """
+        match = re.search(r'"study_citation":\s*study\.get\(\s*"(\w+)"', source)
+        if match is None:
+            raise AssertionError("no study.get assigned to study_citation")
+        return match.group(1)
 
-    # and the record really has no `citation`, so reading one can only ever give nothing
-    record = {"id": "SMGDB00000002", "name": "A study title", "url": "https://doi.org/x"}
-    assert record.get("citation", "") == ""
-    assert (record.get("name") or record.get("id", "")) == "A study title"
+    assert cited_field(inspect.getsource(replicate_path)) == "name"
+    assert cited_field(inspect.getsource(integrated_path)) == "name"
+
+    # and the helper tells the regression from the fix, which is what the old one could not do. These are
+    # the two real sources, so the two assertions above are reachable rather than true of any source.
+    regression = '    m = {"study_citation": study.get("citation", ""), "study_name": study.get("name", "")}'
+    fixed = '    m = {"study_citation": study.get("name") or study.get("id", ""), "study_name": ""}'
+    assert cited_field(regression) == "citation"           # the bug is visible now
+    assert cited_field(fixed) == "name"                    # and distinguishable from the fix
