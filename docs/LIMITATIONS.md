@@ -26,8 +26,8 @@ its own: it is why the tool's name is still in question.
 
 ## 1. Whether a monoculture rate is the rate that organism had in co-culture
 
-**Not known.** The default derivation fits each organism's row by holding its monoculture growth rate
-fixed and fitting the partners' coefficients around it. The arc is then the only free parameter left to
+**Not known.** The integrated form, which **gLV mode** selects, fits each organism's row by holding its
+monoculture growth rate fixed and fitting the partners' coefficients around it. The arc is then the only free parameter left to
 absorb any difference between that rate and the rate the organism actually had in the co-culture, so a few
 per cent of such a difference can publish a significant arc that is not there. **No growth curve in a
 monoculture-versus-co-culture design measures it**: the co-culture is a condition the monocultures were

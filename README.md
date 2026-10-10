@@ -238,7 +238,9 @@ stay there.
 
 Press the **gLV mode** switch beside All and the two settings a simulation needs are set in Advanced
 settings: **Report growth rates** on and **Include drop-out communities** off, since a drop-out arc may act
-through a third species (`--glv-mode` on the command line, or `--report-rates --no-dropout`). The result section's **gLV parameters** control then
+through a third species (`--glv-mode` on the command line, which also sets the growth property and the
+derivation a coefficient needs; `--report-rates --no-dropout` sets two of the four and gives a different
+network). The result section's **gLV parameters** control then
 either downloads the zip or sends the parameters straight into a running R session. The companion package is in [`r/`](r), and it
 assumes no simulator: it hands over a plain matrix and a plain vector, with a helper that shapes them for
 [miaSim](https://bioconductor.org/packages/release/bioc/html/miaSim.html).
@@ -269,7 +271,7 @@ The caveats travel as data rather than as text to be read first: the object prin
 more than one way), `glv_rates()` the matching rates, `glv_scale()` is unnecessary for fitted coefficients
 and says so (it stays for the effect-size parameters of 0.2.0 and
 earlier, which the package still reads), and `as_miasim()` stops when an organism has no growth rate,
-since a simulation cannot invent one. `grownet derive ... --report-rates --to-r` does the same from the command line, and `grownet_glv(url)` reads the parameters from the page
+since a simulation cannot invent one. `grownet derive ... --glv-mode --to-r` does the same from the command line, and `grownet_glv(url)` reads the parameters from the page
 when no port can be opened. The R package's own README is [`r/README.md`](r/README.md).
 
 ## Send it to Cytoscape

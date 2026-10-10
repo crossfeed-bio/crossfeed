@@ -50,11 +50,11 @@ DERIVE_EXAMPLES = """examples:
     grownet derive SMGDB00000004 --live --format matrix --out study4_matrix.csv
 
   the parameters of a generalized Lotka-Volterra simulation, with the growth rates beside them:
-    grownet derive SMGDB00000004 --live --report-rates --glv study4_glv.zip \\
+    grownet derive SMGDB00000004 --live --glv-mode --glv study4_glv.zip \\
         --rates study4_rates.csv --report study4_report.txt
 
   the same parameters sent into a waiting R session (in R: library(grownet); grownet_listen()):
-    grownet derive SMGDB00000004 --live --report-rates --to-r
+    grownet derive SMGDB00000004 --live --glv-mode --to-r
 
 """
 

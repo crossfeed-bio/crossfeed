@@ -60,6 +60,14 @@ content.
   write the files beside it" covered `--glv` and not `--to-r`, which only mattered once the default
   stopped being the form where the metric is irrelevant. The command in `derive --help` was one of the
   two that hit it.
+- **`derive --help` shipped two examples the tool refuses**, and the README a third. Both gLV examples in
+  the command line's own epilog used `--report-rates` and relied on the shipped derivation being the
+  integrated form, so with the comparison back as the default they exit 2, as did the README's `--to-r`
+  line. They press gLV mode now. The README also offered `--report-rates --no-dropout` as the command
+  line equivalent of gLV mode: it sets two of the four settings the mode sets and gives a different
+  network, which it now says. And `docs/LIMITATIONS.md` entry 1 still opened by calling the held rate
+  "the default derivation", six lines above the paragraph added yesterday that corrects it, so a reader
+  who stops at the bold line takes the rate-mismatch limitation to apply to every default network.
 - **Every study lost its citation under the integrated form**, which is what gLV mode selects and what
   derived the published All artifact. `integrated.py` read `study.get("citation")`, a key mGrowthDB has
   never had, while the comparison reads `name`, so the JSON's `studies[]`, the report's "cite the studies
