@@ -615,8 +615,8 @@ def build_parser() -> argparse.ArgumentParser:
     outputs.add_argument("--format", choices=["json", "graphml", "matrix"], default="json",
                          help="the network format: json (the neutral format, default), matrix (the adjacency "
                               "matrix as CSV: one cell per ordered pair, holding the effect of the column on "
-                              "the row, arcs of a pair merged by their median, and a measured bound from "
-                              "the no-growth rule for an obligate or abolished pair) or graphml "
+                              "the row, arcs of a pair merged by their median, and NA for an obligate or "
+                              "abolished pair, whose measured bound travels on the arc) or graphml "
                               "(Cytoscape, "
                               "Gephi, igraph, networkx)")
     outputs.add_argument("--out", metavar="FILE", help="write the network to FILE (default: the screen)")

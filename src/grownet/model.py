@@ -150,8 +150,9 @@ class Edge:
     target_capacity: float | None = None       # the target's own plateau in the co-culture
     target_capacity_unit: str = ""
     target_capacity_n: int | None = None
-    # A censored comparison has no ratio, so its cell holds a measured bound from the no-growth rule
-    # instead of a stated extreme: at least this much facilitation, or at most this much inhibition (#129).
+    # A censored comparison has no ratio, so the arc carries a measured bound from the no-growth rule
+    # and its matrix cell holds NA: at least this much facilitation, or at most this much inhibition
+    # (#129; the cell held the bound briefly while 0.3.0 was prepared, and holds NA since 2026-10-08).
     strength_bound: float | None = None
     bound_rule: str = ""
     # What a derivation that fits the row rather than comparing sets has to say for itself (#127): the

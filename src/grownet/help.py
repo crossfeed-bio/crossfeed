@@ -369,9 +369,10 @@ EDGE_ATTRIBUTES = {
                        "phase: what fits the self-limitation of an organism that grows only with a partner",
     "target_capacity_unit": "the abundance unit that plateau is in, as measured; never converted",
     "target_capacity_n": "co-culture replicates behind that plateau",
-    "strength_bound": "for a comparison where one side did not grow, the measured bound the cell holds "
-                      "instead of a ratio: at least this much facilitation, or at most this much "
-                      "inhibition, from the no-growth rule's own numbers",
+    "strength_bound": "for a comparison where one side did not grow, the measured bound the ARC carries "
+                      "in place of a ratio, while the matrix cell holds NA: at least this much "
+                      "facilitation, or at most this much inhibition, from the no-growth rule's own "
+                      "numbers",
     "bound_rule": "what that bound rests on, in words: the factor the rule allows and the measured start "
                   "it applies to",
     "coefficient": "with a derivation that fits the row rather than comparing sets: the gLV coefficient "
