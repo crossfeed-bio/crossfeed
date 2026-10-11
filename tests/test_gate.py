@@ -126,10 +126,30 @@ def test_the_secrets_pattern_does_not_require_the_value_to_be_quoted(monkeypatch
     found = gate.check_secrets(list(caught))
     assert len(found) == len(caught), f"missed one of {list(caught)}: {found}"
 
-    # and every keyword the pattern names has a case above, so adding one without a case fails here
-    for keyword in ("api", "secret", "token", "password", "authorization", "bearer"):
-        assert any(keyword in text.lower() for text in caught.values()), (
-            f"the pattern names {keyword} and no case above uses it")
+    # ONE CASE PER KEYWORD, each using that keyword alone and each asserted on its own. The loop that
+    # was here searched the test's OWN fixtures for the keyword, so it could never fail because of a
+    # change to the pattern: it only checked that the test had written the word down. `authorization`
+    # was untested in fact, because the single case containing it, `header.py`, is matched by the
+    # `bearer` alternative: `Bearer` is itself one of the keywords and the match starts there. Dropping
+    # `authorization` from the pattern left all 714 tests green while a Basic auth header, the real form
+    # with no `Bearer` in it, stopped being caught (found reviewing round 10).
+    basic = "QWxhZGRpbjpvcGVuc2VzYW1l" + "MTIzNA=="
+    by_keyword = {
+        "api_key": ("kw_api_key.py", line("api_key", ": ", aws)),
+        "api-key": ("kw_api_dash_key.py", line("api-key", ": ", value)),
+        "secret": ("kw_secret2.py", line("secret", "=", value)),
+        "token": ("kw_token.py", line("MGROWTHDB_TOKEN", "=", value)),
+        "password": ("kw_password2.py", line("password", ": ", value)),
+        "authorization": ("kw_authorization.py", line("Authorization", ": ", basic)),
+        "bearer": ("kw_bearer2.py", line("bearer", " ", jwt)),
+    }
+    # the case that went wrong, pinned: `authorization` must be tested by a line with no `bearer` in it,
+    # since `bearer` is itself a keyword and would do the matching. (`api_key` and `api-key` are one
+    # alternative, `api[_-]?key`, and are both here only to pin the optional separator.)
+    assert "bearer" not in by_keyword["authorization"][1].lower()
+    monkeypatch.setattr(gate, "_read", {name: text for name, text in by_keyword.values()}.get)
+    for keyword, (name, _text) in by_keyword.items():
+        assert gate.check_secrets([name]), f"the pattern no longer catches {keyword}"
 
     clean = {
         "workflow.yml": "env:\n  GH_TOKEN: ${{ github.token }}\n  O: ${{ secrets.GITHUB_TOKEN }}\n",
