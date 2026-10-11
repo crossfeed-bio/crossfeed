@@ -104,7 +104,12 @@ def test_the_viewer_writes_the_same_graphml_as_the_command_line(tmp_path):
         r"const displayWeightOf=[^\n]*\n", r"const pyFloat=[^\n]*\n",
         r"function graphmlValue\(attr,v,ty\)\{.*?\n\}\n",
         # the graph-level resolver: flat key names over a nested meta (#155 item 4)
-        r"const GRAPH_META=\{.*?\};\n", r"function graphMeta\(meta,nm\)\{.*?\}\n",
+        # the parameter list is a LOCATOR, not the requirement: pinning `(meta,nm)` broke this test when
+        # the resolver started needing the whole network for the schema id, which is a parity test
+        # failing on a rename rather than on a disagreement (#216)
+        r"const GRAPH_META=\{.*?\};\n", r"const DISPLAY_COLUMNS_NOTE=[^\n]*\n",
+        r"const SCHEMA_URL=[^\n]*\n", r"const PROJECT_URL=[^\n]*\n",
+        r"function graphMeta\([^)]*\)\{.*?\}\n",
         r"function toGraphML\(net\)\{.*?\n\}\n"))
     # Every key this release added has to be carried by the fixture, or the two writers agree about
     # nothing. The test used to build its network with no `meta` at all and a record holding none of the
@@ -181,3 +186,31 @@ def test_the_viewer_accepts_every_network_the_tool_writes():
     got = json.loads(subprocess.run(["node", "-e", js], capture_output=True, text=True,
                                     check=True).stdout)
     assert got == ["yes"] * len(accept) + ["no"] * len(refuse)
+
+
+def test_the_viewer_and_the_exporter_agree_on_the_constants_they_both_write():
+    """Three strings are written by both GraphML writers, so they are compared BY NAME here.
+
+    `test_the_viewer_writes_the_same_graphml_as_the_command_line` already catches a drift, but it catches
+    it as a 960-line diff of every data row. This says which constant moved, which is the difference
+    between a failure you can read and one you have to bisect. The schema URL and the project URL are
+    properties of the format rather than of a run, which is why both writers hold them rather than
+    reading them from `meta` (#216).
+    """
+    import re
+    from pathlib import Path
+
+    from grownet.export import DISPLAY_COLUMNS_NOTE
+    from grownet.help import REPOSITORY
+    from grownet.schema import SCHEMA_DOC
+
+    page = (Path(__file__).resolve().parents[1] / "gui" / "index.html").read_text(encoding="utf-8")
+
+    def const(name):
+        m = re.search(rf'const {name}="([^"]*)";', page)
+        assert m, f"the viewer no longer defines {name}"
+        return m.group(1)
+
+    assert const("SCHEMA_URL") == SCHEMA_DOC["$id"]
+    assert const("PROJECT_URL") == REPOSITORY
+    assert const("DISPLAY_COLUMNS_NOTE") == DISPLAY_COLUMNS_NOTE

@@ -47,6 +47,40 @@ content.
   problem rather than a note, because there is no reading under which a shadowed definition is intended.
   `TEXT_EXT` is removed with it: nothing had read it since scanning became content-based, and a dead list
   of nine extensions at the top of the file #227 was about reads as load-bearing (Craig's agent).
+- **The GraphML carried no schema id, no source and no citation** (#216), and it is the file a Cytoscape
+  user shares. The schema id is the part that matters: `model.py` calls it the project's one guarantee,
+  "the one signal that says the meaning of a field moved", and `significance` was the corrected p-value in
+  `/v0` and is -log10(q) in `/v3`, which runs the other way, so a `/v0` and a `/v3` GraphML had identical
+  column names, inverted `significance`, and nothing in either file to tell them apart. It now carries
+  `schema` (the DOCUMENT's own id, so a network loaded from a `/v0` file says `/v0`), `schema_url`,
+  `source_db`, `studies` with whatever each has to cite by, `project_url`, and one line saying what the
+  display columns are and that the width of an arc with no measured strength is absolute. The viewer
+  writes all of them too, and two tests hold the two writers together: the existing byte-for-byte parity,
+  and a new one that compares the three shared constants by name so a drift says which one moved.
+- **A network pointed at documents it gave no way to find** (#218 item 1). `meta.provisional` ends "see
+  docs/METHOD_NOTES.md and docs/LIMITATIONS.md in the grownet repository" and the only URLs in a network
+  were the study DOIs and the mGrowthDB API: the string `github` appeared nowhere, and `schema` is a bare
+  id rather than a URL. `meta.project` now carries the repository, the schema URL and a URL for each of
+  those two documents.
+- **`--include-absent` was silently ignored by `--format matrix`** (#218 item 2). That format's own
+  convention is that an empty or absent cell is 0, so an arc below the threshold has no cell to be kept
+  in, and the matrix records no settings either, so nothing said the flag was asked for and dropped. It
+  says so now, with the count, and the suggestion one step upstream is format-aware rather than sending a
+  reader to a flag that does nothing there.
+- **The published All artifact had no retrievable identity** (#218 item 3). The workflow replaces one
+  file on a fixed release with `--clobber`, outside git history, so the file a reader downloaded is gone
+  the next day and `derived_at` was its only identifier: a reader asked which version they used had no
+  answer, and a re-derive gives a different network from a database that has moved on. The payload now
+  carries `identity` with a `content_sha256` over everything except that block, so a reader reproduces it
+  from the file alone by the recipe the block states, plus the run and the commit from the environment
+  GitHub Actions already provides, which needs no change to the workflow and leaves a local run carrying
+  neither rather than inventing them.
+- **`license` was empty on every study, everywhere** (#218 item 4). mGrowthDB's study record has no
+  license field at all, measured live: its keys are description, experiments, id, name, projectId,
+  publishedAt, uploadedAt and url. The integrated path read a `license` key that never exists, which
+  reads as "we looked and it was empty", and the report and the attribution block rendered it as
+  "license: see study", sending a reader to look for something the source does not publish. They now say
+  no license is stated by mGrowthDB and point at the study.
 - **The `--fixture` route accepted every setting and applied none of them, in silence** (#222 item 1),
   which is the route a downstream implementer and this project's own examples use. Measured rather than
   reasoned, with a fixture built so each setting had something to act on: the same pair from two studies

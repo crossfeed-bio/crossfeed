@@ -370,7 +370,8 @@ def report_text(result: dict) -> str:
 
     lines.append("sources (cite the studies behind the edges you use):")
     for sid, study in sorted(net.studies.items()):
-        lines.append(f"  - {sid}: {study.citation or sid} [{study.license or 'license: see study'}]"
+        lines.append(f"  - {sid}: {study.citation or sid} "
+                     f"[{study.license or 'no license stated by mGrowthDB; see the study'}]"
                      + (f" {study.url}" if study.url else ""))
     if not net.studies:
         lines.append("  none")

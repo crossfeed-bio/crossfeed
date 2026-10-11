@@ -91,8 +91,16 @@ def test_every_network_records_the_tool_its_version_and_the_date():
     assert provenance(datetime.date(2026, 9, 27))["derived_on"] == "2026-09-27"
     graph = ET.fromstring(to_graphml(net)).find("{http://graphml.graphdrawing.org/xmlns}graph")
     data = {d.get("key"): d.text for d in graph.findall("{http://graphml.graphdrawing.org/xmlns}data")}
-    assert data == {"g_tool": "grownet", "g_tool_version": __version__, "g_derived_on": today,
-                    "g_derived_at": net.meta["derived_at"]}
+    # the four this test is about, asserted by VALUE rather than by an equality over the whole dict: the
+    # dict grew when the GraphML started carrying its own schema id, source and citations (#216), and an
+    # equality here made that a failure of a test about the tool, the version and the date
+    assert {k: data[k] for k in ("g_tool", "g_tool_version", "g_derived_on", "g_derived_at")} == {
+        "g_tool": "grownet", "g_tool_version": __version__, "g_derived_on": today,
+        "g_derived_at": net.meta["derived_at"]}
+    # and nothing is written that is not declared, which is what the equality was incidentally covering
+    declared = {k.get("id") for k in ET.fromstring(to_graphml(net))
+                .findall("{http://graphml.graphdrawing.org/xmlns}key")}
+    assert set(data) <= declared, set(data) - declared
     assert net.meta["derived_at"].startswith(today + "T")                    # date, time and offset
 
 

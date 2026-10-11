@@ -40,7 +40,10 @@ def render_attribution(net: InteractionNetwork) -> str:
     edges_by_study = studies_with_edges(net)
     for sid, study in sorted(net.studies.items()):
         n = len(edges_by_study.get(sid, []))
-        lic = study.license or "license: see study"
+        # mGrowthDB's study record carries no license field at all, so an empty one is the
+        # database not stating one rather than a study without a license. "see study" sent a reader
+        # looking for something the source does not publish (#218 item 4).
+        lic = study.license or "no license stated by mGrowthDB; see the study"
         cite = study.citation or sid
         lines.append(f"  {sid}: {cite} [{lic}] supports {n} edge(s)")
     return "\n".join(lines)

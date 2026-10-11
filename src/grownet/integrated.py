@@ -1058,7 +1058,12 @@ class IntegratedDeriver:
         # report's "cite the studies behind the edges you use" block and the page's Sources. The
         # comparison reads `name` (derive.py:1349); these two must stay the same (2026-10-10).
         study_meta = {"study_citation": study.get("name") or study.get("id", ""),
-                      "study_license": study.get("license", ""),
+                      # mGrowthDB's study record has NO license field: its keys are description,
+                      # experiments, id, name, projectId, publishedAt, uploadedAt and url, measured live
+                      # 2026-10-11. This read a key that never exists, which reads as "we looked and it
+                      # was empty" rather than "the database does not state one" (#218 item 4). Empty
+                      # means unknown, and the renderers say so now.
+                      "study_license": "",
                       "study_url": study.get("url", "")}
         for exp, members, reps in communities:
             # the strict label, so an arc says which altered medium it was measured in and the capacity
