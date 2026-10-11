@@ -62,8 +62,19 @@ a correction, and it is out of scope for 0.3.0.
 
 **Not known.** Nothing in the derivation compares a growth rate with anything outside its own fit. The
 guards are identifiability, model fit, growth above zero and the fit against the interaction-free null; a
-rate's **magnitude** is never questioned. Of 123 monoculture fits that pass every guard, three imply a
-doubling slower than 24 hours and all three are from one study of fast aquatic organisms.
+rate's **magnitude** is never questioned.
+
+**Re-measured live on 2026-10-11** with `derive --all --live --no-published --report-rates --rates <csv>`:
+the corpus publishes **8 organism rate rows and none of them implies a doubling slower than 24 hours**.
+This entry said "of 123 monoculture fits that pass every guard, three imply a doubling slower than 24
+hours and all three are from one study of fast aquatic organisms". That study is SMGDB00000018, and
+`derive SMGDB00000018 --live --report-rates --rates <csv>` now answers "no growth rate could be computed
+for any organism of this network" and exits 1, writing no rates file. (Without `--rates` or `--glv` the
+message is unreachable, because it is what refusing to write those files says, and the run exits 0 with an
+empty network: that is the same class of wrong command this entry is correcting, caught in it.) so the three implausible fits reach no
+artifact a reader can produce and the denominator cannot be recovered from one either. **The limitation
+itself is unchanged**: nothing still compares a rate's magnitude with anything outside its own fit, and
+it would go unnoticed again the moment such a fit publishes.
 
 **Published instead.** The doubling time the rate implies, `ln(2) / r`, in `growth_rates.csv` and beside
 every rate in the report. It catches nothing automatically; it converts a number nobody rejects at a

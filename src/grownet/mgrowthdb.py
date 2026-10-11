@@ -98,7 +98,9 @@ def _connect(host: str, port: int, timeout: float | None):
 
     An unproven family gets `FIRST_TRY` seconds, so a black-holed address costs that and not the operating
     system's own patience; a family that answered before gets the full timeout, since it is the one
-    expected to work. The socket comes back with the caller's timeout set, whichever family answered.
+    expected to work. **A family that fails is forgotten**, so the next connection treats it as unproven
+    and pays `FIRST_TRY` rather than the whole timeout again. The socket comes back with the caller's
+    timeout set, whichever family answered.
     """
     try:
         infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
@@ -121,6 +123,17 @@ def _connect(host: str, port: int, timeout: float | None):
             except OSError as e:
                 last = e
                 sock.close()
+                # the memory is FORGOTTEN when the family it names stops working. Nothing cleared it, so
+                # after a network change the family that used to answer kept the caller's whole timeout,
+                # 30 s against the 3 s an unproven one gets: worse than the 17.5 s of operating-system
+                # patience #184 measured and removed, and it survived the failure, so every later
+                # connection paid it again. A laptop moving networks, a VPN coming up, or a sleep and
+                # wake is enough, and with six workers and three retries one record costs several (#198).
+                if proven:
+                    with _ANSWERED_LOCK:
+                        if _ANSWERED.get(host) == family:
+                            del _ANSWERED[host]
+                    proven = False
                 continue
             sock.settimeout(timeout)
             with _ANSWERED_LOCK:
@@ -332,11 +345,25 @@ class MGrowthDBClient:
         uploaded = self._uploaded.get(sid) if sid else None
         if not sid or uploaded is None:
             return          # nothing to validate it against later, so it is not kept between runs
+        # Written to a temporary file beside the target and renamed over it, which is what makes a
+        # symlink at the target harmless: the rename replaces the link itself, where the plain
+        # `open(path, "w")` this replaces followed the link and overwrote whatever it pointed at,
+        # outside the cache directory. The name is sha256 of a public URL, so it is guessable,
+        # `GROWNET_CACHE` is documented as a free-form override, and a path under /tmp is the natural
+        # choice on a shared machine or a CI runner (#197). Mode "x" refuses an existing temporary
+        # name, a planted symlink included. The rename also makes the write atomic, so an interrupted
+        # run leaves the old entry or the new one, never half a JSON document for the next run to read.
+        path = self._disk_path(key)
+        tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
         try:
-            with open(self._disk_path(key), "w", encoding="utf-8") as f:
+            with open(tmp, "x", encoding="utf-8") as f:
                 json.dump({"owner": [sid, uploaded], "body": data}, f)
+            os.replace(tmp, path)
         except OSError:
-            pass
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
     def _connection(self, fresh: bool = False):
         conn = getattr(self._local, "conn", None)

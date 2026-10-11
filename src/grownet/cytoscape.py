@@ -88,11 +88,21 @@ def genus_colors(net: InteractionNetwork) -> dict:
 
 
 def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
-    """The network as Cytoscape.js JSON: every node and edge attribute becomes a column."""
+    """The network as Cytoscape.js JSON: every node and edge attribute becomes a column, plus the
+    presentation columns Cytoscape styles on (`genus`, `genus_color`, `interaction`, `line_style`,
+    `display_weight`). The neutral format does not gain fields from this, so the asymmetry runs one way.
+    """
     colors = genus_colors(net)
+    # `taxonomy` and `model_ref` were in the file and in GraphML and not here, the same asymmetry the
+    # edge payload below records as fixed, found the same way: by comparing the two emitters rather than
+    # by reading. grownet populates neither today, so nothing is lost on a live run, but a network given
+    # a lineage or a metabolic-model link by hand lost both on the way to Cytoscape, and `model_ref` is
+    # named for the downstream consumer the neutral format exists to serve. `tests/test_export.py`
+    # asserts set equality against the dataclass now, so the next field cannot stop here.
     nodes = [{"data": {"id": node.id, "name": node.name or node.id, "taxon_id": node.taxon_id,
-                       "species": node.species, "identity": node.identity, "genus": genus(node),
-                       "genus_color": colors[genus(node)]}}
+                       "species": node.species, "identity": node.identity,
+                       "taxonomy": node.taxonomy, "model_ref": node.model_ref,
+                       "genus": genus(node), "genus_color": colors[genus(node)]}}
              for node in net.nodes.values()]
     edges = []
     for edge in net.edges:
@@ -154,7 +164,8 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
                 "bound_rule": getattr(edge, "bound_rule", ""),
                 "method": getattr(edge, "method", ""),
                 "quality": " ".join(edge.quality), "cautions": " ".join(edge.cautions),
-                "notes": "; ".join(edge.notes), "community": " ".join(edge.community),
+                # "; " because a node id can contain a space, as `notes` beside it already assumes
+                "notes": "; ".join(edge.notes), "community": "; ".join(edge.community),
                 "experiments": " ".join(edge.experiments), "study_ids": " ".join(edge.study_ids),
                 "merged_arcs": edge.merged_arcs, "strength_range": " ".join(f"{x:g}" for x in edge.strength_range),
                 "supporting_pairs": edge.supporting_pairs, "merged_pairs": "; ".join(edge.merged_pairs),
@@ -356,12 +367,30 @@ def send(net: InteractionNetwork, port: int = PORT, name: str = "grownet",
     refuses the request. Nothing is sent anywhere but this port on the loopback interface.
     """
     root = base_url(port)
+
+    def _refused(port, code, reason, timeout):
+        """Whether CyREST really refused, or something else answered on that port."""
+        try:
+            with urllib.request.urlopen(base_url(port) + "/version", timeout=min(timeout, 3)) as r:
+                body = r.read(400).decode("utf-8", "replace")
+        except Exception:
+            body = ""
+        if "cytoscapeVersion" in body or "apiVersion" in body:
+            return (f"Cytoscape refused the network ({code} {reason}). Update Cytoscape to 3.8 or later, "
+                    "whose CyREST takes networks this way.")
+        return (f"something on port {port} answered {code} {reason}, and it is not Cytoscape: it does not "
+                "identify itself at /v1/version the way CyREST does. Check which port Cytoscape uses "
+                "(its cyrest.port property, 1234 unless changed) and that no other program holds it.")
+
     try:
         created = _post(f"{root}/networks?title={urllib.parse.quote(name)}&collection={brand.NAME}",
                         network_json(net, name), timeout)
     except urllib.error.HTTPError as e:
-        raise CytoscapeError(f"Cytoscape refused the network ({e.code} {e.reason}). Update Cytoscape to 3.8 or "
-                             "later, whose CyREST takes networks this way.") from None
+        # An HTTP error status means SOMETHING answered, and it need not be Cytoscape: pointing
+        # --cytoscape-port at any server that answers an error was reported as Cytoscape refusing the
+        # network, with an instruction to upgrade it, which sends the person to do something that cannot
+        # help (#221 item 1). CyREST identifies itself at /v1/version, so ask before blaming it.
+        raise CytoscapeError(_refused(port, e.code, e.reason, timeout)) from None
     except http.client.HTTPException as e:
         raise CytoscapeError(
             f"something is listening on port {port}, but it is not Cytoscape: it did not answer the way "

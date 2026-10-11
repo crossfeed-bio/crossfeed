@@ -77,8 +77,21 @@ def send(payload: dict, port: int = DEFAULT_PORT, timeout: float = 30.0) -> dict
         with urllib.request.urlopen(request, timeout=timeout) as response:   # noqa: S310 - localhost only
             text = response.read().decode("utf-8")
     except urllib.error.HTTPError as e:
-        raise RError(f"the R session refused the parameters ({e.code} {e.reason}). Check that the grownet "
-                     "package there is up to date.") from None
+        # the R listener identifies itself in plain text on any non-POST request
+        # (r/R/transport.R), so ask who answered rather than telling the person to update a package
+        # that may not be involved at all (#221 item 1)
+        who = ""
+        try:
+            with urllib.request.urlopen(url, timeout=min(timeout, 3)) as probe:   # noqa: S310 - localhost
+                who = probe.read(200).decode("utf-8", "replace")
+        except Exception:
+            who = ""
+        if "grownet" in who.lower():
+            raise RError(f"the R session refused the parameters ({e.code} {e.reason}). Check that the "
+                         "grownet package there is up to date.") from None
+        raise RError(f"something on port {port} answered {e.code} {e.reason}, and it did not identify "
+                     "itself as the grownet R listener. Check which port grownet_listen() printed and "
+                     "that no other program holds it.") from None
     except http.client.HTTPException as e:
         raise RError(f"something is listening on port {port}, but it did not answer the way the grownet R "
                      f"package does ({type(e).__name__}). Check which port grownet_listen() printed and "

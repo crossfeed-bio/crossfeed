@@ -1019,3 +1019,133 @@ def test_a_comparison_never_mixes_a_chemostat_with_a_batch_culture():
     records, skipped = interactions_from_replicates(client, study, exps, method="max")
     assert not [r for r in records if r["target_name"] == B]
     assert any("no monoculture replicates for " + B in reason for _, reason in skipped)
+
+
+def test_a_censored_arc_with_no_measurable_start_still_says_why():
+    """`no_growth_bound` computes a reason when it cannot measure a start, and `bounded_strength` threw it
+    away, so a live censored arc published `bound_rule: ""`: on the corpus the *S. thermophilus* arc,
+    whose STneg monoculture starts at 0 in every replicate.
+
+    `bound_rule` is the only field that can say why a censored arc has no bound, and
+    `matrix._reports_an_extreme` tells its five shapes apart by exactly this field, so an empty one made a
+    fresh arc indistinguishable from a network saved before the machinery existed (found reviewing round
+    9)."""
+    from grownet.derive import OBLIGATE, bounded_strength
+    from grownet.growth import GrowthCurve, Replicate
+    from grownet.interaction import no_growth_bound
+
+    # the bound comes from its PRODUCER, not from a sentence typed here. The first version of this test
+    # hand-wrote the rule string and asserted `bounded_strength` returned that same string, so it
+    # compared a literal with itself: blanking the real sentence in `interaction.py` left the whole suite
+    # green and the arc published `bound_rule: ""` again (found reviewing round 10).
+    flat_from_zero = GrowthCurve(species="S thermophilus", times=[0.0, 1.0, 2.0, 3.0],
+                                 values=[0.0, 0.0, 0.0, 0.0], time_unit="h", abundance_unit="Cells/mL")
+    bound = no_growth_bound([Replicate(curves=(flat_from_zero,))], "S thermophilus", 3.0, "max",
+                            factor=1.5)
+    assert bound["value"] is None, bound          # no usable start, so there is no number to bound by
+    assert bound["rule"], "no_growth_bound computed no reason for a set with no measurable start"
+    reason = bound["rule"]
+
+    no_start = {"outcome": OBLIGATE, "with_log2": [1.0, 1.2], "without_log2": [], "bound": bound}
+    size, rule = bounded_strength(no_start)
+    assert size is None
+    assert rule == reason
+
+    # the set that did grow has no values either: the reason still travels
+    nothing = {**no_start, "with_log2": []}
+    assert bounded_strength(nothing)[1] == reason
+
+    # and a bound that exists is unchanged
+    good = {"outcome": OBLIGATE, "with_log2": [3.0, 3.2], "without_log2": [],
+            "bound": {"value": 2.0, "factor": 1.5, "start": 1.0, "window": 10.0, "rule": "no growth: ..."}}
+    size, rule = bounded_strength(good)
+    assert size is not None and rule
+
+
+def test_a_selection_the_cultivation_rule_already_removed_is_not_blamed_on_the_box():
+    """Naming A6 of SMGDB00000005, a chemostat, was refused as "no experiment of this study matches the
+    media, experiments or studies entered" while `--metric max` on the same command derives from it, so
+    the refusal a reader acts on sent them to retype the box when the fix is the growth measure. And
+    `study_ids_of` fell back to the words "this study", which its caller prefixes with "study ", printing
+    "study this study" (found reviewing round 9)."""
+    from grownet.derive import interactions_from_replicates, select_experiments, study_ids_of
+    from grownet.selection import matches, parse
+
+    # FIRST through the real entry point, because calling `select_experiments` by hand supplies the
+    # `before` argument that the product has to pass: removing that one wiring line left the hand-written
+    # half of this test green while the refusal went back to blaming the second box (found reviewing this
+    # change). A chemostat study, named in the second box, with the default growth measure.
+    client, study, exps = _replicate_study()
+    for exp in exps:
+        exp["cultivationMode"] = "chemostat"
+    _records, skipped_live = interactions_from_replicates(client, study, exps, selection=parse(["co"]))
+    reasons = [reason for _label, reason in skipped_live]
+    assert any("left out before the second box was read" in r for r in reasons), reasons
+    assert not any("no experiment of this study matches" in r for r in reasons), reasons
+    labels = [label for label, _ in skipped_live]
+    assert "study this study" not in labels, labels
+
+    chemostat = {"id": "E1", "name": "A6", "studyId": "SMGDB00000005",
+                 "communityStrains": [{"strain": {"name": "A"}}, {"strain": {"name": "B"}}]}
+    # built by the real parser, not by hand: "A6" is a name, so `parse` puts it where a name goes, and
+    # hand-building the selection put it under `experiments`, which matches on the id and found nothing
+    selection = parse(["A6"])
+    assert matches(chemostat, selection), "the selection must match it, or this test proves nothing"
+
+    # the cultivation rule has already emptied the list; the unfiltered one is handed over for the reason
+    skipped = []
+    assert select_experiments([], selection, skipped, before=[chemostat],
+                              study_id="SMGDB00000005") == []
+    label, reason = skipped[-1]
+    assert label == "study SMGDB00000005", label
+    assert "left out before the second box was read" in reason
+    assert "no experiment of this study matches" not in reason
+
+    # and a selection that genuinely matches nothing still says so
+    skipped = []
+    other = {"media": [], "experiments": ["NOPE"], "studies": [], "entries": ["NOPE"]}
+    select_experiments([], other, skipped, before=[chemostat], study_id="SMGDB00000005")
+    assert "no experiment of this study matches" in skipped[-1][1]
+
+    # the fallback is the caller's now, so the helper says nothing rather than a sentence
+    assert study_ids_of(()) == ""
+    assert study_ids_of([chemostat]) == "SMGDB00000005"
+def test_the_skip_list_separates_pairs_from_notes_about_the_data():
+    """The report headed its whole condensed skip list "pairs the data did not support (N)". On the live
+    corpus 97 of those 186 entries were average-replicate notes keyed by experiment, and 31 named
+    conditions that DID produce reported arcs, so the report called a condition a pair that gave no edge
+    254 lines after reporting an interaction derived from it (#232). The number a reader wants, how many
+    pairs were attempted and gave nothing, was not in the output at all."""
+    from grownet.adapter import AVERAGE, about_a_pair, condensed
+
+    skipped = [
+        ("A organism with B organism [EXP_1]", "no monoculture replicates for A organism"),
+        ("EXP_2: rep1", AVERAGE),
+        ("EXP_2: rep2", AVERAGE),
+        ("C organism with D organism [EXP_3]", "one side did not grow"),
+    ]
+    entries = condensed(skipped)
+    pairs = [e for e in entries if about_a_pair(*e)]
+    notes = [e for e in entries if not about_a_pair(*e)]
+
+    assert len(pairs) == 2, pairs                   # the two that really are pairs
+    assert len(notes) == 1, notes                   # the two average rows condense to one note
+    assert notes[0][0] == "EXP_2" and "average replicate(s) left out" in notes[0][1]
+    # an experiment label is not a pair, which is the whole distinction
+    assert not about_a_pair("EXP_2", "2 average replicate(s) left out (x)")
+    assert about_a_pair("A organism with B organism [EXP_1]", "one side did not grow")
+    # and the OTHER pair shape, which the first version of this missed: `derive.py` writes
+    # `{source} -> {target} [{cond}]` for the no-growth and unusable outcomes, so on SMGDB00000013 the
+    # report said "pairs the data did not support: none" and listed seven of them under a heading
+    # saying they are not pairs (found reviewing #242)
+    assert about_a_pair("A organism -> B organism [EXP_1]", "no growth (auc) in either set")
+    # a separator in the label AND an average-replicate reason: the only negative case here tested the
+    # separator branch, because "2 average replicate(s) left out (x)" does not contain AVERAGE, so
+    # dropping the `AVERAGE not in reason` guard altogether left this test green. `condensed` puts the
+    # AVERAGE text into the reason it synthesises and keys those entries by the EXPERIMENT NAME, which is
+    # free text in mGrowthDB, so an experiment named with " with " or " -> " in it would be filed as a
+    # pair the data did not support: that is #232 again (found reviewing #242).
+    assert not about_a_pair("A organism with B organism [EXP_1]",
+                            f"3 average replicate(s) left out ({AVERAGE})")
+    assert not about_a_pair("A organism -> B organism [EXP_1]",
+                            f"3 average replicate(s) left out ({AVERAGE})")

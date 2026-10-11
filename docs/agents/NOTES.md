@@ -15,6 +15,25 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-11 (#195, #197, #198): **three things about the plumbing that are worth knowing before changing
+  it again.**
+  **What stops a symlink at a cache entry is the rename, not a flag.** `os.rename` acts on the link
+  itself, so writing to a temporary name beside the target and replacing the target is the whole defense;
+  `O_NOFOLLOW` on the final name was the obvious reach and is not what does the work. The temporary is
+  opened with mode `"x"`, which refuses an existing name, a planted link included. A planted link is
+  replaced rather than refused, so a cache someone has interfered with still works instead of silently
+  never caching that key again.
+  **A non-finite setting is not caught by a range check unless the range check is there.** `float()`
+  accepts `nan`, `inf` and `1e999`, and `json.dumps` writes `NaN` and `Infinity`, which RFC 8259 section 6
+  forbids, so R refuses the file while grownet's own `validate` accepts it: Python's json module reads the
+  specials by default, and that is why nothing between the two caught it. `max_adjusted_p` was already
+  safe, by accident of keeping its value only when `0 < value <= 1`, which is False for both. Any new
+  float setting needs the check, and `tests/test_gui.py` fails with a named key if one is added without it.
+  **The remembered address family is a timeout decision, so forgetting it matters as much as setting it.**
+  A remembered family gets the caller's whole timeout and an unproven one gets `FIRST_TRY`, so an entry
+  that outlives the network it describes is worse than no entry: it costs the full timeout on every
+  connection, repeatedly, which is the case the fallback was built for.
+
 - 2026-10-09 (#182, Karoline's decision): **what a study holds is kept between runs and reused while its
   `uploadedAt` is unchanged.** The premise is hers, confirming for the mGrowthDB team, that "uploadedAt is
   kept fresh", and that "it's coupled to study submission".
