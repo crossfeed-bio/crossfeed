@@ -1235,7 +1235,17 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
         "growth_rate_unit": units.pop() if len(units) == 1 else "",
         "growth_rate_detail": [
             {"organism": _label(net.nodes[nid]), "rate": rates[nid]["rate"],
-             "unit": rates[nid].get("unit", RATE_UNIT), "replicates": rates[nid].get("n"),
+             "unit": rates[nid].get("unit", RATE_UNIT),
+             # `replicates` means monoculture replicates, which is the rule stated over `rates_csv`,
+             # and the CSV follows it. This published `n` under that name, so under the integrated form,
+             # the one gLV mode selects, the payload reported its FITTED ROW count as the replicate
+             # count: 1 or 2 against the zip's 3 on a live corpus run, where `glv_payload` promises "the
+             # same numbers as the zip" and the README allows a difference in the fifth significant
+             # digit (#259). The row count is deliberately not added beside it: `grownet.glv/v1` is a
+             # released format with `PREVIOUS_GLV_FORMATS` beside it, so a new field moves that id,
+             # which is a decision about the package rather than a fix to it. Anyone who wants the row
+             # count has it in the network's own `meta.growth_rates`, as `n` with `n_label`.
+             "replicates": rates[nid].get("replicates", rates[nid].get("n")),
              "studies": list(rates[nid].get("studies", ())),
              "per_study": dict(rates[nid].get("per_study", {})),
              "method": rates[nid].get("method", ""), "lag": rates[nid].get("lag"),

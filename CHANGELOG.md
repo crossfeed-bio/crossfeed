@@ -37,6 +37,17 @@ content.
   as they always have.
 
 ### Fixed
+- **The gLV payload published the fitted row count under the field named `replicates`** (#259), where
+  `growth_rates.csv`, the other emitter of the same numbers, published the monoculture replicate count.
+  `replicates` has meant monoculture replicates since 0.2.0, which is the rule stated over `rates_csv`,
+  and a derivation that merges fitted rows keeps the row count in `n` with `n_label` precisely so the two
+  are not confused. On a live `--all --glv-mode` run the payload said 1 and 2 where the zip said 3, and
+  the R package reads the field straight through, against a docstring promising "the same numbers as the
+  zip" and a README allowing a difference in the fifth significant digit. It bit the integrated form only,
+  which is the one gLV mode selects: under the default derivation there is no `replicates` key and both
+  routes fall back to `n`, which is why nothing noticed. The row count is deliberately not added beside
+  it, because a new field would move `grownet.glv/v1`; it is in `meta.growth_rates` for anyone who wants
+  it.
 - **The GraphML, the Cytoscape payload and the viewer joined `community` with a space, and 115 of 145
   arcs of the default corpus could not be split back** (#245). `community` holds node ids, and a node id
   under identity `name` is a lowercase species name, so a 14-member community read as a 16-member one
