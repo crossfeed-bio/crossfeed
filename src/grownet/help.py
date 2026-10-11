@@ -31,6 +31,26 @@ ABOUT = (f"{NAME} was built by Karoline Faust (KU Leuven) and Craig Heilmann (Sy
 # user of the page wants, so each line says what they can now do rather than what moved in the code. A test
 # requires the newest entry to be this version, so a release cannot forget it.
 RELEASES = (
+    ("0.3.1", "2026-10-11", (
+        "The default derivation is the specified comparison again, and gLV mode selects the integrated "
+        "form. Every network derived without gLV mode changes and almost all of them grow: on the whole "
+        "of mGrowthDB the default goes from 12 arcs to 145, over 24 organisms instead of 9, with 15 "
+        "censored arcs where there were none.",
+        "Two days of review after 0.3.0 found 104 things to correct, and most of them are what the tool "
+        "SAID about what it did rather than what it computed: a meta block that reported the no-growth "
+        "rule as applied under a derivation that has no such rule, settings recorded as used by a "
+        "derivation that never reads them, and nine written measurements that no longer reproduced.",
+        "The spread behind an arc's third error component is taken over the monoculture sets a run "
+        "matched rather than the arcs that survived, which was 4.96 times too small on one study: under "
+        "gLV mode 4 of 16 p-values move, one crosses 0.05, and two arcs fall below the threshold.",
+        "The spike limit applies under the integrated form, where it did nothing at all, though at the "
+        "default factor no curve in mGrowthDB reaches it.",
+        "The GraphML says which format it is, where it came from and how to cite it. A /v0 and a /v3 "
+        "file had identical column names and inverted significance with nothing to tell them apart.",
+        "The published daily artifact carries the whole result it says it holds, including the arcs the "
+        "absence threshold left out, and an identity a reader can quote when asked which version they "
+        "used.",
+    )),
     ("0.3.0", "2026-10-06", (
         "The gLV parameters are fitted coefficients, not effect sizes: the diagonal is -r_i / K_i from "
         "each organism's own plateau, and an off-diagonal cell is whatever its derivation fitted, which "
