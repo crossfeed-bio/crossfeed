@@ -16,7 +16,7 @@ import os
 import sys
 from collections import Counter
 
-from .adapter import condensed, unread
+from .adapter import about_a_pair, condensed, unread
 from .attribution import render_attribution
 from .derive import CAPACITY_MAX_FALL
 from .mgrowthdb import MGrowthDBError, records_to_network
@@ -112,6 +112,32 @@ def _rate_flags(a) -> str:
     return ""
 
 
+def _settings_of(a) -> dict:
+    """Every setting of this run, built in ONE place for every derive path.
+
+    There were two of these, written by hand, and they disagreed: `derive <STUDY> --live` recorded 20
+    keys and the species path 23, the difference including `include_absent` and `steady_check`, which are
+    not n/a on either. And `steady_check` was wrong on BOTH, because the species path took it from
+    `DEFAULTS` rather than from the flag, so a run that scored a chemostat recorded that it had not
+    (#233). `report.py` promises "every setting with its value", so two reports of one study differing in
+    their arcs and identical in their settings block is the thing a reader cannot see past.
+    """
+    from .gui import DEFAULTS
+
+    return {**DEFAULTS,
+            "metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
+            "derivation": a.derivation, "deriver": getattr(a, "deriver", "") or "",
+            "merge_arcs": a.merge_arcs, "min_studies": a.min_studies, "merge_genera": a.merge_genera,
+            "spike_factor": a.spike_factor, "capacity_max_fall": a.capacity_max_fall,
+            "absence_threshold": a.absence_threshold,
+            "include_low_quality": a.include_low_quality, "correction": a.correction,
+            "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
+            "no_growth_alpha": a.no_growth_alpha, "no_growth_factor": a.no_growth_factor,
+            "max_adjusted_p": a.max_adjusted_p, "report_rates": a.report_rates,
+            "include_absent": getattr(a, "include_absent", False),
+            "steady_check": getattr(a, "steady_check", False)}
+
+
 def _derive(a):
     if a.glv_mode:
         # the button sets them, and says so, rather than leaving a reader to remember them (#113). The
@@ -182,19 +208,7 @@ def _derive(a):
                                          include_absent=a.include_absent,
                                          # the derivation says what it tests (#142 item 5)
                                          deriver=deriver)
-            extra["settings"] = {"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
-                                 "derivation": a.derivation,
-                                 "merge_arcs": a.merge_arcs, "min_studies": a.min_studies,
-                                 "merge_genera": a.merge_genera,
-                                 "spike_factor": a.spike_factor,
-                                 "capacity_max_fall": a.capacity_max_fall,
-                                 "absence_threshold": a.absence_threshold,
-                                 "include_low_quality": a.include_low_quality, "correction": a.correction,
-                                 "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
-                                 "no_growth_alpha": a.no_growth_alpha, "no_growth_factor": a.no_growth_factor,
-                                 "max_adjusted_p": a.max_adjusted_p, "report_rates": a.report_rates,
-                                 "conditions": " ".join(a.conditions),
-                                 "deriver": a.deriver or ""}
+            extra["settings"] = {**_settings_of(a), "conditions": " ".join(a.conditions)}
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
             return 1
@@ -236,20 +250,11 @@ def _derive_species(a):
     if a.deriver:
         print(f"{flag} uses the default derivation; --deriver applies to one study", file=sys.stderr)
         return 2
-    from .gui import DEFAULTS, run_query
+    from .gui import run_query
     from .mgrowthdb import MGrowthDBClient
-    settings = {**DEFAULTS, "metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
-                "spike_factor": a.spike_factor, "capacity_max_fall": a.capacity_max_fall,
-                "absence_threshold": a.absence_threshold, "include_low_quality": a.include_low_quality,
-                "include_absent": a.include_absent,
-                "correction": a.correction, "include_dropout": not a.no_dropout,
-                "include_non_batch": a.include_non_batch,
+    settings = {**_settings_of(a),
                 "conditions": "\n".join([*a.conditions, *(a.study or "").split(",")]).strip(),
-                "only_entered": not a.all_partners, "exclude_studies": a.exclude_studies,
-                "merge_arcs": a.merge_arcs, "min_studies": a.min_studies, "merge_genera": a.merge_genera,
-                "report_rates": a.report_rates, "derivation": a.derivation,
-                "no_growth_alpha": a.no_growth_alpha,
-                "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p}
+                "only_entered": not a.all_partners, "exclude_studies": a.exclude_studies}
     client = MGrowthDBClient(**({"cache_dir": None} if a.no_cache else {}))
     try:
         result = run_query(client, a.species or [], settings, all_studies=a.all_studies,
@@ -408,8 +413,13 @@ def _emit(a, net, skipped, extra, label, result):
     print(render_attribution(net), file=sys.stderr)
     skipped = condensed(skipped)
     if skipped:
-        print(f"\nskipped {len(skipped)} pair(s) the data did not cleanly support:", file=sys.stderr)
-        for label, reason in skipped:
+        pairs = [s for s in skipped if about_a_pair(*s)]
+        notes = [s for s in skipped if not about_a_pair(*s)]
+        # the count used to include the notes about the input, so it answered a question nobody asked
+        # and not "how many pairs gave nothing" (#232)
+        print(f"\nskipped {len(pairs)} pair(s) the data did not cleanly support"
+              + (f", and {len(notes)} note(s) on the data read" if notes else "") + ":", file=sys.stderr)
+        for label, reason in pairs + notes:
             print(f"  - {label}: {reason}", file=sys.stderr)
     if extra:
         if extra["absence"]["absent"]:

@@ -37,6 +37,32 @@ content.
   as they always have.
 
 ### Fixed
+- **All said it ignored the boxes, and it reads the second one** (#193). Narrowing All by a study or
+  medium in the second box is deliberate and documented (`run_query`, Karoline 2026-09-28); the caption
+  claiming otherwise and the heading "All of mGrowthDB" were the false half. The gLV example button fills
+  that box and leaves it filled, so pressing gLV example and then All reported a two-arc network of one
+  study as the whole database. The heading now says "All, narrowed by the second box" and names what it
+  matched, the caption says it ignores the species box, and the box's own hint says All reads it and to
+  clear it for the whole corpus. The bar's text has a length Karoline set and a test pins it, so the
+  detail is in the hint rather than the bar.
+- **"pairs the data did not support (186)" counted 97 notes about the data and 31 conditions that did
+  produce arcs** (#232). `adapter.condensed` folds the average-replicate notes to one line per
+  experiment, keyed by the experiment, and they were counted under a heading about pairs: the report
+  called a condition a pair that gave no edge 254 lines after reporting an interaction derived from it.
+  The report, the page and the command line now separate pairs from notes on the data read, and the
+  "skipped N pair(s)" message counts the pairs. The page also said 186 and showed 50 with no marker; it
+  says "showing 50 of N" and points at the report.
+- **The page accepted the steady-state check without growth rates, ran nothing, and said it was on**
+  (#233). The command line refuses that combination and names the remedy; the page ticked the box, scored
+  nothing, printed "Check against chemostat steady states: on" and wrote `steady_check: true` into the
+  downloaded network. It now says what the command line says, and a run that asked for the check with
+  rates on but no computable rate says that instead of leaving "on" as the only trace.
+- **Two derive paths recorded different settings, and both recorded `steady_check` wrongly** (#233).
+  `derive <STUDY> --live` wrote 20 keys and the species path 23, the difference including
+  `include_absent` and `steady_check`, which are n/a on neither; and the species path took `steady_check`
+  from the page defaults rather than from the flag, so a run that scored a chemostat recorded that it had
+  not. One builder for every path now, 24 keys on both, verified on live runs of the same study, and a
+  test reads it through the real parser rather than a copy of the key list.
 - **Every relative link in the README was dead on PyPI, and the legend image was broken there** (#192).
   The README is the long description on <https://pypi.org/project/grownet/>, and PyPI does not rewrite
   relative URLs the way GitHub does, so all fifteen resolved against the project page: the limitations

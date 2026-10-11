@@ -21,6 +21,7 @@ test.
 """
 import http.server
 import json
+import os
 import re
 import threading
 import time
@@ -968,3 +969,39 @@ def test_glv_mode_does_not_override_a_derivation_the_reader_asked_for(capsys):
 
     got, _ = resolved(base + ["--glv-mode", "--derivation", "integrated"])
     assert got == "integrated"
+
+
+def test_every_derive_path_records_the_same_settings_and_follows_the_steady_check_flag():
+    """`report.py` promises "every setting with its value", and there were two hand-written settings
+    dicts that disagreed: `derive <STUDY> --live` recorded 20 keys and the species path 23. Worse,
+    `steady_check` was wrong on BOTH, the species path taking it from `DEFAULTS` rather than the flag, so
+    a run that scored a chemostat recorded that it had not, and two reports of one study could differ in
+    their arcs and be identical in their settings block (#233).
+
+    One builder now, and this reads it through the real parser rather than from a copy of the keys.
+    """
+    from grownet.__main__ import _settings_of, build_parser
+    from grownet.gui import DEFAULTS
+
+    parser = build_parser()
+
+    def settings(argv):
+        return _settings_of(parser.parse_args(argv))
+
+    plain = settings(["derive", "SMGDB00000007", "--live", "--out", os.devnull])
+    species = settings(["derive", "SMGDB00000007", "--live", "--species", "A", "B",
+                        "--out", os.devnull])
+    assert set(plain) == set(species), "the two derive paths record different settings"
+    assert set(plain) >= set(DEFAULTS), "a setting the page has and the command line does not record"
+
+    # the two that were missing, and they are not n/a on either path
+    for key in ("include_absent", "steady_check"):
+        assert key in plain and key in species
+
+    # and steady_check follows the flag rather than the default, in both directions
+    off = settings(["derive", "SMGDB00000007", "--live", "--out", os.devnull])
+    on = settings(["derive", "SMGDB00000007", "--live", "--glv-mode", "--steady-check",
+                   "--out", os.devnull])
+    assert off["steady_check"] is False and on["steady_check"] is True
+    absent_on = settings(["derive", "SMGDB00000007", "--live", "--include-absent", "--out", os.devnull])
+    assert off["include_absent"] is False and absent_on["include_absent"] is True

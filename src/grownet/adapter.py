@@ -58,6 +58,18 @@ def condensed(skipped: list) -> list:
             out.append((experiment, f"{len(averages[experiment])} average replicate(s) left out ({AVERAGE})"))
     return out
 
+
+def about_a_pair(label: str, reason: str) -> bool:
+    """Whether a condensed entry is about a PAIR that gave no edge, or a note about the input.
+
+    The two were listed together under the heading "pairs the data did not support (N)", and on the live
+    corpus 97 of those 186 entries were average-replicate notes keyed by experiment, 31 of them naming
+    conditions that DID produce reported arcs: the report said a condition was a pair the data did not
+    support 254 lines after reporting an interaction derived from it (#232). A pair entry names two
+    organisms with "with" between them; an average-replicate note names an experiment.
+    """
+    return AVERAGE not in reason and " with " in label
+
 MIN_POINTS = 2
 
 

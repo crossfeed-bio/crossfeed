@@ -27,7 +27,7 @@ from . import __version__, brand, integrated, interaction, matrix, rates, rbridg
 from . import help as help_page
 from . import published as daily
 from . import selection as selecting
-from .adapter import condensed, unread
+from .adapter import about_a_pair, condensed, unread
 from .attribution import studies_with_edges
 from .cytoscape import CytoscapeError, send, style_xml
 from .derive import (
@@ -350,7 +350,10 @@ derived from mGrowthDB growth data on this machine; nothing is uploaded.</p>
 <label class="field" for="conditions">Media, experiments or studies (optional)</label>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in selecting.EXAMPLES)}</p>
 <textarea id="conditions" name="conditions" rows="5">{_esc(conditions)}</textarea>
-<p class="hint">One per line. A medium is matched as text, so "wilkins" finds every spelling of
+<p class="hint"><strong>All reads this box.</strong> A study or medium left here narrows All to it, which
+is deliberate, so clear it to derive the whole of mGrowthDB; the gLV example button fills it and leaves it
+filled (#193).
+One per line. A medium is matched as text, so "wilkins" finds every spelling of
 Wilkins-Chalgren <em>and</em> every variant of it: a medium with a sugar added or a carbon source left out
 is another environment, so those stay apart and the report names every medium the search read. An id
 (SMGDB..., EMGDB...) picks that study or experiment, which is how to read one medium alone. Empty means
@@ -363,7 +366,7 @@ every medium.</p>
 <button type="submit" name="glv_example" value="1">gLV example</button>
 <button type="submit" name="glv_mode" value="1" class="switch{glv_on}" aria-pressed="{glv_pressed}"
 ><span class="track"><span class="knob"></span></span>gLV mode</button>
-<span class="muted">All derives every study, ignoring the boxes (half a minute or so). gLV example fills
+<span class="muted">All derives every study, ignoring the species box (half a minute). gLV example fills
 the boxes and settings for a package that simulates, and runs it. gLV mode sets the four settings a
 package needs, the derivation among them; press it again to switch back.</span></div>
 {_settings_block(settings or {}, token, job)}
@@ -720,8 +723,24 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
     if result.get("all"):
         daily_note = (f" (the network derived once a day, on {_esc(result['published'][:16].replace('T', ' '))}; "
                       "any other setting derives it live)" if result.get("published") else "")
-        species_heading, resolved = "<h2>All of mGrowthDB</h2>", (
-            f"<li>every study, with every partner: {len(result['studies'])} studies{daily_note}</li>")
+        # "All of mGrowthDB" is only true when the second box is empty. All keeps reading that box and
+        # Exclude these studies, which is deliberate (see run_query's docstring, Karoline 2026-09-28), so
+        # the heading has to say which it was: the gLV example button fills that box and leaves it filled,
+        # so pressing gLV example and then All gave a two-arc network of one study under a heading saying
+        # the whole database (#193).
+        narrowed = [line for line in (result.get("settings", {}).get("conditions") or "").splitlines()
+                    if line.strip()]
+        if narrowed:
+            shown_filter = ", ".join(_esc(x.strip()) for x in narrowed[:3])
+            more = f" and {len(narrowed) - 3} more" if len(narrowed) > 3 else ""
+            species_heading = "<h2>All, narrowed by the second box</h2>"
+            resolved = (f"<li>every study that matches {shown_filter}{more}, with every partner: "
+                        f"{len(result['studies'])} studies{daily_note}</li>"
+                        "<li class=\"muted\">All ignores the species box, not this one. Clear it to derive "
+                        "the whole of mGrowthDB.</li>")
+        else:
+            species_heading, resolved = "<h2>All of mGrowthDB</h2>", (
+                f"<li>every study, with every partner: {len(result['studies'])} studies{daily_note}</li>")
     unresolved = _unresolved_list(result)
     net = result["network"]
     mismatch = any("MISMATCH" in (e.method or "") for e in net.edges)
@@ -752,9 +771,23 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
     skipped = ""
     skips = condensed(result["skipped"])
     if skips:
-        items = "".join(f"<li>{_esc(label)}: {_esc(reason)}</li>" for label, reason in skips[:50])
-        skipped = (f"<details><summary>{len(skips)} pair(s) the data did not support</summary>"
-                   f"<ul>{items}</ul></details>")
+        # two kinds, and counting them together said a condition was a pair that gave no edge while an
+        # arc derived from that condition was reported above it (#232). The cut at 50 was also silent:
+        # the summary printed the full count and the list showed 50 of it.
+        groups = [("pair(s) the data did not support",
+                   [s for s in skips if about_a_pair(*s)]),
+                  ("note(s) on the data read, which are not pairs",
+                   [s for s in skips if not about_a_pair(*s)])]
+        blocks = []
+        for heading, entries in groups:
+            if not entries:
+                continue
+            items = "".join(f"<li>{_esc(label)}: {_esc(reason)}</li>" for label, reason in entries[:50])
+            more = (f"<li class=\"muted\">showing 50 of {len(entries)}; the report below holds them all"
+                    "</li>" if len(entries) > 50 else "")
+            blocks.append(f"<details><summary>{len(entries)} {heading}</summary>"
+                          f"<ul>{items}{more}</ul></details>")
+        skipped = "".join(blocks)
     errors = "".join(f"<p class=\"note\">{_esc(e)}</p>" for e in result["errors"])
     return (f"<section class=\"result\" id=\"result\">{note}{species_heading}<ul>{resolved}</ul>{unresolved}"
             f"<p class=\"muted\">Studies searched: {_esc(studies)}</p>{errors}{table}"
@@ -1077,7 +1110,15 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # never used to fit the parameters, so they test them. Off unless asked for: it reads the curves of
     # chemostats this search did not need.
     checked = None
-    if s.get("steady_check") and organism_rates:
+    if s.get("steady_check") and not s.get("report_rates"):
+        # The command line refuses this combination and names the remedy; the page used to tick the box,
+        # run nothing, print "Check against chemostat steady states: on" in the report and write
+        # `steady_check: true` into the downloaded network. One surface refusing what another drops in
+        # silence is the defect, not which of the two is right (#233).
+        errors.append("no steady-state check: it scores the growth rates and coefficients of the run, so "
+                      "it needs Report growth rates, which gLV mode turns on. The setting is recorded as "
+                      "asked for and nothing was scored.")
+    elif s.get("steady_check") and organism_rates:
         say(len(studies), len(studies), "Reading the chemostat steady states")
         try:
             got = matrix.coefficients(net, organism_rates)
@@ -1085,6 +1126,11 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
             errors.append(f"no steady-state check: {e}")
         else:
             checked = steady.check(got, organism_rates, steady.find(client, net, progress=say))
+    elif s.get("steady_check"):
+        # asked for, rates on, and no rate could be computed: say so rather than leaving the report's
+        # "on" as the only trace
+        errors.append("no steady-state check: no growth rate could be computed for this network, and the "
+                      "check scores the rates and the coefficients the run produced.")
     say(len(studies), len(studies), "Preparing the result")
     return {"entries": names, "settings": dict(s), "resolved": resolved["resolved"],
             "reasons": resolved["reasons"], "suggestions": resolved["suggestions"], "excluded": left_out,
