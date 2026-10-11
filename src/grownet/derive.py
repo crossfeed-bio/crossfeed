@@ -876,8 +876,13 @@ def _renamed(replicates, species: str):
 def classify(mean, outcome: str) -> str:
     """The direction of a comparison: facilitation or inhibition.
 
-    `obligate` (the target grows only with the source present) is the extreme of facilitation and
-    `abolished` (the target grows only without it) the extreme of inhibition; neither has a log2 ratio.
+    `obligate` (the target's without-set did not grow in THIS comparison, by the no-growth rule) is the
+    extreme of facilitation and `abolished` (its with-set did not grow) the extreme of inhibition; neither
+    has a log2 ratio. Both are scoped to one comparison and say nothing about the organism elsewhere: on
+    the corpus one pair is obligate in two conditions of a study and quantified in six others of the same
+    study, once with the target reaching 3.5 times more WITHOUT the source than with it. That is a
+    condition-dependent effect rather than a contradiction, and the word was read as a property of the
+    organism until it was written down this way (2026-10-11).
     Otherwise the sign of the mean decides. A mean of exactly zero has no direction and is `neutral`, and
     is always absent (see `absence`). Whether the comparison counts as an interaction is `absence`'s
     business, not this function's.
@@ -926,7 +931,13 @@ def absolute_values(c: dict) -> tuple:
 
     The comparison is a difference of means of log2 values, so 2 to that mean is the geometric mean of
     the metric in that set, and the ratio of the two is exactly the arc's strength. A set that did not
-    grow has no log2 values and its value is 0, which is what the outcomes obligate and abolished record:
+    grow has no log2 values and its value is 0, which is a SENTINEL rather than a measurement under any
+    metric but a rate. Under a growth rate the 0 is measured, which is what #123 settled and what the
+    formula below needs. Under `auc` or `max`, the shipped default being `auc`, the set did grow and
+    failed a rule about how much, so its real value is above 0 and `bounded_strength` on the same arc
+    carries how far: on the corpus the 15 censored arcs are all `auc`, all carry 0 here, and their own
+    bounds put the without-side at up to 65 per cent of the with-side (2026-10-11). The 0 records that
+    the no-growth rule rejected the set, and the outcomes obligate and abolished record which set:
     `A_ij = (r_with - r_without) / x_j_star` is then a measurement where the log2 ratio does not exist.
     """
     with_log2, without_log2 = c.get("with_log2") or [], c.get("without_log2") or []

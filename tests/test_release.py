@@ -247,3 +247,164 @@ def test_this_tree_dates_its_release_no_earlier_than_its_newest_commit():
     if newest:                      # a tarball has no git history, and then there is nothing to compare
         assert dated >= datetime.date.fromisoformat(newest), (
             f"the release is dated {dated} and its newest commit is {newest}")
+
+
+def test_the_sdist_carries_every_doc_the_suite_reads(tmp_path):
+    """A test that reads a shipped document makes that document a dependency of the suite, and the sdist
+    job is the only one that notices when it is not carried: it unpacks the archive, where the repository
+    layout is not there to fall back on. That went red once already, on the surface guard added for #202,
+    and the prediction from the other side of the review was that it would go red once per new surface
+    test, always after the test looked green locally (Craig's agent on #199, 2026-10-10).
+
+    So this asserts the manifest covers them, which ends the sequence instead of paying for it one file at
+    a time. It reads the paths out of the suite rather than listing them, so a surface test in any of the
+    three shapes the suite actually uses, a whole path in one literal, a component join, or a module-level
+    directory constant, is covered
+    by this assertion the moment it is written.
+
+    `README.md` is deliberately allowed without being named: setuptools ships the declared readme, which
+    was measured in all five manifest shapes. That is a default rather than a promise, so it is recorded
+    here instead of being relied on silently.
+
+    **This test's own dependency is the identical case and is recorded for the same reason**: it reads
+    `MANIFEST.in`, so the suite now needs `MANIFEST.in` in the archive, and the manifest does not name it.
+    setuptools ships it by the same default, built and confirmed with `build==1.6.1`. The coverage logic
+    above cannot see this dependency, because `wanted` is collected by a regex anchored to the tracked
+    top-level directories, so no root-level file ever enters the set that is checked (Craig's agent,
+    reviewing this change: the allowance sat one line from where the README default was written down).
+
+    **What it still cannot see**, so the next reader does not have to find out: a path built with an
+    f-string (`f"docs/{name}"`), a path three or more components deep whose middle part has no dot, a
+    constant assigned from another constant, and any top-level directory outside `TOP_LEVEL`. Those are
+    the shapes to avoid in a surface test, or to add here when one is written. The honest alternative,
+    which is heavier, is to build the sdist in this test and list its members.
+
+    The manifest side reads every verb setuptools reads, in order, including the removing ones. It did
+    not: `prune` and `exclude` were skipped, so a manifest that dropped every doc passed here.
+    """
+    import ast
+    import re
+
+    root = Path(__file__).resolve().parents[1]
+    manifest = (root / "MANIFEST.in").read_text(encoding="utf-8")
+
+    # TWO shapes, because the suite writes both and the first version of this saw only the first: a
+    # whole relative path in one literal, and a COMPONENT JOIN, which is the dominant idiom here
+    # (`root / "gui" / "index.html"`, `os.path.join(..., "docs", "legend.svg")`). Three files the suite
+    # already reads were invisible, among them `schema/format_fields.json`, which `MANIFEST.in`'s own
+    # comment names as the 2026-10-08 instance of this exact failure (found reviewing this change).
+    TOP_LEVEL = ("docs", "examples", "schema", "gui", "r")
+    whole = r'["\']((?:docs|examples|schema|gui|r)/[A-Za-z0-9_./-]+)["\']'
+    joined_pattern = (r'["\'](docs|examples|schema|gui|r)["\']\s*[,/]\s*'
+              r'(?:["\']([A-Za-z0-9_.-]+)["\']\s*[,/]\s*)?["\']([A-Za-z0-9_.-]+\.[A-Za-z0-9]+)["\']')
+    def paths_in_source(source: str) -> set:
+        """Every shipped path this source reads, by text AND through a module-level Path constant.
+
+        The regexes need the directory name as a literal next to the filename, and the suite also writes
+        `DOCS = Path(...) / "docs"` at module level and then `DOCS / "X.md"` inside a test, which neither
+        shape sees: a new surface test written that way passed unnoticed, which is the sequence this test
+        exists to end (found reviewing this change). So module-level assignments whose value ends in one
+        of the tracked directories are resolved, and a `<CONST> / "leaf"` inside the file is joined to it.
+        """
+        found = set(re.findall(whole, source))
+        for top, middle, leaf in re.findall(joined_pattern, source):
+            found.add("/".join(x for x in (top, middle, leaf) if x))
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            return found
+        # NAME = ... / "docs"  (the directory a constant stands for)
+        stands_for = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and len(node.targets) == 1 and \
+                    isinstance(node.targets[0], ast.Name) and isinstance(node.value, ast.BinOp) and \
+                    isinstance(node.value.op, ast.Div) and isinstance(node.value.right, ast.Constant) and \
+                    node.value.right.value in TOP_LEVEL:
+                stands_for[node.targets[0].id] = node.value.right.value
+        # <NAME> / "leaf.md", at any depth
+        for node in ast.walk(tree):
+            if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div) and \
+                    isinstance(node.left, ast.Name) and node.left.id in stands_for and \
+                    isinstance(node.right, ast.Constant) and isinstance(node.right.value, str):
+                found.add(f"{stands_for[node.left.id]}/{node.right.value}")
+        return found
+
+    wanted = set()
+    for path in sorted((root / "tests").glob("*.py")):
+        wanted |= paths_in_source(path.read_text(encoding="utf-8"))
+
+    import fnmatch
+
+    def covered(name: str) -> bool:
+        """Whether MANIFEST.in leaves this file in the sdist, reading the lines IN ORDER as setuptools
+        does.
+
+        The first version collected only `include` and `recursive-include` and ignored every removing
+        verb, so `prune docs` plus `exclude docs/LIMITATIONS.md` appended to the manifest left this test
+        green while setuptools dropped every doc from the archive: exactly the sdist-job-red-where-
+        make-check-passes failure this test exists to end (found reviewing round 10). Order is what
+        decides, which is why MANIFEST.in's own comment warns that a prune written before its include
+        silently does nothing.
+        """
+        if name == "README.md":
+            return True
+        folder, _, base = name.rpartition("/")
+        under = lambda top: folder == top or folder.startswith(top + "/")   # noqa: E731
+        inside = False
+        for line in manifest.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            verb, _, rest = line.partition(" ")
+            parts = rest.split()
+            if verb in ("include", "exclude"):
+                if any(fnmatch.fnmatch(name, pat) for pat in parts):
+                    inside = verb == "include"
+            elif verb in ("recursive-include", "recursive-exclude"):
+                if parts and under(parts[0]) and any(fnmatch.fnmatch(base, p) for p in parts[1:]):
+                    inside = verb == "recursive-include"
+            elif verb in ("graft", "prune"):
+                if any(under(top) for top in parts):
+                    inside = verb == "graft"
+            elif verb == "global-exclude":
+                if any(fnmatch.fnmatch(base, pat) for pat in parts):
+                    inside = False
+        return inside
+
+    missing = sorted(n for n in wanted if not covered(n))
+    assert not missing, (
+        "the suite reads these and MANIFEST.in does not carry them, so the sdist job will fail where "
+        f"`make check` passes: {missing}")
+    # and the assertion is reachable, which the first version of this could not show: the two it was
+    # written for are in the set, and so are the three that a component join hid
+    assert {"docs/METHOD_NOTES.md", "docs/LIMITATIONS.md"} <= wanted
+    assert {"gui/index.html", "schema/format_fields.json", "docs/legend.svg"} <= wanted
+
+    # a positive control for the extraction itself: both shapes are found, and a doc the manifest does
+    # not carry is reported rather than passing. This is what the first version could not do, so a new
+    # surface test written in the suite's own idiom went unnoticed.
+    # A positive control for the extraction, written to a FILE rather than embedded here, because this
+    # file is one of the files the extraction scans: embedded, the control's own paths were found in the
+    # suite and the test failed on them, which is the guard working.
+
+    # the sample's paths are built from variables, so no path literal of the control appears in THIS
+    # file: written out, the extraction found them here and the test failed on its own control
+    # one per line: a TUPLE of string literals reads as a component join to the extraction, which is a
+    # false positive mode worth knowing, and it caught this very line
+    top = "docs"
+    leaf_join = "SAMPLE.md"
+    leaf_whole = "WHOLE.md"
+    viewer = "index.html"
+    probe = tmp_path / "test_probe.py"
+    probe.write_text(
+        "from pathlib import Path\nimport os\n\n\ndef test_x():\n"
+        f'    a = (Path(".") / "{top}" / "{leaf_join}").read_text()\n'
+        f'    b = open("{top}/{leaf_whole}").read()\n'
+        f'    c = os.path.join("gui", "{viewer}")\n',
+        encoding="utf-8")
+    found = paths_in_source(probe.read_text(encoding="utf-8"))
+    assert f"{top}/{leaf_join}" in found, "a component join is invisible to the extraction"
+    assert f"{top}/{leaf_whole}" in found, "a whole path is invisible to the extraction"
+    assert f"gui/{viewer}" in found, "an os.path.join is invisible to the extraction"
+    assert not covered(f"{top}/{leaf_join}"), "the coverage test would pass a file the manifest lacks"
+    assert covered(f"{top}/METHOD_" + "NOTES.md"), "the coverage test would fail a carried file"

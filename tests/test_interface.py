@@ -1026,3 +1026,58 @@ def test_every_derive_path_records_the_same_settings_and_follows_the_steady_chec
     for argv, key, wanted in cases:
         assert settings(base + argv)[key] == wanted, f"{argv} did not set {key}"
         assert off[key] != wanted, f"{key} is already {wanted!r} without {argv}, so this proves nothing"
+    base = ["derive", "SMGDB00000007", "--live", "--out", os.devnull]
+    plain = settings(base)
+    species = settings([*base, "--species", "A", "B"])
+
+    # `set(plain) == set(species)` and `set(plain) >= set(DEFAULTS)` were the two assertions the "20 keys
+    # against 23" headline rested on, and NEITHER CAN FAIL: `_settings_of` returns `{**DEFAULTS, ...}`, so
+    # the second is true of its own construction and the first compares one function with itself. They
+    # are replaced by the thing that can fail, which is whether each key FOLLOWS ITS FLAG (found reviewing
+    # #242, where three keys fell through to DEFAULTS and the test stayed green).
+    assert plain == species, "the two derive paths differ once the species list is set aside"
+
+    # Every flag the parser has that writes a settings key, driven from the parser rather than a list
+    # beside it: a key with no case here is a failure, so adding a setting without wiring it is caught.
+    flags = {"--metric": ("metric", "max"), "--rate-method": ("rate_method", "baranyi"),
+             "--rate-window": ("rate_window", "7"), "--derivation": ("derivation", "integrated"),
+             "--merge-arcs": ("merge_arcs", None), "--merge-genera": ("merge_genera", None),
+             "--min-studies": ("min_studies", "3"), "--spike-factor": ("spike_factor", "50"),
+             "--capacity-max-fall": ("capacity_max_fall", "0.25"),
+             "--absence-threshold": ("absence_threshold", "2.5"),
+             "--include-low-quality": ("include_low_quality", None),
+             "--correction": ("correction", "by"), "--no-dropout": ("include_dropout", None),
+             "--include-non-batch": ("include_non_batch", None),
+             "--no-growth-alpha": ("no_growth_alpha", "0.01"),
+             "--no-growth-factor": ("no_growth_factor", "2"),
+             "--max-adjusted-p": ("max_adjusted_p", "0.05"),
+             "--report-rates": ("report_rates", None), "--include-absent": ("include_absent", None),
+             "--steady-check": ("steady_check", None), "--all-partners": ("only_entered", None),
+             "--exclude-studies": ("exclude_studies", "SMGDB00000002"),
+             "--conditions": ("conditions", "WC")}
+    for flag, (key, value) in flags.items():
+        got = settings([*base, flag] + ([value] if value is not None else []))
+        assert got[key] != plain[key], (
+            f"{flag} did not move {key}: it reads {got[key]!r} with the flag and {plain[key]!r} without, "
+            "so this case proves nothing")
+
+    # `conditions` is the one key whose VALUE the loop above cannot check, and for it the separator IS
+    # the value: the page encodes the second box one selector per LINE and `selection.parse` splits on
+    # newlines, commas and semicolons, never on a space. The case above passes one value, so a space join
+    # looked identical to a newline join and `--conditions "WC" "mucin"` could be recorded as one medium
+    # named "WC mucin", which matches nothing, while the run used the list. That is what the comment over
+    # `_settings_of` is about, and nothing exercised it (found reviewing round 10). The booleans escape
+    # the same loop and are covered by `test_the_command_line_gives_everything_the_page_does`.
+    from grownet import selection
+
+    two = settings([*base, "--conditions", "WC", "mucin"])["conditions"]
+    assert two == "WC\nmucin", repr(two)
+    assert selection.parse(two)["media"] == ["WC", "mucin"], selection.parse(two)
+
+    # and every key the page has is reachable from the command line, or the two disagree about what a
+    # setting is. A key here with no flag above is the defect this assertion exists for.
+    wired = {key for key, _ in flags.values()}
+    unreachable = sorted(k for k in DEFAULTS if k not in wired)
+    assert not unreachable, f"these page settings no command-line flag sets: {unreachable}"
+    assert len(wired) == len(DEFAULTS) == 23, (
+        f"the page has {len(DEFAULTS)} settings and this test wires {len(wired)}: a new one needs a case")

@@ -7,6 +7,7 @@ with its value, and every reason a pair gave no edge.
 """
 from __future__ import annotations
 
+import math
 import textwrap
 
 from . import interaction
@@ -107,8 +108,25 @@ def _edge_line(net, e) -> str:
                          f"{e.se_rate_stage:.3g} from the rate stage"
                          + (f" ({e.rate_stage_method})" if e.rate_stage_method else ""))
     if getattr(e, "metric_with", None) is not None and getattr(e, "metric_without", None) is not None:
-        parts.append(f"{name[e.target]} at {e.metric_with:.4g} with / {e.metric_without:.4g} without "
-                     f"({e.metric})")
+        # Under the comparison these two ARE the pair whose log2 ratio is the strength printed above, so
+        # a reader who divides them gets it back. Under the integrated form they are the fitted row with
+        # and without the partner's term, and dividing them gives a different number from the printed
+        # log2 mean: two averages of one fit, differing by up to 0.42 in log2 on the corpus. The line
+        # used to print both quantities with nothing to say which was which, so a reader checking the
+        # arithmetic in front of them found it wrong (found reviewing 2026-10-11). It now says "fitted"
+        # where the pair is fitted, and gives the ratio it does imply rather than leaving it to be
+        # computed and doubted.
+        fitted = e.method and "integrated" in e.method
+        line = (f"{name[e.target]} at {e.metric_with:.4g} with / {e.metric_without:.4g} without "
+                f"({e.metric})")
+        if fitted:
+            implied = (math.log2(e.metric_with / e.metric_without)
+                       if e.metric_with > 0 and e.metric_without > 0 else None)
+            line = (f"{name[e.target]} fitted at {e.metric_with:.4g} with / {e.metric_without:.4g} "
+                    f"without the partner's term ({e.metric}), a log2 ratio of "
+                    + (f"{implied:.4g}" if implied is not None else "no ratio")
+                    + ", which is the median coefficient's effect and not the log2 mean above")
+        parts.append(line)
     if getattr(e, "partner_abundance", None) is not None:
         parts.append(f"{name[e.source]} at {e.partner_abundance:.4g} "
                      f"{e.partner_abundance_unit} over the window")
@@ -153,7 +171,22 @@ def report_text(result: dict) -> str:
     if result.get("study"):
         lines.append(f"study derived: {result['study']} (every species in it)")
     elif result.get("all"):
-        lines.append("query: all of mGrowthDB (every study, with every partner)")
+        # the same two controls the page's heading names. This said "all of mGrowthDB" unconditionally,
+        # so the report embedded in a page headed "All, narrowed by the second box" contradicted it three
+        # lines above its own "Media, experiments or studies (--conditions): ..." line, and the test that
+        # was meant to catch the heading missed this on letter case alone (found reviewing #242).
+        s_here = result.get("settings", {})
+        narrowed = [x for x in (s_here.get("conditions") or "").splitlines() if x.strip()]
+        excluded = [x.strip() for x in (s_here.get("exclude_studies") or "").split(",") if x.strip()]
+        if narrowed or excluded:
+            which = []
+            if narrowed:
+                which.append("matching " + ", ".join(x.strip() for x in narrowed))
+            if excluded:
+                which.append("excluding " + ", ".join(excluded))
+            lines.append(f"query: All, narrowed: every study {' and '.join(which)}, with every partner")
+        else:
+            lines.append("query: all of mGrowthDB (every study, with every partner)")
         if result.get("published"):
             lines.append(f"  from the network derived once a day in the grownet repository, at {result['published']}")
     else:
