@@ -271,20 +271,15 @@ def test_the_sdist_carries_every_doc_the_suite_reads(tmp_path):
     constant assigned from another constant, and any top-level directory outside `TOP_LEVEL`. Those are
     the shapes to avoid in a surface test, or to add here when one is written. The honest alternative,
     which is heavier, is to build the sdist in this test and list its members.
+
+    The manifest side reads every verb setuptools reads, in order, including the removing ones. It did
+    not: `prune` and `exclude` were skipped, so a manifest that dropped every doc passed here.
     """
     import ast
     import re
 
     root = Path(__file__).resolve().parents[1]
     manifest = (root / "MANIFEST.in").read_text(encoding="utf-8")
-    named = set()
-    for line in manifest.splitlines():
-        line = line.strip()
-        if line.startswith("include "):
-            named.update(line[len("include "):].split())
-        elif line.startswith("recursive-include "):
-            parts = line.split()
-            named.update(f"{parts[1]}/**/{pat}" for pat in parts[2:])
 
     # TWO shapes, because the suite writes both and the first version of this saw only the first: a
     # whole relative path in one literal, and a COMPONENT JOIN, which is the dominant idiom here
@@ -331,17 +326,43 @@ def test_the_sdist_carries_every_doc_the_suite_reads(tmp_path):
     for path in sorted((root / "tests").glob("*.py")):
         wanted |= paths_in_source(path.read_text(encoding="utf-8"))
 
+    import fnmatch
+
     def covered(name: str) -> bool:
-        if name in named or name == "README.md":
+        """Whether MANIFEST.in leaves this file in the sdist, reading the lines IN ORDER as setuptools
+        does.
+
+        The first version collected only `include` and `recursive-include` and ignored every removing
+        verb, so `prune docs` plus `exclude docs/LIMITATIONS.md` appended to the manifest left this test
+        green while setuptools dropped every doc from the archive: exactly the sdist-job-red-where-
+        make-check-passes failure this test exists to end (found reviewing round 10). Order is what
+        decides, which is why MANIFEST.in's own comment warns that a prune written before its include
+        silently does nothing.
+        """
+        if name == "README.md":
             return True
-        import fnmatch
         folder, _, base = name.rpartition("/")
-        for entry in named:
-            if "/**/" in entry:
-                top, pat = entry.split("/**/", 1)
-                if (folder == top or folder.startswith(top + "/")) and fnmatch.fnmatch(base, pat):
-                    return True
-        return False
+        under = lambda top: folder == top or folder.startswith(top + "/")   # noqa: E731
+        inside = False
+        for line in manifest.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            verb, _, rest = line.partition(" ")
+            parts = rest.split()
+            if verb in ("include", "exclude"):
+                if any(fnmatch.fnmatch(name, pat) for pat in parts):
+                    inside = verb == "include"
+            elif verb in ("recursive-include", "recursive-exclude"):
+                if parts and under(parts[0]) and any(fnmatch.fnmatch(base, p) for p in parts[1:]):
+                    inside = verb == "recursive-include"
+            elif verb in ("graft", "prune"):
+                if any(under(top) for top in parts):
+                    inside = verb == "graft"
+            elif verb == "global-exclude":
+                if any(fnmatch.fnmatch(base, pat) for pat in parts):
+                    inside = False
+        return inside
 
     missing = sorted(n for n in wanted if not covered(n))
     assert not missing, (
