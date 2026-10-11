@@ -934,6 +934,18 @@ class IntegratedDeriver:
 
     name = "integrated-v1"
     method = METHOD
+    # This form has NO no-growth rule, which the help page says in as many words, so the network must not
+    # publish that the rule ran: it said `{"applied": true, "obligate": 0, "abolished": 0}` and a reader
+    # of the All artifact concluded no organism in mGrowthDB grows only with a partner, where the
+    # comparison finds 15 (#215 item 1). A censored arc under this form comes from the fit instead (#201).
+    no_growth_rule = False
+    # The settings this form does not read. `--metric` is the sharpest: under this derivation auc, max and
+    # a growth rate give byte-identical networks while `meta.settings.metric` records whichever was asked
+    # for, and each arc's own `metric` reads integrated:two_stage. It derives no drop-out arc, so
+    # `include_dropout` is inert; it has no rate window or rate estimator, because the rate IS a fitted
+    # parameter of the row; and the two no-growth knobs belong to the rule it does not have (#215 item 3).
+    ignores = ("metric", "rate_method", "rate_window", "include_dropout",
+               "no_growth_alpha", "no_growth_factor")
     needs_client = True
     # this form runs no Welch test and compares no replicate sets, so it says what it does run (#142
     # item 5). The t statistic is the one `_arc_statistics` builds: the mean of the per-replicate log2
@@ -1205,6 +1217,13 @@ class IntegratedDeriver:
                         # comparison, which is that the statement is the fit's and not a measurement of
                         # observed curves; `strength_bound` stays None because the fit bounds the effect
                         # below by nothing finite.
+                        # **The format id does not move for this**, which was asked rather than assumed,
+                        # because reusing `abolished` gives it a second route and AGENTS.md says a change
+                        # of a field's MEANING moves the id and no check can see it. Karoline,
+                        # 2026-10-11: "yes, abolished is fine, don't move the id". The field still
+                        # answers the same question, which side failed to grow, and `method` and
+                        # `bound_rule` say which route established it, so no reader is told a fitted
+                        # statement is a measurement. AGENTS.md records where that line falls.
                         "outcome": "abolished" if strength is None else "quantified",
                         "strength_bound": None,
                         "bound_rule": (SUPPRESSED_RULE if strength is None else ""),

@@ -1717,6 +1717,28 @@ def filter_significance(records, max_adjusted_p: float | None = None) -> tuple:
     return kept, info
 
 
+def _no_growth_meta(deriver, alpha, factor, edges) -> dict:
+    """What this network says about the no-growth rule, taken from the DERIVATION and not from the settings.
+
+    A derivation without such a rule says so, and carries no counts, because a 0 there reads as a
+    measurement: the published All artifact said the rule had been applied and had found no obligate
+    organism in the whole of mGrowthDB, where the comparison finds 15 (#215 item 1).
+
+    A censored arc can still exist under such a derivation, from the fit rather than from this rule
+    (#201), which is why the reason names where a count would have come from instead of implying there
+    are none.
+    """
+    if not getattr(deriver, "no_growth_rule", True):
+        return {"applied": False,
+                "why": (f"the {getattr(deriver, 'name', 'chosen')} derivation has no no-growth rule, so "
+                        "no comparison was censored by one and no count here would be a measurement; a "
+                        "censored arc under this derivation comes from the fit and says so in its "
+                        "bound_rule")}
+    return {**rule_meta(alpha, factor),
+            "obligate": sum(1 for e in edges if e.get("outcome") == OBLIGATE),
+            "abolished": sum(1 for e in edges if e.get("outcome") == ABOLISHED)}
+
+
 def output_meta(records, include_low_quality: bool = False, correction: str = "bh",
                 absence_threshold: float = ABSENCE_THRESHOLD, no_growth_alpha: float = None,
                 no_growth_factor: float = None, merge_arcs: bool = False, min_studies: int = 1,
@@ -1761,9 +1783,8 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
     provisional = base + ("" if max_adjusted_p is None else FILTER_NOTE.format(q=max_adjusted_p))
     meta = {"provisional": provisional, "statistics": statistics,
             "absence": {"rule": "absent when |log2 mean| < k * sd", "k": absence_threshold, "absent": absent},
-            "no_growth": {**rule_meta(no_growth_alpha, no_growth_factor),
-                          "obligate": sum(1 for e in edges if e.get("outcome") == OBLIGATE),
-                          "abolished": sum(1 for e in edges if e.get("outcome") == ABOLISHED)},
+            "no_growth": _no_growth_meta(deriver, no_growth_alpha, no_growth_factor, edges),
+            "settings_not_used": sorted(getattr(deriver, "ignores", ()) or ()),
             "filters": {"include_low_quality": include_low_quality, "include_absent": include_absent},
             "hidden": hidden, "merge": merge,
             "genus": genus}
@@ -1790,6 +1811,17 @@ class Deriver:
     # or not it ran that test (#142 item 5): a derivation that tests something else states it here.
     statistics = None
     provisional = None
+    # Whether this derivation HAS a no-growth rule. `output_meta` built that block from the settings for
+    # every derivation, so a form without one published `{"applied": true, "obligate": 0, "abolished": 0}`
+    # and a reader of the All artifact concluded the rule had run over every study and found no organism
+    # in mGrowthDB that grows only with a partner. The comparison finds 15 on the same corpus the same
+    # day. Present and wrong is worse than missing, because a reader trusts it (#215 item 1).
+    no_growth_rule = True
+    # The settings this derivation does not read, so the record of a run does not claim they were used.
+    # Under the integrated form a reader saw "Include drop-out communities: on" where it derives none,
+    # and changing `--metric` gave byte-identical networks while the recorded value changed (#215 item 3,
+    # the mechanism of #194). It travels in `meta` so a reader of the FILE can see it too.
+    ignores = ()
 
     def derive(self, study: dict, exps: list):
         """Return (records, skipped). `records` is a list of dicts for records_to_network; `skipped` is a

@@ -209,9 +209,14 @@ def report_text(result: dict) -> str:
     lines.append("")
 
     lines.append("settings:")
+    # a setting the derivation does not read is marked, rather than printed as if it had been used: under
+    # the integrated form a reader saw "Include drop-out communities: on" where it derives none, and
+    # changing --metric gave byte-identical networks while this line changed (#215 item 3)
+    unused = set(meta.get("settings_not_used") or ())
     for key, (label, flag, _) in SETTINGS.items():
         if key in settings:
-            lines.append(f"  {label} ({flag.split()[0]}): {_value(key, settings[key])}")
+            note = "   <- not read by this derivation" if key in unused else ""
+            lines.append(f"  {label} ({flag.split()[0]}): {_value(key, settings[key])}{note}")
     lines.append("")
 
     shown = [e for e in net.edges if e.status != "absent"]
