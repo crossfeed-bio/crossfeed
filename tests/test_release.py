@@ -249,7 +249,7 @@ def test_this_tree_dates_its_release_no_earlier_than_its_newest_commit():
             f"the release is dated {dated} and its newest commit is {newest}")
 
 
-def test_the_sdist_carries_every_doc_the_suite_reads():
+def test_the_sdist_carries_every_doc_the_suite_reads(tmp_path):
     """A test that reads a shipped document makes that document a dependency of the suite, and the sdist
     job is the only one that notices when it is not carried: it unpacks the archive, where the repository
     layout is not there to fall back on. That went red once already, on the surface guard added for #202,
@@ -277,11 +277,20 @@ def test_the_sdist_carries_every_doc_the_suite_reads():
             parts = line.split()
             named.update(f"{parts[1]}/**/{pat}" for pat in parts[2:])
 
+    # TWO shapes, because the suite writes both and the first version of this saw only the first: a
+    # whole relative path in one literal, and a COMPONENT JOIN, which is the dominant idiom here
+    # (`root / "gui" / "index.html"`, `os.path.join(..., "docs", "legend.svg")`). Three files the suite
+    # already reads were invisible, among them `schema/format_fields.json`, which `MANIFEST.in`'s own
+    # comment names as the 2026-10-08 instance of this exact failure (found reviewing this change).
+    whole = r'["\']((?:docs|examples|schema|gui|r)/[A-Za-z0-9_./-]+)["\']'
+    joined_pattern = (r'["\'](docs|examples|schema|gui|r)["\']\s*[,/]\s*'
+              r'(?:["\']([A-Za-z0-9_.-]+)["\']\s*[,/]\s*)?["\']([A-Za-z0-9_.-]+\.[A-Za-z0-9]+)["\']')
     wanted = set()
     for path in sorted((root / "tests").glob("*.py")):
-        for hit in re.findall(r'"((?:docs|examples|schema|gui)/[A-Za-z0-9_./-]+)"',
-                              path.read_text(encoding="utf-8")):
-            wanted.add(hit)
+        source = path.read_text(encoding="utf-8")
+        wanted.update(re.findall(whole, source))
+        for top, middle, leaf in re.findall(joined_pattern, source):
+            wanted.add("/".join(x for x in (top, middle, leaf) if x))
 
     def covered(name: str) -> bool:
         if name in named or name == "README.md":
@@ -299,5 +308,41 @@ def test_the_sdist_carries_every_doc_the_suite_reads():
     assert not missing, (
         "the suite reads these and MANIFEST.in does not carry them, so the sdist job will fail where "
         f"`make check` passes: {missing}")
-    # and the assertion is reachable: the two this was written for are really in the set it checks
+    # and the assertion is reachable, which the first version of this could not show: the two it was
+    # written for are in the set, and so are the three that a component join hid
     assert {"docs/METHOD_NOTES.md", "docs/LIMITATIONS.md"} <= wanted
+    assert {"gui/index.html", "schema/format_fields.json", "docs/legend.svg"} <= wanted
+
+    # a positive control for the extraction itself: both shapes are found, and a doc the manifest does
+    # not carry is reported rather than passing. This is what the first version could not do, so a new
+    # surface test written in the suite's own idiom went unnoticed.
+    # A positive control for the extraction, written to a FILE rather than embedded here, because this
+    # file is one of the files the extraction scans: embedded, the control's own paths were found in the
+    # suite and the test failed on them, which is the guard working.
+    def paths_in(source: str) -> set:
+        out = set(re.findall(whole, source))
+        for top, middle, leaf in re.findall(joined_pattern, source):
+            out.add("/".join(x for x in (top, middle, leaf) if x))
+        return out
+
+    # the sample's paths are built from variables, so no path literal of the control appears in THIS
+    # file: written out, the extraction found them here and the test failed on its own control
+    # one per line: a TUPLE of string literals reads as a component join to the extraction, which is a
+    # false positive mode worth knowing, and it caught this very line
+    top = "docs"
+    leaf_join = "SAMPLE.md"
+    leaf_whole = "WHOLE.md"
+    viewer = "index.html"
+    probe = tmp_path / "test_probe.py"
+    probe.write_text(
+        "from pathlib import Path\nimport os\n\n\ndef test_x():\n"
+        f'    a = (Path(".") / "{top}" / "{leaf_join}").read_text()\n'
+        f'    b = open("{top}/{leaf_whole}").read()\n'
+        f'    c = os.path.join("gui", "{viewer}")\n',
+        encoding="utf-8")
+    found = paths_in(probe.read_text(encoding="utf-8"))
+    assert f"{top}/{leaf_join}" in found, "a component join is invisible to the extraction"
+    assert f"{top}/{leaf_whole}" in found, "a whole path is invisible to the extraction"
+    assert f"gui/{viewer}" in found, "an os.path.join is invisible to the extraction"
+    assert not covered(f"{top}/{leaf_join}"), "the coverage test would pass a file the manifest lacks"
+    assert covered(f"{top}/METHOD_" + "NOTES.md"), "the coverage test would fail a carried file"
