@@ -13,7 +13,8 @@ glv_write(x, dir)
 The paths written, invisibly.
 }
 \description{
-The same three files grownet's download holds: \code{interaction_matrix.csv},
-\code{growth_rates.csv} and \code{README.txt}, so what arrived over the wire can be kept beside the
-analysis that used it.
+The files grownet's download holds: one \code{interaction_matrix.<abundance unit>.csv} per
+abundance unit (plain \code{interaction_matrix.csv} when the unit is unknown),
+\code{growth_rates.csv} with the same columns the download's has, and \code{README.txt}, so what
+arrived over the wire can be kept beside the analysis that used it.
 }

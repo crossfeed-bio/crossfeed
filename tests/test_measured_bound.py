@@ -2,7 +2,7 @@
 
 Karoline, 2026-10-06: "what would be your suggestion to get rid of the ad-hoc value in the plain
 adjacency matrix?", and then "go with the bound in #129 following your recommendation". Settled
-2026-10-08, after the bounds were measured on the live corpus and 11 of 12 landed inside the range of the
+2026-10-08, after the bounds were measured on the live corpus and 12 of 12 landed inside the range of the
 quantified arcs: **"NA, bound on the arc"**. A matrix cell cannot say what kind of number it holds, so a
 bound printed there is indistinguishable from a ratio, which is the objection that retired +/-10. The
 bound travels on the arc, where it says it is a floor, and `bounded_cells` names the cells left `NA`.

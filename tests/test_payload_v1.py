@@ -113,7 +113,14 @@ def test_the_caveats_say_what_is_a_measurement_and_what_is_not():
     caveats = matrix.glv_payload(_net(arcs), rates)["caveats"]
     assert caveats["censored_cells"] == [{"affected": "A", "actor": "C"}]
     assert "grew only with the actor, or only without it" in caveats["censored"]
-    assert caveats["diagonal"] == "fitted: -r_i / K_i" or "fitted" in caveats["diagonal"]
+    # the EXACT string for this derivation. The assertion here was
+    # `== "fitted: -r_i / K_i" or "fitted" in caveats["diagonal"]`, whose second half is satisfied by any
+    # string containing "fitted": inverting the integrated entry back to the comparison's direction, the
+    # very thing #231 corrected, left this test green (found reviewing round 10).
+    assert caveats["diagonal"] == matrix.DIAGONAL_CAVEAT[matrix.derivation_of(_net(arcs))]
+    assert "the opposite direction" in matrix.DIAGONAL_CAVEAT["integrated"]
+    assert "own observed plateau" in matrix.DIAGONAL_CAVEAT["replicate"]
+    assert matrix.DIAGONAL_CAVEAT["integrated"] != matrix.DIAGONAL_CAVEAT["replicate"]
     assert "extreme" not in caveats
     assert caveats["absence_k"] == 1.0 and caveats["media"] == ["WC"]
     assert "A x = -r" in caveats["unbounded"]

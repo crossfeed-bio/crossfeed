@@ -30,7 +30,10 @@ A square numeric matrix with the organisms as its row and column names.
 }
 \details{
 Every cell is a fitted per-capita coefficient, in 1 over (time times abundance): the diagonal is
-\code{-r_i / K_i} with K the organism's own plateau. What an off-diagonal cell is depends on the
+What the DIAGONAL is depends on the derivation, and \code{x$caveats$diagonal} says which: the
+comparison of replicate sets divides, \code{-r_i / K_i} with K the organism's own observed plateau, while
+the integrated form fits \code{A[i][i]} directly and derives \code{K_i = -r_i / A[i][i]} from it, which
+is the opposite direction. What an off-diagonal cell is depends on the
 derivation that made the package, and \code{print(x)} says which: the comparison of replicate sets fits
 \code{(r_with - r_without) / x_j}, the difference between the affected organism's growth rate with the
 actor and without it over the actor's abundance across that window, while the integrated form, which
