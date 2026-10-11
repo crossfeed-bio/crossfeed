@@ -184,3 +184,92 @@ def test_an_incomplete_run_does_not_exit_zero_and_an_advisory_note_does_not_fail
             ["derive", "--live", "--species", "A", "--out", os.devnull])
         got = cli._derive_species(args)
         assert got == wanted, f"errors={errors} notes={notes} gave {got}, wanted {wanted}"
+
+
+def _parsed(extra_args):
+    """A complete argument namespace, from the real parser, so every attribute `_emit` reads exists."""
+    from grownet.__main__ import build_parser
+    return build_parser().parse_args(["derive", "S", "--fixture", os.devnull, *extra_args])
+
+
+def _one_arc_network():
+    from grownet.mgrowthdb import records_to_network
+    return records_to_network(
+        [{"source": "A organism", "target": "B organism", "effect": "facilitation", "study_id": "S1",
+          "log2_mean": 1.0, "strength": 1.0, "q_value": 0.01, "significance": 2.0}],
+        meta={"tool_version": "9.9.9", "source_db": "mGrowthDB (fixture)"})
+
+
+def test_asking_for_a_rates_file_that_could_not_be_written_does_not_exit_zero(tmp_path, capsys):
+    """`--rates`, `--glv` and `--to-r` with no computable rate print the cause and exit 1.
+
+    The exit code is carried to the END of `_emit`, after the skipped pairs, the absence note and the
+    "NO interactions were derived" explanation, because the diagnosis is what the person needs: the
+    earlier `return 1` printed 7 lines of stderr where asking for less printed 74 (#221 item 3). Carrying
+    it that far is the part that can be lost without anything noticing, and nothing tested it: replacing
+    the final `return 1 if no_rates else 0` with `return 0` left all 718 tests green (found reviewing
+    round 10).
+    """
+    from grownet.__main__ import _emit
+
+    a = _parsed(["--rates", str(tmp_path / "r.csv"), "--out", os.devnull])
+    result = {"rates": {}, "skipped": [], "errors": [], "settings": {}}
+    code = _emit(a, _one_arc_network(), [], None, "S", result)
+    assert code == 1, "asking for a file the run could not write exited 0"
+    err = capsys.readouterr().err
+    assert "--rates" in err and "wrote nothing" in err
+    # and the flag that was NOT asked for is not blamed
+    assert "--glv" not in err and "--to-r" not in err
+    # with a rate to write, the same call exits 0
+    rates = {nid: {"name": nid, "rate": 0.5, "unit": "1/h", "n": 3, "studies": ["S1"],
+                   "method": "easylinear", "lag": None, "lag_method": "", "per_study": {"S1": 0.5}}
+             for nid in _one_arc_network().nodes}
+    assert _emit(_parsed(["--rates", str(tmp_path / "r2.csv"), "--out", os.devnull]),
+                 _one_arc_network(), [], None, "S", {"rates": rates, "skipped": [], "errors": [],
+                                                     "settings": {}}) == 0
+
+
+def test_the_skipped_count_counts_pairs_and_names_the_notes_separately(capsys):
+    """The heading counts pairs and notes apart, because counting them together answered a question
+    nobody asked.
+
+    On the live corpus 97 of 186 entries were average-replicate notes keyed by experiment and 31 named
+    conditions that DID produce reported arcs, so the report called a condition a pair that gave no edge
+    254 lines after reporting an interaction derived from it (#232). `tests/test_derive.py` tests
+    `about_a_pair` as a predicate and nothing asserted that any OUTPUT used it: reverting this heading to
+    one count over everything left the suite green.
+    """
+    from grownet.__main__ import _emit
+    from grownet.adapter import AVERAGE
+
+    skipped = [("A organism with B organism [EXP_1]", "no monoculture replicates"),
+               ("C organism with D organism [EXP_2]", "one side did not grow"),
+               ("EXP_3: rep1", AVERAGE)]
+    code = _emit(_parsed(["--out", os.devnull]), _one_arc_network(), skipped, None, "S",
+                 {"rates": {}, "skipped": skipped, "errors": [], "settings": {}})
+    err = capsys.readouterr().err
+    assert code == 0
+    assert "skipped 2 pair(s)" in err, err          # the two that are pairs, not all three
+    assert "1 note(s) on the data read" in err      # and the average row named as what it is
+
+
+def test_a_single_study_run_refuses_a_flag_that_narrows_several(tmp_path, capsys):
+    """`--exclude-studies` and `--all-partners` narrow a search over several studies, so a run of one
+    study refuses them rather than recording them as applied.
+
+    #242 made the record truthful, which left the contradiction: the report would say the study was
+    excluded while every arc comes from it. Nothing tested the refusal, so replacing the comprehension
+    with an empty list left the suite green and `derive <STUDY> --exclude-studies <that study>` derived
+    the study again (found reviewing round 10).
+    """
+    from grownet.__main__ import main
+
+    fixture = tmp_path / "records.json"
+    fixture.write_text("[]", encoding="utf-8")
+    for flag, value in (("--exclude-studies", "SMGDB00000004"), ("--all-partners", None)):
+        args = ["derive", "SMGDB00000004", "--fixture", str(fixture), "--out", os.devnull, flag]
+        if value is not None:
+            args.append(value)
+        assert main(args) == 2, f"{flag} was not refused on a single-study run"
+        err = capsys.readouterr().err
+        assert flag in err and "would be recorded and not applied" in err
