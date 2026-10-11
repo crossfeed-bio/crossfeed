@@ -55,6 +55,21 @@ content.
   | `METHOD_NOTES` and `test_measured_bound.py` | "11 of 12 inside the quantified range" | **12 of 12** |
   | `LIMITATIONS` entry 2 | "of 123 monoculture fits ... three imply a doubling slower than 24 hours" | **8 published rate rows, none** slower than 24 hours; the study those three came from now yields no network and no rate at all |
 
+  **Three further claims in the same bullet were re-measured after this branch was first pushed**, found
+  reviewing it: the median implied mismatch is **27.05 per cent**, not 19.2, which widens the gap against
+  the 8-to-16 noise floor the paragraph compares it with by 69 per cent; the two *L. delbrueckii* arcs
+  carry `se_rate_selection: None` and the `rate_unchecked` caution, so they take **one** stage-1 rate and
+  the premise of the grouping argument cannot be read off them at all; and the starting-density census was
+  wrong in four figures at once, **16** comparisons with a median of **2.14** and **4** above 3, against a
+  stated 39, 1.17 and 6, while the same bullet ten lines below had 2.16 and 4 of 12 right all along. That
+  census is also in `integrated.starting_densities`'s docstring and is corrected there.
+
+  **And two commands in this branch could not print what they were attached to.** The LIMITATIONS one
+  needed `--rates`, because the message it quotes is what refusing to write that file says; without it the
+  run exits 0 with an empty network. The steady-state one needed `--report`, because the figures are in
+  the report and the recorded command asked for neither it nor the zip. Both are the class this branch
+  exists to correct, caught inside it.
+
   **Two are worth more than a corrected number.** The coverage table's own note says a missing command
   made two readers take it for a fabrication, and the command added to fix that was the wrong one, which
   is how a record decays twice in the same place. And the rate-mismatch paragraph drew a method argument
@@ -65,7 +80,7 @@ content.
 - **The 0.3.0 notes state a steady-state measurement that does not reproduce** (#219), and a tagged entry
   is never rewritten, so the correction is here. They say the integrated fit "lands all three organisms at
   0.41, 0.73 and 2.69 times the observed abundance". Re-measured live on 2026-10-11 with that entry's own
-  command, `derive SMGDB00000007 --live --glv-mode --derivation integrated --steady-check`, against
+  command, `derive SMGDB00000007 --live --glv-mode --derivation integrated --steady-check --report <file>`, against
   SMGDB00000005's control: *B. thetaiotaomicron* **washes out** while the chemostat holds it at 5.285e+08,
   *B. hydrogenotrophica* lands at **299.8x** observed and *R. intestinalis* at **119.6x**, and the fitted
   interactions are **worse than no interactions at all** on both (34.8x and 2.878x with every interaction

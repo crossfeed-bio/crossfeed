@@ -625,11 +625,20 @@ parameter they had. No R2 comparison is quoted above for that reason.
   parameter left to absorb a difference between the rate a monoculture grew at and the rate that organism
   had in co-culture, and a few per cent of such a difference publishes a significant arc that is not
   there. Measured on the live corpus, the implied mismatch among arcs whose monoculture rate is well
-  determined has a median absolute of 19.2 per cent, against an estimator noise floor of 8 to 16 per cent.
+  determined has a median absolute of **27.05 per cent**, against an estimator noise floor of 8 to 16 per
+  cent. Re-measured live 2026-10-11 with
+  `derive --all --live --no-published --derivation integrated --metric growth_rate --report-rates
+  --include-absent`: 16 arcs carry a mismatch, 9 of them widen and 2 keep q < 0.05, which are the three
+  figures this bullet already states, so the population is the same one and the median is what moved. It
+  read 19.2 per cent, which no sub-population reproduces.
   **Craig's agent's grouping changed what that number means**, and it is the part to keep. Grouped by
-  organism and study, two arcs of *L. delbrueckii* in SMGDB00000006 take stage-1 rates 1 per cent apart
-  and imply mismatches that were measured as -83.5 and +129.8 per cent. **Those two numbers no longer
-  reproduce. Re-measured live on 2026-10-11** with
+  organism and study, two arcs of *L. delbrueckii* in SMGDB00000006 were measured taking stage-1 rates 1
+  per cent apart and implying mismatches of -83.5 and +129.8 per cent. **Neither the premise nor the two
+  numbers reproduces now.** Both arcs carry `se_rate_selection: None` and the `rate_unchecked` caution,
+  which is the state `integrated.py` describes as "its organism has one matched set in the study", so they
+  do not take two rates at all and the contradiction cannot be read off them. A pair that still has two
+  matched sets is *B. hydrogenotrophica* in SMGDB00000007, at 0.7387 and 0.7848, 4.27 per cent apart.
+  **Re-measured live on 2026-10-11** with
   `derive SMGDB00000006 --live --metric growth_rate --report-rates --derivation integrated
   --include-absent`, the same two arcs carry `rate_mismatch_to_zero` of **-0.2156 and -0.2174**, which is
   -21.56 and -21.74 per cent: the same sign, 0.2 points apart.
@@ -740,14 +749,21 @@ parameter they had. No R2 comparison is quoted above for that reason.
   separates SMGDB00000018's `Growth A mono 1e5` from `1e7`, and `_choose_monocultures` picks between them.
   An earlier measurement at the coarser condition-key level showed spreads of 49 to 84 times and was not
   a pooling at all.
-  **And in the condition key it would cost arcs.** Over the 39 comparisons the tool makes, the co-culture
-  and monoculture first abundances agree to a median of **1.17 times**, exactly 1.00 where a study
-  inoculates both sides to one density (SMGDB00000013), and differ by more than 3 times in **6**, up to
-  7.43, which is the *S. thermophilus* pair named six lines below (0.007 g/L against 0.052). This said
-  "7.43 (SMGDB00000014's *A. tumefaciens*, 1.5e5 against 6.6e5)", and 6.6e5 / 1.5e5 is **4.4**: the
-  factor was attached to the wrong pair, and it is checkable without running anything, which six review
-  passes read past (2026-10-11). Those six are a deliberate choice about
-  how to start a co-culture, so a 3-times rule in the key would lose about a seventh of the arcs for no
+  **And in the condition key it would cost arcs.** Over the **16** comparisons the tool makes, the
+  co-culture and monoculture first abundances agree to a median of **2.14 times** and differ by more than
+  3 times in **4**, up to 7.43, which is the *S. thermophilus* pair named six lines below (0.007 g/L
+  against 0.052). Counted by wrapping `integrated.starting_densities` over
+  `derive --all --live --no-published --derivation integrated --metric growth_rate --report-rates
+  --include-absent`, 2026-10-11.
+
+  Four figures in that sentence were wrong and the paragraph ten lines below had three of them right all
+  along ("the median factor is 2.16 and the warning fires on 4 of the 12"), so one document gave two
+  medians a factor of 1.8 apart for one quantity. It read "the 39 comparisons", "a median of 1.17 times",
+  "exactly 1.00 where a study inoculates both sides to one density (SMGDB00000013)" (no ratio is 1.00, and
+  that study yields no integrated arc at all) and "more than 3 times in 6", with the 7.43 attached to
+  SMGDB00000014's *A. tumefaciens* at "1.5e5 against 6.6e5", where 6.6e5 / 1.5e5 is **4.4**. Those four are
+  a deliberate choice about
+  how to start a co-culture, so a 3-times rule in the key would lose about a quarter of the arcs for no
   gain.
   So each arc carries a note giving both sides and the factor between them, and says plainly when that
   factor is above 3. On the live All network all 12 arcs carry it, the median factor is 2.16 and the
