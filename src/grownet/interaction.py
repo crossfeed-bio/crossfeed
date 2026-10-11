@@ -27,8 +27,11 @@ Two designs share this comparison:
 A set that did not grow is decided by the no-growth rule before any ratio: `grew` tests each replicate's
 maximum against its abundance at the first time point (Karoline, register item 5). Zero growth is a
 result, not an error. When the target has a positive property only with the source present
-(for example it grows in bi-culture but not in monoculture), the source is required for its growth: an
-obligate commensal or mutualist relationship, outcome "obligate". When it has a positive property only
+(for example it grows in bi-culture but not in monoculture), the source is required for its growth IN
+THAT COMPARISON: outcome "obligate", which Karoline's decision on #16 calls an obligate commensal or
+mutualist relationship. The scope is the comparison and not the organism, since the rule is evaluated per
+condition and no stage asks whether the target grows without the source anywhere else.
+When it has a positive property only
 without the source, the source abolishes its growth, outcome "abolished". A log2 ratio is undefined in both
 cases, so mean, sd, and se are None and the outcome carries the information. Without growth in either set
 the outcome is "no_growth". A comparison with a log2 value is "quantified". Individual replicates with a zero
