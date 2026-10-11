@@ -185,8 +185,9 @@ def dropout_arcs(net: InteractionNetwork) -> int:
 
 
 def counts(net: InteractionNetwork) -> dict:
-    """{"arcs", "cells", "organisms"}: how many arcs reach the matrix, how many cells they make, and how
-    many organisms the matrix has. A matrix holds one cell per ordered pair, so a network with several arcs
+    """{"arcs", "cells", "organisms", "within_one_organism"}: how many arcs reach the matrix, how many
+    cells they make, how many organisms the matrix has, and how many arcs are a pair with itself and so
+    have no cell of their own. A matrix holds one cell per ordered pair, so a network with several arcs
     for one pair has fewer cells than arcs; the page and the README say so, rather than leaving two counts
     to disagree (the lesson of the hidden arcs, Karoline, 2026-10-03). A censored arc reaches the matrix
     and its cell holds `NA` rather than a number (#129), so it is counted here: a cell a reader sees is a
