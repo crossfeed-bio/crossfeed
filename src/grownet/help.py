@@ -125,7 +125,8 @@ SETTINGS = {
     "rate_method": ("Growth rate method", "--rate-method easylinear|baranyi",
                     "Used with growth_rate. easylinear (the default) fits straight lines to log abundance over "
                     "sliding windows and takes the steepest part, as mGrowthDB computes the rates it reports "
-                    "(it matched them on 190 of 192 curves within 10%). baranyi fits the Baranyi-Roberts growth "
+                    "(measured live on 2026-10-11 it matches them on 2132 of 2161 curves within 10 per cent, "
+                    "median ratio 0.9998). baranyi fits the Baranyi-Roberts growth "
                     "model to the curve up to the end of the plateau after its maximum, so a decline after the peak "
                     "does not matter; a curve "
                     "it still does not describe (for example two growth phases) is left out and reported, never "
@@ -310,8 +311,11 @@ EDGE_ATTRIBUTES = {
     "target": "the organism whose growth is measured (node id)",
     "effect": "facilitation (the target grows more with the source) or inhibition (less); neutral for a mean "
               "of exactly zero, which has no direction",
-    "strength": "log2 of the target's growth with the source over without it, as the mean over replicates; "
-                "empty for obligate and abolished",
+    "strength": "log2 of the target's growth with the source over without it, as the mean over "
+                "replicates; empty for obligate and abolished. Under the specified comparison this is "
+                "exactly log2(metric_with / metric_without). Under the integrated form it is the mean of "
+                "the per-replicate log2 effects while that pair comes from the median coefficient, so "
+                "the two are near and not equal, and it is this field the absence threshold acts on",
     "sd": "standard deviation of the strength, the spread of the comparison",
     "se": "standard error of the strength",
     "n_with": "replicates with the source present",
@@ -335,8 +339,11 @@ EDGE_ATTRIBUTES = {
     "significance": "-log10 of the q-value: larger is stronger evidence against the test's own null, 0 at "
                     "q = 1, and a style can map it continuously. It is capped at 15 for a q-value of "
                     "zero. It is a restatement of the q-value and inherits what that rests on",
-    "outcome": "quantified (a ratio was computed), obligate (the target grows only with the source), "
-               "abolished (only without it), or no_growth",
+    "outcome": "quantified (a ratio was computed), obligate (the target did not grow WITHOUT the "
+               "source in this comparison, by the no-growth rule), abolished (it did not grow WITH it), "
+               "or no_growth. These say what one comparison established, not what the organism can do: "
+               "the rule is evaluated per comparison, so one pair can be obligate in one condition and "
+               "quantified in another, which is what a condition-dependent effect looks like here",
     "metric": "the growth property compared: auc, max, or a growth rate with its rule "
               "(growth_rate:easylinear:5, growth_rate:baranyi)",
     "method": "how the edge was computed, in words",
@@ -382,10 +389,20 @@ EDGE_ATTRIBUTES = {
     "partner_abundance_unit": "the abundance unit that number is in, as measured; never converted",
     "partner_abundance_n": "co-culture replicates behind that median",
     "metric_with": "the target's own growth property in the co-culture, as a number rather than a ratio: "
-                   "the geometric mean over the replicates with the source present, which is what a "
-                   "fitted coefficient is built from",
-    "metric_without": "the same without the source; 0 means the target did not grow at all there, which "
-                      "is what an obligate outcome records",
+                   "under the specified comparison the geometric mean over the replicates with the "
+                   "source present, and under the integrated form the fitted row evaluated WITH the "
+                   "partner's term. Either way (metric_with - metric_without) / partner_abundance is the "
+                   "coefficient, which is what a gLV cell is built from; under the integrated form it is "
+                   "not the pair whose log2 ratio strength reports, so do not read one off the other",
+    "metric_without": "the same without the source. A 0 is a SENTINEL for the set that failed the "
+                      "no-growth rule, not a measured zero: under a growth rate it is the rate that was "
+                      "measured, and under auc or max the set did grow and failed a rule about how "
+                      "much, so the number it reached is not 0. How far from 0 it was is usually on "
+                      "the same arc, as strength_bound with the rule that gave it: on the corpus those "
+                      "bounds put the without-side at up to 65 per cent of the with-side. On 3 of the "
+                      "15 censored arcs there is NO bound and strength_bound is empty, because the rule "
+                      "bounds nothing away from zero or the set is zero from its first point; bound_rule "
+                      "says which, and the matrix leaves those cells NA like the rest",
     "target_capacity": "the target's own plateau in the co-culture, where its curves reached stationary "
                        "phase: what fits the self-limitation of an organism that grows only with a partner",
     "target_capacity_unit": "the abundance unit that plateau is in, as measured; never converted",
@@ -514,8 +531,10 @@ DECISIONS = (
      "the paired test finds a rise or when it rose by the factor (1.5 by default). The strong claims, "
      "obligate and abolished, then need two reasons rather than one underpowered test (#37, #68)."),
     ("No growth is a result.",
-     "A target that grows only with its partner is obligate; one that grows only without it is abolished. "
-     "Both are the extremes of their direction and are always shown (#16)."),
+     "A target that did not grow without its partner in a comparison is obligate there; one that did "
+     "not grow with it is abolished. Both are the extremes of their direction and are always shown "
+     "(#16). The rule is per comparison, so the same pair can be obligate in one condition and "
+     "quantified in another."),
     ("Nodes are strains, keyed by NCBI taxon id.",
      "Names change: taxon 411483 is Faecalibacterium prausnitzii A2-165 in one study and Faecalibacterium "
      "duncaniae A2-165 in others, after the 2022 reclassification. Names are resolved through mGrowthDB "

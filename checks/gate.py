@@ -26,12 +26,30 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Kept for the one caller that still wants an extension, the Markdown-only prose rules. What the content
+# checks scan is decided by `_text_of` instead, which looks at the content.
 TEXT_EXT = (".py", ".md", ".toml", ".yml", ".yaml", ".json", ".cfg", ".ini", ".txt")
 
+# A quoted value was required until 2026-10-11, so an unquoted one passed: `TOKEN: ghp_...` in a
+# workflow `env:` block, or `TOKEN=...` in any scanned file, is how a real secret is most likely written
+# here and is exactly what the quotes excluded. The quotes are optional now, and `bearer` may be followed
+# by whitespace rather than a separator, which is how an Authorization header is written. A value must
+# still be 16 or more characters from the class, so `${{ secrets.X }}`, `$VAR`, `<your-token>` and `""`
+# do not match: a placeholder either starts outside the class or is too short.
+# The whitespace-only separator is for `authorization` and `bearer` ALONE, which is how an Authorization
+# header is written. Applied to all seven keywords it flagged ordinary prose, because one hyphenated word
+# after "secret" or "token" is 16 characters of the class: "GitHub secret scanning-and-rotation", "the
+# token docs/METHOD_NOTES.md describes", "a password manager.Keychain entry". In a project whose house
+# style is long prose Markdown with inline file paths that blocks a commit, and a gate someone turns off
+# is worse than none. The key header is broad enough for the forms openssl and gpg actually emit: DSA,
+# ENCRYPTED and PGP PRIVATE KEY BLOCK were missed while the check's own description says "private keys".
 SECRET = re.compile(
-    r"(?i)(?:api[_-]?key|secret|token|password|authorization|bearer)\s*[:=]\s*"
-    r"['\"][A-Za-z0-9/\+=_\-\.]{16,}['\"]"
-    r"|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
+    r"(?i)(?:api[_-]?key|secret|token|password)\s*[:=]\s*"
+    r"['\"]?[A-Za-z0-9/\+=_\-\.]{16,}['\"]?"
+    r"|(?:authorization|bearer)\s*(?:[:=]\s*|\s+)"
+    r"['\"]?[A-Za-z0-9/\+=_\-\.]{16,}['\"]?"
+    r"|-----BEGIN [A-Z0-9 ]{0,20}PRIVATE KEY",
+    re.I,
 )
 LOCAL_PATH = re.compile(r"(?i)(?:[a-z]:[\\/]dev[\\/]|[a-z]:[\\/]users[\\/]|/home/|/users/)")
 # hedging caveats: the tic implies the rest is not; say it plainly instead.
@@ -59,6 +77,32 @@ def tracked_files():
         return []
 
 
+def _text_of(rel):
+    """This file's content when it looks like text, else None: what the content checks scan.
+
+    The nine-extension list missed 30 of 138 tracked files: 9 `.Rd`, 8 `.R`, the extensionless `LICENSE`,
+    `NOTICE`, `Makefile`, `r/NAMESPACE` and `r/DESCRIPTION`, both `.svg`, and one each of `.gitignore`,
+    `.cff`, `.in`, `.html`, `.Rbuildignore` and `.DS_Store`. The largest was `gui/index.html` at 52,570
+    bytes, which is the whole viewer. Its failure mode is the one nobody can enumerate, the next
+    extension no one thought of, and it had already cost two misses in four days: the `.sh` of this
+    branch's own draft, and `schema/format_fields.json` on 2026-10-08 (Craig's agent measured #227).
+
+    A NUL byte is the binary test, not UTF-8 decodability: a latin-1 or UTF-16 file fails a decode test
+    while still being text a secret can sit in. The failure direction is the safe one, because a binary
+    with no early NUL is scanned as text and yields a false positive rather than a silent miss. This is a
+    better trade and not total coverage: it still skips whatever it judges binary, and the summary names
+    those files, so the remaining miss is one anybody can enumerate.
+
+    It goes through `_read` rather than opening the file itself, so one seam decides what every check
+    sees. A version that read the disk directly made every test that supplies its files through `_read`
+    scan nothing at all, silently, which is the shape of defect this gate exists to catch.
+    """
+    text = _read(rel)
+    if text is None:
+        return None
+    return None if "\0" in text[:8192] else text
+
+
 def _read(rel):
     try:
         return open(os.path.join(ROOT, rel), encoding="utf-8", errors="ignore").read()
@@ -76,10 +120,9 @@ def _strip_code(md):
 def check_secrets(rels):
     hits = []
     for rel in rels:
-        if rel.endswith(TEXT_EXT):
-            text = _read(rel)
-            if text and SECRET.search(text):
-                hits.append(f"secret-like string in {rel}")
+        text = _text_of(rel)
+        if text and SECRET.search(text):
+            hits.append(f"secret-like string in {rel}")
     return hits
 
 
@@ -119,9 +162,8 @@ def check_no_local_paths(rels):
     for rel in rels:
         if rel.replace("\\", "/") == RULES_FILE:
             continue
-        if rel.endswith(TEXT_EXT):
-            text = _read(rel)
-            if text and LOCAL_PATH.search(text):
+        text = _text_of(rel)
+        if text and LOCAL_PATH.search(text):
                 bad.append(f"absolute local-machine path in {rel} (keep the repo portable)")
     return bad
 
@@ -163,7 +205,7 @@ def check_house_style(rels):
         if not text:
             continue
         # caveats: scan all tracked text (docs and code)
-        if rel.endswith(TEXT_EXT):
+        if _text_of(rel):
             for m in CAVEATS.finditer(text):
                 bad.append(f"{r}: hedging caveat {m.group(0)!r} (say it plainly)")
         # dashes and US spelling: prose only (docs), outside code spans
@@ -334,7 +376,7 @@ def check_claims(_rels):
 def check_merge_markers(rels):
     bad = []
     for rel in rels:
-        text = _read(rel) if rel.endswith(TEXT_EXT) or "." not in os.path.basename(rel) else None
+        text = _text_of(rel)
         for m in MERGE_MARKER.finditer(text or ""):
             bad.append(f"conflict marker left from a merge in {rel}, line {text.count(chr(10), 0, m.start()) + 1}")
     return bad
@@ -367,9 +409,19 @@ def main():
             print(f"         X {f}")
         all_fails += fails
     if all_fails:
-        print(f"\nGATE FAIL: {len(all_fails)} problem(s) across {len(rels)} tracked files.")
+        scanned = sum(1 for rel in rels if _text_of(rel) is not None)
+        print(f"\nGATE FAIL: {len(all_fails)} problem(s) across {scanned} of {len(rels)} tracked files.")
         return 1
-    print(f"\nGATE OK: {len(rels)} tracked files clean across {len(CHECKS)} checks.")
+    # What was SCANNED, not what is tracked. This said "{len(rels)} tracked files clean" while the
+    # content checks read 108 of 138 and the merge-marker one 113, so the gate overstated its own reach
+    # in the one line a reader takes away from it (Craig's agent, #249 class, on #239). Scanning by
+    # content closed most of that gap; the line now names what is left, because a miss anybody can
+    # enumerate is the point of the trade.
+    skipped = sorted(rel for rel in rels if _text_of(rel) is None)
+    print(f"\nGATE OK: {len(rels) - len(skipped)} of {len(rels)} tracked files clean across "
+          f"{len(CHECKS)} checks"
+          + (f"; {len(skipped)} not scanned as binary: {', '.join(skipped)}" if skipped else "")
+          + ".")
     return 0
 
 

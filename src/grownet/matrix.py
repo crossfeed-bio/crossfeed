@@ -40,7 +40,8 @@ from .rates import doubling_time
 # It is kept because `rows` takes a diagonal, and because a reader of a 0.2.0 package met this number.
 DIAGONAL = -1.0
 RATE_UNIT = "1/h"
-# An obligate comparison (the target grows only with the source) and an abolished one (only without it)
+# An obligate comparison (the target's without-set did not grow there) and an abolished one (its
+# with-set did not grow), both scoped to that comparison rather than to the organism,
 # have no log2 ratio at all, because one side did not grow, while the interaction they report is the
 # strongest there is. Karoline, 2026-10-03: "obligate and abolished arcs need to carry numbers reflecting
 # the strong effect, how about 10 with the appropriate sign?" So such an arc used to enter a matrix as
