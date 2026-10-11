@@ -125,7 +125,8 @@ SETTINGS = {
     "rate_method": ("Growth rate method", "--rate-method easylinear|baranyi",
                     "Used with growth_rate. easylinear (the default) fits straight lines to log abundance over "
                     "sliding windows and takes the steepest part, as mGrowthDB computes the rates it reports "
-                    "(it matched them on 190 of 192 curves within 10%). baranyi fits the Baranyi-Roberts growth "
+                    "(measured live on 2026-10-11 it matches them on 2132 of 2161 curves within 10 per cent, "
+                    "median ratio 0.9998). baranyi fits the Baranyi-Roberts growth "
                     "model to the curve up to the end of the plateau after its maximum, so a decline after the peak "
                     "does not matter; a curve "
                     "it still does not describe (for example two growth phases) is left out and reported, never "
