@@ -37,6 +37,12 @@ content.
   as they always have.
 
 ### Fixed
+- **The test for that refusal called the function by hand**, so it supplied the `before` argument the
+  product has to pass: removing that one wiring line left the test green while the refusal went back to
+  blaming the second box. Found by a pass that attacked every new test with the regression it claims to
+  catch. It now drives `interactions_from_replicates` with a chemostat study named in the second box
+  first, using the helpers this file already has, and keeps the hand call for the two branches a real
+  study cannot easily produce. Verified by removing the wiring and watching it go red.
 - **A censored arc whose non-growing set has no measurable start published `bound_rule: ""`**, and the
   rule that explains it was computed and thrown away. `no_growth_bound` returns "the no-growth rule left
   no measured start to bound this set by" and `bounded_strength` discarded the string with the value; on

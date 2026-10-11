@@ -1056,8 +1056,22 @@ def test_a_selection_the_cultivation_rule_already_removed_is_not_blamed_on_the_b
     the refusal a reader acts on sent them to retype the box when the fix is the growth measure. And
     `study_ids_of` fell back to the words "this study", which its caller prefixes with "study ", printing
     "study this study" (found reviewing round 9)."""
-    from grownet.derive import select_experiments, study_ids_of
+    from grownet.derive import interactions_from_replicates, select_experiments, study_ids_of
     from grownet.selection import matches, parse
+
+    # FIRST through the real entry point, because calling `select_experiments` by hand supplies the
+    # `before` argument that the product has to pass: removing that one wiring line left the hand-written
+    # half of this test green while the refusal went back to blaming the second box (found reviewing this
+    # change). A chemostat study, named in the second box, with the default growth measure.
+    client, study, exps = _replicate_study()
+    for exp in exps:
+        exp["cultivationMode"] = "chemostat"
+    _records, skipped_live = interactions_from_replicates(client, study, exps, selection=parse(["co"]))
+    reasons = [reason for _label, reason in skipped_live]
+    assert any("left out before the second box was read" in r for r in reasons), reasons
+    assert not any("no experiment of this study matches" in r for r in reasons), reasons
+    labels = [label for label, _ in skipped_live]
+    assert "study this study" not in labels, labels
 
     chemostat = {"id": "E1", "name": "A6", "studyId": "SMGDB00000005",
                  "communityStrains": [{"strain": {"name": "A"}}, {"strain": {"name": "B"}}]}
