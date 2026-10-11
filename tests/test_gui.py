@@ -983,3 +983,29 @@ def test_a_setting_off_its_default_is_marked_on_a_result_that_has_arcs():
 
     result["settings"] = dict(DEFAULTS)
     assert "not at their default" not in _result_section("tok", result)
+
+
+def test_the_glv_example_button_ignores_a_setting_left_in_the_form(server):
+    """The button configures everything, which means it does not inherit what is already in the boxes.
+
+    It took the posted form and applied gLV mode on top, so pressing it with an absence threshold of 9
+    still in Advanced settings filled the boxes, ran, and produced no network and no package, against a
+    caption promising a package that simulates (#253). The fix reads `DEFAULTS` instead, and nothing
+    tested it: the existing button test posts `glv_example` alone, and an empty form parses to the
+    defaults either way, so reverting to the form was invisible (found reviewing round 10).
+    """
+    import grownet.gui as gui
+    base, token = server
+
+    data = urllib.parse.urlencode({"glv_example": "1", "absence_threshold": "9",
+                                   "spike_factor": "3"}).encode()
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=30) as r:
+        page = r.read().decode("utf-8")
+    assert "Advanced settings" in page
+
+    said = json.loads(_get(f"{base}/download.json?token={token}"))["meta"]["settings"]
+    assert said["absence_threshold"] == gui.DEFAULTS["absence_threshold"], said["absence_threshold"]
+    assert said["spike_factor"] == gui.DEFAULTS["spike_factor"], said["spike_factor"]
+    # and the settings gLV mode does set are still set, so this did not simply ignore the press
+    assert said["conditions"] == gui.GLV_EXAMPLE_STUDY
+    assert said["report_rates"] is True
