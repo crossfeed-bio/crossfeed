@@ -554,7 +554,10 @@ and is never read as an absence. Low-quality edges are left out of the output by
 `single_replicate` edges: those are shown by default with their `status` undetermined, and the Cytoscape
 style marks them (for example dashed), since one replicate is often all a study has.
 `cautions` are shown without making an edge low quality: `two_replicates` marks an edge with exactly two
-replicates on a side, whose sd rests on two values, and `conditions_unverified` an edge from co-cultures of
+replicates on a side. Where the comparison has a spread, that is an `sd` resting on two values; on a
+censored arc (`obligate` or `abolished`) there is no `sd`, `se` or `effect_over_sd` at all, and the count
+on the censored side is the number of replicates that did **not** grow, so the caution says only how few
+replicates that side had. 9 of the 15 censored arcs of the live corpus carry it. And `conditions_unverified` an edge from co-cultures of
 a pair that differ only in their description (a supplement, say) when nothing recorded says which
 monocultures match. With `--metric max`, `stationary_phase_differs` marks an edge where one set reached
 stationary phase within the compared window and the other did not, so the maximum of one may still be
