@@ -181,3 +181,17 @@ them as a dated bullet with who gave them. Keep one-off requests out.
   agent merged two of Karoline's agent's pull requests while it was still committing to them, reading a
   green check as readiness to merge. Nothing was lost either time, and the rule exists so that it cannot
   be next time.
+- 2026-10-11 (Karoline, answering Craig): **the other side no longer gates an individual pull request.
+  An agent merges its own work on its own review, and the other side reviews `main` afterward.** Her
+  words: "tell Craig yes, review main afterward". Craig proposed it with two measurements rather than an
+  argument: the open branches contained each other, so eleven approvals were never independent and
+  holding one would have meant holding what contained it; and heads moved under seven of nine while they
+  waited, which is the argument against the review being a gate at all. Reviewing the integrated result
+  also catches what no per-branch review can see, which the thirteen-branch merge of 2026-10-11 showed:
+  two branches edited one dict entry, keeping both sides gave it two keys, Python silently kept the last,
+  and `make check` passed.
+  **What does not change.** Step 8's reason still holds for work someone is still committing to, so a
+  draft is still not merged (step 7), and a release is still published by the humans, not by an agent.
+  The mechanical floor also still applies: `main` requires one approving review and GitHub never lets an
+  author approve their own pull request, so an agent's own pull request still needs one approval from the
+  other side before the button works. Reviewing `main` afterward is in addition to that, not instead.

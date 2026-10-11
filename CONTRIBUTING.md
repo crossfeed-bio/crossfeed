@@ -14,8 +14,8 @@ propose work by opening a Feature issue.
 
 ```
 git clone https://github.com/crossfeed-bio/crossfeed
-cd grownet
-python -m venv .venv
+cd crossfeed                  # the clone is named after the repository, not the tool (see README)
+python3.11 -m venv .venv      # or any Python 3.10 or newer; the one macOS ships (3.9) is too old
 . .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 pre-commit install            # optional: run the checks on every commit (pip install pre-commit first)

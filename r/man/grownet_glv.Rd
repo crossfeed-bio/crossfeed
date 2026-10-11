@@ -6,7 +6,9 @@ grownet_glv(from, timeout = 60, quiet = FALSE)
 }
 \arguments{
 \item{from}{The gLV address of a running grownet page, for example
-\code{"http://127.0.0.1:8791/glv.json?token=..."}. The path of a saved payload works too.}
+\code{"http://127.0.0.1:8791/glv.json?token=...&job=..."}, which the page prints under the gLV
+parameters control: copy it from there rather than typing it, because the page prints this address with its own `&job=` and that is the one to paste: without a job the server answers whichever search was looked at last, which with two tabs open is a different system's parameters (#251).
+The path of a saved payload works too.}
 
 \item{timeout}{Seconds to wait for the page.}
 
@@ -22,7 +24,7 @@ the page runs on.
 }
 \examples{
 \dontrun{
-glv <- grownet_glv("http://127.0.0.1:8791/glv.json?token=PASTE_THE_TOKEN")
+glv <- grownet_glv("http://127.0.0.1:8791/glv.json?token=PASTE_THE_TOKEN&job=PASTE_THE_JOB")
 }
 }
 \seealso{

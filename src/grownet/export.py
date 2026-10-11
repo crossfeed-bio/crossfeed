@@ -7,8 +7,15 @@ networkx, and Gephi read, so a grownet network drops straight into an existing n
 Dependency-free (standard library xml only). The graph is directed, and every edge keeps its effect,
 strength, significance (-log10 of the q-value), the q-value, condition, method, the space-joined
 study_ids (the edge-level attribution), and
-when known the evidence (biculture or dropout), the space-joined community, the space-joined cautions,
+when known the evidence (biculture or dropout), the community, the space-joined cautions,
 and the space-joined ids of the experiments the edge compares.
+
+**A list whose members can contain a space is joined with "; ", not " ".** `community` holds NODE IDS and
+a node id under identity "name" is a lowercase species name, so the space-joined form could not be split
+back on 115 of 145 arcs of the default corpus, and a 14-member community read as a 16-member one whose
+two extra members were word fragments (#245). `notes` and `merged_pairs` already used "; ". The four
+still joined with a space, `quality`, `cautions`, `experiments` and `study_ids`, carry no value with a
+space in it today, which was checked on the corpus; the rule for adding another is this sentence.
 
 It also carries the columns the grownet Cytoscape style maps, which "Send to Cytoscape" computes: the
 node's genus and genus color, and the edge's line style and display width. Without them a GraphML file
@@ -190,7 +197,12 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(ed, "e_quality", " ".join(e.quality))
         _data(ed, "e_notes", "; ".join(e.notes))
         _data(ed, "e_evidence", e.evidence)
-        _data(ed, "e_community", " ".join(e.community))
+        # "; " and not " ": `community` holds NODE IDS, and a node id under identity "name" is a
+        # lowercase species name with a space in it, so a space-joined 14-member community read as a
+        # 16-member one whose two extra members were word fragments. On the default corpus 115 of 145
+        # arcs could not be split back (#245). `notes` and `merged_pairs` above already use "; " for
+        # exactly this reason.
+        _data(ed, "e_community", "; ".join(e.community))
         _data(ed, "e_cautions", " ".join(e.cautions))
         _data(ed, "e_experiments", " ".join(e.experiments))
         if e.merged_arcs is not None:

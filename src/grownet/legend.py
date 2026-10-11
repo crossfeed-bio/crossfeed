@@ -37,9 +37,10 @@ ARCS = [
      "the target grows less with the source present: log2 mean below zero. Every arc ends in the same "
      "head, so the color alone carries the sign"),
     ("", 7, FACILITATION, "arrow", "obligate",
-     "the target grows only with the source present, so there is no ratio to report. Always present"),
+     "the target's without-set did not grow in this comparison, so there is no ratio to report. Per "
+     "comparison, not a property of the organism. Always present"),
     ("", 7, INHIBITION, "arrow", "abolished",
-     "the target grows only without the source. Always present, like obligate"),
+     "the target's with-set did not grow in this comparison. Always present, like obligate"),
     ("11 6", 3, FACILITATION, "arrow", "dropout evidence",
      "the source was removed from a community, so its effect can run through a third member. A solid arc "
      "is biculture evidence: one species against the same species with one partner, direct"),

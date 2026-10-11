@@ -42,7 +42,7 @@ Three ways, from the least to the most technical. All give the same program.
 ### Windows, without installing anything
 
 From the first release on, each [release](https://github.com/crossfeed-bio/crossfeed/releases) carries
-`grownet-<version>-windows.zip`: the whole program in one folder, Python included. Unzip it (right-click,
+`grownet-v<version>-windows.zip`: the whole program in one folder, Python included. Unzip it (right-click,
 Extract All), open the folder and double-click `grownet.exe`. A black window opens and shows an address, and
 your browser opens the page there; closing the black window stops the program.
 
@@ -159,7 +159,10 @@ python -m grownet schema [--out FILE]
 - `derive --live --all` does what the page's All button does: every study in mGrowthDB, with every
   partner (a study argument limits it to those studies). With the default settings it reads the network
   derived once a day by `.github/workflows/all-network.yml` (the `all-network` release), when that is
-  less than a day old, and derives live otherwise; `--no-published` always derives live.
+  less than a day old **and was derived by the same derivation your settings ask for**, and derives
+  live otherwise; `--no-published` always derives live. The derivation is part of the condition because a
+  format id moves when a field changes meaning and the derivation is not a field, so the artifact and a
+  live run can carry the same format and entirely different networks.
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of either built-in one (see below).
 - The command line does everything the local page does: every advanced setting has its option, and the
@@ -395,7 +398,10 @@ compared (`auc` by default; `max`, or a growth rate recorded with its rule, `gro
 of one source and target were merged, and the lowest and highest log2 mean among them.
 `supporting_pairs` and `merged_pairs` are set only with `--merge-genera`: how many distinct species pairs
 (strain pairs when only taxon ids were entered) a genus arc rests on, and which. `outcome` says what the comparison could establish: `quantified`, `obligate` (the
-target grows only with the source present), `abolished` (only without it), or `no_growth`. For an
+target's without-set did not grow in that comparison, by the no-growth rule), `abolished` (its with-set
+did not grow), or `no_growth`. These are scoped to one comparison and are not claims about the organism:
+one pair in the corpus is obligate in two conditions of a study and quantified in six others of the same
+study, once with the target reaching 3.5 times more without the source than with it. For an
 obligate or abolished edge, the count on the side without growth is its replicates without growth. A
 comparison whose set was emptied by exclusions (every replicate spiked, for example) says nothing about
 growth; it is skipped with a reason rather than read as obligate. `evidence`
@@ -450,7 +456,8 @@ least-squares fit per organism gives its rate, its own limitation and every part
 once, with no growth property, no log2 ratio, no plateau to certify and no partner abundance to divide by.
 The monocultures identify `r_i` and `A_ii` and are held fixed while the co-cultures give the partners. The
 model has no lag term and no death term, so the rows start where growth starts and stop where it ends.
-Every arc carries the coefficient, the residual and the condition number of its fit; a row the design
+Every arc carries the coefficient, the condition number of its fit, its R2 and the R2 of the same row
+with every interaction set to zero; a row the design
 cannot identify, and a community of three or more members, are reported rather than derived.
 
 **Scoring the package against a chemostat.** `--steady-check` (with `--report-rates --live`) scores the
@@ -522,8 +529,9 @@ and abolished counts depend on these two numbers, so `meta.no_growth` records th
   `strength`.
 - Example: an edge with log2 mean +0.53 and sd 0.91 has `effect_over_sd` 0.58, so it is absent at k = 1 and
   present at k = 0.5. An edge with −2.66 ± 2.38 has 1.12 and is present at k = 1.
-- **Obligate** (the target grows only with the source present) and **abolished** (it grows only without
-  it) are the extremes of facilitation and inhibition. They have no log2 ratio, so no `weight` and no
+- **Obligate** (the target's without-set did not grow in that comparison) and **abolished** (its
+  with-set did not grow) are the extremes of facilitation and inhibition. Both are per comparison, so the
+  same pair can be obligate in one condition and quantified in another. They have no log2 ratio, so no `weight` and no
   `effect_over_sd`; they are always present and are drawn with their own style.
 - A mean of exactly zero is absent, unless its status is undetermined. A low-quality edge's `status` is
   `null` (undetermined) whatever
