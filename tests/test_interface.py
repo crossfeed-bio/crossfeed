@@ -262,7 +262,11 @@ def test_the_page_and_the_command_line_start_from_the_same_defaults():
            "min_studies": a.min_studies, "merge_genera": a.merge_genera, "no_growth_alpha": a.no_growth_alpha,
            "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p,
            "report_rates": a.report_rates, "steady_check": a.steady_check,
-           "derivation": a.derivation}
+           # `--derivation` parses to None, meaning "not given", so gLV mode can tell a reader's own
+           # choice from one it filled in; what must match the page is the value a run resolves to
+           # (2026-10-10). `_derive` does this resolution.
+           "derivation": a.derivation if a.derivation is not None else gui.DEFAULTS["derivation"]}
+    assert a.derivation is None, "the flag carries no default of its own; the page's is the one default"
     assert set(cli) == set(gui.DEFAULTS)
     assert {k: v for k, v in cli.items() if v != gui.DEFAULTS[k]} == {}
 
@@ -528,8 +532,17 @@ def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
 
     # Karoline, 2026-10-04: "Do I click a 2nd time to switch it off?" Pressing it again restores both
     # defaults, and says so
-    again = press({"species": A, "glv_mode": "1", "report_rates": "1", "only_entered": "1",
-                   "metric": "growth_rate"})                            # what the page posts when on
+    # what the page posts when the mode is on, built from the mode itself rather than listed here: this
+    # list was one setting short the moment gLV mode began selecting the derivation too, and a short list
+    # makes the next press turn the mode ON again instead of off (2026-10-10)
+    from grownet.gui import DEFAULTS, glv_mode, glv_mode_on
+    posted = {"species": A, "glv_mode": "1", "only_entered": "1"}
+    on = glv_mode(dict(DEFAULTS))
+    assert glv_mode_on(on)
+    for key, value in on.items():
+        if DEFAULTS[key] != value and value is not False:
+            posted[key] = "1" if value is True else str(value)
+    again = press(posted)
     back = again[again.index("<details>"):]
     assert 'name="report_rates" value="1">' in back                      # off, its default
     assert 'name="include_dropout" value="1" checked' in back            # on, its default
@@ -837,6 +850,8 @@ def test_glv_mode_on_the_command_line_sets_the_same_settings(capsys, monkeypatch
     assert captured["settings"]["include_dropout"] is False
     assert captured["settings"]["metric"] == "growth_rate"           # #119: L is a ratio of rates
     assert captured["settings"]["rate_method"] == "easylinear"      # hers, not the mode's
+    # and the form a coefficient should be fitted by, which is what the mode is for (2026-10-10)
+    assert captured["settings"]["derivation"] == "integrated"
 
 
 def test_the_page_and_the_command_line_mean_the_same_by_glv_mode():
@@ -844,9 +859,14 @@ def test_the_page_and_the_command_line_mean_the_same_by_glv_mode():
     from grownet.gui import DEFAULTS, glv_mode
     applied = glv_mode(dict(DEFAULTS))
     assert applied["report_rates"] is True and applied["include_dropout"] is False
-    # the two Karoline named, and the two the coefficients of #119 need; nothing else moves
+    # the two Karoline named, the metric the coefficients of #119 need, and the derivation that fits a
+    # coefficient rather than dividing a difference of two rates by one partner mean (2026-10-10);
+    # nothing else moves
     assert {k: v for k, v in applied.items() if DEFAULTS[k] != v} == {
-        "report_rates": True, "include_dropout": False, "metric": "growth_rate"}
+        "report_rates": True, "include_dropout": False, "metric": "growth_rate",
+        "derivation": "integrated"}
+    # and pressing it again puts every one of them back, the derivation included
+    assert glv_mode(applied, on=False) == dict(DEFAULTS)
 
 
 def test_the_name_is_never_styled_where_a_command_is_meant():
@@ -913,3 +933,38 @@ def test_the_command_line_and_the_page_describe_the_same_settings():
     # the two derivations are both named, on the flag and in the help's settings table
     assert "integrated" in flag["--derivation"] and "replicate" in flag["--derivation"]
     assert "integrated" in help_page.SETTINGS["derivation"][2]
+
+
+def test_glv_mode_does_not_override_a_derivation_the_reader_asked_for(capsys):
+    """The decision register prints one command as the record of its own measurement:
+    `derive SMGDB00000007 --live --glv-mode --derivation <either> --steady-check`. That command was added
+    because two readers took the table beside it for a fabrication when it was missing. Making gLV mode
+    set the derivation then made both arms give the same answer, so the remedy for "this looks
+    unreproducible" was silently unfixed the same day (found 2026-10-10).
+
+    An explicit flag wins, and the banner says so. Without one, gLV mode selects the integrated form,
+    which is what a coefficient needs.
+    """
+    from grownet.__main__ import _derive, build_parser
+
+    def resolved(argv):
+        a = build_parser().parse_args(argv)
+        assert a.derivation is None or "--derivation" in argv
+        try:
+            _derive(a)                       # resolves the derivation, then fails on the missing input
+        except SystemExit:
+            pass
+        except Exception:                    # noqa: BLE001 - a later stage is not what this tests
+            pass
+        return a.derivation, capsys.readouterr().err
+
+    base = ["derive", "SMGDB00000007", "--fixture", "nothing.json"]
+    got, said = resolved(base + ["--glv-mode"])
+    assert got == "integrated" and "and the integrated form" in said
+
+    got, said = resolved(base + ["--glv-mode", "--derivation", "replicate"])
+    assert got == "replicate", "gLV mode overrode a derivation the reader asked for"
+    assert "which you asked for and gLV mode does not override" in said
+
+    got, _ = resolved(base + ["--glv-mode", "--derivation", "integrated"])
+    assert got == "integrated"

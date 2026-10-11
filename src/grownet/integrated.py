@@ -952,8 +952,10 @@ class IntegratedDeriver:
         "Each interaction is a coefficient of a generalized Lotka-Volterra row, fitted from the whole "
         "measured time course: the organism's own rate and self-limitation from its monocultures under "
         "the same conditions, then its partners' effects from the co-cultures. The strength reported "
-        "beside it is log2(1 + A_ij x_j / r_i), the same quantity the replicate-set comparison measures, "
-        "so the two derivations can be read together. An interaction is reported when |mean| is at least "
+        "beside it is log2(1 + A_ij x_j / r_i), which is on the scale the replicate-set comparison "
+        "reports, though the two are not interchangeable: this form derives no arc from a community of "
+        "three or more, so no drop-out arc, and it has no no-growth rule, so no censored arc and no "
+        "measured bound. An interaction is reported when |mean| is at least "
         "k standard deviations (the absence threshold, default 1), where the dispersion carries the "
         "co-culture replicates, the monoculture stage, and the spread of the selected monoculture rates "
         "where there was more than one. The t-test, corrected for multiple testing, is "
@@ -1037,7 +1039,12 @@ class IntegratedDeriver:
                                 "(see the open decisions in docs/METHOD_NOTES.md)"))
 
         study_id = study.get("id")
-        study_meta = {"study_citation": study.get("citation", ""), "study_license": study.get("license", ""),
+        # `name` is what mGrowthDB calls the study's title; it has no `citation` key and never had, so
+        # this read an absent field and every study lost its citation on this path, in the JSON, the
+        # report's "cite the studies behind the edges you use" block and the page's Sources. The
+        # comparison reads `name` (derive.py:1349); these two must stay the same (2026-10-10).
+        study_meta = {"study_citation": study.get("name") or study.get("id", ""),
+                      "study_license": study.get("license", ""),
                       "study_url": study.get("url", "")}
         for exp, members, reps in communities:
             # the strict label, so an arc says which altered medium it was measured in and the capacity
@@ -1434,7 +1441,7 @@ def _widen_by_rate_selection(pending: list) -> None:
             continue
         # `stdev` is the SAMPLE standard deviation, dividing by n - 1, and that is the intended basis:
         # which monoculture sets this study happened to hold, and which the matcher happened to pair with
-        # each co-culture, is one realisation of a matching that could have gone otherwise, so these
+        # each co-culture, is one realization of a matching that could have gone otherwise, so these
         # rates are a sample of the rates this organism could have been given rather than the whole
         # population of them. `pstdev` would divide by n and give a spread smaller by sqrt(n / (n - 1)),
         # which at the minimum n of 2 that the guard below admits is a factor of 1.41, and
@@ -1526,7 +1533,7 @@ def _strength_mean_at(rows: list, rate: float, at_rate: float):
 
 
 def _arc_statistics(got: dict, cocultures: list, partner: str, rate_selection: dict = None) -> dict:
-    """What an arc publishes about one partner's effect, with both sources of error in it.
+    """What an arc publishes about one partner's effect, with every source of error in it.
 
     {"n", "strength", "sd", "se", "se_replicates", "se_rate_stage", "p_value", "df",
      "coefficient_sd", "coefficient_sd_from_rate_stage", "per_replicate"}.

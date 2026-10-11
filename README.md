@@ -240,7 +240,9 @@ stay there.
 
 Press the **gLV mode** switch beside All and the two settings a simulation needs are set in Advanced
 settings: **Report growth rates** on and **Include drop-out communities** off, since a drop-out arc may act
-through a third species (`--glv-mode` on the command line, or `--report-rates --no-dropout`). The result section's **gLV parameters** control then
+through a third species (`--glv-mode` on the command line, which also sets the growth property and the
+derivation a coefficient needs; `--report-rates --no-dropout` sets two of the four and gives a different
+network). The result section's **gLV parameters** control then
 either downloads the zip or sends the parameters straight into a running R session. The companion package is in [`r/`](https://github.com/crossfeed-bio/crossfeed/tree/main/r), and it
 assumes no simulator: it hands over a plain matrix and a plain vector, with a helper that shapes them for
 [miaSim](https://bioconductor.org/packages/release/bioc/html/miaSim.html).
@@ -271,7 +273,7 @@ The caveats travel as data rather than as text to be read first: the object prin
 more than one way), `glv_rates()` the matching rates, `glv_scale()` is unnecessary for fitted coefficients
 and says so (it stays for the effect-size parameters of 0.2.0 and
 earlier, which the package still reads), and `as_miasim()` stops when an organism has no growth rate,
-since a simulation cannot invent one. `grownet derive ... --report-rates --to-r` does the same from the command line, and `grownet_glv(url)` reads the parameters from the page
+since a simulation cannot invent one. `grownet derive ... --glv-mode --to-r` does the same from the command line, and `grownet_glv(url)` reads the parameters from the page
 when no port can be opened. The R package's own README is [`r/README.md`](https://github.com/crossfeed-bio/crossfeed/blob/main/r/README.md).
 
 ## Send it to Cytoscape
@@ -417,17 +419,18 @@ rule behind each one. The diagonal is 0 here.
 `--glv FILE` (with `--report-rates --metric growth_rate`, or `--glv-mode`, which sets both) writes the parameters of a
 generalized Lotka-Volterra simulation as a zip, as **fitted coefficients**: one
 `interaction_matrix.<unit>.csv` per abundance unit. **What a cell is depends on the derivation, and the
-`README.txt` in the zip states the one that made it.** Under the default, every cell including the
-diagonal is a parameter of the least squares that fitted that organism's row, and the carrying capacity in
-`growth_rates.csv` is `-r_i / A[i][i]`, the plateau that fit implies; `capacity_source` says so per
-organism, and an organism whose fit implies no plateau has a measured one put in its place and is named
-under DIAGONALS THAT ARE NOT A FIT. Under `--derivation replicate` the direction is the other way round:
+`README.txt` in the zip states the one that made it.** Under **gLV mode**, which selects the integrated
+form, every cell including the diagonal is a parameter of the least squares that fitted that organism's
+row, and the carrying capacity in `growth_rates.csv` is `-r_i / A[i][i]`, the plateau that fit implies;
+`capacity_source` says so per organism, and an organism whose fit implies no plateau has a measured one
+put in its place and is named under DIAGONALS THAT ARE NOT A FIT. Under the **default** derivation the
+direction is the other way round, and `capacity_source` is empty because nothing fitted the plateau:
 `A[i][i] = -r_i / K_i` with K the plateau the curves were observed to hold, and
 `A[i][j] = (r_with - r_without) / x_j` off it, the difference between i's own growth rate with j and
 without it over the partner's abundance across i's growth window, so a pair where one side did not grow is
 a measurement rather than a convention, and an organism that grows only with a partner gets `r_i = 0` and
 a self-limitation fitted at its plateau beside that partner.
-`growth_rates.csv`, one rate per organism in the same order with how many values it rests on, and beside
+`growth_rates.csv`, one rate per organism with how many values it rests on, and beside
 it the estimator, the Baranyi lag and the carrying capacity with its abundance unit, how many curves it
 rests on, how many gave none, and how far those curves had fallen from their peak
 (`capacity_fall_from_peak`: 1 is a curve that ended at its peak). The matrix CSV keeps four significant
@@ -439,8 +442,9 @@ environment, so a package built from several media says so and points at the sec
 per-capita effect in 1/(time x abundance), so nothing in the package is a convention and nothing needs
 scaling; abundances are never converted between units, which is why each unit has its own matrix.
 
-**The default derivation, from the whole time course.** `--derivation integrated`, which is what runs
-unless the Derivation setting is changed, fits each organism's row rather than comparing replicate sets:
+**The derivation gLV mode selects, from the whole time course.** `--derivation integrated`, which gLV
+mode turns on and which the Derivation setting selects on its own, fits each organism's row rather than
+comparing replicate sets:
 `ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt)` is linear in the parameters, so one
 least-squares fit per organism gives its rate, its own limitation and every partner's coefficient at
 once, with no growth property, no log2 ratio, no plateau to certify and no partner abundance to divide by.
@@ -626,8 +630,26 @@ before you implement one.
 
 ## How the derivation works
 
-`IntegratedDeriver` (`src/grownet/integrated.py`) is the default since 0.3.0. It fits each organism's
-whole row from its time course: `ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt)` is linear in
+**Two derivations, and which one runs when.** `ReplicateDeriver` (`src/grownet/derive.py`) is the default,
+and is what produces a network. `IntegratedDeriver` (`src/grownet/integrated.py`) is what gLV mode
+selects, and is the only form that gives a gLV coefficient. Neither is the stricter version of the
+other; each answers a different question, and each has a weakness the other does not.
+
+**What the comparison cannot do** is give a coefficient that is free of the organism's own density: a
+coefficient from it is a difference of two separately fitted growth rates divided by one partner mean,
+and that confound is not removed by more replicates. That is why gLV mode does not use it.
+
+**What the integrated form cannot do** is express two kinds of evidence a network rests on. It derives no
+arc from a community of three or more, so no **drop-out** arc exists under it; and it has no no-growth
+rule, so there are no **censored** arcs, no measured bounds and no `NA` cells. On the whole of mGrowthDB
+the comparison gives 145 arcs, 122 of them drop-out, with 12 censored bounds; the integrated form gives
+12 arcs and no bounds (measured 2026-10-09). That is why it is not the default.
+
+It was the default for one release, 0.3.0. The comparison that chose it was run in gLV mode, where
+drop-out communities are off on both sides, so it measured the two forms on the question gLV mode asks
+and not on what a network loses (Karoline, 2026-10-10).
+
+`IntegratedDeriver` fits each organism's whole row from its time course: `ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt)` is linear in
 the parameters, so one regression per organism gives its growth rate, its own self-limitation and every
 partner's per-capita coefficient together, in the units a gLV simulation reads. It is fitted in two
 stages, the monocultures first and then the co-cultures, because a single joint fit inside one experiment
@@ -643,12 +665,13 @@ with every partner set to zero, the condition number of the design, the share of
 rows cover, and the fractional change in the monoculture rate that would drive the coefficient to zero.
 A row whose fit explains less than predicting nothing does is refused and named.
 
-Why it is the default (Karoline, 2026-10-06): it is the form published work uses for this purpose, and it
-is not biased by construction. The alternative below estimates a coefficient as a difference of two
-separately fitted rates divided by one partner mean, and that quantity is the coefficient plus a term in
-the organism's own density, which is set by the inoculum rather than by the partner.
+Why a coefficient comes from it (Karoline, 2026-10-06): it is the form published work uses for this
+purpose, and it is not biased by construction. The comparison estimates a coefficient as a difference of
+two separately fitted rates divided by one partner mean, and that quantity is the coefficient plus a term
+in the organism's own density, which is set by the inoculum rather than by the partner. That argument is
+about the coefficient, which is why gLV mode uses this form and the default does not.
 
-`ReplicateDeriver` (`src/grownet/derive.py`) is the alternative, `--derivation replicate`, and the
+`ReplicateDeriver` (`src/grownet/derive.py`) is the default, `--derivation replicate`, and the
 comparison the collaboration specified. It reads each replicate's measured growth curve from mGrowthDB
 and compares replicate sets on the log2 scale, over the area under the curve by default (`--metric max`
 for maximal abundance, `--metric growth_rate` for the maximum specific growth rate). Every edge
@@ -681,7 +704,8 @@ Single-replicate edges are the exception: they are shown, flagged, and marked by
 Each comparison with at least two replicates per side is also tested, with the test its derivation runs
 and `meta.statistics` names: Welch's t-test on the per-replicate log2 values for the specified comparison,
 and for the integrated form, which compares no sets, its fitted log2 strength against no effect over a
-standard error carrying both the co-culture replicates and the monoculture stage. It is reported as
+standard error carrying the co-culture replicates, the monoculture stage and the spread of the
+selected monoculture rates where there was more than one. It is reported as
 `p_value`, as `q_value` (the correction over every comparison tested in the
 derivation, Benjamini-Hochberg by default, in `meta.statistics`) and as `significance`, which is
 `-log10(q_value)`. The test supports an edge when significant and decides nothing unless
