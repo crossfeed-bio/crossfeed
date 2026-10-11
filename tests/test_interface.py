@@ -21,6 +21,7 @@ test.
 """
 import http.server
 import json
+import os
 import re
 import threading
 import time
@@ -968,3 +969,60 @@ def test_glv_mode_does_not_override_a_derivation_the_reader_asked_for(capsys):
 
     got, _ = resolved(base + ["--glv-mode", "--derivation", "integrated"])
     assert got == "integrated"
+
+
+def test_every_derive_path_records_the_same_settings_and_follows_the_steady_check_flag():
+    """`report.py` promises "every setting with its value", and there were two hand-written settings
+    dicts that disagreed: `derive <STUDY> --live` recorded 20 keys and the species path 23. Worse,
+    `steady_check` was wrong on BOTH, the species path taking it from `DEFAULTS` rather than the flag, so
+    a run that scored a chemostat recorded that it had not, and two reports of one study could differ in
+    their arcs and be identical in their settings block (#233).
+
+    One builder now, and this reads it through the real parser rather than from a copy of the keys.
+    """
+    from grownet.__main__ import _settings_of, build_parser
+    from grownet.gui import DEFAULTS
+
+    parser = build_parser()
+
+    def settings(argv):
+        return _settings_of(parser.parse_args(argv))
+
+    plain = settings(["derive", "SMGDB00000007", "--live", "--out", os.devnull])
+    species = settings(["derive", "SMGDB00000007", "--live", "--species", "A", "B",
+                        "--out", os.devnull])
+    assert set(plain) == set(species), "the two derive paths record different settings"
+    assert set(plain) >= set(DEFAULTS), "a setting the page has and the command line does not record"
+
+    # the four that were missing or wrong, and none is n/a on either path
+    for key in ("include_absent", "steady_check", "exclude_studies", "only_entered"):
+        assert key in plain and key in species
+
+    # Every flag, asserted in BOTH directions. The first version of this test compared KEY SETS and then
+    # checked the values of two keys, so its name claimed every path records the same settings while its
+    # body allowed a path to record them wrongly: `exclude_studies` and `only_entered` came from DEFAULTS
+    # and the report stated the opposite of what was asked, and this test passed (found reviewing #242,
+    # the same defect this file's other tests were written to catch elsewhere).
+    base = ["derive", "SMGDB00000007", "--live", "--out", os.devnull]
+    off = settings(base)
+    cases = [
+        (["--steady-check", "--glv-mode"], "steady_check", True),
+        (["--include-absent"], "include_absent", True),
+        (["--exclude-studies", "SMGDB00000002"], "exclude_studies", "SMGDB00000002"),
+        (["--all-partners"], "only_entered", False),
+        (["--merge-arcs"], "merge_arcs", True),
+        (["--merge-genera"], "merge_genera", True),
+        (["--include-low-quality"], "include_low_quality", True),
+        (["--include-non-batch"], "include_non_batch", True),
+        (["--no-dropout"], "include_dropout", False),
+        (["--report-rates"], "report_rates", True),
+        (["--min-studies", "3"], "min_studies", 3),
+        (["--rate-window", "7"], "rate_window", 7),
+        (["--absence-threshold", "2.5"], "absence_threshold", 2.5),
+        (["--spike-factor", "50"], "spike_factor", 50.0),
+        (["--metric", "max"], "metric", "max"),
+        (["--derivation", "integrated"], "derivation", "integrated"),
+    ]
+    for argv, key, wanted in cases:
+        assert settings(base + argv)[key] == wanted, f"{argv} did not set {key}"
+        assert off[key] != wanted, f"{key} is already {wanted!r} without {argv}, so this proves nothing"

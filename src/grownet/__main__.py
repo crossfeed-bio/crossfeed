@@ -16,7 +16,7 @@ import os
 import sys
 from collections import Counter
 
-from .adapter import condensed, unread
+from .adapter import about_a_pair, condensed, unread
 from .attribution import render_attribution
 from .derive import CAPACITY_MAX_FALL
 from .mgrowthdb import MGrowthDBError, records_to_network
@@ -110,6 +110,13 @@ def _bad_settings(a) -> str:
             return f"{flag} cannot be negative, and was {value}"
     if a.min_studies is not None and a.min_studies < 1:
         return f"--min-studies must be at least 1, and was {a.min_studies}"
+    # a significance level, like --max-adjusted-p, which argparse already refuses above 1. This took any
+    # non-negative number, and 5 switches the no-growth rule off entirely (every set counts as grown, so
+    # no censored or obligate arc can exist) while `meta.no_growth` records "alpha": 5.0 as the level the
+    # test ran at. The help documents exactly one way to switch it off, which is 0 (#250).
+    if a.no_growth_alpha is not None and a.no_growth_alpha > 1:
+        return (f"--no-growth-alpha is a significance level, so at most 1, and was {a.no_growth_alpha}; "
+                "0 switches the no-growth check off, which is the documented way")
     if a.min_studies and a.min_studies > 1 and not a.merge_arcs and not a.merge_genera:
         # the one that silently empties a network: without merging, an arc carries no `studies` key, so
         # `len(e.get("studies") or [e])` is 1 for every arc and the filter removes all of them (#220)
@@ -140,6 +147,44 @@ def _rate_flags(a) -> str:
                 f"log2 ratio of a growth rate, not of {a.metric}: add --metric growth_rate, or use "
                 "--glv-mode, which also selects the derivation that fits the row")
     return ""
+
+
+def _settings_of(a) -> dict:
+    """Every setting of this run, built in ONE place for every derive path.
+
+    There were two of these, written by hand, and they disagreed: `derive <STUDY> --live` recorded 20
+    keys and the species path 23, the difference including `include_absent` and `steady_check`, which are
+    not n/a on either. And `steady_check` was wrong on BOTH, because the species path took it from
+    `DEFAULTS` rather than from the flag, so a run that scored a chemostat recorded that it had not
+    (#233). `report.py` promises "every setting with its value", so two reports of one study differing in
+    their arcs and identical in their settings block is the thing a reader cannot see past.
+    """
+    from .gui import DEFAULTS
+
+    return {**DEFAULTS,
+            "metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
+            "derivation": a.derivation, "deriver": getattr(a, "deriver", "") or "",
+            "merge_arcs": a.merge_arcs, "min_studies": a.min_studies, "merge_genera": a.merge_genera,
+            "spike_factor": a.spike_factor, "capacity_max_fall": a.capacity_max_fall,
+            "absence_threshold": a.absence_threshold,
+            "include_low_quality": a.include_low_quality, "correction": a.correction,
+            "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
+            "no_growth_alpha": a.no_growth_alpha, "no_growth_factor": a.no_growth_factor,
+            "max_adjusted_p": a.max_adjusted_p, "report_rates": a.report_rates,
+            "include_absent": getattr(a, "include_absent", False),
+            "steady_check": getattr(a, "steady_check", False),
+            # these two were left to come from DEFAULTS, which turned a setting the report did not
+            # mention into one it stated the OPPOSITE of: `derive <STUDY> --exclude-studies <that study>
+            # --all-partners` recorded "Exclude these studies: none" and "Only interactions between the
+            # species entered: on", having searched the study and kept every partner. Missing was better
+            # than wrong, and `report.py` promises every setting with its value (found reviewing #242).
+            "exclude_studies": getattr(a, "exclude_studies", "") or "",
+            "only_entered": not getattr(a, "all_partners", False),
+            # the page encodes the second box one selector per LINE, and `selection.parse` splits on
+            # newlines, commas and semicolons: space is the one separator it does not split on. The
+            # single-study path recorded `--conditions "WC" "mucin"` space-joined, so the record parsed
+            # back as one medium named "WC mucin", which matches nothing, while the run used the list.
+            "conditions": "\n".join(getattr(a, "conditions", None) or [])}
 
 
 def _derive(a):
@@ -176,6 +221,18 @@ def _derive(a):
         return 2
     if a.species or a.all_studies:
         return _derive_species(a)
+    # Flags that only the search path can act on. The help says they apply "with --species or --all" and
+    # nothing enforced it, so `derive <STUDY> --exclude-studies <that study>` searched it and the network
+    # held it. Recording the flag as asked is not enough on its own: the report would then say the
+    # study was excluded while the arcs come from it, so the run is refused instead (found reviewing
+    # #242, which made the record truthful and left the contradiction).
+    cannot_act = [flag for flag, on in (("--exclude-studies", a.exclude_studies),
+                                        ("--all-partners", a.all_partners)) if on]
+    if cannot_act:
+        print(f"{cannot_act[0]} narrows a search over several studies, and this run derives the one "
+              f"study {a.study}: it would be recorded and not applied. Use --species or --all, or drop "
+              f"{cannot_act[0]}.", file=sys.stderr)
+        return 2
     if not a.study:
         print("derive needs a study id, or --species with names (see grownet derive --help)", file=sys.stderr)
         return 2
@@ -212,19 +269,7 @@ def _derive(a):
                                          include_absent=a.include_absent,
                                          # the derivation says what it tests (#142 item 5)
                                          deriver=deriver)
-            extra["settings"] = {"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
-                                 "derivation": a.derivation,
-                                 "merge_arcs": a.merge_arcs, "min_studies": a.min_studies,
-                                 "merge_genera": a.merge_genera,
-                                 "spike_factor": a.spike_factor,
-                                 "capacity_max_fall": a.capacity_max_fall,
-                                 "absence_threshold": a.absence_threshold,
-                                 "include_low_quality": a.include_low_quality, "correction": a.correction,
-                                 "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
-                                 "no_growth_alpha": a.no_growth_alpha, "no_growth_factor": a.no_growth_factor,
-                                 "max_adjusted_p": a.max_adjusted_p, "report_rates": a.report_rates,
-                                 "conditions": " ".join(a.conditions),
-                                 "deriver": a.deriver or ""}
+            extra["settings"] = _settings_of(a)
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
             return 1
@@ -266,20 +311,10 @@ def _derive_species(a):
     if a.deriver:
         print(f"{flag} uses the default derivation; --deriver applies to one study", file=sys.stderr)
         return 2
-    from .gui import DEFAULTS, run_query
+    from .gui import run_query
     from .mgrowthdb import MGrowthDBClient
-    settings = {**DEFAULTS, "metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
-                "spike_factor": a.spike_factor, "capacity_max_fall": a.capacity_max_fall,
-                "absence_threshold": a.absence_threshold, "include_low_quality": a.include_low_quality,
-                "include_absent": a.include_absent,
-                "correction": a.correction, "include_dropout": not a.no_dropout,
-                "include_non_batch": a.include_non_batch,
-                "conditions": "\n".join([*a.conditions, *(a.study or "").split(",")]).strip(),
-                "only_entered": not a.all_partners, "exclude_studies": a.exclude_studies,
-                "merge_arcs": a.merge_arcs, "min_studies": a.min_studies, "merge_genera": a.merge_genera,
-                "report_rates": a.report_rates, "derivation": a.derivation,
-                "no_growth_alpha": a.no_growth_alpha,
-                "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p}
+    settings = {**_settings_of(a),
+                "conditions": "\n".join([*a.conditions, *(a.study or "").split(",")]).strip()}
     client = MGrowthDBClient(**({"cache_dir": None} if a.no_cache else {}))
     try:
         result = run_query(client, a.species or [], settings, all_studies=a.all_studies,
@@ -447,8 +482,13 @@ def _emit(a, net, skipped, extra, label, result):
     print(render_attribution(net), file=sys.stderr)
     skipped = condensed(skipped)
     if skipped:
-        print(f"\nskipped {len(skipped)} pair(s) the data did not cleanly support:", file=sys.stderr)
-        for label, reason in skipped:
+        pairs = [s for s in skipped if about_a_pair(*s)]
+        notes = [s for s in skipped if not about_a_pair(*s)]
+        # the count used to include the notes about the input, so it answered a question nobody asked
+        # and not "how many pairs gave nothing" (#232)
+        print(f"\nskipped {len(pairs)} pair(s) the data did not cleanly support"
+              + (f", and {len(notes)} note(s) on the data read" if notes else "") + ":", file=sys.stderr)
+        for label, reason in pairs + notes:
             print(f"  - {label}: {reason}", file=sys.stderr)
     if extra:
         if extra["absence"]["absent"]:
@@ -464,6 +504,18 @@ def _emit(a, net, skipped, extra, label, result):
     if not net.edges and "reasons" not in result:        # a species search has said why already
         top = Counter(r.split(";")[0].strip() for _, r in skipped).most_common(1)
         why = f" Most common reason: {top[0][0]}." if top else ""
+        # and the settings the reader changed that can empty a network on their own, which the page says
+        # and the command line did not: `--spike-factor 1` is a legal value that empties it, so no
+        # refusal applies, and the "most common reason" above is a line that is also present at the
+        # defaults where the same study yields an arc. So the setting that did it was the one thing the
+        # message did not mention (#250, the command-line half of #220).
+        import html as _html
+
+        from .gui import _settings_to_try
+        try_these = _html.unescape(_settings_to_try(_settings_of(a)))
+        for tag in ("<strong>", "</strong>"):
+            try_these = try_these.replace(tag, "")
+        why += try_these
         print(f"\nNO interactions were derived for {label}: the network is empty.{why}\n"
               "grownet derives interactions from pairwise (two-member) co-cultures and from drop-out "
               "designs (a community plus the same community without one member); other larger communities "

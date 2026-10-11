@@ -58,6 +58,35 @@ def condensed(skipped: list) -> list:
             out.append((experiment, f"{len(averages[experiment])} average replicate(s) left out ({AVERAGE})"))
     return out
 
+
+# The two separators a PAIR label is built with, declared here because `about_a_pair` reads them and the
+# builders write them. They are written in nine places: derive.py's `{a} with {b} [{cond}]` for a pair
+# whose sets could not be compared, its `{source} -> {target} [{cond}]` for the no-growth and unusable
+# outcomes, and integrated.py's `{partner} -> {target} [...]`. This started as a bare `" with " in label`
+# and the `" -> "` half was missed, so on SMGDB00000013 the report said "pairs the data did not support:
+# none" while listing seven of them under a heading saying they are not pairs. Inferring the kind from
+# the label's punctuation is only safe while the punctuation is a contract, which is what this is.
+#
+# NOT GUARDED, deliberately and worth knowing: a THIRD separator added somewhere would be filed as a
+# note again, and no test catches that. A source scan cannot tell a pair label from an experiment label
+# with a species appended (`{label}: {name}, {species}` interpolates three names and is not a pair), and
+# the suite is offline so it cannot read the real corpus. The honest guard is to tag the entry at the
+# `skipped.append` site, where the code knows which kind it is building; that is 61 sites and is the
+# right fix when someone next touches them.
+PAIR_SEPARATORS = (" with ", " -> ")
+
+
+def about_a_pair(label: str, reason: str) -> bool:
+    """Whether a condensed entry is about a PAIR that gave no edge, or a note about the input.
+
+    The two were listed together under the heading "pairs the data did not support (N)", and on the live
+    corpus 97 of those 186 entries were average-replicate notes keyed by experiment, 31 of them naming
+    conditions that DID produce reported arcs: the report said a condition was a pair the data did not
+    support 254 lines after reporting an interaction derived from it (#232). A pair entry names two
+    organisms with one of `PAIR_SEPARATORS` between them; a note names an experiment or a study.
+    """
+    return AVERAGE not in reason and any(sep in label for sep in PAIR_SEPARATORS)
+
 MIN_POINTS = 2
 
 

@@ -1019,3 +1019,34 @@ def test_a_comparison_never_mixes_a_chemostat_with_a_batch_culture():
     records, skipped = interactions_from_replicates(client, study, exps, method="max")
     assert not [r for r in records if r["target_name"] == B]
     assert any("no monoculture replicates for " + B in reason for _, reason in skipped)
+
+
+def test_the_skip_list_separates_pairs_from_notes_about_the_data():
+    """The report headed its whole condensed skip list "pairs the data did not support (N)". On the live
+    corpus 97 of those 186 entries were average-replicate notes keyed by experiment, and 31 named
+    conditions that DID produce reported arcs, so the report called a condition a pair that gave no edge
+    254 lines after reporting an interaction derived from it (#232). The number a reader wants, how many
+    pairs were attempted and gave nothing, was not in the output at all."""
+    from grownet.adapter import AVERAGE, about_a_pair, condensed
+
+    skipped = [
+        ("A organism with B organism [EXP_1]", "no monoculture replicates for A organism"),
+        ("EXP_2: rep1", AVERAGE),
+        ("EXP_2: rep2", AVERAGE),
+        ("C organism with D organism [EXP_3]", "one side did not grow"),
+    ]
+    entries = condensed(skipped)
+    pairs = [e for e in entries if about_a_pair(*e)]
+    notes = [e for e in entries if not about_a_pair(*e)]
+
+    assert len(pairs) == 2, pairs                   # the two that really are pairs
+    assert len(notes) == 1, notes                   # the two average rows condense to one note
+    assert notes[0][0] == "EXP_2" and "average replicate(s) left out" in notes[0][1]
+    # an experiment label is not a pair, which is the whole distinction
+    assert not about_a_pair("EXP_2", "2 average replicate(s) left out (x)")
+    assert about_a_pair("A organism with B organism [EXP_1]", "one side did not grow")
+    # and the OTHER pair shape, which the first version of this missed: `derive.py` writes
+    # `{source} -> {target} [{cond}]` for the no-growth and unusable outcomes, so on SMGDB00000013 the
+    # report said "pairs the data did not support: none" and listed seven of them under a heading
+    # saying they are not pairs (found reviewing #242)
+    assert about_a_pair("A organism -> B organism [EXP_1]", "no growth (auc) in either set")

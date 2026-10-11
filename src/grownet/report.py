@@ -10,7 +10,7 @@ from __future__ import annotations
 import textwrap
 
 from . import interaction
-from .adapter import condensed
+from .adapter import about_a_pair, condensed
 from .help import SETTINGS
 from .mgrowthdb import MGROWTHDB_API, NO_DATABASE_VERSION
 from .rates import doubling_time, time_unit
@@ -303,10 +303,18 @@ def report_text(result: dict) -> str:
         lines.append("")
 
     skips = condensed(result["skipped"])
-    lines.append(f"pairs the data did not support ({len(skips)}):" if skips
+    pairs = [(label, reason) for label, reason in skips if about_a_pair(label, reason)]
+    notes = [(label, reason) for label, reason in skips if not about_a_pair(label, reason)]
+    lines.append(f"pairs the data did not support ({len(pairs)}):" if pairs
                  else "pairs the data did not support: none")
-    lines += [f"  - {label}: {reason}" for label, reason in skips]
+    lines += [f"  - {label}: {reason}" for label, reason in pairs]
     lines.append("")
+    if notes:
+        # these are notes about the INPUT, not pairs: counting them under the heading above said a
+        # condition was a pair that gave no edge while an arc derived from it was reported above (#232)
+        lines.append(f"notes on the data read ({len(notes)}), which are not pairs:")
+        lines += [f"  - {label}: {reason}" for label, reason in notes]
+        lines.append("")
 
     lines.append("sources (cite the studies behind the edges you use):")
     for sid, study in sorted(net.studies.items()):
