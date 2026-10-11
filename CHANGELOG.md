@@ -37,6 +37,14 @@ content.
   as they always have.
 
 ### Fixed
+- **The format manifest recorded the one id no release carried and omitted the two that releases did**
+  (#249). It held `/v2`, which `model.py` says in as many words was never tagged, and not `/v0` or `/v1`,
+  which shipped in 0.1.0 and 0.2.0, are still accepted by `PREVIOUS_SCHEMAS` and are in the published
+  schema's enum. Its own `_how` says the entries "are the record of what each released format carried",
+  so the statement was false in both directions, and a reader using the manifest to learn what a `/v1`
+  document declares got nothing. The gate only ever reads the entry for the current `SCHEMA`, which is
+  why nothing noticed. Both are reconstructed from the `v0.1.0` and `v0.2.0` trees by reading their
+  `model.py` rather than by hand: `/v0` with 29 edge, 7 node and 4 study fields, `/v1` with 31, 7 and 4.
 - **Every relative link in the README was dead on PyPI, and the legend image was broken there** (#192).
   The README is the long description on <https://pypi.org/project/grownet/>, and PyPI does not rewrite
   relative URLs the way GitHub does, so all fifteen resolved against the project page: the limitations
