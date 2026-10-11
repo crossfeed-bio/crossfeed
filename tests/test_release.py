@@ -266,6 +266,13 @@ def test_the_sdist_carries_every_doc_the_suite_reads(tmp_path):
     was measured in all five manifest shapes. That is a default rather than a promise, so it is recorded
     here instead of being relied on silently.
 
+    **This test's own dependency is the identical case and is recorded for the same reason**: it reads
+    `MANIFEST.in`, so the suite now needs `MANIFEST.in` in the archive, and the manifest does not name it.
+    setuptools ships it by the same default, built and confirmed with `build==1.6.1`. The coverage logic
+    above cannot see this dependency, because `wanted` is collected by a regex anchored to the tracked
+    top-level directories, so no root-level file ever enters the set that is checked (Craig's agent,
+    reviewing this change: the allowance sat one line from where the README default was written down).
+
     **What it still cannot see**, so the next reader does not have to find out: a path built with an
     f-string (`f"docs/{name}"`), a path three or more components deep whose middle part has no dot, a
     constant assigned from another constant, and any top-level directory outside `TOP_LEVEL`. Those are
