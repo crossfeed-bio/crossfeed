@@ -37,6 +37,81 @@ content.
   as they always have.
 
 ### Fixed
+- **A control that can empty the network was listed in the guard and could never fire**, and the two
+  tests of these guards asserted a subset of what they claimed. `_EMPTYING` held seven entries and the
+  seventh, `min_replicates`, is not a page setting, so the loop skipped it on every call: dead code no
+  test could see, because the test asserted three of the seven by hand. Deleting the other four left it
+  green and #220 returned for four real controls. The entry is gone, the test loops over `_EMPTYING` for
+  the behavior **and** asserts its membership explicitly, because looping over a constant cannot notice
+  the constant shrinking, which the first attempt at this fix got wrong. The sibling test asserted three
+  of the five flags in the negative-value guard and never asserted the `--no-growth-alpha` bound at all;
+  it names the flags from the guard's own list now. Both were verified by applying the deletion and
+  watching them go red.
+- **An incomplete run exited 0 on the species and All paths** (#247), while `derive <a bad id> --live`
+  exited 1 for the identical failure: the species path collected the 404 into `errors`, printed it, and
+  returned 0, so a script could not tell a complete run from an incomplete one. It says the run is
+  incomplete and returns 1 now, and says what the network does hold. This is safe to key on `errors`
+  only because that list is fetch failures and nothing else: the advisory messages travel in `notes`,
+  which is the split this release makes, and the test asserts both halves, because keying on a list
+  holding both would fail a **complete** run. The first version of that test recomputed the condition in
+  a loop and would have passed against any implementation; it drives `_derive_species` with a stubbed
+  `run_query` instead, and fails when the rule is changed to read `notes` as well.
+
+  Not fixed here, and filed: what the FILE says about its own completeness. `meta` carries no record that
+  a study could not be read, and `meta.studies` lists the unreadable study as a source, so the artifact
+  asserts provenance it does not have and `validate` passes. Recording it adds fields, which moves the
+  format id, so it is Karoline's and Craig's call (#247).
+- **`--no-growth-alpha` took any non-negative number, and 5 was published as the level the test ran at**
+  (#250). The sibling `--max-adjusted-p` refuses 5 with a message. An alpha of 5 makes every replicate
+  set count as grown, so the no-growth rule, the only source of the censored and obligate arcs, is
+  switched off while `meta.no_growth` records `"alpha": 5.0`. The help documents exactly one way to switch
+  it off, which is 0. It is bounded at 1 now, with 0 still the documented off switch.
+- **The command line still did not name the setting that emptied the network** (#250, the command-line
+  half of #220). `--spike-factor 1` is a legal value, so no refusal applies, and the "most common reason"
+  the message printed is a line that is also present at the defaults, where the same study yields an arc:
+  so the setting that did it was the one thing the message did not mention. The page's own
+  `_settings_to_try` is a pure function over a settings dict and `_settings_of` already builds that dict
+  for every command-line path, so the empty-network message names them too, and says nothing at the
+  defaults.
+- **An unused id in Exclude these studies went into `errors`**, which the empty-network reason reads as
+  "mGrowthDB could not be read", so the advisory message added here would have blamed the database for a
+  reader's own setting. It travels in `notes` beside the steady-state messages instead, which is the list
+  `_empty_reason_core` does not consult.
+- **A setting could empty the network while the tool blamed mGrowthDB** (#220). `--min-studies 2` counts
+  the studies behind a merged arc, so with nothing merged every arc counted as 1 and all of them were
+  removed; the page then blamed the species filter, said "the species do not affect each other by that
+  rule" while measured arcs were being discarded by a different control, and finally blamed mGrowthDB's
+  replicate structure. The setting was named in exactly one place, the report's `5 arc(s) below 2
+  studies`, and only with `--report`. The command line now refuses that combination and says to add
+  `--merge-arcs`, and any empty search on the page names every setting the reader changed that can empty
+  a network on its own, with what to try. `--spike-factor 1` and `--rate-window 1` are the same shape and
+  are covered by the same two changes.
+- **The command line accepted numbers the page clamps** (#221). `--rate-window -3`, `--absence-threshold
+  -1`, `--no-growth-factor -2` and `--spike-factor -1` each ran and exited 0, and the negative value
+  traveled into `meta.settings` as the provenance of the run: one run reported its own threshold as
+  "|log2 mean| < -1 * sd". They are refused with the bound now, which is the half of "refuse or announce"
+  a command can do and a form cannot.
+  **A non-finite one is refused with them** (#258): `nan` and `inf` are numbers to `float()` and pass a
+  `value < 0` bound, because both comparisons are False, and `json.dumps` then writes the bare `NaN` and
+  `Infinity` into `meta.settings`. RFC 8259 section 6 forbids both, so R refuses the whole network while
+  grownet's own `validate` accepts it, Python's json module reading the specials by default.
+  `--max-adjusted-p` already refused them through its own type, which admits only `0 < value <= 1`.
+- **A mistyped `--exclude-studies` id was dropped in silence and recorded as applied** (#221).
+  `SMGDB0000002`, one digit short, left the study in the search while the report filed with a paper said
+  it was excluded. An id that matches no study searched is now reported, like an unusable entry in the
+  species box, and the ids that did apply are still applied.
+- **The wrong port was reported as out-of-date software** (#221). Pointing `--cytoscape-port` or
+  `--r-port` at any server answering an error status was reported as that program refusing the data, with
+  an instruction to upgrade it: grownet's own page, which answers 403 without a token, produced "Update
+  Cytoscape to 3.8 or later". Both now ask who answered first, CyREST at `/v1/version` and the R listener
+  by its own plain-text reply, and say "something on port N answered 403 Forbidden, and it is not
+  Cytoscape" when it is not.
+- **`--rates` or `--glv` with no computable rate threw away every diagnostic** (#221) and pointed at a
+  report that was only written with `--report`. It returned before the skipped-pair list, the
+  absence-threshold note, the low-quality note, the sources block and the "NO interactions were derived"
+  explanation, so asking for more output gave 7 lines of stderr where asking for less gave 74, including
+  35 copies of the exact cause. The diagnosis is printed and the exit code is carried to the end of the
+  run, and the message names the flags that wrote nothing and says where the reasons are.
 - **All said it ignored the boxes, and it reads the second one** (#193). Narrowing All by a study or
   medium in the second box is deliberate and documented (`run_query`, Karoline 2026-09-28); the caption
   claiming otherwise and the heading "All of mGrowthDB" were the false half. The gLV example button fills

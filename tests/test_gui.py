@@ -620,6 +620,9 @@ def test_all_narrowed_by_the_second_box_does_not_claim_the_whole_database(server
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
         page = r.read().decode("utf-8")
     assert "Searching" not in page, "this needs the result page, not the progress page, or it proves nothing"
+    assert "All of mGrowthDB" not in page
+    assert "All, narrowed by the second box" in page
+    assert "SMGDB00000002" in page and "Clear them to derive" in page
     # case-INSENSITIVE, and over the whole page including the report embedded in it: the first version
     # asserted "All of mGrowthDB" with a capital A, and `report.py` writes "all of mGrowthDB (every
     # study, with every partner)" in lower case, so the report contradicted the heading three lines above
@@ -637,6 +640,7 @@ def test_all_narrowed_by_the_second_box_does_not_claim_the_whole_database(server
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
         page = r.read().decode("utf-8")
     assert "Searching" not in page, "this needs the result page, or it proves nothing"
+    assert "All of mGrowthDB" not in page
     assert "all of mgrowthdb" not in page.lower()
     assert "All, narrowed by Exclude these studies" in page
     assert "excluding SMGDB00000002" in page

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 from collections import Counter
@@ -87,6 +88,53 @@ def _load_deriver(spec):
 def _metric(a) -> str:
     from .gui import metric_name
     return metric_name({"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window})
+
+
+def _bad_settings(a) -> str:
+    """Why a numeric setting cannot be used as given, or "": the same bounds the page applies.
+
+    The page coerces every one of these (`gui.parse_settings`) and the command line took them as typed,
+    so the two routes disagreed about what a legal setting is and a nonsense one reached
+    `meta.settings` as the provenance of the run: `--rate-window -3` gave 0 edges and recorded -3,
+    `--absence-threshold -1` gave 18 edges reported as "|log2 mean| < -1 * sd", `--no-growth-factor -2`
+    gave 10 edges over 3 nodes. Each exited 0 (#221 item 4). Refusing is the right half of "refuse or
+    announce": the page clamps because a form cannot stop and ask, and a command can.
+    """
+    if a.rate_window is not None and a.rate_window < 2:
+        return (f"--rate-window must hold at least 2 points, not {a.rate_window}; the growth rate is a "
+                "line fitted over a window of points")
+    for flag, value in (("--spike-factor", a.spike_factor), ("--capacity-max-fall", a.capacity_max_fall),
+                        ("--absence-threshold", a.absence_threshold),
+                        ("--no-growth-alpha", a.no_growth_alpha),
+                        ("--no-growth-factor", a.no_growth_factor)):
+        # the finite check comes first, because `nan < 0` is False and `inf < 0` is False, so neither
+        # is caught by the bound below. `float()` takes "nan", "inf" and "1e999", and the live path
+        # copies the parsed value into `meta.settings`, where `json.dumps` writes the bare tokens `NaN`
+        # and `Infinity`. RFC 8259 section 6 forbids both, so R refuses the whole network while
+        # grownet's own `validate` accepts it, because Python's json module reads the specials by
+        # default (#258, the command line's half of #195). `--max-adjusted-p` needs none of this:
+        # `_probability` already refuses anything outside `0 < value <= 1`, which both fail.
+        if value is not None and not math.isfinite(value):
+            return (f"{flag} must be a finite number, and was {value}; no threshold can be compared "
+                    "against it, and it reaches meta.settings as a token no strict JSON parser reads")
+        if value is not None and value < 0:
+            return f"{flag} cannot be negative, and was {value}"
+    if a.min_studies is not None and a.min_studies < 1:
+        return f"--min-studies must be at least 1, and was {a.min_studies}"
+    # a significance level, like --max-adjusted-p, which argparse already refuses above 1. This took any
+    # non-negative number, and 5 switches the no-growth rule off entirely (every set counts as grown, so
+    # no censored or obligate arc can exist) while `meta.no_growth` records "alpha": 5.0 as the level the
+    # test ran at. The help documents exactly one way to switch it off, which is 0 (#250).
+    if a.no_growth_alpha is not None and a.no_growth_alpha > 1:
+        return (f"--no-growth-alpha is a significance level, so at most 1, and was {a.no_growth_alpha}; "
+                "0 switches the no-growth check off, which is the documented way")
+    if a.min_studies and a.min_studies > 1 and not a.merge_arcs and not a.merge_genera:
+        # the one that silently empties a network: without merging, an arc carries no `studies` key, so
+        # `len(e.get("studies") or [e])` is 1 for every arc and the filter removes all of them (#220)
+        return (f"--min-studies {a.min_studies} counts the studies behind a MERGED arc, and nothing is "
+                "merged here, so every arc counts as 1 and the network would come out empty: add "
+                "--merge-arcs (or --merge-genera), or drop --min-studies")
+    return ""
 
 
 def _rate_flags(a) -> str:
@@ -178,7 +226,7 @@ def _derive(a):
         # the page's own defaults rather than repeating the value
         from .gui import DEFAULTS
         a.derivation = DEFAULTS["derivation"]
-    problem = _rate_flags(a)
+    problem = _bad_settings(a) or _rate_flags(a)
     if problem:
         print(problem, file=sys.stderr)
         return 2
@@ -311,7 +359,18 @@ def _derive_species(a):
     narrowing = [x for x in (*a.conditions, *(a.exclude_studies or "").split(",")) if x and x.strip()]
     label = ("all of mGrowthDB" if not narrowing else "All, narrowed to " + ", ".join(
         x.strip() for x in narrowing)) if a.all_studies else " and ".join(a.species)
-    return _emit(a, net, result["skipped"], extra, label, result)
+    code = _emit(a, net, result["skipped"], extra, label, result)
+    # An incomplete run must not exit 0, and the two derive paths disagreed about the same failure:
+    # `derive <a bad id> --live` exits 1 while the species and All paths collected the identical 404
+    # into `errors` and exited 0, so a script could not tell a complete run from an incomplete one
+    # (#247). This is safe to key on only because `errors` is fetch failures and nothing else now:
+    # the advisory messages travel in `notes`, which is the split #242 makes.
+    if code == 0 and result.get("errors"):
+        print(f"\nthis run is INCOMPLETE: {len(result['errors'])} study or curve could not be read from "
+              "mGrowthDB (the messages are above). The network holds what was readable; run it again when "
+              "mGrowthDB is reachable if you need all of it.", file=sys.stderr)
+        return 1
+    return code
 
 
 def _rates_of(a, client, study_ids, net, skipped, records=None):
@@ -374,11 +433,20 @@ def _emit(a, net, skipped, extra, label, result):
         print(f"wrote the report to {a.report}", file=sys.stderr)
 
     organism_rates = result.get("rates") or {}
-    if (a.rates or a.glv) and not organism_rates:
-        print("no growth rate could be computed for any organism of this network; the report says why "
-              "each one has none", file=sys.stderr)
-        return 1
-    if a.rates:
+    # This used to `return 1` here, before the skipped-pair list, the absence note, the low-quality note,
+    # the sources block and the "NO interactions were derived" explanation, and it pointed at a report
+    # that was only written if --report was given: asking for --rates printed 7 lines of stderr and
+    # asking for less printed 74, including 35 copies of the exact cause (#221 item 3). The diagnosis is
+    # the thing the person needs, so it is printed and the exit code is carried to the end.
+    no_rates = bool(a.rates or a.glv or a.to_r) and not organism_rates
+    if no_rates:
+        print("no growth rate could be computed for any organism of this network, so "
+              + ", ".join(f for f, on in (("--rates", a.rates), ("--glv", a.glv), ("--to-r", a.to_r)) if on)
+              + " wrote nothing"
+              + (f"; {a.report} says why each organism has none" if a.report
+                 else "; the reasons are below, and --report writes them to a file"),
+              file=sys.stderr)
+    if a.rates and organism_rates:
         from .matrix import rates_csv
         with open(a.rates, "w", encoding="utf-8") as f:
             f.write(rates_csv(organism_rates, net))
@@ -404,7 +472,7 @@ def _emit(a, net, skipped, extra, label, result):
                 from .report import report_text
                 with open(a.report, "w", encoding="utf-8") as f:
                     f.write(report_text(result))
-    if a.glv:
+    if a.glv and organism_rates:
         from . import steady as steady_module
         from .matrix import glv_package
         extra_files = {"steady_state_check.txt": steady_module.as_text(checked)} if a.steady_check else None
@@ -413,7 +481,7 @@ def _emit(a, net, skipped, extra, label, result):
         print(f"wrote the gLV parameters to {a.glv}: the interaction matrix, the growth rates and a README",
               file=sys.stderr)
 
-    if a.to_r:
+    if a.to_r and organism_rates:
         from .matrix import glv_payload
         from .rbridge import DEFAULT_PORT, RError, send
         try:
@@ -462,12 +530,24 @@ def _emit(a, net, skipped, extra, label, result):
     if not net.edges and "reasons" not in result:        # a species search has said why already
         top = Counter(r.split(";")[0].strip() for _, r in skipped).most_common(1)
         why = f" Most common reason: {top[0][0]}." if top else ""
+        # and the settings the reader changed that can empty a network on their own, which the page says
+        # and the command line did not: `--spike-factor 1` is a legal value that empties it, so no
+        # refusal applies, and the "most common reason" above is a line that is also present at the
+        # defaults where the same study yields an arc. So the setting that did it was the one thing the
+        # message did not mention (#250, the command-line half of #220).
+        import html as _html
+
+        from .gui import _settings_to_try
+        try_these = _html.unescape(_settings_to_try(_settings_of(a)))
+        for tag in ("<strong>", "</strong>"):
+            try_these = try_these.replace(tag, "")
+        why += try_these
         print(f"\nNO interactions were derived for {label}: the network is empty.{why}\n"
               "grownet derives interactions from pairwise (two-member) co-cultures and from drop-out "
               "designs (a community plus the same community without one member); other larger communities "
               "yield nothing until a method suited to their design is chosen (see docs/METHOD_NOTES.md).",
               file=sys.stderr)
-    return 0
+    return 1 if no_rates else 0
 
 
 def _probability(text: str) -> float:
