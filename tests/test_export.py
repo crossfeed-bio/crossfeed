@@ -233,6 +233,7 @@ def test_the_graphml_says_which_format_it_is_and_where_it_came_from():
     import re
 
     from grownet import export
+    from grownet.help import REPOSITORY
     from grownet.model import SCHEMA, InteractionNetwork
 
     net = records_to_network(
@@ -247,10 +248,15 @@ def test_the_graphml_says_which_format_it_is_and_where_it_came_from():
         return m.group(1) if m else None
 
     assert attr("schema") == SCHEMA
-    assert "schema/interaction_network.schema.json" in attr("schema_url")
+    from grownet.schema import SCHEMA_DOC
+    assert attr("schema_url") == SCHEMA_DOC["$id"]
     assert attr("source_db") == "mGrowthDB (live)"
-    assert "A Study 2024" in attr("studies") and "doi.org" in attr("studies")
-    assert "github.com/crossfeed-bio" in attr("project_url")
+    # the EXACT line, not a substring of a URL: CodeQL flags `"doi.org" in <url>` as incomplete URL
+    # sanitization, and it is right that the pattern is the risky one even in an assertion. Comparing the
+    # composed line is both the fix and the stronger check, since it pins the order and the separator a
+    # reader parses back.
+    assert attr("studies") == "S1 A Study 2024 https://doi.org/10.1/x"
+    assert attr("project_url") == REPOSITORY        # the constant, not a substring of a URL
     # the display columns travel in every GraphML file, so the file says what they are and that the
     # width of an arc with no measured strength is ABSOLUTE
     legend = attr("display_columns")
