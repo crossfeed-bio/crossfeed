@@ -54,6 +54,13 @@ content.
   header is `-----BEGIN [A-Z0-9 ]{0,20}PRIVATE KEY` now: DSA, ENCRYPTED and PGP PRIVATE KEY BLOCK were
   missed while the check's own description says it covers private keys, and the first version of the test
   probed one header out of seven. Both directions are measured: 13 of 13 caught, 11 of 11 left alone.
+
+  A third correction, from a pass that attacked every new test with the regression it claims to catch:
+  this check's **only** test probed the keywords `token`, `api_key` and `authorization`, so `secret` and
+  `password`, half the key/value group, were untested, and narrowing the pattern to
+  `(?:api[_-]?key|token)` let an unquoted `password=` line through with the test green. There is a case
+  per keyword now, and an assertion that every keyword the pattern names has one, so adding a keyword
+  without a case fails.
 - **Every relative link in the README was dead on PyPI, and the legend image was broken there** (#192).
   The README is the long description on <https://pypi.org/project/grownet/>, and PyPI does not rewrite
   relative URLs the way GitHub does, so all fifteen resolved against the project page: the limitations
