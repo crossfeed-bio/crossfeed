@@ -94,6 +94,16 @@ def _pending(records, fits):
     return out
 
 
+def _sets(fits, target="A"):
+    """The rate table `derive` collects at the fit, keyed by the matched monoculture SET (#255 item 2).
+
+    One set per fit here, which is what these tests have always assumed and what the old `id(got)` keying
+    happened to give. The keying matters when a run matches two co-cultures to ONE set, or drops an arc
+    whose fit ran, and `test_the_table_is_keyed_by_the_matched_set_not_by_the_fit` covers that.
+    """
+    return {target: {(f"set{k}",): got["rate"] for k, (got, _cos) in enumerate(fits)}}
+
+
 def _record(mismatch=None):
     """The fields of a record these passes read and write, as `IntegratedDeriver.derive` builds them."""
     return {"strength": 0.5, "effect": "facilitation", "status": "present", "sd": 1.0, "se": 1.0,
@@ -107,7 +117,7 @@ def test_two_matched_sets_widen_every_arc_of_that_organism_and_say_so():
     fits = [_fit(0.50), _fit(0.60)]
     records = [_record(), _record()]
     before = [dict(r) for r in records]
-    integrated._widen_by_rate_selection(_pending(records, fits))
+    integrated._widen_by_rate_selection(_pending(records, fits), _sets(fits))
 
     rates = sorted(got["rate"] for got, _cos in fits)
     spread = statistics.stdev(rates)
@@ -129,8 +139,8 @@ def test_two_matched_sets_widen_every_arc_of_that_organism_and_say_so():
 def test_one_matched_set_leaves_the_arc_exactly_as_it_was():
     fits = [_fit(0.50)]
     records = [_record()]
-    integrated._widen_by_rate_selection(_pending(records, fits))
-    integrated._flag_unchecked_rates(_pending(records, fits))   # which only adds the caution and its note
+    integrated._widen_by_rate_selection(_pending(records, fits), _sets(fits))
+    integrated._flag_unchecked_rates(_pending(records, fits), _sets(fits))   # which only adds the caution and its note
     assert records[0]["sd"] == 1.0 and records[0]["se"] == 1.0 and records[0]["p_value"] == 0.5
     assert records[0]["strength"] == 0.5 and records[0]["status"] == "present"
     assert "se_rate_selection" not in records[0] or records[0]["se_rate_selection"] is None
@@ -143,9 +153,10 @@ def test_an_arc_with_nothing_to_check_its_rate_against_is_flagged_as_such():
     "flagged as uncheckable rather than as checked and passed"."""
     from grownet.derive import RATE_UNCHECKED
 
-    alone = _pending([_record()], [_fit(0.50)])
-    integrated._widen_by_rate_selection(alone)
-    integrated._flag_unchecked_rates(alone)
+    one_fit = [_fit(0.50)]
+    alone = _pending([_record()], one_fit)
+    integrated._widen_by_rate_selection(alone, _sets(one_fit))
+    integrated._flag_unchecked_rates(alone, _sets(one_fit))
     record = alone[0]["record"]
     assert RATE_UNCHECKED in record["cautions"]
     assert record["se_rate_selection"] is None if "se_rate_selection" in record else True
@@ -153,9 +164,10 @@ def test_an_arc_with_nothing_to_check_its_rate_against_is_flagged_as_such():
     assert "unchecked rather than checked" in note and "rate_mismatch_to_zero" in note
 
     # and an arc the pass did widen is not flagged: it has a measured, if lower-bound, scale
-    widened = _pending([_record(), _record()], [_fit(0.50), _fit(0.60)])
-    integrated._widen_by_rate_selection(widened)
-    integrated._flag_unchecked_rates(widened)
+    two_fits = [_fit(0.50), _fit(0.60)]
+    widened = _pending([_record(), _record()], two_fits)
+    integrated._widen_by_rate_selection(widened, _sets(two_fits))
+    integrated._flag_unchecked_rates(widened, _sets(two_fits))
     for item in widened:
         assert RATE_UNCHECKED not in item["record"]["cautions"]
         assert item["record"]["se_rate_selection"] > 0
@@ -173,17 +185,59 @@ def test_contradicting_arcs_say_so_only_when_they_took_nearly_the_same_rate():
     the note is tied to the rates being close, and `CONTRADICTION_SPREAD` is where that line sits."""
     close = [_fit(0.50), _fit(0.52)]                    # about 3 per cent apart
     records = [_record(mismatch=0.3), _record(mismatch=-0.4)]
-    integrated._widen_by_rate_selection(_pending(records, close))
+    integrated._widen_by_rate_selection(_pending(records, close), _sets(close))
     assert all(any("opposite sign" in n for n in r["notes"]) for r in records)
     assert all("partner" in next(n for n in r["notes"] if "opposite sign" in n) for r in records)
 
     far = [_fit(0.50), _fit(0.90)]                      # about 55 per cent apart
     records = [_record(mismatch=0.3), _record(mismatch=-0.4)]
-    integrated._widen_by_rate_selection(_pending(records, far))
+    integrated._widen_by_rate_selection(_pending(records, far), _sets(far))
     assert not any(any("opposite sign" in n for n in r["notes"]) for r in records)
     assert all(any("different monoculture set" in n for n in r["notes"]) for r in records)
 
     # and agreeing arcs say nothing about a contradiction, however close their rates
     records = [_record(mismatch=0.3), _record(mismatch=0.4)]
-    integrated._widen_by_rate_selection(_pending(records, close))
+    integrated._widen_by_rate_selection(_pending(records, close), _sets(close))
     assert not any(any("opposite sign" in n for n in r["notes"]) for r in records)
+
+
+def test_the_table_is_keyed_by_the_matched_set_not_by_the_fit():
+    """The spread is "how much stage 1 moves when the matched condition moves", so the unit is the
+    matched monoculture SET, and a rate the run fitted counts whether or not its arc survived.
+
+    It was rebuilt from `pending` and keyed by `id(got)`, which got both wrong: a fit whose arcs were
+    dropped (no coefficient, a unit mismatch, the R2-about-zero gate) was invisible, and two co-cultures
+    resolving to the SAME set counted twice. On SMGDB00000014 that published "this organism has one
+    matched monoculture set in this study" for an organism the same run matched to five, and a spread of
+    0.0256 where the five rates spread 0.1267, a factor of 4.96 (#255 item 2).
+
+    Both halves are pinned here by handing the pass a table that disagrees with `pending` in each
+    direction.
+    """
+    # TWO co-cultures matched to ONE set: three arcs, but one rate, so there is nothing to spread and the
+    # arcs are flagged rather than widened on a spread of two copies of one number
+    one_set = {"A": {("shared",): 0.50}}
+    records = [_record(), _record(), _record()]
+    pending = _pending(records, [_fit(0.50), _fit(0.50), _fit(0.50)])
+    integrated._widen_by_rate_selection(pending, one_set)
+    integrated._flag_unchecked_rates(pending, one_set)
+    for item in pending:
+        assert item["record"].get("se_rate_selection") is None
+        note = next(n for n in item["record"]["notes"] if "monoculture set" in n)
+        assert "one matched monoculture set" in note, note
+
+    # and a fit whose ARC was dropped still counts: the table holds three sets where `pending` has two
+    # arcs, and the note must enumerate three
+    three_sets = {"A": {("s1",): 0.40, ("s2",): 0.50, ("s3",): 0.90}}
+    records = [_record(), _record()]
+    pending = _pending(records, [_fit(0.40), _fit(0.50)])
+    integrated._widen_by_rate_selection(pending, three_sets)
+    note = next(n for n in records[0]["notes"] if "monoculture set" in n)
+    assert "matched to 3 different monoculture set(s)" in note, note
+    assert "0.4, 0.5, 0.9" in note, note
+    assert records[0]["rate_selection_spread"] == round(statistics.stdev([0.40, 0.50, 0.90]), 4)
+
+    # the spread is the SAMPLE standard deviation of the three, hand computed:
+    #   mean = 0.6, deviations -0.2, -0.1, +0.3, squares 0.04 + 0.01 + 0.09 = 0.14, /2 = 0.07
+    #   sqrt(0.07) = 0.264575...
+    assert records[0]["rate_selection_spread"] == pytest.approx(0.2646, abs=5e-5)

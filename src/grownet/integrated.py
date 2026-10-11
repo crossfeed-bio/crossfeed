@@ -1010,6 +1010,15 @@ class IntegratedDeriver:
         spike = SPIKE_FACTOR if self.spike_factor is None else self.spike_factor
         records, skipped = [], []
         pending: list = []        # (record, the fit behind it) for the rate-selection pass below
+        # The rates this run fitted, per organism, keyed by the matched monoculture SET rather than by
+        # the fit. The rate-selection pass used to rebuild this from `pending`, which holds only the arcs
+        # that became records and keys them by `id(got)`, so a fit whose arcs were dropped (no
+        # coefficient, a unit mismatch, the R2-about-zero gate) was invisible, and two co-cultures
+        # resolving to the SAME monoculture set counted twice. On SMGDB00000014 that published "this
+        # organism has one matched monoculture set in this study" for an organism the same run matched to
+        # five, and a spread of 0.0256 where the five rates spread 0.1267, a factor of 4.96 (#255 item 2).
+        # Collected here, where the fit happens, so it is what the run did rather than what survived.
+        rates_by_set: dict = {}
         identities = strain_identities(exps, [])
         # the replicates of every experiment, split into monocultures of one organism and communities
         monocultures: dict = {}
@@ -1097,6 +1106,11 @@ class IntegratedDeriver:
                 unverified = len(groups) > 1 and how not in ("named", "qualifier", "wording")
                 got = two_stage(target, monos, reps, [target, *partners], self.max_condition)
                 skipped += got["skipped"]
+                # before the gates below, because a fit that ran is a measurement of this organism's rate
+                # under that matched set whether or not its arcs survived. The set is identified by its
+                # own experiments, so two co-cultures matched to one set count once (#255 item 2).
+                if got.get("rate"):
+                    rates_by_set.setdefault(target, {})[tuple(sorted(mono_experiments))] = got["rate"]
                 if got["rate"] is None or not got["coefficients"]:
                     skipped.append((f"{target} in {exp.get('name') or _exp_id(exp)}",
                                     got["reason"] or "its row could not be identified by this design"))
@@ -1291,8 +1305,8 @@ class IntegratedDeriver:
                     pending.append({"record": records[-1], "got": got, "reps": reps,
                                     "partner": partner, "target": target,
                                     "label": f"{partner} -> {target}"})
-        _widen_by_rate_selection(pending)
-        _flag_unchecked_rates(pending)
+        _widen_by_rate_selection(pending, rates_by_set)
+        _flag_unchecked_rates(pending, rates_by_set)
         return records, skipped
 
 
@@ -1467,7 +1481,7 @@ def starting_densities(cocultures: list, monocultures: list, target: str) -> dic
 CONTRADICTION_SPREAD = 0.10
 
 
-def _widen_by_rate_selection(pending: list) -> None:
+def _widen_by_rate_selection(pending: list, rates_by_set: dict) -> None:
     """Widen each arc's stage variance by the spread of its organism's selected monoculture rates.
 
     `_choose_monocultures` resolves a monoculture set per co-culture experiment, so one organism in one
@@ -1487,11 +1501,13 @@ def _widen_by_rate_selection(pending: list) -> None:
     between flagging it as uncheckable and letting it read as checked and passed (Craig's agent on
     #155 item 1).
     """
-    by_target: dict = {}
-    for item in pending:
-        by_target.setdefault(item["target"], {})[id(item["got"])] = item["got"].get("rate")
-    for target, per_fit in by_target.items():
-        chosen = sorted(r for r in per_fit.values() if r)
+    # `rates_by_set` is collected where the fits are made and keyed by the matched monoculture SET. This
+    # was rebuilt here from `pending` and keyed by `id(got)`, so it saw one entry per FIT and only for
+    # arcs that survived: a fit whose arcs were dropped was invisible, and two co-cultures matched to the
+    # same set counted twice. The spread is "how much stage 1 moves when the matched condition moves",
+    # so the set is the unit and a dropped arc does not unmeasure its organism's rate (#255 item 2).
+    for target in sorted({item["target"] for item in pending}):
+        chosen = sorted(r for r in (rates_by_set.get(target) or {}).values() if r)
         if len(chosen) < 2:
             continue
         # `stdev` is the SAMPLE standard deviation, dividing by n - 1, and that is the intended basis:
@@ -1547,8 +1563,15 @@ def _widen_by_rate_selection(pending: list) -> None:
                                      "measuring growth that depends on the partner"]
 
 
-def _flag_unchecked_rates(pending: list) -> None:
-    """The `rate_unchecked` caution on every arc the widening pass could not reach (#155 item 1)."""
+def _flag_unchecked_rates(pending: list, rates_by_set: dict) -> None:
+    """The `rate_unchecked` caution on every arc the widening pass could not reach (#155 item 1).
+
+    It used to assert ONE cause, that the organism has one matched monoculture set, for every arc it
+    reached. It also reaches an arc whose organism had several sets that all fitted the same rate, and
+    one whose third component could not be computed, and for those the sentence was false (#255 item 2).
+    The caution is the same in all three, because what it says is that the assumption is unchecked; the
+    note now says which of the three it is.
+    """
     from .derive import RATE_UNCHECKED
 
     for item in pending:
@@ -1557,14 +1580,26 @@ def _flag_unchecked_rates(pending: list) -> None:
         record = item["record"]
         if RATE_UNCHECKED in record["cautions"]:
             continue
+        rates = sorted(r for r in (rates_by_set.get(item["target"]) or {}).values() if r)
+        if len(rates) < 2:
+            how_many = "one" if len(rates) == 1 else "no"
+            why = (f"this organism has {how_many} matched monoculture set"
+                   f"{'' if len(rates) == 1 else 's'} in this study, so nothing here measures how much "
+                   "its fitted rate moves with the matched condition")
+        elif not statistics.stdev(rates):
+            why = (f"this organism was matched to {len(rates)} monoculture sets in this study and they "
+                   f"fitted the same rate ({rates[0]:.4g}), so their spread is 0 and measures nothing "
+                   "about how much the rate moves with the matched condition")
+        else:
+            why = (f"this organism was matched to {len(rates)} monoculture sets in this study, whose "
+                   "spread is a measurement, and this arc's share of it could not be computed: "
+                   "re-evaluating its strength at the rate plus and minus that spread gave no value")
         record["cautions"] = [*record["cautions"], RATE_UNCHECKED]
         record["notes"] = [*record["notes"],
-                           "this organism has one matched monoculture set in this study, so nothing here "
-                           "measures how much its fitted rate moves with the matched condition: the "
-                           "se and the p-value carry the replicates and the monoculture stage, and the "
-                           "one assumption this design cannot test, that the rate holds in co-culture, "
-                           "is unchecked rather than checked. rate_mismatch_to_zero says how large a "
-                           "mismatch would explain this arc away"]
+                           why + ": the se and the p-value carry the replicates and the monoculture "
+                           "stage, and the one assumption this design cannot test, that the rate holds "
+                           "in co-culture, is unchecked rather than checked. rate_mismatch_to_zero says "
+                           "how large a mismatch would explain this arc away"]
 
 
 def _strength_mean_at(rows: list, rate: float, at_rate: float):

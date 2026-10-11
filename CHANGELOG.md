@@ -37,6 +37,30 @@ content.
   as they always have.
 
 ### Fixed
+- **The rate table was keyed by the fit and rebuilt from the surviving arcs, so `se_rate_selection`
+  rested on a spread 4.96 times too small and two arcs said how many monoculture sets were matched and
+  were wrong** (#255 item 2). `_widen_by_rate_selection` rebuilt the table from `pending`, which holds
+  only the arcs that became records, keyed by `id(got)`: a fit whose arcs were dropped earlier (no
+  coefficient, a unit mismatch, the R2-about-zero gate) was invisible although it ran in the same pass,
+  and two co-cultures resolving to the same monoculture set counted twice. The spread is "how much
+  stage 1 moves when the matched condition moves", so the matched SET is the unit and a dropped arc does
+  not unmeasure its organism's rate. It is collected now where the fits are made, keyed by the set's own
+  experiments.
+  **This is not a change to the method**, which already says the figure is the spread of an organism's
+  matched monoculture rates: the table computed that spread over the wrong set (Craig's agent on #255,
+  2026-10-11, and his test for it, that the definition of the quantity does not move and only which data
+  reaches it does).
+  **Measured live on SMGDB00000014, the issue's own reproduction.** The spread goes from `0.0256` to
+  `0.1267`, the factor of 4.96 the issue computed; the notes go from "matched to 3 different monoculture
+  set(s)" to 5, with all five rates; and the arc that published "this organism has one matched
+  monoculture set in this study" for an organism matched to five no longer carries `rate_unchecked`.
+  **Corpus-wide, under gLV mode: 4 of 16 arcs' p-values move, one crosses 0.05 (`0.04753` to `0.05386`),
+  two arcs fall below the absence threshold (12 present to 10), and `rate_unchecked` goes from 7 arcs to
+  6.** Arcs change, so this is not a silent patch on a tagged release.
+  `_flag_unchecked_rates` also stopped asserting one cause for every arc it reaches: it reaches an arc
+  whose organism had several sets that all fitted the same rate, and one whose third component could not
+  be computed, and for those the sentence was false. The caution is the same in all three, because what
+  it says is that the assumption is unchecked; the note now says which of the three it is.
 - **The gate now catches a definition written twice**, which is the failure a merge leaves that nothing
   else catches. Resolving thirteen branches on 2026-10-11, a keep-both-sides resolution gave one dict two
   `"outcome"` keys: Python silently keeps the last, so one branch's wording was lost, and the file parsed,
