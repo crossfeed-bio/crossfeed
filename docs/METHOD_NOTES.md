@@ -508,15 +508,20 @@ important to ship something good". Three were structural rather than inherent, a
    median `fit_r2` of 0.917, and **none** of them fails to beat its interaction-free null, which is what
    makes the gate a line at zero rather than a filter that discards true absences.
 
-What this does to the comparison, measured the same day. Coverage, **both sides in gLV mode**, so
-neither is the default of any release and the label below means the comparison: the comparison gives 30 arcs,
-8 organism rows and 10 off-diagonal cells, every block with a positive equilibrium; the integrated form
-gives 23 arcs, 6 organism rows and 9 cells, with one block settling nowhere with every organism above
-zero. Out of sample against SMGDB00000005's control, with the interaction-free null beside each. **The
-command matters and was missing here, which made this table read as unreproducible:** these are
-`derive SMGDB00000007 --live --glv-mode --derivation <either> --steady-check`, that study alone. A
-corpus-wide run (`--all`) builds a different package from six studies and gives different numbers, and
-two independent readers took this table for a fabrication because of the omission. The ratios are
+What this does to the comparison. Coverage, **both sides in gLV mode**, so neither is the default of
+any release and the label below means the comparison. **Re-measured live on 2026-10-11** with
+`derive --all --live --no-published --glv-mode --derivation <either> --glv <zip>`: the comparison gives
+**24 arcs, 8 organism rows and 8 off-diagonal pairs**; the integrated form gives **12 arcs, 7 rows and 7
+pairs**. Out of sample against SMGDB00000005's control, with the interaction-free null beside each.
+
+**Two corrections to this table, both of the #223 class.** It read 30 arcs, 8 rows and 10 cells against
+23, 6 and 9, and none of those six numbers reproduces. And the command recorded here as the fix for the
+table being unreproducible was itself the wrong command: it named
+`derive SMGDB00000007 --live --glv-mode --derivation <either> --steady-check`, "that study alone", which
+today gives **5 arcs over 3 organism rows** for the comparison and **4 over 3** for the integrated form.
+SMGDB00000007 holds three organisms, so it cannot produce a table with 8 organism rows, and the figures
+were corpus-wide all along. The note warning that a missing command made two readers take this for a
+fabrication is kept, because it is the right lesson and the wrong command made it worse. The ratios are
 predicted over observed, so 1.0 is right and both directions are wrong.
 
 | organism | default | integrated | no interactions at all |
@@ -600,9 +605,15 @@ parameter they had. No R2 comparison is quoted above for that reason.
   becomes: everything a study holds may be reused while its `uploadedAt` is unchanged, **the study record
   itself is always read live** because it is the check, and a stamp that has moved drops everything kept
   for that study.
-  **Measured on SMGDB00000007, live, the same day:** a first run sends 153 requests and a second sends
-  **1**. Over the whole corpus a run sends 3738 (2195 bioreplicate records, 930 series, 559 experiments,
-  54 studies), so an unchanged corpus costs the 54 study records and nothing else.
+  **Re-measured live on 2026-10-11, counting `MGrowthDBClient._send` rather than the report's own
+  counters** (`derive --all --live --no-published`): a cold corpus run sends **1926** requests, which is
+  1897 responses plus 29 that are never cached, and a warm one sends **54**, with 1872 responses reused.
+  The 54 are **25 study records, which are always read live because they are the check, plus 29 id-crawl
+  probes that answer 404**. A 404 is never cached, so those 29 are paid on every run however warm the
+  cache, and they appear in neither counter the report prints: that gap is its own defect (#234). This
+  said "3738 ... 54 studies, so an unchanged corpus costs the 54 study records and nothing else", from a
+  corpus of 54 studies; mGrowthDB holds 25 today, and the 54 that remain are a coincidence of two
+  different quantities.
   Three things are deliberate. A response whose study cannot be told is never served, since nothing can say
   whether it is current, which is why each kept file carries its study and stamp rather than an index that
   could fall out of step. A study this run has not checked is not served from, because the check is the
@@ -614,13 +625,30 @@ parameter they had. No R2 comparison is quoted above for that reason.
   parameter left to absorb a difference between the rate a monoculture grew at and the rate that organism
   had in co-culture, and a few per cent of such a difference publishes a significant arc that is not
   there. Measured on the live corpus, the implied mismatch among arcs whose monoculture rate is well
-  determined has a median absolute of 19.2 per cent, against an estimator noise floor of 8 to 16 per cent.
+  determined has a median absolute of **27.05 per cent**, against an estimator noise floor of 8 to 16 per
+  cent. Re-measured live 2026-10-11 with
+  `derive --all --live --no-published --derivation integrated --metric growth_rate --report-rates
+  --include-absent`: 16 arcs carry a mismatch, 9 of them widen and 2 keep q < 0.05, which are the three
+  figures this bullet already states, so the population is the same one and the median is what moved. It
+  read 19.2 per cent, which no sub-population reproduces.
   **Craig's agent's grouping changed what that number means**, and it is the part to keep. Grouped by
-  organism and study, two arcs of *L. delbrueckii* in SMGDB00000006 take stage-1 rates 1 per cent apart
-  (0.8618 and 0.8536) and imply mismatches of -83.5 and +129.8 per cent. One rate error shifts both arcs of
-  an organism the same way; it cannot move one down 84 per cent and the other up 130. What differs is the
-  co-culture rate, by a factor of 13.8, between two partners. So the 19.2 per cent is a mixture of two
-  populations and quoting it as rate-mismatch exposure counts part of the signal as noise.
+  organism and study, two arcs of *L. delbrueckii* in SMGDB00000006 were measured taking stage-1 rates 1
+  per cent apart and implying mismatches of -83.5 and +129.8 per cent. **Neither the premise nor the two
+  numbers reproduces now.** Both arcs carry `se_rate_selection: None` and the `rate_unchecked` caution,
+  which is the state `integrated.py` describes as "its organism has one matched set in the study", so they
+  do not take two rates at all and the contradiction cannot be read off them. A pair that still has two
+  matched sets is *B. hydrogenotrophica* in SMGDB00000007, at 0.7387 and 0.7848, 4.27 per cent apart.
+  **Re-measured live on 2026-10-11** with
+  `derive SMGDB00000006 --live --metric growth_rate --report-rates --derivation integrated
+  --include-absent`, the same two arcs carry `rate_mismatch_to_zero` of **-0.2156 and -0.2174**, which is
+  -21.56 and -21.74 per cent: the same sign, 0.2 points apart.
+  **So the argument this paragraph drew from them does not follow from today's values**, and that is
+  recorded rather than rewritten, because the conclusion is a method judgement and the decision on #155
+  item 1 was Karoline's. The argument was that one rate error cannot move one arc down 84 per cent and
+  the other up 130, so the 19.2 per cent must be a mixture of two populations. Two arcs that now move the
+  same way by nearly the same amount are what a shared rate error would produce, which is the opposite
+  reading. Whether the 19.2 per cent is still a mixture needs re-deciding by a person and is open as
+  #223.
   **What is built**: option 1 (the conditionality stated on every arc, which `rate_mismatch_to_zero` and
   the notes already do) plus his recommendation, option 3's mechanism with option 2's data. The condition
   matcher resolves a monoculture set per co-culture experiment, so one organism in one study can enter two
@@ -721,11 +749,21 @@ parameter they had. No R2 comparison is quoted above for that reason.
   separates SMGDB00000018's `Growth A mono 1e5` from `1e7`, and `_choose_monocultures` picks between them.
   An earlier measurement at the coarser condition-key level showed spreads of 49 to 84 times and was not
   a pooling at all.
-  **And in the condition key it would cost arcs.** Over the 39 comparisons the tool makes, the co-culture
-  and monoculture first abundances agree to a median of **1.17 times**, exactly 1.00 where a study
-  inoculates both sides to one density (SMGDB00000013), and differ by more than 3 times in **6**, up to
-  7.43 (SMGDB00000014's *A. tumefaciens*, 1.5e5 against 6.6e5). Those six are a deliberate choice about
-  how to start a co-culture, so a 3-times rule in the key would lose about a seventh of the arcs for no
+  **And in the condition key it would cost arcs.** Over the **16** comparisons the tool makes, the
+  co-culture and monoculture first abundances agree to a median of **2.14 times** and differ by more than
+  3 times in **4**, up to 7.43, which is the *S. thermophilus* pair named six lines below (0.007 g/L
+  against 0.052). Counted by wrapping `integrated.starting_densities` over
+  `derive --all --live --no-published --derivation integrated --metric growth_rate --report-rates
+  --include-absent`, 2026-10-11.
+
+  Four figures in that sentence were wrong and the paragraph ten lines below had three of them right all
+  along ("the median factor is 2.16 and the warning fires on 4 of the 12"), so one document gave two
+  medians a factor of 1.8 apart for one quantity. It read "the 39 comparisons", "a median of 1.17 times",
+  "exactly 1.00 where a study inoculates both sides to one density (SMGDB00000013)" (no ratio is 1.00, and
+  that study yields no integrated arc at all) and "more than 3 times in 6", with the 7.43 attached to
+  SMGDB00000014's *A. tumefaciens* at "1.5e5 against 6.6e5", where 6.6e5 / 1.5e5 is **4.4**. Those four are
+  a deliberate choice about
+  how to start a co-culture, so a 3-times rule in the key would lose about a quarter of the arcs for no
   gain.
   So each arc carries a note giving both sides and the factor between them, and says plainly when that
   factor is above 3. On the live All network all 12 arcs carry it, the median factor is 2.16 and the
@@ -1528,7 +1566,7 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    measured on the live corpus first, which is what moved the decision: of 223 arcs, 15 are obligate and
    none abolished; 3 of the 15 have no bound at all (two whose rule bounds nothing away from zero, one
    zero from its first point) and the other 12 run 0.2292 to 4.6010, all 12 below the largest quantified
-   `|strength|` (7.0787), 11 of 12 inside the quantified range and 7 of 12 below the median quantified arc
+   `|strength|` (7.0787), **12 of 12** inside the quantified range and 7 of 12 below the median quantified arc
    (1.1814). So a bound printed in a cell sorts among the ratios instead of past them, and a reader
    sorting by magnitude ranks the strongest effects in the set last. The matrix is the one output whose
    cells cannot state what kind of number they hold, which is the same objection that retired +/-10: a

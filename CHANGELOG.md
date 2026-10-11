@@ -37,6 +37,61 @@ content.
   as they always have.
 
 ### Fixed
+- **Nine measured claims that no longer reproduced are corrected, and each now carries the command that
+  produced it** (#223, #219). None is a change to the code: every one was a sentence that had stopped
+  matching what the tool does, which is the one thing internal correctness does not tolerate. Re-measured
+  live on 2026-10-11, and the split #223 found holds: the claims a command prints about itself were fine,
+  and these are the hand-assembled ones.
+
+  | where | said | gives now |
+  | --- | --- | --- |
+  | `rates.py` | easylinear matched mGrowthDB on "43 of 46 within 10%" | **119 of 119** on SMGDB00000004, median ratio 1.0001, and **2132 of 2161** corpus-wide |
+  | `help.py` | "190 of 192 curves" | **2132 of 2161**: the proportion held, the denominator was an order of magnitude off |
+  | `METHOD_NOTES` caching | a run sends 3738, "an unchanged corpus costs the 54 study records and nothing else" | cold **1926**, warm **54**, which is 25 study records plus **29 id-crawl probes that answer 404 and are never cached**, with 1872 reused |
+  | `METHOD_NOTES` rate mismatch | two *L. delbrueckii* arcs imply **-83.5 and +129.8** per cent | **-21.56 and -21.74**: same sign, 0.2 points apart |
+  | `METHOD_NOTES` coverage table | comparison 30 arcs / 8 rows / 10 cells, integrated 23 / 6 / 9 | comparison **24 / 8 / 8**, integrated **12 / 7 / 7** |
+  | the same table's recorded command | `derive SMGDB00000007 ... --steady-check`, "that study alone" | gives **5 arcs over 3 rows** and **4 over 3**: that study holds three organisms, so it cannot produce 8 rows, and the figures were corpus-wide |
+  | `METHOD_NOTES` starting densities | "up to 7.43 (SMGDB00000014's *A. tumefaciens*, 1.5e5 against 6.6e5)" | 6.6e5 / 1.5e5 = **4.4**; the 7.43 belongs to the *S. thermophilus* pair named six lines later |
+  | `METHOD_NOTES` and `test_measured_bound.py` | "11 of 12 inside the quantified range" | **12 of 12** |
+  | `LIMITATIONS` entry 2 | "of 123 monoculture fits ... three imply a doubling slower than 24 hours" | **8 published rate rows, none** slower than 24 hours; the study those three came from now yields no network and no rate at all |
+
+  **Three further claims in the same bullet were re-measured after this branch was first pushed**, found
+  reviewing it: the median implied mismatch is **27.05 per cent**, not 19.2, which widens the gap against
+  the 8-to-16 noise floor the paragraph compares it with by 69 per cent; the two *L. delbrueckii* arcs
+  carry `se_rate_selection: None` and the `rate_unchecked` caution, so they take **one** stage-1 rate and
+  the premise of the grouping argument cannot be read off them at all; and the starting-density census was
+  wrong in four figures at once, **16** comparisons with a median of **2.14** and **4** above 3, against a
+  stated 39, 1.17 and 6, while the same bullet ten lines below had 2.16 and 4 of 12 right all along. That
+  census is also in `integrated.starting_densities`'s docstring and is corrected there.
+
+  **And two commands in this branch could not print what they were attached to.** The LIMITATIONS one
+  needed `--rates`, because the message it quotes is what refusing to write that file says; without it the
+  run exits 0 with an empty network. The steady-state one needed `--report`, because the figures are in
+  the report and the recorded command asked for neither it nor the zip. Both are the class this branch
+  exists to correct, caught inside it.
+
+  **Two are worth more than a corrected number.** The coverage table's own note says a missing command
+  made two readers take it for a fabrication, and the command added to fix that was the wrong one, which
+  is how a record decays twice in the same place. And the rate-mismatch paragraph drew a method argument
+  from the two figures that have changed: two arcs moving the same way by nearly the same amount is what a
+  shared rate error would produce, which is the opposite of what the paragraph concludes. That is recorded
+  and not rewritten, because the conclusion is a method judgement and the decision on #155 item 1 was
+  Karoline's.
+- **The 0.3.0 notes state a steady-state measurement that does not reproduce** (#219), and a tagged entry
+  is never rewritten, so the correction is here. They say the integrated fit "lands all three organisms at
+  0.41, 0.73 and 2.69 times the observed abundance". Re-measured live on 2026-10-11 with that entry's own
+  command, `derive SMGDB00000007 --live --glv-mode --derivation integrated --steady-check --report <file>`, against
+  SMGDB00000005's control: *B. thetaiotaomicron* **washes out** while the chemostat holds it at 5.285e+08,
+  *B. hydrogenotrophica* lands at **299.8x** observed and *R. intestinalis* at **119.6x**, and the fitted
+  interactions are **worse than no interactions at all** on both (34.8x and 2.878x with every interaction
+  set to zero). The other half of the same sentence does reproduce: the comparison gives 1.592x, washes
+  *B. hydrogenotrophica* out, and 3.194x, against the published 1.60 and 3.26.
+
+  **A held-out prediction that misses by two orders of magnitude is not a defect in this tool**, which is
+  Karoline's standard of 2026-10-10: showing how hard interaction inference is from observational growth
+  data is what it is for, and reporting the miss is the tool working. What was wrong is that
+  `CHANGELOG.md` and `docs/METHOD_NOTES.md` stated different numbers for the same measurement inside one
+  tag. The gLV statistics themselves are unchanged and are not being re-argued.
 - **The source distribution now carries the two registers the test suite reads**, `docs/METHOD_NOTES.md`
   and `docs/LIMITATIONS.md`, and a test keeps `MANIFEST.in` honest about that. A test that reads a shipped
   document makes it a dependency of the suite, and the sdist job is the only one that notices when it is

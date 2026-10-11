@@ -7,8 +7,11 @@ and on 2026-09-27 that the implementation is its own option:
   growthrates R package implements it in `fit_easylinear`, which mGrowthDB uses for the rates it reports.
   Fit a straight line to log abundance over every window of `window` consecutive points, take the steepest,
   widen it to span every window whose slope reaches `QUOTA` of that maximum, and fit once more over the
-  widened range. With the default window of 5 it reproduced mGrowthDB's reported rates on SMGDB00000004
-  (median ratio 1.00, 43 of 46 within 10%), so a network on growth rate agrees with the database.
+  widened range. With the default window of 5 it reproduces mGrowthDB's own reported rates
+  (`measurementContexts[].growthRate`): on SMGDB00000004, **119 of 119 comparable curves within 10 per
+  cent, median ratio 1.0001**, and over the whole corpus **2132 of 2161, median ratio 0.9998**
+  (re-measured live 2026-10-11; it said "43 of 46" from an earlier and smaller corpus, which is the class
+  in #223). So a network on growth rate agrees with the database.
 * `baranyi`: the Baranyi-Roberts model fitted by Levenberg-Marquardt, with a multi-start and two guards,
   because an unguarded fit converged on every curve, some to nonsense: mu must stay within 5 times the
   steepest observed slope, and the fit must explain at least R2 = 0.9 of log abundance. A rejected fit is
