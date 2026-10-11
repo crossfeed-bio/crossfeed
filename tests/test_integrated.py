@@ -957,11 +957,22 @@ def test_no_surface_a_reader_meets_still_counts_two_error_components():
 
     root = Path(__file__).resolve().parents[1]
     stale = "both the co-culture replicates and the monoculture stage"
+    # The sdist ships src/ and README.md but not docs/, and the package job runs this suite from an
+    # extracted sdist, so a missing file is that job rather than a defect. Skipping it is only safe
+    # because the modules that carry the two published strings are always present, which the count below
+    # requires: if they ever stop being, this fails rather than passing on an empty list.
+    checked = []
     for name in ("README.md", "src/grownet/help.py", "src/grownet/integrated.py",
                  "src/grownet/derive.py", "docs/METHOD_NOTES.md", "docs/LIMITATIONS.md"):
-        text = (root / name).read_text(encoding="utf-8")
+        path = root / name
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8")
         assert stale not in text, name
         assert "standard error with two components" not in text, name
+        checked.append(name)
+    for required in ("src/grownet/integrated.py", "src/grownet/derive.py"):
+        assert required in checked, f"{required} was not read, so this test checked nothing that matters"
 
     # and the phrase this guards against is one the files really could carry: it is the text that stood in
     # README.md, src/grownet/help.py and src/grownet/integrated.py until 2026-10-10, so the assertions
