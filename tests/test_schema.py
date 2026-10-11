@@ -477,3 +477,54 @@ def test_validate_names_a_self_arc_and_a_significance_that_contradicts_its_q_val
         notes = []
         validate_document(d, notes)
         assert not [n for n in notes if "-log10" in n], f"{label} was flagged: {notes}"
+
+
+def test_every_meta_key_the_tool_writes_is_declared_in_the_schema():
+    """A `meta` key the tool writes and the schema does not declare makes grownet tell a reader its own
+    file is suspect.
+
+    `project` and `settings_not_used` were added on 2026-10-11 and not declared, so **0.4.0 validated its
+    own output** and said `meta has 'project', which this version of the format does not declare: a
+    reader of this version ignores it, so check the spelling or the version`. The undeclared-key
+    machinery of #155 item 5 was working; the omission was real. Found by installing 0.4.0 from PyPI and
+    validating what it derived, which is the one check neither the suite nor the gate was making.
+
+    Both halves are here: the keys `output_meta` actually produces, and the keys any module assigns into
+    a network's `meta`, read from the source so a new one fails this rather than a reader's validate.
+    """
+    import re
+    from pathlib import Path
+
+    from grownet.derive import output_meta
+    from grownet.model import InteractionNetwork
+    from grownet.schema import META_PROPERTIES
+
+    records = [{"source": "a", "target": "b", "source_name": "A", "target_name": "B",
+                "effect": "facilitation", "strength": 1.0, "weight": 1.0, "status": "present",
+                "outcome": "quantified", "study_id": "S1"}]
+    _edges, meta = output_meta(list(records))
+    undeclared = sorted(set(meta) - set(META_PROPERTIES))
+    assert not undeclared, (
+        f"output_meta writes these and the schema does not declare them: {undeclared}. `validate` then "
+        "tells a reader of our own file to check the spelling or the version.")
+
+    # and every `meta["X"] = ...` assignment in the package, which is how `data`, `growth_rates`,
+    # `query` and `selection` reach a file from outside output_meta
+    src = Path(__file__).resolve().parents[1] / "src" / "grownet"
+    assigned = set()
+    for path in sorted(src.rglob("*.py")):
+        for m in re.finditer(r'(?:net|network|\w+)\.meta\[\s*"([a-z_]+)"\s*\]\s*=', path.read_text()):
+            assigned.add(m.group(1))
+    assert assigned, "the probe found no meta assignment at all, so it is checking nothing"
+    missing = sorted(assigned - set(META_PROPERTIES))
+    assert not missing, f"these are assigned into meta and not declared: {missing}"
+
+    # the probe is not vacuous: it sees the ones added from outside output_meta
+    assert {"data", "growth_rates"} <= assigned, sorted(assigned)
+    # and a network carrying only declared keys validates with no note about them
+    net = InteractionNetwork()
+    net.meta = dict(meta)
+    notes = []
+    from grownet.schema import validate_document
+    validate_document(net.to_dict(), notes)
+    assert not [n for n in notes if "does not declare" in n], notes

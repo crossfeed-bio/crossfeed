@@ -31,6 +31,17 @@
           "type": "string",
           "description": "part of the format, and written by every current derivation: its version"
         },
+        "project": {
+          "type": "object",
+          "description": "where to find the project, its schema and the two documents `provisional` cites: a reader of this file alone had no URL for any of them"
+        },
+        "settings_not_used": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "the settings this derivation does not read, so a recorded value is not taken for one that was used"
+        },
         "derived_on": {
           "type": "string",
           "description": "part of the format, and written by every current derivation: the local date it was derived; derived_at beside it carries the offset"
