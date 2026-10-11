@@ -114,6 +114,17 @@ derivation method). Labels are created by a maintainer; if one is missing, say s
   of meaning is the one part of this contract that is still a rule you have to keep rather than a check
   that keeps it for you: move the id, record the new id in the manifest, and say in the changelog what
   the field used to mean (2026-10-08, after #121 and #154).
+  **Where the line falls, from the one case that has tested it.** On #261 the `abolished` outcome gained
+  a second route: it had meant that the set WITH the source did not grow, by the no-growth rule's
+  measurement of curves, and the integrated form now also reaches it when a fitted effect cancels the
+  organism's own growth rate. Karoline ruled on 2026-10-11 that this is **not** a change of meaning and
+  the id does not move: "yes, abolished is fine, don't move the id". The reason to take from it is that
+  the field still answers the same question, which side failed to grow, and the arc carries `method` and
+  `bound_rule` saying which route established it, so no reader is told a fitted statement is a
+  measurement. Compare `/v0` to `/v1`, where `significance` changed from the corrected p-value to
+  -log10 of it: there the number itself meant something else and no other field said so. So the test is
+  whether a reader who trusts the id would read the new content as the old quantity, not whether the code
+  path is new.
 - **No runtime dependencies.** Code under `src/` imports only the standard library and grownet.
 - **Nothing public bearing a collaborator's name or affiliation** without their sign-off.
 - **Security problems are reported privately** (see [SECURITY.md](SECURITY.md)), never in a public issue,

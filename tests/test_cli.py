@@ -273,3 +273,58 @@ def test_a_single_study_run_refuses_a_flag_that_narrows_several(tmp_path, capsys
         assert main(args) == 2, f"{flag} was not refused on a single-study run"
         err = capsys.readouterr().err
         assert flag in err and "would be recorded and not applied" in err
+
+
+def test_the_fixture_route_refuses_a_setting_it_cannot_apply(tmp_path, capsys):
+    """`--fixture` holds records someone already derived, and NO setting changes its arcs.
+
+    Measured rather than reasoned, with a fixture built so each setting had something to act on (the same
+    pair from two studies for merging, a q-value of 0.40 for the filter, a tiny effect with a spread for
+    the threshold, a single_replicate arc for the quality filter): every one of fourteen left the arcs
+    byte-identical. The mechanism is that `output_meta` runs only on the live path, so this route has no
+    output stage at all. Ten or more settings were accepted and discarded in silence (#222 item 1).
+
+    Refusing is the half of "refuse or announce" a command can do, which is what #221 settled for every
+    other setting, and `--deriver` already does it here in almost these words.
+    """
+    import json as _json
+
+    from grownet.__main__ import main
+
+    fixture = tmp_path / "records.json"
+    fixture.write_text(_json.dumps([
+        {"source": "a", "target": "b", "source_name": "A", "target_name": "B", "effect": "facilitation",
+         "strength": 1.0, "q_value": 0.01, "significance": 2.0, "study_id": "S1"}]), encoding="utf-8")
+    base = ["derive", "SMGDB00000004", "--fixture", str(fixture), "--out", os.devnull]
+
+    # a plain fixture run is untouched
+    assert main(base) == 0
+    capsys.readouterr()
+
+    for flag, value in (("--absence-threshold", "9"), ("--metric", "max"), ("--merge-arcs", None),
+                        ("--max-adjusted-p", "0.01"), ("--correction", "by"),
+                        ("--include-absent", None), ("--rate-window", "9")):
+        args = base + [flag] + ([value] if value else [])
+        assert main(args) == 2, f"{flag} was accepted on the fixture route"
+        err = capsys.readouterr().err
+        assert flag in err, err
+        assert "already derived" in err
+
+
+def test_a_route_that_applied_no_threshold_does_not_print_an_empty_one(tmp_path):
+    """The report printed `(k = )` and an empty `settings:` heading on the fixture route, because it has
+    no output stage: a count of arcs below a threshold that was never applied, and a heading that said
+    the run had no settings rather than that it records none (#222 item 1)."""
+    from grownet.mgrowthdb import records_to_network
+    from grownet.report import report_text
+
+    net = records_to_network([
+        {"source": "a", "target": "b", "source_name": "A", "target_name": "B", "effect": "facilitation",
+         "strength": 1.0, "q_value": 0.01, "significance": 2.0, "study_id": "S1"}])
+    text = report_text({"network": net, "entries": [], "settings": {}, "resolved": [], "studies": [],
+                        "skipped": [], "errors": [], "unresolved": [], "taxon_ids": {},
+                        "suggestions": {}, "reasons": {}, "hidden": {}, "absence": {}})
+    assert "(k = )" not in text, "a threshold that was never applied is printed as an empty number"
+    assert "No absence threshold was applied" in text
+    assert "settings: none recorded" in text
+    assert "already derived" in text

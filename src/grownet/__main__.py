@@ -137,6 +137,47 @@ def _bad_settings(a) -> str:
     return ""
 
 
+# The settings the --fixture route does not apply, measured rather than reasoned: with a fixture built so
+# that each one had something to act on (the same pair from two studies for merging, a q-value of 0.40 for
+# the filter, a tiny effect with a spread for the threshold, a single_replicate arc for the quality
+# filter), EVERY one of them left the arcs byte-identical. The mechanism is that `output_meta` runs only
+# on the live path, so the fixture route has no output stage at all: no absence threshold, no merging, no
+# q-value filter. Ten or more settings were accepted and discarded in silence, and the report printed an
+# empty `settings:` heading and a literal `(k = )` (#222 item 1).
+FIXTURE_IGNORES = {
+    "metric": "--metric", "rate_method": "--rate-method", "rate_window": "--rate-window",
+    "spike_factor": "--spike-factor", "capacity_max_fall": "--capacity-max-fall",
+    "no_growth_alpha": "--no-growth-alpha", "no_growth_factor": "--no-growth-factor",
+    "derivation": "--derivation", "include_non_batch": "--include-non-batch",
+    "absence_threshold": "--absence-threshold", "correction": "--correction",
+    "max_adjusted_p": "--max-adjusted-p", "merge_arcs": "--merge-arcs",
+    "merge_genera": "--merge-genera", "min_studies": "--min-studies",
+    "include_low_quality": "--include-low-quality", "include_absent": "--include-absent",
+}
+
+
+def _fixture_flags(a) -> str:
+    """Why a setting cannot be used with --fixture, or "": it holds records someone already derived.
+
+    Refusing is the half of "refuse or announce" a command can do, which is the rule #221 settled for
+    every other setting, and it is what `--deriver` already does here with almost these words. Nothing
+    is applied silently and nothing changes about what the route produces.
+    """
+    if a.live:
+        return ""
+    from .gui import DEFAULTS
+
+    settings = _settings_of(a)
+    asked = [flag for key, flag in sorted(FIXTURE_IGNORES.items())
+             if key in settings and key in DEFAULTS and settings[key] != DEFAULTS[key]]
+    if not asked:
+        return ""
+    return (f"{', '.join(asked)} cannot apply to --fixture, which holds records someone already derived: "
+            "there is no derivation to configure and no output stage runs, so the setting would be "
+            "recorded and not applied. Use --live to derive, or drop "
+            + (asked[0] if len(asked) == 1 else "them") + ".")
+
+
 def _rate_flags(a) -> str:
     """Why the growth-rate options cannot be used as given, or "": checked before anything is derived, so
     a run never writes a network and then refuses to write the files beside it."""
@@ -240,7 +281,7 @@ def _resolve(a, announce=True):
 
 def _derive(a):
     _resolve(a)
-    problem = _bad_settings(a) or _rate_flags(a)
+    problem = _bad_settings(a) or _rate_flags(a) or _fixture_flags(a)
     if problem:
         print(problem, file=sys.stderr)
         return 2

@@ -9,7 +9,9 @@ All button and `grownet derive --all` read that file when it is less than a day 
 the defaults, and otherwise derive live, as before. Nothing is ever uploaded by a user's copy.
 
 The file holds the whole result of the search, not only the network, so the page shows it as a live
-result: the arcs, the studies, the pairs the data did not support, and the report.
+result: the arcs, the arcs the absence threshold left out, the studies, the pairs the data did not
+support, the growth rates and any steady-state check, and the report. `FIELDS` is that list and the
+module's claim is only as true as it; three of them were missing until 2026-10-11 (#228).
 """
 from __future__ import annotations
 
@@ -25,14 +27,27 @@ FILE = "all_result.json"
 URL = f"https://github.com/crossfeed-bio/crossfeed/releases/download/{RELEASE_TAG}/{FILE}"
 MAX_AGE = datetime.timedelta(days=1)
 TIMEOUT = 15
-# the parts of a search result the file carries, besides the network
+# The parts of a search result the file carries, besides the network. `absent` is handled separately
+# because it is an InteractionNetwork rather than plain JSON, which is why it used to be dropped: the
+# artifact's report stated "78 below the absence threshold" and its page section showed none of them,
+# while the CLI's message for that condition says "The report lists them" (#228). `rates`, `steady` and
+# `notes`, the advisory messages #242 split out of `errors`, went with it. A reader of the artifact now
+# sees what a live run shows, and `tests/test_published.py` checks this list against what `run_query`
+# returns rather than leaving it to be maintained by hand, which is how three went missing.
 FIELDS = ("entries", "settings", "resolved", "reasons", "suggestions", "excluded", "all", "genera",
-          "partners_only", "unresolved", "taxon_ids", "studies", "skipped", "errors", "hidden", "absence")
+          "partners_only", "unresolved", "taxon_ids", "studies", "skipped", "errors", "hidden",
+          "absence", "rates", "steady", "notes")
 
 
 def to_payload(result: dict) -> dict:
-    """A search result of All as one JSON document."""
+    """A search result of All as one JSON document.
+
+    `absent` is a network of its own, the arcs the absence threshold left out, so it is serialized the
+    way `network` is rather than passed through as JSON.
+    """
+    absent = result.get("absent")
     return {"format": FORMAT, "network": result["network"].to_dict(),
+            "absent": absent.to_dict() if absent is not None else None,
             **{k: result.get(k) for k in FIELDS}}
 
 
@@ -42,6 +57,8 @@ def from_payload(payload: dict) -> dict:
     result["skipped"] = [tuple(x) for x in payload.get("skipped") or []]
     result["resolved"] = [tuple(x) for x in payload.get("resolved") or []]
     result["network"] = InteractionNetwork.from_dict(payload["network"])
+    absent = payload.get("absent")
+    result["absent"] = InteractionNetwork.from_dict(absent) if absent else None
     result["published"] = result["network"].meta.get("derived_at", "")
     return result
 
