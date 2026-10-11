@@ -7,11 +7,13 @@ content.
 ## [Unreleased]
 
 
-## [0.3.1] (2026-10-11)
+## [0.4.0] (2026-10-11)
 
 **Read this before upgrading: the numbers change.** A version is a promise about content, so this says
-what moved rather than leaving a reader to find out by diffing. Two days of post-release review, 104
-entries below, and three of them change what a derived network holds:
+what moved rather than leaving a reader to find out by diffing. **This is a minor version and not a
+patch, because the default derivation changed**: a reader who upgrades and re-derives gets a different
+network from the same database, which is not what a patch number promises. Two days of post-release
+review, 104 entries below, and three of them change what a derived network holds:
 
 - **the default derivation is the specified comparison again** (first entry under Upgrading). **Every
   network derived without gLV mode changes, and almost all of them grow:** on the whole of mGrowthDB the
@@ -29,7 +31,9 @@ most of the 104 entries, or fixes a guard that was claimed and not applied.
 
 **A re-derive is the way to upgrade.** A network derived with 0.3.0 and a network derived with this
 version are different measurements of the same database, and `meta.settings` plus `meta.tool_version`
-in each file say which is which.
+in each file say which is which. **The format id does not move**: it is still
+`grownet.interaction_network/v3`, because no field was added, removed or given a new meaning, so a reader
+that already parses 0.3.0's files parses these without a change.
 
 ### Upgrading
 - **The default derivation is the specified comparison again, and gLV mode selects the integrated form**

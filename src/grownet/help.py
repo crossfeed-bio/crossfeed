@@ -31,7 +31,7 @@ ABOUT = (f"{NAME} was built by Karoline Faust (KU Leuven) and Craig Heilmann (Sy
 # user of the page wants, so each line says what they can now do rather than what moved in the code. A test
 # requires the newest entry to be this version, so a release cannot forget it.
 RELEASES = (
-    ("0.3.1", "2026-10-11", (
+    ("0.4.0", "2026-10-11", (
         "The default derivation is the specified comparison again, and gLV mode selects the integrated "
         "form. Every network derived without gLV mode changes and almost all of them grow: on the whole "
         "of mGrowthDB the default goes from 12 arcs to 145, over 24 organisms instead of 9, with 15 "
