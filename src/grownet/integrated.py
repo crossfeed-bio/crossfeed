@@ -1191,7 +1191,24 @@ class IntegratedDeriver:
                         "weight": None if strength is None else round(abs(strength), 4),
                         # the status is left to the output, where the absence threshold decides it from
                         # the mean and the spread, as it does for every other derivation
-                        "status": None, "outcome": "quantified", "metric": METRIC,
+                        "status": None,
+                        # Karoline, 2026-10-11, on #201: "I agree on censored". A fitted effect that at
+                        # least cancels the organism's own growth rate has no log2 ratio, because
+                        # log2(1 + A x / r) is undefined at and below -1. That `None` reached `absence`,
+                        # whose first test on a value is `if not mean: return ABSENT`, so the strongest
+                        # inhibition this form can express was reported as NO interaction and its gLV
+                        # cell became a hard 0, which a reader takes as no effect rather than as no
+                        # number. It is censored now, which is the shape the no-growth rule already has:
+                        # the outcome says the target does not grow WITH the source, which is what the
+                        # fit states, `absence` keeps it, and the matrix gives it `NA`. `bound_rule`
+                        # carries the one thing that distinguishes it from a censored arc of the
+                        # comparison, which is that the statement is the fit's and not a measurement of
+                        # observed curves; `strength_bound` stays None because the fit bounds the effect
+                        # below by nothing finite.
+                        "outcome": "abolished" if strength is None else "quantified",
+                        "strength_bound": None,
+                        "bound_rule": (SUPPRESSED_RULE if strength is None else ""),
+                        "metric": METRIC,
                         "method": METHOD, "evidence": "biculture",
                         "quality": quality, "cautions": cautions, "notes": list(row_notes),
                         "cultivation_mode": cultivation(exp),
@@ -1263,6 +1280,15 @@ def _level_of(replicate, species: str):
     if curve is None:
         return None
     return mean_over(curve, curve.times[0], curve.times[-1])
+
+
+# What a censored arc of this form says, where the comparison's censored arcs carry a measured bound from
+# the no-growth rule. There is no number to put beside it: the fit says the partner's effect at least
+# cancels this organism's own growth, so the ratio is undefined rather than large, and a reader of
+# `strength_bound` finds None with this sentence saying why (#201).
+SUPPRESSED_RULE = ("no ratio: the fit puts this organism's net growth with the partner at or below zero, "
+                   "so log2(1 + A_ij x_j / r_i) is undefined; this is what the fitted row implies and "
+                   "not a measurement of a curve that did not grow")
 
 
 def _log2_effect(coefficient: float, level: float, rate: float):

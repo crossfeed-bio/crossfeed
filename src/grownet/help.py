@@ -340,10 +340,12 @@ EDGE_ATTRIBUTES = {
                     "q = 1, and a style can map it continuously. It is capped at 15 for a q-value of "
                     "zero. It is a restatement of the q-value and inherits what that rests on",
     "outcome": "quantified (a ratio was computed), obligate (the target did not grow WITHOUT the "
-               "source in this comparison, by the no-growth rule), abolished (it did not grow WITH it), "
-               "or no_growth. These say what one comparison established, not what the organism can do: "
-               "the rule is evaluated per comparison, so one pair can be obligate in one condition and "
-               "quantified in another, which is what a condition-dependent effect looks like here",
+               "source in this comparison, by the no-growth rule), abolished (it did not grow WITH it, "
+               "either by that rule or because the fitted effect cancels the target's own growth rate, "
+               "which bound_rule distinguishes), or no_growth. These say what one comparison "
+               "established, not what the organism can do: the rule is evaluated per comparison, so one "
+               "pair can be obligate in one condition and quantified in another, which is what a "
+               "condition-dependent effect looks like here",
     "metric": "the growth property compared: auc, max, or a growth rate with its rule "
               "(growth_rate:easylinear:5, growth_rate:baranyi)",
     "method": "how the edge was computed, in words",

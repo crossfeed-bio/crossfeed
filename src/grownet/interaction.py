@@ -33,7 +33,10 @@ mutualist relationship. The scope is the comparison and not the organism, since 
 condition and no stage asks whether the target grows without the source anywhere else.
 When it has a positive property only
 without the source, the source abolishes its growth, outcome "abolished". A log2 ratio is undefined in both
-cases, so mean, sd, and se are None and the outcome carries the information. Without growth in either set
+cases, so mean, sd, and se are None and the outcome carries the information. The integrated form reaches
+"abolished" by its own route, where a fitted effect at or below -1 cancels the organism's own growth rate
+and the ratio is undefined for that reason rather than because a set did not grow; `bound_rule` says
+which, and only the comparison's censored arcs carry a measured bound (#201). Without growth in either set
 the outcome is "no_growth". A comparison with a log2 value is "quantified". Individual replicates with a zero
 or negative property within a set that also has positive replicates are left out and reported.
 

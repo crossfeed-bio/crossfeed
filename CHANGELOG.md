@@ -37,6 +37,20 @@ content.
   as they always have.
 
 ### Fixed
+- **A total suppression was dropped as "no interaction" instead of being censored** (#201, Karoline's
+  decision of 2026-10-11: "I agree on censored"). Under the integrated form an arc's strength is
+  `log2(1 + A_ij x_j / r_i)`, which is undefined once the fitted effect reaches -1, so the strongest
+  inhibition the form can express has no ratio. That `None` reached `absence`, whose first test on a value
+  is `if not mean: return ABSENT`, so the arc was removed from the network, counted under the absence
+  threshold, and given a hard `0` in the gLV cell, which a reader takes as no effect rather than as no
+  number. The arc up to 99 per cent suppression was published, and strongly; at total suppression it
+  vanished. It is censored now: kept, `NA` in the cell, with `bound_rule` saying the statement is the
+  fit's and `strength_bound` None, because nothing measured a bound. **No arc on the live corpus reaches
+  that boundary today**, so no published network changes; the defect was reachable rather than firing.
+  The `outcome` is `abolished`, which already means the target grows only without the source, and
+  `bound_rule` is what separates the fit's statement from the no-growth rule's measurement. METHOD_NOTES
+  said the integrated form can produce no censored arc and no `NA` cell, which is no longer true, and its
+  `derive.py` occurrence count was already one short.
 - **A non-finite number in an Advanced settings box produced JSON that R and every strict parser refuse**
   (#195). `float()` accepts `nan`, `inf` and `1e999`, and nothing checked the result was finite, so the
   value was echoed back to the form as the setting in force and copied into `meta.settings`, where

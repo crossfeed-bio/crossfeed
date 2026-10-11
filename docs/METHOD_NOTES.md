@@ -63,9 +63,17 @@ the same trade is **145 arcs against 12** (whole corpus, live, 2026-10-09).
 
 **The integrated form's weakness: two kinds of evidence it cannot express.** It derives no arc from a
 community of three or more, which Craig declined on #127, so **no drop-out arc can exist under it**; and
-it has no no-growth rule at all, so there are **no censored arcs, no measured bounds and no `NA` cells**
-(`grep -c "obligate\|abolished\|no_growth"`: `derive.py` 40, `integrated.py` 0). On the corpus that is
-122 drop-out arcs and 12 censored bounds the default has and it does not. It also needs a time course, so
+it has no no-growth rule at all, so **no measured bound can exist under it**
+(`grep -c "obligate\|abolished\|no_growth"`: `derive.py` 41, `integrated.py` 1 as of 2026-10-11; the
+`derive.py` count was written as 40 and was already one short). On the corpus that is 122 drop-out arcs
+and 12 censored bounds the default has and it does not.
+
+**It does produce one censored arc of its own since 2026-10-11**, which this paragraph denied until then:
+a fitted effect at or below -1 cancels the organism's own growth, `log2(1 + A_ij x_j / r_i)` is undefined
+there, and such an arc is censored with an `NA` cell rather than dropped as no interaction (Karoline on
+#201: "I agree on censored"). It carries no measured bound, because nothing measured it: `bound_rule`
+says the statement is the fit's and `strength_bound` is None. No arc on the corpus reaches that boundary
+today, so the count above is of the code and not of a network. It also needs a time course, so
 a study measured at two or three points yields nothing under it.
 
 **The comparison's weakness: a coefficient confounded by the organism's own density.** A coefficient from
