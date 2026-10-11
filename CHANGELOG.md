@@ -46,6 +46,14 @@ content.
   kind; it has one now, asserting both what must be caught and what must not, with every example
   assembled at run time so that a test of the guard does not trip the guard. **No secret was ever in the
   repository**: this closed a hole in a check, not an exposure.
+
+  Two corrections from reviewing that change. The whitespace-only separator is for `authorization` and
+  `bearer` alone, which is how an Authorization header is written: applied to all seven keywords it
+  flagged ordinary prose, because one hyphenated word after "secret" or "token" is sixteen characters of
+  the class, and this project's house style is long prose Markdown with inline file paths. And the key
+  header is `-----BEGIN [A-Z0-9 ]{0,20}PRIVATE KEY` now: DSA, ENCRYPTED and PGP PRIVATE KEY BLOCK were
+  missed while the check's own description says it covers private keys, and the first version of the test
+  probed one header out of seven. Both directions are measured: 13 of 13 caught, 11 of 11 left alone.
 - **Every relative link in the README was dead on PyPI, and the legend image was broken there** (#192).
   The README is the long description on <https://pypi.org/project/grownet/>, and PyPI does not rewrite
   relative URLs the way GitHub does, so all fifteen resolved against the project page: the limitations

@@ -33,10 +33,20 @@ TEXT_EXT = (".py", ".md", ".toml", ".yml", ".yaml", ".json", ".cfg", ".ini", ".t
 # by whitespace rather than a separator, which is how an Authorization header is written. A value must
 # still be 16 or more characters from the class, so `${{ secrets.X }}`, `$VAR`, `<your-token>` and `""`
 # do not match: a placeholder either starts outside the class or is too short.
+# The whitespace-only separator is for `authorization` and `bearer` ALONE, which is how an Authorization
+# header is written. Applied to all seven keywords it flagged ordinary prose, because one hyphenated word
+# after "secret" or "token" is 16 characters of the class: "GitHub secret scanning-and-rotation", "the
+# token docs/METHOD_NOTES.md describes", "a password manager.Keychain entry". In a project whose house
+# style is long prose Markdown with inline file paths that blocks a commit, and a gate someone turns off
+# is worse than none. The key header is broad enough for the forms openssl and gpg actually emit: DSA,
+# ENCRYPTED and PGP PRIVATE KEY BLOCK were missed while the check's own description says "private keys".
 SECRET = re.compile(
-    r"(?i)(?:api[_-]?key|secret|token|password|authorization|bearer)\s*(?:[:=]\s*|\s+)"
+    r"(?i)(?:api[_-]?key|secret|token|password)\s*[:=]\s*"
     r"['\"]?[A-Za-z0-9/\+=_\-\.]{16,}['\"]?"
-    r"|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
+    r"|(?:authorization|bearer)\s*(?:[:=]\s*|\s+)"
+    r"['\"]?[A-Za-z0-9/\+=_\-\.]{16,}['\"]?"
+    r"|-----BEGIN [A-Z0-9 ]{0,20}PRIVATE KEY",
+    re.I,
 )
 LOCAL_PATH = re.compile(r"(?i)(?:[a-z]:[\\/]dev[\\/]|[a-z]:[\\/]users[\\/]|/home/|/users/)")
 # hedging caveats: the tic implies the rest is not; say it plainly instead.

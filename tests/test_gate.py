@@ -105,6 +105,14 @@ def test_the_secrets_pattern_does_not_require_the_value_to_be_quoted(monkeypatch
         "header.py": line("Authorization", ": ", "Bearer " + jwt),               # a header, not a pair
         "quoted.py": line("api_key", " = ", aws, quote='"'),                     # what it always caught
         "key.txt": "-----BEGIN " + "OPENSSH PRIVATE KEY" + "-----\n",
+        # the forms openssl and gpg actually emit. Three of these were missed while the check's own
+        # description says it covers "private keys", and one key header out of seven was probed (found
+        # reviewing this change).
+        "rsa.txt": "-----BEGIN " + "RSA PRIVATE KEY" + "-----\n",
+        "dsa.txt": "-----BEGIN " + "DSA PRIVATE KEY" + "-----\n",
+        "enc.txt": "-----BEGIN " + "ENCRYPTED PRIVATE KEY" + "-----\n",
+        "pgp.txt": "-----BEGIN " + "PGP PRIVATE KEY BLOCK" + "-----\n",
+        "plain.txt": "-----BEGIN " + "PRIVATE KEY" + "-----\n",
     }
     monkeypatch.setattr(gate, "_read", caught.get)
     found = gate.check_secrets(list(caught))
@@ -116,6 +124,13 @@ def test_the_secrets_pattern_does_not_require_the_value_to_be_quoted(monkeypatch
         "empty.py": 'api_key = ""\n',
         "prose.md": "The secret sauce is that the token is short and a password manager helps.\n",
         "curl.md": "curl -H 'Authorization: Bearer <token>' https://example.org\n",
+        # ordinary prose. The whitespace-only separator was applied to all seven keywords although it is
+        # there for an Authorization header, and one hyphenated word after "secret" or "token" is 16
+        # characters of the class, so this project's own house style tripped the gate. A gate someone
+        # turns off is worse than none, which this test's docstring already says.
+        "prose2.md": ("GitHub secret scanning-and-rotation is covered in SECURITY.md, and the token "
+                      "docs/METHOD_NOTES.md describes is not one.\n"),
+        "prose3.md": "Use a password manager.Keychain entry, and every secret rotation-and-revocation step.\n",
     }
     monkeypatch.setattr(gate, "_read", clean.get)
     assert gate.check_secrets(list(clean)) == []
