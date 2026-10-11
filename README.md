@@ -42,7 +42,7 @@ Three ways, from the least to the most technical. All give the same program.
 ### Windows, without installing anything
 
 From the first release on, each [release](https://github.com/crossfeed-bio/crossfeed/releases) carries
-`grownet-<version>-windows.zip`: the whole program in one folder, Python included. Unzip it (right-click,
+`grownet-v<version>-windows.zip`: the whole program in one folder, Python included. Unzip it (right-click,
 Extract All), open the folder and double-click `grownet.exe`. A black window opens and shows an address, and
 your browser opens the page there; closing the black window stops the program.
 
@@ -159,7 +159,10 @@ python -m grownet schema [--out FILE]
 - `derive --live --all` does what the page's All button does: every study in mGrowthDB, with every
   partner (a study argument limits it to those studies). With the default settings it reads the network
   derived once a day by `.github/workflows/all-network.yml` (the `all-network` release), when that is
-  less than a day old, and derives live otherwise; `--no-published` always derives live.
+  less than a day old **and was derived by the same derivation your settings ask for**, and derives
+  live otherwise; `--no-published` always derives live. The derivation is part of the condition because a
+  format id moves when a field changes meaning and the derivation is not a field, so the artifact and a
+  live run can carry the same format and entirely different networks.
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of either built-in one (see below).
 - The command line does everything the local page does: every advanced setting has its option, and the
@@ -453,7 +456,8 @@ least-squares fit per organism gives its rate, its own limitation and every part
 once, with no growth property, no log2 ratio, no plateau to certify and no partner abundance to divide by.
 The monocultures identify `r_i` and `A_ii` and are held fixed while the co-cultures give the partners. The
 model has no lag term and no death term, so the rows start where growth starts and stop where it ends.
-Every arc carries the coefficient, the residual and the condition number of its fit; a row the design
+Every arc carries the coefficient, the condition number of its fit, its R2 and the R2 of the same row
+with every interaction set to zero; a row the design
 cannot identify, and a community of three or more members, are reported rather than derived.
 
 **Scoring the package against a chemostat.** `--steady-check` (with `--report-rates --live`) scores the

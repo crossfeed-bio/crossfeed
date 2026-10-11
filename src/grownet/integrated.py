@@ -15,7 +15,8 @@ What the measurement on #116 showed, and why `two_stage` exists: inside one expe
 two organisms that rise together correlate (at +0.977 on SMGDB00000004), and the fit then splits an
 organism's own limitation from its partner's effect badly. The monocultures identify `r_i` and `A_ii`
 cleanly, so those are fitted first and held fixed while the co-cultures give the partners' coefficients.
-Every fit reports its condition number and its residual, and a fit that is not identified is named rather
+Every fit reports its condition number and its R2 against the interaction-free null, and a fit that is
+not identified is named rather
 than published as a number.
 
 Standard library only: the normal equations of a design this small are solved by Gaussian elimination.
@@ -920,8 +921,9 @@ class IntegratedDeriver:
     """Derive a network by fitting each organism's row from the whole time course (#127).
 
     One fit per organism, over its monocultures and then its co-cultures (`two_stage`), and one arc per
-    partner it was grown with. Every arc carries the fitted coefficient, the condition number and the
-    residual of the fit behind it, and the rate and self-limitation of that organism, so a package takes
+    partner it was grown with. Every arc carries the fitted coefficient, the condition number of the fit
+    behind it, its R2 and the R2 with every interaction set to zero, and the rate and self-limitation of
+    that organism, so a package takes
     its parameters from the same fit. An organism whose row the design cannot identify gives no arc and is
     reported, as everything else unmeasurable is.
 

@@ -26,7 +26,9 @@ example_payload <- function() {
         caveats = list(
             coefficients = paste("every cell is a fitted per-capita coefficient: the diagonal is",
                                  "-r_i / K_i and an off-diagonal cell is (r_with - r_without) / x_j"),
-            diagonal = "fitted: -r_i / K_i, with K_i the organism's own plateau",
+            # the comparison's wording, which is what this fixture's derivation is; the integrated
+            # package carries the other one and `grownet.matrix.DIAGONAL_CAVEAT` holds both (#231)
+            diagonal = "fitted: -r_i / K_i, with K_i the organism's own observed plateau",
             units = "one matrix per abundance unit: abundances are never converted between units",
             abundance_units = list("Cells/mL"),
             unbounded = paste("the equilibrium of a fit is the solution of A x = -r, and a negative",

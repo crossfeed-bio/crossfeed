@@ -9,7 +9,8 @@ Checks:
   3. no-local-paths   no absolute local-machine paths (the repo is portable and self-contained)
   4. self-contained   every import under src/ resolves to the standard library or grownet itself
   5. house-style      docs use ASCII punctuation and US spelling; prose carries no hedging caveats
-  6. schema-contract  the shipped JSON Schema matches the code, and emitted networks validate against it
+  6. schema-contract  the shipped JSON Schema matches the code, and an emitted network passes the
+                     dependency-free validator (which is a SUBSET of that schema: see schema.py)
   7. claims          the docs a stranger reads name the deriver the code actually defaults to, and do not
                      restate a claim that has been corrected (see checks/claims_check.py)
   8. merge-markers    no leftover conflict markers from a merge (one once reached the changelog unseen)
@@ -218,7 +219,16 @@ def check_house_style(rels):
 
 
 def check_schema_contract(_rels):
-    """Import grownet and confirm the shipped schema matches the code and emitted networks validate.
+    """Import grownet and confirm the shipped schema matches the code, and that an emitted network
+    passes `validate_document`.
+
+    **That is not the same as validating against the shipped JSON Schema**, and these three lines said it
+    was. `validate_document` checks the enums, the required fields, a negative weight and referential
+    integrity, and checks no numeric type, no `minimum`, no `maximum` and no string type: a hand-written
+    network passes it and fails the schema nine ways. No emitted network violates the schema today, which
+    was measured, so this was a false claim about a guard rather than a wrong output, and the honest fix
+    is to say which validator runs (#249). Walking `SCHEMA_DOC`'s own keywords over the document here is
+    the version that would make the original claim true, and both are in hand at this point.
     Skips (does not fail) if grownet is not importable, so the gate still runs standalone."""
     src = os.path.join(ROOT, "src")
     if src not in sys.path:
@@ -249,7 +259,7 @@ def check_schema_contract(_rels):
         doc = records_to_network(records, meta={"source_db": "fixture"}).to_dict()
         problems = validate_document(doc)
         if problems:
-            bad.append("an emitted network fails its own schema: " + "; ".join(problems))
+            bad.append("an emitted network fails the dependency-free validator: " + "; ".join(problems))
     except OSError:
         pass  # fixture optional
     return bad

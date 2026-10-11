@@ -198,7 +198,15 @@ def _settings_of(a) -> dict:
             "conditions": "\n".join(getattr(a, "conditions", None) or [])}
 
 
-def _derive(a):
+def _resolve(a, announce=True):
+    """Settle what the run will actually use, before anything is checked or derived.
+
+    gLV mode sets four settings and `--derivation` carries no default of its own, so the parsed arguments
+    are NOT what runs: `_rate_flags` tests `a.derivation == "replicate"` and would pass anything if it
+    saw the unresolved `None`. Pulled out of `_derive` so that a test of the help page's own commands
+    checks what a run would check rather than a copy of this logic, which is how a fourth broken example
+    reached the page (#234).
+    """
     if a.glv_mode:
         # the button sets them, and says so, rather than leaving a reader to remember them (#113). The
         # the metric came with the coefficients of #119: L is the log2 ratio of a growth rate. The rate
@@ -219,13 +227,19 @@ def _derive(a):
             a.derivation = "integrated"
         told = ("and the integrated form" if chosen is None else
                 f"and the {chosen} derivation, which you asked for and gLV mode does not override")
-        print("gLV mode: growth rates on, drop-out communities off, the comparison on the growth rate, "
-              f"{told}", file=sys.stderr)
+        if announce:
+            print("gLV mode: growth rates on, drop-out communities off, the comparison on the growth "
+                  f"rate, {told}", file=sys.stderr)
     if a.derivation is None:
         # the page and the command line must agree on what runs when nothing is chosen, so this reads
         # the page's own defaults rather than repeating the value
         from .gui import DEFAULTS
         a.derivation = DEFAULTS["derivation"]
+    return a
+
+
+def _derive(a):
+    _resolve(a)
     problem = _bad_settings(a) or _rate_flags(a)
     if problem:
         print(problem, file=sys.stderr)
@@ -310,17 +324,29 @@ def _derive(a):
     return _emit(a, net, skipped, extra, a.study, result)
 
 
-def _derive_species(a):
-    """What the local page does, from the command line: names to studies to one network (#78)."""
+def _species_flags(a) -> str:
+    """Why a search over several studies cannot be run as given, or "".
+
+    Pulled out of `_derive_species` so that one function holds every pre-flight check of this path and a
+    test of the help page's own commands reaches all of them. The test applied `_rate_flags` alone, so
+    two of the three guards were never consulted and an example printed on the page could exit 2 with
+    the suite green (found reviewing this branch, which added that test).
+    """
     flag = "--all" if a.all_studies else "--species"
     if a.all_studies and a.species:
-        print("--all derives every study; leave out --species", file=sys.stderr)
-        return 2
+        return "--all derives every study; leave out --species"
     if not a.live:
-        print(f"{flag} searches mGrowthDB, so it needs --live", file=sys.stderr)
-        return 2
+        return f"{flag} searches mGrowthDB, so it needs --live"
     if a.deriver:
-        print(f"{flag} uses the default derivation; --deriver applies to one study", file=sys.stderr)
+        return f"{flag} uses the default derivation; --deriver applies to one study"
+    return ""
+
+
+def _derive_species(a):
+    """What the local page does, from the command line: names to studies to one network (#78)."""
+    problem = _species_flags(a)
+    if problem:
+        print(problem, file=sys.stderr)
         return 2
     from .gui import run_query
     from .mgrowthdb import MGrowthDBClient
@@ -645,7 +671,8 @@ def build_parser() -> argparse.ArgumentParser:
                            "--live; the study argument then limits it to those studies)")
     what.add_argument("--no-published", action="store_true",
                       help="with --all, derive live even when the network derived once a day in the grownet "
-                           "repository is less than a day old (it is used only with the default settings)")
+                           "repository is less than a day old, was derived by the same derivation this run would "
+                           "use, and the settings are the defaults; otherwise it derives live")
     what.add_argument("--no-cache", action="store_true",
                       help="read everything from mGrowthDB again, instead of reusing what an earlier run "
                            "read for a study whose uploadedAt has not changed. The kept responses live in "

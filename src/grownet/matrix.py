@@ -391,8 +391,10 @@ OFF_DIAGONAL = {
         "      ln(x_i(T) / x_i(0)) = r_i T + sum_j A[i][j] integral(x_j dt), which is linear in r_i and in",
         "      every A[i][j], so one least-squares fit per organism gives its whole row. r_i and A[i][i]",
         "      come from that organism's monocultures under the same conditions, then the partners' effects",
-        "      from the co-cultures with those held fixed. Every arc carries the coefficient, the condition",
-        "      number and the residual of the fit behind it, so every cell can be traced to its fit.",
+        "      from the co-cultures with those held fixed. Every arc of the NETWORK carries the coefficient,",
+        "      the condition number of its fit, its R2 and the R2 of the same row with every interaction set",
+        "      to zero. Those are on the arcs in the network file, not in this package: a cell here is traced",
+        "      to its fit through the network the package was built from.",
     ],
 }
 
@@ -420,11 +422,23 @@ MODEL_ASSUMPTIONS = (
     "      medium travels with every arc and with every carrying capacity for that reason.",
 )
 
+# One line each, for the `caveats` block that travels into the R object and any other consumer. This
+# was a single unbranched string saying "fitted: -r_i / K_i, with K_i the organism's own plateau", which
+# is the comparison's direction: under the integrated form A[i][i] IS the fitted parameter and K_i is
+# derived from it, which the same module says twelve lines from here is "the opposite direction" (#231).
+DIAGONAL_CAVEAT = {
+    "replicate": "fitted: -r_i / K_i, with K_i the organism's own observed plateau",
+    "integrated": ("fitted directly: A[i][i] is a parameter of the same least squares that gave r_i, and "
+                   "K_i = -r_i / A[i][i] is the plateau that fit implies, which is the opposite "
+                   "direction; carrying_capacity_source says so per organism"),
+}
+
 CAVEAT_COEFFICIENTS = {
     "replicate": ("every cell is a fitted per-capita coefficient: the diagonal is -r_i / K_i "
                   "and an off-diagonal cell is (r_with - r_without) / x_j, so nothing here is "
                   "a convention and nothing needs scaling to match the rest"),
-    "integrated": ("every cell is a fitted per-capita coefficient: the diagonal is -r_i / K_i and an "
+    "integrated": ("every cell is a fitted per-capita coefficient: the diagonal A[i][i] is fitted "
+                   "directly, with K_i = -r_i / A[i][i] derived from it, and an "
                    "off-diagonal cell is fitted from the whole time course, as a parameter of "
                    "ln(x_i(T) / x_i(0)) = r_i T + sum_j A[i][j] integral(x_j dt), so nothing here is a "
                    "convention and nothing needs scaling to match the rest"),
@@ -1249,7 +1263,7 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
             # integrated cell holds, and the R package prints this text rather than one of its own
             "coefficients": CAVEAT_COEFFICIENTS[derivation_of(net)],
             "derivation": derivation_of(net),
-            "diagonal": "fitted: -r_i / K_i, with K_i the organism's own plateau",
+            "diagonal": DIAGONAL_CAVEAT[derivation_of(net)],
             # the assumptions of the form itself, so the R object and any other consumer carry them too
             "model_assumptions": {
                 "constant_coefficients": (

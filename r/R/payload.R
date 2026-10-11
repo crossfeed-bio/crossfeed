@@ -206,7 +206,10 @@ print.grownet_glv <- function(x, ...) {
         if (length(said) == 1L && nzchar(said)) {
             cat(paste0("  ", sub("^every", "Every", said), ".\n"))
         } else {
-            cat("  Every cell is a fitted per-capita coefficient: the diagonal is -r_i / K_i.\n")
+            # the fallback for a payload carrying no caveats: it named the comparison's direction,
+            # which is wrong for an integrated package, so it names neither (#231)
+            cat("  Every cell is a fitted per-capita coefficient; caveats$diagonal says what the\n")
+            cat("  diagonal is under the derivation that made this package.\n")
         }
     }
     cat("  Read before you simulate:\n")

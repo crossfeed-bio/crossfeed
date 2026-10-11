@@ -49,6 +49,27 @@ test_that("the README and the files travel with the numbers", {
                  "steady-state check")
 })
 
+test_that("the rates file carries the columns the README points at, not just the rate", {
+    # It wrote three columns, organism, growth_rate and unit, under a doc promising "the same three files
+    # grownet's download holds", whose growth_rates.csv has sixteen. A reader who kept the output beside
+    # their analysis, which is what the doc says it is for, silently dropped the estimator, the lag, the
+    # carrying capacity and its provenance: the columns README.txt in the same directory names.
+    glv <- example_glv()
+    dir <- file.path(tempdir(), "glv-rates")
+    on.exit(unlink(dir, recursive = TRUE))
+    glv_write(glv, dir)
+    rates <- utils::read.csv(file.path(dir, "growth_rates.csv"), stringsAsFactors = FALSE)
+    for (column in c("organism", "growth_rate", "unit", "replicates", "studies", "method", "lag",
+                     "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves",
+                     "capacity_source", "doubling_time")) {
+        expect_true(column %in% names(rates), info = column)
+    }
+    # and the values are the payload's own, not blanks: the doubling time is derived from the rate beside it
+    first <- rates[1, ]
+    expect_equal(first$growth_rate, glv$growth_rates[[1]])
+    expect_equal(first$doubling_time, log(2) / glv$growth_rates[[1]])
+})
+
 test_that("one file per matrix is written when the organisms were counted in different units", {
     two <- grownet:::as_grownet_glv(two_unit_payload())
     dir <- file.path(tempdir(), "glv-two")
