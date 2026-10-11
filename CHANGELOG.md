@@ -37,6 +37,35 @@ content.
   as they always have.
 
 ### Fixed
+- **The source distribution now carries the two registers the test suite reads**, `docs/METHOD_NOTES.md`
+  and `docs/LIMITATIONS.md`, and a test keeps `MANIFEST.in` honest about that. A test that reads a shipped
+  document makes it a dependency of the suite, and the sdist job is the only one that notices when it is
+  not carried, because it unpacks the archive where the repository layout is not there to fall back on:
+  the surface guard added for #202 went red there while `make check` was green. The named include is
+  deliberate rather than forgetful. Measured first: `recursive-include docs *.md` also ships
+  `docs/agents/NOTES.md`, 95,162 bytes of agent working notes, and `docs/DATA_GOVERNANCE.md`, so it is not
+  a tighter version of the named line but a decision to publish two more files; `graft docs` adds those
+  plus both SVGs; and a recursive rule with `prune docs/agents` works only when the prune comes after it.
+  The new test reads the paths out of the suite rather than listing them, so the next surface test is
+  covered the moment it is written, and it records that `README.md` ships because setuptools carries the
+  declared readme, which is a default rather than a promise.
+  Corrected from reviewing that change: the extraction matched only a whole relative path inside one
+  literal, and the suite's dominant idiom is a **component join**, so three files it already reads were
+  invisible, among them `schema/format_fields.json`, which `MANIFEST.in`'s own comment names as the
+  2026-10-08 instance of this exact failure. Both shapes are matched now, 7 paths against 3. The test
+  also had no positive control, which is why a promise it did not keep read as kept; it has one, written
+  to a temp file. That control is built from variables with one literal per line, because this file is
+  one of the files the extraction scans and a tuple of string literals reads as a path join: it caught
+  its own control twice while being written, which is the guard working.
+
+  And a third correction, from a pass that attacked every new test with the regression it claims to
+  catch: both shapes needed the directory name as a literal **next to** the filename, and the suite also
+  writes `DOCS = Path(...) / "docs"` at module level and then `DOCS / "X.md"` inside a test. A surface
+  test written that way, which is the most ordinary Python idiom and which `tests/test_legend.py` already
+  half-uses, passed unnoticed while reading a doc the manifest does not carry. Module-level directory
+  constants are resolved through the AST now, verified by writing exactly that test and watching the
+  guard fail on it. The docstring also names the shapes it still cannot see, rather than promising every
+  surface test is covered.
 - **Three of the gate's checks read nine file extensions, so the viewer and the whole R package were
   never scanned** (#227, measured by Craig's agent on #239). Of 138 tracked files the list matched 108:
   the 30 it skipped were 9 `.Rd`, 8 `.R`, the extensionless `LICENSE`, `NOTICE`, `Makefile`,
