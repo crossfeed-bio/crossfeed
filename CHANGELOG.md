@@ -37,6 +37,23 @@ content.
   as they always have.
 
 ### Fixed
+- **Three `meta` blocks were present and wrong under the integrated form** (#215, and the mechanism of
+  #194). Present and wrong is worse than missing, because a reader trusts them.
+  - `meta.no_growth` was built from the settings for every derivation, so a form with no such rule
+    published `{"applied": true, "obligate": 0, "abolished": 0}`. A reader of the published All artifact
+    concluded the rule had run over every study and found **no organism in mGrowthDB that grows only in
+    the presence of a partner**. The comparison finds 15 on the same corpus the same day. The block now
+    comes from the derivation, as `statistics` and `provisional` already did, and a derivation without
+    the rule says so and carries no count, because a 0 there reads as a measurement. It also says where a
+    censored arc under that form does come from, since #201 means one can exist.
+  - `meta.growth_rates` appeared while `settings.report_rates` was recorded false, and the README stated
+    the contract the other way round. Under the integrated form the rates are a product of the same fit
+    that gives the arcs rather than a stage to ask for, so the README now says that.
+  - settings the derivation does not read were recorded as if they had been used: a reader saw "Include
+    drop-out communities: on" where that form derives none, and `--metric auc`, `max` and `growth_rate`
+    gave byte-identical networks while the recorded value changed. The derivation names them,
+    `meta.settings_not_used` carries them so a reader of the FILE sees them too, and the report and the
+    page mark them rather than printing them as used.
 - **A total suppression was dropped as "no interaction" instead of being censored** (#201, Karoline's
   decision of 2026-10-11: "I agree on censored"). Under the integrated form an arc's strength is
   `log2(1 + A_ij x_j / r_i)`, which is undefined once the fitted effect reaches -1, so the strongest
