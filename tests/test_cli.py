@@ -2,6 +2,8 @@
 import json
 import os
 
+import pytest
+
 from grownet.__main__ import main
 
 
@@ -50,7 +52,7 @@ def test_a_file_that_cannot_be_read_or_written_is_one_line_not_a_traceback(tmp_p
 
 def test_the_command_line_refuses_the_numbers_the_page_clamps():
     """The page coerces every numeric setting (`gui.parse_settings`) and the command line took them as
-    typed, so the two disagreed about what is legal and a nonsense value travelled into `meta.settings`
+    typed, so the two disagreed about what is legal and a nonsense value reached `meta.settings`
     as the provenance of the run: `--rate-window -3` gave 0 edges and recorded -3, `--absence-threshold
     -1` gave 18 edges reported as "|log2 mean| < -1 * sd", `--no-growth-factor -2` gave 10 edges over 3
     nodes, each exiting 0 (#221 item 4).
@@ -72,14 +74,27 @@ def test_the_command_line_refuses_the_numbers_the_page_clamps():
     # the no-growth rule off while `meta.no_growth` records it as the level the test ran at
     assert "at most 1" in why(["--no-growth-alpha", "5"])
 
-    # EVERY flag in the negative-value loop, named from the function's own tuple rather than listed
-    # here: the first version asserted three of the five, so dropping two from the loop left it green
-    # and the page and the command line disagreed again about what is legal (found reviewing this
-    # change)
+    # EVERY flag in the negative-value loop, listed here rather than read from the function's own
+    # tuple, which is the point: the first version asserted three of the five, so dropping two from the
+    # loop left it green and the page and the command line disagreed again about what is legal (found
+    # reviewing this change). A loop over the function's tuple would shrink with it and notice nothing.
     negatives = ["--spike-factor", "--capacity-max-fall", "--absence-threshold",
                  "--no-growth-alpha", "--no-growth-factor"]
     for flag in negatives:
         assert "cannot be negative" in why([flag, "-1"]), f"{flag} is not refused when negative"
+
+    # the same five again, non-finite. `nan < 0` and `inf < 0` are both False, so the bound above does
+    # not catch either, and `float()` accepts all three of these spellings. Unrefused, the value reaches
+    # `meta.settings` and `json.dumps` writes `NaN` or `Infinity`, which RFC 8259 section 6 forbids: R
+    # refuses the whole network while grownet's own `validate` accepts it (#258)
+    for flag in negatives:
+        for text in ("nan", "inf", "1e999"):
+            assert "must be a finite number" in why([flag, text]), f"{flag} {text} is not refused"
+    # --max-adjusted-p needs no entry above: its own argparse type refuses anything outside
+    # `0 < value <= 1`, and `nan` and `inf` both fail that, so the parser stops before _bad_settings runs
+    for text in ("nan", "inf"):
+        with pytest.raises(SystemExit):
+            why(["--max-adjusted-p", text])
 
     # the same value with merging on is legitimate and is not refused
     assert why(["--min-studies", "2", "--merge-arcs"]) == ""
@@ -106,7 +121,7 @@ def test_a_setting_that_can_empty_the_network_is_named_when_it_does():
 
     # The membership is asserted EXPLICITLY, because looping over `_EMPTYING` cannot notice `_EMPTYING`
     # shrinking: deleting an entry just makes the loop check one thing fewer, which is what the first
-    # version of this fix got wrong. The loop below then checks the behaviour of whatever is there.
+    # version of this fix got wrong. The loop below then checks the behavior of whatever is there.
     assert {key for key, _, _ in _EMPTYING} == {
         "min_studies", "spike_factor", "rate_window", "absence_threshold", "max_adjusted_p",
         "no_growth_factor"}, "a control was added to or removed from _EMPTYING without a decision"

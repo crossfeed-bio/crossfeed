@@ -91,6 +91,11 @@ content.
   traveled into `meta.settings` as the provenance of the run: one run reported its own threshold as
   "|log2 mean| < -1 * sd". They are refused with the bound now, which is the half of "refuse or announce"
   a command can do and a form cannot.
+  **A non-finite one is refused with them** (#258): `nan` and `inf` are numbers to `float()` and pass a
+  `value < 0` bound, because both comparisons are False, and `json.dumps` then writes the bare `NaN` and
+  `Infinity` into `meta.settings`. RFC 8259 section 6 forbids both, so R refuses the whole network while
+  grownet's own `validate` accepts it, Python's json module reading the specials by default.
+  `--max-adjusted-p` already refused them through its own type, which admits only `0 < value <= 1`.
 - **A mistyped `--exclude-studies` id was dropped in silence and recorded as applied** (#221).
   `SMGDB0000002`, one digit short, left the study in the search while the report filed with a paper said
   it was excluded. An id that matches no study searched is now reported, like an unusable entry in the

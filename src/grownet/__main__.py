@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 from collections import Counter
@@ -93,7 +94,7 @@ def _bad_settings(a) -> str:
     """Why a numeric setting cannot be used as given, or "": the same bounds the page applies.
 
     The page coerces every one of these (`gui.parse_settings`) and the command line took them as typed,
-    so the two routes disagreed about what a legal setting is and a nonsense one travelled into
+    so the two routes disagreed about what a legal setting is and a nonsense one reached
     `meta.settings` as the provenance of the run: `--rate-window -3` gave 0 edges and recorded -3,
     `--absence-threshold -1` gave 18 edges reported as "|log2 mean| < -1 * sd", `--no-growth-factor -2`
     gave 10 edges over 3 nodes. Each exited 0 (#221 item 4). Refusing is the right half of "refuse or
@@ -106,6 +107,16 @@ def _bad_settings(a) -> str:
                         ("--absence-threshold", a.absence_threshold),
                         ("--no-growth-alpha", a.no_growth_alpha),
                         ("--no-growth-factor", a.no_growth_factor)):
+        # the finite check comes first, because `nan < 0` is False and `inf < 0` is False, so neither
+        # is caught by the bound below. `float()` takes "nan", "inf" and "1e999", and the live path
+        # copies the parsed value into `meta.settings`, where `json.dumps` writes the bare tokens `NaN`
+        # and `Infinity`. RFC 8259 section 6 forbids both, so R refuses the whole network while
+        # grownet's own `validate` accepts it, because Python's json module reads the specials by
+        # default (#258, the command line's half of #195). `--max-adjusted-p` needs none of this:
+        # `_probability` already refuses anything outside `0 < value <= 1`, which both fail.
+        if value is not None and not math.isfinite(value):
+            return (f"{flag} must be a finite number, and was {value}; no threshold can be compared "
+                    "against it, and it reaches meta.settings as a token no strict JSON parser reads")
         if value is not None and value < 0:
             return f"{flag} cannot be negative, and was {value}"
     if a.min_studies is not None and a.min_studies < 1:
