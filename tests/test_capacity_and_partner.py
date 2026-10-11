@@ -451,3 +451,76 @@ def test_the_package_states_what_the_model_assumes_in_the_readme_and_as_data():
     assert any("PAIRWISE AND ADD UP" in line for line in matrix.MODEL_ASSUMPTIONS)
     text = " ".join(matrix.MODEL_ASSUMPTIONS)
     assert "higher-order interaction" in text and "fit_window_share" in text
+
+
+def test_the_spike_limit_reaches_the_capacity_and_the_partner_abundance():
+    """Both numbers took the raw co-culture replicates, while the monoculture plateau path refuses a
+    spiked curve in its own words (#255 item 3).
+
+    They are load-bearing: `target_capacity` fits the self-limitation of an organism with no monoculture
+    capacity, and `partner_abundance` is the `x_j` a gLV coefficient divides by. A spike is by
+    construction a huge interior maximum, which is what a plateau reads.
+
+    **What each one actually changes, measured rather than assumed.** For `partner_abundances` the guard
+    changes the NUMBER: a spiked replicate used to contribute one. For `target_capacity` it usually
+    changes the REASON rather than the number, because a spike that becomes the curve's maximum leaves it
+    ending far below that peak and the decline limit already refused it, reporting "the curve ends at
+    1/610 of its peak" where the cause is a spike. Naming the cause is the point: a guard claimed and not
+    applied, and a misattributed refusal.
+    """
+    from grownet.derive import partner_abundances, target_capacity
+    from grownet.growth import GrowthCurve, Replicate
+
+    def curve(species, values):
+        return GrowthCurve(species=species, times=list(range(len(values))), values=values,
+                           time_unit="h", abundance_unit="CFUs/mL")
+
+    plain = [1e6, 2e6, 4e6, 8e6, 8.1e6, 8.2e6, 8.2e6]
+    spiked = [1e6, 2e6, 4e6, 8e6, 5.0e9, 8.2e6, 8.2e6]
+    clean_rep = [Replicate(curves=(curve("A", plain), curve("B", plain)), name="r1")]
+    spiked_rep = [Replicate(curves=(curve("A", spiked), curve("B", spiked)), name="r2")]
+
+    # the clean replicate gives both numbers
+    assert target_capacity(clean_rep, "A", spike_factor=100)["value"] == 8.2e6
+    assert partner_abundances(clean_rep, "A", "B", spike_factor=100)["n"] == 1
+
+    # the spiked one gives neither, and says why in the promised words
+    cap = target_capacity(spiked_rep, "A", spike_factor=100)
+    assert cap["value"] is None and cap["n"] == 0
+    assert "implausible spike" in cap["skipped"][0][1]
+    par = partner_abundances(spiked_rep, "A", "B", spike_factor=100)
+    assert par["value"] is None and par["n"] == 0, par
+    assert "implausible spike" in par["skipped"][0][1]
+
+    # and a limit nothing reaches leaves both as they were, so the guard is the setting and not a new rule
+    assert target_capacity(spiked_rep, "A", spike_factor=1e9)["skipped"][0][1].startswith("the curve ends")
+    assert partner_abundances(spiked_rep, "A", "B", spike_factor=1e9)["n"] == 1
+
+
+def test_the_measured_plateau_names_every_curve_it_refuses():
+    """`integrated._measured_plateau` refused a curve with a bare `continue` and recorded no reason at
+    all, while the capacity help promises every such curve is named with the others that gave none
+    (#255 item 3, Craig's agent's detail inside it)."""
+    from grownet.growth import GrowthCurve, Replicate
+    from grownet.integrated import _measured_plateau
+
+    def rep(name, values, points=None):
+        return Replicate(curves=(GrowthCurve(species="A", times=points or list(range(len(values))),
+                                             values=values, time_unit="h",
+                                             abundance_unit="CFUs/mL"),), name=name)
+
+    reps = [rep("ok", [1e6, 2e6, 4e6, 8e6, 8.1e6, 8.2e6, 8.2e6]),
+            rep("spiked", [1e6, 2e6, 4e6, 8e6, 5.0e9, 8.2e6, 8.2e6]),
+            rep("rising", [1e6, 2e6, 4e6, 8e6, 1.6e7, 3.2e7, 6.4e7])]
+    skipped = []
+    got = _measured_plateau(reps, "A", spike_factor=100, skipped=skipped)
+    assert got is not None and got[2] == 1, got        # only the clean curve counts
+    named = {label.split("replicate ")[-1]: reason for label, reason in skipped}
+    assert set(named) == {"spiked", "rising"}, named
+    assert "implausible spike" in named["spiked"]
+    assert "stationary" in named["rising"]
+    # The one-point branch is not tested because it cannot be reached: `GrowthCurve` refuses a curve with
+    # fewer than two time points at construction ("a growth curve needs at least two time points"), so
+    # that arm is defensive. Written down rather than left as an untested line a reader wonders about.
+    # and with no list to report into it still works, since the caller may not pass one
+    assert _measured_plateau(reps, "A", spike_factor=100) is not None

@@ -435,7 +435,8 @@ def partner_abundance(replicate, target: str, partner: str, rate_method: str = N
     return {"value": value, "unit": partner_curve.abundance_unit, "window": (start, end), "reason": ""}
 
 
-def target_capacity(replicates, target: str, max_fall: float = None) -> dict:
+def target_capacity(replicates, target: str, max_fall: float = None,
+                    spike_factor: float = None) -> dict:
     """{"value", "unit", "n", "skipped"}: the target's own plateau in these co-culture replicates.
 
     An organism that does not grow alone has no monoculture carrying capacity, so its self-limitation
@@ -452,13 +453,25 @@ def target_capacity(replicates, target: str, max_fall: float = None) -> dict:
     behind the value past it: SMGDB00000007's `bhbt` B. thetaiotaomicron fell by 67 to 159 times on all
     six (#155 item 10).
     """
+    from .growth import spike
+    from .interaction import SPIKE_FACTOR, _spike_reason
     limit = CAPACITY_MAX_FALL if max_fall is None else max_fall
+    factor = SPIKE_FACTOR if spike_factor is None else spike_factor
     values, unit, skipped = [], "", []
     for i, replicate in enumerate(replicates):
         curve = replicate.curve(target)
         label = f"{target} in co-culture: replicate {replicate.name or i}"
         if curve is None:
             skipped.append((label, "no curve for this organism in this replicate"))
+            continue
+        # The spike limit applies here too, and did not: a spike is by construction a huge interior
+        # maximum, which is what a plateau reads. The monoculture plateau path refuses the same curve in
+        # its own words, and this one took it unannotated, so at --spike-factor 5 on SMGDB00000014 every
+        # A. tumefaciens curve in At_Ct_ROS was declared implausible and its own arc refused while this
+        # number still came out of the same three curves (#255 item 3).
+        found = spike(curve, factor)
+        if found:
+            skipped.append((label, _spike_reason(replicate, target, found, factor)))
             continue
         settled = reached_stationary(curve, curve.times[-1])
         if settled is not True:
@@ -486,14 +499,25 @@ def target_capacity(replicates, target: str, max_fall: float = None) -> dict:
 
 
 def partner_abundances(replicates, target: str, partner: str, rate_method: str = None,
-                       window: int = None) -> dict:
+                       window: int = None, spike_factor: float = None) -> dict:
     """The same over a replicate set: the median of the replicates that have one, with the rest reported.
 
     {"value", "unit", "n", "skipped"}: `value` is None when no replicate gave one, and `skipped` holds a
     (label, reason) for each that did not, so the report says why rather than leaving a blank.
     """
+    from .growth import spike
+    from .interaction import SPIKE_FACTOR, _spike_reason
+    factor = SPIKE_FACTOR if spike_factor is None else spike_factor
     values, unit, skipped = [], "", []
     for i, replicate in enumerate(replicates):
+        # the same guard: `partner_abundance` reads the curve's own level, which a spike raises, and
+        # this number is the x_j a gLV coefficient divides by (#255 item 3)
+        curve = replicate.curve(partner)
+        found = spike(curve, factor) if curve is not None else None
+        if found:
+            skipped.append((f"{partner} beside {target}: replicate {replicate.name or i}",
+                            _spike_reason(replicate, partner, found, factor)))
+            continue
         got = partner_abundance(replicate, target, partner, rate_method, window)
         if got["value"] is None:
             skipped.append((f"{partner} beside {target}: replicate {replicate.name or i}", got["reason"]))
@@ -1137,12 +1161,13 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
             (cautions if method in METRICS_FOR_CONTINUOUS_CULTURE else quality).append(
                 CONTINUOUS_CULTURE if method in METRICS_FOR_CONTINUOUS_CULTURE else NON_BATCH)
         kind, window = rates.fit_parts(method)
-        partner = partner_abundances(co_reps, target, source, kind, window)
+        # `_pairwise` already has the setting; both numbers were taking the raw co-culture replicates
+        partner = partner_abundances(co_reps, target, source, kind, window, spike_factor)
         records.append(_record(source, target, c, method, quality, cautions,
                                _spike_notes(result["flagged"], target), cond, "biculture", (a, b),
                                [_exp_id(exp), *origin[target]], study_id, study_meta, identities, mode,
                                media_identity(exp)["label"], partner,
-                               target_capacity(co_reps, target, capacity_max_fall)))
+                               target_capacity(co_reps, target, capacity_max_fall, spike_factor)))
 
 
 def run_group(exp: dict) -> str:

@@ -439,7 +439,8 @@ def _stage_one_draws(target: str, rates: list, selfs: list, usable: list, pooled
             "method": f"bootstrap of {n} monoculture replicate(s), {STAGE_ONE_DRAWS} resamples"}
 
 
-def _measured_plateau(replicates: list, target: str, max_fall: float = None):
+def _measured_plateau(replicates: list, target: str, max_fall: float = None,
+                      spike_factor: float = None, skipped: list = None):
     """(the plateau these monocultures of `target` certify, its unit, how many curves, how far they had
     fallen from their peak), or None.
 
@@ -450,21 +451,48 @@ def _measured_plateau(replicates: list, target: str, max_fall: float = None):
     condition as the fit it goes into.
     """
     from .derive import CAPACITY_MAX_FALL
-    from .growth import curve_features, fall_from_peak, reached_stationary
+    from .growth import curve_features, fall_from_peak, reached_stationary, spike
+    from .interaction import SPIKE_FACTOR, _spike_reason
     limit = CAPACITY_MAX_FALL if max_fall is None else max_fall
+    factor = SPIKE_FACTOR if spike_factor is None else spike_factor
     values, falls, unit = [], [], ""
-    for replicate in replicates:
+
+    def refuse(replicate, i, why):
+        """Every curve this refuses, named. It refused each with a bare `continue` and recorded no reason
+        at all, while the capacity help promises such a curve is "named with the others that gave none"
+        (#255 item 3)."""
+        if skipped is not None:
+            skipped.append((f"{target} monoculture plateau: replicate {replicate.name or i}", why))
+
+    for i, replicate in enumerate(replicates):
         curve = replicate.curve(target)
+        # the second arm is defensive: `GrowthCurve` refuses a curve with fewer than two time points at
+        # construction, so only the missing-curve case is reachable through it
         if curve is None or len(curve.times) < 2:
+            refuse(replicate, i, "no curve for this organism in this replicate, or fewer than two points, "
+                                 "so no plateau can be read from it")
+            continue
+        # the same limit the rest of the project applies: a spike is a huge interior maximum, and the
+        # plateau IS the maximum (#255 item 3)
+        found = spike(curve, factor)
+        if found:
+            refuse(replicate, i, _spike_reason(replicate, target, found, factor))
             continue
         if reached_stationary(curve, curve.times[-1]) is not True:
+            refuse(replicate, i, "the curve had not reached stationary phase, or is too sparse to judge")
             continue
         fall = fall_from_peak(curve, curve.times[-1])
         if fall is None or (limit and fall > limit):
+            refuse(replicate, i, "the curve ends at zero or below, so what it held cannot be read"
+                   if fall is None else
+                   f"the curve ends at 1/{fall:.3g} of its peak, further than the {limit:g} times "
+                   "allowed: the peak is not a level this culture held")
             continue
         if not unit:
             unit = curve.abundance_unit
         if curve.abundance_unit != unit:
+            refuse(replicate, i, f"the plateau is in {curve.abundance_unit} and the others in {unit}; "
+                                 "abundances are never converted")
             continue
         values.append(curve_features(curve)["max"])
         falls.append(fall)
@@ -589,7 +617,7 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
     self_limitation_source = "fitted from the monoculture time courses"
     capacity_fall = None        # only a measured plateau has a curve whose fall can be measured
     if not (own < 0 and rate > 0):
-        plateau = _measured_plateau(usable, target)
+        plateau = _measured_plateau(usable, target, skipped=skipped)
         if plateau is not None and rate > 0 and plateau[0] > 0:
             own = -rate / plateau[0]
             self_limitation_source = (f"-r/K at the measured plateau {plateau[0]:.4g} {plateau[1]} of "
@@ -917,6 +945,53 @@ def fill_capacities(fitted: dict, measured: dict) -> tuple:
     return fitted, []
 
 
+def _unspiked_for(reps, members: list, factor: float, exp: dict, exp_id) -> tuple:
+    """(usable replicates, skipped): the replicates no member of this experiment spikes in.
+
+    Karoline, 2026-10-11, on #255 item 1, choosing this over marking the setting not applicable: "I'd go
+    for your first option: apply it in IntegratedDeriver.derive after replicates_for_experiment, dropping
+    each spiked curve per species and reporting it with interaction._spike_reason so the wording is the
+    one the help promises."
+
+    `replicates_for_experiment` attaches a NOTE to the replicate and never drops the curve. The exclusion
+    lives in `interaction._unspiked`, which this path never called, and `Replicate.notes` is never read
+    here, so `--spike-factor 1.5` removed 33 curves and named every one under the comparison and removed
+    nothing and named nothing under the form gLV mode selects, while `meta.settings.spike_factor`
+    recorded 1.5 as the provenance of that run. `help.py` states the limit as a project standard with no
+    derivation qualifier.
+
+    The reason is `interaction._spike_reason`, so the wording is the promised one. Its tail, "left out for
+    this species only", is exact for a monoculture and not for a row: this form fits a target against
+    every partner in the same design, so a replicate missing one member cannot contribute the row at all.
+    Where that is the case the reason says so rather than leaving a reader with the comparison's meaning.
+    """
+    from .growth import spike as spiked
+    from .interaction import _spike_reason
+
+    usable, skipped = [], []
+    for i, rep in enumerate(reps):
+        hit = None
+        for species in members:
+            # a replicate need not carry a curve for every member: a drop-out community trace is exactly
+            # that, and `spike` reads `curve.values`, so this crashed on the corpus the first time it ran
+            # live. A missing curve is not a spike, and what to do about it is decided downstream.
+            curve = rep.curve(species)
+            found = spiked(curve, factor) if curve is not None else None
+            if found:
+                hit = (species, found)
+                break
+        if hit is None:
+            usable.append(rep)
+            continue
+        species, found = hit
+        reason = _spike_reason(rep, species, found, factor)
+        if len(members) > 1:
+            reason += ("; this form fits the row against every member together, so this replicate is "
+                       "left out of this experiment rather than of one species")
+        skipped.append((f"{species}: {exp.get('name') or exp_id(exp)} replicate {rep.name or i}", reason))
+    return usable, skipped
+
+
 class IntegratedDeriver:
     """Derive a network by fitting each organism's row from the whole time course (#127).
 
@@ -1035,6 +1110,8 @@ class IntegratedDeriver:
                 continue
             reps, skips = replicates_for_experiment(self.client, exp, spike)
             skipped += skips
+            reps, spike_skips = _unspiked_for(reps, members, spike, exp, _exp_id)
+            skipped += spike_skips
             if not reps:
                 continue
             if len(members) == 1:
