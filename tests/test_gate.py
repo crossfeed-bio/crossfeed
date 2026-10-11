@@ -189,3 +189,42 @@ def test_the_secrets_pattern_does_not_require_the_value_to_be_quoted(monkeypatch
     latin1 = {"notes.txt": "caf\xe9 " + line("token", "=", value)}
     monkeypatch.setattr(gate, "_read", latin1.get)
     assert gate.check_secrets(list(latin1)), "a non-UTF-8 text file is being skipped"
+
+
+def test_a_definition_written_twice_is_caught_in_python_and_in_json(monkeypatch):
+    """The failure a merge leaves that nothing else catches.
+
+    Resolving thirteen branches on 2026-10-11, a keep-both-sides resolution gave one dict two
+    `"outcome"` keys. Python silently keeps the last, so one branch's wording was lost, and the file
+    parsed, every test passed and the gate was clean. The same shape took two test FUNCTIONS out of a
+    file in the same session, and a test that no longer exists cannot fail.
+
+    Craig's agent extended it to JSON, where a duplicate key is also last-wins in every parser either
+    side uses and where `schema/` and the fixtures live.
+
+    The four that must be caught and the four that must NOT are both asserted, because the false
+    positives are the ones that would get this check turned off: the same key in two DIFFERENT literals
+    is ordinary, and so is the same method name in two classes.
+    """
+    caught = {"dup_dict.py": 'X = {"a": 1, "b": 2, "a": 3}\n',
+              "dup_def.py": "def f():\n    pass\n\n\ndef f():\n    pass\n",
+              "dup_class.py": "class C:\n    pass\n\n\nclass C:\n    pass\n",
+              "dup_json.json": '{"a": 1, "a": 2}\n'}
+    clean = {"clean.py": 'X = {"a": 1, "b": 2}\n\n\ndef f():\n    pass\n',
+             "two_literals.py": 'X = {"a": {"k": 1}, "b": {"k": 2}}\n',
+             "two_classes.py": "class A:\n    def go(self):\n        pass\n\n\nclass B:\n"
+                               "    def go(self):\n        pass\n",
+             "clean.json": '{"a": 1, "b": 2}\n',
+             # a file that does not parse is ruff's business, not this check's
+             "broken.py": "def (:\n",
+             "broken.json": "{not json\n"}
+
+    monkeypatch.setattr(gate, "_text_of", caught.get)
+    found = gate.check_shadowed_definitions(list(caught))
+    assert len(found) == len(caught), found
+    for name in caught:
+        assert any(name in f for f in found), f"{name} was not caught"
+    assert any("keeps only the last" in f for f in found)
+
+    monkeypatch.setattr(gate, "_text_of", clean.get)
+    assert gate.check_shadowed_definitions(list(clean)) == []
