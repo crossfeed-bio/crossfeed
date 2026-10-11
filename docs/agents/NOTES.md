@@ -15,6 +15,22 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-11 (#255 item 2): **a derived quantity is collected where it is measured, not rebuilt from what
+  survived.** `_widen_by_rate_selection` rebuilt its rate table from `pending`, the arcs that became
+  records, keyed by `id(got)`. Both are wrong for the quantity: the spread is how much stage 1 moves when
+  the matched condition moves, so the unit is the matched monoculture SET, and a fit whose arcs were
+  dropped still measured that organism's rate. Two co-cultures matched to one set counted twice, and a
+  dropped fit vanished, giving a spread 4.96 times too small and an arc that said "one matched
+  monoculture set" for an organism matched to five.
+  **The rule to carry forward:** if a number describes what the RUN did, collect it at the point the run
+  does it. Rebuilding it later from the output can only see what the output kept, which is a different
+  population, and the difference is invisible because both are plausible numbers.
+  **How the line was drawn, since the gLV statistics are fenced** (Karoline: "they were vetted a lot and
+  we're not going to improve them"): Craig's agent's test, which Karoline accepted on 2026-10-11, is
+  whether the DEFINITION of the quantity moves or only which data reaches it. Only the data moved here,
+  so it is a defect and not a method change. Arcs do change, so it is not a silent patch on a tagged
+  release: 4 of 16 p-values moved, one crossed 0.05, two arcs fell below the absence threshold.
+
 - 2026-10-11 (#215, #194): **a claim about a run belongs to the DERIVATION, not to the settings.**
   `meta.statistics` and `meta.provisional` already came from the deriver, and `meta.no_growth` did not:
   it was built from the settings for every derivation, so a form with no no-growth rule published
