@@ -1205,6 +1205,13 @@ class IntegratedDeriver:
                         # comparison, which is that the statement is the fit's and not a measurement of
                         # observed curves; `strength_bound` stays None because the fit bounds the effect
                         # below by nothing finite.
+                        # **The format id does not move for this**, which was asked rather than assumed,
+                        # because reusing `abolished` gives it a second route and AGENTS.md says a change
+                        # of a field's MEANING moves the id and no check can see it. Karoline,
+                        # 2026-10-11: "yes, abolished is fine, don't move the id". The field still
+                        # answers the same question, which side failed to grow, and `method` and
+                        # `bound_rule` say which route established it, so no reader is told a fitted
+                        # statement is a measurement. AGENTS.md records where that line falls.
                         "outcome": "abolished" if strength is None else "quantified",
                         "strength_bound": None,
                         "bound_rule": (SUPPRESSED_RULE if strength is None else ""),
