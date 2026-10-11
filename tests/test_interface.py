@@ -21,6 +21,7 @@ test.
 """
 import http.server
 import json
+import os
 import re
 import threading
 import time
@@ -518,7 +519,10 @@ def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
         return page
 
     pressed = press({"species": A, "glv_mode": "1", "include_dropout": "1", "only_entered": "1"})
-    settings = pressed[pressed.index("<details>"):]
+    # "<details" and not "<details>": the settings block renders `<details open>` when a setting is
+    # not at its default, so that a reader is told (#250). This is a LOCATOR for the block, not the
+    # requirement the test pins.
+    settings = pressed[pressed.index("<details"):]
     assert 'name="report_rates" value="1" checked' in settings
     assert 'name="include_dropout" value="1">' in settings               # off
     assert "gLV mode on: growth rates on, drop-out communities off" in pressed
@@ -543,7 +547,10 @@ def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
         if DEFAULTS[key] != value and value is not False:
             posted[key] = "1" if value is True else str(value)
     again = press(posted)
-    back = again[again.index("<details>"):]
+    # "<details" and not "<details>": the settings block renders `<details open>` when a setting is
+    # not at its default, so that a reader is told (#250). This is a LOCATOR for the block, not the
+    # requirement the test pins.
+    back = again[again.index("<details"):]
     assert 'name="report_rates" value="1">' in back                      # off, its default
     assert 'name="include_dropout" value="1" checked' in back            # on, its default
     assert "gLV mode off" in again and 'class="switch on"' not in again
@@ -821,7 +828,10 @@ def test_drop_out_communities_stay_on_by_default_in_advanced_settings(server):
     in sight, rather than behind the button."""
     base, token = server
     _, page, _ = _open(f"{base}/?token={token}")
-    settings = page[page.index("<details>"):]
+    # "<details" and not "<details>": the settings block renders `<details open>` when a setting is
+    # not at its default, so that a reader is told (#250). This is a LOCATOR for the block, not the
+    # requirement the test pins.
+    settings = page[page.index("<details"):]
     assert 'name="include_dropout" value="1" checked' in settings
     assert "gLV mode unticks it" in settings                     # the setting says which button touches it
 
@@ -968,3 +978,115 @@ def test_glv_mode_does_not_override_a_derivation_the_reader_asked_for(capsys):
 
     got, _ = resolved(base + ["--glv-mode", "--derivation", "integrated"])
     assert got == "integrated"
+
+
+def test_every_derive_path_records_the_same_settings_and_follows_the_steady_check_flag():
+    """`report.py` promises "every setting with its value", and there were two hand-written settings
+    dicts that disagreed: `derive <STUDY> --live` recorded 20 keys and the species path 23. Worse,
+    `steady_check` was wrong on BOTH, the species path taking it from `DEFAULTS` rather than the flag, so
+    a run that scored a chemostat recorded that it had not, and two reports of one study could differ in
+    their arcs and be identical in their settings block (#233).
+
+    One builder now, and this reads it through the real parser rather than from a copy of the keys.
+    """
+    from grownet.__main__ import _settings_of, build_parser
+    from grownet.gui import DEFAULTS
+
+    parser = build_parser()
+
+    def settings(argv):
+        return _settings_of(parser.parse_args(argv))
+
+    plain = settings(["derive", "SMGDB00000007", "--live", "--out", os.devnull])
+    species = settings(["derive", "SMGDB00000007", "--live", "--species", "A", "B",
+                        "--out", os.devnull])
+    assert set(plain) == set(species), "the two derive paths record different settings"
+    assert set(plain) >= set(DEFAULTS), "a setting the page has and the command line does not record"
+
+    # the four that were missing or wrong, and none is n/a on either path
+    for key in ("include_absent", "steady_check", "exclude_studies", "only_entered"):
+        assert key in plain and key in species
+
+    # Every flag, asserted in BOTH directions. The first version of this test compared KEY SETS and then
+    # checked the values of two keys, so its name claimed every path records the same settings while its
+    # body allowed a path to record them wrongly: `exclude_studies` and `only_entered` came from DEFAULTS
+    # and the report stated the opposite of what was asked, and this test passed (found reviewing #242,
+    # the same defect this file's other tests were written to catch elsewhere).
+    base = ["derive", "SMGDB00000007", "--live", "--out", os.devnull]
+    off = settings(base)
+    cases = [
+        (["--steady-check", "--glv-mode"], "steady_check", True),
+        (["--include-absent"], "include_absent", True),
+        (["--exclude-studies", "SMGDB00000002"], "exclude_studies", "SMGDB00000002"),
+        (["--all-partners"], "only_entered", False),
+        (["--merge-arcs"], "merge_arcs", True),
+        (["--merge-genera"], "merge_genera", True),
+        (["--include-low-quality"], "include_low_quality", True),
+        (["--include-non-batch"], "include_non_batch", True),
+        (["--no-dropout"], "include_dropout", False),
+        (["--report-rates"], "report_rates", True),
+        (["--min-studies", "3"], "min_studies", 3),
+        (["--rate-window", "7"], "rate_window", 7),
+        (["--absence-threshold", "2.5"], "absence_threshold", 2.5),
+        (["--spike-factor", "50"], "spike_factor", 50.0),
+        (["--metric", "max"], "metric", "max"),
+        (["--derivation", "integrated"], "derivation", "integrated"),
+    ]
+    for argv, key, wanted in cases:
+        assert settings(base + argv)[key] == wanted, f"{argv} did not set {key}"
+        assert off[key] != wanted, f"{key} is already {wanted!r} without {argv}, so this proves nothing"
+    base = ["derive", "SMGDB00000007", "--live", "--out", os.devnull]
+    plain = settings(base)
+    species = settings([*base, "--species", "A", "B"])
+
+    # `set(plain) == set(species)` and `set(plain) >= set(DEFAULTS)` were the two assertions the "20 keys
+    # against 23" headline rested on, and NEITHER CAN FAIL: `_settings_of` returns `{**DEFAULTS, ...}`, so
+    # the second is true of its own construction and the first compares one function with itself. They
+    # are replaced by the thing that can fail, which is whether each key FOLLOWS ITS FLAG (found reviewing
+    # #242, where three keys fell through to DEFAULTS and the test stayed green).
+    assert plain == species, "the two derive paths differ once the species list is set aside"
+
+    # Every flag the parser has that writes a settings key, driven from the parser rather than a list
+    # beside it: a key with no case here is a failure, so adding a setting without wiring it is caught.
+    flags = {"--metric": ("metric", "max"), "--rate-method": ("rate_method", "baranyi"),
+             "--rate-window": ("rate_window", "7"), "--derivation": ("derivation", "integrated"),
+             "--merge-arcs": ("merge_arcs", None), "--merge-genera": ("merge_genera", None),
+             "--min-studies": ("min_studies", "3"), "--spike-factor": ("spike_factor", "50"),
+             "--capacity-max-fall": ("capacity_max_fall", "0.25"),
+             "--absence-threshold": ("absence_threshold", "2.5"),
+             "--include-low-quality": ("include_low_quality", None),
+             "--correction": ("correction", "by"), "--no-dropout": ("include_dropout", None),
+             "--include-non-batch": ("include_non_batch", None),
+             "--no-growth-alpha": ("no_growth_alpha", "0.01"),
+             "--no-growth-factor": ("no_growth_factor", "2"),
+             "--max-adjusted-p": ("max_adjusted_p", "0.05"),
+             "--report-rates": ("report_rates", None), "--include-absent": ("include_absent", None),
+             "--steady-check": ("steady_check", None), "--all-partners": ("only_entered", None),
+             "--exclude-studies": ("exclude_studies", "SMGDB00000002"),
+             "--conditions": ("conditions", "WC")}
+    for flag, (key, value) in flags.items():
+        got = settings([*base, flag] + ([value] if value is not None else []))
+        assert got[key] != plain[key], (
+            f"{flag} did not move {key}: it reads {got[key]!r} with the flag and {plain[key]!r} without, "
+            "so this case proves nothing")
+
+    # `conditions` is the one key whose VALUE the loop above cannot check, and for it the separator IS
+    # the value: the page encodes the second box one selector per LINE and `selection.parse` splits on
+    # newlines, commas and semicolons, never on a space. The case above passes one value, so a space join
+    # looked identical to a newline join and `--conditions "WC" "mucin"` could be recorded as one medium
+    # named "WC mucin", which matches nothing, while the run used the list. That is what the comment over
+    # `_settings_of` is about, and nothing exercised it (found reviewing round 10). The booleans escape
+    # the same loop and are covered by `test_the_command_line_gives_everything_the_page_does`.
+    from grownet import selection
+
+    two = settings([*base, "--conditions", "WC", "mucin"])["conditions"]
+    assert two == "WC\nmucin", repr(two)
+    assert selection.parse(two)["media"] == ["WC", "mucin"], selection.parse(two)
+
+    # and every key the page has is reachable from the command line, or the two disagree about what a
+    # setting is. A key here with no flag above is the defect this assertion exists for.
+    wired = {key for key, _ in flags.values()}
+    unreachable = sorted(k for k in DEFAULTS if k not in wired)
+    assert not unreachable, f"these page settings no command-line flag sets: {unreachable}"
+    assert len(wired) == len(DEFAULTS) == 23, (
+        f"the page has {len(DEFAULTS)} settings and this test wires {len(wired)}: a new one needs a case")

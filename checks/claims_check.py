@@ -45,9 +45,17 @@ DOCS = ("README.md", "docs/METHOD_NOTES.md", "docs/agents/NOTES.md", "CONTRIBUTI
         "docs/LIMITATIONS.md")
 
 # Phrases that assert something is the current default, rather than mentioning it.
+# This caught 1 of 8 natural phrasings, measured against a tree built for the purpose: "grownet defaults
+# to X", "The default is X", "Out of the box grownet runs X", "X is what you get if you change nothing",
+# "X is used unless you set the Derivation setting", "By default, X derives every network" and
+# "Derivation: --derivation x (default)" all passed, the last two although `runs by default` was in the
+# pattern, because the pattern is word-order sensitive (#235 item 3). The default flipped twice in five
+# days, which is when this guard is load-bearing, so the phrasings are covered rather than argued about.
 ASSERTS_DEFAULT = re.compile(
     r"is the default|as the default|the default for|default deriver|default derivation|"
-    r"why it is the default|is still what|is what `?main`? runs|runs by default",
+    r"why it is the default|is still what|is what `?main`? runs|runs by default|"
+    r"\bby default\b|\bdefaults? to\b|\bthe default is\b|\bout of the box\b|"
+    r"unless you (?:set|change|pass|choose)|if you change nothing|\(default\)",
     re.I,
 )
 WINDOW = 200   # characters either side of a mention, for judging what a sentence is claiming
@@ -184,7 +192,16 @@ def check_default_deriver(problems: list) -> None:
 
 VIEWER = "gui/index.html"
 # Vocabularies the viewer has to understand to draw an edge correctly. Each is a tuple in model.py.
-VOCABULARIES = ("QUALITY_FLAGS", "CAUTIONS", "EVIDENCE", "OUTCOMES")
+# Every vocabulary the viewer draws from. It held four, and `STATUSES` was not among them although the
+# check's own docstring cites "once when `status` arrived and absent comparisons drew as interactions" as
+# a reason it exists: a new `status` value the viewer never names passed all nine checks (#235 item 2).
+# `EFFECTS`, `STATUSES` and `GENUS_QUALIFIERS` are drawn and are covered now.
+# NOT here, deliberately: `IDENTITIES` names how a node was matched (`ncbi`, `name`, `genus`) and the
+# viewer shows the resolved node rather than the matcher, so "ncbi" is absent from it by design;
+# `KNOWN_SCHEMAS` and `PREVIOUS_SCHEMAS` are format ids the viewer refuses or accepts as whole strings.
+# A vocabulary left out is left out with a reason, which is what this comment is for.
+VOCABULARIES = ("QUALITY_FLAGS", "CAUTIONS", "EVIDENCE", "OUTCOMES", "EFFECTS", "STATUSES",
+                "GENUS_QUALIFIERS")
 
 
 def model_vocabulary(name: str) -> list:

@@ -7,8 +7,12 @@
 #' `A[i, j]` is the effect of j on i: rows are affected, columns are the actor, which is the order
 #' `dx_i/dt = x_i (r_i + sum_j A[i][j] x_j)` reads in.
 #'
-#' Every cell is a fitted per-capita coefficient, in 1 over (time times abundance): the diagonal is
-#' `-r_i / K_i` with K the organism's own plateau. What an off-diagonal cell is depends on the derivation
+#' Every cell is a fitted per-capita coefficient, in 1 over (time times abundance). What the DIAGONAL is
+#' depends on the derivation, and `x$caveats$diagonal` says which: the comparison of replicate sets
+#' divides, `-r_i / K_i` with K the organism's own observed plateau, while the integrated form fits
+#' `A[i][i]` directly as a parameter of the same least squares that gave `r_i` and derives
+#' `K_i = -r_i / A[i][i]` from it, which is the opposite direction.
+#' What an off-diagonal cell is depends on the derivation
 #' that made the package, and `print(x)` says which: the comparison of replicate sets fits
 #' `(r_with - r_without) / x_j`, the difference between the affected organism's growth rate with the
 #' actor and without it over the actor's abundance across that window, while the integrated form, which
@@ -122,10 +126,51 @@ glv_readme <- function(x, print = TRUE) {
     x$readme
 }
 
+# The columns the download's growth_rates.csv holds, taken from the payload's own
+# `growth_rate_detail`. This wrote three of them, organism, growth_rate and unit, under a doc promising
+# "the same three files grownet's download holds", so a reader who kept the output beside their analysis
+# silently dropped the estimator, the lag, the carrying capacity and its provenance: the columns the
+# README.txt in the same directory tells them to read. Every value is already in the object.
+.rates_frame <- function(x) {
+    detail <- x$growth_rate_detail
+    if (!length(detail)) {
+        return(data.frame(organism = x$organisms, growth_rate = unname(x$growth_rates),
+                          unit = x$growth_rate_unit, stringsAsFactors = FALSE))
+    }
+    pick <- function(d, key, default = "") {
+        v <- d[[key]]
+        if (is.null(v) || !length(v)) return(default)
+        if (length(v) > 1) return(paste(unlist(v), collapse = " "))
+        unlist(v)[[1]]
+    }
+    text <- function(key) {
+        vapply(detail, function(d) as.character(pick(d, key)), character(1))
+    }
+    rate <- vapply(detail, function(d) as.numeric(pick(d, "rate", NA_real_)), numeric(1))
+    data.frame(
+        organism = text("organism"),
+        growth_rate = rate,
+        unit = text("unit"),
+        replicates = text("replicates"),
+        studies = text("studies"),
+        method = text("method"),
+        lag = text("lag"),
+        lag_method = text("lag_method"),
+        carrying_capacity = text("carrying_capacity"),
+        capacity_unit = text("carrying_capacity_unit"),
+        capacity_curves = text("carrying_capacity_curves"),
+        capacity_source = text("carrying_capacity_source"),
+        # derived from the column beside it and adds no measurement, as the download's last column is
+        doubling_time = ifelse(is.na(rate) | rate <= 0, NA_real_, log(2) / rate),
+        stringsAsFactors = FALSE)
+}
+
 #' Write the parameters as files
 #'
-#' The same three files grownet's download holds: `interaction_matrix.csv`, `growth_rates.csv` and
-#' `README.txt`, so what arrived over the wire can be kept beside the analysis that used it.
+#' The files grownet's download holds: one `interaction_matrix.<abundance unit>.csv` per abundance unit
+#' (plain `interaction_matrix.csv` when the unit is unknown), `growth_rates.csv` with the same columns the
+#' download's has, and `README.txt`, so what arrived over the wire can be kept beside the analysis that
+#' used it.
 #'
 #' @param x gLV parameters from [grownet_listen()] or [grownet_glv()].
 #' @param dir Directory to write into. It is created when it does not exist.
@@ -147,9 +192,7 @@ glv_write <- function(x, dir) {
         written <- c(written, path)
     }
     rates_path <- file.path(dir, "growth_rates.csv")
-    write.csv(data.frame(organism = x$organisms, growth_rate = unname(x$growth_rates),
-                         unit = x$growth_rate_unit, stringsAsFactors = FALSE),
-              rates_path, row.names = FALSE)
+    write.csv(.rates_frame(x), rates_path, row.names = FALSE)
     readme_path <- file.path(dir, "README.txt")
     writeLines(x$readme, readme_path)
     written <- c(written, rates_path, readme_path)
