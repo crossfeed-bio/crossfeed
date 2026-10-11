@@ -1023,6 +1023,19 @@ def test_every_derive_path_records_the_same_settings_and_follows_the_steady_chec
             f"{flag} did not move {key}: it reads {got[key]!r} with the flag and {plain[key]!r} without, "
             "so this case proves nothing")
 
+    # `conditions` is the one key whose VALUE the loop above cannot check, and for it the separator IS
+    # the value: the page encodes the second box one selector per LINE and `selection.parse` splits on
+    # newlines, commas and semicolons, never on a space. The case above passes one value, so a space join
+    # looked identical to a newline join and `--conditions "WC" "mucin"` could be recorded as one medium
+    # named "WC mucin", which matches nothing, while the run used the list. That is what the comment over
+    # `_settings_of` is about, and nothing exercised it (found reviewing round 10). The booleans escape
+    # the same loop and are covered by `test_the_command_line_gives_everything_the_page_does`.
+    from grownet import selection
+
+    two = settings([*base, "--conditions", "WC", "mucin"])["conditions"]
+    assert two == "WC\nmucin", repr(two)
+    assert selection.parse(two)["media"] == ["WC", "mucin"], selection.parse(two)
+
     # and every key the page has is reachable from the command line, or the two disagree about what a
     # setting is. A key here with no flag above is the defect this assertion exists for.
     wired = {key for key, _ in flags.values()}
