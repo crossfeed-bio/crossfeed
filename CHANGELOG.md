@@ -37,6 +37,15 @@ content.
   as they always have.
 
 ### Fixed
+- **The Cytoscape table dropped `taxonomy` and `model_ref`**, which the neutral file and GraphML both
+  carry, against the claim in the same file that this payload names every field and against
+  `network_json`'s own docstring ("every node and edge attribute becomes a column"). grownet populates
+  neither today, so nothing is lost on a live run, but a network given a lineage or a metabolic-model link
+  by hand lost both on the way to Cytoscape, and `model_ref` is named for the downstream consumer the
+  neutral format exists to serve. Found by comparing the two emitters rather than by reading either, which
+  is how the same asymmetry was found for the three error components. `tests/test_export.py` now asserts
+  set equality between the payload's columns and the `Node` and `Edge` records, so the next field cannot
+  stop at the table.
 - **The gLV payload published the fitted row count under the field named `replicates`** (#259), where
   `growth_rates.csv`, the other emitter of the same numbers, published the monoculture replicate count.
   `replicates` has meant monoculture replicates since 0.2.0, which is the rule stated over `rates_csv`,

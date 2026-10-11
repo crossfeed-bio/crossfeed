@@ -142,3 +142,77 @@ def test_community_is_joined_so_a_consumer_can_split_it_back():
 
     # and the rule is declared where the "space-joined community" claim used to be
     assert "joined with \"; \", not \" \"" in (export.__doc__ or "")
+
+
+def test_every_record_field_reaches_the_cytoscape_table():
+    """A field in the file and in GraphML must be a column in Cytoscape too, or it stops at the table.
+
+    `taxonomy` and `model_ref` did exactly that, which is the same asymmetry the edge payload's own
+    comment records as fixed for the three error components: found by comparing the two emitters rather
+    than by reading either (#245 class, found reviewing round 10). `model_ref` is named for the
+    downstream consumer the neutral format exists to serve.
+
+    Asserted as SET EQUALITY against the dataclasses, not as a list written here, so a field added to
+    `Node` or `Edge` without a column fails with its own name. The presentation columns Cytoscape styles
+    on are listed, because they are the deliberate extras and the asymmetry runs only that way.
+    """
+    from dataclasses import fields
+
+    from grownet import cytoscape, model
+
+    net = model.InteractionNetwork()
+    net.add_node(model.Node(id="a", name="Aa bb", taxonomy="Bacteria;Firmicutes;Aa bb",
+                            model_ref="https://example.org/model/aa", taxon_id="1", species="aa bb",
+                            identity="ncbi"))
+    net.add_node(model.Node(id="b", name="Bb cc"))
+    net.add_study(model.Study(id="S"))
+    net.add_edge(model.Edge(source="a", target="b", effect="facilitation", study_ids=("S",),
+                            strength=1.0))
+    payload = cytoscape.network_json(net)["elements"]
+
+    node_extra = {"genus", "genus_color"}
+    node_columns = set(payload["nodes"][0]["data"])
+    assert node_columns - node_extra == {f.name for f in fields(model.Node)}, (
+        "the Cytoscape node table and the Node record disagree: "
+        f"only in the record {sorted({f.name for f in fields(model.Node)} - node_columns)}, "
+        f"only in the table {sorted(node_columns - node_extra - {f.name for f in fields(model.Node)})}")
+
+    # the two that were missing, by value, so a column present and empty does not pass
+    data = payload["nodes"][0]["data"]
+    assert data["taxonomy"] == "Bacteria;Firmicutes;Aa bb"
+    assert data["model_ref"] == "https://example.org/model/aa"
+
+    # The edge side needs an edge with EVERY field set, because the payload omits a None: a sparse edge
+    # would make this pass by having nothing to drop. Values are filled by declared type rather than
+    # listed, so a new field is filled too.
+    filled = {}
+    for f in fields(model.Edge):
+        kind = str(f.type)
+        if f.name in ("source", "target"):
+            filled[f.name] = "a" if f.name == "source" else "b"
+        elif f.name == "effect":
+            filled[f.name] = "facilitation"
+        elif "tuple" in kind:
+            # a *_range holds numbers, which the payload formats with :g
+            filled[f.name] = (1.0, 2.0) if f.name.endswith("_range") else ("x",)
+        elif "int" in kind:
+            filled[f.name] = 2
+        elif "float" in kind:
+            filled[f.name] = 1.5
+        else:
+            filled[f.name] = "x"
+    whole = model.InteractionNetwork()
+    whole.add_node(model.Node(id="a", name="Aa bb"))
+    whole.add_node(model.Node(id="b", name="Bb cc"))
+    whole.add_study(model.Study(id="S"))
+    whole.add_edge(model.Edge(**{**filled, "study_ids": ("S",)}))
+    edge_columns = set(cytoscape.network_json(whole)["elements"]["edges"][0]["data"])
+
+    # `evidence` travels as the `interaction` column by design, so it is named rather than silently
+    # allowed, and the presentation columns are the deliberate extras
+    edge_extra = {"interaction", "line_style", "display_weight"}
+    edge_fields = {f.name for f in fields(model.Edge)}
+    assert not edge_fields - edge_columns - {"evidence"}, (
+        f"these Edge fields are not Cytoscape columns: {sorted(edge_fields - edge_columns - {'evidence'})}")
+    assert not edge_columns - edge_extra - edge_fields, (
+        f"these Cytoscape columns are not Edge fields: {sorted(edge_columns - edge_extra - edge_fields)}")
