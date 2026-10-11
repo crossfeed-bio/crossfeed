@@ -37,6 +37,54 @@ content.
   as they always have.
 
 ### Fixed
+- **The Cytoscape table dropped `taxonomy` and `model_ref`**, which the neutral file and GraphML both
+  carry, against the claim in the same file that this payload names every field and against
+  `network_json`'s own docstring ("every node and edge attribute becomes a column"). grownet populates
+  neither today, so nothing is lost on a live run, but a network given a lineage or a metabolic-model link
+  by hand lost both on the way to Cytoscape, and `model_ref` is named for the downstream consumer the
+  neutral format exists to serve. Found by comparing the two emitters rather than by reading either, which
+  is how the same asymmetry was found for the three error components. `tests/test_export.py` now asserts
+  set equality between the payload's columns and the `Node` and `Edge` records, so the next field cannot
+  stop at the table.
+- **The gLV payload published the fitted row count under the field named `replicates`** (#259), where
+  `growth_rates.csv`, the other emitter of the same numbers, published the monoculture replicate count.
+  `replicates` has meant monoculture replicates since 0.2.0, which is the rule stated over `rates_csv`,
+  and a derivation that merges fitted rows keeps the row count in `n` with `n_label` precisely so the two
+  are not confused. On a live `--all --glv-mode` run the payload said 1 and 2 where the zip said 3, and
+  the R package reads the field straight through, against a docstring promising "the same numbers as the
+  zip" and a README allowing a difference in the fifth significant digit. It bit the integrated form only,
+  which is the one gLV mode selects: under the default derivation there is no `replicates` key and both
+  routes fall back to `n`, which is why nothing noticed. The row count is deliberately not added beside
+  it, because a new field would move `grownet.glv/v1`; it is in `meta.growth_rates` for anyone who wants
+  it.
+- **The GraphML, the Cytoscape payload and the viewer joined `community` with a space, and 115 of 145
+  arcs of the default corpus could not be split back** (#245). `community` holds node ids, and a node id
+  under identity `name` is a lowercase species name, so a 14-member community read as a 16-member one
+  whose two extra members were word fragments (`lachnoclostridium`, `symbiosum`). It is the field a reader
+  needs for exactly the arcs that depend on it: a drop-out arc's own text says the effect may run
+  "directly or through the others", and the others are this list. Joined with `"; "` now, in all three
+  routes, as `notes` and `merged_pairs` in the same emitters already were; 0 of 145 fail to split.
+  The rule for any future list whose members can contain a space is written where the "space-joined
+  community" claim used to be, and the four still joined with a space carry no such value today, which was
+  measured.
+- **Every censored arc's `bound_rule` printed a start abundance and a window with no unit** (#248), and
+  one field carried 105.8 Cells/mL on one study and 1.44e+07 CFUs/mL on another while naming neither.
+  `GrowthCurve` refuses to exist without both units, so they were in hand at that point, and the report's
+  next clause on the same arc already prints the partner's abundance with its unit. `strength_bound` is
+  the only number a reader has for a censored pair and this rule is the only thing that says what it came
+  from. All three metric branches now carry them, including the rate bound, which printed `0.001408` with
+  no `1/h`.
+- **The page promised a matrix cell the CSV did not hold** (#248). `matrix.counts` counted self pairs and
+  `rows` writes the diagonal there, so with `--merge-genera`, which produces within-genus arcs by
+  Karoline's own choice, the page said 45 cells over 17 organisms and the file held 44: the lost cell was
+  written as `0`, the same token as the 245 pairs where no comparison was attempted. `counts` reports them
+  apart now and the page says how many arcs have no cell and why. Verified on the live corpus: 44 against
+  44.
+- **The `grownet_glv()` address in the R package's own documentation omitted `job=`** (#251), so following
+  it served whichever search the browser last looked at: two tabs, two searches, and the job-less address
+  returned a different system's parameters each time with HTTP 200 and the right format. The page prints
+  the address with its job, and the three documented examples now say so and say why to copy it rather
+  than type it.
 - **The R package's `glv_write` wrote three of the download's sixteen rate columns**, under a doc
   promising "the same three files grownet's download holds". A reader who kept its output beside their
   analysis, which is what the documentation says it is for, silently dropped the estimator, the lag, the

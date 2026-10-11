@@ -233,14 +233,24 @@ def no_growth_bound(reps, species: str, end: float, method: str, factor: float =
     """
     factor = NO_GROWTH_FACTOR if factor is None else factor
     starts, spans = [], []
+    # the units, which `GrowthCurve` refuses to exist without (`growth.py` raises "time unit and
+    # abundance unit are required"), so they are in hand here. The rule used to print the start and the
+    # window bare, and `strength_bound` is the only number a reader has for a censored pair: on the
+    # corpus one such field carried 105.8 Cells/mL and another 1.687e+07 CFUs/mL and named neither, while
+    # the report's next clause on the same arc prints the partner's abundance WITH its unit (#248).
+    abundance_unit, time_unit = "", ""
     for rep_ in reps:
         curve = rep_.curve(species)
         if curve is None:
             continue
+        abundance_unit = abundance_unit or (curve.abundance_unit or "")
+        time_unit = time_unit or (curve.time_unit or "")
         times, values = cut(curve, end)
         if values and values[0] > 0:
             starts.append(values[0])
             spans.append(times[-1] - times[0])
+    in_abundance = f" {abundance_unit}" if abundance_unit else ""
+    in_time = f" {time_unit}" if time_unit else " time unit(s)"
     if not starts or not factor:
         return {"value": None, "factor": factor, "start": None, "window": None,
                 "rule": "the no-growth rule left no measured start to bound this set by"}
@@ -248,15 +258,15 @@ def no_growth_bound(reps, species: str, end: float, method: str, factor: float =
     window = statistics.mean(spans) or 1.0
     if method.startswith("growth_rate"):
         value = math.log(factor) / window
-        how = (f"no growth: a rise under {factor:g} times its own start over {window:g} time unit(s) is a "
-               f"rate under {value:.4g}")
+        how = (f"no growth: a rise under {factor:g} times its own start over {window:g}{in_time} is a "
+               f"rate under {value:.4g}" + (f" 1/{time_unit}" if time_unit else ""))
     elif method == "auc":
         value = factor * start * window
-        how = (f"no growth: at most {factor:g} times its own start ({start:.4g}) over {window:g} time "
-               "unit(s)")
+        how = (f"no growth: at most {factor:g} times its own start ({start:.4g}{in_abundance}) over "
+               f"{window:g}{in_time}")
     else:
         value = factor * start
-        how = f"no growth: at most {factor:g} times its own start ({start:.4g})"
+        how = f"no growth: at most {factor:g} times its own start ({start:.4g}{in_abundance})"
     return {"value": value, "factor": factor, "start": start, "window": window, "rule": how}
 
 

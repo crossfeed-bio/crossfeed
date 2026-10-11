@@ -72,6 +72,38 @@ def test_the_rates_travel_with_what_a_coefficient_is_made_of():
     assert first["method"] == METRIC
 
 
+def test_the_payload_and_the_csv_agree_on_what_replicates_counts():
+    """`replicates` means monoculture replicates in both emitters of this format, and the row count is a
+    different number.
+
+    Under the integrated form a rate entry carries both: `n`, the fitted rows the median rests on, with
+    `n_label` saying so, and `replicates`, the size of the monoculture set the rate stage had. The rule
+    is stated over `rates_csv` and the CSV follows it; the payload wrote `n` under the name
+    `replicates`, so a live `--all --glv-mode` run reported 1 and 2 where the zip reported 3, against a
+    docstring promising "the same numbers as the zip" (#259).
+
+    The fixture sets the two counts to DIFFERENT values on purpose. Every rate fixture in the suite
+    carried only `n`, which is why the two keys were indistinguishable and nothing could see this.
+    """
+    merged = {nid: {**entry, "n": 2, "n_label": "fitted row(s)", "replicates": 3}
+              for nid, entry in RATES.items()}
+    net = _net(PAIR)
+    detail = {d["organism"]: d["replicates"] for d in matrix.glv_payload(net, merged)["growth_rate_detail"]}
+    assert detail == {"A": 3, "B": 3}, detail            # the replicate count, not the 2 fitted rows
+
+    # and the CSV, the other emitter of the same numbers, says the same thing
+    text = matrix.rates_csv(merged, net)
+    head, rows = text.splitlines()[0].split(","), text.splitlines()[1:]
+    column = head.index("replicates")
+    assert {row.split(",")[column] for row in rows if row} == {"3"}
+
+    # a derivation with no replicate count still reports its `n`, which is the fallback the CSV uses too
+    plain = {nid: {k: v for k, v in entry.items() if k != "replicates"} for nid, entry in merged.items()}
+    fell_back = {d["organism"]: d["replicates"]
+                 for d in matrix.glv_payload(net, plain)["growth_rate_detail"]}
+    assert fell_back == {"A": 2, "B": 2}, fell_back
+
+
 def test_the_caveats_say_what_is_a_measurement_and_what_is_not():
     """No stated extreme and no conventional diagonal is left, so the caveats are about what could not be
     fitted and about the bounds a censored comparison gives."""

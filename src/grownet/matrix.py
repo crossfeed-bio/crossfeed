@@ -186,8 +186,9 @@ def dropout_arcs(net: InteractionNetwork) -> int:
 
 
 def counts(net: InteractionNetwork) -> dict:
-    """{"arcs", "cells", "organisms"}: how many arcs reach the matrix, how many cells they make, and how
-    many organisms the matrix has. A matrix holds one cell per ordered pair, so a network with several arcs
+    """{"arcs", "cells", "organisms", "within_one_organism"}: how many arcs reach the matrix, how many
+    cells they make, how many organisms the matrix has, and how many arcs are a pair with itself and so
+    have no cell of their own. A matrix holds one cell per ordered pair, so a network with several arcs
     for one pair has fewer cells than arcs; the page and the README say so, rather than leaving two counts
     to disagree (the lesson of the hidden arcs, Karoline, 2026-10-03). A censored arc reaches the matrix
     and its cell holds `NA` rather than a number (#129), so it is counted here: a cell a reader sees is a
@@ -195,7 +196,15 @@ def counts(net: InteractionNetwork) -> dict:
     values, _ = cells(net)
     in_a_cell = sum(1 for e in net.edges
                     if (e.status != "absent" and e.strength is not None) or _censored(e))
-    return {"arcs": in_a_cell, "cells": len(values), "organisms": len(net.nodes)}
+    # A SELF pair has no cell of its own in the plain adjacency matrix: `rows` writes the diagonal
+    # there, 0.0 when no diagonal is supplied. `--merge-genera` produces within-genus arcs by design
+    # (Karoline, on `derive.merge_genus`: "interactions within one genus stay, as an arc from the genus
+    # to itself"), so counting them here promised 45 cells where the CSV held 44, and the arc the JSON
+    # reported printed as 0, which in that file means no interaction (#248). They are counted apart so
+    # the two numbers agree and the page can say what has no cell.
+    self_pairs = sum(1 for a, b in values if a == b)
+    return {"arcs": in_a_cell, "cells": len(values) - self_pairs, "organisms": len(net.nodes),
+            "within_one_organism": self_pairs}
 
 
 def bounded_cells(net: InteractionNetwork) -> list:
@@ -1242,7 +1251,17 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
         "growth_rate_unit": units.pop() if len(units) == 1 else "",
         "growth_rate_detail": [
             {"organism": _label(net.nodes[nid]), "rate": rates[nid]["rate"],
-             "unit": rates[nid].get("unit", RATE_UNIT), "replicates": rates[nid].get("n"),
+             "unit": rates[nid].get("unit", RATE_UNIT),
+             # `replicates` means monoculture replicates, which is the rule stated over `rates_csv`,
+             # and the CSV follows it. This published `n` under that name, so under the integrated form,
+             # the one gLV mode selects, the payload reported its FITTED ROW count as the replicate
+             # count: 1 or 2 against the zip's 3 on a live corpus run, where `glv_payload` promises "the
+             # same numbers as the zip" and the README allows a difference in the fifth significant
+             # digit (#259). The row count is deliberately not added beside it: `grownet.glv/v1` is a
+             # released format with `PREVIOUS_GLV_FORMATS` beside it, so a new field moves that id,
+             # which is a decision about the package rather than a fix to it. Anyone who wants the row
+             # count has it in the network's own `meta.growth_rates`, as `n` with `n_label`.
+             "replicates": rates[nid].get("replicates", rates[nid].get("n")),
              "studies": list(rates[nid].get("studies", ())),
              "per_study": dict(rates[nid].get("per_study", {})),
              "method": rates[nid].get("method", ""), "lag": rates[nid].get("lag"),

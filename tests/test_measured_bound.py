@@ -182,3 +182,37 @@ def test_a_bound_that_does_not_separate_the_effect_from_zero_leaves_the_cell_at_
               "skipped": [], "errors": [], "rates": {}, "hidden": {}, "absence": {"k": 1.0, "absent": 0}}
     text = report_text(result)
     assert "the cell is NA" in text and "does not bound this effect away from zero" in text
+
+
+def test_the_bound_rule_carries_the_units_it_measured_in():
+    """`strength_bound` is the only number a reader has for a censored pair, and the rule beside it names
+    the units of every quantity in it.
+
+    On the corpus one such field carried 105.8 Cells/mL and another 1.687e+07 CFUs/mL and named neither,
+    while the report's next clause on the same arc prints the partner's abundance WITH its unit (#248).
+    `GrowthCurve` refuses to exist without both units, so they are always in hand.
+
+    Nothing asserted them: blanking the abundance unit and putting "time unit(s)" back left the suite
+    green (found reviewing round 10). All three metrics are checked, because each writes a different
+    quantity: `max` a bound in abundance, `auc` abundance times time, a rate in reciprocal time.
+    """
+    from grownet.growth import GrowthCurve, Replicate
+
+    curve = GrowthCurve(species=A, times=[0.0, 1.0, 2.0, 3.0], values=[2.0e6] * 4,
+                        time_unit="h", abundance_unit="Cells/mL")
+    reps = [Replicate(curves=(curve,))]
+
+    peak = interaction.no_growth_bound(reps, A, 3.0, "max", factor=1.5)
+    assert "Cells/mL" in peak["rule"], peak["rule"]
+
+    area = interaction.no_growth_bound(reps, A, 3.0, "auc", factor=1.5)
+    assert "Cells/mL" in area["rule"] and " h" in area["rule"], area["rule"]
+
+    rate = interaction.no_growth_bound(reps, A, 3.0, "growth_rate:easylinear:5", factor=1.5)
+    assert "1/h" in rate["rule"] and " h" in rate["rule"], rate["rule"]
+
+    # and a curve whose units are a different pair carries THOSE, rather than a hard-wired string
+    other = GrowthCurve(species=A, times=[0.0, 2.0], values=[1.0e5, 1.0e5],
+                        time_unit="min", abundance_unit="CFUs/mL")
+    moved = interaction.no_growth_bound([Replicate(curves=(other,))], A, 2.0, "max", factor=1.5)
+    assert "CFUs/mL" in moved["rule"] and "Cells/mL" not in moved["rule"], moved["rule"]

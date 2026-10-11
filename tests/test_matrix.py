@@ -202,6 +202,32 @@ def test_a_cell_with_no_ratio_is_named_as_such():
     assert matrix.counts(net)["arcs"] == 1            # it reaches the matrix: a cell a reader sees
 
 
+def test_an_arc_from_one_organism_to_itself_is_counted_apart_from_the_cells():
+    """A self pair has no cell of its own, so it is not counted as one.
+
+    `--merge-genera` produces within-genus arcs by design (Karoline, on `derive.merge_genus`:
+    "interactions within one genus stay, as an arc from the genus to itself"), and the plain matrix writes
+    the DIAGONAL at that position. Counting them as cells promised 45 where the CSV held 44, and the arc
+    the JSON reported printed as 0, which in that file means no interaction (#248).
+
+    Nothing read `cells` or `within_one_organism`: reverting `counts` to `len(values)` and 0 left the
+    whole suite green, so the page could promise a cell the CSV does not hold again (found reviewing
+    round 10).
+    """
+    net = _net([_arc("a", "b", 1.0), _arc("a", "a", 0.5)])
+    got = matrix.counts(net)
+    assert got["arcs"] == 2                       # both reach the matrix
+    assert got["within_one_organism"] == 1        # one of them is a pair with itself
+    assert got["cells"] == 1                      # and so makes no cell: only A -> B does
+
+    # the CSV is the thing that must agree, so it is read rather than assumed: exactly one off-diagonal
+    # position carries a number, and the self pair's position holds the diagonal
+    _names, values = _read(matrix.matrix_csv(net))
+    off = {pair: v for pair, v in values.items() if pair[0] != pair[1] and v not in (0, 0.0)}
+    assert len(off) == got["cells"], (off, got)
+    assert values[("A", "A")] == 0.0              # the diagonal, not the 0.5 arc
+
+
 def test_a_rate_is_reported_under_the_name_the_network_uses():
     # a strain renamed after a reclassification (411483) carries its current name in the network; the rates
     # must not fall back to the name the study that measured them used (#24)

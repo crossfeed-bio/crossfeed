@@ -563,7 +563,13 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
             "the legend's style. The report holds every setting and every reason a pair gave no edge. The "
             f"adjacency matrix holds one cell per ordered pair, so this search's {count['arcs']} arc(s) that "
             f"reach it make {count['cells']} cell(s) over {count['organisms']} organism(s): arcs of one pair "
-            f"from different conditions or studies merge by their median.{na_hint}</p>")
+            f"from different conditions or studies merge by their median."
+            # a within-genus arc has no cell of its own, because the diagonal is written there; saying so
+            # is what stops the two counts disagreeing silently (#248)
+            + (f" {count['within_one_organism']} arc(s) are from one organism to itself, which "
+               "--merge-genera produces, and have no cell in this matrix: the diagonal is written there."
+               if count.get("within_one_organism") else "")
+            + f"{na_hint}</p>")
     rate_hint = ("<p class=\"hint\">The growth rates are each organism's maximum specific growth rate in "
                  "monoculture, the median over the replicates and studies that have one, with the lag and the "
                  "carrying capacity beside each. The gLV package holds fitted per-capita coefficients, one "
