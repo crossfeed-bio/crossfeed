@@ -98,3 +98,44 @@ def test_a_setting_that_can_empty_the_network_is_named_when_it_does():
     # two at once are both named, since either could be the cause
     said = _settings_to_try({**DEFAULTS, "min_studies": 2, "absence_threshold": 9.0})
     assert "Arcs from at least N studies" in said and "Absence threshold" in said
+
+
+def test_an_incomplete_run_does_not_exit_zero_and_an_advisory_note_does_not_fail_one(monkeypatch):
+    """`derive <a bad id> --live` exits 1 while the species and All paths collected the identical 404 into
+    `errors` and exited 0, so a script could not tell a complete run from an incomplete one (#247).
+
+    Keying the exit code on `errors` is safe only because that list is fetch failures and nothing else:
+    the advisory messages (a setting that could not act, a check asked for and not run) travel in
+    `notes`. Both halves are asserted, because keying on a list holding both would fail a COMPLETE run,
+    which is how this nearly went onto the wrong branch.
+
+    This drives `_derive_species` itself with a stubbed `run_query`, rather than restating the rule: the
+    first version of this test recomputed the condition in a loop and would have passed against any
+    implementation.
+    """
+    from grownet import __main__ as cli
+    from grownet import gui
+    from grownet.model import InteractionNetwork
+
+    def answer(errors, notes):
+        net = InteractionNetwork()
+        return {"network": net, "skipped": [], "errors": list(errors), "notes": list(notes),
+                "absence": {"absent": 0, "k": 1.0},
+                "hidden": {"low_quality": 0, "absent": 0}, "studies": ["SMGDB00000001"],
+                "unresolved": [], "suggestions": {}, "reasons": {}, "resolved": [], "settings": {},
+                "entries": [], "taxon_ids": [], "rates": {}, "steady": None, "genera": {},
+                "excluded": [], "all": False, "partners_only": 0}
+
+    cases = [((), (), 0),
+             ((), ("not used in Exclude these studies: SMGDB0000002",), 0),
+             (("SMGDB0000002: mGrowthDB returned HTTP 404",), (), 1),
+             (("SMGDB0000002: HTTP 404",), ("a note as well",), 1)]
+    for errors, notes, wanted in cases:
+        # bound now, not captured: ruff's B023 is right that a loop variable in a lambda is a trap
+        monkeypatch.setattr(gui, "run_query",
+                            lambda *a, _e=errors, _n=notes, **k: answer(_e, _n))
+        monkeypatch.setattr(cli, "MGrowthDBClient", lambda *a, **k: object(), raising=False)
+        args = cli.build_parser().parse_args(
+            ["derive", "--live", "--species", "A", "--out", os.devnull])
+        got = cli._derive_species(args)
+        assert got == wanted, f"errors={errors} notes={notes} gave {got}, wanted {wanted}"

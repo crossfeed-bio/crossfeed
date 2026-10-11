@@ -344,7 +344,18 @@ def _derive_species(a):
         from .gui import _empty_reason
         print("\nno interactions: " + html.unescape(_empty_reason(result)), file=sys.stderr)
     label = "all of mGrowthDB" if a.all_studies else " and ".join(a.species)
-    return _emit(a, net, result["skipped"], extra, label, result)
+    code = _emit(a, net, result["skipped"], extra, label, result)
+    # An incomplete run must not exit 0, and the two derive paths disagreed about the same failure:
+    # `derive <a bad id> --live` exits 1 while the species and All paths collected the identical 404
+    # into `errors` and exited 0, so a script could not tell a complete run from an incomplete one
+    # (#247). This is safe to key on only because `errors` is fetch failures and nothing else now:
+    # the advisory messages travel in `notes`, which is the split #242 makes.
+    if code == 0 and result.get("errors"):
+        print(f"\nthis run is INCOMPLETE: {len(result['errors'])} study or curve could not be read from "
+              "mGrowthDB (the messages are above). The network holds what was readable; run it again when "
+              "mGrowthDB is reachable if you need all of it.", file=sys.stderr)
+        return 1
+    return code
 
 
 def _rates_of(a, client, study_ids, net, skipped, records=None):

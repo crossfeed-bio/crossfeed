@@ -37,6 +37,20 @@ content.
   as they always have.
 
 ### Fixed
+- **An incomplete run exited 0 on the species and All paths** (#247), while `derive <a bad id> --live`
+  exited 1 for the identical failure: the species path collected the 404 into `errors`, printed it, and
+  returned 0, so a script could not tell a complete run from an incomplete one. It says the run is
+  incomplete and returns 1 now, and says what the network does hold. This is safe to key on `errors`
+  only because that list is fetch failures and nothing else: the advisory messages travel in `notes`,
+  which is the split this release makes, and the test asserts both halves, because keying on a list
+  holding both would fail a **complete** run. The first version of that test recomputed the condition in
+  a loop and would have passed against any implementation; it drives `_derive_species` with a stubbed
+  `run_query` instead, and fails when the rule is changed to read `notes` as well.
+
+  Not fixed here, and filed: what the FILE says about its own completeness. `meta` carries no record that
+  a study could not be read, and `meta.studies` lists the unreadable study as a source, so the artifact
+  asserts provenance it does not have and `validate` passes. Recording it adds fields, which moves the
+  format id, so it is Karoline's and Craig's call (#247).
 - **`--no-growth-alpha` took any non-negative number, and 5 was published as the level the test ran at**
   (#250). The sibling `--max-adjusted-p` refuses 5 with a message. An alpha of 5 makes every replicate
   set count as grown, so the no-growth rule, the only source of the censored and obligate arcs, is
