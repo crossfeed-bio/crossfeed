@@ -74,3 +74,57 @@ def test_the_claims_gate_names_the_deriver_a_sentence_is_about(tmp_path, monkeyp
     missing = []
     claims_check.check_default_deriver(missing)
     assert any("no doc in" in p for p in missing)
+
+
+def test_the_secrets_pattern_does_not_require_the_value_to_be_quoted(monkeypatch):
+    """The pattern required quotes around the value until 2026-10-11, so the way a secret is most likely
+    to be written in this repository went straight through: a workflow `env:` block is unquoted YAML, and
+    so is `TOKEN=...` in a shell line. The tree was clean of secrets throughout, so this was a hole in the
+    guard rather than an exposure, and `check_secrets` had no test of any kind.
+
+    Both halves matter and both are asserted: what must be caught, and what must not be, since a pattern
+    that flags this project's own `${{ secrets.GITHUB_TOKEN }}` is a pattern someone turns off. A
+    placeholder is safe because it either starts outside the character class or is shorter than the
+    16-character minimum.
+
+    Every example is assembled at run time from pieces. Writing them out would put secret-shaped lines in
+    a tracked file and the gate would flag THIS file, which it did on the first attempt: the guard works,
+    and a test of a guard must not trip it.
+    """
+    value = "ghp_" + "0123456789abcdef" + "ghijklmnop"
+    jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+    aws = "AKIA" + "IOSFODNN7EXAMPLE"
+
+    def line(keyword, sep, val, quote=""):
+        return f"{keyword}{sep}{quote}{val}{quote}\n"
+
+    caught = {
+        "workflow.yml": "env:\n  " + line("GITHUB_TOKEN", ": ", value),          # unquoted YAML
+        "setenv.py": line("MGROWTHDB_TOKEN", "=", value),                        # unquoted assignment
+        "notes.md": line("api_key", ": ", aws),
+        "header.py": line("Authorization", ": ", "Bearer " + jwt),               # a header, not a pair
+        "quoted.py": line("api_key", " = ", aws, quote='"'),                     # what it always caught
+        "key.txt": "-----BEGIN " + "OPENSSH PRIVATE KEY" + "-----\n",
+    }
+    monkeypatch.setattr(gate, "_read", caught.get)
+    found = gate.check_secrets(list(caught))
+    assert len(found) == len(caught), f"missed one of {list(caught)}: {found}"
+
+    clean = {
+        "workflow.yml": "env:\n  GH_TOKEN: ${{ github.token }}\n  O: ${{ secrets.GITHUB_TOKEN }}\n",
+        "README.md": "Set `token: <your-token-here>` and `password: $PASSWORD` first.\n",
+        "empty.py": 'api_key = ""\n',
+        "prose.md": "The secret sauce is that the token is short and a password manager helps.\n",
+        "curl.md": "curl -H 'Authorization: Bearer <token>' https://example.org\n",
+    }
+    monkeypatch.setattr(gate, "_read", clean.get)
+    assert gate.check_secrets(list(clean)) == []
+
+    # And a separate thing this test ran into rather than set out to show: the first draft used a
+    # `setenv.sh`, and it was not flagged because `.sh` is not in `gate.TEXT_EXT`, so that file is never
+    # READ by this check. That is #227 and not the pattern, and it is pinned here so a future failure
+    # cannot confuse the two.
+    unscanned = {"setenv.sh": line("MGROWTHDB_TOKEN", "=", value)}
+    monkeypatch.setattr(gate, "_read", unscanned.get)
+    assert gate.check_secrets(list(unscanned)) == [], "if this flags now, #227 is fixed and this is stale"
+    assert not any(name.endswith(gate.TEXT_EXT) for name in unscanned)

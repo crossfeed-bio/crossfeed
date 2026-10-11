@@ -37,6 +37,15 @@ content.
   as they always have.
 
 ### Fixed
+- **The gate's `secrets` check required the value to be quoted**, so an unquoted one passed all nine
+  checks: a workflow `env:` block is unquoted YAML, and so is `TOKEN=...` in any scanned file, which is
+  how a secret is most likely to be written here. The quotes are optional now, and `bearer` may be
+  followed by whitespace rather than a separator, which is how an Authorization header is written. A value
+  must still be 16 or more characters from the class, so `${{ secrets.X }}`, `$VAR`, `<your-token>` and
+  `""` still do not match, and the gate is clean on all 138 tracked files. The check had no test of any
+  kind; it has one now, asserting both what must be caught and what must not, with every example
+  assembled at run time so that a test of the guard does not trip the guard. **No secret was ever in the
+  repository**: this closed a hole in a check, not an exposure.
 - **Every relative link in the README was dead on PyPI, and the legend image was broken there** (#192).
   The README is the long description on <https://pypi.org/project/grownet/>, and PyPI does not rewrite
   relative URLs the way GitHub does, so all fifteen resolved against the project page: the limitations

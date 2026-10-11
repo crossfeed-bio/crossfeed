@@ -27,9 +27,15 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEXT_EXT = (".py", ".md", ".toml", ".yml", ".yaml", ".json", ".cfg", ".ini", ".txt")
 
+# A quoted value was required until 2026-10-11, so an unquoted one passed: `TOKEN: ghp_...` in a
+# workflow `env:` block, or `TOKEN=...` in any scanned file, is how a real secret is most likely written
+# here and is exactly what the quotes excluded. The quotes are optional now, and `bearer` may be followed
+# by whitespace rather than a separator, which is how an Authorization header is written. A value must
+# still be 16 or more characters from the class, so `${{ secrets.X }}`, `$VAR`, `<your-token>` and `""`
+# do not match: a placeholder either starts outside the class or is too short.
 SECRET = re.compile(
-    r"(?i)(?:api[_-]?key|secret|token|password|authorization|bearer)\s*[:=]\s*"
-    r"['\"][A-Za-z0-9/\+=_\-\.]{16,}['\"]"
+    r"(?i)(?:api[_-]?key|secret|token|password|authorization|bearer)\s*(?:[:=]\s*|\s+)"
+    r"['\"]?[A-Za-z0-9/\+=_\-\.]{16,}['\"]?"
     r"|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
 )
 LOCAL_PATH = re.compile(r"(?i)(?:[a-z]:[\\/]dev[\\/]|[a-z]:[\\/]users[\\/]|/home/|/users/)")
