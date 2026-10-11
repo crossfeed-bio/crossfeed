@@ -113,10 +113,23 @@ def test_the_secrets_pattern_does_not_require_the_value_to_be_quoted(monkeypatch
         "enc.txt": "-----BEGIN " + "ENCRYPTED PRIVATE KEY" + "-----\n",
         "pgp.txt": "-----BEGIN " + "PGP PRIVATE KEY BLOCK" + "-----\n",
         "plain.txt": "-----BEGIN " + "PRIVATE KEY" + "-----\n",
+        # ONE PER KEYWORD the pattern names. The first version probed `token`, `api_key` and
+        # `authorization` only, so `secret` and `password`, half the key/value group, were untested:
+        # narrowing the pattern to `(?:api[_-]?key|token)` let an unquoted `password=` line through
+        # with this, its only test, green (found reviewing this change).
+        "kw_secret.py": line("secret", "=", value),
+        "kw_password.py": line("password", ": ", value),
+        "kw_dashkey.py": line("api-key", ": ", value),
+        "kw_bearer.py": line("bearer", " ", jwt),
     }
     monkeypatch.setattr(gate, "_read", caught.get)
     found = gate.check_secrets(list(caught))
     assert len(found) == len(caught), f"missed one of {list(caught)}: {found}"
+
+    # and every keyword the pattern names has a case above, so adding one without a case fails here
+    for keyword in ("api", "secret", "token", "password", "authorization", "bearer"):
+        assert any(keyword in text.lower() for text in caught.values()), (
+            f"the pattern names {keyword} and no case above uses it")
 
     clean = {
         "workflow.yml": "env:\n  GH_TOKEN: ${{ github.token }}\n  O: ${{ secrets.GITHUB_TOKEN }}\n",
