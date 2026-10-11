@@ -396,9 +396,12 @@ EDGE_ATTRIBUTES = {
     "metric_without": "the same without the source. A 0 is a SENTINEL for the set that failed the "
                       "no-growth rule, not a measured zero: under a growth rate it is the rate that was "
                       "measured, and under auc or max the set did grow and failed a rule about how "
-                      "much, so the number it reached is not 0. How far from 0 it was is on the same "
-                      "arc, as strength_bound with the rule that gave it: on the corpus those bounds "
-                      "put the without-side at up to 65 per cent of the with-side",
+                      "much, so the number it reached is not 0. How far from 0 it was is usually on "
+                      "the same arc, as strength_bound with the rule that gave it: on the corpus those "
+                      "bounds put the without-side at up to 65 per cent of the with-side. On 3 of the "
+                      "15 censored arcs there is NO bound and strength_bound is empty, because the rule "
+                      "bounds nothing away from zero or the set is zero from its first point; bound_rule "
+                      "says which, and the matrix leaves those cells NA like the rest",
     "target_capacity": "the target's own plateau in the co-culture, where its curves reached stationary "
                        "phase: what fits the self-limitation of an organism that grows only with a partner",
     "target_capacity_unit": "the abundance unit that plateau is in, as measured; never converted",

@@ -37,6 +37,14 @@ content.
   as they always have.
 
 ### Fixed
+- **The sentinel's remedy was stated without its exception** (Craig's agent, reviewing #226). The new
+  `metric_without` description told a reader that how far from 0 the set was "is on the same arc, as
+  strength_bound with the rule that gave it". `derive.bounded_strength` has two paths that return no
+  bound, and on the corpus **3 of the 15 censored arcs take one of them**: measured live, two whose rule
+  bounds nothing away from zero and one that is zero from its first point. A reader followed the sentence
+  and found an empty field with nothing having warned them, which is the same defect class the entry
+  above fixes. The description now names the exception and points at `bound_rule`, which says which path
+  it was; the matrix already left those three cells `NA` rather than 0.
 - **The test for the fitted report line modelled the wrong field**, found by a pass that attacked every
   new test with the regression it claims to catch. It built its edges with `method="integrated:two_stage"`,
   which is `integrated.METRIC`; the `method` field carries `integrated.METHOD`, which begins "integrated
