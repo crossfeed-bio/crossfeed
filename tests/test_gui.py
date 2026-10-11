@@ -620,9 +620,16 @@ def test_all_narrowed_by_the_second_box_does_not_claim_the_whole_database(server
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
         page = r.read().decode("utf-8")
     assert "Searching" not in page, "this needs the result page, not the progress page, or it proves nothing"
-    assert "All of mGrowthDB" not in page
+    # case-INSENSITIVE, and over the whole page including the report embedded in it: the first version
+    # asserted "All of mGrowthDB" with a capital A, and `report.py` writes "all of mGrowthDB (every
+    # study, with every partner)" in lower case, so the report contradicted the heading three lines above
+    # its own conditions line and this test passed (found reviewing #242)
+    assert "all of mgrowthdb" not in page.lower(), "the page or its report still claims the whole database"
     assert "All, narrowed by the second box" in page
-    assert "SMGDB00000002" in page and "Clear them to derive" in page
+    # the CONTAINING phrase, not the bare id: that id reaches this page from the re-rendered form field,
+    # from "Studies searched:", and twice from the embedded report's settings block, so asserting the id
+    # alone passed however the heading was worded
+    assert "matching SMGDB00000002" in page and "Clear them to derive" in page
 
     # and the OTHER control that narrows All, which the first version of this test did not cover and the
     # fix therefore did not either: Exclude these studies, which the code comment named all along
@@ -630,7 +637,7 @@ def test_all_narrowed_by_the_second_box_does_not_claim_the_whole_database(server
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
         page = r.read().decode("utf-8")
     assert "Searching" not in page, "this needs the result page, or it proves nothing"
-    assert "All of mGrowthDB" not in page
+    assert "all of mgrowthdb" not in page.lower()
     assert "All, narrowed by Exclude these studies" in page
     assert "excluding SMGDB00000002" in page
 

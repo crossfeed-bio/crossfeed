@@ -1050,3 +1050,13 @@ def test_the_skip_list_separates_pairs_from_notes_about_the_data():
     # report said "pairs the data did not support: none" and listed seven of them under a heading
     # saying they are not pairs (found reviewing #242)
     assert about_a_pair("A organism -> B organism [EXP_1]", "no growth (auc) in either set")
+    # a separator in the label AND an average-replicate reason: the only negative case here tested the
+    # separator branch, because "2 average replicate(s) left out (x)" does not contain AVERAGE, so
+    # dropping the `AVERAGE not in reason` guard altogether left this test green. `condensed` puts the
+    # AVERAGE text into the reason it synthesises and keys those entries by the EXPERIMENT NAME, which is
+    # free text in mGrowthDB, so an experiment named with " with " or " -> " in it would be filed as a
+    # pair the data did not support: that is #232 again (found reviewing #242).
+    assert not about_a_pair("A organism with B organism [EXP_1]",
+                            f"3 average replicate(s) left out ({AVERAGE})")
+    assert not about_a_pair("A organism -> B organism [EXP_1]",
+                            f"3 average replicate(s) left out ({AVERAGE})")

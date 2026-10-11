@@ -306,7 +306,11 @@ def _derive_species(a):
 
         from .gui import _empty_reason
         print("\nno interactions: " + html.unescape(_empty_reason(result)), file=sys.stderr)
-    label = "all of mGrowthDB" if a.all_studies else " and ".join(a.species)
+    # "all of mGrowthDB" only when nothing narrowed it: the second box and Exclude these studies both
+    # narrow All, which is deliberate, and saying otherwise is the same false claim the page carried
+    narrowing = [x for x in (*a.conditions, *(a.exclude_studies or "").split(",")) if x and x.strip()]
+    label = ("all of mGrowthDB" if not narrowing else "All, narrowed to " + ", ".join(
+        x.strip() for x in narrowing)) if a.all_studies else " and ".join(a.species)
     return _emit(a, net, result["skipped"], extra, label, result)
 
 
