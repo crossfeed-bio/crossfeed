@@ -37,6 +37,13 @@ content.
   as they always have.
 
 ### Fixed
+- **The R package's `glv_write` wrote three of the download's sixteen rate columns**, under a doc
+  promising "the same three files grownet's download holds". A reader who kept its output beside their
+  analysis, which is what the documentation says it is for, silently dropped the estimator, the lag, the
+  carrying capacity and its provenance: the columns the `README.txt` written next to it tells them to
+  read. Every value was already in the payload's `growth_rate_detail`, so it now writes them, with the
+  doubling time derived as the download's last column is. The documentation also said "three files" where
+  the download holds one matrix per abundance unit, and says so now.
 - **Two published statements about `sd` and `se` said what the code's own comment says is false** (#260).
   `help.py`'s meaning for `se_replicates` and METHOD_NOTES both asserted that "the tool's own relation
   se = sd / sqrt(n) holds", and METHOD_NOTES added "`sd` is `se * sqrt(n)`", which is the formula
