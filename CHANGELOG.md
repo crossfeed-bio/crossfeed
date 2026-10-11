@@ -37,6 +37,18 @@ content.
   as they always have.
 
 ### Fixed
+- **The source distribution now carries the two registers the test suite reads**, `docs/METHOD_NOTES.md`
+  and `docs/LIMITATIONS.md`, and a test keeps `MANIFEST.in` honest about that. A test that reads a shipped
+  document makes it a dependency of the suite, and the sdist job is the only one that notices when it is
+  not carried, because it unpacks the archive where the repository layout is not there to fall back on:
+  the surface guard added for #202 went red there while `make check` was green. The named include is
+  deliberate rather than forgetful. Measured first: `recursive-include docs *.md` also ships
+  `docs/agents/NOTES.md`, 95,162 bytes of agent working notes, and `docs/DATA_GOVERNANCE.md`, so it is not
+  a tighter version of the named line but a decision to publish two more files; `graft docs` adds those
+  plus both SVGs; and a recursive rule with `prune docs/agents` works only when the prune comes after it.
+  The new test reads the paths out of the suite rather than listing them, so the next surface test is
+  covered the moment it is written, and it records that `README.md` ships because setuptools carries the
+  declared readme, which is a default rather than a promise.
 - **The gate's `secrets` check required the value to be quoted**, so an unquoted one passed all nine
   checks: a workflow `env:` block is unquoted YAML, and so is `TOKEN=...` in any scanned file, which is
   how a secret is most likely to be written here. The quotes are optional now, and `bearer` may be

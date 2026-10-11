@@ -247,3 +247,57 @@ def test_this_tree_dates_its_release_no_earlier_than_its_newest_commit():
     if newest:                      # a tarball has no git history, and then there is nothing to compare
         assert dated >= datetime.date.fromisoformat(newest), (
             f"the release is dated {dated} and its newest commit is {newest}")
+
+
+def test_the_sdist_carries_every_doc_the_suite_reads():
+    """A test that reads a shipped document makes that document a dependency of the suite, and the sdist
+    job is the only one that notices when it is not carried: it unpacks the archive, where the repository
+    layout is not there to fall back on. That went red once already, on the surface guard added for #202,
+    and the prediction from the other side of the review was that it would go red once per new surface
+    test, always after the test looked green locally (Craig's agent on #199, 2026-10-10).
+
+    So this asserts the manifest covers them, which ends the sequence instead of paying for it one file at
+    a time. It reads the paths out of the suite rather than listing them, so a new surface test is covered
+    by this assertion the moment it is written.
+
+    `README.md` is deliberately allowed without being named: setuptools ships the declared readme, which
+    was measured in all five manifest shapes. That is a default rather than a promise, so it is recorded
+    here instead of being relied on silently.
+    """
+    import re
+
+    root = Path(__file__).resolve().parents[1]
+    manifest = (root / "MANIFEST.in").read_text(encoding="utf-8")
+    named = set()
+    for line in manifest.splitlines():
+        line = line.strip()
+        if line.startswith("include "):
+            named.update(line[len("include "):].split())
+        elif line.startswith("recursive-include "):
+            parts = line.split()
+            named.update(f"{parts[1]}/**/{pat}" for pat in parts[2:])
+
+    wanted = set()
+    for path in sorted((root / "tests").glob("*.py")):
+        for hit in re.findall(r'"((?:docs|examples|schema|gui)/[A-Za-z0-9_./-]+)"',
+                              path.read_text(encoding="utf-8")):
+            wanted.add(hit)
+
+    def covered(name: str) -> bool:
+        if name in named or name == "README.md":
+            return True
+        import fnmatch
+        folder, _, base = name.rpartition("/")
+        for entry in named:
+            if "/**/" in entry:
+                top, pat = entry.split("/**/", 1)
+                if (folder == top or folder.startswith(top + "/")) and fnmatch.fnmatch(base, pat):
+                    return True
+        return False
+
+    missing = sorted(n for n in wanted if not covered(n))
+    assert not missing, (
+        "the suite reads these and MANIFEST.in does not carry them, so the sdist job will fail where "
+        f"`make check` passes: {missing}")
+    # and the assertion is reachable: the two this was written for are really in the set it checks
+    assert {"docs/METHOD_NOTES.md", "docs/LIMITATIONS.md"} <= wanted
