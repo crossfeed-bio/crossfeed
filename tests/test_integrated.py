@@ -1031,14 +1031,21 @@ def test_the_report_says_which_quantity_the_fitted_pair_is():
     now says the pair is fitted, gives the ratio it does imply, and says that ratio is the median
     coefficient's effect rather than the log2 mean (2026-10-11). The comparison's line is unchanged,
     because there the two ARE the pair whose log2 ratio is the printed mean."""
-    from grownet import model
+    from grownet import integrated, model
+    from grownet.derive import REPLICATE_METHOD
     from grownet.report import _edge_line
 
     net = model.InteractionNetwork(nodes={"a": model.Node(id="a", name="Source organism"),
                                           "b": model.Node(id="b", name="Target organism")})
 
+    # the REAL constants. The first version of this put `integrated.METRIC` ("integrated:two_stage") in
+    # the `method` field, which is where `integrated.METHOD` goes, so the test modelled the wrong field
+    # and passed only because METHOD happens to contain the word "integrated": rewriting the detection as
+    # an equality against the invented string left it green, and every real arc fell back to the
+    # unlabelled line (found reviewing this branch).
+    assert "integrated" in integrated.METHOD, "the detection reads this substring, so the test needs it"
     fitted = model.Edge(source="a", target="b", effect="inhibition", strength=-0.5417, sd=0.16,
-                        metric="auc", method="integrated:two_stage",
+                        metric="auc", method=integrated.METHOD,
                         metric_with=0.2701, metric_without=0.4926, partner_abundance=3.0)
     line = _edge_line(net, fitted)
     assert "fitted at 0.2701 with / 0.4926 without the partner's term" in line
@@ -1046,8 +1053,15 @@ def test_the_report_says_which_quantity_the_fitted_pair_is():
     assert "not the log2 mean above" in line
     assert "log2 mean -0.54" in line                              # and the mean is still printed
 
+    # a MERGED integrated arc, whose method carries "; merged: ..." appended by `derive.py`: it must
+    # still be labelled, and the invented-string version would not have labelled it either
+    merged = model.Edge(source="a", target="b", effect="inhibition", strength=-0.5417, sd=0.16,
+                        metric="auc", method=integrated.METHOD + "; merged: the median of 3 arcs",
+                        metric_with=0.2701, metric_without=0.4926, partner_abundance=3.0)
+    assert "fitted at" in _edge_line(net, merged)
+
     compared = model.Edge(source="a", target="b", effect="inhibition", strength=-2.66, sd=2.38,
-                          metric="auc", method="replicate sets",
+                          metric="auc", method=REPLICATE_METHOD.format(metric="auc"),
                           metric_with=5.088e9, metric_without=3.216e10, partner_abundance=3.0)
     plain = _edge_line(net, compared)
     assert "at 5.088e+09 with / 3.216e+10 without (auc)" in plain

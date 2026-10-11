@@ -37,6 +37,14 @@ content.
   as they always have.
 
 ### Fixed
+- **The test for the fitted report line modelled the wrong field**, found by a pass that attacked every
+  new test with the regression it claims to catch. It built its edges with `method="integrated:two_stage"`,
+  which is `integrated.METRIC`; the `method` field carries `integrated.METHOD`, which begins "integrated
+  v1: ln(x_i(T) / x_i(0)) = ...". The test passed only because that string happens to contain the word
+  the detection looks for, so rewriting the detection as an equality against the invented string left the
+  test green while **every real integrated arc fell back to the unlabeled line a reader divided and
+  found wrong**. It uses the real constants now, plus a merged arc, whose method carries "; merged: ..."
+  appended afterwards and which the invented-string version would not have labeled either.
 - **Three words the tool used about itself claimed more than it computes** (#224, #225, #226), found in a
   review of 0.3.0. No statistic, rule, threshold or published number changes; what changes is that the
   sentences describing them are now true, and three tests hold them there.
