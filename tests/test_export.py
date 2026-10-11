@@ -216,3 +216,60 @@ def test_every_record_field_reaches_the_cytoscape_table():
         f"these Edge fields are not Cytoscape columns: {sorted(edge_fields - edge_columns - {'evidence'})}")
     assert not edge_columns - edge_extra - edge_fields, (
         f"these Cytoscape columns are not Edge fields: {sorted(edge_columns - edge_extra - edge_fields)}")
+
+
+def test_the_graphml_says_which_format_it_is_and_where_it_came_from():
+    """The GraphML is the file a Cytoscape user shares, and it carried no schema id, no source and no
+    citation (#216).
+
+    The schema id is the part that matters. `model.py` calls it the project's one guarantee, "the one
+    signal that says the meaning of a field moved", and `significance` was the corrected p-value in /v0
+    and is -log10(q) in /v3, which runs the OTHER way: a /v0 and a /v3 GraphML had identical column
+    names, inverted significance, and nothing in either file to tell them apart.
+
+    It is the DOCUMENT's own id, not the current constant, or this field would assert the very thing the
+    issue is about.
+    """
+    import re
+
+    from grownet import export
+    from grownet.help import REPOSITORY
+    from grownet.model import SCHEMA, InteractionNetwork
+
+    net = records_to_network(
+        [{"source": "a", "target": "b", "source_name": "A", "target_name": "B", "effect": "facilitation",
+          "strength": 1.0, "weight": 1.0, "status": "present", "outcome": "quantified",
+          "study_id": "S1", "study_citation": "A Study 2024", "study_url": "https://doi.org/10.1/x"}],
+        meta={"tool_version": "9.9.9", "source_db": "mGrowthDB (live)"})
+    xml = export.to_graphml(net)
+
+    def attr(name):
+        m = re.search(rf'key="g_{name}">([^<]*)<', xml)
+        return m.group(1) if m else None
+
+    assert attr("schema") == SCHEMA
+    from grownet.schema import SCHEMA_DOC
+    assert attr("schema_url") == SCHEMA_DOC["$id"]
+    assert attr("source_db") == "mGrowthDB (live)"
+    # the EXACT line, not a substring of a URL: CodeQL flags `"doi.org" in <url>` as incomplete URL
+    # sanitization, and it is right that the pattern is the risky one even in an assertion. Comparing the
+    # composed line is both the fix and the stronger check, since it pins the order and the separator a
+    # reader parses back.
+    assert attr("studies") == "S1 A Study 2024 https://doi.org/10.1/x"
+    assert attr("project_url") == REPOSITORY        # the constant, not a substring of a URL
+    # the display columns travel in every GraphML file, so the file says what they are and that the
+    # width of an arc with no measured strength is ABSOLUTE
+    legend = attr("display_columns")
+    assert "presentation, not measurement" in legend and "absolute" in legend
+
+    # a network LOADED from an older document reports that document's id, not today's
+    older = InteractionNetwork.from_dict({"schema": "grownet.interaction_network/v0", "meta": {},
+                                          "nodes": [{"id": "a"}, {"id": "b"}], "studies": [{"id": "S"}],
+                                          "edges": [{"source": "a", "target": "b",
+                                                     "effect": "facilitation", "study_ids": ["S"]}]})
+    assert re.search(r'key="g_schema">([^<]*)<', export.to_graphml(older)).group(1) == \
+        "grownet.interaction_network/v0"
+    # every key written is declared, or a reader's parser rejects the file
+    declared = set(re.findall(r'key id="(g_[a-z_]+)"', xml))
+    written = set(re.findall(r'<data key="(g_[a-z_]+)"', xml))
+    assert written <= declared, written - declared
