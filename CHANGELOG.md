@@ -6,6 +6,35 @@ content.
 
 ## [Unreleased]
 
+
+## [0.4.0] (2026-10-11)
+
+**Read this before upgrading: the numbers change.** A version is a promise about content, so this says
+what moved rather than leaving a reader to find out by diffing. **This is a minor version and not a
+patch, because the default derivation changed**: a reader who upgrades and re-derives gets a different
+network from the same database, which is not what a patch number promises. Two days of post-release
+review, 104 entries below, and three of them change what a derived network holds:
+
+- **the default derivation is the specified comparison again** (first entry under Upgrading). **Every
+  network derived without gLV mode changes, and almost all of them grow:** on the whole of mGrowthDB the
+  default goes from **12 arcs to 145**, over 24 organisms instead of 9. This is the largest change here.
+- **the rate table is keyed by the matched monoculture set** (#255 item 2), which moves `se`, `sd`,
+  `p_value` and `effect_over_sd` under the integrated form. Measured corpus-wide in gLV mode: 4 of 16
+  p-values move, **one crosses 0.05** (`0.04753` to `0.05386`), and **two arcs fall below the absence
+  threshold**, so a gLV network of 12 present arcs becomes 10.
+- **the spike limit now applies under the integrated form** (#255 item 1). At the default factor of 100
+  the corpus is byte-identical, so nothing changes unless a reader sets the setting; set to 1.5 on
+  SMGDB00000014 it goes from 4 arcs to 1, where before it did nothing at all.
+
+Nothing else here changes a number: the rest corrects what the tool SAYS about what it did, which is
+most of the 104 entries, or fixes a guard that was claimed and not applied.
+
+**A re-derive is the way to upgrade.** A network derived with 0.3.0 and a network derived with this
+version are different measurements of the same database, and `meta.settings` plus `meta.tool_version`
+in each file say which is which. **The format id does not move**: it is still
+`grownet.interaction_network/v3`, because no field was added, removed or given a new meaning, so a reader
+that already parses 0.3.0's files parses these without a change.
+
 ### Upgrading
 - **The default derivation is the specified comparison again, and gLV mode selects the integrated form**
   (Karoline, 2026-10-10: "the default one, when we don't want to do simulations, should be the lenient
