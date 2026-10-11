@@ -15,6 +15,21 @@ Rules for this file:
 
 ## Current state
 
+- 2026-10-11 (#215, #194): **a claim about a run belongs to the DERIVATION, not to the settings.**
+  `meta.statistics` and `meta.provisional` already came from the deriver, and `meta.no_growth` did not:
+  it was built from the settings for every derivation, so a form with no no-growth rule published
+  `{"applied": true, "obligate": 0, "abolished": 0}` and a reader of the published All artifact concluded
+  the rule had run over every study and found no organism in mGrowthDB that grows only with a partner.
+  The comparison finds 15 on the same corpus the same day.
+  **The seam is a class attribute on the deriver**, beside `statistics` and `provisional`:
+  `no_growth_rule` says whether the rule exists at all, and `ignores` lists the settings that derivation
+  does not read. When adding a derivation, set both, or it will claim the previous one's behavior.
+  **A derivation that does not apply a rule carries no count for it**, because a 0 reads as a
+  measurement. The reason says where a censored arc under that form DOES come from, since #201 means one
+  can exist from the fit.
+  **`meta.settings_not_used` is why the list travels in the file** rather than only in the report: a
+  reader who did not run the tool is the one most likely to read a recorded setting as one that was used.
+
 - 2026-10-11 (#195, #197, #198): **three things about the plumbing that are worth knowing before changing
   it again.**
   **What stops a symlink at a cache entry is the rename, not a flag.** `os.rename` acts on the link

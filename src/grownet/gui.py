@@ -875,6 +875,15 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
         more = f", and {len(off_default) - 6} more" if len(off_default) > 6 else ""
         errors += (f"<p class=\"muted\">{len(off_default)} setting(s) are not at their default: "
                    f"{named}{more}. Advanced settings is open below.</p>")
+    # and the settings this DERIVATION does not read, which is a different thing from a changed one: a
+    # reader who sees "Include drop-out communities: on" beside a form that derives none has been told
+    # something false about their own run (#215 item 3)
+    unused = [k for k in (getattr(net, "meta", {}) or {}).get("settings_not_used") or () if k in s_here]
+    if unused:
+        told = ", ".join(_esc(help_settings[k][0] if k in help_settings else k) for k in sorted(unused))
+        errors += (f"<p class=\"muted\">{len(unused)} setting(s) are recorded but NOT read by the "
+                   f"{_esc(s_here.get('derivation', ''))} derivation, so changing them changes nothing "
+                   f"here: {told}.</p>")
     return (f"<section class=\"result\" id=\"result\">{note}{species_heading}<ul>{resolved}</ul>{unresolved}"
             f"<p class=\"muted\">Studies searched: {_esc(studies)}</p>{errors}{table}"
             f"{_absent_section(result, result.get('absence', {}))}{_sources(net)}{skipped}</section>")

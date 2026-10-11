@@ -317,7 +317,9 @@ read, and it is pinned by a JSON Schema at
 the tool, `tool_version` and `derived_on` (the date: mGrowthDB changes, so the same version can derive a
 different network later), `derived_at` (the date and time), the data read (`meta.data`: the API, when,
 and each study's upload and publication dates) and every setting used; GraphML carries the tool, version,
-date and time as graph attributes. A run with `--report-rates` also carries `meta.growth_rates`: the rule
+date and time as graph attributes. A run with `--report-rates` also carries `meta.growth_rates`,
+and so does any run under the integrated form, whose rates are a product of the same fit that
+gives the arcs rather than a separate stage to ask for: the rule
 the rates follow, a rate per organism with its unit, the number of monoculture replicates behind it, the
 studies and each study's own median, and `without_a_rate`, the organisms that have none.
 

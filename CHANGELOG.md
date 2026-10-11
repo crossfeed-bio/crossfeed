@@ -56,6 +56,33 @@ content.
   reading as a far weaker result than its own `q_value` states; that cross-check is applied only to the
   format ids where the relation holds, and only as a note, since a reader may have rounded. Checked
   against grownet's own output: 206 of the corpus's 223 arcs carry both fields and none is flagged.
+- **The published All artifact dropped four parts of the result its own module says it holds** (#228).
+  `published.py` describes the file as holding "the whole result of the search, not only the network", and
+  `FIELDS` left out `absent`, `rates`, `steady` and `notes`. The consequence a reader met: the artifact's
+  report stated "78 below the absence threshold" and its page section showed none of them, while the
+  command line's message for that condition says "The report lists them". `absent` is a network of its
+  own, which is why it was the one lost at the defaults: the other fields pass through as JSON and it
+  needs serializing the way `network` does. Measured on a live All derivation round-tripped through the
+  format, the page section now matches the live result exactly where it previously vanished, and the
+  payload is 0.46 MB. `tests/test_published.py` checks `FIELDS` against what `run_query` actually returns,
+  so the next key added cannot disappear in silence, and an artifact written before this still loads.
+- **Three `meta` blocks were present and wrong under the integrated form** (#215, and the mechanism of
+  #194). Present and wrong is worse than missing, because a reader trusts them.
+  - `meta.no_growth` was built from the settings for every derivation, so a form with no such rule
+    published `{"applied": true, "obligate": 0, "abolished": 0}`. A reader of the published All artifact
+    concluded the rule had run over every study and found **no organism in mGrowthDB that grows only in
+    the presence of a partner**. The comparison finds 15 on the same corpus the same day. The block now
+    comes from the derivation, as `statistics` and `provisional` already did, and a derivation without
+    the rule says so and carries no count, because a 0 there reads as a measurement. It also says where a
+    censored arc under that form does come from, since #201 means one can exist.
+  - `meta.growth_rates` appeared while `settings.report_rates` was recorded false, and the README stated
+    the contract the other way round. Under the integrated form the rates are a product of the same fit
+    that gives the arcs rather than a stage to ask for, so the README now says that.
+  - settings the derivation does not read were recorded as if they had been used: a reader saw "Include
+    drop-out communities: on" where that form derives none, and `--metric auc`, `max` and `growth_rate`
+    gave byte-identical networks while the recorded value changed. The derivation names them,
+    `meta.settings_not_used` carries them so a reader of the FILE sees them too, and the report and the
+    page mark them rather than printing them as used.
 - **A total suppression was dropped as "no interaction" instead of being censored** (#201, Karoline's
   decision of 2026-10-11: "I agree on censored"). Under the integrated form an arc's strength is
   `log2(1 + A_ij x_j / r_i)`, which is undefined once the fitted effect reaches -1, so the strongest

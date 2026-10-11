@@ -119,3 +119,62 @@ def test_the_report_names_the_derivation_that_ran(monkeypatch):
     replicate = report_text(_query())
     assert "integrated" not in replicate
     assert "replicate" in replicate
+
+
+def test_a_derivation_without_a_no_growth_rule_says_so_rather_than_reporting_none():
+    """`meta.no_growth` comes from the DERIVATION, not from the settings.
+
+    It was built from the settings for every derivation, so the integrated form published
+    `{"applied": true, "obligate": 0, "abolished": 0}`. A reader of the All artifact concluded that the
+    rule had run over all 25 studies and found no organism in mGrowthDB that grows only with a partner;
+    the comparison finds 15 on the same corpus the same day, measured 2026-10-11. Present and wrong is
+    worse than missing, because a reader trusts it (#215 item 1).
+
+    A censored arc CAN exist under that form, from the fit rather than from this rule (#201), so the
+    reason says where one comes from instead of implying there are none.
+    """
+    from grownet.derive import Deriver, output_meta
+    from grownet.integrated import IntegratedDeriver
+
+    records = [{"source": "a", "target": "b", "source_name": "A", "target_name": "B",
+                "effect": "inhibition", "strength": None, "weight": None, "status": "present",
+                "outcome": "obligate", "study_id": "S1", "metric": "auc"}]
+
+    def meta_for(deriver):
+        _edges, meta = output_meta(list(records), deriver=deriver)
+        return meta
+
+    rule = meta_for(Deriver())["no_growth"]
+    assert rule["applied"] is True
+    assert rule["obligate"] == 1, rule        # the comparison counts what the rule produced
+
+    none = meta_for(IntegratedDeriver())["no_growth"]
+    assert none["applied"] is False
+    # and NO count, because a 0 there reads as a measurement
+    assert "obligate" not in none and "abolished" not in none, none
+    assert "no no-growth rule" in none["why"]
+    assert "bound_rule" in none["why"]        # where a censored arc under this form does come from
+
+
+def test_a_setting_the_derivation_does_not_read_is_recorded_as_such():
+    """The settings block printed every key with no derivation awareness, so under the integrated form a
+    reader saw "Include drop-out communities: on" where it derives none, and changing `--metric` gave
+    byte-identical networks while the recorded value changed (#215 item 3, the mechanism of #194).
+
+    The list travels in `meta` so a reader of the FILE sees it, not only a reader of the report.
+    """
+    from grownet.derive import Deriver
+    from grownet.integrated import IntegratedDeriver
+
+    assert Deriver.ignores == ()
+    ignored = set(IntegratedDeriver.ignores)
+    # the ones measured as inert under that form
+    assert {"metric", "rate_method", "rate_window", "include_dropout"} <= ignored, ignored
+    assert {"no_growth_alpha", "no_growth_factor"} <= ignored, ignored
+    # and not the ones it does read, or the mark would be a lie in the other direction
+    for key in ("absence_threshold", "correction", "max_adjusted_p", "merge_arcs", "include_absent"):
+        assert key not in ignored, key
+
+    # the report marks them, and only them
+    from grownet.help import SETTINGS
+    assert all(k in SETTINGS for k in ignored), "a key nothing renders cannot be marked"
