@@ -37,6 +37,58 @@ content.
   as they always have.
 
 ### Fixed
+- **The sentinel's remedy was stated without its exception** (Craig's agent, reviewing #226). The new
+  `metric_without` description told a reader that how far from 0 the set was "is on the same arc, as
+  strength_bound with the rule that gave it". `derive.bounded_strength` has two paths that return no
+  bound, and on the corpus **3 of the 15 censored arcs take one of them**: measured live, two whose rule
+  bounds nothing away from zero and one that is zero from its first point. A reader followed the sentence
+  and found an empty field with nothing having warned them, which is the same defect class the entry
+  above fixes. The description now names the exception and points at `bound_rule`, which says which path
+  it was; the matrix already left those three cells `NA` rather than 0.
+- **The test for the fitted report line modelled the wrong field**, found by a pass that attacked every
+  new test with the regression it claims to catch. It built its edges with `method="integrated:two_stage"`,
+  which is `integrated.METRIC`; the `method` field carries `integrated.METHOD`, which begins "integrated
+  v1: ln(x_i(T) / x_i(0)) = ...". The test passed only because that string happens to contain the word
+  the detection looks for, so rewriting the detection as an equality against the invented string left the
+  test green while **every real integrated arc fell back to the unlabeled line a reader divided and
+  found wrong**. It uses the real constants now, plus a merged arc, whose method carries "; merged: ..."
+  appended afterwards and which the invented-string version would not have labeled either.
+- **Three words the tool used about itself claimed more than it computes** (#224, #225, #226), found in a
+  review of 0.3.0. No statistic, rule, threshold or published number changes; what changes is that the
+  sentences describing them are now true, and three tests hold them there.
+- **`strength` and the `metric_with`/`metric_without` pair were documented as one quantity, and under the
+  integrated form they are two** (#224). Under the specified comparison `strength` **is** exactly
+  `log2(metric_with / metric_without)`, and 0 of 208 corpus arcs depart from it beyond rounding. Under the
+  integrated form the pair is the fitted row evaluated with and without the partner's term, from the
+  median coefficient, while `strength` is the mean of the per-replicate log2 effects at each replicate's
+  own partner level: **16 of 16 corpus arcs differ, by up to 0.42 in log2**, and on 2 the absence
+  threshold, which acts on `strength`, lands the other way from the pair. The report printed
+  `log2 mean -0.54` and `0.2701 with / 0.4926 without` on one line, so a reader who divided them got
+  -0.8669 and found the line wrong. `model.py`, the `strength` and `metric_with` field descriptions and
+  the report now name the relation per derivation, and the report gives the fitted pair's own log2 ratio
+  beside it rather than leaving it to be computed and doubted. What is exact under **both** is Karoline's
+  formula of #123, `(with - without) / partner_abundance`, which is what a gLV cell is built from, and
+  that is what the new test pins.
+- **`outcome: obligate` was defined in eight places as "the target grows only with the source"**, which
+  reads as a claim about the organism (#225). The rule is evaluated per comparison: it says the
+  without-set of **that** comparison failed the no-growth rule, and no stage asks whether the target grows
+  without the source anywhere else. In the corpus one pair is obligate in two conditions of a study and
+  quantified in six others of the same study, **once with the target reaching 1.16e+11 without the source
+  against 3.31e+10 with it**, so the artifact carried its own counterexample. The field table, the legend,
+  the help page's principle, `derive.py`, `interaction.py`, `matrix.py` and the README now state the
+  scope, and a dated note records it under Karoline's decision on #16 without altering her words. A pair
+  measured as obligate in one condition and quantified in another is a condition-dependent effect, not a
+  contradiction (Karoline, 2026-10-10, on the related sign conflict: "it's of interest and just shows that
+  higher order interactions matter").
+- **`metric_without` is 0 on every censored arc whatever the metric, and the help page said the 0 was a
+  measurement** (#226): "0 means the target did not grow at all there". Under a growth rate the 0 is
+  measured, which is what #123 settled. Under `auc` or `max`, and `auc` is the default, the set **did**
+  grow and failed a rule about how much, so its value is not 0, and the same arc's `strength_bound` says
+  how far: on the corpus all 15 censored arcs are `auc`, all carry 0, and their own bounds put the
+  without-side at **up to 65 per cent of the with-side**. The field description and
+  `derive.absolute_values` now call the 0 a sentinel for the set the no-growth rule rejected, and point at
+  the bound for how far from zero it was. The value is unchanged, since changing what the field means
+  would move the format id.
 - **Every relative link in the README was dead on PyPI, and the legend image was broken there** (#192).
   The README is the long description on <https://pypi.org/project/grownet/>, and PyPI does not rewrite
   relative URLs the way GitHub does, so all fifteen resolved against the project page: the limitations
