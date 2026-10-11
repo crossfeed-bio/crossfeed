@@ -37,6 +37,16 @@ content.
   as they always have.
 
 ### Fixed
+- **The published All artifact dropped four parts of the result its own module says it holds** (#228).
+  `published.py` describes the file as holding "the whole result of the search, not only the network", and
+  `FIELDS` left out `absent`, `rates`, `steady` and `notes`. The consequence a reader met: the artifact's
+  report stated "78 below the absence threshold" and its page section showed none of them, while the
+  command line's message for that condition says "The report lists them". `absent` is a network of its
+  own, which is why it was the one lost at the defaults: the other fields pass through as JSON and it
+  needs serializing the way `network` does. Measured on a live All derivation round-tripped through the
+  format, the page section now matches the live result exactly where it previously vanished, and the
+  payload is 0.46 MB. `tests/test_published.py` checks `FIELDS` against what `run_query` actually returns,
+  so the next key added cannot disappear in silence, and an artifact written before this still loads.
 - **Three `meta` blocks were present and wrong under the integrated form** (#215, and the mechanism of
   #194). Present and wrong is worse than missing, because a reader trusts them.
   - `meta.no_growth` was built from the settings for every derivation, so a form with no such rule

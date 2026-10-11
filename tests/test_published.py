@@ -74,3 +74,72 @@ def test_a_published_network_derived_the_other_way_is_not_served():
         yield io.BytesIO(json.dumps(payload).encode("utf-8"))
 
     assert published.fetch_from(no_settings, settings={"derivation": "replicate"}) is not None
+
+
+def test_the_artifact_carries_the_arcs_the_threshold_left_out():
+    """The module says the file holds the whole result of the search. It dropped `absent`, `rates` and
+    `steady`, so the published artifact's report stated "78 below the absence threshold" and its page
+    section listed none of them, while the CLI's message for that condition says "The report lists them"
+    (#228, measured live 2026-10-11).
+
+    `absent` is a network of its own, which is why it was lost: the other fields pass through as JSON and
+    it needs serializing the way `network` does.
+    """
+    import json
+
+    from grownet import published
+    from grownet.mgrowthdb import records_to_network
+
+    def arc(source, target, strength, status):
+        return {"source": source, "target": target, "source_name": source.upper(),
+                "target_name": target.upper(), "effect": "facilitation", "strength": strength,
+                "weight": abs(strength), "status": status, "outcome": "quantified", "study_id": "S1"}
+
+    result = {"network": records_to_network([arc("a", "b", 1.0, "present")]),
+              "absent": records_to_network([arc("c", "d", 0.01, "absent")]),
+              "rates": {"a": {"name": "A", "rate": 0.5, "unit": "1/h"}},
+              "steady": [{"study": "S1", "satisfied": True}],
+              "absence": {"k": 1.0, "absent": 1}, "hidden": {"absent": 1},
+              "entries": [], "settings": {}, "studies": [], "skipped": [], "errors": []}
+
+    back = published.from_payload(json.loads(json.dumps(published.to_payload(result))))
+
+    assert back["absent"] is not None, "the arcs the threshold left out are missing from the artifact"
+    assert [(e.source, e.target) for e in back["absent"].edges] == [("c", "d")]
+    assert back["absent"].edges[0].status == "absent"
+    assert back["rates"] == result["rates"]
+    assert back["steady"] == result["steady"]
+    # and the network itself is still the network, not the absent one
+    assert [(e.source, e.target) for e in back["network"].edges] == [("a", "b")]
+    # an artifact written before this carried no `absent` key at all, and must still load
+    older = json.loads(json.dumps(published.to_payload(result)))
+    older.pop("absent")
+    assert published.from_payload(older)["absent"] is None
+
+
+def test_every_field_a_search_returns_is_carried_or_deliberately_left_out():
+    """`FIELDS` is the module's claim to hold the whole result, so it is checked against what
+    `run_query` actually returns rather than maintained by hand: three keys were missing and the loss was
+    silent (#228).
+
+    A key that is deliberately not carried is named here with the reason, so the next one added to
+    `run_query` fails this test rather than disappearing.
+    """
+    import inspect
+    import re
+
+    from grownet import gui, published
+
+    returned = set(re.findall(r'"([a-z_]+)":', inspect.getsource(gui.run_query).split("return {", 1)[1]))
+    carried = set(published.FIELDS) | {"network", "absent"}
+    # Nothing is deliberately left out today, so this set is empty and the check is strict. A key that
+    # genuinely should not travel goes here WITH its reason, and the next key added to `run_query`
+    # then fails this test rather than disappearing from the artifact in silence.
+    deliberate = set()
+    missing = returned - carried - deliberate
+    assert not missing, (
+        f"run_query returns these and the artifact drops them silently: {sorted(missing)}. Carry them in "
+        "FIELDS, or name them above with the reason they are not carried.")
+    # and the probe is not looking at nothing, which would make the assertion vacuous
+    assert len(returned) > 15, returned
+    assert {"network", "absent", "rates", "steady", "notes"} <= returned
