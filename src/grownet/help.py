@@ -342,7 +342,9 @@ EDGE_ATTRIBUTES = {
     "method": "how the edge was computed, in words",
     "quality": "flags that make the edge low quality: single_replicate, strains_pooled, non_batch, "
                "removed_member_detected; empty means no issue found",
-    "cautions": "remarks that do not lower quality: two_replicates (exactly two replicates on a side), "
+    "cautions": "remarks that do not lower quality: two_replicates (exactly two replicates on a side; "
+               "where the comparison has a spread that is an sd resting on two values, and a censored arc "
+               "has no spread at all), "
                 "conditions_unverified (experiments of this pair differ only in their description, such as a "
                 "supplement, and nothing recorded says which monocultures or drop-outs match which), "
                 "stationary_phase_differs (with max as the measure: one set reached stationary phase and the "

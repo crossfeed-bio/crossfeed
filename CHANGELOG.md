@@ -37,6 +37,31 @@ content.
   as they always have.
 
 ### Fixed
+- **A censored arc whose non-growing set has no measurable start published `bound_rule: ""`**, and the
+  rule that explains it was computed and thrown away. `no_growth_bound` returns "the no-growth rule left
+  no measured start to bound this set by" and `bounded_strength` discarded the string with the value; on
+  the live corpus that is the *S. thermophilus* arc, whose STneg monoculture starts at 0 in every
+  replicate. `bound_rule` is the only field that can say why a censored arc has no bound, and
+  `matrix._reports_an_extreme` tells its five shapes apart by exactly this field, so an empty one made a
+  fresh arc indistinguishable from a network saved before the machinery existed. 0 of 15 censored arcs
+  carry an empty rule now.
+- **`two_replicates` was defined by a spread that nine of the fifteen censored arcs do not have.**
+  `README.md` said it marks an edge "whose sd rests on two values" and the legend said "the spread rests
+  on two values per side", while those arcs carry `sd`, `se` and `effect_over_sd` all `None`, and on seven
+  of them the count on the censored side is the number of replicates that did **not** grow. The caution is
+  decided from the counts alone, which is a derivation behavior the collaboration owns, so the three
+  places that describe it are corrected rather than the arcs that carry it: it says how few replicates a
+  side had, and says that a censored arc has no spread to rest on.
+- **A refusal named the second box when the growth measure was the cause** (and printed "study this
+  study"). Naming A6 of SMGDB00000005, a chemostat, answered "no experiment of this study matches the
+  media, experiments or studies entered", while the same command with `--metric max` derives from it: the
+  cultivation-mode filter runs first and empties the list that the selection is then tested against, so
+  the refusal a reader acts on sent them to retype the box when the fix is the growth measure or
+  `--include-non-batch`. The unfiltered list is now used for the diagnosis only, and the message says the
+  experiments were left out before the box was read and points at the reason above it. A selection that
+  genuinely matches nothing still says so. `study_ids_of` returned the words "this study" and its one
+  caller prefixes the result with "study ", so an emptied list printed "study this study" twice; the
+  fallback is the caller's now and it uses the study id it already holds.
 - **Every relative link in the README was dead on PyPI, and the legend image was broken there** (#192).
   The README is the long description on <https://pypi.org/project/grownet/>, and PyPI does not rewrite
   relative URLs the way GitHub does, so all fifteen resolved against the project page: the limitations

@@ -224,7 +224,7 @@ def _batch_only(exps, include_non_batch: bool, skipped, metric: str = "auc") -> 
     return kept
 
 
-def select_experiments(exps, selection, skipped) -> list:
+def select_experiments(exps, selection, skipped, before=None, study_id="") -> list:
     """The experiments a selection asks for, with the monocultures a kept comparison needs.
 
     Karoline, 2026-10-04, choosing between a literal reading and this one: naming a co-culture also keeps
@@ -250,8 +250,25 @@ def select_experiments(exps, selection, skipped) -> list:
                         ", ".join(sorted(_exp_id(e) for e in added))
                         + ": the comparisons you named are made against them"))
     if not kept:
-        skipped.append((f"study {study_ids_of(exps)}",
-                        "no experiment of this study matches the media, experiments or studies entered"))
+        # `exps` has already been narrowed by the cultivation-mode filter, so "no experiment matches"
+        # can name the selection when the growth measure is the cause: naming A6 of SMGDB00000005, a
+        # chemostat, said the box matched nothing while `--metric max` proves it matches, and the
+        # refusal a reader acts on sent them to retype the box (found reviewing round 9). `before` is
+        # the unfiltered list, used for the diagnosis only. And `study_ids_of` falls back to the words
+        # "this study", which the caller prefixed with "study ", printing "study this study" twice: it
+        # takes the study id it already holds instead.
+        label = study_ids_of(exps) or study_ids_of(before or ()) or study_id or "this study"
+        matched_before = [e for e in (before or ()) if selecting.matches(e, selection)] if before else []
+        if matched_before:
+            named = ", ".join(sorted(_exp_id(e) for e in matched_before)[:4])
+            skipped.append((f"study {label}",
+                            f"the experiments you named ({named}) are in this study and were left out "
+                            "before the second box was read, by the cultivation-mode rule above: see "
+                            "that reason, not this one. The second box matched them"))
+        else:
+            skipped.append((f"study {label}",
+                            "no experiment of this study matches the media, experiments or studies "
+                            "entered"))
     # a medium is matched as text, so one word reaches every medium whose name or description holds it,
     # and an added or removed compound makes another environment: say how many were read, since that is
     # what the strict rule is for (Karoline, 2026-10-07, "because such changes alter interactions")
@@ -266,8 +283,12 @@ def select_experiments(exps, selection, skipped) -> list:
 
 
 def study_ids_of(exps) -> str:
-    """The studies a list of experiments belongs to, for a message."""
-    return ", ".join(sorted({str(e.get("studyId", "")) for e in exps if e.get("studyId")})) or "this study"
+    """The studies a list of experiments belongs to, for a message, or "" when the list names none.
+
+    This fell back to the words "this study", and its one caller prefixes the result with "study ", so an
+    empty list printed "study this study" (found reviewing round 9). The caller chooses the fallback now.
+    """
+    return ", ".join(sorted({str(e.get("studyId", "")) for e in exps if e.get("studyId")}))
 
 
 def _replicate_flags(n_with: int, n_without: int) -> tuple:
@@ -947,11 +968,18 @@ def bounded_strength(c: dict) -> tuple:
     inhibition).
     """
     bound = c.get("bound") or {}
+    # the rule travels even when there is no bound. `no_growth_bound` computes a reason when it cannot
+    # measure a start ("the no-growth rule left no measured start to bound this set by") and this threw
+    # it away, so a live censored arc published `bound_rule: ""`: on the corpus the *S. thermophilus*
+    # arc, whose STneg monoculture starts at 0 in every replicate. `bound_rule` is the only field that
+    # can say why a censored arc has no bound, and `matrix._reports_an_extreme` tells its five shapes
+    # apart by exactly this field, so an empty one made a fresh 2026 arc indistinguishable from a
+    # network saved before the machinery existed (#249-class, found reviewing round 9).
     if not bound.get("value"):
-        return None, ""
+        return None, bound.get("rule", "")
     growing = c["with_log2"] if c["outcome"] == OBLIGATE else c["without_log2"]
     if not growing:
-        return None, ""
+        return None, bound.get("rule", "")
     size = mean(growing) - math.log2(bound["value"])
     if size <= 0:
         # the bound is weaker than the measurement it is compared with, so it does not put the effect
@@ -1356,11 +1384,12 @@ def interactions_from_replicates(client, study: dict, exps: list, study_id: str 
         # SMGDB00000015 holds 91 monocultures and nothing else: say so first, not only per replicate
         skipped.append((f"study {study_id}", f"only monocultures ({len(exps)} experiments of one strain each): "
                         "an interaction needs a co-culture or a community to compare with"))
+    before_batch = list(exps or ())      # kept for the diagnosis below, not for deriving
     exps = _batch_only(exps, include_non_batch, skipped, method)
     # the second box: media, experiments or studies (#113). Identities and variants are still read from
     # every experiment, so matching a strain to its monocultures is unchanged by what is selected.
     identities = strain_identities(exps, skipped)
-    exps = select_experiments(exps, selection, skipped)
+    exps = select_experiments(exps, selection, skipped, before=before_batch, study_id=study_id)
     # with `keep`, only what can give an interaction between kept strains is read (a search with "only the
     # species entered"); identities and variants still come from every experiment, so matching is unchanged
     relevant = {id(e) for e in relevant_experiments(exps, keep, dropout)}
