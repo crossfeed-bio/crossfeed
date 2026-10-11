@@ -168,11 +168,24 @@ def test_the_secrets_pattern_does_not_require_the_value_to_be_quoted(monkeypatch
     monkeypatch.setattr(gate, "_read", clean.get)
     assert gate.check_secrets(list(clean)) == []
 
-    # And a separate thing this test ran into rather than set out to show: the first draft used a
-    # `setenv.sh`, and it was not flagged because `.sh` is not in `gate.TEXT_EXT`, so that file is never
-    # READ by this check. That is #227 and not the pattern, and it is pinned here so a future failure
-    # cannot confuse the two.
-    unscanned = {"setenv.sh": line("MGROWTHDB_TOKEN", "=", value)}
-    monkeypatch.setattr(gate, "_read", unscanned.get)
-    assert gate.check_secrets(list(unscanned)) == [], "if this flags now, #227 is fixed and this is stale"
-    assert not any(name.endswith(gate.TEXT_EXT) for name in unscanned)
+    # The thing this test ran into rather than set out to show: the first draft used a `setenv.sh`, and
+    # it was NOT flagged, because `.sh` was not among the nine extensions the gate read, so that file was
+    # never looked at. It said here that "if this flags now, #227 is fixed and this is stale", and #227
+    # is now fixed: what to scan is decided by content, so an extension nobody listed is scanned anyway.
+    whatever_the_extension = {"setenv.sh": line("MGROWTHDB_TOKEN", "=", value),
+                              "Makefile": line("API_KEY", "=", value),
+                              "viewer.html": line("token", ": ", value),
+                              "notes.rst": line("password", "=", value)}
+    monkeypatch.setattr(gate, "_read", whatever_the_extension.get)
+    assert len(gate.check_secrets(list(whatever_the_extension))) == len(whatever_the_extension), (
+        "a secret is missed because of the file's name")
+
+    # and what is still skipped is skipped for a reason anybody can state: a NUL byte early in the file.
+    # UTF-8 decodability is deliberately NOT the test, because a latin-1 file is still text a secret can
+    # sit in, so the one below must be scanned although it does not decode cleanly
+    binary = {"logo.png": "\x89PNG\r\n\x1a\n\0\0\0" + line("token", "=", value)}
+    monkeypatch.setattr(gate, "_read", binary.get)
+    assert gate.check_secrets(list(binary)) == [], "a binary file is being scanned"
+    latin1 = {"notes.txt": "caf\xe9 " + line("token", "=", value)}
+    monkeypatch.setattr(gate, "_read", latin1.get)
+    assert gate.check_secrets(list(latin1)), "a non-UTF-8 text file is being skipped"

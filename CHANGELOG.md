@@ -37,6 +37,19 @@ content.
   as they always have.
 
 ### Fixed
+- **Three of the gate's checks read nine file extensions, so the viewer and the whole R package were
+  never scanned** (#227, measured by Craig's agent on #239). Of 138 tracked files the list matched 108:
+  the 30 it skipped were 9 `.Rd`, 8 `.R`, the extensionless `LICENSE`, `NOTICE`, `Makefile`,
+  `r/NAMESPACE` and `r/DESCRIPTION`, both `.svg`, and one each of `.gitignore`, `.cff`, `.in`, `.html`,
+  `.Rbuildignore` and `.DS_Store`, the largest being `gui/index.html` at 52,570 bytes, which is the whole
+  viewer. The list's failure mode is the one nobody can enumerate, the next extension no one thought of,
+  and it had cost two misses in four days. What to scan is now decided by content, with a NUL byte as the
+  binary test rather than UTF-8 decodability, so a latin-1 file is still scanned and a binary with no
+  early NUL yields a false positive rather than a silent miss. 137 of 138 files are scanned now, and the
+  one skipped is `.DS_Store`.
+- **The gate overstated its own reach in the line a reader takes away from it**: "138 tracked files clean
+  across 9 checks" while the content checks read 108 and the merge-marker one 113. It now reports what was
+  scanned against what is tracked, and names what it skipped.
 - **The gate's `secrets` check required the value to be quoted**, so an unquoted one passed all nine
   checks: a workflow `env:` block is unquoted YAML, and so is `TOKEN=...` in any scanned file, which is
   how a secret is most likely to be written here. The quotes are optional now, and `bearer` may be
