@@ -396,7 +396,7 @@ def test_every_command_the_help_page_prints_is_one_the_parser_accepts():
     import re
     import shlex
 
-    from grownet.__main__ import _rate_flags, _resolve, build_parser
+    from grownet.__main__ import _rate_flags, _resolve, _species_flags, build_parser
     from grownet.gui import DEFAULTS, EXAMPLE
     from grownet.help import COMMAND, render_help
 
@@ -428,4 +428,12 @@ def test_every_command_the_help_page_prints_is_one_the_parser_accepts():
         # unresolved arguments passes everything, because it tests `a.derivation == "replicate"`; this
         # test found that on itself, which is why it uses the run's own resolver rather than a copy.
         args = _resolve(parser.parse_args(argv), announce=False)
-        assert _rate_flags(args) == "", f"{command}\n  -> {_rate_flags(args)}"
+        # EVERY pre-flight guard the run applies, not just the rate flags. `_derive` has three and the
+        # first version of this called one, so a printed example could exit 2 with the suite green:
+        # adding `--species` to the `--all` line, the most ordinary editorial slip for it, was not
+        # caught (found reviewing this change).
+        problems = [_rate_flags(args)]
+        if args.species or args.all_studies:
+            problems.append(_species_flags(args))
+        for problem in problems:
+            assert problem == "", f"{command}\n  -> {problem}"

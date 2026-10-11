@@ -238,17 +238,29 @@ def _derive(a):
     return _emit(a, net, skipped, extra, a.study, result)
 
 
-def _derive_species(a):
-    """What the local page does, from the command line: names to studies to one network (#78)."""
+def _species_flags(a) -> str:
+    """Why a search over several studies cannot be run as given, or "".
+
+    Pulled out of `_derive_species` so that one function holds every pre-flight check of this path and a
+    test of the help page's own commands reaches all of them. The test applied `_rate_flags` alone, so
+    two of the three guards were never consulted and an example printed on the page could exit 2 with
+    the suite green (found reviewing this branch, which added that test).
+    """
     flag = "--all" if a.all_studies else "--species"
     if a.all_studies and a.species:
-        print("--all derives every study; leave out --species", file=sys.stderr)
-        return 2
+        return "--all derives every study; leave out --species"
     if not a.live:
-        print(f"{flag} searches mGrowthDB, so it needs --live", file=sys.stderr)
-        return 2
+        return f"{flag} searches mGrowthDB, so it needs --live"
     if a.deriver:
-        print(f"{flag} uses the default derivation; --deriver applies to one study", file=sys.stderr)
+        return f"{flag} uses the default derivation; --deriver applies to one study"
+    return ""
+
+
+def _derive_species(a):
+    """What the local page does, from the command line: names to studies to one network (#78)."""
+    problem = _species_flags(a)
+    if problem:
+        print(problem, file=sys.stderr)
         return 2
     from .gui import DEFAULTS, run_query
     from .mgrowthdb import MGrowthDBClient

@@ -37,6 +37,14 @@ content.
   as they always have.
 
 ### Fixed
+- **The help-command guard applied one of the three pre-flight checks a run applies**, found by a pass
+  that attacked every new test with the regression it claims to catch. `_derive` consults the rate flags,
+  the settings bounds and, on the search path, three further guards; the test called the rate flags
+  alone, so adding `--species` to the printed `--all` line, the most ordinary editorial slip for it,
+  exited 2 with the whole suite green. The search path's three guards are pulled out of `_derive_species`
+  as `_species_flags`, so one function holds them and the test reaches all of them; a guard added there
+  in future is consulted by the test without anyone remembering to add it. Verified by making that slip
+  and watching the test go red.
 - **Gate check 6 said emitted networks validate against the shipped JSON Schema, and it runs the
   dependency-free validator** (#249), which this release documents as a subset of that schema: a
   hand-written network passes `grownet validate` and fails the schema nine ways. The claim stood in the
