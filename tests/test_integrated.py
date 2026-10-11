@@ -978,3 +978,69 @@ def test_no_surface_a_reader_meets_still_counts_two_error_components():
     # README.md, src/grownet/help.py and src/grownet/integrated.py until 2026-10-10, so the assertions
     # above are reachable rather than describing a string nobody would write.
     assert stale.startswith("both the co-culture replicates")
+
+
+def test_a_total_suppression_is_censored_rather_than_dropped_as_no_interaction():
+    """Karoline, 2026-10-11, on #201: "I agree on censored."
+
+    `log2(1 + A_ij x_j / r_i)` is undefined once the fitted effect reaches -1, so the strongest
+    inhibition this form can express has no ratio. That `None` used to reach `absence`, whose first test
+    on a value is `if not mean: return ABSENT`, so the arc was reported as NO interaction and its gLV
+    cell became a hard 0, which a reader takes as no effect rather than as no number. The arc right up to
+    99 per cent suppression was published, and strongly.
+
+    It is censored now: the shape the no-growth rule already has, which is what she agreed to. The outcome
+    says the target does not grow WITH the source, which is what the fit states, `absence` keeps it, the
+    matrix gives it `NA`, and `bound_rule` carries the one thing that distinguishes it from a censored arc
+    of the comparison, that the statement is the fit's and not a measurement of a curve.
+
+    The design here is a late bloom, because a partner that cancels growth from the start leaves no
+    usable points to fit: A grows to 7.2e7 while B is small, then B blooms and pushes A back to 5.6e6.
+    The fitted effect lands at -1.10, just past the boundary, which is the case that matters: nothing
+    about the curves is extreme.
+    """
+    from test_growth_rates import _client, _co, _mono
+
+    from grownet import matrix
+    from grownet.integrated import IntegratedDeriver
+    from grownet.mgrowthdb import records_to_network
+
+    def series(times, values, which=0):
+        return [(t, row[which], None) for t, row in zip(times, values, strict=True)]
+
+    def run(a_ab):
+        r = [0.4, 1.2]
+        A = [[-4.0e-10, a_ab], [0.0, -1.0e-9]]
+        mono_a = _simulate([0.4], [[-4.0e-10]], [1.0e7])
+        mono_b = _simulate([1.2], [[-1.0e-9]], [3.0e5])
+        co = _simulate(r, A, [1.0e7, 3.0e5])
+        client = _client({(1, "A"): series(*mono_a), (2, "B"): series(*mono_b),
+                          (3, "A"): series(*co, 0), (3, "B"): series(*co, 1)})
+        exps = [_mono("E1", "A", [(1, "r1")]), _mono("E2", "B", [(2, "r1")]),
+                _co("E3", "A", "B", [(3, "r1")])]
+        records, _ = IntegratedDeriver(client=client).derive({"id": "S1"}, exps)
+        return records, next(x for x in records
+                             if x["target_name"] == "A" and x["source_name"] == "B")
+
+    records, arc = run(-1.2e-9)
+    effect = arc["coefficient"] * arc["partner_abundance"] / arc["fitted_rate"]
+    assert effect < -1, effect                       # the fit cancels A's own growth and more
+    assert arc["strength"] is None                   # so there is no ratio
+    assert arc["outcome"] == "abolished"             # censored, not quantified
+    assert arc["strength_bound"] is None             # the fit bounds it below by nothing finite
+    assert arc["bound_rule"] and "undefined" in arc["bound_rule"]
+    assert "not a measurement" in arc["bound_rule"]  # the fit's statement, said to be the fit's
+
+    # the consequence her decision is about, end to end: kept, and `NA` rather than 0
+    net = records_to_network(records, meta={"tool_version": "9.9.9", "source_db": "mGrowthDB (live)"})
+    edge = next(e for e in net.edges if e.strength is None and e.outcome == "abolished")
+    assert edge.status != "absent", "the strongest inhibition the form can express was dropped again"
+    assert ("A", "B") in {(a, b) for a, b, _bound in matrix.bounded_cells(net)}
+    rows = {row.split(",")[0]: row.split(",") for row in matrix.matrix_csv(net).splitlines()[1:]}
+    names = matrix.matrix_csv(net).splitlines()[0].split(",")[1:]
+    assert rows["A"][1 + names.index("B")] == "NA"   # not "0", which would read as no interaction
+
+    # and the boundary is where it should be: a weaker partner still gives a number
+    _, weaker = run(-8.0e-10)
+    assert weaker["strength"] is not None and weaker["outcome"] == "quantified"
+    assert weaker["bound_rule"] == ""

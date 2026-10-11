@@ -336,7 +336,9 @@ EDGE_ATTRIBUTES = {
                     "q = 1, and a style can map it continuously. It is capped at 15 for a q-value of "
                     "zero. It is a restatement of the q-value and inherits what that rests on",
     "outcome": "quantified (a ratio was computed), obligate (the target grows only with the source), "
-               "abolished (only without it), or no_growth",
+               "abolished (only without it, either because the set with the source did not grow or "
+               "because the fitted effect cancels the target's own growth rate, which bound_rule "
+               "distinguishes), or no_growth",
     "metric": "the growth property compared: auc, max, or a growth rate with its rule "
               "(growth_rate:easylinear:5, growth_rate:baranyi)",
     "method": "how the edge was computed, in words",
