@@ -142,7 +142,12 @@ def _settings_of(a) -> dict:
             # species entered: on", having searched the study and kept every partner. Missing was better
             # than wrong, and `report.py` promises every setting with its value (found reviewing #242).
             "exclude_studies": getattr(a, "exclude_studies", "") or "",
-            "only_entered": not getattr(a, "all_partners", False)}
+            "only_entered": not getattr(a, "all_partners", False),
+            # the page encodes the second box one selector per LINE, and `selection.parse` splits on
+            # newlines, commas and semicolons: space is the one separator it does not split on. The
+            # single-study path recorded `--conditions "WC" "mucin"` space-joined, so the record parsed
+            # back as one medium named "WC mucin", which matches nothing, while the run used the list.
+            "conditions": "\n".join(getattr(a, "conditions", None) or [])}
 
 
 def _derive(a):
@@ -227,7 +232,7 @@ def _derive(a):
                                          include_absent=a.include_absent,
                                          # the derivation says what it tests (#142 item 5)
                                          deriver=deriver)
-            extra["settings"] = {**_settings_of(a), "conditions": " ".join(a.conditions)}
+            extra["settings"] = _settings_of(a)
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
             return 1

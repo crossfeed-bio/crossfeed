@@ -77,7 +77,11 @@ content.
   partner. Both are in the builder now. Recording them is not enough on its own, because the report
   would then say a study was excluded while the arcs come from it, so a bare study argument with
   `--exclude-studies` or `--all-partners` is refused: those flags narrow a search over several studies
-  and the help already said they apply with `--species` or `--all`.
+  and the help already said they apply with `--species` or `--all`. `conditions` was the other key left
+  out of that builder, and the one whose two paths disagreed in VALUE: the single-study path joined
+  `--conditions "WC" "mucin"` with a space, and space is the one separator `selection.parse` does not
+  split on, so the record read back as one medium named "WC mucin" that matches nothing while the run used
+  the two. It is in the builder with the page's own one-per-line encoding.
   `derive <STUDY> --live` wrote 20 keys and the species path 23, the difference including
   `include_absent` and `steady_check`, which are n/a on neither; and the species path took `steady_check`
   from the page defaults rather than from the flag, so a run that scored a chemostat recorded that it had

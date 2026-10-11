@@ -622,7 +622,17 @@ def test_all_narrowed_by_the_second_box_does_not_claim_the_whole_database(server
     assert "Searching" not in page, "this needs the result page, not the progress page, or it proves nothing"
     assert "All of mGrowthDB" not in page
     assert "All, narrowed by the second box" in page
-    assert "SMGDB00000002" in page and "Clear it to derive" in page
+    assert "SMGDB00000002" in page and "Clear them to derive" in page
+
+    # and the OTHER control that narrows All, which the first version of this test did not cover and the
+    # fix therefore did not either: Exclude these studies, which the code comment named all along
+    data = b"all=1&species=&exclude_studies=SMGDB00000002"
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
+        page = r.read().decode("utf-8")
+    assert "Searching" not in page, "this needs the result page, or it proves nothing"
+    assert "All of mGrowthDB" not in page
+    assert "All, narrowed by Exclude these studies" in page
+    assert "excluding SMGDB00000002" in page
 
 
 def test_a_genus_entered_brings_in_all_its_species_and_is_shown_as_a_genus():

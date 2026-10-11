@@ -733,15 +733,29 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
         # the heading has to say which it was: the gLV example button fills that box and leaves it filled,
         # so pressing gLV example and then All gave a two-arc network of one study under a heading saying
         # the whole database (#193).
-        narrowed = [line for line in (result.get("settings", {}).get("conditions") or "").splitlines()
-                    if line.strip()]
-        if narrowed:
-            shown_filter = ", ".join(_esc(x.strip()) for x in narrowed[:3])
-            more = f" and {len(narrowed) - 3} more" if len(narrowed) > 3 else ""
-            species_heading = "<h2>All, narrowed by the second box</h2>"
-            resolved = (f"<li>every study that matches {shown_filter}{more}, with every partner: "
+        # BOTH controls, which this comment named and the first version read only the first of: a study
+        # left in Exclude these studies narrows All just as the second box does, and the page said
+        # "All of mGrowthDB" over "every study, with every partner: 0 studies" (found reviewing #242).
+        settings_here = result.get("settings", {})
+        narrowed = [line for line in (settings_here.get("conditions") or "").splitlines() if line.strip()]
+        excluded_ids = [x.strip() for x in (settings_here.get("exclude_studies") or "").split(",")
+                        if x.strip()]
+        if narrowed or excluded_ids:
+            which = ("the second box" if narrowed and not excluded_ids
+                     else "Exclude these studies" if excluded_ids and not narrowed
+                     else "the second box and Exclude these studies")
+            species_heading = f"<h2>All, narrowed by {which}</h2>"
+            parts = []
+            if narrowed:
+                shown_filter = ", ".join(_esc(x.strip()) for x in narrowed[:3])
+                more = f" and {len(narrowed) - 3} more" if len(narrowed) > 3 else ""
+                parts.append(f"matching {shown_filter}{more}")
+            if excluded_ids:
+                parts.append("excluding " + ", ".join(_esc(x) for x in excluded_ids[:3])
+                             + (f" and {len(excluded_ids) - 3} more" if len(excluded_ids) > 3 else ""))
+            resolved = (f"<li>every study {' and '.join(parts)}, with every partner: "
                         f"{len(result['studies'])} studies{daily_note}</li>"
-                        "<li class=\"muted\">All ignores the species box, not this one. Clear it to derive "
+                        "<li class=\"muted\">All ignores the species box, not these. Clear them to derive "
                         "the whole of mGrowthDB.</li>")
         else:
             species_heading, resolved = "<h2>All of mGrowthDB</h2>", (
