@@ -595,7 +595,12 @@ def test_the_all_button_sits_next_to_example_with_its_explainer(server):
     base, token = server
     form = _get(f"{base}/?token={token}")
     assert '<button type="submit" name="example" value="1">Example</button>\n<button type="submit" name="all"' in form
-    assert "All derives every study, ignoring the boxes" in form
+    # the caption said "All derives every study, ignoring the boxes", and All reads the second box by
+    # design (run_query's docstring, Karoline 2026-09-28), so the caption was the false half (#193)
+    assert "All derives every study, ignoring the species box" in form
+    assert "ignoring the boxes" not in form
+    # the bar has a length limit Karoline set, so the second box's own hint carries the rest
+    assert "All reads this box" in form and "clear it to derive the whole of mGrowthDB" in form
     # and the gLV example button beside them, which fills the boxes and the settings for a package that
     # simulates and runs the search (Karoline, 2026-10-07)
     assert 'name="glv_example" value="1">gLV example</button>' in form
@@ -603,6 +608,38 @@ def test_the_all_button_sits_next_to_example_with_its_explainer(server):
     with urllib.request.urlopen(f"{base}/run?token={token}", data=b"all=1&species=", timeout=10) as r:
         page = r.read().decode("utf-8")
     assert "All of mGrowthDB" in page or "Searching" in page             # a quick fake search, or its progress
+
+
+def test_all_narrowed_by_the_second_box_does_not_claim_the_whole_database(server):
+    """Pressing All with a study id left in the second box narrowed the search and still headed the result
+    "All of mGrowthDB". The gLV example button fills that box and leaves it filled, so gLV example then
+    All reported a network of one study as the whole database (#193). The narrowing is deliberate; the
+    heading was the defect."""
+    base, token = server
+    data = b"all=1&species=&conditions=SMGDB00000002"
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
+        page = r.read().decode("utf-8")
+    assert "Searching" not in page, "this needs the result page, not the progress page, or it proves nothing"
+    # case-INSENSITIVE, and over the whole page including the report embedded in it: the first version
+    # asserted "All of mGrowthDB" with a capital A, and `report.py` writes "all of mGrowthDB (every
+    # study, with every partner)" in lower case, so the report contradicted the heading three lines above
+    # its own conditions line and this test passed (found reviewing #242)
+    assert "all of mgrowthdb" not in page.lower(), "the page or its report still claims the whole database"
+    assert "All, narrowed by the second box" in page
+    # the CONTAINING phrase, not the bare id: that id reaches this page from the re-rendered form field,
+    # from "Studies searched:", and twice from the embedded report's settings block, so asserting the id
+    # alone passed however the heading was worded
+    assert "matching SMGDB00000002" in page and "Clear them to derive" in page
+
+    # and the OTHER control that narrows All, which the first version of this test did not cover and the
+    # fix therefore did not either: Exclude these studies, which the code comment named all along
+    data = b"all=1&species=&exclude_studies=SMGDB00000002"
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
+        page = r.read().decode("utf-8")
+    assert "Searching" not in page, "this needs the result page, or it proves nothing"
+    assert "all of mgrowthdb" not in page.lower()
+    assert "All, narrowed by Exclude these studies" in page
+    assert "excluding SMGDB00000002" in page
 
 
 def test_a_genus_entered_brings_in_all_its_species_and_is_shown_as_a_genus():

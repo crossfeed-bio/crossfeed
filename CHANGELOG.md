@@ -37,6 +37,74 @@ content.
   as they always have.
 
 ### Fixed
+- **All said it ignored the boxes, and it reads the second one** (#193). Narrowing All by a study or
+  medium in the second box is deliberate and documented (`run_query`, Karoline 2026-09-28); the caption
+  claiming otherwise and the heading "All of mGrowthDB" were the false half. The gLV example button fills
+  that box and leaves it filled, so pressing gLV example and then All reported a two-arc network of one
+  study as the whole database. The heading now says "All, narrowed by the second box" and names what it
+  matched, the caption says it ignores the species box, and the box's own hint says All reads it and to
+  clear it for the whole corpus. The bar's text has a length Karoline set and a test pins it, so the
+  detail is in the hint rather than the bar.
+
+  **And the report embedded in that page still claimed the whole database**, found reviewing this branch.
+  `report.py` wrote "query: all of mGrowthDB (every study, with every partner)" unconditionally, three
+  lines above its own "Media, experiments or studies" line, so one file contradicted itself and
+  `/report.txt` and the download said it too. **The test written for exactly this missed it on letter
+  case**: it asserted `"All of mGrowthDB" not in page` and the report writes lower case. The report takes
+  the same two controls now, the command line's own run label does too, and the test reads the page
+  case-insensitively and asserts the containing phrase rather than a bare study id, which reached that
+  page from five other places.
+- **Three tests on this branch could not fail, and were rewritten so that they can.** A review pass
+  attacked every test added in the last two days by constructing the regression each claims to catch.
+  The settings test rested on two assertions that are true of their own construction, because
+  `_settings_of` returns `{**DEFAULTS, ...}`: dropping three keys so they fell through to the defaults,
+  which is verbatim the defect its docstring describes, left it green. It asserts every one of the 23
+  page settings is moved by its own flag now, and counts them, so a new setting without a case fails.
+  `about_a_pair`'s only negative case had a reason that does not contain `AVERAGE`, so that half of the
+  predicate was untested; both label shapes are asserted against it now. Each was verified by applying
+  the regression and watching the test go red.
+- **"pairs the data did not support (186)" counted 97 notes about the data and 31 conditions that did
+  produce arcs** (#232), and the first version of this fix made it worse before it made it better:
+  `about_a_pair` told the two kinds apart by the label's punctuation and knew only one of the two shapes
+  the code writes, so on SMGDB00000013 the report read "pairs the data did not support: none" while
+  listing seven of them under a heading saying they are not pairs. `derive.py` writes
+  `{a} with {b} [{cond}]` for a pair whose sets could not be compared and `{source} -> {target} [{cond}]`
+  for the no-growth and unusable outcomes; both are declared as `adapter.PAIR_SEPARATORS` now, and a
+  third separator added somewhere is recorded there as a known gap rather than left to be discovered. `adapter.condensed` folds the average-replicate notes to one line per
+  experiment, keyed by the experiment, and they were counted under a heading about pairs: the report
+  called a condition a pair that gave no edge 254 lines after reporting an interaction derived from it.
+  The report, the page and the command line now separate pairs from notes on the data read, and the
+  "skipped N pair(s)" message counts the pairs. The page also said 186 and showed 50 with no marker; it
+  says "showing 50 of N" and points at the report.
+- **An empty network caused by the reader's own setting was reported as "mGrowthDB could not be read"**,
+  in a run where mGrowthDB answered every request. `_empty_reason_core` reads `errors` as a fetch
+  failure, which it used to be and only be; the messages added here and in #243 for a check that could
+  not run and an id that matched nothing went into the same list, so the lead sentence did the exact
+  thing #220 and #243 exist to stop. Advisory messages travel in `notes` now, which the page shows beside
+  the errors and `_empty_reason_core` does not consult.
+- **The page accepted the steady-state check without growth rates, ran nothing, and said it was on**
+  (#233). The command line refuses that combination and names the remedy; the page ticked the box, scored
+  nothing, printed "Check against chemostat steady states: on" and wrote `steady_check: true` into the
+  downloaded network. It now says what the command line says, and a run that asked for the check with
+  rates on but no computable rate says that instead of leaving "on" as the only trace.
+- **Two derive paths recorded different settings, and both recorded `steady_check` wrongly** (#233),
+  and the first version of the single builder left `exclude_studies` and `only_entered` to come from the
+  page defaults, which turned a setting the report did not mention into one it stated the **opposite**
+  of: `derive <STUDY> --exclude-studies <that study> --all-partners` recorded "Exclude these studies:
+  none" and "Only interactions between the species entered: on", having searched the study and kept every
+  partner. Both are in the builder now. Recording them is not enough on its own, because the report
+  would then say a study was excluded while the arcs come from it, so a bare study argument with
+  `--exclude-studies` or `--all-partners` is refused: those flags narrow a search over several studies
+  and the help already said they apply with `--species` or `--all`. `conditions` was the other key left
+  out of that builder, and the one whose two paths disagreed in VALUE: the single-study path joined
+  `--conditions "WC" "mucin"` with a space, and space is the one separator `selection.parse` does not
+  split on, so the record read back as one medium named "WC mucin" that matches nothing while the run used
+  the two. It is in the builder with the page's own one-per-line encoding.
+  `derive <STUDY> --live` wrote 20 keys and the species path 23, the difference including
+  `include_absent` and `steady_check`, which are n/a on neither; and the species path took `steady_check`
+  from the page defaults rather than from the flag, so a run that scored a chemostat recorded that it had
+  not. One builder for every path now, 24 keys on both, verified on live runs of the same study, and a
+  test reads it through the real parser rather than a copy of the key list.
 - **Nine measured claims that no longer reproduced are corrected, and each now carries the command that
   produced it** (#223, #219). None is a change to the code: every one was a sentence that had stopped
   matching what the tool does, which is the one thing internal correctness does not tolerate. Re-measured

@@ -11,7 +11,7 @@ import math
 import textwrap
 
 from . import interaction
-from .adapter import condensed
+from .adapter import about_a_pair, condensed
 from .help import SETTINGS
 from .mgrowthdb import MGROWTHDB_API, NO_DATABASE_VERSION
 from .rates import doubling_time, time_unit
@@ -171,7 +171,22 @@ def report_text(result: dict) -> str:
     if result.get("study"):
         lines.append(f"study derived: {result['study']} (every species in it)")
     elif result.get("all"):
-        lines.append("query: all of mGrowthDB (every study, with every partner)")
+        # the same two controls the page's heading names. This said "all of mGrowthDB" unconditionally,
+        # so the report embedded in a page headed "All, narrowed by the second box" contradicted it three
+        # lines above its own "Media, experiments or studies (--conditions): ..." line, and the test that
+        # was meant to catch the heading missed this on letter case alone (found reviewing #242).
+        s_here = result.get("settings", {})
+        narrowed = [x for x in (s_here.get("conditions") or "").splitlines() if x.strip()]
+        excluded = [x.strip() for x in (s_here.get("exclude_studies") or "").split(",") if x.strip()]
+        if narrowed or excluded:
+            which = []
+            if narrowed:
+                which.append("matching " + ", ".join(x.strip() for x in narrowed))
+            if excluded:
+                which.append("excluding " + ", ".join(excluded))
+            lines.append(f"query: All, narrowed: every study {' and '.join(which)}, with every partner")
+        else:
+            lines.append("query: all of mGrowthDB (every study, with every partner)")
         if result.get("published"):
             lines.append(f"  from the network derived once a day in the grownet repository, at {result['published']}")
     else:
@@ -321,10 +336,18 @@ def report_text(result: dict) -> str:
         lines.append("")
 
     skips = condensed(result["skipped"])
-    lines.append(f"pairs the data did not support ({len(skips)}):" if skips
+    pairs = [(label, reason) for label, reason in skips if about_a_pair(label, reason)]
+    notes = [(label, reason) for label, reason in skips if not about_a_pair(label, reason)]
+    lines.append(f"pairs the data did not support ({len(pairs)}):" if pairs
                  else "pairs the data did not support: none")
-    lines += [f"  - {label}: {reason}" for label, reason in skips]
+    lines += [f"  - {label}: {reason}" for label, reason in pairs]
     lines.append("")
+    if notes:
+        # these are notes about the INPUT, not pairs: counting them under the heading above said a
+        # condition was a pair that gave no edge while an arc derived from it was reported above (#232)
+        lines.append(f"notes on the data read ({len(notes)}), which are not pairs:")
+        lines += [f"  - {label}: {reason}" for label, reason in notes]
+        lines.append("")
 
     lines.append("sources (cite the studies behind the edges you use):")
     for sid, study in sorted(net.studies.items()):
