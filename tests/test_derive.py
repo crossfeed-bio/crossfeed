@@ -1031,17 +1031,29 @@ def test_a_censored_arc_with_no_measurable_start_still_says_why():
     fresh arc indistinguishable from a network saved before the machinery existed (found reviewing round
     9)."""
     from grownet.derive import OBLIGATE, bounded_strength
+    from grownet.growth import GrowthCurve, Replicate
+    from grownet.interaction import no_growth_bound
 
-    no_start = {"outcome": OBLIGATE, "with_log2": [1.0, 1.2], "without_log2": [],
-                "bound": {"value": None, "factor": 1.5, "start": None, "window": None,
-                          "rule": "the no-growth rule left no measured start to bound this set by"}}
+    # the bound comes from its PRODUCER, not from a sentence typed here. The first version of this test
+    # hand-wrote the rule string and asserted `bounded_strength` returned that same string, so it
+    # compared a literal with itself: blanking the real sentence in `interaction.py` left the whole suite
+    # green and the arc published `bound_rule: ""` again (found reviewing round 10).
+    flat_from_zero = GrowthCurve(species="S thermophilus", times=[0.0, 1.0, 2.0, 3.0],
+                                 values=[0.0, 0.0, 0.0, 0.0], time_unit="h", abundance_unit="Cells/mL")
+    bound = no_growth_bound([Replicate(curves=(flat_from_zero,))], "S thermophilus", 3.0, "max",
+                            factor=1.5)
+    assert bound["value"] is None, bound          # no usable start, so there is no number to bound by
+    assert bound["rule"], "no_growth_bound computed no reason for a set with no measurable start"
+    reason = bound["rule"]
+
+    no_start = {"outcome": OBLIGATE, "with_log2": [1.0, 1.2], "without_log2": [], "bound": bound}
     size, rule = bounded_strength(no_start)
     assert size is None
-    assert rule == "the no-growth rule left no measured start to bound this set by"
+    assert rule == reason
 
     # the set that did grow has no values either: the reason still travels
     nothing = {**no_start, "with_log2": []}
-    assert bounded_strength(nothing)[1] == no_start["bound"]["rule"]
+    assert bounded_strength(nothing)[1] == reason
 
     # and a bound that exists is unchanged
     good = {"outcome": OBLIGATE, "with_log2": [3.0, 3.2], "without_log2": [],
