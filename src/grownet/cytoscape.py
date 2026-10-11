@@ -356,12 +356,30 @@ def send(net: InteractionNetwork, port: int = PORT, name: str = "grownet",
     refuses the request. Nothing is sent anywhere but this port on the loopback interface.
     """
     root = base_url(port)
+
+    def _refused(port, code, reason, timeout):
+        """Whether CyREST really refused, or something else answered on that port."""
+        try:
+            with urllib.request.urlopen(base_url(port) + "/version", timeout=min(timeout, 3)) as r:
+                body = r.read(400).decode("utf-8", "replace")
+        except Exception:
+            body = ""
+        if "cytoscapeVersion" in body or "apiVersion" in body:
+            return (f"Cytoscape refused the network ({code} {reason}). Update Cytoscape to 3.8 or later, "
+                    "whose CyREST takes networks this way.")
+        return (f"something on port {port} answered {code} {reason}, and it is not Cytoscape: it does not "
+                "identify itself at /v1/version the way CyREST does. Check which port Cytoscape uses "
+                "(its cyrest.port property, 1234 unless changed) and that no other program holds it.")
+
     try:
         created = _post(f"{root}/networks?title={urllib.parse.quote(name)}&collection={brand.NAME}",
                         network_json(net, name), timeout)
     except urllib.error.HTTPError as e:
-        raise CytoscapeError(f"Cytoscape refused the network ({e.code} {e.reason}). Update Cytoscape to 3.8 or "
-                             "later, whose CyREST takes networks this way.") from None
+        # An HTTP error status means SOMETHING answered, and it need not be Cytoscape: pointing
+        # --cytoscape-port at any server that answers an error was reported as Cytoscape refusing the
+        # network, with an instruction to upgrade it, which sends the person to do something that cannot
+        # help (#221 item 1). CyREST identifies itself at /v1/version, so ask before blaming it.
+        raise CytoscapeError(_refused(port, e.code, e.reason, timeout)) from None
     except http.client.HTTPException as e:
         raise CytoscapeError(
             f"something is listening on port {port}, but it is not Cytoscape: it did not answer the way "

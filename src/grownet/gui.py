@@ -643,9 +643,50 @@ def _empty_reason(result: dict) -> str:
     unmatched = len([r for _, r in result.get("skipped", ()) if "no experiment of this study matches" in r])
     if s.get("conditions") and unmatched and "second box" not in reason:
         studies = len(result.get("studies", ()))
-        return (f"The second box left out {unmatched} of the {studies} study(ies) searched: no experiment "
-                f"there matches {_esc(s['conditions'])}. " + reason)
-    return reason
+        reason = (f"The second box left out {unmatched} of the {studies} study(ies) searched: no experiment "
+                  f"there matches {_esc(s['conditions'])}. " + reason)
+    return reason + _settings_to_try(s)
+
+
+# the controls that can take a network to zero on their own, in the order worth checking, with what to
+# try. Several of these did it in silence while the page blamed mGrowthDB's replicate structure and never
+# named the setting: `min_studies 2` removes every arc when nothing is merged, `spike_factor 1` empties
+# the network although the help warns only about 0, and `rate_window 1` empties it with a perfectly
+# worded reason that reached the per-pair skip list and was then hidden (#220).
+_EMPTYING = (
+    ("min_studies", "Arcs from at least N studies", "it counts the studies behind a MERGED arc, so with "
+     "nothing merged every arc counts as 1 and all of them are removed: tick Merge arcs, or set it to 1"),
+    ("spike_factor", "Spike limit", "a low limit drops replicates as spiked, and 1 drops almost all of "
+     "them: raise it, or set it to 0 to switch the check off"),
+    ("rate_window", "Growth rate window", "the rate is a line fitted over this many points, so a small "
+     "window gives no rate and the pairs that needed one are left out"),
+    ("absence_threshold", "Absence threshold", "a high threshold calls every arc absent: lower it, or "
+     "tick Include arcs below the absence threshold to see them"),
+    ("max_adjusted_p", "Maximum adjusted p", "a strict q-value filter can remove every arc: the hidden "
+     "count above says how many it took"),
+    ("no_growth_factor", "No-growth rise factor", "a high factor calls every set no-growth"),
+    ("min_replicates", "Minimum replicates", "few studies hold more than two or three replicates a side"),
+)
+
+
+def _settings_to_try(s: dict) -> str:
+    """The settings that are not at their defaults, named, when a search came back empty.
+
+    The page's own notes blamed the species filter, then said "the species do not affect each other by
+    that rule", then blamed mGrowthDB's replicate structure, while a control the reader had changed was
+    discarding measured arcs and was never named (#220). This does not guess which one did it; it says
+    which ones could and what to try, which is what a person needs to get unstuck.
+    """
+    changed = []
+    for key, label, hint in _EMPTYING:
+        if key not in s or key not in DEFAULTS:
+            continue
+        if s[key] != DEFAULTS[key]:
+            changed.append(f"{label} is {s[key]}, not {DEFAULTS[key]}: {hint}")
+    if not changed:
+        return ""
+    return (" <strong>Settings you changed that can empty a network on their own:</strong> "
+            + "; ".join(changed) + ".")
 
 
 def _empty_reason_core(result: dict) -> str:
@@ -970,6 +1011,15 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     excluded = {sid.strip().upper() for sid in s["exclude_studies"].split(",") if sid.strip()}
     left_out = [sid for sid in studies if sid.upper() in excluded]
     studies = [sid for sid in studies if sid.upper() not in excluded]
+    # an id that matched nothing was dropped in silence and recorded as applied, so a mistyped id
+    # ("SMGDB0000002", one digit short) left the study in the search while the report said it was
+    # excluded. The species box answers an unusable entry; this one said nothing (#221 item 2).
+    searched = {sid.upper() for sid in [*studies, *left_out]}
+    unused = sorted(sid for sid in excluded if sid not in searched)
+    if unused:
+        errors.append("not used in Exclude these studies: " + ", ".join(unused)
+                      + ". No study searched has that id, so nothing was excluded by it; a study id "
+                      "looks like SMGDB00000002. The other ids in that setting were applied.")
     partners_only = 0                       # interactions dropped because a partner was not entered
 
     # A species name resolves to every strain of that species, and a strain keeps its taxon id across the

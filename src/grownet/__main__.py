@@ -89,6 +89,36 @@ def _metric(a) -> str:
     return metric_name({"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window})
 
 
+def _bad_settings(a) -> str:
+    """Why a numeric setting cannot be used as given, or "": the same bounds the page applies.
+
+    The page coerces every one of these (`gui.parse_settings`) and the command line took them as typed,
+    so the two routes disagreed about what a legal setting is and a nonsense one travelled into
+    `meta.settings` as the provenance of the run: `--rate-window -3` gave 0 edges and recorded -3,
+    `--absence-threshold -1` gave 18 edges reported as "|log2 mean| < -1 * sd", `--no-growth-factor -2`
+    gave 10 edges over 3 nodes. Each exited 0 (#221 item 4). Refusing is the right half of "refuse or
+    announce": the page clamps because a form cannot stop and ask, and a command can.
+    """
+    if a.rate_window is not None and a.rate_window < 2:
+        return (f"--rate-window must hold at least 2 points, not {a.rate_window}; the growth rate is a "
+                "line fitted over a window of points")
+    for flag, value in (("--spike-factor", a.spike_factor), ("--capacity-max-fall", a.capacity_max_fall),
+                        ("--absence-threshold", a.absence_threshold),
+                        ("--no-growth-alpha", a.no_growth_alpha),
+                        ("--no-growth-factor", a.no_growth_factor)):
+        if value is not None and value < 0:
+            return f"{flag} cannot be negative, and was {value}"
+    if a.min_studies is not None and a.min_studies < 1:
+        return f"--min-studies must be at least 1, and was {a.min_studies}"
+    if a.min_studies and a.min_studies > 1 and not a.merge_arcs and not a.merge_genera:
+        # the one that silently empties a network: without merging, an arc carries no `studies` key, so
+        # `len(e.get("studies") or [e])` is 1 for every arc and the filter removes all of them (#220)
+        return (f"--min-studies {a.min_studies} counts the studies behind a MERGED arc, and nothing is "
+                "merged here, so every arc counts as 1 and the network would come out empty: add "
+                "--merge-arcs (or --merge-genera), or drop --min-studies")
+    return ""
+
+
 def _rate_flags(a) -> str:
     """Why the growth-rate options cannot be used as given, or "": checked before anything is derived, so
     a run never writes a network and then refuses to write the files beside it."""
@@ -140,7 +170,7 @@ def _derive(a):
         # the page's own defaults rather than repeating the value
         from .gui import DEFAULTS
         a.derivation = DEFAULTS["derivation"]
-    problem = _rate_flags(a)
+    problem = _bad_settings(a) or _rate_flags(a)
     if problem:
         print(problem, file=sys.stderr)
         return 2
@@ -342,11 +372,20 @@ def _emit(a, net, skipped, extra, label, result):
         print(f"wrote the report to {a.report}", file=sys.stderr)
 
     organism_rates = result.get("rates") or {}
-    if (a.rates or a.glv) and not organism_rates:
-        print("no growth rate could be computed for any organism of this network; the report says why "
-              "each one has none", file=sys.stderr)
-        return 1
-    if a.rates:
+    # This used to `return 1` here, before the skipped-pair list, the absence note, the low-quality note,
+    # the sources block and the "NO interactions were derived" explanation, and it pointed at a report
+    # that was only written if --report was given: asking for --rates printed 7 lines of stderr and
+    # asking for less printed 74, including 35 copies of the exact cause (#221 item 3). The diagnosis is
+    # the thing the person needs, so it is printed and the exit code is carried to the end.
+    no_rates = bool(a.rates or a.glv or a.to_r) and not organism_rates
+    if no_rates:
+        print("no growth rate could be computed for any organism of this network, so "
+              + ", ".join(f for f, on in (("--rates", a.rates), ("--glv", a.glv), ("--to-r", a.to_r)) if on)
+              + " wrote nothing"
+              + (f"; {a.report} says why each organism has none" if a.report
+                 else "; the reasons are below, and --report writes them to a file"),
+              file=sys.stderr)
+    if a.rates and organism_rates:
         from .matrix import rates_csv
         with open(a.rates, "w", encoding="utf-8") as f:
             f.write(rates_csv(organism_rates, net))
@@ -372,7 +411,7 @@ def _emit(a, net, skipped, extra, label, result):
                 from .report import report_text
                 with open(a.report, "w", encoding="utf-8") as f:
                     f.write(report_text(result))
-    if a.glv:
+    if a.glv and organism_rates:
         from . import steady as steady_module
         from .matrix import glv_package
         extra_files = {"steady_state_check.txt": steady_module.as_text(checked)} if a.steady_check else None
@@ -381,7 +420,7 @@ def _emit(a, net, skipped, extra, label, result):
         print(f"wrote the gLV parameters to {a.glv}: the interaction matrix, the growth rates and a README",
               file=sys.stderr)
 
-    if a.to_r:
+    if a.to_r and organism_rates:
         from .matrix import glv_payload
         from .rbridge import DEFAULT_PORT, RError, send
         try:
@@ -430,7 +469,7 @@ def _emit(a, net, skipped, extra, label, result):
               "designs (a community plus the same community without one member); other larger communities "
               "yield nothing until a method suited to their design is chosen (see docs/METHOD_NOTES.md).",
               file=sys.stderr)
-    return 0
+    return 1 if no_rates else 0
 
 
 def _probability(text: str) -> float:

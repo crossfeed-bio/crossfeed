@@ -37,6 +37,36 @@ content.
   as they always have.
 
 ### Fixed
+- **A setting could empty the network while the tool blamed mGrowthDB** (#220). `--min-studies 2` counts
+  the studies behind a merged arc, so with nothing merged every arc counted as 1 and all of them were
+  removed; the page then blamed the species filter, said "the species do not affect each other by that
+  rule" while measured arcs were being discarded by a different control, and finally blamed mGrowthDB's
+  replicate structure. The setting was named in exactly one place, the report's `5 arc(s) below 2
+  studies`, and only with `--report`. The command line now refuses that combination and says to add
+  `--merge-arcs`, and any empty search on the page names every setting the reader changed that can empty
+  a network on its own, with what to try. `--spike-factor 1` and `--rate-window 1` are the same shape and
+  are covered by the same two changes.
+- **The command line accepted numbers the page clamps** (#221). `--rate-window -3`, `--absence-threshold
+  -1`, `--no-growth-factor -2` and `--spike-factor -1` each ran and exited 0, and the negative value
+  traveled into `meta.settings` as the provenance of the run: one run reported its own threshold as
+  "|log2 mean| < -1 * sd". They are refused with the bound now, which is the half of "refuse or announce"
+  a command can do and a form cannot.
+- **A mistyped `--exclude-studies` id was dropped in silence and recorded as applied** (#221).
+  `SMGDB0000002`, one digit short, left the study in the search while the report filed with a paper said
+  it was excluded. An id that matches no study searched is now reported, like an unusable entry in the
+  species box, and the ids that did apply are still applied.
+- **The wrong port was reported as out-of-date software** (#221). Pointing `--cytoscape-port` or
+  `--r-port` at any server answering an error status was reported as that program refusing the data, with
+  an instruction to upgrade it: grownet's own page, which answers 403 without a token, produced "Update
+  Cytoscape to 3.8 or later". Both now ask who answered first, CyREST at `/v1/version` and the R listener
+  by its own plain-text reply, and say "something on port N answered 403 Forbidden, and it is not
+  Cytoscape" when it is not.
+- **`--rates` or `--glv` with no computable rate threw away every diagnostic** (#221) and pointed at a
+  report that was only written with `--report`. It returned before the skipped-pair list, the
+  absence-threshold note, the low-quality note, the sources block and the "NO interactions were derived"
+  explanation, so asking for more output gave 7 lines of stderr where asking for less gave 74, including
+  35 copies of the exact cause. The diagnosis is printed and the exit code is carried to the end of the
+  run, and the message names the flags that wrote nothing and says where the reasons are.
 - **Every relative link in the README was dead on PyPI, and the legend image was broken there** (#192).
   The README is the long description on <https://pypi.org/project/grownet/>, and PyPI does not rewrite
   relative URLs the way GitHub does, so all fifteen resolved against the project page: the limitations
