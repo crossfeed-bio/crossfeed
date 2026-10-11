@@ -607,7 +607,11 @@ const displayWeightOf=e=>e.outcome==="obligate"||e.outcome==="abolished"?8.0:Num
 const pyFloat=x=>Number.isInteger(x)?x.toFixed(1):String(x);     // as Python's str() writes a float
 function graphmlValue(attr,v,ty){
   if(v===null||v===undefined)return "";
-  if(Array.isArray(v))return v.join(attr==="notes"||attr==="merged_pairs"?"; ":" ");
+  // "community" joins with "; " like notes and merged_pairs, because it holds NODE IDS and a node id
+  // under identity "name" is a lowercase species name with a space in it: the space-joined form could
+  // not be split back on 115 of 145 arcs of the default corpus (#245). grownet.export does the same, and
+  // test_legend.py compares the two routes byte for byte.
+  if(Array.isArray(v))return v.join(attr==="notes"||attr==="merged_pairs"||attr==="community"?"; ":" ");
   // a double whose value happens to be whole is still written as a float, the way Python's str() does:
   // 2.4e8 is "240000000.0" and not "240000000", or a reader diffing the two routes sees a difference
   // that is not there (#155 item 4)

@@ -38,7 +38,7 @@ When a port cannot be opened, read the same parameters from the page instead, at
 under the gLV control:
 
 ```r
-glv <- grownet_glv("http://127.0.0.1:8791/glv.json?token=PASTE_THE_TOKEN")
+glv <- grownet_glv("http://127.0.0.1:8791/glv.json?token=PASTE_THE_TOKEN&job=PASTE_THE_JOB")
 ```
 
 ## What arrives, and what it hides
@@ -51,7 +51,9 @@ gLV parameters from grownet 0.3.0, derived 2026-10-06T12:00:00+02:00 from mGrowt
   3 organisms; matrix 3 x 3, every cell in 1/(h x Cells/mL)
   growth rates: 3 of 3 organisms (1/h)
   A[i, j] is the effect of j on i: rows are affected, columns are the actor.
-  Every cell is a fitted per-capita coefficient: the diagonal is -r_i / K_i and an off-diagonal cell is
+  Every cell is a fitted per-capita coefficient; what the diagonal is depends on the derivation and
+  `caveats$diagonal` says which. Under the comparison of replicate sets the diagonal is -r_i / K_i and an
+  off-diagonal cell is
   fitted from the whole time course, as a parameter of ln(x_i(T) / x_i(0)) = r_i T + sum_j A[i][j]
   integral(x_j dt), so nothing here is a convention and nothing needs scaling to match the rest.
   Read before you simulate:

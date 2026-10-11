@@ -8,6 +8,15 @@ include CHANGELOG.md CITATION.cff NOTICE
 # archive while the wheel was fine. A named include is one more place to remember (2026-10-08).
 recursive-include schema *.json
 include docs/legend.svg
+# the two registers the suite reads, NAMED rather than `recursive-include docs *.md`: measured on
+# 2026-10-11, the recursive rule also ships docs/agents/NOTES.md (95,162 bytes of agent working notes)
+# and docs/DATA_GOVERNANCE.md, so it is not a tighter version of this line, it is a decision to publish
+# two more files. `graft docs` adds those plus both SVGs. A recursive rule with `prune docs/agents` works
+# only if the prune comes AFTER it; written the other way round it silently does nothing. The test below
+# keeps this line honest, so naming a file here is not the "one more place to remember" that the schema
+# comment above warns about (Craig's agent measured the five shapes on #199; the named include is his
+# corrected recommendation and it is what this is).
+include docs/METHOD_NOTES.md docs/LIMITATIONS.md
 recursive-include tests *.py *.json *.csv *.svg
 recursive-include checks *.py
 recursive-include packaging *.py

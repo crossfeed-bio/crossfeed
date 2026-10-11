@@ -73,6 +73,460 @@ content.
   out empty, because that notice runs from the empty-network reason alone: so the one case where numbers
   leave the page under a changed threshold was the case the page did not mark. The block opens with a
   count when anything is off its default, and every result names them in one line.
+- **The Cytoscape table dropped `taxonomy` and `model_ref`**, which the neutral file and GraphML both
+  carry, against the claim in the same file that this payload names every field and against
+  `network_json`'s own docstring ("every node and edge attribute becomes a column"). grownet populates
+  neither today, so nothing is lost on a live run, but a network given a lineage or a metabolic-model link
+  by hand lost both on the way to Cytoscape, and `model_ref` is named for the downstream consumer the
+  neutral format exists to serve. Found by comparing the two emitters rather than by reading either, which
+  is how the same asymmetry was found for the three error components. `tests/test_export.py` now asserts
+  set equality between the payload's columns and the `Node` and `Edge` records, so the next field cannot
+  stop at the table.
+- **The gLV payload published the fitted row count under the field named `replicates`** (#259), where
+  `growth_rates.csv`, the other emitter of the same numbers, published the monoculture replicate count.
+  `replicates` has meant monoculture replicates since 0.2.0, which is the rule stated over `rates_csv`,
+  and a derivation that merges fitted rows keeps the row count in `n` with `n_label` precisely so the two
+  are not confused. On a live `--all --glv-mode` run the payload said 1 and 2 where the zip said 3, and
+  the R package reads the field straight through, against a docstring promising "the same numbers as the
+  zip" and a README allowing a difference in the fifth significant digit. It bit the integrated form only,
+  which is the one gLV mode selects: under the default derivation there is no `replicates` key and both
+  routes fall back to `n`, which is why nothing noticed. The row count is deliberately not added beside
+  it, because a new field would move `grownet.glv/v1`; it is in `meta.growth_rates` for anyone who wants
+  it.
+- **The GraphML, the Cytoscape payload and the viewer joined `community` with a space, and 115 of 145
+  arcs of the default corpus could not be split back** (#245). `community` holds node ids, and a node id
+  under identity `name` is a lowercase species name, so a 14-member community read as a 16-member one
+  whose two extra members were word fragments (`lachnoclostridium`, `symbiosum`). It is the field a reader
+  needs for exactly the arcs that depend on it: a drop-out arc's own text says the effect may run
+  "directly or through the others", and the others are this list. Joined with `"; "` now, in all three
+  routes, as `notes` and `merged_pairs` in the same emitters already were; 0 of 145 fail to split.
+  The rule for any future list whose members can contain a space is written where the "space-joined
+  community" claim used to be, and the four still joined with a space carry no such value today, which was
+  measured.
+- **Every censored arc's `bound_rule` printed a start abundance and a window with no unit** (#248), and
+  one field carried 105.8 Cells/mL on one study and 1.44e+07 CFUs/mL on another while naming neither.
+  `GrowthCurve` refuses to exist without both units, so they were in hand at that point, and the report's
+  next clause on the same arc already prints the partner's abundance with its unit. `strength_bound` is
+  the only number a reader has for a censored pair and this rule is the only thing that says what it came
+  from. All three metric branches now carry them, including the rate bound, which printed `0.001408` with
+  no `1/h`.
+- **The page promised a matrix cell the CSV did not hold** (#248). `matrix.counts` counted self pairs and
+  `rows` writes the diagonal there, so with `--merge-genera`, which produces within-genus arcs by
+  Karoline's own choice, the page said 45 cells over 17 organisms and the file held 44: the lost cell was
+  written as `0`, the same token as the 245 pairs where no comparison was attempted. `counts` reports them
+  apart now and the page says how many arcs have no cell and why. Verified on the live corpus: 44 against
+  44.
+- **The `grownet_glv()` address in the R package's own documentation omitted `job=`** (#251), so following
+  it served whichever search the browser last looked at: two tabs, two searches, and the job-less address
+  returned a different system's parameters each time with HTTP 200 and the right format. The page prints
+  the address with its job, and the three documented examples now say so and say why to copy it rather
+  than type it.
+- **The R package's `glv_write` wrote three of the download's sixteen rate columns**, under a doc
+  promising "the same three files grownet's download holds". A reader who kept its output beside their
+  analysis, which is what the documentation says it is for, silently dropped the estimator, the lag, the
+  carrying capacity and its provenance: the columns the `README.txt` written next to it tells them to
+  read. Every value was already in the payload's `growth_rate_detail`, so it now writes them, with the
+  doubling time derived as the download's last column is. The documentation also said "three files" where
+  the download holds one matrix per abundance unit, and says so now.
+- **Two published statements about `sd` and `se` said what the code's own comment says is false** (#260).
+  `help.py`'s meaning for `se_replicates` and METHOD_NOTES both asserted that "the tool's own relation
+  se = sd / sqrt(n) holds", and METHOD_NOTES added "`sd` is `se * sqrt(n)`", which is the formula
+  `integrated.py` abandoned on 2026-10-07 and records in a comment as one that "never held for two
+  variance components": the monoculture stage's error is shared by every replicate of a row, so its
+  variance is never divided by n. Measured on all twelve arcs of a live `--glv-mode` run, `sd / sqrt(n)`
+  is out by up to a factor of 2.06, while `se` reproduces exactly as the square root of the component
+  variances added. Both now say that. METHOD_NOTES also said "both halves are published", naming two of
+  the three components: `se_rate_selection` is published too.
+- **The caveat naming which direction the gLV diagonal runs had no test that could see it** (#260). The
+  assertion read `== "fitted: -r_i / K_i" or "fitted" in caveats["diagonal"]`, and the second half passes
+  for any string containing "fitted", so inverting the integrated entry back to the comparison's
+  direction, the correction #231 exists for, left the suite green. It now asserts the exact string for
+  the derivation in hand, and that the two derivations differ.
+- **The help-command guard applied one of the three pre-flight checks a run applies**, found by a pass
+  that attacked every new test with the regression it claims to catch. `_derive` consults the rate flags,
+  the settings bounds and, on the search path, three further guards; the test called the rate flags
+  alone, so adding `--species` to the printed `--all` line, the most ordinary editorial slip for it,
+  exited 2 with the whole suite green. The search path's three guards are pulled out of `_derive_species`
+  as `_species_flags`, so one function holds them and the test reaches all of them; a guard added there
+  in future is consulted by the test without anyone remembering to add it. Verified by making that slip
+  and watching the test go red.
+- **Gate check 6 said emitted networks validate against the shipped JSON Schema, and it runs the
+  dependency-free validator** (#249), which this release documents as a subset of that schema: a
+  hand-written network passes `grownet validate` and fails the schema nine ways. The claim stood in the
+  gate's own summary of its checks, in the function's docstring and in the message it would print. All
+  three say which validator runs now. No emitted network violates the schema today, which was measured,
+  so this was a false claim about a guard rather than a wrong output, and the version that would make the
+  original claim true (walking the schema's own keywords over the document, both of which are in hand
+  there) is named in the docstring for whoever wants it.
+- **The help page's own guard read `<pre>` blocks only** (#249), and the page prints four more commands
+  in inline `<code>`, among them the gLV walkthrough, which is one of the three places #234 says this bug
+  was already fixed once. Removing `--live` from that inline command left the whole suite green while the
+  printed command exited 2. Both elements are read now, 13 commands against 9, the floor is the real
+  count so losing a block fails rather than quietly checking less, and the inline case was verified by
+  breaking it and watching the test go red.
+- **The help page told every reader that All spares "about 1,300 requests"** (#249). This release
+  re-measured that quantity for `docs/METHOD_NOTES.md` and corrected it there, and walked past the page a
+  non-developer reads: it is 1,926 cold and 54 warm, counted at the client's own send. Both figures with
+  a pointer to the command now.
+- **Five statements promised the residual of every fit, including every gLV package README, and no output
+  carries it** (#230). `_least_squares` computes it and `fit_row` and `two_stage` drop it; there is no
+  residual field on an edge, in the schema, in GraphML, in Cytoscape or in `r/`. The gLV package was the
+  sharpest: its own README said each cell can be traced to its fit by the condition number and the
+  residual, and the condition number is on the network edge rather than in the zip, so the zip could not
+  be traced to its fit at all. The promises now name what exists, `fit_condition`, `fit_r2` and
+  `fit_null_r2`, and the package README says a cell is traced through the network it was built from.
+  Emitting the residual would add a field and move the format id, so that is not done here.
+- **`caveats.diagonal` stated the retired direction, and the R package repeated it in four places**
+  (#231). It was one unbranched string, "fitted: -r_i / K_i, with K_i the organism's own plateau", which
+  is the comparison's direction; under the integrated form `A[i][i]` is the fitted parameter and
+  `K_i = -r_i / A[i][i]` is derived from it, which `matrix.py` itself calls "the opposite direction"
+  twelve lines from where both were written. So a gLV package built by the integrated form carried the
+  retired statement in its `caveats` while its own README carried the correct one. `DIAGONAL_CAVEAT` now
+  holds both and is selected by the derivation, verified on live payloads of each; `r/R/use.R`,
+  `r/man/glv_matrix.Rd`, `r/README.md` and `r/R/payload.R`'s fallback say that it depends on the
+  derivation, and the R fixture that pinned the retired text is labeled with which arm it is.
+  Same shape as #211 item 1, in the places #211 did not reach.
+- **Four statements about the project's own guards were stronger than the guards** (#235).
+  `schema.py`'s module docstring said the dependency-free validator "enforces the same constraints" as
+  the shipped JSON Schema: a hand-written network passes `grownet validate` and fails that schema nine
+  ways, because `validate_document` checks no numeric type, no `minimum`, no `maximum` and no string
+  type. The viewer-vocabulary guard covered 4 of the 7 vocabularies and `STATUSES` was not among them,
+  although its own docstring cites a `status` value arriving as a reason it exists; it covers seven now,
+  and the three left out say why. `ASSERTS_DEFAULT` caught 1 of 8 natural ways to call a deriver the
+  default, including "By default, X derives every network" although `runs by default` was in the pattern,
+  because it is word-order sensitive; all eight are caught and the sentence naming both forms still
+  passes. And `published.fresh`'s `settings` argument defaults to `None`, which skips the derivation
+  check that the docstring makes the point of the function: `fresh(p, now)` was True on the artifact that
+  `fresh(p, now, DEFAULTS)` refused. No shipped path does that, and it is written down rather than left
+  to be found again.
+- **Four reader-facing texts stated the published artifact's condition as age only** (#235), after #199
+  added the derivation condition: `README.md`, the help page, `run_query`'s docstring and
+  `--no-published`'s help. A reader at the defaults could be refused the artifact on a condition no
+  document stated.
+- **The documentation was run literally and three things in it did not work** (#234). `CONTRIBUTING.md`'s
+  development setup said `cd grownet` where the clone makes `crossfeed`, and did not say which Python, so
+  it failed at its second line for every developer the README sends there. A help-page example exited 2,
+  which was **the fourth copy of that bug** after the CLI epilog, the README and the gLV walkthrough; no
+  test ran what the help page prints, so a test now parses every command on it through the real parser
+  and the run's own argument resolver, which is what the previous three fixes lacked. And `README.md`
+  named `grownet-<version>-windows.zip` where every release carries `grownet-v<version>-windows.zip`,
+  which `RELEASING.md` and the release check both had right.
+- **A control that can empty the network was listed in the guard and could never fire**, and the two
+  tests of these guards asserted a subset of what they claimed. `_EMPTYING` held seven entries and the
+  seventh, `min_replicates`, is not a page setting, so the loop skipped it on every call: dead code no
+  test could see, because the test asserted three of the seven by hand. Deleting the other four left it
+  green and #220 returned for four real controls. The entry is gone, the test loops over `_EMPTYING` for
+  the behavior **and** asserts its membership explicitly, because looping over a constant cannot notice
+  the constant shrinking, which the first attempt at this fix got wrong. The sibling test asserted three
+  of the five flags in the negative-value guard and never asserted the `--no-growth-alpha` bound at all;
+  it names the flags from the guard's own list now. Both were verified by applying the deletion and
+  watching them go red.
+- **An incomplete run exited 0 on the species and All paths** (#247), while `derive <a bad id> --live`
+  exited 1 for the identical failure: the species path collected the 404 into `errors`, printed it, and
+  returned 0, so a script could not tell a complete run from an incomplete one. It says the run is
+  incomplete and returns 1 now, and says what the network does hold. This is safe to key on `errors`
+  only because that list is fetch failures and nothing else: the advisory messages travel in `notes`,
+  which is the split this release makes, and the test asserts both halves, because keying on a list
+  holding both would fail a **complete** run. The first version of that test recomputed the condition in
+  a loop and would have passed against any implementation; it drives `_derive_species` with a stubbed
+  `run_query` instead, and fails when the rule is changed to read `notes` as well.
+
+  Not fixed here, and filed: what the FILE says about its own completeness. `meta` carries no record that
+  a study could not be read, and `meta.studies` lists the unreadable study as a source, so the artifact
+  asserts provenance it does not have and `validate` passes. Recording it adds fields, which moves the
+  format id, so it is Karoline's and Craig's call (#247).
+- **`--no-growth-alpha` took any non-negative number, and 5 was published as the level the test ran at**
+  (#250). The sibling `--max-adjusted-p` refuses 5 with a message. An alpha of 5 makes every replicate
+  set count as grown, so the no-growth rule, the only source of the censored and obligate arcs, is
+  switched off while `meta.no_growth` records `"alpha": 5.0`. The help documents exactly one way to switch
+  it off, which is 0. It is bounded at 1 now, with 0 still the documented off switch.
+- **The command line still did not name the setting that emptied the network** (#250, the command-line
+  half of #220). `--spike-factor 1` is a legal value, so no refusal applies, and the "most common reason"
+  the message printed is a line that is also present at the defaults, where the same study yields an arc:
+  so the setting that did it was the one thing the message did not mention. The page's own
+  `_settings_to_try` is a pure function over a settings dict and `_settings_of` already builds that dict
+  for every command-line path, so the empty-network message names them too, and says nothing at the
+  defaults.
+- **An unused id in Exclude these studies went into `errors`**, which the empty-network reason reads as
+  "mGrowthDB could not be read", so the advisory message added here would have blamed the database for a
+  reader's own setting. It travels in `notes` beside the steady-state messages instead, which is the list
+  `_empty_reason_core` does not consult.
+- **A setting could empty the network while the tool blamed mGrowthDB** (#220). `--min-studies 2` counts
+  the studies behind a merged arc, so with nothing merged every arc counted as 1 and all of them were
+  removed; the page then blamed the species filter, said "the species do not affect each other by that
+  rule" while measured arcs were being discarded by a different control, and finally blamed mGrowthDB's
+  replicate structure. The setting was named in exactly one place, the report's `5 arc(s) below 2
+  studies`, and only with `--report`. The command line now refuses that combination and says to add
+  `--merge-arcs`, and any empty search on the page names every setting the reader changed that can empty
+  a network on its own, with what to try. `--spike-factor 1` and `--rate-window 1` are the same shape and
+  are covered by the same two changes.
+- **The command line accepted numbers the page clamps** (#221). `--rate-window -3`, `--absence-threshold
+  -1`, `--no-growth-factor -2` and `--spike-factor -1` each ran and exited 0, and the negative value
+  traveled into `meta.settings` as the provenance of the run: one run reported its own threshold as
+  "|log2 mean| < -1 * sd". They are refused with the bound now, which is the half of "refuse or announce"
+  a command can do and a form cannot.
+  **A non-finite one is refused with them** (#258): `nan` and `inf` are numbers to `float()` and pass a
+  `value < 0` bound, because both comparisons are False, and `json.dumps` then writes the bare `NaN` and
+  `Infinity` into `meta.settings`. RFC 8259 section 6 forbids both, so R refuses the whole network while
+  grownet's own `validate` accepts it, Python's json module reading the specials by default.
+  `--max-adjusted-p` already refused them through its own type, which admits only `0 < value <= 1`.
+- **A mistyped `--exclude-studies` id was dropped in silence and recorded as applied** (#221).
+  `SMGDB0000002`, one digit short, left the study in the search while the report filed with a paper said
+  it was excluded. An id that matches no study searched is now reported, like an unusable entry in the
+  species box, and the ids that did apply are still applied.
+- **The wrong port was reported as out-of-date software** (#221). Pointing `--cytoscape-port` or
+  `--r-port` at any server answering an error status was reported as that program refusing the data, with
+  an instruction to upgrade it: grownet's own page, which answers 403 without a token, produced "Update
+  Cytoscape to 3.8 or later". Both now ask who answered first, CyREST at `/v1/version` and the R listener
+  by its own plain-text reply, and say "something on port N answered 403 Forbidden, and it is not
+  Cytoscape" when it is not.
+- **`--rates` or `--glv` with no computable rate threw away every diagnostic** (#221) and pointed at a
+  report that was only written with `--report`. It returned before the skipped-pair list, the
+  absence-threshold note, the low-quality note, the sources block and the "NO interactions were derived"
+  explanation, so asking for more output gave 7 lines of stderr where asking for less gave 74, including
+  35 copies of the exact cause. The diagnosis is printed and the exit code is carried to the end of the
+  run, and the message names the flags that wrote nothing and says where the reasons are.
+- **All said it ignored the boxes, and it reads the second one** (#193). Narrowing All by a study or
+  medium in the second box is deliberate and documented (`run_query`, Karoline 2026-09-28); the caption
+  claiming otherwise and the heading "All of mGrowthDB" were the false half. The gLV example button fills
+  that box and leaves it filled, so pressing gLV example and then All reported a two-arc network of one
+  study as the whole database. The heading now says "All, narrowed by the second box" and names what it
+  matched, the caption says it ignores the species box, and the box's own hint says All reads it and to
+  clear it for the whole corpus. The bar's text has a length Karoline set and a test pins it, so the
+  detail is in the hint rather than the bar.
+
+  **And the report embedded in that page still claimed the whole database**, found reviewing this branch.
+  `report.py` wrote "query: all of mGrowthDB (every study, with every partner)" unconditionally, three
+  lines above its own "Media, experiments or studies" line, so one file contradicted itself and
+  `/report.txt` and the download said it too. **The test written for exactly this missed it on letter
+  case**: it asserted `"All of mGrowthDB" not in page` and the report writes lower case. The report takes
+  the same two controls now, the command line's own run label does too, and the test reads the page
+  case-insensitively and asserts the containing phrase rather than a bare study id, which reached that
+  page from five other places.
+- **Three tests on this branch could not fail, and were rewritten so that they can.** A review pass
+  attacked every test added in the last two days by constructing the regression each claims to catch.
+  The settings test rested on two assertions that are true of their own construction, because
+  `_settings_of` returns `{**DEFAULTS, ...}`: dropping three keys so they fell through to the defaults,
+  which is verbatim the defect its docstring describes, left it green. It asserts every one of the 23
+  page settings is moved by its own flag now, and counts them, so a new setting without a case fails.
+  `about_a_pair`'s only negative case had a reason that does not contain `AVERAGE`, so that half of the
+  predicate was untested; both label shapes are asserted against it now. Each was verified by applying
+  the regression and watching the test go red.
+- **"pairs the data did not support (186)" counted 97 notes about the data and 31 conditions that did
+  produce arcs** (#232), and the first version of this fix made it worse before it made it better:
+  `about_a_pair` told the two kinds apart by the label's punctuation and knew only one of the two shapes
+  the code writes, so on SMGDB00000013 the report read "pairs the data did not support: none" while
+  listing seven of them under a heading saying they are not pairs. `derive.py` writes
+  `{a} with {b} [{cond}]` for a pair whose sets could not be compared and `{source} -> {target} [{cond}]`
+  for the no-growth and unusable outcomes; both are declared as `adapter.PAIR_SEPARATORS` now, and a
+  third separator added somewhere is recorded there as a known gap rather than left to be discovered. `adapter.condensed` folds the average-replicate notes to one line per
+  experiment, keyed by the experiment, and they were counted under a heading about pairs: the report
+  called a condition a pair that gave no edge 254 lines after reporting an interaction derived from it.
+  The report, the page and the command line now separate pairs from notes on the data read, and the
+  "skipped N pair(s)" message counts the pairs. The page also said 186 and showed 50 with no marker; it
+  says "showing 50 of N" and points at the report.
+- **An empty network caused by the reader's own setting was reported as "mGrowthDB could not be read"**,
+  in a run where mGrowthDB answered every request. `_empty_reason_core` reads `errors` as a fetch
+  failure, which it used to be and only be; the messages added here and in #243 for a check that could
+  not run and an id that matched nothing went into the same list, so the lead sentence did the exact
+  thing #220 and #243 exist to stop. Advisory messages travel in `notes` now, which the page shows beside
+  the errors and `_empty_reason_core` does not consult.
+- **The page accepted the steady-state check without growth rates, ran nothing, and said it was on**
+  (#233). The command line refuses that combination and names the remedy; the page ticked the box, scored
+  nothing, printed "Check against chemostat steady states: on" and wrote `steady_check: true` into the
+  downloaded network. It now says what the command line says, and a run that asked for the check with
+  rates on but no computable rate says that instead of leaving "on" as the only trace.
+- **Two derive paths recorded different settings, and both recorded `steady_check` wrongly** (#233),
+  and the first version of the single builder left `exclude_studies` and `only_entered` to come from the
+  page defaults, which turned a setting the report did not mention into one it stated the **opposite**
+  of: `derive <STUDY> --exclude-studies <that study> --all-partners` recorded "Exclude these studies:
+  none" and "Only interactions between the species entered: on", having searched the study and kept every
+  partner. Both are in the builder now. Recording them is not enough on its own, because the report
+  would then say a study was excluded while the arcs come from it, so a bare study argument with
+  `--exclude-studies` or `--all-partners` is refused: those flags narrow a search over several studies
+  and the help already said they apply with `--species` or `--all`. `conditions` was the other key left
+  out of that builder, and the one whose two paths disagreed in VALUE: the single-study path joined
+  `--conditions "WC" "mucin"` with a space, and space is the one separator `selection.parse` does not
+  split on, so the record read back as one medium named "WC mucin" that matches nothing while the run used
+  the two. It is in the builder with the page's own one-per-line encoding.
+  `derive <STUDY> --live` wrote 20 keys and the species path 23, the difference including
+  `include_absent` and `steady_check`, which are n/a on neither; and the species path took `steady_check`
+  from the page defaults rather than from the flag, so a run that scored a chemostat recorded that it had
+  not. One builder for every path now, 24 keys on both, verified on live runs of the same study, and a
+  test reads it through the real parser rather than a copy of the key list.
+- **Nine measured claims that no longer reproduced are corrected, and each now carries the command that
+  produced it** (#223, #219). None is a change to the code: every one was a sentence that had stopped
+  matching what the tool does, which is the one thing internal correctness does not tolerate. Re-measured
+  live on 2026-10-11, and the split #223 found holds: the claims a command prints about itself were fine,
+  and these are the hand-assembled ones.
+
+  | where | said | gives now |
+  | --- | --- | --- |
+  | `rates.py` | easylinear matched mGrowthDB on "43 of 46 within 10%" | **119 of 119** on SMGDB00000004, median ratio 1.0001, and **2132 of 2161** corpus-wide |
+  | `help.py` | "190 of 192 curves" | **2132 of 2161**: the proportion held, the denominator was an order of magnitude off |
+  | `METHOD_NOTES` caching | a run sends 3738, "an unchanged corpus costs the 54 study records and nothing else" | cold **1926**, warm **54**, which is 25 study records plus **29 id-crawl probes that answer 404 and are never cached**, with 1872 reused |
+  | `METHOD_NOTES` rate mismatch | two *L. delbrueckii* arcs imply **-83.5 and +129.8** per cent | **-21.56 and -21.74**: same sign, 0.2 points apart |
+  | `METHOD_NOTES` coverage table | comparison 30 arcs / 8 rows / 10 cells, integrated 23 / 6 / 9 | comparison **24 / 8 / 8**, integrated **12 / 7 / 7** |
+  | the same table's recorded command | `derive SMGDB00000007 ... --steady-check`, "that study alone" | gives **5 arcs over 3 rows** and **4 over 3**: that study holds three organisms, so it cannot produce 8 rows, and the figures were corpus-wide |
+  | `METHOD_NOTES` starting densities | "up to 7.43 (SMGDB00000014's *A. tumefaciens*, 1.5e5 against 6.6e5)" | 6.6e5 / 1.5e5 = **4.4**; the 7.43 belongs to the *S. thermophilus* pair named six lines later |
+  | `METHOD_NOTES` and `test_measured_bound.py` | "11 of 12 inside the quantified range" | **12 of 12** |
+  | `LIMITATIONS` entry 2 | "of 123 monoculture fits ... three imply a doubling slower than 24 hours" | **8 published rate rows, none** slower than 24 hours; the study those three came from now yields no network and no rate at all |
+
+  **Three further claims in the same bullet were re-measured after this branch was first pushed**, found
+  reviewing it: the median implied mismatch is **27.05 per cent**, not 19.2, which widens the gap against
+  the 8-to-16 noise floor the paragraph compares it with by 69 per cent; the two *L. delbrueckii* arcs
+  carry `se_rate_selection: None` and the `rate_unchecked` caution, so they take **one** stage-1 rate and
+  the premise of the grouping argument cannot be read off them at all; and the starting-density census was
+  wrong in four figures at once, **16** comparisons with a median of **2.14** and **4** above 3, against a
+  stated 39, 1.17 and 6, while the same bullet ten lines below had 2.16 and 4 of 12 right all along. That
+  census is also in `integrated.starting_densities`'s docstring and is corrected there.
+
+  **And two commands in this branch could not print what they were attached to.** The LIMITATIONS one
+  needed `--rates`, because the message it quotes is what refusing to write that file says; without it the
+  run exits 0 with an empty network. The steady-state one needed `--report`, because the figures are in
+  the report and the recorded command asked for neither it nor the zip. Both are the class this branch
+  exists to correct, caught inside it.
+
+  **Two are worth more than a corrected number.** The coverage table's own note says a missing command
+  made two readers take it for a fabrication, and the command added to fix that was the wrong one, which
+  is how a record decays twice in the same place. And the rate-mismatch paragraph drew a method argument
+  from the two figures that have changed: two arcs moving the same way by nearly the same amount is what a
+  shared rate error would produce, which is the opposite of what the paragraph concludes. That is recorded
+  and not rewritten, because the conclusion is a method judgement and the decision on #155 item 1 was
+  Karoline's.
+- **The 0.3.0 notes state a steady-state measurement that does not reproduce** (#219), and a tagged entry
+  is never rewritten, so the correction is here. They say the integrated fit "lands all three organisms at
+  0.41, 0.73 and 2.69 times the observed abundance". Re-measured live on 2026-10-11 with that entry's own
+  command, `derive SMGDB00000007 --live --glv-mode --derivation integrated --steady-check --report <file>`, against
+  SMGDB00000005's control: *B. thetaiotaomicron* **washes out** while the chemostat holds it at 5.285e+08,
+  *B. hydrogenotrophica* lands at **299.8x** observed and *R. intestinalis* at **119.6x**, and the fitted
+  interactions are **worse than no interactions at all** on both (34.8x and 2.878x with every interaction
+  set to zero). The other half of the same sentence does reproduce: the comparison gives 1.592x, washes
+  *B. hydrogenotrophica* out, and 3.194x, against the published 1.60 and 3.26.
+
+  **A held-out prediction that misses by two orders of magnitude is not a defect in this tool**, which is
+  Karoline's standard of 2026-10-10: showing how hard interaction inference is from observational growth
+  data is what it is for, and reporting the miss is the tool working. What was wrong is that
+  `CHANGELOG.md` and `docs/METHOD_NOTES.md` stated different numbers for the same measurement inside one
+  tag. The gLV statistics themselves are unchanged and are not being re-argued.
+- **The source distribution now carries the two registers the test suite reads**, `docs/METHOD_NOTES.md`
+  and `docs/LIMITATIONS.md`, and a test keeps `MANIFEST.in` honest about that. A test that reads a shipped
+  document makes it a dependency of the suite, and the sdist job is the only one that notices when it is
+  not carried, because it unpacks the archive where the repository layout is not there to fall back on:
+  the surface guard added for #202 went red there while `make check` was green. The named include is
+  deliberate rather than forgetful. Measured first: `recursive-include docs *.md` also ships
+  `docs/agents/NOTES.md`, 95,162 bytes of agent working notes, and `docs/DATA_GOVERNANCE.md`, so it is not
+  a tighter version of the named line but a decision to publish two more files; `graft docs` adds those
+  plus both SVGs; and a recursive rule with `prune docs/agents` works only when the prune comes after it.
+  The new test reads the paths out of the suite rather than listing them, so the next surface test is
+  covered the moment it is written, and it records that `README.md` ships because setuptools carries the
+  declared readme, which is a default rather than a promise.
+  Corrected from reviewing that change: the extraction matched only a whole relative path inside one
+  literal, and the suite's dominant idiom is a **component join**, so three files it already reads were
+  invisible, among them `schema/format_fields.json`, which `MANIFEST.in`'s own comment names as the
+  2026-10-08 instance of this exact failure. Both shapes are matched now, 7 paths against 3. The test
+  also had no positive control, which is why a promise it did not keep read as kept; it has one, written
+  to a temp file. That control is built from variables with one literal per line, because this file is
+  one of the files the extraction scans and a tuple of string literals reads as a path join: it caught
+  its own control twice while being written, which is the guard working.
+
+  And a third correction, from a pass that attacked every new test with the regression it claims to
+  catch: both shapes needed the directory name as a literal **next to** the filename, and the suite also
+  writes `DOCS = Path(...) / "docs"` at module level and then `DOCS / "X.md"` inside a test. A surface
+  test written that way, which is the most ordinary Python idiom and which `tests/test_legend.py` already
+  half-uses, passed unnoticed while reading a doc the manifest does not carry. Module-level directory
+  constants are resolved through the AST now, verified by writing exactly that test and watching the
+  guard fail on it. The docstring also names the shapes it still cannot see, rather than promising every
+  surface test is covered.
+- **Three of the gate's checks read nine file extensions, so the viewer and the whole R package were
+  never scanned** (#227, measured by Craig's agent on #239). Of 138 tracked files the list matched 108:
+  the 30 it skipped were 9 `.Rd`, 8 `.R`, the extensionless `LICENSE`, `NOTICE`, `Makefile`,
+  `r/NAMESPACE` and `r/DESCRIPTION`, both `.svg`, and one each of `.gitignore`, `.cff`, `.in`, `.html`,
+  `.Rbuildignore` and `.DS_Store`, the largest being `gui/index.html` at 52,570 bytes, which is the whole
+  viewer. The list's failure mode is the one nobody can enumerate, the next extension no one thought of,
+  and it had cost two misses in four days. What to scan is now decided by content, with a NUL byte as the
+  binary test rather than UTF-8 decodability, so a latin-1 file is still scanned and a binary with no
+  early NUL yields a false positive rather than a silent miss. 137 of 138 files are scanned now, and the
+  one skipped is `.DS_Store`.
+- **The gate overstated its own reach in the line a reader takes away from it**: "138 tracked files clean
+  across 9 checks" while the content checks read 108 and the merge-marker one 113. It now reports what was
+  scanned against what is tracked, and names what it skipped.
+- **The gate's `secrets` check required the value to be quoted**, so an unquoted one passed all nine
+  checks: a workflow `env:` block is unquoted YAML, and so is `TOKEN=...` in any scanned file, which is
+  how a secret is most likely to be written here. The quotes are optional now, and `bearer` may be
+  followed by whitespace rather than a separator, which is how an Authorization header is written. A value
+  must still be 16 or more characters from the class, so `${{ secrets.X }}`, `$VAR`, `<your-token>` and
+  `""` still do not match, and the gate is clean on all 138 tracked files. The check had no test of any
+  kind; it has one now, asserting both what must be caught and what must not, with every example
+  assembled at run time so that a test of the guard does not trip the guard. **No secret was ever in the
+  repository**: this closed a hole in a check, not an exposure.
+
+  Two corrections from reviewing that change. The whitespace-only separator is for `authorization` and
+  `bearer` alone, which is how an Authorization header is written: applied to all seven keywords it
+  flagged ordinary prose, because one hyphenated word after "secret" or "token" is sixteen characters of
+  the class, and this project's house style is long prose Markdown with inline file paths. And the key
+  header is `-----BEGIN [A-Z0-9 ]{0,20}PRIVATE KEY` now: DSA, ENCRYPTED and PGP PRIVATE KEY BLOCK were
+  missed while the check's own description says it covers private keys, and the first version of the test
+  probed one header out of seven. Both directions are measured: 13 of 13 caught, 11 of 11 left alone.
+
+  A third correction, from a pass that attacked every new test with the regression it claims to catch:
+  this check's **only** test probed the keywords `token`, `api_key` and `authorization`, so `secret` and
+  `password`, half the key/value group, were untested, and narrowing the pattern to
+  `(?:api[_-]?key|token)` let an unquoted `password=` line through with the test green. There is a case
+  per keyword now, and an assertion that every keyword the pattern names has one, so adding a keyword
+  without a case fails.
+- **The sentinel's remedy was stated without its exception** (Craig's agent, reviewing #226). The new
+  `metric_without` description told a reader that how far from 0 the set was "is on the same arc, as
+  strength_bound with the rule that gave it". `derive.bounded_strength` has two paths that return no
+  bound, and on the corpus **3 of the 15 censored arcs take one of them**: measured live, two whose rule
+  bounds nothing away from zero and one that is zero from its first point. A reader followed the sentence
+  and found an empty field with nothing having warned them, which is the same defect class the entry
+  above fixes. The description now names the exception and points at `bound_rule`, which says which path
+  it was; the matrix already left those three cells `NA` rather than 0.
+- **The test for the fitted report line modelled the wrong field**, found by a pass that attacked every
+  new test with the regression it claims to catch. It built its edges with `method="integrated:two_stage"`,
+  which is `integrated.METRIC`; the `method` field carries `integrated.METHOD`, which begins "integrated
+  v1: ln(x_i(T) / x_i(0)) = ...". The test passed only because that string happens to contain the word
+  the detection looks for, so rewriting the detection as an equality against the invented string left the
+  test green while **every real integrated arc fell back to the unlabeled line a reader divided and
+  found wrong**. It uses the real constants now, plus a merged arc, whose method carries "; merged: ..."
+  appended afterwards and which the invented-string version would not have labeled either.
+- **Three words the tool used about itself claimed more than it computes** (#224, #225, #226), found in a
+  review of 0.3.0. No statistic, rule, threshold or published number changes; what changes is that the
+  sentences describing them are now true, and three tests hold them there.
+- **`strength` and the `metric_with`/`metric_without` pair were documented as one quantity, and under the
+  integrated form they are two** (#224). Under the specified comparison `strength` **is** exactly
+  `log2(metric_with / metric_without)`, and 0 of 208 corpus arcs depart from it beyond rounding. Under the
+  integrated form the pair is the fitted row evaluated with and without the partner's term, from the
+  median coefficient, while `strength` is the mean of the per-replicate log2 effects at each replicate's
+  own partner level: **16 of 16 corpus arcs differ, by up to 0.42 in log2**, and on 2 the absence
+  threshold, which acts on `strength`, lands the other way from the pair. The report printed
+  `log2 mean -0.54` and `0.2701 with / 0.4926 without` on one line, so a reader who divided them got
+  -0.8669 and found the line wrong. `model.py`, the `strength` and `metric_with` field descriptions and
+  the report now name the relation per derivation, and the report gives the fitted pair's own log2 ratio
+  beside it rather than leaving it to be computed and doubted. What is exact under **both** is Karoline's
+  formula of #123, `(with - without) / partner_abundance`, which is what a gLV cell is built from, and
+  that is what the new test pins.
+- **`outcome: obligate` was defined in eight places as "the target grows only with the source"**, which
+  reads as a claim about the organism (#225). The rule is evaluated per comparison: it says the
+  without-set of **that** comparison failed the no-growth rule, and no stage asks whether the target grows
+  without the source anywhere else. In the corpus one pair is obligate in two conditions of a study and
+  quantified in six others of the same study, **once with the target reaching 1.16e+11 without the source
+  against 3.31e+10 with it**, so the artifact carried its own counterexample. The field table, the legend,
+  the help page's principle, `derive.py`, `interaction.py`, `matrix.py` and the README now state the
+  scope, and a dated note records it under Karoline's decision on #16 without altering her words. A pair
+  measured as obligate in one condition and quantified in another is a condition-dependent effect, not a
+  contradiction (Karoline, 2026-10-10, on the related sign conflict: "it's of interest and just shows that
+  higher order interactions matter").
+- **`metric_without` is 0 on every censored arc whatever the metric, and the help page said the 0 was a
+  measurement** (#226): "0 means the target did not grow at all there". Under a growth rate the 0 is
+  measured, which is what #123 settled. Under `auc` or `max`, and `auc` is the default, the set **did**
+  grow and failed a rule about how much, so its value is not 0, and the same arc's `strength_bound` says
+  how far: on the corpus all 15 censored arcs are `auc`, all carry 0, and their own bounds put the
+  without-side at **up to 65 per cent of the with-side**. The field description and
+  `derive.absolute_values` now call the 0 a sentinel for the set the no-growth rule rejected, and point at
+  the bound for how far from zero it was. The value is unchanged, since changing what the field means
+  would move the format id.
 - **Every relative link in the README was dead on PyPI, and the legend image was broken there** (#192).
   The README is the long description on <https://pypi.org/project/grownet/>, and PyPI does not rewrite
   relative URLs the way GitHub does, so all fifteen resolved against the project page: the limitations
