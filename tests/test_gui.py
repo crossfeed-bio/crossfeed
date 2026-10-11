@@ -888,3 +888,41 @@ def test_the_glv_example_button_configures_everything_and_runs(server):
     report = _get(f"{base}/report.txt?token={token}")
     for name in gui.GLV_EXAMPLE:
         assert name in report
+
+
+def test_a_non_finite_advanced_setting_falls_back_to_its_default():
+    """`nan`, `inf` and `1e999` in a settings box fall back to the default, so no output carries a token
+    that is not JSON.
+
+    `float()` accepts all three. A non-finite setting was echoed back to the form as the value in force
+    and copied into `meta.settings`, where `json.dumps` writes the bare `NaN` and `Infinity`. RFC 8259
+    section 6 forbids both, so R refuses the whole file, including the `/glv.json` the help page tells
+    people to paste into `grownet_glv(...)`, while grownet's own `validate` accepts it, because Python's
+    json module reads the specials by default. Nothing between the two caught it (#195).
+
+    Every field that reaches `meta.settings` through `float()` is listed here, so a new one added without
+    the check shows up as a missing key rather than passing quietly.
+    """
+    posted = {"spike_factor": ["nan"], "absence_threshold": ["inf"], "capacity_max_fall": ["1e999"],
+              "no_growth_factor": ["-inf"], "no_growth_alpha": ["nan"],
+              "filter_adjusted_p": ["on"], "max_adjusted_p": ["nan"]}
+    assert set(posted) - {"filter_adjusted_p"} == {
+        key for key in gui.DEFAULTS
+        if key in ("spike_factor", "absence_threshold", "capacity_max_fall", "no_growth_factor",
+                   "no_growth_alpha", "max_adjusted_p")}, "a float setting was added without this check"
+
+    settings = gui.parse_settings(posted)
+    for key in ("spike_factor", "absence_threshold", "capacity_max_fall", "no_growth_factor",
+                "no_growth_alpha"):
+        assert settings[key] == gui.DEFAULTS[key], key
+    # `max_adjusted_p` keeps its value only when `0 < value <= 1`, which is False for nan and for inf, so
+    # it already fell back before this check existed: it lands on the box's own default, not on None
+    assert settings["max_adjusted_p"] == gui.ADJUSTED_P_DEFAULT
+
+    blob = json.dumps(settings)
+    assert not [token for token in ("NaN", "Infinity", "-Infinity") if token in blob]
+    assert json.loads(blob, parse_constant=_no_constants) == settings     # strict: no specials at all
+
+
+def _no_constants(token):
+    raise AssertionError(f"meta.settings carries {token}, which is not JSON")

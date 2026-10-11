@@ -15,6 +15,7 @@ import dataclasses
 import html
 import http.server
 import json
+import math
 import secrets
 import socketserver
 import threading
@@ -829,6 +830,26 @@ def glv_mode(settings: dict, on: bool = True) -> dict:
             "derivation": DEFAULTS["derivation"]}
 
 
+def _finite(form: dict, key: str) -> float | None:
+    """The absolute value of a finite number posted under `key`, or None when there is not one.
+
+    `float()` accepts "nan", "inf" and "1e999". A non-finite setting was echoed back to the form as the
+    value in force and copied into `meta.settings`, where `json.dumps` writes the bare tokens `NaN` and
+    `Infinity`. RFC 8259 section 6 forbids both, so R and every other strict parser refuses the whole
+    file, while grownet's own `validate` accepts it, because Python's json module reads the specials by
+    default: nothing between the two caught it (#195). A non-finite number is also not a threshold any
+    measurement can be compared against, so it falls back to the default like any other unreadable value.
+
+    `max_adjusted_p` does not need this: it keeps its parsed value only when `0 < value <= 1`, which is
+    False for both `nan` and `inf`, so it already falls back.
+    """
+    try:
+        value = abs(float(form.get(key, [""])[0]))
+    except ValueError:
+        return None
+    return value if math.isfinite(value) else None
+
+
 def parse_settings(form: dict) -> dict:
     """Settings from the posted form, falling back to the defaults for anything missing or unreadable."""
     settings = dict(DEFAULTS)
@@ -842,14 +863,12 @@ def parse_settings(form: dict) -> dict:
         settings["rate_window"] = max(2, int(form.get("rate_window", [""])[0]))
     except ValueError:
         pass
-    try:
-        settings["spike_factor"] = abs(float(form.get("spike_factor", [""])[0]))
-    except ValueError:
-        pass
-    try:
-        settings["capacity_max_fall"] = abs(float(form.get("capacity_max_fall", [""])[0]))
-    except ValueError:
-        pass
+    spike = _finite(form, "spike_factor")
+    if spike is not None:
+        settings["spike_factor"] = spike
+    fall = _finite(form, "capacity_max_fall")
+    if fall is not None:
+        settings["capacity_max_fall"] = fall
     settings["include_low_quality"] = bool(form.get("include_low_quality"))
     settings["include_absent"] = bool(form.get("include_absent"))
     settings["include_dropout"] = bool(form.get("include_dropout"))
@@ -860,15 +879,13 @@ def parse_settings(form: dict) -> dict:
         settings["min_studies"] = max(1, int(form.get("min_studies", [""])[0]))
     except ValueError:
         pass
-    try:
-        settings["absence_threshold"] = abs(float(form.get("absence_threshold", [""])[0]))
-    except ValueError:
-        pass
+    absent = _finite(form, "absence_threshold")
+    if absent is not None:
+        settings["absence_threshold"] = absent
     for key in ("no_growth_alpha", "no_growth_factor"):
-        try:
-            settings[key] = abs(float(form.get(key, [""])[0]))
-        except ValueError:
-            pass
+        value = _finite(form, key)
+        if value is not None:
+            settings[key] = value
     settings["max_adjusted_p"] = None
     if form.get("filter_adjusted_p"):
         try:

@@ -37,6 +37,27 @@ content.
   as they always have.
 
 ### Fixed
+- **A non-finite number in an Advanced settings box produced JSON that R and every strict parser refuse**
+  (#195). `float()` accepts `nan`, `inf` and `1e999`, and nothing checked the result was finite, so the
+  value was echoed back to the form as the setting in force and copied into `meta.settings`, where
+  `json.dumps` writes the bare tokens `NaN` and `Infinity`. RFC 8259 section 6 forbids both, so R refused
+  the whole file, `/glv.json` included, which is the URL the help page gives for `grownet_glv(...)`, while
+  grownet's own `validate` accepted it, because Python's json module reads the specials by default. Each
+  of the five fields now falls back to its default, as any other unreadable value does.
+- **A kept response was written through whatever was at its path, and not atomically** (#197). The name is
+  sha256 of a public URL, so it is guessable, and `GROWNET_CACHE` is documented as a free-form override
+  whose natural value on a shared machine or a CI runner is a path under `/tmp`. A plain `open(path, "w")`
+  followed a symlink planted there and overwrote a file outside the cache directory. The write now goes to
+  a temporary name beside the target and is renamed onto it, which replaces a link rather than following
+  it, and makes the write atomic, so an interrupted run leaves the old entry or the new one and never half
+  a JSON document.
+- **The remembered address family was never cleared, so a network change cost the full timeout on every
+  connection** (#198). `_connect` gives a remembered family the caller's whole timeout, on the reasoning
+  that it is the one expected to work, and nothing removed the entry when it stopped working. That is the
+  situation the fallback was built for, and in it the memory was worse than none: 30 seconds per
+  connection against the 17.5 seconds of operating-system patience #184 measured and removed, and the
+  entry survived the failure, so every later connection paid it again. A failing family is now forgotten,
+  and the next connection treats both as unproven.
 - **Every relative link in the README was dead on PyPI, and the legend image was broken there** (#192).
   The README is the long description on <https://pypi.org/project/grownet/>, and PyPI does not rewrite
   relative URLs the way GitHub does, so all fifteen resolved against the project page: the limitations

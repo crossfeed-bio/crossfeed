@@ -566,3 +566,92 @@ def test_a_reply_that_is_not_a_representation_is_an_mgrowthdb_error(monkeypatch)
     with pytest.raises(MGrowthDBError):
         MGrowthDBClient(retries=3, backoff=0, cache_dir=None).get_study("S")
     assert len(calls) == 1
+
+
+def test_the_remembered_family_is_forgotten_when_it_stops_answering(monkeypatch):
+    """A remembered family that fails is cleared, so the next connection pays three seconds and not thirty.
+
+    `_connect` gives a remembered family the caller's whole timeout, on the reasoning that it is the one
+    expected to work. Nothing removed the entry when it stopped working, and that is exactly the situation
+    the fallback exists for: a laptop moving between a dual-stack network and an IPv4-only one, a VPN
+    coming up, a sleep and wake. The memory then made things worse than no memory at all, 30 seconds per
+    connection against the 17.5 seconds of operating-system patience #184 measured and removed, and it
+    survived the failure, so every later connection paid it again (#198).
+
+    Here IPv6 is the remembered family and the network has changed so that nothing answers at all. What is
+    checked is the timeout each attempt was given, that the memory is gone afterwards, and that the second
+    connection therefore pays `FIRST_TRY` on both families rather than the full timeout on the remembered
+    one.
+    """
+    import socket as socket_module
+
+    from grownet import mgrowthdb
+
+    attempts = []
+
+    class _Socket:
+        def __init__(self, family, kind, proto):
+            self.family, self.timeout = family, None
+
+        def settimeout(self, t):
+            self.timeout = t
+
+        def connect(self, address):
+            attempts.append((self.family, self.timeout))
+            raise TimeoutError("timed out")           # the network changed: neither family answers
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(mgrowthdb.socket, "getaddrinfo",
+                        lambda *a, **kw: [(socket_module.AF_INET6, socket_module.SOCK_STREAM, 6, "",
+                                           ("2a02::5", 443, 0, 0)),
+                                          (socket_module.AF_INET, socket_module.SOCK_STREAM, 6, "",
+                                           ("134.58.134.5", 443))])
+    monkeypatch.setattr(mgrowthdb.socket, "socket", _Socket)
+    monkeypatch.setattr(mgrowthdb, "_ANSWERED", {"moved.example": socket_module.AF_INET6})
+
+    with pytest.raises(OSError):
+        mgrowthdb._connect("moved.example", 443, 30.0)
+    assert attempts == [(socket_module.AF_INET6, 30.0),          # the remembered family, full timeout
+                        (socket_module.AF_INET, mgrowthdb.FIRST_TRY)]
+    assert "moved.example" not in mgrowthdb._ANSWERED            # and it is forgotten, which is the fix
+
+    attempts.clear()
+    with pytest.raises(OSError):
+        mgrowthdb._connect("moved.example", 443, 30.0)
+    assert attempts == [(socket_module.AF_INET6, mgrowthdb.FIRST_TRY),   # nothing pays 30 seconds again
+                        (socket_module.AF_INET, mgrowthdb.FIRST_TRY)]
+
+
+def test_a_kept_response_is_never_written_through_a_symlink(tmp_path):
+    """A kept response goes to a temporary name and is renamed over the target, so a symlink planted at
+    the target is replaced rather than followed.
+
+    The file name is sha256 of a public URL, so it is guessable, and `GROWNET_CACHE` is documented as a
+    free-form override whose natural value on a shared machine or a CI runner is a path under /tmp. The
+    plain `open(path, "w")` this replaces followed the link and overwrote whatever it pointed at, outside
+    the cache directory (#197). The rename is also atomic, so an interrupted write cannot leave half a
+    JSON document for the next run to read.
+
+    A response is kept only when its study's `uploadedAt` has been read live this run, so `_uploaded`
+    carries the stamp here, and the key has to be the `study/<id>.json` URL that names its own study.
+    """
+    outside = tmp_path / "outside" / "notes.txt"
+    outside.parent.mkdir()
+    outside.write_text("not grownet's to write", encoding="utf-8")
+    cache = tmp_path / "cache"
+
+    client = MGrowthDBClient(cache_dir=str(cache))
+    url = client.base_url + "/study/SMGDB00000001.json"
+    client._uploaded["SMGDB00000001"] = "2026-01-01T00:00:00"
+    target = client._disk_path(url)
+
+    import os
+    os.symlink(outside, target)                       # the guessable name, planted before the run
+    client._cache_put(url, {"id": "SMGDB00000001", "value": 1})
+
+    assert outside.read_text(encoding="utf-8") == "not grownet's to write"   # nothing written through it
+    assert not os.path.islink(target)                 # the link is gone, replaced by a real entry
+    assert json.loads(open(target, encoding="utf-8").read())["body"]["value"] == 1   # and it still caches
+    assert [p.name for p in cache.iterdir() if p.name.endswith(".part")] == []       # no temporary left
