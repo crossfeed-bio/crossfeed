@@ -20,15 +20,13 @@ Tests run separately (pytest), in CI and from the pre-commit hook.
 from __future__ import annotations
 
 import ast
+import json
 import os
 import re
 import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# Kept for the one caller that still wants an extension, the Markdown-only prose rules. What the content
-# checks scan is decided by `_text_of` instead, which looks at the content.
-TEXT_EXT = (".py", ".md", ".toml", ".yml", ".yaml", ".json", ".cfg", ".ini", ".txt")
 
 # A quoted value was required until 2026-10-11, so an unquoted one passed: `TOKEN: ghp_...` in a
 # workflow `env:` block, or `TOKEN=...` in any scanned file, is how a real secret is most likely written
@@ -373,6 +371,64 @@ def check_claims(_rels):
     return problems
 
 
+def check_shadowed_definitions(rels):
+    """A definition or a mapping key written twice in one file, where the language keeps only the last.
+
+    This is the failure a merge leaves and NOTHING else catches. Resolving thirteen branches on
+    2026-10-11, a keep-both-sides resolution gave one dict two `"outcome"` keys: Python silently keeps
+    the last, so one branch's wording was lost, the file parsed, every test passed and the gate was
+    clean. The same shape took two test FUNCTIONS out of a file in the same session, and a test that no
+    longer exists cannot fail.
+
+    Craig's agent extended it to JSON, where a duplicate key is also last-wins in every parser either
+    side uses and where `schema/` and the fixtures live, and ran it over the merged tree before this
+    existed. It found nothing then, which is the right time to add a check rather than the wrong one.
+
+    Reported as a problem and not a note, because unlike an unknown field there is no reading under which
+    a shadowed definition is intended.
+    """
+    import collections
+
+    bad = []
+    for rel in rels:
+        r = rel.replace("\\", "/")
+        text = _text_of(rel)
+        if not text:
+            continue
+        if r.endswith(".py"):
+            try:
+                tree = ast.parse(text)
+            except SyntaxError:
+                continue            # ruff reports a syntax error; this check is about what parses
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Dict):
+                    keys = [k.value for k in node.keys
+                            if isinstance(k, ast.Constant) and isinstance(k.value, str)]
+                    for key, n in collections.Counter(keys).items():
+                        if n > 1:
+                            bad.append(f"{r}: dict key {key!r} written {n} times in one literal, and "
+                                       "Python keeps only the last")
+            top = [n.name for n in tree.body
+                   if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))]
+            for name, n in collections.Counter(top).items():
+                if n > 1:
+                    bad.append(f"{r}: {name} defined {n} times at the top level, and Python keeps only "
+                               "the last")
+        elif r.endswith(".json"):
+            def twice(pairs, rel=r):
+                seen = collections.Counter(k for k, _ in pairs)
+                for key, n in seen.items():
+                    if n > 1:
+                        bad.append(f"{rel}: JSON key {key!r} written {n} times in one object, and every "
+                                   "parser keeps only the last")
+                return dict(pairs)
+            try:
+                json.loads(text, object_pairs_hook=twice)
+            except ValueError:
+                continue            # an unparseable JSON file is not this check's business
+    return bad
+
+
 def check_merge_markers(rels):
     bad = []
     for rel in rels:
@@ -392,6 +448,7 @@ CHECKS = [
     ("format-fields", check_format_fields),
     ("claims", check_claims),
     ("merge-markers", check_merge_markers),
+    ("shadowed-definitions", check_shadowed_definitions),
 ]
 
 

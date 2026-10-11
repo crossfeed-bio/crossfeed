@@ -37,6 +37,16 @@ content.
   as they always have.
 
 ### Fixed
+- **The gate now catches a definition written twice**, which is the failure a merge leaves that nothing
+  else catches. Resolving thirteen branches on 2026-10-11, a keep-both-sides resolution gave one dict two
+  `"outcome"` keys: Python silently keeps the last, so one branch's wording was lost, and the file parsed,
+  every test passed and the gate was clean. The same shape took two test functions out of a file in the
+  same session, and a test that no longer exists cannot fail. The check covers duplicate keys in a Python
+  dict literal, duplicate top-level `def` and `class` names, and duplicate keys in a JSON object, which
+  Craig's agent added to the technique and ran over the merged tree before this existed. Reported as a
+  problem rather than a note, because there is no reading under which a shadowed definition is intended.
+  `TEXT_EXT` is removed with it: nothing had read it since scanning became content-based, and a dead list
+  of nine extensions at the top of the file #227 was about reads as load-bearing (Craig's agent).
 - **The GraphML carried no schema id, no source and no citation** (#216), and it is the file a Cytoscape
   user shares. The schema id is the part that matters: `model.py` calls it the project's one guarantee,
   "the one signal that says the meaning of a field moved", and `significance` was the corrected p-value in
