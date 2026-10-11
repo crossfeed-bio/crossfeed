@@ -668,7 +668,6 @@ _EMPTYING = (
     ("max_adjusted_p", "Maximum adjusted p", "a strict q-value filter can remove every arc: the hidden "
      "count above says how many it took"),
     ("no_growth_factor", "No-growth rise factor", "a high factor calls every set no-growth"),
-    ("min_replicates", "Minimum replicates", "few studies hold more than two or three replicates a side"),
 )
 
 

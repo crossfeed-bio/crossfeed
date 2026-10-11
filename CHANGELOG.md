@@ -37,6 +37,16 @@ content.
   as they always have.
 
 ### Fixed
+- **A control that can empty the network was listed in the guard and could never fire**, and the two
+  tests of these guards asserted a subset of what they claimed. `_EMPTYING` held seven entries and the
+  seventh, `min_replicates`, is not a page setting, so the loop skipped it on every call: dead code no
+  test could see, because the test asserted three of the seven by hand. Deleting the other four left it
+  green and #220 returned for four real controls. The entry is gone, the test loops over `_EMPTYING` for
+  the behavior **and** asserts its membership explicitly, because looping over a constant cannot notice
+  the constant shrinking, which the first attempt at this fix got wrong. The sibling test asserted three
+  of the five flags in the negative-value guard and never asserted the `--no-growth-alpha` bound at all;
+  it names the flags from the guard's own list now. Both were verified by applying the deletion and
+  watching them go red.
 - **An incomplete run exited 0 on the species and All paths** (#247), while `derive <a bad id> --live`
   exited 1 for the identical failure: the species path collected the 404 into `errors`, printed it, and
   returned 0, so a script could not tell a complete run from an incomplete one. It says the run is

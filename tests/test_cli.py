@@ -66,11 +66,20 @@ def test_the_command_line_refuses_the_numbers_the_page_clamps():
         return _bad_settings(parser.parse_args(["derive", "S", "--live", *extra, "--out", os.devnull]))
 
     assert "at least 2 points" in why(["--rate-window", "-3"])
-    assert "cannot be negative" in why(["--absence-threshold", "-1"])
-    assert "cannot be negative" in why(["--no-growth-factor", "-2"])
-    assert "cannot be negative" in why(["--spike-factor", "-1"])
     assert "at least 1" in why(["--min-studies", "0"])
     assert "every arc counts as 1" in why(["--min-studies", "2"])
+    # the significance level, which the sibling --max-adjusted-p refuses above 1: an alpha of 5 switches
+    # the no-growth rule off while `meta.no_growth` records it as the level the test ran at
+    assert "at most 1" in why(["--no-growth-alpha", "5"])
+
+    # EVERY flag in the negative-value loop, named from the function's own tuple rather than listed
+    # here: the first version asserted three of the five, so dropping two from the loop left it green
+    # and the page and the command line disagreed again about what is legal (found reviewing this
+    # change)
+    negatives = ["--spike-factor", "--capacity-max-fall", "--absence-threshold",
+                 "--no-growth-alpha", "--no-growth-factor"]
+    for flag in negatives:
+        assert "cannot be negative" in why([flag, "-1"]), f"{flag} is not refused when negative"
 
     # the same value with merging on is legitimate and is not refused
     assert why(["--min-studies", "2", "--merge-arcs"]) == ""
@@ -88,6 +97,27 @@ def test_a_setting_that_can_empty_the_network_is_named_when_it_does():
     from grownet.gui import DEFAULTS, _settings_to_try
 
     assert _settings_to_try(dict(DEFAULTS)) == "", "nothing to say when every setting is a default"
+
+    # EVERY entry, looped out of `_EMPTYING` itself rather than listed here. The first version asserted
+    # three of the seven, so deleting the other four left it green and #220 returned for four real
+    # controls; and the seventh entry, `min_replicates`, was DEAD, because the key is not in `DEFAULTS`
+    # and the loop skipped it on every call, which no test could see (found reviewing this change).
+    from grownet.gui import _EMPTYING
+
+    # The membership is asserted EXPLICITLY, because looping over `_EMPTYING` cannot notice `_EMPTYING`
+    # shrinking: deleting an entry just makes the loop check one thing fewer, which is what the first
+    # version of this fix got wrong. The loop below then checks the behaviour of whatever is there.
+    assert {key for key, _, _ in _EMPTYING} == {
+        "min_studies", "spike_factor", "rate_window", "absence_threshold", "max_adjusted_p",
+        "no_growth_factor"}, "a control was added to or removed from _EMPTYING without a decision"
+
+    for key, label, _hint in _EMPTYING:
+        assert key in DEFAULTS, f"{key} is not a page setting, so this entry can never fire"
+        moved = 2 if isinstance(DEFAULTS[key], int) and not isinstance(DEFAULTS[key], bool) else 9.0
+        if DEFAULTS[key] == moved:
+            moved = moved + 1
+        said = _settings_to_try({**DEFAULTS, key: moved})
+        assert label in said, f"{label} is in _EMPTYING and _settings_to_try does not name it"
 
     said = _settings_to_try({**DEFAULTS, "min_studies": 2})
     assert "Arcs from at least N studies is 2" in said and "Merge arcs" in said
