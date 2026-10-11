@@ -911,6 +911,13 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    source present is an obligate commensal or mutualist, reported as outcome `obligate` (and `abolished`
    for growth only without the source), not as an error. Still open: how such arcs appear in the network
    (proposed default: effect `facilitation` or `inhibition` with a null strength and the outcome recorded),
+   NOTE 2026-10-11, not a change to the decision above, which is recorded in Karoline's terms: the rule
+   is evaluated per comparison, so `obligate` says the without-set of ONE comparison did not grow and
+   says nothing about the organism in another condition. On the corpus *C. testosteroni* and
+   *A. tumefaciens* are obligate in two conditions of SMGDB00000013 and quantified in six others of the
+   same study, once with the target at 1.16e+11 without the source against 3.31e+10 with it. Eight
+   places described the word as "the target grows only with the source", which reads as a property of
+   the organism; they now state the scope.
    and what counts as no growth in real data, where values rarely reach exactly zero (options: a
    detection limit per technique, a minimum increase over the first time point, or a pseudocount).
    SETTLED 2026-09-19 (Karoline); recorded in "Decisions" in [docs/agents/NOTES.md](agents/NOTES.md). No

@@ -92,6 +92,124 @@ content.
   data is what it is for, and reporting the miss is the tool working. What was wrong is that
   `CHANGELOG.md` and `docs/METHOD_NOTES.md` stated different numbers for the same measurement inside one
   tag. The gLV statistics themselves are unchanged and are not being re-argued.
+- **The source distribution now carries the two registers the test suite reads**, `docs/METHOD_NOTES.md`
+  and `docs/LIMITATIONS.md`, and a test keeps `MANIFEST.in` honest about that. A test that reads a shipped
+  document makes it a dependency of the suite, and the sdist job is the only one that notices when it is
+  not carried, because it unpacks the archive where the repository layout is not there to fall back on:
+  the surface guard added for #202 went red there while `make check` was green. The named include is
+  deliberate rather than forgetful. Measured first: `recursive-include docs *.md` also ships
+  `docs/agents/NOTES.md`, 95,162 bytes of agent working notes, and `docs/DATA_GOVERNANCE.md`, so it is not
+  a tighter version of the named line but a decision to publish two more files; `graft docs` adds those
+  plus both SVGs; and a recursive rule with `prune docs/agents` works only when the prune comes after it.
+  The new test reads the paths out of the suite rather than listing them, so the next surface test is
+  covered the moment it is written, and it records that `README.md` ships because setuptools carries the
+  declared readme, which is a default rather than a promise.
+  Corrected from reviewing that change: the extraction matched only a whole relative path inside one
+  literal, and the suite's dominant idiom is a **component join**, so three files it already reads were
+  invisible, among them `schema/format_fields.json`, which `MANIFEST.in`'s own comment names as the
+  2026-10-08 instance of this exact failure. Both shapes are matched now, 7 paths against 3. The test
+  also had no positive control, which is why a promise it did not keep read as kept; it has one, written
+  to a temp file. That control is built from variables with one literal per line, because this file is
+  one of the files the extraction scans and a tuple of string literals reads as a path join: it caught
+  its own control twice while being written, which is the guard working.
+
+  And a third correction, from a pass that attacked every new test with the regression it claims to
+  catch: both shapes needed the directory name as a literal **next to** the filename, and the suite also
+  writes `DOCS = Path(...) / "docs"` at module level and then `DOCS / "X.md"` inside a test. A surface
+  test written that way, which is the most ordinary Python idiom and which `tests/test_legend.py` already
+  half-uses, passed unnoticed while reading a doc the manifest does not carry. Module-level directory
+  constants are resolved through the AST now, verified by writing exactly that test and watching the
+  guard fail on it. The docstring also names the shapes it still cannot see, rather than promising every
+  surface test is covered.
+- **Three of the gate's checks read nine file extensions, so the viewer and the whole R package were
+  never scanned** (#227, measured by Craig's agent on #239). Of 138 tracked files the list matched 108:
+  the 30 it skipped were 9 `.Rd`, 8 `.R`, the extensionless `LICENSE`, `NOTICE`, `Makefile`,
+  `r/NAMESPACE` and `r/DESCRIPTION`, both `.svg`, and one each of `.gitignore`, `.cff`, `.in`, `.html`,
+  `.Rbuildignore` and `.DS_Store`, the largest being `gui/index.html` at 52,570 bytes, which is the whole
+  viewer. The list's failure mode is the one nobody can enumerate, the next extension no one thought of,
+  and it had cost two misses in four days. What to scan is now decided by content, with a NUL byte as the
+  binary test rather than UTF-8 decodability, so a latin-1 file is still scanned and a binary with no
+  early NUL yields a false positive rather than a silent miss. 137 of 138 files are scanned now, and the
+  one skipped is `.DS_Store`.
+- **The gate overstated its own reach in the line a reader takes away from it**: "138 tracked files clean
+  across 9 checks" while the content checks read 108 and the merge-marker one 113. It now reports what was
+  scanned against what is tracked, and names what it skipped.
+- **The gate's `secrets` check required the value to be quoted**, so an unquoted one passed all nine
+  checks: a workflow `env:` block is unquoted YAML, and so is `TOKEN=...` in any scanned file, which is
+  how a secret is most likely to be written here. The quotes are optional now, and `bearer` may be
+  followed by whitespace rather than a separator, which is how an Authorization header is written. A value
+  must still be 16 or more characters from the class, so `${{ secrets.X }}`, `$VAR`, `<your-token>` and
+  `""` still do not match, and the gate is clean on all 138 tracked files. The check had no test of any
+  kind; it has one now, asserting both what must be caught and what must not, with every example
+  assembled at run time so that a test of the guard does not trip the guard. **No secret was ever in the
+  repository**: this closed a hole in a check, not an exposure.
+
+  Two corrections from reviewing that change. The whitespace-only separator is for `authorization` and
+  `bearer` alone, which is how an Authorization header is written: applied to all seven keywords it
+  flagged ordinary prose, because one hyphenated word after "secret" or "token" is sixteen characters of
+  the class, and this project's house style is long prose Markdown with inline file paths. And the key
+  header is `-----BEGIN [A-Z0-9 ]{0,20}PRIVATE KEY` now: DSA, ENCRYPTED and PGP PRIVATE KEY BLOCK were
+  missed while the check's own description says it covers private keys, and the first version of the test
+  probed one header out of seven. Both directions are measured: 13 of 13 caught, 11 of 11 left alone.
+
+  A third correction, from a pass that attacked every new test with the regression it claims to catch:
+  this check's **only** test probed the keywords `token`, `api_key` and `authorization`, so `secret` and
+  `password`, half the key/value group, were untested, and narrowing the pattern to
+  `(?:api[_-]?key|token)` let an unquoted `password=` line through with the test green. There is a case
+  per keyword now, and an assertion that every keyword the pattern names has one, so adding a keyword
+  without a case fails.
+- **The sentinel's remedy was stated without its exception** (Craig's agent, reviewing #226). The new
+  `metric_without` description told a reader that how far from 0 the set was "is on the same arc, as
+  strength_bound with the rule that gave it". `derive.bounded_strength` has two paths that return no
+  bound, and on the corpus **3 of the 15 censored arcs take one of them**: measured live, two whose rule
+  bounds nothing away from zero and one that is zero from its first point. A reader followed the sentence
+  and found an empty field with nothing having warned them, which is the same defect class the entry
+  above fixes. The description now names the exception and points at `bound_rule`, which says which path
+  it was; the matrix already left those three cells `NA` rather than 0.
+- **The test for the fitted report line modelled the wrong field**, found by a pass that attacked every
+  new test with the regression it claims to catch. It built its edges with `method="integrated:two_stage"`,
+  which is `integrated.METRIC`; the `method` field carries `integrated.METHOD`, which begins "integrated
+  v1: ln(x_i(T) / x_i(0)) = ...". The test passed only because that string happens to contain the word
+  the detection looks for, so rewriting the detection as an equality against the invented string left the
+  test green while **every real integrated arc fell back to the unlabeled line a reader divided and
+  found wrong**. It uses the real constants now, plus a merged arc, whose method carries "; merged: ..."
+  appended afterwards and which the invented-string version would not have labeled either.
+- **Three words the tool used about itself claimed more than it computes** (#224, #225, #226), found in a
+  review of 0.3.0. No statistic, rule, threshold or published number changes; what changes is that the
+  sentences describing them are now true, and three tests hold them there.
+- **`strength` and the `metric_with`/`metric_without` pair were documented as one quantity, and under the
+  integrated form they are two** (#224). Under the specified comparison `strength` **is** exactly
+  `log2(metric_with / metric_without)`, and 0 of 208 corpus arcs depart from it beyond rounding. Under the
+  integrated form the pair is the fitted row evaluated with and without the partner's term, from the
+  median coefficient, while `strength` is the mean of the per-replicate log2 effects at each replicate's
+  own partner level: **16 of 16 corpus arcs differ, by up to 0.42 in log2**, and on 2 the absence
+  threshold, which acts on `strength`, lands the other way from the pair. The report printed
+  `log2 mean -0.54` and `0.2701 with / 0.4926 without` on one line, so a reader who divided them got
+  -0.8669 and found the line wrong. `model.py`, the `strength` and `metric_with` field descriptions and
+  the report now name the relation per derivation, and the report gives the fitted pair's own log2 ratio
+  beside it rather than leaving it to be computed and doubted. What is exact under **both** is Karoline's
+  formula of #123, `(with - without) / partner_abundance`, which is what a gLV cell is built from, and
+  that is what the new test pins.
+- **`outcome: obligate` was defined in eight places as "the target grows only with the source"**, which
+  reads as a claim about the organism (#225). The rule is evaluated per comparison: it says the
+  without-set of **that** comparison failed the no-growth rule, and no stage asks whether the target grows
+  without the source anywhere else. In the corpus one pair is obligate in two conditions of a study and
+  quantified in six others of the same study, **once with the target reaching 1.16e+11 without the source
+  against 3.31e+10 with it**, so the artifact carried its own counterexample. The field table, the legend,
+  the help page's principle, `derive.py`, `interaction.py`, `matrix.py` and the README now state the
+  scope, and a dated note records it under Karoline's decision on #16 without altering her words. A pair
+  measured as obligate in one condition and quantified in another is a condition-dependent effect, not a
+  contradiction (Karoline, 2026-10-10, on the related sign conflict: "it's of interest and just shows that
+  higher order interactions matter").
+- **`metric_without` is 0 on every censored arc whatever the metric, and the help page said the 0 was a
+  measurement** (#226): "0 means the target did not grow at all there". Under a growth rate the 0 is
+  measured, which is what #123 settled. Under `auc` or `max`, and `auc` is the default, the set **did**
+  grow and failed a rule about how much, so its value is not 0, and the same arc's `strength_bound` says
+  how far: on the corpus all 15 censored arcs are `auc`, all carry 0, and their own bounds put the
+  without-side at **up to 65 per cent of the with-side**. The field description and
+  `derive.absolute_values` now call the 0 a sentinel for the set the no-growth rule rejected, and point at
+  the bound for how far from zero it was. The value is unchanged, since changing what the field means
+  would move the format id.
 - **Every relative link in the README was dead on PyPI, and the legend image was broken there** (#192).
   The README is the long description on <https://pypi.org/project/grownet/>, and PyPI does not rewrite
   relative URLs the way GitHub does, so all fifteen resolved against the project page: the limitations
