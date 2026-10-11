@@ -378,3 +378,45 @@ def test_the_help_states_what_a_glv_model_assumes():
     # and it is in the table of contents, so a reader meets it before the walkthrough
     assert 'href="#glv-assumptions"' in page
     assert page.index('href="#glv-assumptions"') < page.index('href="#glv-walkthrough"')
+
+
+def test_every_command_the_help_page_prints_is_one_the_parser_accepts():
+    """A help-page example that exits 2 has been fixed three times, in the CLI epilog, in the README and
+    in the gLV walkthrough, and a fourth copy survived all three because no test ran what the help page
+    prints: `test_help.py` asserted that the substrings `--format matrix`, `--report-rates` and `--glv`
+    appear (#234). The surviving one was
+    `derive SMGDB00000004 --live --report-rates --rates ... --glv ...`, which under the comparison needs
+    `--metric growth_rate` and exits 2 with that message.
+
+    This parses every command the page prints, which catches a flag combination the parser refuses
+    without touching the network, and it reads the commands out of the rendered page rather than a list
+    here, so the next example is covered when it is written.
+    """
+    import html
+    import re
+    import shlex
+
+    from grownet.__main__ import _rate_flags, _resolve, build_parser
+    from grownet.gui import DEFAULTS, EXAMPLE
+    from grownet.help import COMMAND, render_help
+
+    page = render_help("tok", DEFAULTS, EXAMPLE)
+    commands = []
+    for block in re.findall(r"<pre>(.*?)</pre>", page, re.S):
+        for line in html.unescape(block).splitlines():
+            line = line.strip()
+            if line.startswith(COMMAND + " "):
+                commands.append(line)
+    assert len(commands) >= 8, f"the page printed {len(commands)} commands, so this checked almost nothing"
+
+    parser = build_parser()
+    for command in commands:
+        argv = shlex.split(command)[1:]                 # drop the program name
+        if argv and argv[0] in ("gui", "validate", "schema"):
+            continue                                   # no settings to check on these
+        # the parsed arguments are not what runs: gLV mode sets four settings and `--derivation`
+        # carries no default, so `_resolve` is what a run applies before any check. Calling the guard on
+        # unresolved arguments passes everything, because it tests `a.derivation == "replicate"`; this
+        # test found that on itself, which is why it uses the run's own resolver rather than a copy.
+        args = _resolve(parser.parse_args(argv), announce=False)
+        assert _rate_flags(args) == "", f"{command}\n  -> {_rate_flags(args)}"

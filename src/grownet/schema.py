@@ -4,9 +4,17 @@ What grownet emits (grownet.model.InteractionNetwork.to_dict) is the contract do
 (Syntropa, microbetag). SCHEMA_DOC is the canonical JSON Schema (draft-07); it is also shipped as
 `schema/interaction_network.schema.json` so any tool in any language can validate against a file.
 
-`validate_document` enforces the same constraints with no third-party dependency, and additionally checks
-referential integrity: every edge endpoint is a declared node, every cited study is declared, and every
-edge carries at least one supporting study (the edge-level attribution the collaboration adopted).
+`validate_document` is NOT equivalent to that schema and this line used to say it was (#235 item 1). It
+checks the enums, the required fields, a negative weight, and referential integrity that the schema
+cannot express: every edge endpoint is a declared node, every cited study is declared, and every edge
+carries at least one supporting study (the edge-level attribution the collaboration adopted).
+It checks **no numeric type, no `minimum` and no `maximum` and no string type**, so a document it calls
+valid can fail the shipped schema: measured on 2026-10-11, one hand-written network passed
+`grownet validate` and failed the schema nine ways, among them a `strength` of `"big"`, a `significance`
+of -3.0 against `minimum: 0`, a `q_value` of 7.5 against `maximum: 1` and a `n_with` of 2.5 against
+`integer`. A downstream tool that wants the full contract validates the file against
+`schema/interaction_network.schema.json` with a JSON Schema library; this validator is the
+dependency-free subset, and `validate_document`'s own docstring has always been accurate about which.
 """
 from __future__ import annotations
 

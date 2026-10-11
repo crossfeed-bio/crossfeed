@@ -37,6 +37,49 @@ content.
   as they always have.
 
 ### Fixed
+- **Five statements promised the residual of every fit, including every gLV package README, and no output
+  carries it** (#230). `_least_squares` computes it and `fit_row` and `two_stage` drop it; there is no
+  residual field on an edge, in the schema, in GraphML, in Cytoscape or in `r/`. The gLV package was the
+  sharpest: its own README said each cell can be traced to its fit by the condition number and the
+  residual, and the condition number is on the network edge rather than in the zip, so the zip could not
+  be traced to its fit at all. The promises now name what exists, `fit_condition`, `fit_r2` and
+  `fit_null_r2`, and the package README says a cell is traced through the network it was built from.
+  Emitting the residual would add a field and move the format id, so that is not done here.
+- **`caveats.diagonal` stated the retired direction, and the R package repeated it in four places**
+  (#231). It was one unbranched string, "fitted: -r_i / K_i, with K_i the organism's own plateau", which
+  is the comparison's direction; under the integrated form `A[i][i]` is the fitted parameter and
+  `K_i = -r_i / A[i][i]` is derived from it, which `matrix.py` itself calls "the opposite direction"
+  twelve lines from where both were written. So a gLV package built by the integrated form carried the
+  retired statement in its `caveats` while its own README carried the correct one. `DIAGONAL_CAVEAT` now
+  holds both and is selected by the derivation, verified on live payloads of each; `r/R/use.R`,
+  `r/man/glv_matrix.Rd`, `r/README.md` and `r/R/payload.R`'s fallback say that it depends on the
+  derivation, and the R fixture that pinned the retired text is labeled with which arm it is.
+  Same shape as #211 item 1, in the places #211 did not reach.
+- **Four statements about the project's own guards were stronger than the guards** (#235).
+  `schema.py`'s module docstring said the dependency-free validator "enforces the same constraints" as
+  the shipped JSON Schema: a hand-written network passes `grownet validate` and fails that schema nine
+  ways, because `validate_document` checks no numeric type, no `minimum`, no `maximum` and no string
+  type. The viewer-vocabulary guard covered 4 of the 7 vocabularies and `STATUSES` was not among them,
+  although its own docstring cites a `status` value arriving as a reason it exists; it covers seven now,
+  and the three left out say why. `ASSERTS_DEFAULT` caught 1 of 8 natural ways to call a deriver the
+  default, including "By default, X derives every network" although `runs by default` was in the pattern,
+  because it is word-order sensitive; all eight are caught and the sentence naming both forms still
+  passes. And `published.fresh`'s `settings` argument defaults to `None`, which skips the derivation
+  check that the docstring makes the point of the function: `fresh(p, now)` was True on the artifact that
+  `fresh(p, now, DEFAULTS)` refused. No shipped path does that, and it is written down rather than left
+  to be found again.
+- **Four reader-facing texts stated the published artifact's condition as age only** (#235), after #199
+  added the derivation condition: `README.md`, the help page, `run_query`'s docstring and
+  `--no-published`'s help. A reader at the defaults could be refused the artifact on a condition no
+  document stated.
+- **The documentation was run literally and three things in it did not work** (#234). `CONTRIBUTING.md`'s
+  development setup said `cd grownet` where the clone makes `crossfeed`, and did not say which Python, so
+  it failed at its second line for every developer the README sends there. A help-page example exited 2,
+  which was **the fourth copy of that bug** after the CLI epilog, the README and the gLV walkthrough; no
+  test ran what the help page prints, so a test now parses every command on it through the real parser
+  and the run's own argument resolver, which is what the previous three fixes lacked. And `README.md`
+  named `grownet-<version>-windows.zip` where every release carries `grownet-v<version>-windows.zip`,
+  which `RELEASING.md` and the release check both had right.
 - **Every relative link in the README was dead on PyPI, and the legend image was broken there** (#192).
   The README is the long description on <https://pypi.org/project/grownet/>, and PyPI does not rewrite
   relative URLs the way GitHub does, so all fifteen resolved against the project page: the limitations

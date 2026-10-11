@@ -7,8 +7,12 @@
 #' `A[i, j]` is the effect of j on i: rows are affected, columns are the actor, which is the order
 #' `dx_i/dt = x_i (r_i + sum_j A[i][j] x_j)` reads in.
 #'
-#' Every cell is a fitted per-capita coefficient, in 1 over (time times abundance): the diagonal is
-#' `-r_i / K_i` with K the organism's own plateau. What an off-diagonal cell is depends on the derivation
+#' Every cell is a fitted per-capita coefficient, in 1 over (time times abundance). What the DIAGONAL is
+#' depends on the derivation, and `x$caveats$diagonal` says which: the comparison of replicate sets
+#' divides, `-r_i / K_i` with K the organism's own observed plateau, while the integrated form fits
+#' `A[i][i]` directly as a parameter of the same least squares that gave `r_i` and derives
+#' `K_i = -r_i / A[i][i]` from it, which is the opposite direction.
+#' What an off-diagonal cell is depends on the derivation
 #' that made the package, and `print(x)` says which: the comparison of replicate sets fits
 #' `(r_with - r_without) / x_j`, the difference between the affected organism's growth rate with the
 #' actor and without it over the actor's abundance across that window, while the integrated form, which

@@ -927,7 +927,8 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     `all_studies` is the page's All button (Karoline, 2026-09-28): the entries are ignored and every study
     mGrowthDB holds is derived, with every partner kept, still under the second box (media, experiments or
     studies) and Exclude these studies. With the default settings it is read from the network derived once a
-    day in the grownet repository when that is less than a day old (`grownet.published`, #96); `published`
+    day in the grownet repository when that is less than a day old and was derived by the same derivation
+    these settings ask for (`grownet.published`, #96); `published`
     False, or any other setting, derives it live.
     """
     def say(done, total, message):

@@ -667,7 +667,8 @@ def render_help(token: str, defaults: dict, example: tuple, job: str = "") -> st
 mGrowthDB), or NCBI taxon ids. grownet looks them up in mGrowthDB, reads the growth curves of every study
 that holds them, and derives the interactions between them on this machine. The All button ignores the
 box and derives every study in mGrowthDB, with every partner. With the default settings, All reads the
-network the grownet repository derives from mGrowthDB once a day, when it is less than a day old, which
+network the grownet repository derives from mGrowthDB once a day, when it is less than a day old and
+was derived by the same derivation your settings ask for, which
 spares mGrowthDB about 1,300 requests; the result says when it was derived. Any other setting, or GitHub
 out of reach, derives it live. Nothing is uploaded, and nothing is written outside the file you
 download.</p>
@@ -948,7 +949,7 @@ the diagonal is <code>A[i][i] = -r_i / K_i</code> with K the organism's own mono
 and an off-diagonal cell is whatever the derivation fitted, which the package's own README.txt and the
 payload's <code>caveats.coefficients</code> state. Under the default, the integrated form, it is a
 parameter of the fit of the whole row, <code>ln(x_i(T) / x_i(0)) = r_i T + sum_j A[i][j] integral(x_j
-dt)</code>, with the condition number and the residual of that fit on every arc. Under the comparison of
+dt)</code>, with the condition number of that fit and its R2 on every arc. Under the comparison of
 replicate sets it is <code>A[i][j] = (r_with - r_without) / x_j</code>, the difference between i's
 own growth rate with j and without it, over the partner's abundance averaged across the window i's rate
 was fitted in; both rates come from the same comparison and are in the report, so every cell can be
@@ -993,7 +994,7 @@ be told apart.</p>
 (the lag the Baranyi fit reports) and stop where it ends (the plateau rule the Baranyi fit uses). Without
 those cuts a culture that sits at its inoculum, or declines after its peak, makes the fit pay in the rate,
 which showed up as a negative rate on a real study. Every arc carries the coefficient it fitted, the
-residual and the condition number of that fit, and a row the design cannot identify is reported rather
+R2 and the condition number of that fit, and a row the design cannot identify is reported rather
 than published. A community of three or more members is reported too, not derived: this form could fit a
 row inside one, which would be a new kind of evidence and needs a decision first. The growth rates and
 the carrying capacities of such a run come from the same fit, the capacity being the plateau it implies,
@@ -1203,7 +1204,7 @@ command. Other uses:</p>
 <pre>{COMMAND} derive SMGDB00000004 --live --format graphml --out study4.graphml
 {COMMAND} derive --live --species Blautia --conditions "Wilkins-Chalgren" --out wc.json
 {COMMAND} derive SMGDB00000004 --live --format matrix --out study4_matrix.csv
-{COMMAND} derive SMGDB00000004 --live --report-rates --rates study4_rates.csv --glv study4_glv.zip
+{COMMAND} derive SMGDB00000004 --live --glv-mode --rates study4_rates.csv --glv study4_glv.zip
 {COMMAND} derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
 {COMMAND} derive --live --all --merge-arcs --merge-genera --out all_genera.json
 {COMMAND} gui
