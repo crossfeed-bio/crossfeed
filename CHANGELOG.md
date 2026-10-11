@@ -49,6 +49,14 @@ content.
   The new test reads the paths out of the suite rather than listing them, so the next surface test is
   covered the moment it is written, and it records that `README.md` ships because setuptools carries the
   declared readme, which is a default rather than a promise.
+  Corrected from reviewing that change: the extraction matched only a whole relative path inside one
+  literal, and the suite's dominant idiom is a **component join**, so three files it already reads were
+  invisible, among them `schema/format_fields.json`, which `MANIFEST.in`'s own comment names as the
+  2026-10-08 instance of this exact failure. Both shapes are matched now, 7 paths against 3. The test
+  also had no positive control, which is why a promise it did not keep read as kept; it has one, written
+  to a temp file. That control is built from variables with one literal per line, because this file is
+  one of the files the extraction scans and a tuple of string literals reads as a path join: it caught
+  its own control twice while being written, which is the guard working.
 - **The gate's `secrets` check required the value to be quoted**, so an unquoted one passed all nine
   checks: a workflow `env:` block is unquoted YAML, and so is `TOKEN=...` in any scanned file, which is
   how a secret is most likely to be written here. The quotes are optional now, and `bearer` may be
