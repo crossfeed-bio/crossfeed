@@ -60,6 +60,10 @@ class _Status(Exception):
         self.code = code
 
 
+# answers that carry no body by definition (RFC 9110 sections 15.3.5 and 15.3.6), so an empty one must
+# not reach `json.loads`, where the command line would report it as the reader's own file being invalid
+_NO_BODY = frozenset({204, 205})
+
 # what a dropped or refused connection raises below urllib: retried like a network error
 _NETWORK = (OSError, http.client.HTTPException)
 
@@ -357,7 +361,12 @@ class MGrowthDBClient:
                 if attempt == 1:
                     raise
                 continue                          # a kept-open connection the server had closed: reopen
-            if response.status >= 400:
+            if response.status in _NO_BODY or not 200 <= response.status < 300:
+                # anything that is not a representation: a 3xx above all. `http.client` does not follow
+                # redirects, unlike the `urllib.request` opener this replaced, so the body is empty and
+                # it used to reach `json.loads`, where the command line reported it as the user's own
+                # file being invalid JSON, with the exit code for a user error and no status on the
+                # error at all (RFC 9110 section 15.4; 2026-10-10)
                 raise _Status(response.status, response.reason)
             return body
         raise OSError("unreachable")               # not reached
@@ -370,6 +379,12 @@ class MGrowthDBClient:
             try:
                 return self._send(url, accept)
             except _Status as e:
+                if e.code < 400:
+                    # a redirect or anything else that is not a representation: not the reader's mistake
+                    # and not a server fault, so it is neither retried nor blamed on the id
+                    raise MGrowthDBError(
+                        f"mGrowthDB answered HTTP {e.code} for {url}, which is not a reply this client "
+                        f"follows (the API may have moved; API docs: {API_DOCS})", status=e.code) from None
                 if e.code < 500:
                     raise MGrowthDBError(
                         f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})",
@@ -422,7 +437,12 @@ class MGrowthDBClient:
         if self._mem is not None and url in self._mem:
             return self._mem[url]
         data = json.loads(self._request(url, "application/json").decode("utf-8"))
-        uploaded = data.get("uploadedAt", "")
+        # `or None` on purpose: a study with no stamp, or a blank one, is the study whose version
+        # nothing can establish, and it used to be the one cached hardest. `""` compared equal to itself
+        # on every later run, so `_stale` said current forever and a revised study was never re-read.
+        # None is what the rest of this already treats as "not checked", and nothing is kept for it
+        # (2026-10-10).
+        uploaded = (data.get("uploadedAt") or "").strip() or None
         with self._index_lock:
             self.fetched += 1
             self._uploaded[study_id] = uploaded
@@ -503,6 +523,17 @@ def provenance(today: datetime.date | None = None, now: datetime.datetime | None
 # version of the data behind a network is when it was read plus each study's own upload and publication
 # dates, which change when a study is corrected.
 NO_DATABASE_VERSION = "mGrowthDB publishes no database version; each study's upload and publication dates are given"
+NO_STAMP = "not given by mGrowthDB"
+
+
+def _stamp(value) -> str:
+    """A study's own date, or words saying it has none, never an empty string.
+
+    The same distinction the cache makes: a study that carries no stamp is not a study stamped with
+    nothing, and the version record is what a reader quotes when auditing where a network came from.
+    """
+    text = (value or "").strip()
+    return text or NO_STAMP
 
 
 def data_versions(client, study_ids, retrieved_at: str) -> dict:
@@ -513,7 +544,11 @@ def data_versions(client, study_ids, retrieved_at: str) -> dict:
             study = client.get_study(sid)          # cached by the client, so no second request
         except MGrowthDBError:
             continue
-        studies[sid] = {"uploaded_at": study.get("uploadedAt", ""), "published_at": study.get("publishedAt", "")}
+        # an absence is stated rather than written as an empty string, the way NO_DATABASE_VERSION
+        # states the database's: a reader auditing provenance can then tell "the study carries no
+        # stamp" from "we read one and it was empty" (found reviewing #205, 2026-10-10)
+        studies[sid] = {"uploaded_at": _stamp(study.get("uploadedAt")),
+                        "published_at": _stamp(study.get("publishedAt"))}
     return {"api": MGROWTHDB_API, "retrieved_at": retrieved_at, "database_version": NO_DATABASE_VERSION,
             "studies": studies}
 
