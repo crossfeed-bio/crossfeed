@@ -332,7 +332,10 @@ def test_the_glv_example_section_gives_every_step_of_running_it_in_miasim():
     # monoculture replicates, all three of which fitted a positive self-limitation, and its equilibrium
     # inverted the co-culture it was fitted from. Her requirement is the steps, not the study.
     assert "gLV example" in section and "SMGDB00000002" in section
-    assert "--report-rates" in section and "--glv" in section
+    # the command printed beside the button is the one the button runs: gLV mode, which sets the rates,
+    # the metric, the drop-out setting and the derivation. It printed --report-rates alone until
+    # 2026-10-10, which exits 2 under the default derivation (found reviewing #199)
+    assert "--glv-mode" in section and "--glv " in section
     # installing miaSim is part of the steps: it is a Bioconductor package, not a CRAN one
     assert "BiocManager::install" in section and "miaSim" in section
     # the three calls a simulation needs, and the deterministic settings spelled out

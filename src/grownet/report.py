@@ -7,6 +7,8 @@ with its value, and every reason a pair gave no edge.
 """
 from __future__ import annotations
 
+import textwrap
+
 from . import interaction
 from .adapter import condensed
 from .help import SETTINGS
@@ -210,6 +212,15 @@ def report_text(result: dict) -> str:
     if stats:
         lines.append(f"statistics: {stats.get('test', '')}; {stats.get('correction', '')}; "
                      f"{stats.get('tests', 0)} test(s); {stats.get('role', '')}")
+    # What the derivation says about itself, including what it cannot do. It is in the JSON, in GraphML
+    # and on the page, and it was in neither the report nor the matrix: the report is what a methods
+    # section is written from, which `docs/LIMITATIONS.md` says is the artifact that travels with the
+    # output, so a reader could quote a derivation's limits only from a file they were not reading
+    # (2026-10-10). Wrapped, because it is a paragraph and the rest of this is lines.
+    if meta.get("provisional"):
+        lines.append("")
+        lines.append("about this derivation:")
+        lines += ["  " + line for line in textwrap.wrap(meta["provisional"], 110)]
     for error in result["errors"]:
         lines.append(f"error: {error}")
     lines.append("")

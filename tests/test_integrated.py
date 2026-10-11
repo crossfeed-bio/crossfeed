@@ -913,3 +913,68 @@ def test_an_arc_says_what_each_side_was_inoculated_at():
     # and abundances in different units are not divided by each other
     other = [_named(["A"], times, series, "u", unit="OD600")]
     assert integrated.starting_densities(cos, other, "A") == {}
+
+
+def test_what_this_form_says_about_itself_carries_both_fixes_and_counts_its_error_components():
+    """The two sentences this derivation publishes about itself were each wrong in a different way, and
+    the fixes were found on two branches that both touch this file, so either one taken wholesale restores
+    the other's defect (Craig's agent on #199, 2026-10-10: a side-pick "is syntactically valid, passes the
+    whole suite, and ships", because nothing read either phrase).
+
+    First: `provisional` said the two derivations "can be read together", which they cannot. This form
+    derives no arc from a community of three or more and has no no-growth rule at all, so 122 drop-out
+    arcs, 15 censored arcs and 12 measured bounds of the default derivation have no counterpart here.
+
+    Second: the standard error was described as having two components, which outlived #155 item 1 adding
+    the third. `_arc_statistics` returns `se_replicates`, `se_rate_stage` and `se_rate_selection`, and
+    takes Satterthwaite degrees of freedom over whichever are present, so "two" understates what an arc
+    already carries. That claim had four copies and the branch that found it fixed one, which is the
+    failure this test exists to make loud: these strings travel into `meta`, the report header, GraphML
+    and every exported file, and a reader meets them before any document.
+    """
+    provisional = integrated.IntegratedDeriver.provisional
+    test = integrated.IntegratedDeriver.statistics["test"]
+
+    assert "not interchangeable" in provisional
+    assert "can be read together" not in provisional
+    assert "no drop-out arc" in provisional and "no measured bound" in provisional
+
+    for text in (provisional, test):
+        assert "selected monoculture rates" in text or "rates the condition matcher" in text
+        assert "two components" not in text
+        assert "both the co-culture replicates" not in text
+
+    # the three the code actually returns, so the sentence cannot drift from them silently
+    assert set(integrated._arc_statistics({}, [], "B")) >= {
+        "se_replicates", "se_rate_stage", "se_rate_selection"}
+
+
+def test_no_surface_a_reader_meets_still_counts_two_error_components():
+    """The same claim stood in four places and a fix to one left three. Every surface that describes this
+    test to a reader is checked here, because the only thing that caught the other three was reading the
+    file rather than the diff."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    stale = "both the co-culture replicates and the monoculture stage"
+    # The sdist ships src/ and README.md but not docs/, and the package job runs this suite from an
+    # extracted sdist, so a missing file is that job rather than a defect. Skipping it is only safe
+    # because the modules that carry the two published strings are always present, which the count below
+    # requires: if they ever stop being, this fails rather than passing on an empty list.
+    checked = []
+    for name in ("README.md", "src/grownet/help.py", "src/grownet/integrated.py",
+                 "src/grownet/derive.py", "docs/METHOD_NOTES.md", "docs/LIMITATIONS.md"):
+        path = root / name
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8")
+        assert stale not in text, name
+        assert "standard error with two components" not in text, name
+        checked.append(name)
+    for required in ("src/grownet/integrated.py", "src/grownet/derive.py"):
+        assert required in checked, f"{required} was not read, so this test checked nothing that matters"
+
+    # and the phrase this guards against is one the files really could carry: it is the text that stood in
+    # README.md, src/grownet/help.py and src/grownet/integrated.py until 2026-10-10, so the assertions
+    # above are reachable rather than describing a string nobody would write.
+    assert stale.startswith("both the co-culture replicates")
