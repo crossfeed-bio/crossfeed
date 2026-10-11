@@ -37,6 +37,34 @@ content.
   as they always have.
 
 ### Fixed
+- **The GraphML, the Cytoscape payload and the viewer joined `community` with a space, and 115 of 145
+  arcs of the default corpus could not be split back** (#245). `community` holds node ids, and a node id
+  under identity `name` is a lowercase species name, so a 14-member community read as a 16-member one
+  whose two extra members were word fragments (`lachnoclostridium`, `symbiosum`). It is the field a reader
+  needs for exactly the arcs that depend on it: a drop-out arc's own text says the effect may run
+  "directly or through the others", and the others are this list. Joined with `"; "` now, in all three
+  routes, as `notes` and `merged_pairs` in the same emitters already were; 0 of 145 fail to split.
+  The rule for any future list whose members can contain a space is written where the "space-joined
+  community" claim used to be, and the four still joined with a space carry no such value today, which was
+  measured.
+- **Every censored arc's `bound_rule` printed a start abundance and a window with no unit** (#248), and
+  one field carried 105.8 Cells/mL on one study and 1.44e+07 CFUs/mL on another while naming neither.
+  `GrowthCurve` refuses to exist without both units, so they were in hand at that point, and the report's
+  next clause on the same arc already prints the partner's abundance with its unit. `strength_bound` is
+  the only number a reader has for a censored pair and this rule is the only thing that says what it came
+  from. All three metric branches now carry them, including the rate bound, which printed `0.001408` with
+  no `1/h`.
+- **The page promised a matrix cell the CSV did not hold** (#248). `matrix.counts` counted self pairs and
+  `rows` writes the diagonal there, so with `--merge-genera`, which produces within-genus arcs by
+  Karoline's own choice, the page said 45 cells over 17 organisms and the file held 44: the lost cell was
+  written as `0`, the same token as the 245 pairs where no comparison was attempted. `counts` reports them
+  apart now and the page says how many arcs have no cell and why. Verified on the live corpus: 44 against
+  44.
+- **The `grownet_glv()` address in the R package's own documentation omitted `job=`** (#251), so following
+  it served whichever search the browser last looked at: two tabs, two searches, and the job-less address
+  returned a different system's parameters each time with HTTP 200 and the right format. The page prints
+  the address with its job, and the three documented examples now say so and say why to copy it rather
+  than type it.
 - **Every relative link in the README was dead on PyPI, and the legend image was broken there** (#192).
   The README is the long description on <https://pypi.org/project/grownet/>, and PyPI does not rewrite
   relative URLs the way GitHub does, so all fifteen resolved against the project page: the limitations

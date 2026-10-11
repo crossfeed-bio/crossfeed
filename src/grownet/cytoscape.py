@@ -154,7 +154,8 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
                 "bound_rule": getattr(edge, "bound_rule", ""),
                 "method": getattr(edge, "method", ""),
                 "quality": " ".join(edge.quality), "cautions": " ".join(edge.cautions),
-                "notes": "; ".join(edge.notes), "community": " ".join(edge.community),
+                # "; " because a node id can contain a space, as `notes` beside it already assumes
+                "notes": "; ".join(edge.notes), "community": "; ".join(edge.community),
                 "experiments": " ".join(edge.experiments), "study_ids": " ".join(edge.study_ids),
                 "merged_arcs": edge.merged_arcs, "strength_range": " ".join(f"{x:g}" for x in edge.strength_range),
                 "supporting_pairs": edge.supporting_pairs, "merged_pairs": "; ".join(edge.merged_pairs),

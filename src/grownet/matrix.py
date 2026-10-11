@@ -194,7 +194,15 @@ def counts(net: InteractionNetwork) -> dict:
     values, _ = cells(net)
     in_a_cell = sum(1 for e in net.edges
                     if (e.status != "absent" and e.strength is not None) or _censored(e))
-    return {"arcs": in_a_cell, "cells": len(values), "organisms": len(net.nodes)}
+    # A SELF pair has no cell of its own in the plain adjacency matrix: `rows` writes the diagonal
+    # there, 0.0 when no diagonal is supplied. `--merge-genera` produces within-genus arcs by design
+    # (Karoline, on `derive.merge_genus`: "interactions within one genus stay, as an arc from the genus
+    # to itself"), so counting them here promised 45 cells where the CSV held 44, and the arc the JSON
+    # reported printed as 0, which in that file means no interaction (#248). They are counted apart so
+    # the two numbers agree and the page can say what has no cell.
+    self_pairs = sum(1 for a, b in values if a == b)
+    return {"arcs": in_a_cell, "cells": len(values) - self_pairs, "organisms": len(net.nodes),
+            "within_one_organism": self_pairs}
 
 
 def bounded_cells(net: InteractionNetwork) -> list:

@@ -46,7 +46,9 @@ def test_graphml_carries_evidence_and_community_when_known():
     root = ET.fromstring(to_graphml(records_to_network(recs)))
     data = {d.get("key"): d.text for d in root.find(".//g:edge", NS).findall("g:data", NS)}
     assert data["e_evidence"] == "dropout"
-    assert data["e_community"] == "a b c"
+    # "; " and not " ": a node id can contain a space, so the space-joined form could not be
+    # split back on 115 of 145 corpus arcs (#245)
+    assert data["e_community"] == "a; b; c"
     # an edge without evidence has neither key
     unknown = [e for e in ET.fromstring(to_graphml(_net())).findall(".//g:edge", NS) if e.get("target") == "b"][0]
     assert {"e_evidence", "e_community"}.isdisjoint(d.get("key") for d in unknown.findall("g:data", NS))
@@ -106,3 +108,37 @@ def test_graphml_carries_the_columns_the_cytoscape_style_maps():
     assert (obligate["line_style"], obligate["display_weight"]) == ("SOLID", "8.0")  # no ratio: the fixed width
     assert (a["genus"], b["genus"]) == ("Blautia", "[Clostridium]")                   # brackets kept
     assert a["genus_color"] != b["genus_color"]
+
+
+def test_community_is_joined_so_a_consumer_can_split_it_back():
+    """`community` holds NODE IDS, and a node id under identity "name" is a lowercase species name with a
+    space in it. Joined with a space, a 14-member community read as a 16-member one whose two extra
+    members were word fragments: on the live corpus 115 of 145 arcs could not be split back (#245).
+    `notes` and `merged_pairs` in the same emitter already used "; " for exactly this reason."""
+    import xml.etree.ElementTree as ET
+
+    from grownet import cytoscape, export, model
+
+    net = model.InteractionNetwork(
+        nodes={"lachnoclostridium symbiosum": model.Node(id="lachnoclostridium symbiosum",
+                                                         name="Lachnoclostridium symbiosum"),
+               "ncbi:1590": model.Node(id="ncbi:1590", name="Lactobacillus")},
+        edges=[model.Edge(source="ncbi:1590", target="lachnoclostridium symbiosum",
+                          effect="inhibition", strength=-1.0, evidence="dropout",
+                          community=["lachnoclostridium symbiosum", "ncbi:1590"],
+                          study_ids=["SMGDB00000008"])],
+        studies={"SMGDB00000008": model.Study(id="SMGDB00000008")})
+
+    doc = ET.fromstring(export.to_graphml(net))
+    values = [d.text for d in doc.iter("{http://graphml.graphdrawing.org/xmlns}data")
+              if d.get("key") == "e_community"]
+    assert values, "no community value in the GraphML, so this test proves nothing"
+    assert values[0].split("; ") == ["lachnoclostridium symbiosum", "ncbi:1590"]
+    # and the space-joined form would not have round-tripped, which is the whole point
+    assert values[0].split(" ") != ["lachnoclostridium symbiosum", "ncbi:1590"]
+
+    row = cytoscape.network_json(net, "x")["elements"]["edges"][0]["data"]
+    assert row["community"].split("; ") == ["lachnoclostridium symbiosum", "ncbi:1590"]
+
+    # and the rule is declared where the "space-joined community" claim used to be
+    assert "joined with \"; \", not \" \"" in (export.__doc__ or "")

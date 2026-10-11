@@ -38,7 +38,7 @@ When a port cannot be opened, read the same parameters from the page instead, at
 under the gLV control:
 
 ```r
-glv <- grownet_glv("http://127.0.0.1:8791/glv.json?token=PASTE_THE_TOKEN")
+glv <- grownet_glv("http://127.0.0.1:8791/glv.json?token=PASTE_THE_TOKEN&job=PASTE_THE_JOB")
 ```
 
 ## What arrives, and what it hides
