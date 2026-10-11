@@ -659,6 +659,11 @@ def _empty_reason_core(result: dict) -> str:
     if not result["resolved"] and not result.get("all"):
         return "None of the entries could be used; each one says why above."
     if result.get("errors"):
+        # FETCH failures only. `errors` used to hold nothing else, and then advisory messages were added
+        # to it (a mistyped id in Exclude these studies, a steady-state check asked for without growth
+        # rates), so an empty network caused by the reader's own setting was reported as "mGrowthDB could
+        # not be read" in a run where mGrowthDB answered every request: the lead sentence did the exact
+        # thing #220 and #243 exist to stop. Advisory messages travel in `notes` now.
         return "mGrowthDB could not be read (see the messages above); try again when it is reachable."
     if not result["studies"]:
         if result.get("excluded"):
@@ -788,7 +793,8 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
             blocks.append(f"<details><summary>{len(entries)} {heading}</summary>"
                           f"<ul>{items}{more}</ul></details>")
         skipped = "".join(blocks)
-    errors = "".join(f"<p class=\"note\">{_esc(e)}</p>" for e in result["errors"])
+    errors = "".join(f"<p class=\"note\">{_esc(e)}</p>"
+                     for e in [*result["errors"], *result.get("notes", ())])
     return (f"<section class=\"result\" id=\"result\">{note}{species_heading}<ul>{resolved}</ul>{unresolved}"
             f"<p class=\"muted\">Studies searched: {_esc(studies)}</p>{errors}{table}"
             f"{_absent_section(result, result.get('absence', {}))}{_sources(net)}{skipped}</section>")
@@ -952,8 +958,9 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
               narrow: bool = True, all_studies: bool = False, published: bool = True) -> dict:
     """Species names or taxon ids to an interaction network, through mGrowthDB and the existing derivation.
 
-    Returns {"resolved", "unresolved", "taxon_ids", "studies", "network", "skipped", "errors"}. Failures
-    that concern one study are collected in "errors" instead of raising, so a single bad study does not
+    Returns {"resolved", "unresolved", "taxon_ids", "studies", "network", "skipped", "errors", "notes"}.
+    Failures that concern one study are collected in "errors" instead of raising, so a single bad study
+    does not
     lose the rest. `progress(done, total, message)`, when given, is told where the search is: `total` is
     None until the studies are known (#75).
 
@@ -981,7 +988,11 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # show each strain by its current name, the one its most recent study uses (#24)
     resolved["resolved"] = [(entry, {t: current.get(t, n) for t, n in matches.items()})
                             for entry, matches in resolved["resolved"]]
-    errors, skipped, records = [], [], []
+    # `errors` is FETCH failures and nothing else, because `_empty_reason_core` reads it as "mGrowthDB
+    # could not be read". `notes` is everything advisory: a setting that could not act, a check that was
+    # asked for and not run. Putting the second kind in the first made an empty network caused by the
+    # reader's own setting read as a database failure, in a run where every request succeeded.
+    errors, notes, skipped, records = [], [], [], []
 
     # the second box: study ids in it narrow the search as "Only these studies" used to, media and
     # experiment ids are matched per experiment inside the derivation (#113)
@@ -1115,7 +1126,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         # run nothing, print "Check against chemostat steady states: on" in the report and write
         # `steady_check: true` into the downloaded network. One surface refusing what another drops in
         # silence is the defect, not which of the two is right (#233).
-        errors.append("no steady-state check: it scores the growth rates and coefficients of the run, so "
+        notes.append("no steady-state check: it scores the growth rates and coefficients of the run, so "
                       "it needs Report growth rates, which gLV mode turns on. The setting is recorded as "
                       "asked for and nothing was scored.")
     elif s.get("steady_check") and organism_rates:
@@ -1123,13 +1134,13 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         try:
             got = matrix.coefficients(net, organism_rates)
         except matrix.CannotConvert as e:
-            errors.append(f"no steady-state check: {e}")
+            notes.append(f"no steady-state check: {e}")
         else:
             checked = steady.check(got, organism_rates, steady.find(client, net, progress=say))
     elif s.get("steady_check"):
         # asked for, rates on, and no rate could be computed: say so rather than leaving the report's
         # "on" as the only trace
-        errors.append("no steady-state check: no growth rate could be computed for this network, and the "
+        notes.append("no steady-state check: no growth rate could be computed for this network, and the "
                       "check scores the rates and the coefficients the run produced.")
     say(len(studies), len(studies), "Preparing the result")
     return {"entries": names, "settings": dict(s), "resolved": resolved["resolved"],
@@ -1139,7 +1150,8 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
             "unresolved": resolved["unresolved"], "taxon_ids": resolved["taxon_ids"], "studies": studies,
             "network": net, "absent": records_to_network(absent_records) if absent_records else None,
             "rates": organism_rates, "steady": checked,
-            "skipped": skipped, "errors": errors, "hidden": extra["hidden"], "absence": extra["absence"]}
+            "skipped": skipped, "errors": errors, "notes": notes,
+            "hidden": extra["hidden"], "absence": extra["absence"]}
 
 
 # searches kept for their pages, downloads and reports: the latest ones only, so a page left open all day

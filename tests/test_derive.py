@@ -1045,3 +1045,8 @@ def test_the_skip_list_separates_pairs_from_notes_about_the_data():
     # an experiment label is not a pair, which is the whole distinction
     assert not about_a_pair("EXP_2", "2 average replicate(s) left out (x)")
     assert about_a_pair("A organism with B organism [EXP_1]", "one side did not grow")
+    # and the OTHER pair shape, which the first version of this missed: `derive.py` writes
+    # `{source} -> {target} [{cond}]` for the no-growth and unusable outcomes, so on SMGDB00000013 the
+    # report said "pairs the data did not support: none" and listed seven of them under a heading
+    # saying they are not pairs (found reviewing #242)
+    assert about_a_pair("A organism -> B organism [EXP_1]", "no growth (auc) in either set")

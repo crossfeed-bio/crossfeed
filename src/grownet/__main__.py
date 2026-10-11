@@ -135,7 +135,14 @@ def _settings_of(a) -> dict:
             "no_growth_alpha": a.no_growth_alpha, "no_growth_factor": a.no_growth_factor,
             "max_adjusted_p": a.max_adjusted_p, "report_rates": a.report_rates,
             "include_absent": getattr(a, "include_absent", False),
-            "steady_check": getattr(a, "steady_check", False)}
+            "steady_check": getattr(a, "steady_check", False),
+            # these two were left to come from DEFAULTS, which turned a setting the report did not
+            # mention into one it stated the OPPOSITE of: `derive <STUDY> --exclude-studies <that study>
+            # --all-partners` recorded "Exclude these studies: none" and "Only interactions between the
+            # species entered: on", having searched the study and kept every partner. Missing was better
+            # than wrong, and `report.py` promises every setting with its value (found reviewing #242).
+            "exclude_studies": getattr(a, "exclude_studies", "") or "",
+            "only_entered": not getattr(a, "all_partners", False)}
 
 
 def _derive(a):
@@ -172,6 +179,18 @@ def _derive(a):
         return 2
     if a.species or a.all_studies:
         return _derive_species(a)
+    # Flags that only the search path can act on. The help says they apply "with --species or --all" and
+    # nothing enforced it, so `derive <STUDY> --exclude-studies <that study>` searched it and the network
+    # held it. Recording the flag as asked is not enough on its own: the report would then say the
+    # study was excluded while the arcs come from it, so the run is refused instead (found reviewing
+    # #242, which made the record truthful and left the contradiction).
+    cannot_act = [flag for flag, on in (("--exclude-studies", a.exclude_studies),
+                                        ("--all-partners", a.all_partners)) if on]
+    if cannot_act:
+        print(f"{cannot_act[0]} narrows a search over several studies, and this run derives the one "
+              f"study {a.study}: it would be recorded and not applied. Use --species or --all, or drop "
+              f"{cannot_act[0]}.", file=sys.stderr)
+        return 2
     if not a.study:
         print("derive needs a study id, or --species with names (see grownet derive --help)", file=sys.stderr)
         return 2
@@ -253,8 +272,7 @@ def _derive_species(a):
     from .gui import run_query
     from .mgrowthdb import MGrowthDBClient
     settings = {**_settings_of(a),
-                "conditions": "\n".join([*a.conditions, *(a.study or "").split(",")]).strip(),
-                "only_entered": not a.all_partners, "exclude_studies": a.exclude_studies}
+                "conditions": "\n".join([*a.conditions, *(a.study or "").split(",")]).strip()}
     client = MGrowthDBClient(**({"cache_dir": None} if a.no_cache else {}))
     try:
         result = run_query(client, a.species or [], settings, all_studies=a.all_studies,
