@@ -5,10 +5,11 @@ comparing a strain's growth ALONE vs WITH a partner, under one condition. The CO
 scientific choice owned by the collaboration (K. Faust): which growth metric, how to read a per-strain
 signal inside a community, and the significance test.
 
-That choice plugs in through the `Deriver` interface, and two methods are in it. `IntegratedDeriver`
-(grownet.integrated) is the default since 0.3.0: each organism's whole row fitted from its time course.
-`ReplicateDeriver`, in this module, is the comparison of replicate sets the collaboration specified and
-settled (docs/METHOD_NOTES.md), one setting away as `--derivation replicate`. Another method drops in the
+That choice plugs in through the `Deriver` interface, and two methods are in it. `ReplicateDeriver`, in
+this module, is the default: the comparison of replicate sets the collaboration specified and settled
+(docs/METHOD_NOTES.md), and the only form that gives a drop-out arc or a censored one.
+`IntegratedDeriver` (grownet.integrated) fits each organism's whole row from its time course and is what
+gLV mode selects, since a coefficient should come from it (2026-10-10). Another method drops in the
 same way, without touching the network model or the pipeline.
 
 The retired `BaselineDeriver` that first ran this seam end to end was deleted in 0.3.0 (#139): the seam
@@ -1621,12 +1622,24 @@ def merge_genus(edges: list, merge: bool = False, level: str = "species") -> tup
 # How to read a derived network, on the page and in every file written from it, so a file that travels
 # without the page (a download, the daily All network) states its own terms (Craig's agent, #96). It is
 # part of a derivation's meta, not of the format: `derive --fixture` only formats given records.
+# This travels into the report's header, into GraphML as a graph attribute, and into a methods section,
+# so it carries what the comparison cannot do as well as what it does. It named neither limit while this
+# form was the alternative; it is the default again since 2026-10-10, so the omission now reaches every
+# reader rather than one who chose it (found reviewing #199).
 PROVISIONAL = ("Each interaction compares a species' growth with and without its partner across replicates "
                "(mean log2 difference). An interaction is reported when |mean| is at least k standard "
                "deviations (the absence threshold, default 1: the mean plus or minus its standard deviation "
                "stays on one side of zero). Welch's t-test, corrected for multiple testing, is shown "
                "as supporting evidence and does not decide; with few replicates, more experiments may change "
-               "any of these results (see docs/METHOD_NOTES.md in the grownet repository).")
+               "any of these results. Two limits of this derivation travel with every network it makes. "
+               "An arc from a community compared with the same community without one member (evidence "
+               "dropout) says the removed member affects the target, DIRECTLY OR THROUGH THE OTHERS, so it "
+               "is not on its own evidence of an interaction between those two; each such arc is marked. "
+               "And a gLV coefficient computed from this comparison is a difference of two separately "
+               "fitted growth rates divided by one partner mean, which carries the organism's own density "
+               "as a confound that no number of replicates removes; gLV mode fits the row instead, which "
+               "is what a coefficient should come from (see docs/METHOD_NOTES.md and docs/LIMITATIONS.md "
+               "in the grownet repository).")
 
 
 # Appended to the caution when the filter is on, since the caution then no longer holds: the adjusted p-value
@@ -1748,8 +1761,11 @@ class ReplicateDeriver(Deriver):
 
     Reads each replicate's measured series through `grownet.adapter`, compares the replicate sets with
     `grownet.interaction.interaction_strength` (area under the curve by default; maximal abundance or a
-    growth rate selectable), and emits edges carrying the standard error and the replicate counts. This is the default
-    for a live derivation; the integrated form of #127 is the default since 0.3.0.
+    growth rate selectable), and emits edges carrying the standard error and the replicate counts.
+
+    **This is the default derivation.** It was so until 0.3.0, the integrated form of #127 was for one
+    release, and it is again since 2026-10-10, because it is the only form that gives a drop-out arc or a
+    censored one. The integrated form is what gLV mode selects.
     """
 
     name = "replicate-v1"
