@@ -402,18 +402,27 @@ def test_every_command_the_help_page_prints_is_one_the_parser_accepts():
 
     page = render_help("tok", DEFAULTS, EXAMPLE)
     commands = []
-    for block in re.findall(r"<pre>(.*?)</pre>", page, re.S):
+    # <code> as well as <pre>: the page prints four more commands in inline <code>, among them the gLV
+    # walkthrough, which is one of the three places #234 says this bug was already fixed once. Removing
+    # `--live` from that inline command left the whole suite green while the printed command exited 2
+    # (found reviewing this change).
+    for block in re.findall(r"<(?:pre|code)>(.*?)</(?:pre|code)>", page, re.S):
         for line in html.unescape(block).splitlines():
             line = line.strip()
             if line.startswith(COMMAND + " "):
                 commands.append(line)
-    assert len(commands) >= 8, f"the page printed {len(commands)} commands, so this checked almost nothing"
+    # the floor is the real count, so losing a block is a failure rather than a quieter test. It was 8
+    # while the <pre>-only extraction found 9, which let four commands go unchecked without the floor
+    # noticing.
+    assert len(commands) >= 12, f"the page printed {len(commands)} commands, so this checked less than before"
 
     parser = build_parser()
     for command in commands:
         argv = shlex.split(command)[1:]                 # drop the program name
-        if argv and argv[0] in ("gui", "validate", "schema"):
+        if argv and argv[0] in ("gui", "validate", "schema", "style"):
             continue                                   # no settings to check on these
+        if "--help" in argv or "-h" in argv:
+            continue                                   # argparse exits 0 and prints; nothing to check
         # the parsed arguments are not what runs: gLV mode sets four settings and `--derivation`
         # carries no default, so `_resolve` is what a run applies before any check. Calling the guard on
         # unresolved arguments passes everything, because it tests `a.derivation == "replicate"`; this

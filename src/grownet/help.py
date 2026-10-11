@@ -669,7 +669,10 @@ that holds them, and derives the interactions between them on this machine. The 
 box and derives every study in mGrowthDB, with every partner. With the default settings, All reads the
 network the grownet repository derives from mGrowthDB once a day, when it is less than a day old and
 was derived by the same derivation your settings ask for, which
-spares mGrowthDB about 1,300 requests; the result says when it was derived. Any other setting, or GitHub
+spares mGrowthDB the 1,926 requests a cold corpus run sends, or
+the 54 a warm one does (measured 2026-10-11;
+docs/METHOD_NOTES.md carries the command); the result says when it was derived. Any other setting,
+or GitHub
 out of reach, derives it live. Nothing is uploaded, and nothing is written outside the file you
 download.</p>
 

@@ -37,6 +37,24 @@ content.
   as they always have.
 
 ### Fixed
+- **Gate check 6 said emitted networks validate against the shipped JSON Schema, and it runs the
+  dependency-free validator** (#249), which this release documents as a subset of that schema: a
+  hand-written network passes `grownet validate` and fails the schema nine ways. The claim stood in the
+  gate's own summary of its checks, in the function's docstring and in the message it would print. All
+  three say which validator runs now. No emitted network violates the schema today, which was measured,
+  so this was a false claim about a guard rather than a wrong output, and the version that would make the
+  original claim true (walking the schema's own keywords over the document, both of which are in hand
+  there) is named in the docstring for whoever wants it.
+- **The help page's own guard read `<pre>` blocks only** (#249), and the page prints four more commands
+  in inline `<code>`, among them the gLV walkthrough, which is one of the three places #234 says this bug
+  was already fixed once. Removing `--live` from that inline command left the whole suite green while the
+  printed command exited 2. Both elements are read now, 13 commands against 9, the floor is the real
+  count so losing a block fails rather than quietly checking less, and the inline case was verified by
+  breaking it and watching the test go red.
+- **The help page told every reader that All spares "about 1,300 requests"** (#249). This release
+  re-measured that quantity for `docs/METHOD_NOTES.md` and corrected it there, and walked past the page a
+  non-developer reads: it is 1,926 cold and 54 warm, counted at the client's own send. Both figures with
+  a pointer to the command now.
 - **Five statements promised the residual of every fit, including every gLV package README, and no output
   carries it** (#230). `_least_squares` computes it and `fit_row` and `two_stage` drop it; there is no
   residual field on an edge, in the schema, in GraphML, in Cytoscape or in `r/`. The gLV package was the
