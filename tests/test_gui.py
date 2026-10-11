@@ -158,8 +158,10 @@ def test_a_study_that_fails_is_reported_not_raised():
 
 def test_form_hides_every_setting_behind_one_button():
     page = render_form("tok")
-    assert page.count("<details>") == 1 and "Advanced settings" in page
-    head, _, tail = page.partition("<details>")
+    # "<details" and not "<details>": the block renders `<details open>` when a setting is off its
+    # default, so a reader is told (#250). The count is of the settings block, which is still one.
+    assert page.count("<details") == 1 and "Advanced settings" in page
+    head, _, tail = page.partition("<details")
     # only the two boxes and the four buttons are visible; every setting sits behind the button
     # (Karoline, 2026-10-04, after a first attempt put two of them in the bar: "this is now quite complex.
     # So how about moving both options back to advanced parameters ... and instead introduce a button
@@ -888,3 +890,57 @@ def test_the_glv_example_button_configures_everything_and_runs(server):
     report = _get(f"{base}/report.txt?token={token}")
     for name in gui.GLV_EXAMPLE:
         assert name in report
+
+
+def test_a_token_with_a_non_ascii_character_is_refused_rather_than_dropping_the_connection(server):
+    """`secrets.compare_digest` raises `TypeError` on a str holding non-ASCII, and the exception escaped
+    `_authorized`, so the connection closed with no status line and the browser showed its own "site
+    can't be reached" (#246). `secrets.token_urlsafe` emits "-" and "_", so any tool that autocorrects a
+    double hyphen to an en dash on the way to a reader produces exactly that, and it failed worse than
+    the case `_authorized` was written for (Karoline, 2026-10-04: "localhost:8791 shows an error")."""
+    base, token = server
+    mangled = token.replace("-", "–", 1) if "-" in token else token + "–"
+    assert mangled != token, "this needs a token the substitution changes, or it proves nothing"
+    for label, given in (("non-ASCII", mangled), ("wrong but ASCII", "abcdefgh")):
+        try:
+            with urllib.request.urlopen(f"{base}/?token={urllib.parse.quote(given)}", timeout=10) as r:
+                raise AssertionError(f"{label}: expected 403, got {r.status}")
+        except urllib.error.HTTPError as e:
+            assert e.code == 403, label
+            assert "token" in e.read().decode("utf-8", "replace").lower(), label
+
+
+def test_the_rate_and_glv_routes_say_a_search_is_gone_rather_than_blaming_a_setting(server):
+    """`/rates.csv`, `/glv.zip`, `/glv.json` and POST `/glv` went straight from "no rates" to "tick
+    Report growth rates and run the search again", for a search that was pruned or still running with
+    that box already ticked. `_gone`'s docstring states the rule: a running search "must not be told to
+    run again: it is running". `/download` and `/report.txt` already called it; these four are the slow
+    routes, and a gLV run with rates is the search a reader least wants to start twice (#246)."""
+    base, token = server
+    for path in ("/rates.csv", "/glv.zip", "/glv.json", "/download", "/report.txt"):
+        with urllib.request.urlopen(f"{base}{path}?token={token}&job=deadbeef", timeout=10) as r:
+            body = r.read().decode("utf-8", "replace")
+        assert "no longer here" in body, f"{path} did not say the search is gone: {body[:120]}"
+        assert "tick Report growth rates" not in body, f"{path} still blames a setting"
+
+
+def test_a_setting_off_its_default_is_marked_on_a_result_that_has_arcs():
+    """Advanced settings was always collapsed, and the result section named a changed setting only when
+    the network came out EMPTY, because `_settings_to_try` runs from `_empty_reason` alone. So the one
+    case where numbers leave the page under a changed threshold was the case the page did not mark
+    (#250)."""
+    from grownet.gui import DEFAULTS, _result_section, render_form
+
+    plain = render_form("tok", settings=dict(DEFAULTS))
+    assert "<details open>" not in plain and "not at its default" not in plain
+
+    one = render_form("tok", settings={**DEFAULTS, "absence_threshold": 3.0})
+    assert "<details open>" in one and "1 not at its default" in one
+    two = render_form("tok", settings={**DEFAULTS, "absence_threshold": 3.0, "min_studies": 2})
+    assert "2 not at their default" in two
+
+    result = _query(absence_threshold=3.0)
+    assert result["network"].edges, "this needs a result WITH arcs, or it proves nothing"
+    assert "not at their default" in _result_section("tok", result)
+    result["settings"] = dict(DEFAULTS)
+    assert "not at their default" not in _result_section("tok", result)

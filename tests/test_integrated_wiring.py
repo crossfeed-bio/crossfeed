@@ -34,7 +34,10 @@ def test_the_derivation_defaults_to_the_comparison_and_glv_mode_selects_the_inte
 
 def test_the_setting_is_in_advanced_settings_with_both_choices():
     page = render_form("tok")
-    settings = page[page.index("<details>"):]
+    # "<details" and not "<details>": the settings block renders `<details open>` when a setting is
+    # not at its default, so that a reader is told (#250). This is a LOCATOR for the block, not the
+    # requirement the test pins.
+    settings = page[page.index("<details"):]
     assert 'name="derivation"' in settings
     assert '<option value="replicate" selected>' in settings and 'value="integrated"' in settings
     assert "whole time course" in " ".join(settings.split())      # the muted text wraps in the source

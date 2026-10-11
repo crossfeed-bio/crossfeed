@@ -212,8 +212,15 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
                           f"{d}</option>" for d in DERIVATIONS)
     rate_methods = "".join(f"<option value=\"{m}\"{' selected' if s['rate_method'] == m else ''}>{m}</option>"
                            for m in rates.METHODS)
-    return f"""<details>
-<summary>Advanced settings</summary>
+    # Open, with a count, when anything is not at its default. It was always collapsed and the result
+    # section said nothing about a changed setting unless the network came out EMPTY, because
+    # `_settings_to_try` runs only from `_empty_reason`: so the one case where numbers leave the page
+    # under a changed threshold was the case the page did not mark (#250).
+    changed = [k for k, v in s.items() if k in DEFAULTS and v != DEFAULTS[k]]
+    head = ("<details>\n<summary>Advanced settings</summary>" if not changed else
+            f"<details open>\n<summary>Advanced settings: {len(changed)} not at "
+            f"{'its' if len(changed) == 1 else 'their'} default</summary>")
+    return f"""{head}
 <div class="row"><label>Growth property
   <select name="metric">{options}</select></label>
   <span class="muted">the growth property compared: auc, the area under the curve (default); max, the maximal
@@ -756,6 +763,18 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
         skipped = (f"<details><summary>{len(skips)} pair(s) the data did not support</summary>"
                    f"<ul>{items}</ul></details>")
     errors = "".join(f"<p class=\"note\">{_esc(e)}</p>" for e in result["errors"])
+    # and one line naming the settings that are not at their defaults, on EVERY result and not only an
+    # empty one: a run that returns arcs under a changed threshold is the case a reader most needs told,
+    # and it was the one case the page did not mark (#250)
+    from .help import SETTINGS as help_settings
+    s_here = result.get("settings", {})
+    off_default = [k for k, v in s_here.items() if k in DEFAULTS and v != DEFAULTS[k]]
+    if off_default:
+        named = ", ".join(f"{_esc(help_settings[k][0] if k in help_settings else k)} = {_esc(str(s_here[k]))}"
+                          for k in sorted(off_default)[:6])
+        more = f", and {len(off_default) - 6} more" if len(off_default) > 6 else ""
+        errors += (f"<p class=\"muted\">{len(off_default)} setting(s) are not at their default: "
+                   f"{named}{more}. Advanced settings is open below.</p>")
     return (f"<section class=\"result\" id=\"result\">{note}{species_heading}<ul>{resolved}</ul>{unresolved}"
             f"<p class=\"muted\">Studies searched: {_esc(studies)}</p>{errors}{table}"
             f"{_absent_section(result, result.get('absence', {}))}{_sources(net)}{skipped}</section>")
@@ -1153,7 +1172,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         since anything that could read it here could use it.
         """
         given = query.get("token", [""])[0]
-        if secrets.compare_digest(given, self.token):
+        # compare BYTES: `secrets.compare_digest` raises TypeError on a str holding non-ASCII, and the
+        # exception escaped, so the connection was closed with no status line at all and the browser
+        # showed its own "site can't be reached". `secrets.token_urlsafe` emits "-" and "_", so any tool
+        # that autocorrects a double hyphen to an en dash on the way to the reader produces exactly that,
+        # and it failed worse than the case this function was written for (#246).
+        if secrets.compare_digest(given.encode("utf-8", "surrogateescape"), self.token.encode("utf-8")):
             return True
         self._send(render_token_page(bool(given), self.server.server_address[1]), status=403)
         return False
@@ -1258,7 +1282,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _rates(self, path: str, query: dict):
         """The growth rates on their own, and the gLV package: both need a search that reported rates."""
         result = self._result(query)
-        organism_rates = (result or {}).get("rates") or {}
+        if result is None:
+            # `_gone` first, as `/download` and `/report.txt` already do: these four routes went straight
+            # to "tick Report growth rates and run the search again" for a search that was STILL RUNNING
+            # with that box already ticked, which is what `_gone`'s docstring says must not happen,
+            # because it sends a reader to repeat work under way. These are the slow routes (#246).
+            self._send(render_form(self.token, message=self._gone(
+                query, "No growth rates yet: tick Report growth rates and run the search again.")))
+            return
+        organism_rates = result.get("rates") or {}
         if not organism_rates:
             self._send(render_form(self.token, message="No growth rates yet: tick Report growth rates and "
                                                        "run the search again."))
@@ -1300,7 +1332,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _glv(self, query: dict, form: dict) -> None:
         """The page's one gLV control: the zip, or the parameters posted into a listening R session."""
         result = self._result(query)
-        organism_rates = (result or {}).get("rates") or {}
+        if result is None:                      # a running or pruned search, not a missing setting (#246)
+            self._send(render_form(self.token, message=self._gone(
+                query, "No gLV parameters yet: tick Report growth rates and run the search again.")))
+            return
+        organism_rates = result.get("rates") or {}
         if not organism_rates:
             self._send(render_form(self.token, message="No gLV parameters yet: tick Report growth rates "
                                                        "and run the search again."))
@@ -1419,7 +1455,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             # package can be built from, on a study chosen for the other form (found reviewing #199,
             # 2026-10-10). It presses the mode rather than repeating parts of it, so the two cannot
             # drift again. The help's gLV section runs this package through miaSim step by step.
-            settings = {**glv_mode(settings), "conditions": GLV_EXAMPLE_STUDY}
+            # from the DEFAULTS, not from whatever the form posted: the Example button beside it was changed for
+            # exactly this on 2026-10-09 ("It used to keep them... Either gave an empty network with
+            # nothing on the page to say why", Karoline), and this one was left inheriting them, so
+            # pressing it with an absence threshold of 9 still in the form filled the boxes, ran, and
+            # produced no network and no package, against a caption promising a package that simulates
+            settings = {**glv_mode(dict(DEFAULTS)), "conditions": GLV_EXAMPLE_STUDY}
             job = self._start(list(GLV_EXAMPLE), settings)
             job["thread"].join(self.wait)
             self._redirect(f"/?token={self.token}&job={job['id']}#result")
