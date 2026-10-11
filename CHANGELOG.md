@@ -37,6 +37,20 @@ content.
   as they always have.
 
 ### Fixed
+- **Two published statements about `sd` and `se` said what the code's own comment says is false** (#260).
+  `help.py`'s meaning for `se_replicates` and METHOD_NOTES both asserted that "the tool's own relation
+  se = sd / sqrt(n) holds", and METHOD_NOTES added "`sd` is `se * sqrt(n)`", which is the formula
+  `integrated.py` abandoned on 2026-10-07 and records in a comment as one that "never held for two
+  variance components": the monoculture stage's error is shared by every replicate of a row, so its
+  variance is never divided by n. Measured on all twelve arcs of a live `--glv-mode` run, `sd / sqrt(n)`
+  is out by up to a factor of 2.06, while `se` reproduces exactly as the square root of the component
+  variances added. Both now say that. METHOD_NOTES also said "both halves are published", naming two of
+  the three components: `se_rate_selection` is published too.
+- **The caveat naming which direction the gLV diagonal runs had no test that could see it** (#260). The
+  assertion read `== "fitted: -r_i / K_i" or "fitted" in caveats["diagonal"]`, and the second half passes
+  for any string containing "fitted", so inverting the integrated entry back to the comparison's
+  direction, the correction #231 exists for, left the suite green. It now asserts the exact string for
+  the derivation in hand, and that the two derivations differ.
 - **The help-command guard applied one of the three pre-flight checks a run applies**, found by a pass
   that attacked every new test with the regression it claims to catch. `_derive` consults the rate flags,
   the settings bounds and, on the search path, three further guards; the test called the rate flags

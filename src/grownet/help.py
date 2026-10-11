@@ -432,9 +432,11 @@ EDGE_ATTRIBUTES = {
                                       "function of the rate and the self-limitation",
     "se_replicates": "the part of se that comes from the co-culture replicates: their spread over the "
                      "square root of their number. With a derivation that fits the row, sd is the "
-                     "dispersion of one estimate including the monoculture stage, so that the tool's own "
-                     "relation se = sd / sqrt(n) holds and the absence threshold carries that stage too; "
-                     "the replicates' own scatter is this number times the square root of n",
+                     "dispersion of ONE comparison and se the dispersion of their mean, and both carry "
+                     "the monoculture stage, so the absence threshold carries that stage too and "
+                     "se = sd / sqrt(n) does not hold: the stage's error is shared by every replicate of "
+                     "a row, so its variance is never divided by n; the replicates' own scatter is this "
+                     "number times the square root of n",
     "se_rate_stage": "the part of se that comes from the monoculture stage, from resampling it. se is "
                      "the square root of the variances added, and the p-value is a t statistic on "
                      "it with a Satterthwaite degrees of freedom, so an arc whose monoculture stage is "

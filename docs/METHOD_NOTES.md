@@ -466,10 +466,19 @@ important to ship something good". Three were structural rather than inherent, a
      regression over all their rows the delete-one jackknife is used, which is consistent for a
      least-squares estimate, with its `(n - 1) / n` scaling.
 
-   `se` is the square root of the two variances added, `sd` is `se * sqrt(n)` so that the tool's own
-   relation `se = sd / sqrt(n)` holds and the absence threshold reads a dispersion that carries both, and
-   `p_value` is a t statistic on `se` with a Satterthwaite degrees of freedom. Both halves are published
-   as `se_replicates` and `se_rate_stage`, with `rate_stage_method` naming the resampling.
+   `se` is the square root of the variances added, and `sd` is the dispersion of **one** comparison,
+   `sqrt(var_stage + var_selection + var_replicate)`, so the absence threshold reads a dispersion that
+   carries every component. **`se = sd / sqrt(n)` does not hold**, and never did for two variance
+   components: the monoculture stage's error is shared by every replicate of a row, so its variance is
+   never divided by n. `sd` did briefly carry `se * sqrt(n)`, which is
+   `sqrt(n * var_stage + var_replicate)`; a component never divided by n cannot be multiplied by it to
+   reach replicate scale, and that `sd` grew with n, so the absence threshold `|mean| < k * sd` got
+   harder to pass the more co-culture replicates a row had (measured and corrected 2026-10-07; this
+   paragraph still described the abandoned formula until 2026-10-11). `p_value` is a t statistic on `se`
+   with a Satterthwaite degrees of freedom. Every component is published,
+   as `se_replicates`, `se_rate_stage` and `se_rate_selection`, with `rate_stage_method` naming the
+   resampling. ("Both halves" here named two of the three until 2026-10-11, the selection component
+   having been added after this paragraph was written.)
 
    Measured over the six studies that give arcs (2, 4, 6, 7, 13, 14), against the same code with stage 1
    treated as exact: **20 arcs become 17** (three fall below the absence threshold and so leave the file),
