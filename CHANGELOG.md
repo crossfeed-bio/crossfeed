@@ -37,6 +37,42 @@ content.
   as they always have.
 
 ### Fixed
+- **Two tests on this branch asserted less than their names claim**, found by a pass that attacked every
+  new test with the regression it claims to catch. The download-route test requested five **GET** routes
+  and never POST `/glv`, which is the fourth route its own docstring names, so removing that route's
+  `_gone` call left it green; and every request used an unknown job id, which always takes the "gone"
+  branch, so the **running** case, which is what `_gone`'s docstring is actually about, was never
+  exercised. Both are covered now, and reaching the running case needed the fixture to hand over the real
+  handler class, because `serve` builds a subclass with its own `state` and planting a job on
+  `gui._Handler` never reached the running server. The settings-mark test asserted a phrase that was
+  already true, because the test helper forces `include_absent` off its default: it held for a query with
+  no keyword at all and said nothing about the threshold. It isolates the threshold and asserts it is
+  **named**. Each was verified by applying the regression and watching it go red.
+- **Any non-ASCII character in `token=` closed the connection with no response at all** (#246).
+  `secrets.compare_digest` raises `TypeError` on a `str` holding non-ASCII, the exception escaped
+  `_authorized`, and the browser showed its own "site can't be reached" rather than the token page that
+  function exists to show (Karoline, 2026-10-04: "localhost:8791 shows an error"). `secrets.token_urlsafe`
+  emits `-` and `_`, so any tool that autocorrects a double hyphen to an en dash on the way to a reader
+  produces exactly this, and it failed worse than the case the code was written for. The comparison is on
+  bytes now, and a mangled token answers 403 with the token page like any other wrong one.
+- **Four download routes told a reader to tick a box they had already ticked** (#246). `/rates.csv`,
+  `/glv.zip`, `/glv.json` and the gLV form went straight from "no rates" to "tick Report growth rates and
+  run the search again" for a search that was pruned **or still running**, with rates on. `_gone`'s
+  docstring states the rule they broke: a running search "must not be told to run again: it is running,
+  and saying so sends a reader to repeat work that is already under way". `/download` and `/report.txt`
+  already called it. These are the slow routes, and a gLV run with rates is the search a reader least
+  wants to start twice.
+- **The gLV example button inherited whatever Advanced settings were left in the form** (#246). The
+  Example button beside it was changed on 2026-10-09 for exactly this, and its comment says why: "It used
+  to keep them... Either gave an empty network with nothing on the page to say why" (Karoline). Pressing
+  gLV example with an absence threshold of 9 still in the form filled the boxes, ran, and produced no
+  network and no package, against a caption promising a package that simulates. It starts from the
+  defaults now, as Example does.
+- **A setting changed and forgotten left no mark on a result that still had arcs** (#250). Advanced
+  settings was always collapsed, and the result section named a changed setting only when the network came
+  out empty, because that notice runs from the empty-network reason alone: so the one case where numbers
+  leave the page under a changed threshold was the case the page did not mark. The block opens with a
+  count when anything is off its default, and every result names them in one line.
 - **The Cytoscape table dropped `taxonomy` and `model_ref`**, which the neutral file and GraphML both
   carry, against the claim in the same file that this payload names every field and against
   `network_json`'s own docstring ("every node and edge attribute becomes a column"). grownet populates

@@ -519,7 +519,10 @@ def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
         return page
 
     pressed = press({"species": A, "glv_mode": "1", "include_dropout": "1", "only_entered": "1"})
-    settings = pressed[pressed.index("<details>"):]
+    # "<details" and not "<details>": the settings block renders `<details open>` when a setting is
+    # not at its default, so that a reader is told (#250). This is a LOCATOR for the block, not the
+    # requirement the test pins.
+    settings = pressed[pressed.index("<details"):]
     assert 'name="report_rates" value="1" checked' in settings
     assert 'name="include_dropout" value="1">' in settings               # off
     assert "gLV mode on: growth rates on, drop-out communities off" in pressed
@@ -544,7 +547,10 @@ def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
         if DEFAULTS[key] != value and value is not False:
             posted[key] = "1" if value is True else str(value)
     again = press(posted)
-    back = again[again.index("<details>"):]
+    # "<details" and not "<details>": the settings block renders `<details open>` when a setting is
+    # not at its default, so that a reader is told (#250). This is a LOCATOR for the block, not the
+    # requirement the test pins.
+    back = again[again.index("<details"):]
     assert 'name="report_rates" value="1">' in back                      # off, its default
     assert 'name="include_dropout" value="1" checked' in back            # on, its default
     assert "gLV mode off" in again and 'class="switch on"' not in again
@@ -822,7 +828,10 @@ def test_drop_out_communities_stay_on_by_default_in_advanced_settings(server):
     in sight, rather than behind the button."""
     base, token = server
     _, page, _ = _open(f"{base}/?token={token}")
-    settings = page[page.index("<details>"):]
+    # "<details" and not "<details>": the settings block renders `<details open>` when a setting is
+    # not at its default, so that a reader is told (#250). This is a LOCATOR for the block, not the
+    # requirement the test pins.
+    settings = page[page.index("<details"):]
     assert 'name="include_dropout" value="1" checked' in settings
     assert "gLV mode unticks it" in settings                     # the setting says which button touches it
 
