@@ -432,3 +432,48 @@ def test_the_format_check_refuses_when_it_cannot_read_the_declaration(monkeypatc
     assert len(problems) == 1, problems
     assert "could not find the SCHEMA declaration" in problems[0]
     assert "widen the pattern" in problems[0]
+
+
+def test_validate_names_a_self_arc_and_a_significance_that_contradicts_its_q_value():
+    """Two things `validate` could not see, both from a hand-built records file, which is the route a
+    downstream implementer and our own examples use (#222 items 2 and 3).
+
+    A SELF arc is legitimate: `--merge-genera` produces within-genus arcs by design (Karoline, on
+    `derive.merge_genus`: "interactions within one genus stay, as an arc from the genus to itself"). But
+    the plain matrix writes the diagonal at that position, so such an arc takes no cell of its own: one
+    careless copy-paste gave a document whose JSON held 2 arcs and whose matrix held 1, which `validate`
+    called fine with nothing saying an arc had been dropped. A note, not a problem, because the merged
+    case is real.
+
+    `significance` is -log10 of the q-value from /v1 on, and held the q-value itself in /v0, which is the
+    change of meaning that moved the id. A file written to the old convention validated cleanly and the
+    report printed both side by side without comment: `significance` 0.02 read as -log10(q) means q about
+    0.95, against a `q_value` orders of magnitude away. Checked only for the ids where the relation holds.
+    """
+    import math
+
+    from grownet.model import SCHEMA
+    from grownet.schema import validate_document
+
+    def doc(schema=SCHEMA, **edge):
+        base = {"source": "a", "target": "b", "effect": "facilitation", "study_ids": ["S"]}
+        return {"schema": schema, "meta": {}, "nodes": [{"id": "a"}, {"id": "b"}],
+                "studies": [{"id": "S"}], "edges": [{**base, **edge}]}
+
+    notes = []
+    assert validate_document(doc(target="a"), notes) == [], "a self arc is legitimate, not a problem"
+    assert any("to itself" in n and "no cell of its own" in n for n in notes), notes
+
+    # the /v0 convention under a current id: significance IS the q-value
+    notes = []
+    assert validate_document(doc(significance=0.02, q_value=0.02), notes) == []
+    assert any("is not -log10(q_value)" in n for n in notes), notes
+
+    # and the three cases that must NOT be flagged, or the note becomes noise
+    for label, d in (("correct", doc(significance=round(-math.log10(0.02), 4), q_value=0.02)),
+                     ("rounded", doc(significance=1.70, q_value=0.02)),
+                     ("a /v0 document", doc(schema="grownet.interaction_network/v0",
+                                            significance=0.02, q_value=0.02))):
+        notes = []
+        validate_document(d, notes)
+        assert not [n for n in notes if "-log10" in n], f"{label} was flagged: {notes}"

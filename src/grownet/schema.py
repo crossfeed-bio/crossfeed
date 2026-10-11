@@ -293,6 +293,12 @@ def _unknown_keys(lists: dict) -> list:
     return out
 
 
+# The format ids where `significance` is -log10 of the q-value. In /v0 it held the corrected p-value
+# itself, which is exactly the change of meaning that moved the id (AGENTS.md), so the cross-check below
+# must not be applied to a /v0 document.
+_MINUS_LOG10_SCHEMAS = tuple(x for x in KNOWN_SCHEMAS if not x.endswith("/v0"))
+
+
 def validate_document(doc, notes: list = None) -> list:
     """Return every problem with `doc` as a grownet interaction-network document (empty list = valid).
 
@@ -347,6 +353,33 @@ def validate_document(doc, notes: list = None) -> list:
             problems.append(f"edges[{i}] status {e.get('status')!r} not in {STATUSES}")
         if isinstance(e.get("weight"), (int, float)) and e["weight"] < 0:
             problems.append(f"edges[{i}] weight must not be negative")
+        # An arc from an organism to ITSELF is legitimate: `--merge-genera` produces within-genus arcs by
+        # design (Karoline, on `derive.merge_genus`: "interactions within one genus stay, as an arc from
+        # the genus to itself"). But the plain adjacency matrix writes the DIAGONAL at that position, so
+        # such an arc takes no cell of its own, and a hand-built records file with one careless
+        # copy-paste gave a document whose JSON held 2 arcs, whose matrix held 1, and which `validate`
+        # called fine with nothing saying an arc had been dropped (#222 item 2). A note, not a problem,
+        # because the merged case is real.
+        if notes is not None and e.get("source") and e.get("source") == e.get("target"):
+            notes.append(f"edges[{i}] runs from {e['source']!r} to itself: legitimate for a merged genus, "
+                         "and it takes no cell of its own in the adjacency matrix, where that position "
+                         "holds the diagonal")
+        # `significance` and `q_value` are two views of one number from /v1 on, where significance became
+        # -log10(q). A records file written to the /v0 convention, where it held the q-value itself,
+        # validated cleanly and the report printed both side by side without comment: significance 0.02
+        # read as -log10(q) means q about 0.95, against a q_value orders of magnitude away (#222 item 3).
+        # Checked only for the ids where the relation holds, and only as a note, since a reader may have
+        # rounded.
+        if notes is not None and doc.get("schema") in _MINUS_LOG10_SCHEMAS:
+            sig, q = e.get("significance"), e.get("q_value")
+            if isinstance(sig, (int, float)) and isinstance(q, (int, float)) and 0 < q <= 1:
+                import math
+                want = min(15.0, -math.log10(q))
+                if abs(sig - want) > max(0.05, 0.02 * want):
+                    notes.append(f"edges[{i}] significance {sig:.4g} is not -log10(q_value) "
+                                 f"({want:.4g}) as {doc.get('schema')} declares: a file written to the "
+                                 "/v0 convention, where significance held the q-value itself, reads as a "
+                                 "much weaker result than its own q_value states")
         quality = e.get("quality", [])
         if not isinstance(quality, (list, tuple)) or any(q not in QUALITY_FLAGS for q in quality):
             problems.append(f"edges[{i}] quality must be a list of {QUALITY_FLAGS}")

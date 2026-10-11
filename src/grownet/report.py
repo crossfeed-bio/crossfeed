@@ -208,7 +208,13 @@ def report_text(result: dict) -> str:
         lines.append("left out by Exclude these studies: " + ", ".join(result["excluded"]))
     lines.append("")
 
-    lines.append("settings:")
+    # an empty `settings:` heading said a run had no settings, where the truth is that this route records
+    # none because it applies none (#222 item 1)
+    if not settings:
+        lines.append("settings: none recorded. This run read records that were already derived, so no "
+                     "derivation or output setting applied to them.")
+    else:
+        lines.append("settings:")
     # a setting the derivation does not read is marked, rather than printed as if it had been used: under
     # the integrated form a reader saw "Include drop-out communities: on" where it derives none, and
     # changing --metric gave byte-identical networks while this line changed (#215 item 3)
@@ -229,10 +235,18 @@ def report_text(result: dict) -> str:
     hidden = meta.get("hidden", {}).get("low_quality", 0)
     rule = meta.get("no_growth", {})
     k = meta.get("absence", {}).get("k", "")
-    lines.append(f"result: {len(shown)} interaction(s) written, {len(in_file) + left_out} below the absence "
-                 f"threshold (k = {k})"
-                 + (", left out of the network" if left_out else ", kept in the network")
-                 + f", {hidden} low-quality edge(s) hidden")
+    # A route that ran no output stage has no threshold and no count, and this printed the count anyway
+    # with a literal `(k = )`: the --fixture route holds records someone already derived, so no absence
+    # threshold was applied to them (#222 item 1). Say that instead of printing an empty number.
+    if k == "":
+        lines.append(f"result: {len(shown)} interaction(s) written. No absence threshold was applied: "
+                     "these records were already derived, so this run classified nothing"
+                     + (f", and {hidden} low-quality edge(s) are hidden" if hidden else ""))
+    else:
+        lines.append(f"result: {len(shown)} interaction(s) written, {len(in_file) + left_out} below the "
+                     f"absence threshold (k = {k})"
+                     + (", left out of the network" if left_out else ", kept in the network")
+                     + f", {hidden} low-quality edge(s) hidden")
     applied = meta.get("statistics", {}).get("filter", {})
     if applied.get("max_adjusted_p") is not None:
         lines.append(f"q-value filter (q is the adjusted p-value): interactions above "

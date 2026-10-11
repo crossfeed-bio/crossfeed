@@ -37,6 +37,25 @@ content.
   as they always have.
 
 ### Fixed
+- **The `--fixture` route accepted every setting and applied none of them, in silence** (#222 item 1),
+  which is the route a downstream implementer and this project's own examples use. Measured rather than
+  reasoned, with a fixture built so each setting had something to act on: the same pair from two studies
+  for merging, a q-value of 0.40 for the filter, a tiny effect with a spread for the threshold, a
+  `single_replicate` arc for the quality filter. **All fourteen left the arcs byte-identical.** The
+  mechanism is that `output_meta` runs only on the live path, so this route has no output stage at all:
+  no absence threshold, no merging, no q-value filter. A setting that cannot apply is refused now, naming
+  it, as `--deriver` already was. The report also printed a literal `(k = )` and an empty `settings:`
+  heading, which said a run had no settings where the truth is that this route records none because it
+  applies none; both now say that.
+- **`validate` could not see a self arc or a `significance` that contradicts its own `q_value`** (#222
+  items 2 and 3). A records file with one careless copy-paste gave a document whose JSON held 2 arcs and
+  whose matrix held 1, and `validate` called it fine: an arc from an organism to itself takes no cell of
+  its own, because the matrix writes the diagonal at that position. It is a **note** and not a problem,
+  because `--merge-genera` produces within-genus arcs by design. And a file written to the pre-`/v1`
+  convention, where `significance` held the q-value rather than -log10 of it, validated cleanly while
+  reading as a far weaker result than its own `q_value` states; that cross-check is applied only to the
+  format ids where the relation holds, and only as a note, since a reader may have rounded. Checked
+  against grownet's own output: 206 of the corpus's 223 arcs carry both fields and none is flagged.
 - **The published All artifact dropped four parts of the result its own module says it holds** (#228).
   `published.py` describes the file as holding "the whole result of the search, not only the network", and
   `FIELDS` left out `absent`, `rates`, `steady` and `notes`. The consequence a reader met: the artifact's
