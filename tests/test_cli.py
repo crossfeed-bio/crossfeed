@@ -328,3 +328,52 @@ def test_a_route_that_applied_no_threshold_does_not_print_an_empty_one(tmp_path)
     assert "No absence threshold was applied" in text
     assert "settings: none recorded" in text
     assert "already derived" in text
+
+
+def test_the_matrix_format_says_include_absent_cannot_apply_to_it(capsys):
+    """`--format matrix --include-absent` gave a file byte-identical to the default and said nothing: this
+    format's convention is that an empty or absent cell is 0 (Karoline, 2026-10-03), so an arc below the
+    threshold has no cell of its own to be kept in, and the matrix records no settings either, so nothing
+    in the file said the flag was asked for and dropped (#218 item 2).
+
+    Announced rather than refused, because the run is legitimate and nothing false is written: what is
+    wrong is only the reader's expectation. The suggestion one step upstream is format-aware for the same
+    reason, since it used to send a reader to a flag that does nothing here.
+    """
+    from grownet.__main__ import _emit, build_parser
+    from grownet.mgrowthdb import records_to_network
+
+    # the network a --include-absent run produces: the arcs below the threshold are IN it, with status
+    # absent, which is the case whose count the message reports
+    net = records_to_network([
+        {"source": "a", "target": "b", "source_name": "A", "target_name": "B", "effect": "facilitation",
+         "strength": 1.0, "weight": 1.0, "status": "present", "outcome": "quantified", "study_id": "S1"},
+        {"source": "c", "target": "d", "source_name": "C", "target_name": "D", "effect": "facilitation",
+         "strength": 0.01, "weight": 0.01, "status": "absent", "outcome": "quantified",
+         "study_id": "S1"},
+        {"source": "e", "target": "f", "source_name": "E", "target_name": "F", "effect": "inhibition",
+         "strength": -0.01, "weight": 0.01, "status": "absent", "outcome": "quantified",
+         "study_id": "S1"}])
+    extra = {"absence": {"absent": 2, "k": 1.0}, "hidden": {"absent": 2, "low_quality": 0}}
+
+    def run(fmt, absent):
+        args = ["derive", "S", "--fixture", os.devnull, "--format", fmt, "--out", os.devnull]
+        if absent:
+            args.append("--include-absent")
+        a = build_parser().parse_args(args)
+        _emit(a, net, [], extra, "S", {"rates": {}, "skipped": [], "errors": [], "settings": {}})
+        return capsys.readouterr().err
+
+    told = run("matrix", True)
+    assert "no effect with --format matrix" in told
+    assert "an empty or absent cell is 0" in told
+    assert "(2 in this network)" in told, told
+
+    # and the upstream suggestion does not point at the flag for this format
+    assert "keep them with --include-absent" not in told
+    assert "--format matrix cannot carry them" in told
+
+    # the JSON format is untouched: the flag works there, so it is still suggested
+    as_json = run("json", False)
+    assert "keep them with --include-absent" in as_json
+    assert "no effect with --format matrix" not in as_json

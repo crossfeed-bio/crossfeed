@@ -46,6 +46,24 @@ _KEYS = [
     ("g_absence_count", "graph", "absence_count", "int"),
     ("g_hidden", "graph", "hidden", "string"),
     ("g_statistics_test", "graph", "statistics_test", "string"),
+    # The SCHEMA ID, which this file carried nowhere. `model.py` calls it the project's one guarantee:
+    # "this is the one signal that says the meaning of a field moved". `significance` was the corrected
+    # p-value in /v0 and is -log10(q) in /v3, which runs the OTHER way, so a /v0 and a /v3 GraphML had
+    # identical column names, inverted significance, and nothing in either file to tell them apart
+    # (#216). `grownet validate` honors this on the JSON route and names the version it read.
+    ("g_schema", "graph", "schema", "string"),
+    ("g_schema_url", "graph", "schema_url", "string"),
+    # where the numbers came from and how to cite them: a reader of the GraphML alone had `e_study_ids`
+    # with no title, no DOI, no database and no API, so they could not cite the work (#216)
+    ("g_source_db", "graph", "source_db", "string"),
+    ("g_studies", "graph", "studies", "string"),
+    ("g_project_url", "graph", "project_url", "string"),
+    # and what the display columns are, since they travel in every GraphML file and `cytoscape.py` says
+    # they "exist only in what Cytoscape receives". They are presentation, not measurement, and
+    # `e_display_weight` is ABSOLUTE for an arc with no measured strength, so those arcs are drawn
+    # thicker than every arc that has one. A reader styling on it needs to know that from the file
+    # (#216, #218 item 1).
+    ("g_display_columns", "graph", "display_columns", "string"),
     ("n_name", "node", "name", "string"),
     # Gephi takes a node's label from an attribute called label (Cytoscape uses name): the same strain name
     ("n_label", "node", "label", "string"),
@@ -127,6 +145,14 @@ def _data(parent, key, value):
     d.text = str(value)
 
 
+# Kept SHORT and in one place, because `gui/index.html` writes the same GraphML and
+# `tests/test_legend.py` compares the two byte for byte: a long sentence duplicated in JavaScript is the
+# drift that #245 was. The detail lives in the documents `g_project_url` points at.
+DISPLAY_COLUMNS_NOTE = ("e_line_style and e_display_weight are presentation, not measurement. "
+                        "e_display_weight is absolute for an arc with no measured strength, so such an "
+                        "arc is drawn thicker than every arc that has one.")
+
+
 def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
     """Serialize the network as a GraphML document (a directed graph)."""
     ET.register_namespace("", _NS)
@@ -152,6 +178,22 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
     _data(graph, "g_hidden", "; ".join(f"{name} {count}" for name, count in sorted(hidden.items()))
           if hidden else None)
     _data(graph, "g_statistics_test", (net.meta.get("statistics") or {}).get("test"))
+    from .help import REPOSITORY
+    from .schema import SCHEMA_DOC
+    # `net.schema`, which `from_dict` preserves from the document it read, NOT the current constant: a
+    # network loaded from a /v0 file must say /v0 here, or this field would assert the very thing #216
+    # is about, that a reader cannot tell a /v0 GraphML from a /v3 one
+    _data(graph, "g_schema", net.schema)
+    _data(graph, "g_schema_url", SCHEMA_DOC.get("$id"))
+    _data(graph, "g_source_db", net.meta.get("source_db"))
+    _data(graph, "g_project_url", REPOSITORY)
+    # one line per study, with whatever it has to cite by: the GraphML is the file a Cytoscape user
+    # shares, and `e_study_ids` alone is not something a reader can cite
+    _data(graph, "g_studies", "; ".join(
+        " ".join(x for x in (s.id, s.citation or "", s.url or "", f"[{s.license}]" if s.license else "")
+                 if x).strip()
+        for s in net.studies.values()) or None)
+    _data(graph, "g_display_columns", DISPLAY_COLUMNS_NOTE)
 
     from .cytoscape import display_weight, genus, genus_colors, line_style  # the style's own columns
     colors = genus_colors(net)

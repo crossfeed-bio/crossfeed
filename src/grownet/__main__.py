@@ -483,6 +483,19 @@ def _emit(a, net, skipped, extra, label, result):
     elif a.format == "matrix":
         from .matrix import matrix_csv
         payload = matrix_csv(net)        # the plain adjacency matrix: its diagonal is 0, the gLV one is -1
+        # `--include-absent` cannot do anything here and said nothing: `derive --all --format matrix
+        # --include-absent` gives a file byte-identical to the default, because this format's convention
+        # is that an empty or absent cell is 0 (Karoline, 2026-10-03), so an arc below the threshold has
+        # nowhere else to go. The matrix records no settings either, so nothing in the file says the flag
+        # was asked for and dropped (#218 item 2). Announced rather than refused, because the run itself
+        # is legitimate and nothing false is written: what is wrong is only the reader's expectation.
+        if getattr(a, "include_absent", False):
+            absent_now = sum(1 for e in net.edges if e.status == "absent")
+            print("--include-absent has no effect with --format matrix: this format's convention is that "
+                  "an empty or absent cell is 0, so an arc below the threshold has no cell of its own to "
+                  f"be kept in{f' ({absent_now} in this network)' if absent_now else ''}. The JSON and "
+                  "GraphML formats carry them with status absent; use one of those, or read the arcs "
+                  "below the threshold from the report.", file=sys.stderr)
     else:
         payload = net.to_json()
     if a.out:
@@ -586,8 +599,15 @@ def _emit(a, net, skipped, extra, label, result):
     if extra:
         if extra["absence"]["absent"]:
             left_out = extra["hidden"].get("absent", 0)
-            where = ("left out of the network, so the file holds the interactions it reports; keep them with "
-                     "--include-absent" if left_out else "in the file, with status absent")
+            # and the suggestion is only made where the chosen format can carry them: on --format matrix
+            # an absent cell is 0 by that format's own convention, so suggesting the flag there sent a
+            # reader to one that does nothing (#218 item 2, the same defect one step upstream)
+            keeps_absent = a.format != "matrix"
+            where = ("left out of the network, so the file holds the interactions it reports"
+                     + ("; keep them with --include-absent" if keeps_absent else
+                        ", and --format matrix cannot carry them: an absent cell is 0 in that format, so "
+                        "read them from the report or use the JSON or GraphML format")
+                     if left_out else "in the file, with status absent")
             print(f"\n{extra['absence']['absent']} comparison(s) came out below the absence threshold "
                   f"(|log2 mean| < {extra['absence']['k']:g} * sd): {where}. The report lists them.",
                   file=sys.stderr)

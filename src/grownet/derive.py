@@ -1717,6 +1717,16 @@ def filter_significance(records, max_adjusted_p: float | None = None) -> tuple:
     return kept, info
 
 
+def _project_meta() -> dict:
+    """Where a reader of this file alone can find the project, its schema and the documents it cites."""
+    from .help import REPOSITORY
+    from .schema import SCHEMA_DOC
+    return {"repository": REPOSITORY,
+            "schema_url": SCHEMA_DOC.get("$id", ""),
+            "method_notes": f"{REPOSITORY}/blob/main/docs/METHOD_NOTES.md",
+            "limitations": f"{REPOSITORY}/blob/main/docs/LIMITATIONS.md"}
+
+
 def _no_growth_meta(deriver, alpha, factor, edges) -> dict:
     """What this network says about the no-growth rule, taken from the DERIVATION and not from the settings.
 
@@ -1784,6 +1794,13 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
     meta = {"provisional": provisional, "statistics": statistics,
             "absence": {"rule": "absent when |log2 mean| < k * sd", "k": absence_threshold, "absent": absent},
             "no_growth": _no_growth_meta(deriver, no_growth_alpha, no_growth_factor, edges),
+            # Where to find the project, its schema and the two documents `provisional` tells a reader
+            # to read. `provisional` ends "(see docs/METHOD_NOTES.md and docs/LIMITATIONS.md in the
+            # grownet repository)" and the only URLs in a network were the study DOIs and the mGrowthDB
+            # API: the string `github` did not appear anywhere, and `schema` is a bare id rather than a
+            # URL. For a format its own schema calls "the neutral, openly citable interaction-network
+            # format", the artifact carried no pointer to itself (#218 item 1).
+            "project": _project_meta(),
             "settings_not_used": sorted(getattr(deriver, "ignores", ()) or ()),
             "filters": {"include_low_quality": include_low_quality, "include_absent": include_absent},
             "hidden": hidden, "merge": merge,
