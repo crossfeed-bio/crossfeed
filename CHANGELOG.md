@@ -37,6 +37,17 @@ content.
   as they always have.
 
 ### Fixed
+- **Two tests on this branch asserted less than their names claim**, found by a pass that attacked every
+  new test with the regression it claims to catch. The download-route test requested five **GET** routes
+  and never POST `/glv`, which is the fourth route its own docstring names, so removing that route's
+  `_gone` call left it green; and every request used an unknown job id, which always takes the "gone"
+  branch, so the **running** case, which is what `_gone`'s docstring is actually about, was never
+  exercised. Both are covered now, and reaching the running case needed the fixture to hand over the real
+  handler class, because `serve` builds a subclass with its own `state` and planting a job on
+  `gui._Handler` never reached the running server. The settings-mark test asserted a phrase that was
+  already true, because the test helper forces `include_absent` off its default: it held for a query with
+  no keyword at all and said nothing about the threshold. It isolates the threshold and asserts it is
+  **named**. Each was verified by applying the regression and watching it go red.
 - **Any non-ASCII character in `token=` closed the connection with no response at all** (#246).
   `secrets.compare_digest` raises `TypeError` on a `str` holding non-ASCII, the exception escaped
   `_authorized`, and the browser showed its own "site can't be reached" rather than the token page that

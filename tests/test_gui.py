@@ -260,6 +260,10 @@ def server():
     httpd = holder["server"]
     handler = httpd.RequestHandlerClass
     assert issubclass(handler, http.server.BaseHTTPRequestHandler)
+    # `serve` builds a SUBCLASS of `_Handler` with its own `state`, so a test that plants a job on
+    # `gui._Handler.state` never reaches the running server. The real class is here, so it is handed over
+    # as an attribute of the url string's tuple rather than by guessing (found reviewing #246's test).
+    gui._handler_under_test = handler
     yield f"http://127.0.0.1:{httpd.server_address[1]}", handler.token
     httpd.shutdown()
 
@@ -917,11 +921,39 @@ def test_the_rate_and_glv_routes_say_a_search_is_gone_rather_than_blaming_a_sett
     run again: it is running". `/download` and `/report.txt` already called it; these four are the slow
     routes, and a gLV run with rates is the search a reader least wants to start twice (#246)."""
     base, token = server
-    for path in ("/rates.csv", "/glv.zip", "/glv.json", "/download", "/report.txt"):
+    routes = ("/rates.csv", "/glv.zip", "/glv.json", "/download", "/report.txt")
+
+    # A PRUNED search: every route must say it is gone
+    for path in routes:
         with urllib.request.urlopen(f"{base}{path}?token={token}&job=deadbeef", timeout=10) as r:
             body = r.read().decode("utf-8", "replace")
         assert "no longer here" in body, f"{path} did not say the search is gone: {body[:120]}"
         assert "tick Report growth rates" not in body, f"{path} still blames a setting"
+
+    # POST /glv, the FOURTH route the docstring names and which the first version never requested, so
+    # removing its `_gone` call left this test green (found reviewing this change)
+    post = urllib.request.Request(f"{base}/glv?token={token}&job=deadbeef",
+                                  data=b"shape=zip", method="POST")
+    with urllib.request.urlopen(post, timeout=10) as r:
+        body = r.read().decode("utf-8", "replace")
+    assert "no longer here" in body, f"POST /glv did not say the search is gone: {body[:140]}"
+    assert "tick Report growth rates" not in body, "POST /glv still blames a setting"
+
+    # And a search STILL RUNNING, which is the case `_gone`'s docstring is about and which an unknown
+    # job id never reaches: it must not be told to run again, because it is running.
+    import grownet.gui as gui
+
+    jobs = gui._handler_under_test.state.setdefault("jobs", {})
+    jobs["busy01"] = {"status": "running"}
+    try:
+        for path in routes:
+            with urllib.request.urlopen(f"{base}{path}?token={token}&job=busy01", timeout=10) as r:
+                body = r.read().decode("utf-8", "replace")
+            assert "still running" in body, f"{path} did not say the search is running: {body[:140]}"
+            assert "run it again" not in body and "run the search again" not in body, (
+                f"{path} told a running search to run again")
+    finally:
+        jobs.pop("busy01", None)
 
 
 def test_a_setting_off_its_default_is_marked_on_a_result_that_has_arcs():
@@ -941,6 +973,13 @@ def test_a_setting_off_its_default_is_marked_on_a_result_that_has_arcs():
 
     result = _query(absence_threshold=3.0)
     assert result["network"].edges, "this needs a result WITH arcs, or it proves nothing"
-    assert "not at their default" in _result_section("tok", result)
+    # the threshold ALONE off its default, and the threshold NAMED. `_query` forces `include_absent`,
+    # which is itself off its default, so asserting the bare phrase held for `_query()` with no keyword
+    # at all and said nothing about the threshold (found reviewing this change).
+    result["settings"] = {**DEFAULTS, "absence_threshold": 3.0}
+    section = _result_section("tok", result)
+    assert "1 setting(s) are not at their default" in section
+    assert "Absence threshold k = 3.0" in section, section[section.find("setting(s)"):][:140]
+
     result["settings"] = dict(DEFAULTS)
     assert "not at their default" not in _result_section("tok", result)
