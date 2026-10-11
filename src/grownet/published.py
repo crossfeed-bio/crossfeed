@@ -56,6 +56,14 @@ def fresh(payload: dict, now: datetime.datetime | None = None, settings: dict | 
     """Whether a published file is this format, this schema, less than a day old, and derived the way the
     caller would derive it.
 
+    **`settings` defaults to None, which skips the derivation check**, and that is stated here because the
+    paragraph below makes that check the point of the function: measured on 2026-10-11, `fresh(p, now)`
+    was True on the same artifact and at the same moment that `fresh(p, now, DEFAULTS)` was False, and
+    `fetch()` with no argument returned the integrated artifact to a caller at the comparison (#235 item
+    4). No shipped path does that, because `gui.run_query` passes the settings, and the default stays
+    None so that a caller who genuinely has no settings (a reader inspecting an artifact) is not forced
+    to invent some. A caller that will DERIVE from it passes them.
+
     **The derivation is checked because the schema id cannot see it.** The artifact and a live run can
     carry the same format, the same schema and entirely different networks: on 2026-10-10 the default
     went back to the comparison of replicate sets and the published artifact was still the integrated

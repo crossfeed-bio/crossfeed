@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 from collections import Counter
 
-from .adapter import condensed, unread
+from .adapter import about_a_pair, condensed, unread
 from .attribution import render_attribution
 from .derive import CAPACITY_MAX_FALL
 from .mgrowthdb import MGrowthDBError, records_to_network
@@ -89,6 +90,53 @@ def _metric(a) -> str:
     return metric_name({"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window})
 
 
+def _bad_settings(a) -> str:
+    """Why a numeric setting cannot be used as given, or "": the same bounds the page applies.
+
+    The page coerces every one of these (`gui.parse_settings`) and the command line took them as typed,
+    so the two routes disagreed about what a legal setting is and a nonsense one reached
+    `meta.settings` as the provenance of the run: `--rate-window -3` gave 0 edges and recorded -3,
+    `--absence-threshold -1` gave 18 edges reported as "|log2 mean| < -1 * sd", `--no-growth-factor -2`
+    gave 10 edges over 3 nodes. Each exited 0 (#221 item 4). Refusing is the right half of "refuse or
+    announce": the page clamps because a form cannot stop and ask, and a command can.
+    """
+    if a.rate_window is not None and a.rate_window < 2:
+        return (f"--rate-window must hold at least 2 points, not {a.rate_window}; the growth rate is a "
+                "line fitted over a window of points")
+    for flag, value in (("--spike-factor", a.spike_factor), ("--capacity-max-fall", a.capacity_max_fall),
+                        ("--absence-threshold", a.absence_threshold),
+                        ("--no-growth-alpha", a.no_growth_alpha),
+                        ("--no-growth-factor", a.no_growth_factor)):
+        # the finite check comes first, because `nan < 0` is False and `inf < 0` is False, so neither
+        # is caught by the bound below. `float()` takes "nan", "inf" and "1e999", and the live path
+        # copies the parsed value into `meta.settings`, where `json.dumps` writes the bare tokens `NaN`
+        # and `Infinity`. RFC 8259 section 6 forbids both, so R refuses the whole network while
+        # grownet's own `validate` accepts it, because Python's json module reads the specials by
+        # default (#258, the command line's half of #195). `--max-adjusted-p` needs none of this:
+        # `_probability` already refuses anything outside `0 < value <= 1`, which both fail.
+        if value is not None and not math.isfinite(value):
+            return (f"{flag} must be a finite number, and was {value}; no threshold can be compared "
+                    "against it, and it reaches meta.settings as a token no strict JSON parser reads")
+        if value is not None and value < 0:
+            return f"{flag} cannot be negative, and was {value}"
+    if a.min_studies is not None and a.min_studies < 1:
+        return f"--min-studies must be at least 1, and was {a.min_studies}"
+    # a significance level, like --max-adjusted-p, which argparse already refuses above 1. This took any
+    # non-negative number, and 5 switches the no-growth rule off entirely (every set counts as grown, so
+    # no censored or obligate arc can exist) while `meta.no_growth` records "alpha": 5.0 as the level the
+    # test ran at. The help documents exactly one way to switch it off, which is 0 (#250).
+    if a.no_growth_alpha is not None and a.no_growth_alpha > 1:
+        return (f"--no-growth-alpha is a significance level, so at most 1, and was {a.no_growth_alpha}; "
+                "0 switches the no-growth check off, which is the documented way")
+    if a.min_studies and a.min_studies > 1 and not a.merge_arcs and not a.merge_genera:
+        # the one that silently empties a network: without merging, an arc carries no `studies` key, so
+        # `len(e.get("studies") or [e])` is 1 for every arc and the filter removes all of them (#220)
+        return (f"--min-studies {a.min_studies} counts the studies behind a MERGED arc, and nothing is "
+                "merged here, so every arc counts as 1 and the network would come out empty: add "
+                "--merge-arcs (or --merge-genera), or drop --min-studies")
+    return ""
+
+
 def _rate_flags(a) -> str:
     """Why the growth-rate options cannot be used as given, or "": checked before anything is derived, so
     a run never writes a network and then refuses to write the files beside it."""
@@ -112,7 +160,53 @@ def _rate_flags(a) -> str:
     return ""
 
 
-def _derive(a):
+def _settings_of(a) -> dict:
+    """Every setting of this run, built in ONE place for every derive path.
+
+    There were two of these, written by hand, and they disagreed: `derive <STUDY> --live` recorded 20
+    keys and the species path 23, the difference including `include_absent` and `steady_check`, which are
+    not n/a on either. And `steady_check` was wrong on BOTH, because the species path took it from
+    `DEFAULTS` rather than from the flag, so a run that scored a chemostat recorded that it had not
+    (#233). `report.py` promises "every setting with its value", so two reports of one study differing in
+    their arcs and identical in their settings block is the thing a reader cannot see past.
+    """
+    from .gui import DEFAULTS
+
+    return {**DEFAULTS,
+            "metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
+            "derivation": a.derivation, "deriver": getattr(a, "deriver", "") or "",
+            "merge_arcs": a.merge_arcs, "min_studies": a.min_studies, "merge_genera": a.merge_genera,
+            "spike_factor": a.spike_factor, "capacity_max_fall": a.capacity_max_fall,
+            "absence_threshold": a.absence_threshold,
+            "include_low_quality": a.include_low_quality, "correction": a.correction,
+            "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
+            "no_growth_alpha": a.no_growth_alpha, "no_growth_factor": a.no_growth_factor,
+            "max_adjusted_p": a.max_adjusted_p, "report_rates": a.report_rates,
+            "include_absent": getattr(a, "include_absent", False),
+            "steady_check": getattr(a, "steady_check", False),
+            # these two were left to come from DEFAULTS, which turned a setting the report did not
+            # mention into one it stated the OPPOSITE of: `derive <STUDY> --exclude-studies <that study>
+            # --all-partners` recorded "Exclude these studies: none" and "Only interactions between the
+            # species entered: on", having searched the study and kept every partner. Missing was better
+            # than wrong, and `report.py` promises every setting with its value (found reviewing #242).
+            "exclude_studies": getattr(a, "exclude_studies", "") or "",
+            "only_entered": not getattr(a, "all_partners", False),
+            # the page encodes the second box one selector per LINE, and `selection.parse` splits on
+            # newlines, commas and semicolons: space is the one separator it does not split on. The
+            # single-study path recorded `--conditions "WC" "mucin"` space-joined, so the record parsed
+            # back as one medium named "WC mucin", which matches nothing, while the run used the list.
+            "conditions": "\n".join(getattr(a, "conditions", None) or [])}
+
+
+def _resolve(a, announce=True):
+    """Settle what the run will actually use, before anything is checked or derived.
+
+    gLV mode sets four settings and `--derivation` carries no default of its own, so the parsed arguments
+    are NOT what runs: `_rate_flags` tests `a.derivation == "replicate"` and would pass anything if it
+    saw the unresolved `None`. Pulled out of `_derive` so that a test of the help page's own commands
+    checks what a run would check rather than a copy of this logic, which is how a fourth broken example
+    reached the page (#234).
+    """
     if a.glv_mode:
         # the button sets them, and says so, rather than leaving a reader to remember them (#113). The
         # the metric came with the coefficients of #119: L is the log2 ratio of a growth rate. The rate
@@ -133,19 +227,37 @@ def _derive(a):
             a.derivation = "integrated"
         told = ("and the integrated form" if chosen is None else
                 f"and the {chosen} derivation, which you asked for and gLV mode does not override")
-        print("gLV mode: growth rates on, drop-out communities off, the comparison on the growth rate, "
-              f"{told}", file=sys.stderr)
+        if announce:
+            print("gLV mode: growth rates on, drop-out communities off, the comparison on the growth "
+                  f"rate, {told}", file=sys.stderr)
     if a.derivation is None:
         # the page and the command line must agree on what runs when nothing is chosen, so this reads
         # the page's own defaults rather than repeating the value
         from .gui import DEFAULTS
         a.derivation = DEFAULTS["derivation"]
-    problem = _rate_flags(a)
+    return a
+
+
+def _derive(a):
+    _resolve(a)
+    problem = _bad_settings(a) or _rate_flags(a)
     if problem:
         print(problem, file=sys.stderr)
         return 2
     if a.species or a.all_studies:
         return _derive_species(a)
+    # Flags that only the search path can act on. The help says they apply "with --species or --all" and
+    # nothing enforced it, so `derive <STUDY> --exclude-studies <that study>` searched it and the network
+    # held it. Recording the flag as asked is not enough on its own: the report would then say the
+    # study was excluded while the arcs come from it, so the run is refused instead (found reviewing
+    # #242, which made the record truthful and left the contradiction).
+    cannot_act = [flag for flag, on in (("--exclude-studies", a.exclude_studies),
+                                        ("--all-partners", a.all_partners)) if on]
+    if cannot_act:
+        print(f"{cannot_act[0]} narrows a search over several studies, and this run derives the one "
+              f"study {a.study}: it would be recorded and not applied. Use --species or --all, or drop "
+              f"{cannot_act[0]}.", file=sys.stderr)
+        return 2
     if not a.study:
         print("derive needs a study id, or --species with names (see grownet derive --help)", file=sys.stderr)
         return 2
@@ -182,19 +294,7 @@ def _derive(a):
                                          include_absent=a.include_absent,
                                          # the derivation says what it tests (#142 item 5)
                                          deriver=deriver)
-            extra["settings"] = {"metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
-                                 "derivation": a.derivation,
-                                 "merge_arcs": a.merge_arcs, "min_studies": a.min_studies,
-                                 "merge_genera": a.merge_genera,
-                                 "spike_factor": a.spike_factor,
-                                 "capacity_max_fall": a.capacity_max_fall,
-                                 "absence_threshold": a.absence_threshold,
-                                 "include_low_quality": a.include_low_quality, "correction": a.correction,
-                                 "include_dropout": not a.no_dropout, "include_non_batch": a.include_non_batch,
-                                 "no_growth_alpha": a.no_growth_alpha, "no_growth_factor": a.no_growth_factor,
-                                 "max_adjusted_p": a.max_adjusted_p, "report_rates": a.report_rates,
-                                 "conditions": " ".join(a.conditions),
-                                 "deriver": a.deriver or ""}
+            extra["settings"] = _settings_of(a)
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
             return 1
@@ -224,32 +324,34 @@ def _derive(a):
     return _emit(a, net, skipped, extra, a.study, result)
 
 
-def _derive_species(a):
-    """What the local page does, from the command line: names to studies to one network (#78)."""
+def _species_flags(a) -> str:
+    """Why a search over several studies cannot be run as given, or "".
+
+    Pulled out of `_derive_species` so that one function holds every pre-flight check of this path and a
+    test of the help page's own commands reaches all of them. The test applied `_rate_flags` alone, so
+    two of the three guards were never consulted and an example printed on the page could exit 2 with
+    the suite green (found reviewing this branch, which added that test).
+    """
     flag = "--all" if a.all_studies else "--species"
     if a.all_studies and a.species:
-        print("--all derives every study; leave out --species", file=sys.stderr)
-        return 2
+        return "--all derives every study; leave out --species"
     if not a.live:
-        print(f"{flag} searches mGrowthDB, so it needs --live", file=sys.stderr)
-        return 2
+        return f"{flag} searches mGrowthDB, so it needs --live"
     if a.deriver:
-        print(f"{flag} uses the default derivation; --deriver applies to one study", file=sys.stderr)
+        return f"{flag} uses the default derivation; --deriver applies to one study"
+    return ""
+
+
+def _derive_species(a):
+    """What the local page does, from the command line: names to studies to one network (#78)."""
+    problem = _species_flags(a)
+    if problem:
+        print(problem, file=sys.stderr)
         return 2
-    from .gui import DEFAULTS, run_query
+    from .gui import run_query
     from .mgrowthdb import MGrowthDBClient
-    settings = {**DEFAULTS, "metric": a.metric, "rate_method": a.rate_method, "rate_window": a.rate_window,
-                "spike_factor": a.spike_factor, "capacity_max_fall": a.capacity_max_fall,
-                "absence_threshold": a.absence_threshold, "include_low_quality": a.include_low_quality,
-                "include_absent": a.include_absent,
-                "correction": a.correction, "include_dropout": not a.no_dropout,
-                "include_non_batch": a.include_non_batch,
-                "conditions": "\n".join([*a.conditions, *(a.study or "").split(",")]).strip(),
-                "only_entered": not a.all_partners, "exclude_studies": a.exclude_studies,
-                "merge_arcs": a.merge_arcs, "min_studies": a.min_studies, "merge_genera": a.merge_genera,
-                "report_rates": a.report_rates, "derivation": a.derivation,
-                "no_growth_alpha": a.no_growth_alpha,
-                "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p}
+    settings = {**_settings_of(a),
+                "conditions": "\n".join([*a.conditions, *(a.study or "").split(",")]).strip()}
     client = MGrowthDBClient(**({"cache_dir": None} if a.no_cache else {}))
     try:
         result = run_query(client, a.species or [], settings, all_studies=a.all_studies,
@@ -278,8 +380,23 @@ def _derive_species(a):
 
         from .gui import _empty_reason
         print("\nno interactions: " + html.unescape(_empty_reason(result)), file=sys.stderr)
-    label = "all of mGrowthDB" if a.all_studies else " and ".join(a.species)
-    return _emit(a, net, result["skipped"], extra, label, result)
+    # "all of mGrowthDB" only when nothing narrowed it: the second box and Exclude these studies both
+    # narrow All, which is deliberate, and saying otherwise is the same false claim the page carried
+    narrowing = [x for x in (*a.conditions, *(a.exclude_studies or "").split(",")) if x and x.strip()]
+    label = ("all of mGrowthDB" if not narrowing else "All, narrowed to " + ", ".join(
+        x.strip() for x in narrowing)) if a.all_studies else " and ".join(a.species)
+    code = _emit(a, net, result["skipped"], extra, label, result)
+    # An incomplete run must not exit 0, and the two derive paths disagreed about the same failure:
+    # `derive <a bad id> --live` exits 1 while the species and All paths collected the identical 404
+    # into `errors` and exited 0, so a script could not tell a complete run from an incomplete one
+    # (#247). This is safe to key on only because `errors` is fetch failures and nothing else now:
+    # the advisory messages travel in `notes`, which is the split #242 makes.
+    if code == 0 and result.get("errors"):
+        print(f"\nthis run is INCOMPLETE: {len(result['errors'])} study or curve could not be read from "
+              "mGrowthDB (the messages are above). The network holds what was readable; run it again when "
+              "mGrowthDB is reachable if you need all of it.", file=sys.stderr)
+        return 1
+    return code
 
 
 def _rates_of(a, client, study_ids, net, skipped, records=None):
@@ -342,11 +459,20 @@ def _emit(a, net, skipped, extra, label, result):
         print(f"wrote the report to {a.report}", file=sys.stderr)
 
     organism_rates = result.get("rates") or {}
-    if (a.rates or a.glv) and not organism_rates:
-        print("no growth rate could be computed for any organism of this network; the report says why "
-              "each one has none", file=sys.stderr)
-        return 1
-    if a.rates:
+    # This used to `return 1` here, before the skipped-pair list, the absence note, the low-quality note,
+    # the sources block and the "NO interactions were derived" explanation, and it pointed at a report
+    # that was only written if --report was given: asking for --rates printed 7 lines of stderr and
+    # asking for less printed 74, including 35 copies of the exact cause (#221 item 3). The diagnosis is
+    # the thing the person needs, so it is printed and the exit code is carried to the end.
+    no_rates = bool(a.rates or a.glv or a.to_r) and not organism_rates
+    if no_rates:
+        print("no growth rate could be computed for any organism of this network, so "
+              + ", ".join(f for f, on in (("--rates", a.rates), ("--glv", a.glv), ("--to-r", a.to_r)) if on)
+              + " wrote nothing"
+              + (f"; {a.report} says why each organism has none" if a.report
+                 else "; the reasons are below, and --report writes them to a file"),
+              file=sys.stderr)
+    if a.rates and organism_rates:
         from .matrix import rates_csv
         with open(a.rates, "w", encoding="utf-8") as f:
             f.write(rates_csv(organism_rates, net))
@@ -372,7 +498,7 @@ def _emit(a, net, skipped, extra, label, result):
                 from .report import report_text
                 with open(a.report, "w", encoding="utf-8") as f:
                     f.write(report_text(result))
-    if a.glv:
+    if a.glv and organism_rates:
         from . import steady as steady_module
         from .matrix import glv_package
         extra_files = {"steady_state_check.txt": steady_module.as_text(checked)} if a.steady_check else None
@@ -381,7 +507,7 @@ def _emit(a, net, skipped, extra, label, result):
         print(f"wrote the gLV parameters to {a.glv}: the interaction matrix, the growth rates and a README",
               file=sys.stderr)
 
-    if a.to_r:
+    if a.to_r and organism_rates:
         from .matrix import glv_payload
         from .rbridge import DEFAULT_PORT, RError, send
         try:
@@ -408,8 +534,13 @@ def _emit(a, net, skipped, extra, label, result):
     print(render_attribution(net), file=sys.stderr)
     skipped = condensed(skipped)
     if skipped:
-        print(f"\nskipped {len(skipped)} pair(s) the data did not cleanly support:", file=sys.stderr)
-        for label, reason in skipped:
+        pairs = [s for s in skipped if about_a_pair(*s)]
+        notes = [s for s in skipped if not about_a_pair(*s)]
+        # the count used to include the notes about the input, so it answered a question nobody asked
+        # and not "how many pairs gave nothing" (#232)
+        print(f"\nskipped {len(pairs)} pair(s) the data did not cleanly support"
+              + (f", and {len(notes)} note(s) on the data read" if notes else "") + ":", file=sys.stderr)
+        for label, reason in pairs + notes:
             print(f"  - {label}: {reason}", file=sys.stderr)
     if extra:
         if extra["absence"]["absent"]:
@@ -425,12 +556,24 @@ def _emit(a, net, skipped, extra, label, result):
     if not net.edges and "reasons" not in result:        # a species search has said why already
         top = Counter(r.split(";")[0].strip() for _, r in skipped).most_common(1)
         why = f" Most common reason: {top[0][0]}." if top else ""
+        # and the settings the reader changed that can empty a network on their own, which the page says
+        # and the command line did not: `--spike-factor 1` is a legal value that empties it, so no
+        # refusal applies, and the "most common reason" above is a line that is also present at the
+        # defaults where the same study yields an arc. So the setting that did it was the one thing the
+        # message did not mention (#250, the command-line half of #220).
+        import html as _html
+
+        from .gui import _settings_to_try
+        try_these = _html.unescape(_settings_to_try(_settings_of(a)))
+        for tag in ("<strong>", "</strong>"):
+            try_these = try_these.replace(tag, "")
+        why += try_these
         print(f"\nNO interactions were derived for {label}: the network is empty.{why}\n"
               "grownet derives interactions from pairwise (two-member) co-cultures and from drop-out "
               "designs (a community plus the same community without one member); other larger communities "
               "yield nothing until a method suited to their design is chosen (see docs/METHOD_NOTES.md).",
               file=sys.stderr)
-    return 0
+    return 1 if no_rates else 0
 
 
 def _probability(text: str) -> float:
@@ -528,7 +671,8 @@ def build_parser() -> argparse.ArgumentParser:
                            "--live; the study argument then limits it to those studies)")
     what.add_argument("--no-published", action="store_true",
                       help="with --all, derive live even when the network derived once a day in the grownet "
-                           "repository is less than a day old (it is used only with the default settings)")
+                           "repository is less than a day old, was derived by the same derivation this run would "
+                           "use, and the settings are the defaults; otherwise it derives live")
     what.add_argument("--no-cache", action="store_true",
                       help="read everything from mGrowthDB again, instead of reusing what an earlier run "
                            "read for a study whose uploadedAt has not changed. The kept responses live in "

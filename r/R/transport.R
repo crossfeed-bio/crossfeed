@@ -113,14 +113,16 @@ grownet_listen <- function(port = 8793, timeout = 300, quiet = FALSE) {
 #' the page runs on.
 #'
 #' @param from The gLV address of a running grownet page, for example
-#'   `"http://127.0.0.1:8791/glv.json?token=..."`. The path of a saved payload works too.
+#'   `"http://127.0.0.1:8791/glv.json?token=...&job=..."`, which the page prints under the gLV
+#'   parameters control: copy it from there rather than typing it, because the page prints this address with its own `&job=` and that is the one to paste: without a job the server answers whichever search was looked at last, which with two tabs open is a different system's parameters (#251).
+#'   The path of a saved payload works too.
 #' @param timeout Seconds to wait for the page.
 #' @param quiet Set to `TRUE` to keep the function from printing what arrived.
 #' @return The gLV parameters, an object of class `grownet_glv`.
 #' @seealso [grownet_listen()], which receives them from the page's Send to R button.
 #' @examples
 #' \dontrun{
-#' glv <- grownet_glv("http://127.0.0.1:8791/glv.json?token=PASTE_THE_TOKEN")
+#' glv <- grownet_glv("http://127.0.0.1:8791/glv.json?token=PASTE_THE_TOKEN&job=PASTE_THE_JOB")
 #' }
 #' @export
 grownet_glv <- function(from, timeout = 60, quiet = FALSE) {

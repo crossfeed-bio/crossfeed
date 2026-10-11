@@ -378,3 +378,62 @@ def test_the_help_states_what_a_glv_model_assumes():
     # and it is in the table of contents, so a reader meets it before the walkthrough
     assert 'href="#glv-assumptions"' in page
     assert page.index('href="#glv-assumptions"') < page.index('href="#glv-walkthrough"')
+
+
+def test_every_command_the_help_page_prints_is_one_the_parser_accepts():
+    """A help-page example that exits 2 has been fixed three times, in the CLI epilog, in the README and
+    in the gLV walkthrough, and a fourth copy survived all three because no test ran what the help page
+    prints: `test_help.py` asserted that the substrings `--format matrix`, `--report-rates` and `--glv`
+    appear (#234). The surviving one was
+    `derive SMGDB00000004 --live --report-rates --rates ... --glv ...`, which under the comparison needs
+    `--metric growth_rate` and exits 2 with that message.
+
+    This parses every command the page prints, which catches a flag combination the parser refuses
+    without touching the network, and it reads the commands out of the rendered page rather than a list
+    here, so the next example is covered when it is written.
+    """
+    import html
+    import re
+    import shlex
+
+    from grownet.__main__ import _rate_flags, _resolve, _species_flags, build_parser
+    from grownet.gui import DEFAULTS, EXAMPLE
+    from grownet.help import COMMAND, render_help
+
+    page = render_help("tok", DEFAULTS, EXAMPLE)
+    commands = []
+    # <code> as well as <pre>: the page prints four more commands in inline <code>, among them the gLV
+    # walkthrough, which is one of the three places #234 says this bug was already fixed once. Removing
+    # `--live` from that inline command left the whole suite green while the printed command exited 2
+    # (found reviewing this change).
+    for block in re.findall(r"<(?:pre|code)>(.*?)</(?:pre|code)>", page, re.S):
+        for line in html.unescape(block).splitlines():
+            line = line.strip()
+            if line.startswith(COMMAND + " "):
+                commands.append(line)
+    # the floor is the real count, so losing a block is a failure rather than a quieter test. It was 8
+    # while the <pre>-only extraction found 9, which let four commands go unchecked without the floor
+    # noticing.
+    assert len(commands) >= 12, f"the page printed {len(commands)} commands, so this checked less than before"
+
+    parser = build_parser()
+    for command in commands:
+        argv = shlex.split(command)[1:]                 # drop the program name
+        if argv and argv[0] in ("gui", "validate", "schema", "style"):
+            continue                                   # no settings to check on these
+        if "--help" in argv or "-h" in argv:
+            continue                                   # argparse exits 0 and prints; nothing to check
+        # the parsed arguments are not what runs: gLV mode sets four settings and `--derivation`
+        # carries no default, so `_resolve` is what a run applies before any check. Calling the guard on
+        # unresolved arguments passes everything, because it tests `a.derivation == "replicate"`; this
+        # test found that on itself, which is why it uses the run's own resolver rather than a copy.
+        args = _resolve(parser.parse_args(argv), announce=False)
+        # EVERY pre-flight guard the run applies, not just the rate flags. `_derive` has three and the
+        # first version of this called one, so a printed example could exit 2 with the suite green:
+        # adding `--species` to the `--all` line, the most ordinary editorial slip for it, was not
+        # caught (found reviewing this change).
+        problems = [_rate_flags(args)]
+        if args.species or args.all_studies:
+            problems.append(_species_flags(args))
+        for problem in problems:
+            assert problem == "", f"{command}\n  -> {problem}"

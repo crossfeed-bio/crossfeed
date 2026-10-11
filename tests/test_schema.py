@@ -316,6 +316,16 @@ def test_a_new_record_field_cannot_ship_under_an_unchanged_format_id():
     assert check_format_fields([]) == []
     manifest = json.loads((root / "schema" / "format_fields.json").read_text(encoding="utf-8"))
     assert manifest["current"] == SCHEMA
+    # EVERY id the package still reads has an entry, not just the current one. This file calls itself the
+    # record of what each released format carried, and the gate only reads the entry for the current
+    # SCHEMA, so nothing held the others in place: the two ids releases actually shipped were missing
+    # while `/v2`, which no release carried, was present (#249). Deleting the `/v0` and `/v1` entries
+    # again left both the suite and the gate green (found reviewing round 10).
+    from grownet.model import KNOWN_SCHEMAS
+    assert set(manifest["formats"]) == set(KNOWN_SCHEMAS), (
+        "format_fields.json must hold one entry per id the reader accepts: "
+        f"missing {sorted(set(KNOWN_SCHEMAS) - set(manifest['formats']))}, "
+        f"extra {sorted(set(manifest['formats']) - set(KNOWN_SCHEMAS))}")
     for kind, cls in (("edge", Edge), ("node", Node), ("study", Study)):
         assert sorted(manifest["formats"][SCHEMA][kind]) == sorted(f.name for f in fields(cls)), kind
 

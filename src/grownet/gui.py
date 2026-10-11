@@ -28,7 +28,7 @@ from . import __version__, brand, integrated, interaction, matrix, rates, rbridg
 from . import help as help_page
 from . import published as daily
 from . import selection as selecting
-from .adapter import condensed, unread
+from .adapter import about_a_pair, condensed, unread
 from .attribution import studies_with_edges
 from .cytoscape import CytoscapeError, send, style_xml
 from .derive import (
@@ -213,8 +213,15 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
                           f"{d}</option>" for d in DERIVATIONS)
     rate_methods = "".join(f"<option value=\"{m}\"{' selected' if s['rate_method'] == m else ''}>{m}</option>"
                            for m in rates.METHODS)
-    return f"""<details>
-<summary>Advanced settings</summary>
+    # Open, with a count, when anything is not at its default. It was always collapsed and the result
+    # section said nothing about a changed setting unless the network came out EMPTY, because
+    # `_settings_to_try` runs only from `_empty_reason`: so the one case where numbers leave the page
+    # under a changed threshold was the case the page did not mark (#250).
+    changed = [k for k, v in s.items() if k in DEFAULTS and v != DEFAULTS[k]]
+    head = ("<details>\n<summary>Advanced settings</summary>" if not changed else
+            f"<details open>\n<summary>Advanced settings: {len(changed)} not at "
+            f"{'its' if len(changed) == 1 else 'their'} default</summary>")
+    return f"""{head}
 <div class="row"><label>Growth property
   <select name="metric">{options}</select></label>
   <span class="muted">the growth property compared: auc, the area under the curve (default); max, the maximal
@@ -351,7 +358,10 @@ derived from mGrowthDB growth data on this machine; nothing is uploaded.</p>
 <label class="field" for="conditions">Media, experiments or studies (optional)</label>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in selecting.EXAMPLES)}</p>
 <textarea id="conditions" name="conditions" rows="5">{_esc(conditions)}</textarea>
-<p class="hint">One per line. A medium is matched as text, so "wilkins" finds every spelling of
+<p class="hint"><strong>All reads this box.</strong> A study or medium left here narrows All to it, which
+is deliberate, so clear it to derive the whole of mGrowthDB; the gLV example button fills it and leaves it
+filled (#193).
+One per line. A medium is matched as text, so "wilkins" finds every spelling of
 Wilkins-Chalgren <em>and</em> every variant of it: a medium with a sugar added or a carbon source left out
 is another environment, so those stay apart and the report names every medium the search read. An id
 (SMGDB..., EMGDB...) picks that study or experiment, which is how to read one medium alone. Empty means
@@ -364,7 +374,7 @@ every medium.</p>
 <button type="submit" name="glv_example" value="1">gLV example</button>
 <button type="submit" name="glv_mode" value="1" class="switch{glv_on}" aria-pressed="{glv_pressed}"
 ><span class="track"><span class="knob"></span></span>gLV mode</button>
-<span class="muted">All derives every study, ignoring the boxes (half a minute or so). gLV example fills
+<span class="muted">All derives every study, ignoring the species box (half a minute). gLV example fills
 the boxes and settings for a package that simulates, and runs it. gLV mode sets the four settings a
 package needs, the derivation among them; press it again to switch back.</span></div>
 {_settings_block(settings or {}, token, job)}
@@ -561,7 +571,13 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
             "the legend's style. The report holds every setting and every reason a pair gave no edge. The "
             f"adjacency matrix holds one cell per ordered pair, so this search's {count['arcs']} arc(s) that "
             f"reach it make {count['cells']} cell(s) over {count['organisms']} organism(s): arcs of one pair "
-            f"from different conditions or studies merge by their median.{na_hint}</p>")
+            f"from different conditions or studies merge by their median."
+            # a within-genus arc has no cell of its own, because the diagonal is written there; saying so
+            # is what stops the two counts disagreeing silently (#248)
+            + (f" {count['within_one_organism']} arc(s) are from one organism to itself, which "
+               "--merge-genera produces, and have no cell in this matrix: the diagonal is written there."
+               if count.get("within_one_organism") else "")
+            + f"{na_hint}</p>")
     rate_hint = ("<p class=\"hint\">The growth rates are each organism's maximum specific growth rate in "
                  "monoculture, the median over the replicates and studies that have one, with the lag and the "
                  "carrying capacity beside each. The gLV package holds fitted per-capita coefficients, one "
@@ -644,9 +660,49 @@ def _empty_reason(result: dict) -> str:
     unmatched = len([r for _, r in result.get("skipped", ()) if "no experiment of this study matches" in r])
     if s.get("conditions") and unmatched and "second box" not in reason:
         studies = len(result.get("studies", ()))
-        return (f"The second box left out {unmatched} of the {studies} study(ies) searched: no experiment "
-                f"there matches {_esc(s['conditions'])}. " + reason)
-    return reason
+        reason = (f"The second box left out {unmatched} of the {studies} study(ies) searched: no experiment "
+                  f"there matches {_esc(s['conditions'])}. " + reason)
+    return reason + _settings_to_try(s)
+
+
+# the controls that can take a network to zero on their own, in the order worth checking, with what to
+# try. Several of these did it in silence while the page blamed mGrowthDB's replicate structure and never
+# named the setting: `min_studies 2` removes every arc when nothing is merged, `spike_factor 1` empties
+# the network although the help warns only about 0, and `rate_window 1` empties it with a perfectly
+# worded reason that reached the per-pair skip list and was then hidden (#220).
+_EMPTYING = (
+    ("min_studies", "Arcs from at least N studies", "it counts the studies behind a MERGED arc, so with "
+     "nothing merged every arc counts as 1 and all of them are removed: tick Merge arcs, or set it to 1"),
+    ("spike_factor", "Spike limit", "a low limit drops replicates as spiked, and 1 drops almost all of "
+     "them: raise it, or set it to 0 to switch the check off"),
+    ("rate_window", "Growth rate window", "the rate is a line fitted over this many points, so a small "
+     "window gives no rate and the pairs that needed one are left out"),
+    ("absence_threshold", "Absence threshold", "a high threshold calls every arc absent: lower it, or "
+     "tick Include arcs below the absence threshold to see them"),
+    ("max_adjusted_p", "Maximum adjusted p", "a strict q-value filter can remove every arc: the hidden "
+     "count above says how many it took"),
+    ("no_growth_factor", "No-growth rise factor", "a high factor calls every set no-growth"),
+)
+
+
+def _settings_to_try(s: dict) -> str:
+    """The settings that are not at their defaults, named, when a search came back empty.
+
+    The page's own notes blamed the species filter, then said "the species do not affect each other by
+    that rule", then blamed mGrowthDB's replicate structure, while a control the reader had changed was
+    discarding measured arcs and was never named (#220). This does not guess which one did it; it says
+    which ones could and what to try, which is what a person needs to get unstuck.
+    """
+    changed = []
+    for key, label, hint in _EMPTYING:
+        if key not in s or key not in DEFAULTS:
+            continue
+        if s[key] != DEFAULTS[key]:
+            changed.append(f"{label} is {s[key]}, not {DEFAULTS[key]}: {hint}")
+    if not changed:
+        return ""
+    return (" <strong>Settings you changed that can empty a network on their own:</strong> "
+            + "; ".join(changed) + ".")
 
 
 def _empty_reason_core(result: dict) -> str:
@@ -657,6 +713,11 @@ def _empty_reason_core(result: dict) -> str:
     if not result["resolved"] and not result.get("all"):
         return "None of the entries could be used; each one says why above."
     if result.get("errors"):
+        # FETCH failures only. `errors` used to hold nothing else, and then advisory messages were added
+        # to it (a mistyped id in Exclude these studies, a steady-state check asked for without growth
+        # rates), so an empty network caused by the reader's own setting was reported as "mGrowthDB could
+        # not be read" in a run where mGrowthDB answered every request: the lead sentence did the exact
+        # thing #220 and #243 exist to stop. Advisory messages travel in `notes` now.
         return "mGrowthDB could not be read (see the messages above); try again when it is reachable."
     if not result["studies"]:
         if result.get("excluded"):
@@ -721,8 +782,38 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
     if result.get("all"):
         daily_note = (f" (the network derived once a day, on {_esc(result['published'][:16].replace('T', ' '))}; "
                       "any other setting derives it live)" if result.get("published") else "")
-        species_heading, resolved = "<h2>All of mGrowthDB</h2>", (
-            f"<li>every study, with every partner: {len(result['studies'])} studies{daily_note}</li>")
+        # "All of mGrowthDB" is only true when the second box is empty. All keeps reading that box and
+        # Exclude these studies, which is deliberate (see run_query's docstring, Karoline 2026-09-28), so
+        # the heading has to say which it was: the gLV example button fills that box and leaves it filled,
+        # so pressing gLV example and then All gave a two-arc network of one study under a heading saying
+        # the whole database (#193).
+        # BOTH controls, which this comment named and the first version read only the first of: a study
+        # left in Exclude these studies narrows All just as the second box does, and the page said
+        # "All of mGrowthDB" over "every study, with every partner: 0 studies" (found reviewing #242).
+        settings_here = result.get("settings", {})
+        narrowed = [line for line in (settings_here.get("conditions") or "").splitlines() if line.strip()]
+        excluded_ids = [x.strip() for x in (settings_here.get("exclude_studies") or "").split(",")
+                        if x.strip()]
+        if narrowed or excluded_ids:
+            which = ("the second box" if narrowed and not excluded_ids
+                     else "Exclude these studies" if excluded_ids and not narrowed
+                     else "the second box and Exclude these studies")
+            species_heading = f"<h2>All, narrowed by {which}</h2>"
+            parts = []
+            if narrowed:
+                shown_filter = ", ".join(_esc(x.strip()) for x in narrowed[:3])
+                more = f" and {len(narrowed) - 3} more" if len(narrowed) > 3 else ""
+                parts.append(f"matching {shown_filter}{more}")
+            if excluded_ids:
+                parts.append("excluding " + ", ".join(_esc(x) for x in excluded_ids[:3])
+                             + (f" and {len(excluded_ids) - 3} more" if len(excluded_ids) > 3 else ""))
+            resolved = (f"<li>every study {' and '.join(parts)}, with every partner: "
+                        f"{len(result['studies'])} studies{daily_note}</li>"
+                        "<li class=\"muted\">All ignores the species box, not these. Clear them to derive "
+                        "the whole of mGrowthDB.</li>")
+        else:
+            species_heading, resolved = "<h2>All of mGrowthDB</h2>", (
+                f"<li>every study, with every partner: {len(result['studies'])} studies{daily_note}</li>")
     unresolved = _unresolved_list(result)
     net = result["network"]
     mismatch = any("MISMATCH" in (e.method or "") for e in net.edges)
@@ -753,10 +844,37 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
     skipped = ""
     skips = condensed(result["skipped"])
     if skips:
-        items = "".join(f"<li>{_esc(label)}: {_esc(reason)}</li>" for label, reason in skips[:50])
-        skipped = (f"<details><summary>{len(skips)} pair(s) the data did not support</summary>"
-                   f"<ul>{items}</ul></details>")
-    errors = "".join(f"<p class=\"note\">{_esc(e)}</p>" for e in result["errors"])
+        # two kinds, and counting them together said a condition was a pair that gave no edge while an
+        # arc derived from that condition was reported above it (#232). The cut at 50 was also silent:
+        # the summary printed the full count and the list showed 50 of it.
+        groups = [("pair(s) the data did not support",
+                   [s for s in skips if about_a_pair(*s)]),
+                  ("note(s) on the data read, which are not pairs",
+                   [s for s in skips if not about_a_pair(*s)])]
+        blocks = []
+        for heading, entries in groups:
+            if not entries:
+                continue
+            items = "".join(f"<li>{_esc(label)}: {_esc(reason)}</li>" for label, reason in entries[:50])
+            more = (f"<li class=\"muted\">showing 50 of {len(entries)}; the report below holds them all"
+                    "</li>" if len(entries) > 50 else "")
+            blocks.append(f"<details><summary>{len(entries)} {heading}</summary>"
+                          f"<ul>{items}{more}</ul></details>")
+        skipped = "".join(blocks)
+    errors = "".join(f"<p class=\"note\">{_esc(e)}</p>"
+                     for e in [*result["errors"], *result.get("notes", ())])
+    # and one line naming the settings that are not at their defaults, on EVERY result and not only an
+    # empty one: a run that returns arcs under a changed threshold is the case a reader most needs told,
+    # and it was the one case the page did not mark (#250)
+    from .help import SETTINGS as help_settings
+    s_here = result.get("settings", {})
+    off_default = [k for k, v in s_here.items() if k in DEFAULTS and v != DEFAULTS[k]]
+    if off_default:
+        named = ", ".join(f"{_esc(help_settings[k][0] if k in help_settings else k)} = {_esc(str(s_here[k]))}"
+                          for k in sorted(off_default)[:6])
+        more = f", and {len(off_default) - 6} more" if len(off_default) > 6 else ""
+        errors += (f"<p class=\"muted\">{len(off_default)} setting(s) are not at their default: "
+                   f"{named}{more}. Advanced settings is open below.</p>")
     return (f"<section class=\"result\" id=\"result\">{note}{species_heading}<ul>{resolved}</ul>{unresolved}"
             f"<p class=\"muted\">Studies searched: {_esc(studies)}</p>{errors}{table}"
             f"{_absent_section(result, result.get('absence', {}))}{_sources(net)}{skipped}</section>")
@@ -936,15 +1054,17 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
               narrow: bool = True, all_studies: bool = False, published: bool = True) -> dict:
     """Species names or taxon ids to an interaction network, through mGrowthDB and the existing derivation.
 
-    Returns {"resolved", "unresolved", "taxon_ids", "studies", "network", "skipped", "errors"}. Failures
-    that concern one study are collected in "errors" instead of raising, so a single bad study does not
+    Returns {"resolved", "unresolved", "taxon_ids", "studies", "network", "skipped", "errors", "notes"}.
+    Failures that concern one study are collected in "errors" instead of raising, so a single bad study
+    does not
     lose the rest. `progress(done, total, message)`, when given, is told where the search is: `total` is
     None until the studies are known (#75).
 
     `all_studies` is the page's All button (Karoline, 2026-09-28): the entries are ignored and every study
     mGrowthDB holds is derived, with every partner kept, still under the second box (media, experiments or
     studies) and Exclude these studies. With the default settings it is read from the network derived once a
-    day in the grownet repository when that is less than a day old (`grownet.published`, #96); `published`
+    day in the grownet repository when that is less than a day old and was derived by the same derivation
+    these settings ask for (`grownet.published`, #96); `published`
     False, or any other setting, derives it live.
     """
     def say(done, total, message):
@@ -965,7 +1085,11 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # show each strain by its current name, the one its most recent study uses (#24)
     resolved["resolved"] = [(entry, {t: current.get(t, n) for t, n in matches.items()})
                             for entry, matches in resolved["resolved"]]
-    errors, skipped, records = [], [], []
+    # `errors` is FETCH failures and nothing else, because `_empty_reason_core` reads it as "mGrowthDB
+    # could not be read". `notes` is everything advisory: a setting that could not act, a check that was
+    # asked for and not run. Putting the second kind in the first made an empty network caused by the
+    # reader's own setting read as a database failure, in a run where every request succeeded.
+    errors, notes, skipped, records = [], [], [], []
 
     # the second box: study ids in it narrow the search as "Only these studies" used to, media and
     # experiment ids are matched per experiment inside the derivation (#113)
@@ -987,6 +1111,18 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     excluded = {sid.strip().upper() for sid in s["exclude_studies"].split(",") if sid.strip()}
     left_out = [sid for sid in studies if sid.upper() in excluded]
     studies = [sid for sid in studies if sid.upper() not in excluded]
+    # an id that matched nothing was dropped in silence and recorded as applied, so a mistyped id
+    # ("SMGDB0000002", one digit short) left the study in the search while the report said it was
+    # excluded. The species box answers an unusable entry; this one said nothing (#221 item 2).
+    searched = {sid.upper() for sid in [*studies, *left_out]}
+    unused = sorted(sid for sid in excluded if sid not in searched)
+    if unused:
+        # `notes`, not `errors`: `_empty_reason_core` reads `errors` as "mGrowthDB could not be read",
+        # so putting an advisory message there blamed the database for an empty network in a run where
+        # every request succeeded, which is the thing this very change exists to stop
+        notes.append("not used in Exclude these studies: " + ", ".join(unused)
+                      + ". No study searched has that id, so nothing was excluded by it; a study id "
+                      "looks like SMGDB00000002. The other ids in that setting were applied.")
     partners_only = 0                       # interactions dropped because a partner was not entered
 
     # A species name resolves to every strain of that species, and a strain keeps its taxon id across the
@@ -1094,14 +1230,27 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # never used to fit the parameters, so they test them. Off unless asked for: it reads the curves of
     # chemostats this search did not need.
     checked = None
-    if s.get("steady_check") and organism_rates:
+    if s.get("steady_check") and not s.get("report_rates"):
+        # The command line refuses this combination and names the remedy; the page used to tick the box,
+        # run nothing, print "Check against chemostat steady states: on" in the report and write
+        # `steady_check: true` into the downloaded network. One surface refusing what another drops in
+        # silence is the defect, not which of the two is right (#233).
+        notes.append("no steady-state check: it scores the growth rates and coefficients of the run, so "
+                      "it needs Report growth rates, which gLV mode turns on. The setting is recorded as "
+                      "asked for and nothing was scored.")
+    elif s.get("steady_check") and organism_rates:
         say(len(studies), len(studies), "Reading the chemostat steady states")
         try:
             got = matrix.coefficients(net, organism_rates)
         except matrix.CannotConvert as e:
-            errors.append(f"no steady-state check: {e}")
+            notes.append(f"no steady-state check: {e}")
         else:
             checked = steady.check(got, organism_rates, steady.find(client, net, progress=say))
+    elif s.get("steady_check"):
+        # asked for, rates on, and no rate could be computed: say so rather than leaving the report's
+        # "on" as the only trace
+        notes.append("no steady-state check: no growth rate could be computed for this network, and the "
+                      "check scores the rates and the coefficients the run produced.")
     say(len(studies), len(studies), "Preparing the result")
     return {"entries": names, "settings": dict(s), "resolved": resolved["resolved"],
             "reasons": resolved["reasons"], "suggestions": resolved["suggestions"], "excluded": left_out,
@@ -1110,7 +1259,8 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
             "unresolved": resolved["unresolved"], "taxon_ids": resolved["taxon_ids"], "studies": studies,
             "network": net, "absent": records_to_network(absent_records) if absent_records else None,
             "rates": organism_rates, "steady": checked,
-            "skipped": skipped, "errors": errors, "hidden": extra["hidden"], "absence": extra["absence"]}
+            "skipped": skipped, "errors": errors, "notes": notes,
+            "hidden": extra["hidden"], "absence": extra["absence"]}
 
 
 # searches kept for their pages, downloads and reports: the latest ones only, so a page left open all day
@@ -1170,7 +1320,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         since anything that could read it here could use it.
         """
         given = query.get("token", [""])[0]
-        if secrets.compare_digest(given, self.token):
+        # compare BYTES: `secrets.compare_digest` raises TypeError on a str holding non-ASCII, and the
+        # exception escaped, so the connection was closed with no status line at all and the browser
+        # showed its own "site can't be reached". `secrets.token_urlsafe` emits "-" and "_", so any tool
+        # that autocorrects a double hyphen to an en dash on the way to the reader produces exactly that,
+        # and it failed worse than the case this function was written for (#246).
+        if secrets.compare_digest(given.encode("utf-8", "surrogateescape"), self.token.encode("utf-8")):
             return True
         self._send(render_token_page(bool(given), self.server.server_address[1]), status=403)
         return False
@@ -1275,7 +1430,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _rates(self, path: str, query: dict):
         """The growth rates on their own, and the gLV package: both need a search that reported rates."""
         result = self._result(query)
-        organism_rates = (result or {}).get("rates") or {}
+        if result is None:
+            # `_gone` first, as `/download` and `/report.txt` already do: these four routes went straight
+            # to "tick Report growth rates and run the search again" for a search that was STILL RUNNING
+            # with that box already ticked, which is what `_gone`'s docstring says must not happen,
+            # because it sends a reader to repeat work under way. These are the slow routes (#246).
+            self._send(render_form(self.token, message=self._gone(
+                query, "No growth rates yet: tick Report growth rates and run the search again.")))
+            return
+        organism_rates = result.get("rates") or {}
         if not organism_rates:
             self._send(render_form(self.token, message="No growth rates yet: tick Report growth rates and "
                                                        "run the search again."))
@@ -1317,7 +1480,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _glv(self, query: dict, form: dict) -> None:
         """The page's one gLV control: the zip, or the parameters posted into a listening R session."""
         result = self._result(query)
-        organism_rates = (result or {}).get("rates") or {}
+        if result is None:                      # a running or pruned search, not a missing setting (#246)
+            self._send(render_form(self.token, message=self._gone(
+                query, "No gLV parameters yet: tick Report growth rates and run the search again.")))
+            return
+        organism_rates = result.get("rates") or {}
         if not organism_rates:
             self._send(render_form(self.token, message="No gLV parameters yet: tick Report growth rates "
                                                        "and run the search again."))
@@ -1436,7 +1603,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             # package can be built from, on a study chosen for the other form (found reviewing #199,
             # 2026-10-10). It presses the mode rather than repeating parts of it, so the two cannot
             # drift again. The help's gLV section runs this package through miaSim step by step.
-            settings = {**glv_mode(settings), "conditions": GLV_EXAMPLE_STUDY}
+            # from the DEFAULTS, not from whatever the form posted: the Example button beside it was changed for
+            # exactly this on 2026-10-09 ("It used to keep them... Either gave an empty network with
+            # nothing on the page to say why", Karoline), and this one was left inheriting them, so
+            # pressing it with an absence threshold of 9 still in the form filled the boxes, ran, and
+            # produced no network and no package, against a caption promising a package that simulates
+            settings = {**glv_mode(dict(DEFAULTS)), "conditions": GLV_EXAMPLE_STUDY}
             job = self._start(list(GLV_EXAMPLE), settings)
             job["thread"].join(self.wait)
             self._redirect(f"/?token={self.token}&job={job['id']}#result")
