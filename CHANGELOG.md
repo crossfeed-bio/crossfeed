@@ -45,6 +45,24 @@ content.
   matched, the caption says it ignores the species box, and the box's own hint says All reads it and to
   clear it for the whole corpus. The bar's text has a length Karoline set and a test pins it, so the
   detail is in the hint rather than the bar.
+
+  **And the report embedded in that page still claimed the whole database**, found reviewing this branch.
+  `report.py` wrote "query: all of mGrowthDB (every study, with every partner)" unconditionally, three
+  lines above its own "Media, experiments or studies" line, so one file contradicted itself and
+  `/report.txt` and the download said it too. **The test written for exactly this missed it on letter
+  case**: it asserted `"All of mGrowthDB" not in page` and the report writes lower case. The report takes
+  the same two controls now, the command line's own run label does too, and the test reads the page
+  case-insensitively and asserts the containing phrase rather than a bare study id, which reached that
+  page from five other places.
+- **Three tests on this branch could not fail, and were rewritten so that they can.** A review pass
+  attacked every test added in the last two days by constructing the regression each claims to catch.
+  The settings test rested on two assertions that are true of their own construction, because
+  `_settings_of` returns `{**DEFAULTS, ...}`: dropping three keys so they fell through to the defaults,
+  which is verbatim the defect its docstring describes, left it green. It asserts every one of the 23
+  page settings is moved by its own flag now, and counts them, so a new setting without a case fails.
+  `about_a_pair`'s only negative case had a reason that does not contain `AVERAGE`, so that half of the
+  predicate was untested; both label shapes are asserted against it now. Each was verified by applying
+  the regression and watching the test go red.
 - **"pairs the data did not support (186)" counted 97 notes about the data and 31 conditions that did
   produce arcs** (#232), and the first version of this fix made it worse before it made it better:
   `about_a_pair` told the two kinds apart by the label's punctuation and knew only one of the two shapes
