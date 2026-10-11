@@ -614,6 +614,23 @@ parameter they had. No R2 comparison is quoted above for that reason.
 ## Open decisions
 
 
+- **OPEN, 2026-10-11 (#266): one format bump to `/v4`, or none.** Three things a reader who did not run
+  the tool cannot establish from the file need a field the format does not have: `metric_unit`, because
+  all 223 corpus arcs carry a `metric_with`/`metric_without` pair and 190 of them carry no unit field of
+  any kind while the All network mixes three units (#214); `window` and `window_unit`, because the
+  interval each arc was compared over is computed by both derivation routes, is load-bearing for an area
+  under a curve, and is dropped before anything a reader sees, so five published arcs share a
+  whole-community reference with a sibling that differs by a factor of 1.6 to 2.0 with nothing saying why
+  (#213); and, if Karoline and Craig choose that shape, one node field for a refused taxon id, which is
+  currently written into `taxon_id` where it is the obvious machine join key (#217).
+  They belong in ONE bump rather than three. Adding a field is backward compatible in the direction that
+  matters, since `PREVIOUS_SCHEMAS` keeps accepting `/v3` and `validate` treats an undeclared key as a
+  note, and by the test Karoline set on 2026-10-11 it is an addition rather than a change of meaning: a
+  reader who trusts the id would not read the new content as the old quantity.
+  Three issues filed with these, **#216 and #218, need no field and are not waiting on this**: GraphML
+  graph attributes, `meta` keys and the `license` that is hard-coded empty are all outside the field
+  manifest the gate tracks.
+
 - **Settled 2026-10-09 (#182): measurements may be reused while a study's `uploadedAt` is unchanged.** The
   rule until now was that measurements are read fresh on every run, because mGrowthDB serves only the
   latest version of a study and a kept curve could silently be an old one. What was missing was any way to
