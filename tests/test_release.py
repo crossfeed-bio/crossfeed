@@ -257,13 +257,22 @@ def test_the_sdist_carries_every_doc_the_suite_reads(tmp_path):
     test, always after the test looked green locally (Craig's agent on #199, 2026-10-10).
 
     So this asserts the manifest covers them, which ends the sequence instead of paying for it one file at
-    a time. It reads the paths out of the suite rather than listing them, so a new surface test is covered
+    a time. It reads the paths out of the suite rather than listing them, so a surface test in any of the
+    three shapes the suite actually uses, a whole path in one literal, a component join, or a module-level
+    directory constant, is covered
     by this assertion the moment it is written.
 
     `README.md` is deliberately allowed without being named: setuptools ships the declared readme, which
     was measured in all five manifest shapes. That is a default rather than a promise, so it is recorded
     here instead of being relied on silently.
+
+    **What it still cannot see**, so the next reader does not have to find out: a path built with an
+    f-string (`f"docs/{name}"`), a path three or more components deep whose middle part has no dot, a
+    constant assigned from another constant, and any top-level directory outside `TOP_LEVEL`. Those are
+    the shapes to avoid in a surface test, or to add here when one is written. The honest alternative,
+    which is heavier, is to build the sdist in this test and list its members.
     """
+    import ast
     import re
 
     root = Path(__file__).resolve().parents[1]
@@ -282,15 +291,45 @@ def test_the_sdist_carries_every_doc_the_suite_reads(tmp_path):
     # (`root / "gui" / "index.html"`, `os.path.join(..., "docs", "legend.svg")`). Three files the suite
     # already reads were invisible, among them `schema/format_fields.json`, which `MANIFEST.in`'s own
     # comment names as the 2026-10-08 instance of this exact failure (found reviewing this change).
+    TOP_LEVEL = ("docs", "examples", "schema", "gui", "r")
     whole = r'["\']((?:docs|examples|schema|gui|r)/[A-Za-z0-9_./-]+)["\']'
     joined_pattern = (r'["\'](docs|examples|schema|gui|r)["\']\s*[,/]\s*'
               r'(?:["\']([A-Za-z0-9_.-]+)["\']\s*[,/]\s*)?["\']([A-Za-z0-9_.-]+\.[A-Za-z0-9]+)["\']')
+    def paths_in_source(source: str) -> set:
+        """Every shipped path this source reads, by text AND through a module-level Path constant.
+
+        The regexes need the directory name as a literal next to the filename, and the suite also writes
+        `DOCS = Path(...) / "docs"` at module level and then `DOCS / "X.md"` inside a test, which neither
+        shape sees: a new surface test written that way passed unnoticed, which is the sequence this test
+        exists to end (found reviewing this change). So module-level assignments whose value ends in one
+        of the tracked directories are resolved, and a `<CONST> / "leaf"` inside the file is joined to it.
+        """
+        found = set(re.findall(whole, source))
+        for top, middle, leaf in re.findall(joined_pattern, source):
+            found.add("/".join(x for x in (top, middle, leaf) if x))
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            return found
+        # NAME = ... / "docs"  (the directory a constant stands for)
+        stands_for = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and len(node.targets) == 1 and \
+                    isinstance(node.targets[0], ast.Name) and isinstance(node.value, ast.BinOp) and \
+                    isinstance(node.value.op, ast.Div) and isinstance(node.value.right, ast.Constant) and \
+                    node.value.right.value in TOP_LEVEL:
+                stands_for[node.targets[0].id] = node.value.right.value
+        # <NAME> / "leaf.md", at any depth
+        for node in ast.walk(tree):
+            if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div) and \
+                    isinstance(node.left, ast.Name) and node.left.id in stands_for and \
+                    isinstance(node.right, ast.Constant) and isinstance(node.right.value, str):
+                found.add(f"{stands_for[node.left.id]}/{node.right.value}")
+        return found
+
     wanted = set()
     for path in sorted((root / "tests").glob("*.py")):
-        source = path.read_text(encoding="utf-8")
-        wanted.update(re.findall(whole, source))
-        for top, middle, leaf in re.findall(joined_pattern, source):
-            wanted.add("/".join(x for x in (top, middle, leaf) if x))
+        wanted |= paths_in_source(path.read_text(encoding="utf-8"))
 
     def covered(name: str) -> bool:
         if name in named or name == "README.md":
@@ -319,11 +358,6 @@ def test_the_sdist_carries_every_doc_the_suite_reads(tmp_path):
     # A positive control for the extraction, written to a FILE rather than embedded here, because this
     # file is one of the files the extraction scans: embedded, the control's own paths were found in the
     # suite and the test failed on them, which is the guard working.
-    def paths_in(source: str) -> set:
-        out = set(re.findall(whole, source))
-        for top, middle, leaf in re.findall(joined_pattern, source):
-            out.add("/".join(x for x in (top, middle, leaf) if x))
-        return out
 
     # the sample's paths are built from variables, so no path literal of the control appears in THIS
     # file: written out, the extraction found them here and the test failed on its own control
@@ -340,7 +374,7 @@ def test_the_sdist_carries_every_doc_the_suite_reads(tmp_path):
         f'    b = open("{top}/{leaf_whole}").read()\n'
         f'    c = os.path.join("gui", "{viewer}")\n',
         encoding="utf-8")
-    found = paths_in(probe.read_text(encoding="utf-8"))
+    found = paths_in_source(probe.read_text(encoding="utf-8"))
     assert f"{top}/{leaf_join}" in found, "a component join is invisible to the extraction"
     assert f"{top}/{leaf_whole}" in found, "a whole path is invisible to the extraction"
     assert f"gui/{viewer}" in found, "an os.path.join is invisible to the extraction"

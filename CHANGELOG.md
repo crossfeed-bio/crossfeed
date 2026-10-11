@@ -57,6 +57,15 @@ content.
   to a temp file. That control is built from variables with one literal per line, because this file is
   one of the files the extraction scans and a tuple of string literals reads as a path join: it caught
   its own control twice while being written, which is the guard working.
+
+  And a third correction, from a pass that attacked every new test with the regression it claims to
+  catch: both shapes needed the directory name as a literal **next to** the filename, and the suite also
+  writes `DOCS = Path(...) / "docs"` at module level and then `DOCS / "X.md"` inside a test. A surface
+  test written that way, which is the most ordinary Python idiom and which `tests/test_legend.py` already
+  half-uses, passed unnoticed while reading a doc the manifest does not carry. Module-level directory
+  constants are resolved through the AST now, verified by writing exactly that test and watching the
+  guard fail on it. The docstring also names the shapes it still cannot see, rather than promising every
+  surface test is covered.
 - **The gate's `secrets` check required the value to be quoted**, so an unquoted one passed all nine
   checks: a workflow `env:` block is unquoted YAML, and so is `TOKEN=...` in any scanned file, which is
   how a secret is most likely to be written here. The quotes are optional now, and `bearer` may be
