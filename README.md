@@ -395,7 +395,10 @@ compared (`auc` by default; `max`, or a growth rate recorded with its rule, `gro
 of one source and target were merged, and the lowest and highest log2 mean among them.
 `supporting_pairs` and `merged_pairs` are set only with `--merge-genera`: how many distinct species pairs
 (strain pairs when only taxon ids were entered) a genus arc rests on, and which. `outcome` says what the comparison could establish: `quantified`, `obligate` (the
-target grows only with the source present), `abolished` (only without it), or `no_growth`. For an
+target's without-set did not grow in that comparison, by the no-growth rule), `abolished` (its with-set
+did not grow), or `no_growth`. These are scoped to one comparison and are not claims about the organism:
+one pair in the corpus is obligate in two conditions of a study and quantified in six others of the same
+study, once with the target reaching 3.5 times more without the source than with it. For an
 obligate or abolished edge, the count on the side without growth is its replicates without growth. A
 comparison whose set was emptied by exclusions (every replicate spiked, for example) says nothing about
 growth; it is skipped with a reason rather than read as obligate. `evidence`
@@ -522,8 +525,9 @@ and abolished counts depend on these two numbers, so `meta.no_growth` records th
   `strength`.
 - Example: an edge with log2 mean +0.53 and sd 0.91 has `effect_over_sd` 0.58, so it is absent at k = 1 and
   present at k = 0.5. An edge with −2.66 ± 2.38 has 1.12 and is present at k = 1.
-- **Obligate** (the target grows only with the source present) and **abolished** (it grows only without
-  it) are the extremes of facilitation and inhibition. They have no log2 ratio, so no `weight` and no
+- **Obligate** (the target's without-set did not grow in that comparison) and **abolished** (its
+  with-set did not grow) are the extremes of facilitation and inhibition. Both are per comparison, so the
+  same pair can be obligate in one condition and quantified in another. They have no log2 ratio, so no `weight` and no
   `effect_over_sd`; they are always present and are drawn with their own style.
 - A mean of exactly zero is absent, unless its status is undetermined. A low-quality edge's `status` is
   `null` (undetermined) whatever

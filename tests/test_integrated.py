@@ -978,3 +978,93 @@ def test_no_surface_a_reader_meets_still_counts_two_error_components():
     # README.md, src/grownet/help.py and src/grownet/integrated.py until 2026-10-10, so the assertions
     # above are reachable rather than describing a string nobody would write.
     assert stale.startswith("both the co-culture replicates")
+
+
+def test_what_the_metric_pair_is_a_ratio_of_is_stated_per_derivation():
+    """The two derivations publish `metric_with`/`metric_without` with different relations to `strength`,
+    and three places said they were the same relation (found reviewing 2026-10-11).
+
+    Under the specified comparison `strength` IS log2(metric_with / metric_without), exactly: both sides
+    are 2 to the mean of that set's log2 values and `strength` is the difference of those means. Measured
+    on the live corpus, 0 of 208 arcs depart from it beyond the 4 decimals the fields are rounded to.
+
+    Under the integrated form they are two averages of one fit: the pair is the fitted row evaluated with
+    and without the partner's term, from the MEDIAN coefficient, while `strength` is the MEAN of the
+    per-replicate log2 effects, each at its own partner level. 16 of 16 corpus arcs differ, by up to
+    0.4197 in log2, and on 2 the absence threshold, which acts on `strength`, lands the other way from
+    the pair. Neither number is wrong; saying they are one quantity was.
+
+    What is exact under BOTH is Karoline's formula of #123, which is why the pair is published at all,
+    and that is the invariant asserted here rather than a string.
+    """
+    from pathlib import Path
+
+    from grownet import matrix, model
+    from grownet.help import EDGE_ATTRIBUTES
+
+    # the invariant that holds under both derivations and that the gLV cell is built from
+    edge = model.Edge(source="a", target="b", effect="facilitation", strength=0.1419,
+                      metric="growth_rate", metric_with=0.3 + 2.5 * 4.0, metric_without=0.3,
+                      partner_abundance=4.0)
+    cell, how = matrix._per_arc(edge, fallback_rate=None)
+    assert cell == pytest.approx(2.5) and how == "rates"
+
+    # and the three statements that used to claim one relation now name the derivation
+    strength, with_, without = (EDGE_ATTRIBUTES["strength"], EDGE_ATTRIBUTES["metric_with"],
+                                EDGE_ATTRIBUTES["metric_without"])
+    assert "exactly log2(metric_with / metric_without)" in strength
+    assert "integrated form" in strength and "not equal" in strength
+    assert "absence threshold acts on" in strength          # which of the two the threshold uses
+    assert "not the pair whose log2 ratio strength reports" in with_
+    assert "partner_abundance is the" in with_              # the relation that does hold
+    assert "SENTINEL" in without                            # and the 0 is not a measured zero
+
+    comment = (Path(__file__).resolve().parents[1] / "src" / "grownet" / "model.py").read_text(
+        encoding="utf-8")
+    assert "Under the integrated form the two are NOT a ratio of `strength`" in comment
+    assert "which `strength` is the log2 ratio of: a set that did not grow has 0" not in comment
+
+
+def test_the_report_says_which_quantity_the_fitted_pair_is():
+    """The report printed `log2 mean -0.54` and `0.2701 with / 0.4926 without` on one line, and the ratio
+    of those two is -0.8669: a reader checking the arithmetic in front of them found it wrong. The line
+    now says the pair is fitted, gives the ratio it does imply, and says that ratio is the median
+    coefficient's effect rather than the log2 mean (2026-10-11). The comparison's line is unchanged,
+    because there the two ARE the pair whose log2 ratio is the printed mean."""
+    from grownet import integrated, model
+    from grownet.derive import REPLICATE_METHOD
+    from grownet.report import _edge_line
+
+    net = model.InteractionNetwork(nodes={"a": model.Node(id="a", name="Source organism"),
+                                          "b": model.Node(id="b", name="Target organism")})
+
+    # the REAL constants. The first version of this put `integrated.METRIC` ("integrated:two_stage") in
+    # the `method` field, which is where `integrated.METHOD` goes, so the test modelled the wrong field
+    # and passed only because METHOD happens to contain the word "integrated": rewriting the detection as
+    # an equality against the invented string left it green, and every real arc fell back to the
+    # unlabelled line (found reviewing this branch).
+    assert "integrated" in integrated.METHOD, "the detection reads this substring, so the test needs it"
+    fitted = model.Edge(source="a", target="b", effect="inhibition", strength=-0.5417, sd=0.16,
+                        metric="auc", method=integrated.METHOD,
+                        metric_with=0.2701, metric_without=0.4926, partner_abundance=3.0)
+    line = _edge_line(net, fitted)
+    assert "fitted at 0.2701 with / 0.4926 without the partner's term" in line
+    assert "a log2 ratio of -0.8669" in line                      # what dividing them really gives
+    assert "not the log2 mean above" in line
+    assert "log2 mean -0.54" in line                              # and the mean is still printed
+
+    # a MERGED integrated arc, whose method carries "; merged: ..." appended by `derive.py`: it must
+    # still be labelled, and the invented-string version would not have labelled it either
+    merged = model.Edge(source="a", target="b", effect="inhibition", strength=-0.5417, sd=0.16,
+                        metric="auc", method=integrated.METHOD + "; merged: the median of 3 arcs",
+                        metric_with=0.2701, metric_without=0.4926, partner_abundance=3.0)
+    assert "fitted at" in _edge_line(net, merged)
+
+    compared = model.Edge(source="a", target="b", effect="inhibition", strength=-2.66, sd=2.38,
+                          metric="auc", method=REPLICATE_METHOD.format(metric="auc"),
+                          metric_with=5.088e9, metric_without=3.216e10, partner_abundance=3.0)
+    plain = _edge_line(net, compared)
+    assert "at 5.088e+09 with / 3.216e+10 without (auc)" in plain
+    assert "fitted at" not in plain and "log2 ratio of" not in plain
+    # and on that one a reader who divides gets the printed mean back, which is why it needs no note
+    assert round(math.log2(5.088e9 / 3.216e10), 2) == -2.66
