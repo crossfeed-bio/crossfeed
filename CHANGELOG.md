@@ -57,6 +57,14 @@ content.
   in, and the matrix records no settings either, so nothing said the flag was asked for and dropped. It
   says so now, with the count, and the suggestion one step upstream is format-aware rather than sending a
   reader to a flag that does nothing there.
+- **The published All artifact had no retrievable identity** (#218 item 3). The workflow replaces one
+  file on a fixed release with `--clobber`, outside git history, so the file a reader downloaded is gone
+  the next day and `derived_at` was its only identifier: a reader asked which version they used had no
+  answer, and a re-derive gives a different network from a database that has moved on. The payload now
+  carries `identity` with a `content_sha256` over everything except that block, so a reader reproduces it
+  from the file alone by the recipe the block states, plus the run and the commit from the environment
+  GitHub Actions already provides, which needs no change to the workflow and leaves a local run carrying
+  neither rather than inventing them.
 - **`license` was empty on every study, everywhere** (#218 item 4). mGrowthDB's study record has no
   license field at all, measured live: its keys are description, experiments, id, name, projectId,
   publishedAt, uploadedAt and url. The integrated path read a `license` key that never exists, which

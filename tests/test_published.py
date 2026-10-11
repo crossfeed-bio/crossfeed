@@ -143,3 +143,53 @@ def test_every_field_a_search_returns_is_carried_or_deliberately_left_out():
     # and the probe is not looking at nothing, which would make the assertion vacuous
     assert len(returned) > 15, returned
     assert {"network", "absent", "rates", "steady", "notes"} <= returned
+
+
+def test_the_artifact_carries_something_a_reader_can_quote(monkeypatch):
+    """The workflow replaces one file on a fixed release with `--clobber`, outside git history, so the
+    file a reader downloaded is gone the next day and `derived_at` was its only identifier. A reader
+    asked "which version did you use" had no answer, and a re-derive gives a different network from a
+    database that has moved on (#218 item 3).
+
+    `content_sha256` is over the payload WITHOUT the identity block, so a reader reproduces it from the
+    file alone, which this asserts rather than trusting. The run and the commit come from the environment
+    GitHub Actions already provides, so the workflow needs no change, and a local run carries neither
+    rather than inventing them.
+    """
+    import hashlib
+    import json
+
+    from grownet import published
+    from grownet.mgrowthdb import records_to_network
+
+    result = {"network": records_to_network([
+        {"source": "a", "target": "b", "source_name": "A", "target_name": "B",
+         "effect": "facilitation", "strength": 1.0, "weight": 1.0, "status": "present",
+         "outcome": "quantified", "study_id": "S1"}]),
+        "entries": [], "settings": {}, "studies": [], "skipped": [], "errors": []}
+
+    monkeypatch.setenv("GITHUB_RUN_ID", "12345")
+    monkeypatch.setenv("GITHUB_SHA", "deadbeef")
+    payload = published.to_payload(result)
+    ident = payload["identity"]
+    assert (ident["run"], ident["commit"]) == ("12345", "deadbeef")
+
+    # a reader reproduces the hash from the file alone, by the recipe the block itself states
+    body = json.dumps({k: v for k, v in payload.items() if k != "identity"},
+                      sort_keys=True, separators=(",", ":"))
+    assert hashlib.sha256(body.encode("utf-8")).hexdigest() == ident["content_sha256"]
+    assert "identity block removed" in ident["hashed"]
+
+    # it survives the round trip, or a reader of the loaded result cannot quote it either
+    assert published.from_payload(json.loads(json.dumps(payload)))["identity"]["run"] == "12345"
+
+    # a different network gets a different hash, or the field says nothing
+    other = dict(result)
+    other["settings"] = {"absence_threshold": 2.0}
+    assert published.to_payload(other)["identity"]["content_sha256"] != ident["content_sha256"]
+
+    # and a local run carries no run or commit rather than inventing them
+    monkeypatch.delenv("GITHUB_RUN_ID"), monkeypatch.delenv("GITHUB_SHA")
+    local = published.to_payload(result)["identity"]
+    assert (local["run"], local["commit"]) == ("", "")
+    assert local["content_sha256"] == ident["content_sha256"], "the hash must not depend on the run"

@@ -16,7 +16,9 @@ module's claim is only as true as it; three of them were missing until 2026-10-1
 from __future__ import annotations
 
 import datetime
+import hashlib
 import json
+import os
 import urllib.request
 
 from .model import SCHEMA, InteractionNetwork
@@ -46,9 +48,32 @@ def to_payload(result: dict) -> dict:
     way `network` is rather than passed through as JSON.
     """
     absent = result.get("absent")
-    return {"format": FORMAT, "network": result["network"].to_dict(),
-            "absent": absent.to_dict() if absent is not None else None,
-            **{k: result.get(k) for k in FIELDS}}
+    payload = {"format": FORMAT, "network": result["network"].to_dict(),
+               "absent": absent.to_dict() if absent is not None else None,
+               **{k: result.get(k) for k in FIELDS}}
+    payload["identity"] = _identity(payload)
+    return payload
+
+
+def _identity(payload: dict) -> dict:
+    """Something a reader can quote when asked which version of the daily artifact they used.
+
+    The workflow replaces one file on a fixed release with `--clobber`, outside git history, so the file
+    a reader downloaded is gone the next day and `derived_at` was its only identifier: a re-derive gives
+    a different network from a database that has moved on, and the question "which version did you use"
+    had no answer (#218 item 3).
+
+    `content_sha256` is over the payload WITHOUT this block, so it is reproducible by a reader: dump the
+    file, drop `identity`, canonicalize, hash. The run and the commit come from the environment GitHub
+    Actions already provides, so the workflow needs no change, and a local run carries neither rather
+    than inventing them.
+    """
+    body = json.dumps({k: v for k, v in payload.items() if k != "identity"},
+                      sort_keys=True, separators=(",", ":"))
+    return {"content_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+            "run": os.environ.get("GITHUB_RUN_ID", ""),
+            "commit": os.environ.get("GITHUB_SHA", ""),
+            "hashed": "the payload with the identity block removed, JSON with sorted keys and no spaces"}
 
 
 def from_payload(payload: dict) -> dict:
@@ -59,6 +84,7 @@ def from_payload(payload: dict) -> dict:
     result["network"] = InteractionNetwork.from_dict(payload["network"])
     absent = payload.get("absent")
     result["absent"] = InteractionNetwork.from_dict(absent) if absent else None
+    result["identity"] = payload.get("identity") or {}
     result["published"] = result["network"].meta.get("derived_at", "")
     return result
 
