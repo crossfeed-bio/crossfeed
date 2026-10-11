@@ -37,6 +37,43 @@ content.
   as they always have.
 
 ### Fixed
+- **Three of the gate's checks read nine file extensions, so the viewer and the whole R package were
+  never scanned** (#227, measured by Craig's agent on #239). Of 138 tracked files the list matched 108:
+  the 30 it skipped were 9 `.Rd`, 8 `.R`, the extensionless `LICENSE`, `NOTICE`, `Makefile`,
+  `r/NAMESPACE` and `r/DESCRIPTION`, both `.svg`, and one each of `.gitignore`, `.cff`, `.in`, `.html`,
+  `.Rbuildignore` and `.DS_Store`, the largest being `gui/index.html` at 52,570 bytes, which is the whole
+  viewer. The list's failure mode is the one nobody can enumerate, the next extension no one thought of,
+  and it had cost two misses in four days. What to scan is now decided by content, with a NUL byte as the
+  binary test rather than UTF-8 decodability, so a latin-1 file is still scanned and a binary with no
+  early NUL yields a false positive rather than a silent miss. 137 of 138 files are scanned now, and the
+  one skipped is `.DS_Store`.
+- **The gate overstated its own reach in the line a reader takes away from it**: "138 tracked files clean
+  across 9 checks" while the content checks read 108 and the merge-marker one 113. It now reports what was
+  scanned against what is tracked, and names what it skipped.
+- **The gate's `secrets` check required the value to be quoted**, so an unquoted one passed all nine
+  checks: a workflow `env:` block is unquoted YAML, and so is `TOKEN=...` in any scanned file, which is
+  how a secret is most likely to be written here. The quotes are optional now, and `bearer` may be
+  followed by whitespace rather than a separator, which is how an Authorization header is written. A value
+  must still be 16 or more characters from the class, so `${{ secrets.X }}`, `$VAR`, `<your-token>` and
+  `""` still do not match, and the gate is clean on all 138 tracked files. The check had no test of any
+  kind; it has one now, asserting both what must be caught and what must not, with every example
+  assembled at run time so that a test of the guard does not trip the guard. **No secret was ever in the
+  repository**: this closed a hole in a check, not an exposure.
+
+  Two corrections from reviewing that change. The whitespace-only separator is for `authorization` and
+  `bearer` alone, which is how an Authorization header is written: applied to all seven keywords it
+  flagged ordinary prose, because one hyphenated word after "secret" or "token" is sixteen characters of
+  the class, and this project's house style is long prose Markdown with inline file paths. And the key
+  header is `-----BEGIN [A-Z0-9 ]{0,20}PRIVATE KEY` now: DSA, ENCRYPTED and PGP PRIVATE KEY BLOCK were
+  missed while the check's own description says it covers private keys, and the first version of the test
+  probed one header out of seven. Both directions are measured: 13 of 13 caught, 11 of 11 left alone.
+
+  A third correction, from a pass that attacked every new test with the regression it claims to catch:
+  this check's **only** test probed the keywords `token`, `api_key` and `authorization`, so `secret` and
+  `password`, half the key/value group, were untested, and narrowing the pattern to
+  `(?:api[_-]?key|token)` let an unquoted `password=` line through with the test green. There is a case
+  per keyword now, and an assertion that every keyword the pattern names has one, so adding a keyword
+  without a case fails.
 - **The sentinel's remedy was stated without its exception** (Craig's agent, reviewing #226). The new
   `metric_without` description told a reader that how far from 0 the set was "is on the same arc, as
   strength_bound with the rule that gave it". `derive.bounded_strength` has two paths that return no
