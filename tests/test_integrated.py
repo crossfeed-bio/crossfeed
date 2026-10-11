@@ -1132,3 +1132,55 @@ def test_the_report_says_which_quantity_the_fitted_pair_is():
     assert "fitted at" not in plain and "log2 ratio of" not in plain
     # and on that one a reader who divides gets the printed mean back, which is why it needs no note
     assert round(math.log2(5.088e9 / 3.216e10), 2) == -2.66
+
+
+def test_the_spike_limit_applies_under_the_integrated_form_too():
+    """Karoline, 2026-10-11, on #255 item 1: "I'd go for your first option: apply it in
+    IntegratedDeriver.derive after replicates_for_experiment, dropping each spiked curve per species and
+    reporting it with interaction._spike_reason so the wording is the one the help promises."
+
+    `replicates_for_experiment` attaches a NOTE to the replicate and never drops the curve; the exclusion
+    lives in `interaction._unspiked`, which this path never called. So `--spike-factor 1.5` removed 33
+    curves and named every one under the comparison, and removed nothing and named nothing under the form
+    gLV mode selects, while `meta.settings.spike_factor` recorded 1.5 as that run's provenance. `help.py`
+    states the limit as a project standard with no derivation qualifier, and this file had no spike test
+    at all.
+    """
+    from grownet.growth import GrowthCurve, Replicate
+    from grownet.integrated import _unspiked_for
+
+    def rep(name, a_values, b_values):
+        mk = lambda sp, vs: GrowthCurve(species=sp, times=list(range(len(vs))), values=vs,  # noqa: E731
+                                        time_unit="h", abundance_unit="Cells/mL")
+        return Replicate(curves=(mk("A", a_values), mk("B", b_values)), name=name)
+
+    plain = [1e6, 2e6, 4e6, 8e6, 8.1e6, 8.2e6]
+    spike_in_a = [1e6, 2e6, 1.0e9, 4e6, 8.1e6, 8.2e6]        # 1e9 between 2e6 and 4e6
+    reps = [rep("r1", plain, plain), rep("r2", spike_in_a, plain), rep("r3", plain, plain)]
+
+    kept, skipped = _unspiked_for(reps, ["A", "B"], 100, {"name": "E1"}, lambda e: "E1")
+    assert [r.name for r in kept] == ["r1", "r3"], "the spiked replicate was not dropped"
+    assert len(skipped) == 1
+    label, reason = skipped[0]
+    assert "A" in label and "r2" in label
+    # the wording the help promises, from interaction._spike_reason
+    assert "implausible spike" in reason and "limit 100" in reason
+    # and the tail is corrected for this form, where the row needs every member together
+    assert "left out of this experiment rather than of one species" in reason
+
+    # a MONOCULTURE experiment keeps the comparison's meaning, since one species is the whole row
+    kept, skipped = _unspiked_for([rep("m1", spike_in_a, plain)], ["A"], 100, {"name": "M1"},
+                                  lambda e: "M1")
+    assert kept == [] and len(skipped) == 1
+    assert "left out for this species only" in skipped[0][1]
+    assert "rather than of one species" not in skipped[0][1]
+
+    # a replicate with no curve for a member is not a spike: the drop-out traces are exactly that, and
+    # `spike` reads `curve.values`, so this crashed on the live corpus the first time it ran
+    bare = Replicate(curves=(GrowthCurve(species="A", times=[0, 1, 2], values=[1e6, 2e6, 4e6],
+                                         time_unit="h", abundance_unit="Cells/mL"),), name="b1")
+    kept, skipped = _unspiked_for([bare], ["A", "B"], 100, {"name": "E2"}, lambda e: "E2")
+    assert kept == [bare] and skipped == []
+
+    # and at a limit nothing reaches, nothing is dropped
+    assert _unspiked_for(reps, ["A", "B"], 1e9, {"name": "E1"}, lambda e: "E1")[0] == reps

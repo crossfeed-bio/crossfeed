@@ -37,6 +37,30 @@ content.
   as they always have.
 
 ### Fixed
+- **The spike limit did nothing at all under the integrated form** (#255 item 1, Karoline's decision of
+  2026-10-11: "I'd go for your first option: apply it in `IntegratedDeriver.derive` after
+  `replicates_for_experiment`, dropping each spiked curve per species and reporting it with
+  `interaction._spike_reason` so the wording is the one the help promises"). That path read the setting
+  and passed it to `replicates_for_experiment`, which attaches a NOTE to the replicate and never drops the
+  curve; the exclusion lives in `interaction._unspiked`, which the path never called, and
+  `Replicate.notes` was never read there. So `--spike-factor 1.5` removed 33 curves and named every one
+  under the comparison, and removed nothing and named nothing under the form gLV mode selects, while
+  `meta.settings.spike_factor` recorded 1.5 as that run's provenance. Measured live on SMGDB00000014:
+  `--spike-factor 1.5` now goes from 4 arcs to 1 with 54 mentions in the report, where before both
+  settings gave the same 4 arcs and no mention. **At the default factor the whole corpus is
+  byte-identical**, so no published network changes; the setting stops being inert. The reason is the
+  promised one, with its tail corrected where this form needs every member of a row together, so a
+  replicate is left out of the experiment rather than of one species.
+- **`target_capacity`, `partner_abundances` and the measured plateau were spike-blind** (#255 item 3),
+  where the monoculture plateau path refuses the same curve in its own words. Both numbers are
+  load-bearing: the first fits the self-limitation of an organism with no monoculture capacity, the second
+  is the `x_j` a gLV coefficient divides by, and a spike is by construction a huge interior maximum, which
+  is what a plateau reads. Measured: the guard changes the **number** for `partner_abundances`, and for
+  `target_capacity` it usually changes the **reason**, from "the curve ends at 1/610 of its peak" to
+  "implausible spike", because a spike that becomes the maximum left the curve ending far below it and the
+  decline limit already refused it while naming the wrong cause. `integrated._measured_plateau` also
+  refused every curve with a bare `continue` and recorded no reason at all, although the capacity help
+  promises each is named with the others that gave none; it names all of them now.
 - **The rate table was keyed by the fit and rebuilt from the surviving arcs, so `se_rate_selection`
   rested on a spread 4.96 times too small and two arcs said how many monoculture sets were matched and
   were wrong** (#255 item 2). `_widen_by_rate_selection` rebuilt the table from `pending`, which holds
