@@ -143,8 +143,18 @@ class Edge:
     partner_abundance: float | None = None
     partner_abundance_unit: str = ""      # the abundance unit it was measured in, never converted
     partner_abundance_n: int | None = None  # co-culture replicates behind the median
-    # The metric itself in each set, which `strength` is the log2 ratio of: a set that did not grow has 0
-    # here, so a censored pair is a measurement rather than a floor (#123).
+    # The metric itself in each set. Under the specified comparison `strength` IS the log2 ratio of the
+    # two, exactly, because both are 2 to the mean of that set's log2 values and `strength` is the
+    # difference of those means; measured on the corpus, 0 of 208 arcs depart from it beyond rounding.
+    # Under the integrated form the two are NOT a ratio of `strength`: the pair is the fitted row
+    # evaluated with and without the partner's term, from the median coefficient over the replicates,
+    # while `strength` is the mean of the per-replicate log2 effects, each at its own partner level. Two
+    # averages of one fit, so they are close and not equal: 16 of 16 corpus arcs differ, by up to 0.42 in
+    # log2, and on 2 the absence threshold (which acts on `strength`) lands the other way from the pair.
+    # What IS exact under both is Karoline's formula of #123, `(with - without) / partner_abundance`,
+    # which is what the gLV cell is built from and what makes this pair worth publishing.
+    # A set that did not grow has 0 here, which is a sentinel under any metric but a rate (see
+    # `derive.absolute_values`), so a censored pair is a measurement rather than a floor (#123).
     metric_with: float | None = None
     metric_without: float | None = None
     target_capacity: float | None = None       # the target's own plateau in the co-culture

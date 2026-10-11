@@ -1343,11 +1343,14 @@ def starting_densities(cocultures: list, monocultures: list, target: str) -> dic
     experiment checked, while the starting density is sometimes in the description and sometimes only in
     the experiment's name. The curves always carry it: the first measured abundance is the thing itself.
 
-    This is **reported and not matched on**. Measured over the 39 comparisons the tool makes, the two
-    sides agree to a median of 1.17 times, exactly 1.00 where a study inoculates both to one density, and
-    differ by more than 3 times in 6 of them, up to 7.43. Those six are a deliberate choice about how to
-    start a co-culture, not a confound to refuse, so putting a starting density in the condition key would
-    lose a seventh of the arcs for no gain. A reader who can see that an arc rests on a monoculture
+    This is **reported and not matched on**. Re-measured over the **16** comparisons the tool makes
+    (2026-10-11, by wrapping this function over `derive --all --live --no-published --derivation
+    integrated --metric growth_rate --report-rates --include-absent`), the two sides agree to a median of
+    **2.14** times and differ by more than 3 times in **4** of them, up to 7.43. Those four are a
+    deliberate choice about how to start a co-culture, not a confound to refuse, so putting a starting
+    density in the condition key would lose a quarter of the arcs for no gain. This said 39 comparisons, a
+    median of 1.17, and 6 above 3, with one ratio "exactly 1.00 where a study inoculates both to one
+    density": no ratio is 1.00 today. A reader who can see that an arc rests on a monoculture
     started four times denser than its co-culture can weigh it; one who cannot, cannot.
 
     {"co", "mono", "ratio", "unit"} as medians over the replicates, or an empty dict where either side has
