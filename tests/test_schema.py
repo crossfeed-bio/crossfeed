@@ -137,9 +137,9 @@ def test_a_document_from_the_previous_version_is_still_valid_and_named():
     not the id it moves from was released; v2 never was."""
     from grownet.model import KNOWN_SCHEMAS, PREVIOUS_SCHEMAS, SCHEMA
     from grownet.schema import validate_document
-    assert SCHEMA == "grownet.interaction_network/v3"
-    assert PREVIOUS_SCHEMAS == ("grownet.interaction_network/v2", "grownet.interaction_network/v1",
-                                "grownet.interaction_network/v0")
+    assert SCHEMA == "grownet.interaction_network/v4"
+    assert PREVIOUS_SCHEMAS == ("grownet.interaction_network/v3", "grownet.interaction_network/v2",
+                                "grownet.interaction_network/v1", "grownet.interaction_network/v0")
     assert KNOWN_SCHEMAS == (SCHEMA, *PREVIOUS_SCHEMAS)
 
     doc = {"schema": SCHEMA, "nodes": [], "edges": [], "studies": []}

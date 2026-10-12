@@ -6,6 +6,19 @@ content.
 
 ## [Unreleased]
 
+### Upgrading
+
+- **The format id moves to `grownet.interaction_network/v4`** (Karoline, 2026-10-12, #266), for five
+  optional fields a reader could not get from a `/v3` file. On an arc: `metric_unit`, the unit of
+  `metric_with` and `metric_without` (#214); `window` and `window_unit`, the interval the metric was
+  computed over, which an area depends on (#213); and `vs_other_removals`, a drop-out arc's strength minus
+  the median of the other drop-out arcs measured against the same full community (#209 option 2). On a
+  node: `taxon_id_refused`, why its `taxon_id` is not its identity, where mGrowthDB gave one id to
+  different strains of a study (#217 option b). Nothing a `/v3` field means changes, and `/v3` files still
+  read and validate. **An installed 0.4.0 refuses the daily All network once it is written as `/v4`** and
+  derives All live instead, as every copy refuses a format it does not know, until it is upgraded. Live:
+  study 8's arcs were measured over 30 h (100 arcs) and 20 h (15), which nothing said before.
+
 ### Fixed
 
 - **0.4.0 called its own output suspect.** `grownet validate` on a network 0.4.0 derived said `meta has

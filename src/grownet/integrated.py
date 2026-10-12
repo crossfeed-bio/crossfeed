@@ -1293,6 +1293,8 @@ class IntegratedDeriver:
                         "source_identity": src["identity"],
                         "target_taxon_id": tgt["taxon_id"], "target_species": tgt["species"],
                         "target_identity": tgt["identity"],
+                        "source_taxon_id_refused": src.get("taxon_id_refused", ""),
+                        "target_taxon_id_refused": tgt.get("taxon_id_refused", ""),
                         "effect": ("facilitation" if coefficient > 0 else
                                    "inhibition" if coefficient < 0 else "neutral"),
                         "strength": None if strength is None else round(strength, 4),
@@ -1360,6 +1362,11 @@ class IntegratedDeriver:
                         "fitted_capacity_fall": got.get("capacity_fall"),
                         "metric_with": got["rate"] + coefficient * (abundance or 0.0),
                         "metric_without": got["rate"],
+                        # both are rates, in the rate's unit; the interval is the fit's own span (#213)
+                        "metric_unit": rate_unit_of(curve),
+                        "window": (None if not window or window.get("start") is None
+                                   else round(window["end"] - window["start"], 6)),
+                        "window_unit": (window or {}).get("unit", "") if window else "",
                         "fit_r2": got["r2"], "fit_condition": got["condition"],
                         # the same row with every partner's effect set to zero, so a reader sees how much
                         # the partners bought and the gate above is not taken on trust (#142 item 9)

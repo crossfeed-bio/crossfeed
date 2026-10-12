@@ -165,6 +165,8 @@ SCHEMA_DOC = {
                 "taxon_id": {"type": "string"},
                 "species": {"type": "string"},
                 "identity": {"enum": [*IDENTITIES, ""]},
+                # why taxon_id is not this node's identity; empty where it is (v4, #217)
+                "taxon_id_refused": {"type": "string"},
             },
         },
         "edge": {
@@ -233,6 +235,12 @@ SCHEMA_DOC = {
                 # to `se` (#155 item 1)
                 "se_rate_selection": {"type": ["number", "null"]},
                 "rate_selection_spread": {"type": ["number", "null"]},
+                # v4: the unit of metric_with and metric_without (#214), the interval the metric was
+                # computed over (#213), and a drop-out arc against the other removals of its target (#209)
+                "metric_unit": {"type": "string"},
+                "window": {"type": ["number", "null"]},
+                "window_unit": {"type": "string"},
+                "vs_other_removals": {"type": ["number", "null"]},
                 "rate_stage_method": {"type": "string"},
                 "rate_stage_n": {"type": ["integer", "null"]},
             },

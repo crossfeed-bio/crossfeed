@@ -444,6 +444,11 @@ Rules for this file:
   whether a near-scarce denominator is withheld and above what stated ratio; whether a capacity and the
   cells beside it must share a medium; and whether `reached_stationary` should certify at the end of a
   curve rather than over its last fifth, since it accepts a declining culture and records its peak.
+- 2026-10-12 (Karoline, on #266: "go with your recommendations"): **`grownet.interaction_network/v4`**,
+  one bump for five optional fields: `metric_unit`, `window`, `window_unit`, `vs_other_removals` on the
+  edge (#214, #213, #209 option 2) and `taxon_id_refused` on the node (#217 option b, keep the id and say
+  it is not a join key). Additions only: a reader who trusts `/v3` reads none of the new content as an old
+  quantity, which is her 2026-10-11 test for when the id moves.
 - 2026-10-08: the id is **`grownet.interaction_network/v3`** from 0.3.0, and the entries below are why it
   was `/v2` and `/v1`. It moved from `/v2` to `/v3` before 0.3.0 shipped, for the two optional edge fields
   of #155 item 1 (`se_rate_selection`, `rate_selection_spread`). **A field addition moves the id whether

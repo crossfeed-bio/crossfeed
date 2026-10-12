@@ -343,16 +343,41 @@ def strain_identities(exps, skipped) -> dict:
                 continue
             if taxon is not None and taxon not in ambiguous:
                 identities[name] = {"id": f"ncbi:{taxon}", "taxon_id": taxon, "species": genus_species(name),
-                                    "identity": NCBI}
+                                    "identity": NCBI, "taxon_id_refused": ""}
             else:
+                refused = (f"mGrowthDB gives taxon id {taxon} to different strains in this study "
+                           f"({', '.join(sorted(names_by_taxon[taxon]))}), so it is not a join key"
+                           if taxon in ambiguous else "")
                 identities[name] = {"id": genus_species(name), "taxon_id": taxon or "",
-                                    "species": genus_species(name), "identity": BY_NAME}
+                                    "species": genus_species(name), "identity": BY_NAME,
+                                    "taxon_id_refused": refused}
     return identities
 
 
 def _identity(identities: dict, name: str) -> dict:
     return identities.get(name) or {"id": genus_species(name), "taxon_id": "", "species": genus_species(name),
-                                    "identity": BY_NAME}
+                                    "identity": BY_NAME, "taxon_id_refused": ""}
+
+
+def metric_unit(method: str, abundance: str, time: str) -> str:
+    """The unit of a comparison's two absolute values under `method` (#214): the abundance unit for `max`,
+    abundance x time for `auc`, 1/time for a growth rate. Empty where a unit is not recorded."""
+    if method == "max":
+        return abundance or ""
+    if method == "auc":
+        return f"{abundance} x {time}" if abundance and time else ""
+    if str(method).startswith("growth_rate"):
+        return f"1/{time}" if time else ""
+    return ""
+
+
+def _units(replicates, species) -> tuple:
+    """(abundance unit, time unit) of `species` in the first of these replicates that measured it."""
+    for rep in replicates:
+        curve = rep.curve(species)
+        if curve is not None:
+            return curve.abundance_unit or "", curve.time_unit or ""
+    return "", ""
 
 
 def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, identities=None) -> dict:
@@ -1048,6 +1073,8 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
         "target": tgt["id"], "target_name": target,
         "source_taxon_id": src["taxon_id"], "source_species": src["species"], "source_identity": src["identity"],
         "target_taxon_id": tgt["taxon_id"], "target_species": tgt["species"], "target_identity": tgt["identity"],
+        "source_taxon_id_refused": src.get("taxon_id_refused", ""),
+        "target_taxon_id_refused": tgt.get("taxon_id_refused", ""),
         "effect": classify(mean, c["outcome"]),
         "strength": None if mean is None else round(mean, 4),
         "weight": None if mean is None else round(abs(mean), 4),
@@ -1069,6 +1096,10 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
         # the two absolute numbers the strength is the ratio of, and the target's own plateau in the
         # co-culture, which together fit a row that a ratio cannot (#123)
         "metric_with": _absolute[0], "metric_without": _absolute[1],
+        "metric_unit": metric_unit(method, *(c.get("units") or ("", ""))),
+        # the interval both sides were measured over, which an area depends on (#213)
+        "window": (None if not c.get("window") else round(c["window"][1] - c["window"][0], 6)),
+        "window_unit": (c.get("units") or ("", ""))[1] if c.get("window") else "",
         "strength_bound": _bound[0], "bound_rule": _bound[1],
         "target_capacity": (capacity or {}).get("value"),
         "target_capacity_unit": (capacity or {}).get("unit", ""),
@@ -1142,7 +1173,7 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
         c = {"mean": side["mean"], "sd": side["sd"], "se": side["se"], "outcome": side["outcome"],
              "n_with": side["n_co"], "n_without": side["n_mono"],
              "with_log2": side["co_log2"], "without_log2": side["mono_log2"],
-             "bound": side.get("bound")}
+             "bound": side.get("bound"), "window": side.get("window"), "units": _units(co_reps, target)}
         quality, cautions = _replicate_flags(c["n_with"], c["n_without"])
         cautions += stationary_cautions(side.get("stationary"), method, c["outcome"])
         cautions += zero_start_cautions(side.get("zero_start"), c["outcome"])
@@ -1320,6 +1351,7 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
     skipped += result["skipped"]
     for arc in result["arcs"]:
         removed, target = arc["source"], arc["target"]
+        arc = {**arc, "units": _units(full, target)}
         quality, cautions = _replicate_flags(arc["n_with"], arc["n_without"])
         cautions += stationary_cautions(arc.get("stationary"), method, arc["outcome"])
         cautions += zero_start_cautions(arc.get("zero_start"), arc["outcome"])
@@ -1774,6 +1806,31 @@ def _no_growth_meta(deriver, alpha, factor, edges) -> dict:
             "abolished": sum(1 for e in edges if e.get("outcome") == ABOLISHED)}
 
 
+def against_other_removals(records) -> None:
+    """Set `vs_other_removals` on each drop-out record: its strength minus the median strength of the other
+    drop-out arcs measured against the same full community, where there are at least two others (#209).
+
+    Every drop-out arc to one target compares a removal with ONE full-community measurement, so each arc
+    is that target's level plus what this removal did, and on study 8 the target explained 61.6 per cent of
+    the variance of its arcs and the removed member 11.1. This publishes the second part beside the arc
+    (Karoline, 2026-10-12: option 2). Presence, the q-value and the strength stay as they are. Computed
+    over every record before any filter, so what a display hides does not move it.
+    """
+    groups: dict = {}
+    for r in records:
+        if r.get("evidence") == "dropout" and r.get("strength") is not None and r.get("metric_with") is not None:
+            key = (r.get("target"), r.get("study_id"), r.get("medium"), r.get("metric"), r.get("metric_with"))
+            groups.setdefault(key, []).append(r)
+    for r in records:
+        r["vs_other_removals"] = None
+    for members in groups.values():
+        if len(members) < 3:
+            continue
+        for r in members:
+            others = [o["strength"] for o in members if o is not r]
+            r["vs_other_removals"] = round(r["strength"] - median(others), 4)
+
+
 def output_meta(records, include_low_quality: bool = False, correction: str = "bh",
                 absence_threshold: float = ABSENCE_THRESHOLD, no_growth_alpha: float = None,
                 no_growth_factor: float = None, merge_arcs: bool = False, min_studies: int = 1,
@@ -1798,6 +1855,7 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
         # a low-quality edge is never read as the absence of an interaction (Karoline, on #40; #50)
         record["status"] = None if is_low_quality(record) else absence(
             record.get("strength"), record.get("sd"), record.get("outcome"), absence_threshold)
+    against_other_removals(records)
     tests = adjust_significance(records, correction)
     records, significance_filter = filter_significance(records, max_adjusted_p)
     edges, hidden = select_edges(records, include_low_quality, include_absent)

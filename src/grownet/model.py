@@ -33,10 +33,16 @@ from dataclasses import asdict, dataclass, field, fields
 # artifact built from it, which `published.fresh` refuses under a different id anyway. Moving rather than
 # amending v2's entry keeps the rule absolute, since the one thing that made #121 possible was an
 # exception to it (2026-10-08).
-SCHEMA = "grownet.interaction_network/v3"
+# v4 (Karoline, 2026-10-12, on #266, #217 and #209): one bump for five fields a reader could not get from
+# a v3 file. On the edge, the unit of `metric_with` and `metric_without` (#214), the interval the metric
+# was computed over and its unit (#213), and a drop-out arc's difference from the other removals of the
+# same target (#209 option 2); on the node, why its `taxon_id` is not its identity (#217 option b). Nothing
+# a v3 field means changes, so a v3 reader reads a v4 file with five fields it ignores.
+SCHEMA = "grownet.interaction_network/v4"
 # Older ids a reader still accepts, newest first. A v0 document is valid: its `significance` means what v0
 # said it means, which is why `grownet validate` names the version it read.
-PREVIOUS_SCHEMAS = ("grownet.interaction_network/v2", "grownet.interaction_network/v1",
+PREVIOUS_SCHEMAS = ("grownet.interaction_network/v3", "grownet.interaction_network/v2",
+                    "grownet.interaction_network/v1",
                     "grownet.interaction_network/v0")
 KNOWN_SCHEMAS = (SCHEMA, *PREVIOUS_SCHEMAS)
 EFFECTS = ("facilitation", "inhibition", "neutral")
@@ -100,6 +106,10 @@ class Node:
     species: str = ""             # genus and species from the name: the key to merge with species-level networks
     identity: str = ""            # what the id rests on: "ncbi" (the taxon id), "name" (genus and species),
     #                               or "genus" (a node that merges every strain of a genus)
+    # why `taxon_id` is NOT this node's identity, where mGrowthDB gave it to different strains of one study
+    # (SMGDB00000008: 1506553 is both L. clostridioforme and L. symbiosum). The id stays, since it is what
+    # the source says; this says it is not a join key (Karoline, 2026-10-12, #217 option b). Empty otherwise.
+    taxon_id_refused: str = ""
 
 
 @dataclass(frozen=True)
@@ -195,6 +205,18 @@ class Edge:
     se_rate_stage: float | None = None
     se_rate_selection: float | None = None
     rate_selection_spread: float | None = None
+    # the unit of `metric_with` and `metric_without`: the abundance unit for `max`, abundance x time for
+    # `auc`, 1/time for a growth rate and for the integrated form's rates (#214)
+    metric_unit: str = ""
+    # how long the interval was that the metric was computed over, in `window_unit`: the shared window of
+    # the curves compared, or the integrated fit's span. An area depends on it, so two arcs over different
+    # intervals are not the same quantity (#213)
+    window: float | None = None
+    window_unit: str = ""
+    # a drop-out arc's strength minus the median strength of the other drop-out arcs measured against the
+    # same full community (same target, study, medium, metric and reference), where there are at least two
+    # others: what this removal did beyond the level the whole group shares (#209 option 2). None otherwise
+    vs_other_removals: float | None = None
     rate_stage_method: str = ""
     rate_stage_n: int | None = None
     merged_arcs: int | None = None  # arcs merged into this one (register item 14), None when not merged

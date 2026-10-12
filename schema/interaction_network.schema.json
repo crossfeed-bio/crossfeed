@@ -13,6 +13,7 @@
   "properties": {
     "schema": {
       "enum": [
+        "grownet.interaction_network/v4",
         "grownet.interaction_network/v3",
         "grownet.interaction_network/v2",
         "grownet.interaction_network/v1",
@@ -175,6 +176,9 @@
             "genus",
             ""
           ]
+        },
+        "taxon_id_refused": {
+          "type": "string"
         }
       }
     },
@@ -506,6 +510,24 @@
           ]
         },
         "rate_selection_spread": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "metric_unit": {
+          "type": "string"
+        },
+        "window": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "window_unit": {
+          "type": "string"
+        },
+        "vs_other_removals": {
           "type": [
             "number",
             "null"

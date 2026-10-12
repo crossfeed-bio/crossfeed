@@ -498,6 +498,16 @@ EDGE_ATTRIBUTES = {
                              "this organism could have been given. The population form would be smaller "
                              "by sqrt(n / (n - 1)), a factor of 1.41 where two sets were selected, so "
                              "this is the wider of the two readings",
+    "metric_unit": "the unit of metric_with and metric_without: the abundance unit for max, abundance x "
+                   "time for auc, 1/time for a growth rate and for the integrated form's rates",
+    "window": "how long the interval was that the metric was computed over, in window_unit: the curves' "
+              "shared window, or the integrated fit's span. An area grows with it, so two arcs over "
+              "different intervals are not the same quantity",
+    "window_unit": "the time unit of window",
+    "vs_other_removals": "a drop-out arc's strength minus the median strength of the other drop-out arcs "
+                         "measured against the same full community (same target, study, medium and metric), "
+                         "where there are at least two: what this removal did beyond the level the group "
+                         "shares. Empty for every other arc",
     "rate_stage_method": "how the monoculture stage was resampled for that number: a bootstrap of its "
                          "replicates where the stage is the median of one fit per replicate, or a "
                          "delete-one jackknife where it is one regression over all of their rows",
@@ -522,6 +532,8 @@ NODE_ATTRIBUTES = {
     "id": "ncbi:<taxon id> for a strain with an NCBI taxon id, otherwise genus and species from the name",
     "name": "the strain name, as the study records it",
     "taxon_id": "the NCBI taxon id of the strain, as mGrowthDB records it",
+    "taxon_id_refused": "why taxon_id is not this node's identity: mGrowthDB gave it to different strains of "
+                        "one study, so it is not a join key; empty where taxon_id is the identity",
     "species": "genus and species from the name, to merge with species-level networks",
     "identity": "what the id rests on: ncbi (the taxon id), name, or genus (with Merge to genus: the node "
                 "stands for every strain of its genus)",
@@ -1221,10 +1233,11 @@ give others; the report beside the download says what was read and when.</p>
 
 <h2 id="attributes">Arc and node attributes</h2>
 <p>Every downloaded network, JSON or GraphML, carries these for each arc (edge) and node. A network
-names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v3</code>
-since 0.3.0. It moved to <code>/v1</code> in 0.2.0 because <code>significance</code> changed meaning, from
-the corrected p-value to -log10 of it, and to <code>/v2</code> and then <code>/v3</code> because optional
-arc fields were added and an installed 0.2.0 builds its arcs from every field a file carries, so it must
+names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v4</code>,
+after <code>/v3</code> in 0.3.0 and 0.4.0. It moved to <code>/v1</code> in 0.2.0 because
+<code>significance</code> changed meaning, from the corrected p-value to -log10 of it, and to
+<code>/v2</code>, <code>/v3</code> and then <code>/v4</code> because optional arc and node fields were
+added and an installed 0.2.0 builds its arcs from every field a file carries, so it must
 read a newer daily network as a format it does not know and derive live instead. A file from 0.1.x says
 <code>/v0</code> and one from 0.2.x <code>/v1</code>; both are still valid, read with their own meaning,
 and so is <code>/v2</code>, which no release ever carried. The network
