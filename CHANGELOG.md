@@ -8,6 +8,19 @@ content.
 
 ### Fixed
 
+- **The gLV package's files describe themselves correctly** (#210, #211):
+  - the zip's README says to match `growth_rates.csv` to a matrix **by the organism column, never by
+    position**: each matrix holds its own unit's organisms in its own order, and a positional read gave a
+    plausible, wrong simulation, off by factors of 2 to 4;
+  - in gLV mode the README no longer describes the off-diagonals with the comparison's formula, nineteen
+    lines after its own integrated description, nor says a setting chooses the estimator that the
+    integrated form does not read;
+  - cells "from a comparison where one side did not grow" are named only where they are in a matrix;
+  - `capacity_curves_left_out` writes a count of 0 as `0`, not as a blank that R reads as `NA`;
+  - a nonzero value below 5e-5 is no longer printed as `0`, which means no interaction;
+  - in R, the coverage line counts organisms outside every matrix (it read "8 of 8" for an 11-organism
+    network), `summary()` gains `network_organisms`, and `glv_write()` writes the three rate columns it
+    was missing and the matrices at four significant digits, as the download does.
 - **0.4.0 called its own output suspect.** `grownet validate` on a network 0.4.0 derived said `meta has
   'project', which this version of the format does not declare`, and the same for `settings_not_used`:
   both keys were added in 0.4.0 and never declared in the schema. A third, `slice`, written by
