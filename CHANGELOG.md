@@ -6,8 +6,23 @@ content.
 
 ## [Unreleased]
 
+### Changed
+
+- **A monoculture measured only as a whole culture gives its growth rate and lag from a count** (Karoline,
+  #140: option 1 on 2026-10-07, "Counts only" on 2026-10-12): a plate count or flow cytometry, never optical
+  density, and never a carrying capacity. The rate says where it came from (`rate_sources`, and in the
+  report). Such monocultures were dropped replicate by replicate. Live, study 9 gives *E. coli* LF82 and
+  *B. fragilis* NCTC 9343 a rate.
+- **A growth rate is not pooled across monocultures that started more than 10 times apart** (Karoline,
+  2026-10-12, #81 b), measured at each curve's first time point. The study's rates for that organism are
+  left out and named. Live: *A. tumefaciens* (24 times) and *C. testosteroni* (101 times) in
+  SMGDB00000014, and *S. putrefaciens* (85 times) in SMGDB00000018, so the All network's rates for the
+  first two now come from SMGDB00000013 alone.
+
 ### Fixed
 
+- **A Baranyi start that ran off to an enormous rate raised `OverflowError`** instead of being rejected
+  like any other unconverged start. First met on optical densities while building the above.
 - **0.4.0 called its own output suspect.** `grownet validate` on a network 0.4.0 derived said `meta has
   'project', which this version of the format does not declare`, and the same for `settings_not_used`:
   both keys were added in 0.4.0 and never declared in the schema. A third, `slice`, written by

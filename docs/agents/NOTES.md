@@ -444,6 +444,11 @@ Rules for this file:
   whether a near-scarce denominator is withheld and above what stated ratio; whether a capacity and the
   cells beside it must share a medium; and whether `reached_stationary` should certify at the end of a
   curve rather than over its last fifth, since it accepts a declining culture and records its peak.
+- 2026-10-12 (Karoline, #140 "Counts only" and #81 "I'd also pick b)"): a monoculture with no per-strain
+  series gives its rate and lag from ONE culture-level plate count or flow cytometry trace, never OD and
+  never a capacity; and a study's monoculture rates for an organism are not pooled when their first
+  measured values are more than 10x apart (`derive.MAX_START_SPREAD`). OD was excluded after measuring:
+  study 10's OD starts at the medium's 0.6 and gave 0.0007 to 0.009 /h.
 - 2026-10-08: the id is **`grownet.interaction_network/v3`** from 0.3.0, and the entries below are why it
   was `/v2` and `/v1`. It moved from `/v2` to `/v3` before 0.3.0 shipped, for the two optional edge fields
   of #155 item 1 (`se_rate_selection`, `rate_selection_spread`). **A field addition moves the id whether

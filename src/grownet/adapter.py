@@ -144,10 +144,13 @@ def _abundance_unit(context: dict) -> str:
 
 
 # The culture-level traces a monoculture's rate may come from, preferred in this order (#140, Karoline
-# 2026-10-07: "yes to #140 with option 1"). Counts before optical density: a rate is invariant to a
-# proxy's scale but not to its linearity, and OD saturates where counts do not (Craig's agent, on #140).
-# pH and metabolites measure the medium, not the culture's size, and are never used.
-CULTURE_TECHNIQUES = ("plates", "fc", "od")
+# 2026-10-07: "yes to #140 with option 1", and 2026-10-12: "Counts only"). Plate counts and flow
+# cytometry, never optical density: a rate is invariant to a proxy's scale but not to its linearity, and
+# OD saturates where counts do not (Craig's agent, on #140). Built with OD first, SMGDB00000010's OD,
+# six points over 168 h starting at the medium's own 0.6, gave rates of 0.0007 to 0.009 /h that entered
+# published medians, and OD first readings near 0.001 tripped the starting-density rule on noise. pH and
+# metabolites measure the medium, not the culture's size.
+CULTURE_TECHNIQUES = ("plates", "fc")
 
 
 def culture_trace_replicates(client, experiment: dict, species: str) -> tuple:
@@ -176,8 +179,8 @@ def culture_trace_replicates(client, experiment: dict, species: str) -> tuple:
                 by_technique.setdefault(context.get("techniqueType") or "", []).append(context)
         technique = next((t for t in CULTURE_TECHNIQUES if len(by_technique.get(t, ())) == 1), None)
         if technique is None:
-            skipped.append((f"{label}: {name}", "no per-strain series and no single culture-level count or "
-                                                 "optical density to take a growth rate from"))
+            skipped.append((f"{label}: {name}", "no per-strain series and no single culture-level count (plates or "
+                                                 "flow cytometry) to take a growth rate from"))
             continue
         context = by_technique[technique][0]
         try:
