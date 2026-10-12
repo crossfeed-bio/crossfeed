@@ -300,6 +300,12 @@ def report_text(result: dict) -> str:
                 extra.append(f"doubling {double:.4g} {time_unit(rate.get('unit', '1/h'))}")
             if rate.get("lag") is not None:
                 extra.append(f"lag {rate['lag']:.3g} {rate.get('unit', '1/h').removeprefix('1/')}")
+            # a rate from a monoculture measured only as a whole culture says which trace it came from (#140)
+            culture = {k: n for k, n in (rate.get("rate_sources") or {}).items() if k != "per-strain"}
+            if culture:
+                extra.append("rate from " + ", ".join(f"{k} ({n} replicate(s))" for k, n in sorted(culture.items()))
+                             + (" and per-strain series" if (rate.get("rate_sources") or {}).get("per-strain")
+                                else "") + "; no capacity is taken from a culture-level trace")
             if rate.get("capacity") is not None:
                 extra.append(f"carrying capacity {rate['capacity']:.4g} {rate.get('capacity_unit', '')}"
                              f" from {rate.get('capacity_n', 0)} "
