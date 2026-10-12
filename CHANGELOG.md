@@ -6,6 +6,16 @@ content.
 
 ## [Unreleased]
 
+### Fixed
+
+- **0.4.0 called its own output suspect.** `grownet validate` on a network 0.4.0 derived said `meta has
+  'project', which this version of the format does not declare`, and the same for `settings_not_used`:
+  both keys were added in 0.4.0 and never declared in the schema. A third, `slice`, written by
+  `grownet.slices.fp_bh`, had been undeclared since that module existed (found by Craig's agent on #274).
+  All three are declared now. The data was right and the files were valid; only the note was wrong, and
+  the format id does not move, since `meta` is an open object. The test behind it now walks the syntax
+  tree for every form a key can reach a network's `meta` by, where it read one form and saw 2 of the 20
+  keys (#274).
 
 ## [0.4.0] (2026-10-11)
 
