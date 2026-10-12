@@ -8,6 +8,13 @@ content.
 
 ### Fixed
 
+- **The page's report says what its search read and reused from mGrowthDB**, as the command line's has
+  since #182: it printed no `reads:` line at all. The counts are this search's own. The page keeps one
+  connection for an hour, so the command line's way of reading the totals would have reported every
+  earlier search as this one's. When another search ran at the same time, the report says the two cannot
+  be told apart rather than printing a mixed count. And it counts the responses the client answered
+  from memory, which nothing counted: run live, a second search over the same studies said "0 from
+  mGrowthDB, 0 reused" about a network built from 429 responses (#187).
 - **0.4.0 called its own output suspect.** `grownet validate` on a network 0.4.0 derived said `meta has
   'project', which this version of the format does not declare`, and the same for `settings_not_used`:
   both keys were added in 0.4.0 and never declared in the schema. A third, `slice`, written by

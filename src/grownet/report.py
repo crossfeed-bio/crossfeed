@@ -157,14 +157,25 @@ def report_text(result: dict) -> str:
     # what was read and what was reused, since a reader should be able to see that a network rests on
     # measurements kept from an earlier run, and which studies were read again because mGrowthDB has a
     # newer version of them (#182)
+    # The page's search carries its own counts in `reads`, since the page's client lives for an hour and
+    # its counters hold every search; the command line's run owns its client, so the client's totals are
+    # that run's. The page printed no line at all before (#187).
     client = result.get("client")
-    if client is not None and getattr(client, "cache_dir", None):
-        reused, fetched = getattr(client, "reused", 0), getattr(client, "fetched", 0)
-        refreshed = getattr(client, "refreshed", []) or []
-        line = (f"reads: {fetched} from mGrowthDB, {reused} reused from an earlier run "
+    reads = result.get("reads")
+    if reads is None and client is not None and getattr(client, "cache_dir", None):
+        reads = {"fetched": getattr(client, "fetched", 0), "reused": getattr(client, "reused", 0),
+                 "remembered": getattr(client, "remembered", 0),
+                 "refreshed": getattr(client, "refreshed", []) or [], "shared": False}
+    if reads and reads.get("shared"):
+        lines.append("reads: not counted for this search alone, because another search ran at the same time "
+                     "on the same connection to mGrowthDB")
+    elif reads:
+        line = (f"reads: {reads['fetched']} from mGrowthDB, {reads['reused']} reused from an earlier run "
                 f"(kept while a study's uploadedAt is unchanged)")
-        if refreshed:
-            line += f"; read again because their uploadedAt moved: {', '.join(sorted(refreshed))}"
+        if reads.get("remembered"):
+            line += f", {reads['remembered']} answered from what this session had already read"
+        if reads.get("refreshed"):
+            line += f"; read again because their uploadedAt moved: {', '.join(sorted(reads['refreshed']))}"
         lines.append(line)
     lines.append("")
 
