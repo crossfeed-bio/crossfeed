@@ -314,11 +314,47 @@ def rate_rule(method: str) -> str:
     return f"{method} in monoculture, median over replicates and studies; batch experiments only"
 
 
+# The study-level tripwire of #173 (Craig's agent's framing, built on Karoline's 2026-10-12 decision): a
+# study whose rates are ALL this many times slower than the median rate of the other studies in the same
+# run is named. A flag and never a refusal, since slow is not wrong; and an internal comparison, so it
+# carries no citation burden. Five is the low end of the gap that motivated it: SMGDB00000018's four fits
+# sat five to fifteen times below the corpus median of 0.2245 /h, together, while the next slowest study's
+# fastest fit was within it.
+SLOW_FACTOR = 5.0
+# fewer other studies than this and their median is not a reference worth comparing a study with
+SLOW_MIN_OTHER_STUDIES = 3
+
+
+def slow_studies(rates: dict) -> list:
+    """[{"study", "rates", "fastest", "others_median", "factor"}]: studies every rate of which is more than
+    `SLOW_FACTOR` times slower than the median rate of the other studies (#173).
+
+    Read from each organism's `per_study`, so a study enters with every rate it gave, whichever organism
+    it went to, and an organism's merged rate that rests partly on such a study is visible as such.
+    """
+    by_study: dict = {}
+    for rate in rates.values():
+        for sid, value in (rate.get("per_study") or {}).items():
+            if value is not None and value > 0:
+                by_study.setdefault(sid, []).append(value)
+    out = []
+    for sid, values in sorted(by_study.items()):
+        others = [v for other, vs in by_study.items() if other != sid for v in vs]
+        if len(by_study) - 1 < SLOW_MIN_OTHER_STUDIES or not others:
+            continue
+        reference = statistics.median(others)
+        if max(values) * SLOW_FACTOR < reference:
+            out.append({"study": sid, "rates": len(values), "fastest": max(values),
+                        "others_median": reference, "factor": reference / max(values)})
+    return out
+
+
 def rate_meta(net: InteractionNetwork, rates: dict, method: str) -> str:
     """The `growth_rates` block of a network's meta: the rule, a rate per organism, and the organisms that
     have none, so a downloaded network carries the rates it was reported with and says what is missing."""
     return {"rule": rate_rule(method), "organisms": {nid: dict(rate) for nid, rate in rates.items()},
-            "without_a_rate": sorted(_label(node) for nid, node in net.nodes.items() if nid not in rates)}
+            "without_a_rate": sorted(_label(node) for nid, node in net.nodes.items() if nid not in rates),
+            "slow_studies": slow_studies(rates)}
 
 
 def _number(value: float | None) -> str:

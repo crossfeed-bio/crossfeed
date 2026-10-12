@@ -6,6 +6,15 @@ content.
 
 ## [Unreleased]
 
+### Added
+
+- **A study whose growth rates are slow as a block is named** (Karoline, 2026-10-12, #173: Craig's
+  agent's study-level tripwire, as a flag). When every rate from one study is more than 5 times slower than
+  the median of the other studies in the run, the report says so, and `meta.growth_rates.slow_studies`
+  carries it. Nothing is refused: slow can be the organisms or the study's conditions. On all of mGrowthDB
+  today it names SMGDB00000013 and SMGDB00000014 at the defaults (6.1 and 7.5 times) and nothing in gLV
+  mode.
+
 ### Fixed
 
 - **0.4.0 called its own output suspect.** `grownet validate` on a network 0.4.0 derived said `meta has
