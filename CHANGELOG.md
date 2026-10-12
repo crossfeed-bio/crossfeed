@@ -6,6 +6,18 @@ content.
 
 ## [Unreleased]
 
+### Added
+
+- **The report names what no drop-out arc shows on its own** (#207, #209). It lists every ordered pair
+  measured both as a pair and inside a community with **opposite effects**, both arcs together, as a
+  result: in Karoline's words, it "just shows that higher order interactions matter". On the All network
+  that is *Roseburia intestinalis* on *Blautia hydrogenotrophica*, an inhibition from the biculture and a
+  facilitation from the drop-out. And it lists the **drop-out arcs that share one full-community
+  reference**, by target: part of each such arc is how the target fared in that community rather than what
+  removing the member did. On the All network that is 118 arcs in 17 groups. The `provisional` sentence
+  says the second limit, and `docs/LIMITATIONS.md` gains entry 8. Nothing is merged, re-centred or
+  withheld: options 2 and 3 of #209 remain a method decision.
+
 ### Fixed
 
 - **0.4.0 called its own output suspect.** `grownet validate` on a network 0.4.0 derived said `meta has
