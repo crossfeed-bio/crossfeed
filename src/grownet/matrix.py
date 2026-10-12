@@ -341,6 +341,84 @@ def matrix_csv(net: InteractionNetwork, diagonal: float | None = None) -> str:
     return out.getvalue()
 
 
+# The file written beside the adjacency matrix CSV (Karoline, 2026-10-12, on #212: "Sidecar file").
+ABOUT_SUFFIX = ".about.txt"
+
+
+def about_name(csv_name: str) -> str:
+    """The sidecar's name for a matrix file: `x.csv` gives `x.about.txt`."""
+    stem = csv_name[:-4] if csv_name.lower().endswith(".csv") else csv_name
+    return stem + ABOUT_SUFFIX
+
+
+def matrix_about(net: InteractionNetwork, csv_name: str = "grownet_matrix.csv") -> str:
+    """What the adjacency matrix CSV is, for the file written beside it (#212).
+
+    The CSV is a bare grid: no tool, version, date, derivation, metric or threshold, nothing saying rows are
+    the affected organism, and no key for `0` or `NA`, while changing a setting changes every number and
+    the file looks the same. A comment header would sit inside the grid, and R's `read.csv` does not skip
+    `#` lines unless told to, so the description travels beside the grid instead. It also names the
+    pairs `matrix_csv` leaves at 0 for disagreeing in sign, which the CSV used to drop silently.
+    """
+    import json
+    import textwrap
+
+    from . import brand
+    from .help import EDGE_ATTRIBUTES
+
+    meta = net.meta
+    names, _, conflicts = rows(net)
+    k = (meta.get("absence") or {}).get("k")
+    metrics = sorted({e.metric for e in net.edges if e.metric})
+
+    def para(text, indent="  "):
+        return textwrap.wrap(text, 106, initial_indent=indent, subsequent_indent=indent + "    ")
+
+    lines = [f"{brand.NAME} {meta.get('tool_version', '')}: adjacency matrix",
+             f"derived {meta.get('derived_at', '')} from {meta.get('source_db', 'mGrowthDB')}",
+             f"describes {csv_name}, {len(names)} x {len(names)}. Keep this file beside it: the CSV alone "
+             "does not say how it was made.",
+             "",
+             "READING IT"]
+    lines += para("Rows are the affected organism and columns the actor: the cell in row i, column j is the "
+                  "effect of j on i. The diagonal is 0, since this is the plain adjacency matrix; the gLV "
+                  "package is where a diagonal is fitted.")
+    lines += para(f"A cell is the median strength of the arcs of that ordered pair. Strength is "
+                  f"{EDGE_ATTRIBUTES['strength']}.")
+    lines += para(f"Derivation: {derivation_of(net)}. Metric: {', '.join(metrics) or 'not recorded'}. "
+                  "Both change every number here, and the file looks the same either way.")
+    lines += para("0 is no arc in this network for the pair: none was derived, the comparison fell below "
+                  "the absence threshold" + (f" (k = {k})" if k not in (None, "") else "")
+                  + ", it was hidden as low quality, or the pair's arcs disagree in sign (listed below).")
+    lines += para("NA is a comparison where one side did not grow, so no ratio exists: those cells are "
+                  "listed below with the bound the network's arcs carry.")
+    lines.append("")
+    settings = meta.get("settings") or {}
+    lines.append("SETTINGS" if settings else "SETTINGS: none recorded; these records were already derived")
+    lines += [f"  {key}: {json.dumps(settings[key], default=str)}" for key in sorted(settings)]
+    lines.append("")
+    if conflicts:
+        lines.append("LEFT AT 0 BECAUSE THE ARCS OF THE PAIR DISAGREE IN SIGN (actor on affected)")
+        lines += [f"  {actor} on {affected}" for affected, actor in dict.fromkeys(conflicts)]
+        lines.append("")
+    bounded = bounded_cells(net)
+    if bounded:
+        lines.append("NA CELLS (actor on affected, and the bound where the rule set one)")
+        lines += [f"  {actor} on {affected}" + ("" if bound is None else f": at least {bound:+.4g}")
+                  for affected, actor, bound in bounded]
+        lines.append("")
+    found = media(net)
+    if found:
+        lines.append("MEDIA THE ARCS COME FROM")
+        lines += [f"  {m}" for m in found]
+        lines.append("")
+    lines.append("SOURCES (cite the studies behind the arcs you use)")
+    lines += [f"  {sid}: {study.citation or 'no citation recorded'}"
+              + (f" [{study.license}]" if study.license else "") + (f" {study.url}" if study.url else "")
+              for sid, study in sorted(net.studies.items())] or ["  none"]
+    return "\n".join(lines) + "\n"
+
+
 def derivation_of(net: InteractionNetwork | None) -> str:
     """"integrated" or "replicate": whose formula this network's cells follow.
 

@@ -391,8 +391,8 @@ def test_a_download_for_a_search_the_server_lost_is_refused_not_substituted(serv
     gone = "That search is no longer here"
     # the page already refused it; these are the routes that did not
     assert gone in _get(f"{base}/?token={token}&job=deadbeef")
-    for route in ("/download?format=matrix", "/download?format=json", "/download?format=graphml",
-                  "/report.txt"):
+    for route in ("/download?format=matrix", "/download?format=matrix_about", "/download?format=json",
+                  "/download?format=graphml", "/report.txt"):
         sep = "&" if "?" in route else "?"
         page = _get(f"{base}{route}{sep}token={token}&job=deadbeef")
         assert gone in page, f"{route} answered with something for a search it does not have"
@@ -1086,3 +1086,22 @@ def test_the_glv_example_button_ignores_a_setting_left_in_the_form(server):
     # and the settings gLV mode does set are still set, so this did not simply ignore the press
     assert said["conditions"] == gui.GLV_EXAMPLE_STUDY
     assert said["report_rates"] is True
+
+
+def test_the_page_offers_what_the_matrix_is_beside_it(server):
+    """#212, Karoline 2026-10-12: a sidecar. The page serves one file per request, so the description is
+    its own entry in the format menu, and it describes the search the CSV came from."""
+    import urllib.request as request
+    base, token = server
+    data = urllib.parse.urlencode({"species": f"{A}\n{B}", "only_entered": "1",
+                                   "derivation": "replicate"}).encode()
+    with request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
+        page = r.read().decode("utf-8")
+    assert '<option value="matrix_about">' in page
+    with request.urlopen(f"{base}/download?token={token}&format=matrix_about", timeout=10) as r:
+        about = r.read().decode("utf-8")
+        assert r.headers["Content-Type"].startswith("text/plain")
+        assert "grownet_matrix.about.txt" in r.headers.get("Content-Disposition", "")
+    assert "describes grownet_matrix.csv" in about and "Derivation: replicate" in about
+    assert "Rows are the affected organism" in about and "SMGDB00000001" in about
+

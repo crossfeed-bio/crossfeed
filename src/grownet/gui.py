@@ -533,7 +533,8 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
                 "<button class=\"primary\" type=\"submit\">Download network</button> "
                 "<select name=\"format\" aria-label=\"Network format\">"
                 "<option value=\"json\">JSON</option><option value=\"graphml\">GraphML</option>"
-                "<option value=\"matrix\">Adjacency matrix (CSV)</option></select></form>")
+                "<option value=\"matrix\">Adjacency matrix (CSV)</option>"
+                "<option value=\"matrix_about\">Adjacency matrix: what it is (TXT)</option></select></form>")
     cytoscape = (f"<form class=\"inline\" method=\"post\" action=\"/cytoscape?token={t}{tail}\">"
                  "<button type=\"submit\">Send to Cytoscape</button></form>")
     report = (f"<details class=\"report\"><summary class=\"btn\">Report</summary>"
@@ -1396,6 +1397,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             # package is where the diagonal is -1 (Karoline, 2026-10-03)
             self._send(matrix.matrix_csv(result["network"]), "text/csv; charset=utf-8",
                        f"{TITLE}_matrix.csv")
+        elif fmt == "matrix_about":
+            # what the grid is, which the CSV cannot carry without breaking a plain read.csv (#212)
+            self._send(matrix.matrix_about(result["network"], f"{TITLE}_matrix.csv"),
+                       "text/plain; charset=utf-8", matrix.about_name(f"{TITLE}_matrix.csv"))
         else:
             self._send(result["network"].to_json(), "application/json", f"{TITLE}_network.json")
 
