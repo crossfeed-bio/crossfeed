@@ -107,6 +107,12 @@ META_PROPERTIES = {
     "study_id": {"type": "string", "description": _RECORDED + "the one study this network was derived "
                                                   "from, where a derivation read a single study"},
     "settings": {"type": "object", "description": _RECORDED + "every setting the run used"},
+    # written by `grownet.slices.fp_bh` and undeclared for as long as that module has existed, found by
+    # Craig's agent on #274 with a syntax-tree walk; the test that came with #274 read only the
+    # `net.meta["x"] = ` form and this key arrives as a `meta=` dict literal
+    "slice": {"type": "string",
+              "description": _RECORDED + "which slice script wrote this network: fp_bh is the FP/BH study, "
+                                         "end to end, from grownet.slices.fp_bh"},
     "selection": {"type": "object",
                   "description": _RECORDED + "what the second box asked for: media, experiments or "
                                              "studies"},

@@ -86,6 +86,10 @@
           "type": "object",
           "description": "recorded, not promised: every setting the run used"
         },
+        "slice": {
+          "type": "string",
+          "description": "recorded, not promised: which slice script wrote this network: fp_bh is the FP/BH study, end to end, from grownet.slices.fp_bh"
+        },
         "selection": {
           "type": "object",
           "description": "recorded, not promised: what the second box asked for: media, experiments or studies"
