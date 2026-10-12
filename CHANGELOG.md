@@ -8,6 +8,11 @@ content.
 
 ### Fixed
 
+- **A strain is shown by its current strain name, not the bare species**, where mGrowthDB's most recent
+  study names only the species (Karoline, 2026-10-12, #24). The current name is now the latest name
+  mGrowthDB gives under that species with a strain designation: taxon 411483 is "Faecalibacterium
+  duncaniae A2-165" rather than "Faecalibacterium duncaniae", and 74426 "Collinsella aerofaciens RCC
+  1377". 2 of mGrowthDB's 63 taxa change. Only names the database itself uses are shown.
 - **0.4.0 called its own output suspect.** `grownet validate` on a network 0.4.0 derived said `meta has
   'project', which this version of the format does not declare`, and the same for `settings_not_used`:
   both keys were added in 0.4.0 and never declared in the schema. A third, `slice`, written by

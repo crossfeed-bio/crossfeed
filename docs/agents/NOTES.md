@@ -574,7 +574,11 @@ Rules for this file:
 - 2026-09-18 (Karoline): species and strain names are resolved through mGrowthDB, never by querying NCBI
   directly. mGrowthDB is linked to NCBI through a local import that is kept up to date, so following its
   naming keeps one source of truth. The current name for a taxon id is the one in the most recently
-  published study holding it (#24).
+  published study holding it (#24). Refined 2026-10-12 (Karoline, on #24: "Yes, strain level"): where
+  that study names only the species, the current name is the latest name mGrowthDB gives under the same
+  species WITH a strain designation (`taxonomy.current_name`). Only names mGrowthDB uses are shown; a
+  designation is never moved from an old species name onto a new one. Live, 2 of 63 taxa change:
+  411483 becomes "Faecalibacterium duncaniae A2-165" and 74426 "Collinsella aerofaciens RCC 1377".
 - 2026-09-18 (Craig, on merging #17): the optional `evidence` and `community` edge fields are accepted
   into the neutral format (item 4 of "Open decisions"). `evidence` is `biculture` (mono versus bi-culture,
   direct) or `dropout` (possibly indirect), and `community` records the members of the full community.
