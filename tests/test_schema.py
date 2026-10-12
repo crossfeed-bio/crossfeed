@@ -477,3 +477,169 @@ def test_validate_names_a_self_arc_and_a_significance_that_contradicts_its_q_val
         notes = []
         validate_document(d, notes)
         assert not [n for n in notes if "-log10" in n], f"{label} was flagged: {notes}"
+
+
+def _meta_keys(sources):
+    """Every literal string key that can reach a network's `meta`, read from the syntax tree.
+
+    Returns {key: {form, ...}} over the forms the package uses or could use:
+
+    - `subscript`: `net.meta["k"] = ...`, or `meta["k"] = ...` on a name called exactly `meta`
+    - `keyword`: `meta={"k": ...}` passed to a call (how `slice`, `query` and `selection` arrive)
+    - `bound`: `meta = {"k": ...}` or `net.meta = {"k": ...}`
+    - `update`: `....meta.update({"k": ...})`, `.update(k=...)` or `.setdefault("k", ...)`
+    - `spread`: `**f()` inside one of the dicts above, where `f` is a function in the package whose
+      return value is a dict literal (how `provenance()` puts `tool` and `derived_at` there)
+
+    The name must be exactly `meta`: Craig's agent's first pass matched names ENDING in `meta` and took
+    `study_meta`, which is spread into edge records and never touches network `meta`, for three
+    undeclared keys that were not (#274).
+    """
+    import ast
+
+    trees = [ast.parse(text) for text in sources]
+    returns = {}
+    for tree in trees:
+        for fn in ast.walk(tree):
+            if isinstance(fn, ast.FunctionDef):
+                for node in ast.walk(fn):
+                    if isinstance(node, ast.Return) and isinstance(node.value, ast.Dict):
+                        returns.setdefault(fn.name, []).append(node.value)
+
+    found = {}
+
+    def add(key, form):
+        if isinstance(key, ast.Constant) and isinstance(key.value, str):
+            found.setdefault(key.value, set()).add(form)
+
+    def is_meta(node):
+        return ((isinstance(node, ast.Attribute) and node.attr == "meta")
+                or (isinstance(node, ast.Name) and node.id == "meta"))
+
+    def from_dict(d, form):
+        for k, v in zip(d.keys, d.values, strict=True):
+            if k is not None:
+                add(k, form)
+            elif isinstance(v, ast.Call) and isinstance(v.func, ast.Name):
+                for r in returns.get(v.func.id, []):
+                    from_dict(r, "spread")
+
+    for tree in trees:
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for t in targets:
+                    if isinstance(t, ast.Subscript) and is_meta(t.value):
+                        add(t.slice, "subscript")
+                    if is_meta(t) and isinstance(node.value, ast.Dict):
+                        from_dict(node.value, "bound")
+            elif isinstance(node, ast.Call):
+                for kw in node.keywords:
+                    if kw.arg == "meta" and isinstance(kw.value, ast.Dict):
+                        from_dict(kw.value, "keyword")
+                f = node.func
+                if isinstance(f, ast.Attribute) and is_meta(f.value):
+                    if f.attr == "update":
+                        for a in node.args:
+                            if isinstance(a, ast.Dict):
+                                from_dict(a, "update")
+                        for kw in node.keywords:
+                            if kw.arg:
+                                add(ast.Constant(kw.arg), "update")
+                    elif f.attr == "setdefault" and node.args:
+                        add(node.args[0], "update")
+    return found
+
+
+def test_the_meta_key_walk_sees_every_form_it_claims():
+    """The positive control for the walk below: one undeclared key planted in each form, and each found.
+
+    The probe #274 first shipped with was a regex for `x.meta["k"] =` and saw 2 of the 20 literal keys
+    that reach a network's `meta`; `slice` arrives as a `meta=` dict literal and passed the suite as an
+    undeclared key in the tree (Craig's agent, on #274). A walk that misses a form passes the same way, so
+    each form is planted here and must come back under its own name.
+    """
+    planted = """
+def made():
+    return {"k_spread": 1}
+
+def run(net, meta):
+    net.meta["k_sub"] = 1
+    meta["k_sub_name"] = 1
+    build(records, meta={"k_kw": 1, **made()})
+    meta = {"k_bound": 1}
+    net.meta = {"k_bound_attr": 1}
+    net.meta.update({"k_upd": 1}, k_upd_kw=1)
+    net.meta.setdefault("k_setdef", 1)
+    study_meta = {"not_meta": 1}
+    record(meta={**study_meta})
+"""
+    found = _meta_keys([planted])
+    expected = {"k_spread": "spread", "k_sub": "subscript", "k_sub_name": "subscript", "k_kw": "keyword",
+                "k_bound": "bound", "k_bound_attr": "bound", "k_upd": "update", "k_upd_kw": "update",
+                "k_setdef": "update"}
+    for key, form in expected.items():
+        assert form in found.get(key, set()), f"the walk missed {key!r} ({form}): {found}"
+    assert "not_meta" not in found, "a name ending in meta is not meta: study_meta feeds edges"
+
+
+def test_every_meta_key_the_tool_writes_is_declared_in_the_schema():
+    """A `meta` key the tool writes and the schema does not declare makes grownet tell a reader its own
+    file is suspect.
+
+    `project` and `settings_not_used` were added on 2026-10-11 and not declared, so **0.4.0 validated its
+    own output** and said `meta has 'project', which this version of the format does not declare: a
+    reader of this version ignores it, so check the spelling or the version`. The undeclared-key
+    machinery of #155 item 5 was working; the omission was real. Found by installing 0.4.0 from PyPI and
+    validating what it derived, which is the one check neither the suite nor the gate was making.
+
+    Both halves are here: the keys `output_meta` actually produces, and every literal key the package's
+    source can put into a network's `meta` by any form `_meta_keys` reads. The second half was a regex
+    for `x.meta["k"] =` until Craig's agent measured it on #274: it saw 2 of the 20 keys that reach a
+    file, and missed `slice`, undeclared and live in `grownet.slices.fp_bh`.
+    """
+    from pathlib import Path
+
+    from grownet.derive import output_meta
+    from grownet.model import InteractionNetwork
+    from grownet.schema import META_PROPERTIES
+
+    records = [{"source": "a", "target": "b", "source_name": "A", "target_name": "B",
+                "effect": "facilitation", "strength": 1.0, "weight": 1.0, "status": "present",
+                "outcome": "quantified", "study_id": "S1"}]
+    _edges, meta = output_meta(list(records))
+    undeclared = sorted(set(meta) - set(META_PROPERTIES))
+    assert not undeclared, (
+        f"output_meta writes these and the schema does not declare them: {undeclared}. `validate` then "
+        "tells a reader of our own file to check the spelling or the version.")
+
+    src = Path(__file__).resolve().parents[1] / "src" / "grownet"
+    found = _meta_keys([path.read_text() for path in sorted(src.rglob("*.py"))])
+    missing = {k: sorted(v) for k, v in sorted(found.items()) if k not in META_PROPERTIES}
+    assert not missing, f"these can reach a network's meta and are not declared (key: how): {missing}"
+
+    # not vacuous: the keys known to arrive by each form the package uses today are all seen
+    for key, form in {"data": "subscript", "growth_rates": "subscript", "slice": "keyword",
+                      "query": "keyword", "selection": "keyword", "study_id": "bound",
+                      "project": "bound", "tool": "spread", "derived_at": "spread"}.items():
+        assert form in found.get(key, set()), f"{key!r} no longer seen as {form}: {sorted(found)}"
+
+    # and a network carrying only declared keys validates with no note about them
+    net = InteractionNetwork()
+    net.meta = dict(meta)
+    notes = []
+    validate_document(net.to_dict(), notes)
+    assert not [n for n in notes if "does not declare" in n], notes
+
+
+def test_the_fp_bh_slice_writes_no_undeclared_meta_key():
+    """`slice` end to end: the network the FP/BH slice writes validates without the undeclared-key note."""
+    from grownet.slices.fp_bh import _build
+
+    records = [{"source": "a", "target": "b", "source_name": "A", "target_name": "B",
+                "effect": "facilitation", "strength": 1.0, "weight": 1.0, "study_id": "S1"}]
+    net = _build(records, "S1", "mGrowthDB (fixture)")
+    assert net.meta["slice"] == "fp_bh"
+    notes = []
+    validate_document(net.to_dict(), notes)
+    assert not [n for n in notes if "does not declare" in n], notes

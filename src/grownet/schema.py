@@ -69,6 +69,18 @@ _RECORDED = "recorded, not promised: "
 META_PROPERTIES = {
     "tool": {"type": "string", "description": _PROMISE + "the tool that derived this network"},
     "tool_version": {"type": "string", "description": _PROMISE + "its version"},
+    # Both were added on 2026-10-11 and NOT declared here, so grownet 0.4.0 validated its own output and
+    # told a reader `meta has 'project', which this version of the format does not declare: a reader of
+    # this version ignores it, so check the spelling or the version`. The keys are part of this version;
+    # the note was the schema not knowing it, which is the undeclared-key machinery of #155 item 5 doing
+    # its job on a real omission. Found by installing 0.4.0 from PyPI and validating what it derived.
+    "project": {"type": "object",
+                "description": "where to find the project, its schema and the two documents "
+                               "`provisional` cites: a reader of this file alone had no URL for any of "
+                               "them"},
+    "settings_not_used": {"type": "array", "items": {"type": "string"},
+                          "description": "the settings this derivation does not read, so a recorded "
+                                         "value is not taken for one that was used"},
     # `provenance` takes it from `datetime.now().astimezone()`, so it is the LOCAL date of whoever ran
     # the derivation; `derived_at` beside it carries the time with its offset, which is what says which
     # day that was anywhere else. The description said UTC, which it has never been (#155 item 14).
@@ -95,6 +107,12 @@ META_PROPERTIES = {
     "study_id": {"type": "string", "description": _RECORDED + "the one study this network was derived "
                                                   "from, where a derivation read a single study"},
     "settings": {"type": "object", "description": _RECORDED + "every setting the run used"},
+    # written by `grownet.slices.fp_bh` and undeclared for as long as that module has existed, found by
+    # Craig's agent on #274 with a syntax-tree walk; the test that came with #274 read only the
+    # `net.meta["x"] = ` form and this key arrives as a `meta=` dict literal
+    "slice": {"type": "string",
+              "description": _RECORDED + "which slice script wrote this network: fp_bh is the FP/BH study, "
+                                         "end to end, from grownet.slices.fp_bh"},
     "selection": {"type": "object",
                   "description": _RECORDED + "what the second box asked for: media, experiments or "
                                              "studies"},
