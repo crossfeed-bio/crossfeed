@@ -6,6 +6,17 @@ content.
 
 ## [Unreleased]
 
+### Changed
+
+- **In gLV mode an organism's published growth rate and carrying capacity no longer move with a display
+  setting** (Karoline, 2026-10-12, #204: the rate is a property of the organism). They were a median over
+  the arcs that survived the absence threshold, the q-value filter and the low-quality filter, so
+  `--include-absent` moved one rate by 14 per cent. They are now a median over every row the derivation
+  fitted. On all of mGrowthDB at the defaults this moves two published rates, *B. thetaiotaomicron* 0.7915
+  to 0.7848 /h and *R. intestinalis* 0.5899 to 0.5806 /h, with their capacities, and gives *C.
+  testosteroni* the rate it was fitted with; with the flag or the q-value filter the numbers are now
+  identical.
+
 ### Fixed
 
 - **0.4.0 called its own output suspect.** `grownet validate` on a network 0.4.0 derived said `meta has

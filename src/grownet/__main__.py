@@ -329,6 +329,10 @@ def _derive(a):
                                                    no_growth_factor=a.no_growth_factor,
                                                    capacity_max_fall=a.capacity_max_fall,
                                                    selection=parse_selection(a.conditions))
+            # every row the derivation fitted, before any display filter: an organism's published rate is a
+            # property of the organism, so it must not move with --include-absent or the q-value filter
+            # (Karoline, 2026-10-12, on #204: option 1)
+            fitted_rows = list(records)
             records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold,
                                          a.no_growth_alpha, a.no_growth_factor, a.merge_arcs, a.min_studies,
                                          a.merge_genera, max_adjusted_p=a.max_adjusted_p,
@@ -358,7 +362,8 @@ def _derive(a):
         print(f"warning: {errors[0]}", file=sys.stderr)
     organism_rates = {}
     if a.report_rates:
-        organism_rates, skipped = _rates_of(a, client, [a.study], net, skipped, records)
+        organism_rates, skipped = _rates_of(a, client, [a.study], net, skipped,
+                                            fitted_rows if a.live else records)
     result = {"study": a.study, "entries": [], "resolved": [], "unresolved": [], "studies": [a.study],
               "rates": organism_rates, "client": client if a.live else None,
               "skipped": skipped, "errors": errors, "network": net}

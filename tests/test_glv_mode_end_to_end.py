@@ -336,3 +336,77 @@ def test_both_derivations_cite_a_study_by_the_same_field():
     fixed = '    m = {"study_citation": study.get("name") or study.get("id", ""), "study_name": ""}'
     assert cited_field(regression) == "citation"           # the bug is visible now
     assert cited_field(fixed) == "name"                    # and distinguishable from the fix
+
+
+def test_a_published_rate_does_not_move_with_a_display_flag():
+    """#204, Karoline 2026-10-12 (option 1): the published rate is a property of the organism, so it comes
+    from every row the derivation fitted, not from the arcs a display filter kept. It was a median over
+    the surviving arcs, and `--include-absent` moved Roseburia's rate by 14 per cent on SMGDB00000007."""
+    def rates(**over):
+        r = run_query(TimeCourseClient(), [A, B], {**glv_mode({}), **over})
+        organisms = (r["network"].meta.get("growth_rates") or {}).get("organisms", {})
+        return {e["name"]: (e["rate"], e.get("capacity")) for e in organisms.values()}
+
+    default, with_absent = rates(), rates(include_absent=True)
+    assert default and with_absent
+    shared = set(default) & set(with_absent)
+    assert shared, (default, with_absent)
+    assert {n: default[n] for n in shared} == {n: with_absent[n] for n in shared}
+    # the simulation's own rates come back for both, whichever arcs the display keeps
+    for name, (rate, _) in default.items():
+        assert abs(rate - RATES[name]) < 0.05 * RATES[name], (name, rate)
+
+
+def test_the_rate_is_the_median_over_every_fitted_row_not_the_kept_ones(monkeypatch):
+    """The case the simulation above cannot show, since all its rows of one organism carry one rate: two
+    rows of B fitted at different rates, one of which the absence threshold hides. The median over the
+    kept row was 0.3; over every fitted row it is 0.4, with the flag or without it."""
+    from test_gui import FakeClient
+
+    import grownet.gui as gui
+
+    def row(source, strength, sd, rate):
+        return {"source": source, "target": "b", "source_name": source.upper(), "target_name": "B",
+                "effect": "facilitation", "strength": strength, "weight": strength, "sd": sd, "se": sd / 2,
+                "p_value": 0.01, "n_with": 3, "n_without": 3, "outcome": "quantified", "study_id": "S1",
+                "metric": "integrated:two_stage", "fitted_rate": rate, "fitted_rate_unit": "1/h",
+                "evidence": "biculture", "medium": "WC"}
+
+    rows = [row("a", 2.0, 0.5, 0.3), row("c", 0.1, 1.0, 0.5)]        # the second is below k * sd
+    monkeypatch.setattr(gui, "derive_interactions", lambda *a, **k: ([dict(r) for r in rows], []))
+    got = {}
+    for flag in (False, True):
+        r = gui.run_query(FakeClient(), [], {**glv_mode({}), "include_absent": flag}, all_studies=True,
+                          published=False)
+        got[flag] = (r["network"].meta.get("growth_rates") or {}).get("organisms", {})["b"]["rate"]
+    assert got[False] == got[True] == 0.4, got
+
+
+def test_the_command_line_takes_the_rate_from_every_fitted_row_too(monkeypatch, tmp_path):
+    """The same fix on `derive <study> --live --glv-mode --rates`, which overwrote its records with the
+    kept ones before reading the rates from them."""
+    from test_gui import FakeClient
+
+    import grownet.derive as derive
+    import grownet.mgrowthdb as mgrowthdb
+    from grownet.__main__ import main
+
+    def row(source, strength, sd, rate):
+        return {"source": source, "target": "b", "source_name": source.upper(), "target_name": "B",
+                "effect": "facilitation", "strength": strength, "weight": strength, "sd": sd, "se": sd / 2,
+                "p_value": 0.01, "n_with": 3, "n_without": 3, "outcome": "quantified", "study_id": "S1",
+                "metric": "integrated:two_stage", "fitted_rate": rate, "fitted_rate_unit": "1/h",
+                "evidence": "biculture", "medium": "WC"}
+
+    rows = [row("a", 2.0, 0.5, 0.3), row("c", 0.1, 1.0, 0.5)]
+    monkeypatch.setattr(derive, "derive_interactions", lambda *a, **k: ([dict(r) for r in rows], []))
+    monkeypatch.setattr(mgrowthdb, "MGrowthDBClient", lambda *a, **k: FakeClient())
+    got = {}
+    for flag in ([], ["--include-absent"]):
+        out = tmp_path / f"r{len(flag)}.csv"
+        main(["derive", "SMGDB00000001", "--live", "--glv-mode", "--rates", str(out), "--out",
+              str(tmp_path / "n.json"), *flag])
+        line = [x for x in out.read_text(encoding="utf-8").splitlines() if x.startswith("B,")][0]
+        got[bool(flag)] = float(line.split(",")[1])
+    assert got[False] == got[True] == 0.4, got
+
