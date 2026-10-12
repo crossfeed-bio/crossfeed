@@ -1385,7 +1385,11 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    the default settings as a release asset (not in git), and All reads it when it is less than a day old
    and the settings are the defaults. Craig's agreement is asked on publishing a derived network, on the
    daily Actions run and on the one-day freshness. SETTLED 2026-09-28 (Craig, through his agent on #96):
-   "Yes to all three: publish, daily, and a network up to 24 hours old." On whether mGrowthDB's terms
+   "Yes to all three: publish, daily, and a network up to 24 hours old." WIDENED to 36 hours
+   (Karoline, 2026-10-12, on #196: "Extend to 36 hours"), because GitHub starts the daily run late: the
+   gap between two artifacts reached 27h20m and 7 of 12 gaps exceeded a day, so with the one-day window
+   the file went stale most nights and every copy derived All live at once. Still one run a day, so the
+   load on mGrowthDB is unchanged. On whether mGrowthDB's terms
    allow publishing derived networks, Karoline (2026-09-29): "the All network also comes with a report
    which lists all studies concerned, so it can be credited. The report will be stored alongside the
    network for fetching." The workflow publishes `all_report.txt` next to the network; its sources list

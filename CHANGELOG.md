@@ -6,6 +6,15 @@ content.
 
 ## [Unreleased]
 
+### Changed
+
+- **The daily All network is served while it is less than 36 hours old**, not one day (Karoline,
+  2026-10-12, #196). GitHub starts the daily run late by a varying amount: the gap between two published
+  artifacts reached 27h20m and 7 of 12 gaps exceeded a day, so the file went stale most nights before its
+  replacement landed and every copy of grownet derived All live from mGrowthDB at the same time. Still one
+  run a day. The format id and the derivation check, which keep a reader from a wrong artifact, are
+  unchanged.
+
 ### Fixed
 
 - **0.4.0 called its own output suspect.** `grownet validate` on a network 0.4.0 derived said `meta has

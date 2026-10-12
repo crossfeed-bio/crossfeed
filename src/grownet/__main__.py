@@ -732,7 +732,7 @@ def build_parser() -> argparse.ArgumentParser:
                            "--live; the study argument then limits it to those studies)")
     what.add_argument("--no-published", action="store_true",
                       help="with --all, derive live even when the network derived once a day in the grownet "
-                           "repository is less than a day old, was derived by the same derivation this run would "
+                           "repository is less than 36 hours old, was derived by the same derivation this run would "
                            "use, and the settings are the defaults; otherwise it derives live")
     what.add_argument("--no-cache", action="store_true",
                       help="read everything from mGrowthDB again, instead of reusing what an earlier run "
