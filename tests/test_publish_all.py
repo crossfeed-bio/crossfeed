@@ -67,7 +67,13 @@ def test_the_release_description_says_what_this_run_produced_and_what_each_file_
 
 
 def test_the_workflow_sets_the_description_on_every_run():
-    wf = (ROOT / ".github" / "workflows" / "all-network.yml").read_text(encoding="utf-8")
+    import pytest
+    path = ROOT / ".github" / "workflows" / "all-network.yml"
+    if not path.exists():
+        # the sdist carries the publisher but not the repository's workflows, which are not part of what
+        # a packager builds; the check runs wherever the workflow is, which is every CI job but `package`
+        pytest.skip("no .github in this tree (an unpacked sdist)")
+    wf = path.read_text(encoding="utf-8")
     assert "publish_all.py out notes.md" in wf
     assert "gh release edit all-network --notes-file notes.md" in wf
     assert '--notes "' not in wf, "a literal description behind `||` is written once and never again"
