@@ -827,7 +827,9 @@ replicates are compared. Strain identities and description variants still come f
 ## Growth rate metric (#41, built 2026-09-27)
 
 `crossfeed.rates`: `easylinear` reimplements growthrates' fit_easylinear (windows of h points starting at
-points 1 to N minus h, steepest slope, widened to every window within quota 0.95 of it, refit), and matched mGrowthDB's
+points 1 to N minus h, steepest slope, refit from the first window within quota 0.95 of it to the end of the
+last, every window between included, exactly as growthrates' `tp <- seq(min(candidates), max(candidates) + h - 1)`
+does; #229 checked it against growthrates 0.8.5, identical to 5e-15), and matched mGrowthDB's
 reported growthRate on 190 of 192 curves within 10% (SMGDB00000002, 4, 7, 13; median ratio 1.00 each);
 keeping growthrates' loop, which skips the last possible window, matched better on study 13. `baranyi` is the prototype's
 guarded Levenberg-Marquardt fit (multi-start, mu within 5x the steepest slope, R2 >= 0.9); a rejected fit

@@ -8,6 +8,11 @@ content.
 
 ### Fixed
 
+- **The growth-rate docstring says what `easylinear` does** (#229). It said the refit spans "every window
+  whose slope reaches" the quota; it spans from the first such window to the end of the last, every
+  window between included, which is what `growthrates`' `fit_easylinear` does. Kept as it is (Karoline,
+  2026-10-12: option 2): checked against `growthrates` 0.8.5 on studies 4 and 5, the two agree to 5e-15
+  on all 342 curves both fit. No number changes.
 - **0.4.0 called its own output suspect.** `grownet validate` on a network 0.4.0 derived said `meta has
   'project', which this version of the format does not declare`, and the same for `settings_not_used`:
   both keys were added in 0.4.0 and never declared in the schema. A third, `slice`, written by
