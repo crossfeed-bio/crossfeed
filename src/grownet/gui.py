@@ -1083,9 +1083,12 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     s = {**DEFAULTS, **(settings or {})}
     if all_studies and published and daily.usable(s, DEFAULTS):
         say(0, None, "Reading today's All network from the grownet repository")
-        found = daily.fetch(s)      # and only if it was derived the way this search would derive it
+        why_live = []
+        found = daily.fetch(s, why=why_live)   # only if derived the way this search would derive it
         if found:
             return found
+    else:
+        why_live = []
     names = [] if all_studies else split_entries(entries)    # one per line, and at commas and semicolons
     say(0, None, "Looking up the species in mGrowthDB")
     index = species_index(client) if index is None else index
@@ -1099,6 +1102,10 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # asked for and not run. Putting the second kind in the first made an empty network caused by the
     # reader's own setting read as a database failure, in a run where every request succeeded.
     errors, notes, skipped, records = [], [], [], []
+    # why the network derived once a day was not served, when it was asked for: a stale file and a defect
+    # in reading one looked the same before (#157)
+    notes += [f"the network derived once a day in the grownet repository was not used, so All was derived "
+              f"live: {reason}" for reason in why_live]
 
     # the second box: study ids in it narrow the search as "Only these studies" used to, media and
     # experiment ids are matched per experiment inside the derivation (#113)

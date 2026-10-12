@@ -734,7 +734,7 @@ def test_the_daily_all_network_is_used_when_fresh_and_the_settings_are_the_defau
     # `fetch` takes the search's settings now, so the artifact's own derivation can be compared with
     # the one the reader asked for (2026-10-10)
     monkeypatch.setattr(published, "fetch",
-                        lambda settings=None: published.fetch_from(
+                        lambda settings=None, why=None: published.fetch_from(
                             opener, now=derived + datetime.timedelta(hours=1), settings=settings))
     r = run_query(FakeClient(), [], {}, all_studies=True)
     assert r["published"] == payload["network"]["meta"]["derived_at"] and r["all"]

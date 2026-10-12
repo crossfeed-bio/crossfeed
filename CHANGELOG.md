@@ -8,6 +8,12 @@ content.
 
 ### Fixed
 
+- **All says why it was derived live, when the network derived once a day was not used** (#157): the
+  file was too old, from another format, derived another way, unreachable, or, worth reporting, fetched
+  and unreadable, which is a defect in grownet. All five used to look the same, and a defect in reading
+  the file was indistinguishable from a stale one.
+- **A search's notes reach the report and the command line**, not only the page: a value in Exclude
+  these studies that excluded nothing, a check asked for and not run, and the reason above.
 - **0.4.0 called its own output suspect.** `grownet validate` on a network 0.4.0 derived said `meta has
   'project', which this version of the format does not declare`, and the same for `settings_not_used`:
   both keys were added in 0.4.0 and never declared in the schema. A third, `slice`, written by

@@ -410,6 +410,8 @@ def _derive_species(a):
               + (f" (did you mean: {', '.join(hints)}?)" if hints else ""), file=sys.stderr)
     for error in result["errors"]:
         print(error, file=sys.stderr)
+    for note in result.get("notes", ()):
+        print(f"note: {note}", file=sys.stderr)
     print("studies searched: " + (", ".join(result["studies"]) or "none"), file=sys.stderr)
     net = result["network"]
     problems = net.validate()

@@ -275,6 +275,11 @@ def report_text(result: dict) -> str:
         lines += ["  " + line for line in textwrap.wrap(meta["provisional"], 110)]
     for error in result["errors"]:
         lines.append(f"error: {error}")
+    # the advisory messages of a search, which reached the page and neither this report nor the command
+    # line: a value in Exclude these studies that excluded nothing, a check asked for and not run, the
+    # reason the daily network was not used (found working on #187 and #157)
+    for note in result.get("notes", ()):
+        lines.append(f"note: {note}")
     lines.append("")
 
     lines.append("interactions:" if shown else "interactions: none")
