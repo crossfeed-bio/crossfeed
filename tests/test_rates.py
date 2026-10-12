@@ -109,3 +109,22 @@ def test_a_curve_that_only_declines_has_a_non_positive_rate_not_a_crash():
     # comparison (SMGDB00000014's 0.75% linoleic acid co-cultures). The steepest slope is returned instead
     declining = [math.exp(-0.3 * t) for t in T]
     assert easylinear(T, declining) == pytest.approx(-0.3)
+
+
+def test_a_refit_that_turns_negative_under_a_rising_window_is_no_rate():
+    """#229 (a), Karoline 2026-10-12: two rises separated by a deep fall, so the steepest window rises and
+    the first-to-last refit, growthrates' own span, comes out negative. growthrates returns that as the
+    maximum growth rate; grownet says the curve has none, which keeps a growing culture from reading as no
+    growth downstream."""
+    import math
+
+    import pytest
+
+    from grownet.rates import RateUnavailable, easylinear_fit
+    logs = [5, 6, 7, 8, 9, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 1, 2, 3, 4, 5, 6]
+    with pytest.raises(RateUnavailable, match="falls to"):
+        easylinear_fit(list(range(len(logs))), [math.exp(y) for y in logs], window=5)
+    # nothing else moves: a curve whose steepest window does not rise still returns its rate as it is
+    falling = [5, 4, 3, 2, 1, 0, -1]
+    assert easylinear_fit(list(range(7)), [math.exp(y) for y in falling], window=5)["rate"] < 0
+

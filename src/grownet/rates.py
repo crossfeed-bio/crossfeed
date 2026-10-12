@@ -111,6 +111,17 @@ def easylinear_fit(times, values, window: int = DEFAULT_WINDOW, quota: float = Q
     candidates = [i for i, s in enumerate(slopes) if s >= quota * best]
     first, last = min(candidates), max(candidates) + window
     fit = _line(xs[first:last], ys[first:last])
+    if fit[0] <= 0:
+        # The steepest window rises and the refit over the first-to-last span, which is growthrates' own,
+        # does not: the windows between two separated rises fell far enough to turn the slope. The
+        # reference returns that number as the maximum specific growth rate (-0.01218 /h on a chemostat of
+        # SMGDB00000005), and a non-positive rate reads downstream as NO GROWTH, which feeds the obligate and
+        # abolished outcomes, for a culture whose steepest stretch was growing. So it is no rate, with the
+        # reason (Karoline, 2026-10-12, on #229: "go with your recommendations"). Only here does this
+        # depart from growthrates; a curve with no rising window at all still returns its rate as it is.
+        raise RateUnavailable(f"the steepest window rises at {best:.4g} per time unit, but the refit from the "
+                              f"first to the last window within {quota:g} of it falls to {fit[0]:.4g}, so "
+                              "this curve has no maximum growth rate by this method")
     return {"rate": fit[0], "start": xs[first], "end": xs[last - 1], "points": last - first}
 
 

@@ -8,6 +8,12 @@ content.
 
 ### Fixed
 
+- **A growth curve whose steepest window rises can no longer return a negative "maximum growth rate"**
+  (Karoline, 2026-10-12, #229). The refit over growthrates' first-to-last span can fall below zero when two
+  rises are separated by a deep fall, and a non-positive rate read downstream as no growth. Such a curve
+  now has no rate, with the reason, and its replicate is left out as any unreadable rate is. This is the
+  one place grownet departs from growthrates, which returns the negative number. On all of mGrowthDB it is
+  2 of 1090 strain curves, both in SMGDB00000005's chemostats, which the default leaves out.
 - **0.4.0 called its own output suspect.** `grownet validate` on a network 0.4.0 derived said `meta has
   'project', which this version of the format does not declare`, and the same for `settings_not_used`:
   both keys were added in 0.4.0 and never declared in the schema. A third, `slice`, written by
