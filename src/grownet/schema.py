@@ -101,7 +101,15 @@ META_PROPERTIES = {
                                              "and how many comparisons it ran over"},
     "query": {"type": "string", "description": _RECORDED + "what was searched: species, all, or a study"},
     "species": {"type": "array", "description": _RECORDED + "the names typed into the search"},
-    "studies": {"type": "array", "description": _RECORDED + "the studies the search read"},
+    "studies": {"type": "array", "description": _RECORDED + "the studies the search read; one it could "
+                                                 "not read is named in errors instead"},
+    # a run that could not read a study wrote it here as a source and recorded the failure nowhere in the
+    # file, so `validate` passed it and a reader could not tell a complete run from an incomplete one (#247)
+    "errors": {"type": "array", "items": {"type": "string"},
+               "description": _RECORDED + "what could not be read from mGrowthDB; empty when nothing failed"},
+    "complete": {"type": "boolean",
+                 "description": _RECORDED + "false when anything the run asked for could not be read, so "
+                                            "the network holds less than the data does"},
     # a single-study derivation records which study it was, and this was emitted and undeclared: the
     # agreement test covered node, edge and study and not `meta`, so nothing compared the two (#155 item 14)
     "study_id": {"type": "string", "description": _RECORDED + "the one study this network was derived "
@@ -260,7 +268,7 @@ def _objs(x):
     return x if isinstance(x, list) and all(isinstance(i, dict) for i in x) else None
 
 
-_META_TYPES = {"string": str, "array": list, "object": dict}
+_META_TYPES = {"string": str, "array": list, "object": dict, "boolean": bool}
 
 
 def _meta_problems(meta: dict, notes: list = None) -> list:
@@ -282,8 +290,15 @@ def _meta_problems(meta: dict, notes: list = None) -> list:
         if value is None:
             continue
         kind = _META_TYPES[declared["type"]]
-        if not isinstance(value, kind) or isinstance(value, bool):
+        # bool is an int in Python and none of the other kinds, so it is refused everywhere but where a
+        # boolean is declared
+        if not isinstance(value, kind) or (isinstance(value, bool) and kind is not bool):
             problems.append(f"meta.{key} must be {declared['type']}, not {type(value).__name__}")
+    # a valid file can still be an incomplete run, and the file is the only thing a later reader has (#247)
+    if meta.get("complete") is False and notes is not None:
+        errors = meta.get("errors") if isinstance(meta.get("errors"), list) else []
+        notes.append(f"this network records {len(errors)} error(s) and is INCOMPLETE: it holds what could be "
+                     "read from mGrowthDB, not all the run asked for (meta.errors names them)")
     return problems
 
 
