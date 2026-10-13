@@ -8,6 +8,13 @@ content.
 
 ### Added
 
+- **A check that reads the live corpus** (#237). Every other check was closed over the repository: the
+  gate reads source, the suite is offline, the release check compares strings. After each daily publish,
+  `packaging/live_check.py` checks the All network just derived from mGrowthDB, and one study derived in
+  gLV mode, for properties rather than numbers, so it does not go stale as mGrowthDB grows: the fields
+  each kind of arc promises, the arithmetic between them under the derivation that made them, the schema
+  with no undeclared key, and nothing empty. A violation opens its own `live-check-failed` issue. On
+  2026-10-12 every property held on 145 arcs, 78 below the threshold, and the gLV-mode study.
 - **The adjacency matrix CSV travels with a description of itself** (Karoline, 2026-10-12, #212: a
   sidecar file). `--format matrix --out x.csv` writes `x.about.txt` beside it, and the page's format menu
   has "Adjacency matrix: what it is (TXT)". It holds the version, date, derivation and metric, every

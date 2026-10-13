@@ -84,6 +84,18 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
 5. **Check as a user would:** `uv tool install grownet` then `grownet gui` on a clean machine, and the zip on
    a Windows machine. A version on PyPI cannot be replaced: a mistake is fixed with a new version.
 
+## If the live check fails
+
+After each daily publish, `packaging/live_check.py` checks the file just derived from the live mGrowthDB,
+and one study derived in gLV mode, for properties the tool promises rather than numbers: every arc carries
+the fields its evidence and outcome promise, `strength` is `log2(metric_with / metric_without)` under the
+comparison and `coefficient` is `(metric_with - metric_without) / partner_abundance` under the integrated
+form, the network validates with no undeclared key, and nothing is empty (#237). It is the one check that
+reads a real mGrowthDB response. A violation opens an issue labeled `live-check-failed`, whose run log
+names every arc; the artifact was published anyway, because every copy derives the same thing live, so
+the fix is in the code. Run it by hand with `python packaging/live_check.py DIR`, where `DIR` holds an
+`all_result.json`.
+
 ## If the daily All artifact is broken
 
 The `all-network` workflow publishes `all_result.json` as an asset of the `all-network` release, from
