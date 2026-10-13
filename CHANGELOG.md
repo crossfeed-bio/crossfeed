@@ -14,9 +14,47 @@ content.
   setting, which way the rows run, what `0` and `NA` mean, the pairs left at 0 for disagreeing in sign
   (which the CSV dropped without a word), the `NA` cells with their bounds, the media and the sources.
   The grid itself is unchanged, so a plain `read.csv` still reads it.
+- **The report names what no drop-out arc shows on its own** (#207, #209). It lists every ordered pair
+  measured both as a pair and inside a community with **opposite effects**, both arcs together, as a
+  result: in Karoline's words, it "just shows that higher order interactions matter". On the All network
+  that is *Roseburia intestinalis* on *Blautia hydrogenotrophica*, an inhibition from the biculture and a
+  facilitation from the drop-out. And it lists the **drop-out arcs that share one full-community
+  reference**, by target: part of each such arc is how the target fared in that community rather than what
+  removing the member did. On the All network that is 118 arcs in 17 groups. The `provisional` sentence
+  says the second limit, and `docs/LIMITATIONS.md` gains entry 8. Nothing is merged, re-centred or
+  withheld: options 2 and 3 of #209 remain a method decision.
+
+### Changed
+
+- **The daily All network is served while it is less than 36 hours old**, not one day (Karoline,
+  2026-10-12, #196). GitHub starts the daily run late by a varying amount: the gap between two published
+  artifacts reached 27h20m and 7 of 12 gaps exceeded a day, so the file went stale most nights before its
+  replacement landed and every copy of grownet derived All live from mGrowthDB at the same time. Still one
+  run a day. The format id and the derivation check, which keep a reader from a wrong artifact, are
+  unchanged.
 
 ### Fixed
 
+- **The gLV package's files describe themselves correctly** (#210, #211):
+  - the zip's README says to match `growth_rates.csv` to a matrix **by the organism column, never by
+    position**: each matrix holds its own unit's organisms in its own order, and a positional read gave a
+    plausible, wrong simulation, off by factors of 2 to 4;
+  - in gLV mode the README no longer describes the off-diagonals with the comparison's formula, nineteen
+    lines after its own integrated description, nor says a setting chooses the estimator that the
+    integrated form does not read;
+  - cells "from a comparison where one side did not grow" are named only where they are in a matrix;
+  - `capacity_curves_left_out` writes a count of 0 as `0`, not as a blank that R reads as `NA`;
+  - a nonzero value below 5e-5 is no longer printed as `0`, which means no interaction; it is written
+    in scientific notation instead (`3e-05`), which `read.csv` reads, and every other number prints as before;
+  - in R, the coverage line counts organisms outside every matrix (it read "8 of 8" for an 11-organism
+    network), `summary()` gains `network_organisms`, and `glv_write()` writes the three rate columns it
+    was missing and the matrices at four significant digits, as the download does.
+- **A run that could not read everything now says so in the file it writes.** A study that answered 404
+  was written into `meta.studies` (which the schema describes as the studies the search READ), the file
+  carried no trace of the failure, and `grownet validate` passed it. Now `meta.studies` lists only the
+  studies read, `meta.errors` names what failed, `meta.complete` is false, and `validate` notes the file
+  as incomplete. The report reads the errors from the file. And `derive <study> --live` exits 1 when
+  curves could not be read, as the species and All paths have since #243 (#247).
 - **0.4.0 called its own output suspect.** `grownet validate` on a network 0.4.0 derived said `meta has
   'project', which this version of the format does not declare`, and the same for `settings_not_used`:
   both keys were added in 0.4.0 and never declared in the schema. A third, `slice`, written by
@@ -25,6 +63,18 @@ content.
   the format id does not move, since `meta` is an open object. The test behind it now walks the syntax
   tree for every form a key can reach a network's `meta` by, where it read one form and saw 2 of the 20
   keys (#274).
+- **The daily All artifact's release description is rewritten by every run** and says what that run
+  produced: studies, organisms, arcs, when, by which version and which derivation. It was written once, on
+  the first run, so editing it in the workflow changed nothing, and it promised "the default settings" for
+  `all_network.json` and `all_report.txt`, which nothing checks against a reader's version. It now says so,
+  and which file the freshness rule governs (#236).
+- **A collapsed All derivation is no longer published.** A run with no arcs is refused, and so is one with
+  less than half the arcs of the artifact it replaces unless it is run by hand with `allow_drop`. The
+  workflow refused only a run with errors, so zero arcs published and was served to every reader at the
+  defaults until the next run (#236).
+- **`packaging/check_release.py` refuses a tag that already names another commit**, and with no tag reports
+  a tagged version as released rather than ready. It said `v0.3.0 is ready` on a tree whose v0.3.0 was
+  tagged and on PyPI (#236).
 
 ## [0.4.0] (2026-10-11)
 

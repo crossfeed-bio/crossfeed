@@ -327,7 +327,12 @@ def _number(value: float | None) -> str:
     did not grow at all (#129)."""
     if value is None:
         return "NA"
-    return "0" if value == 0 else f"{value:.4f}".rstrip("0").rstrip(".")
+    if value == 0:
+        return "0"
+    text = f"{value:.4f}".rstrip("0").rstrip(".")
+    # four decimal places print any |value| below 5e-5 as `0` or `-0`, and `0` is documented as no
+    # interaction; four significant digits there instead, as `_coefficient` writes them (#211)
+    return f"{value:.4g}" if text in ("0", "-0") else text
 
 
 def matrix_csv(net: InteractionNetwork, diagonal: float | None = None) -> str:
@@ -574,7 +579,10 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
                           else rate.get("capacity_n", "")) if capacity is not None else "",
                          # an empty capacity reads as absence unless the curves that gave none are
                          # counted where the capacity itself is read (found 2026-10-06)
-                         len(rate.get("capacity_left_out") or "") or "",
+                         # 0 is a count, and a blank is what R reads as NA, which is the cell the
+                         # column exists to tell apart from "no capacity at all" (#211 item 5); blank
+                         # only where the derivation did not record the curves at all
+                         "" if "capacity_left_out" not in rate else len(rate.get("capacity_left_out") or ()),
                          # a plateau is the peak of a curve that may have declined after it, so what the
                          # curves held at their last measurement travels with it (Karoline, 2026-10-07)
                          "" if rate.get("capacity_fall") is None else f"{rate['capacity_fall']:.4g}",
@@ -1070,8 +1078,13 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             "from_the_ratio": [(_label(net.nodes[a]), _label(net.nodes[b]))
                                for (a, b), entry in values.items() if entry["how"] == "ratio"],
             "obligate_rows": list(rows_fitted), "plateau_rows": list(plateau_rows),
+            # only cells that are in a matrix: an organism left out of every block took its censored
+            # cells with it, and the README named them as entering the median of their pair while
+            # WHAT IS NOT IN HERE listed the same organisms as excluded (#211 item 2)
             "censored_cells": [(_label(net.nodes[a]), _label(net.nodes[b]))
-                               for (a, b), entry in values.items() if entry["censored"]],
+                               for (a, b), entry in values.items()
+                               if entry["censored"] and any(a in block["ids"] and b in block["ids"]
+                                                            for block in matrices)],
             "metric": metrics[0] if metrics else "",
             # the integrated path's equivalent of `plateau_rows`: an organism whose fit implied no
             # plateau, so a measured one was put in its place. `plateau_rows` is populated from
@@ -1100,21 +1113,35 @@ def coefficient_csv(block: dict) -> str:
     return out.getvalue()
 
 
-def _rate_method_lines(got: dict) -> list:
-    """What the README says about the estimator behind r, and what choosing another one would move."""
+def _rate_method_lines(got: dict, derivation: str = "replicate") -> list:
+    """What the README says about the estimator behind r, and what choosing another one would move.
+
+    Per derivation, as `DIAGONAL_PROSE` and `OFF_DIAGONAL` are: a package built in gLV mode said, nineteen
+    lines below its own integrated description, that "each off-diagonal uses its own comparison's two
+    rates" and that the Growth rate method setting chooses the estimator, which the integrated form does
+    not read (#211 item 1).
+    """
     methods = got["rate_methods"]
     named = ", ".join(methods) if methods else "not recorded"
     merge = ("the median over the fitted rows, each row's rate the median over that organism's "
              "monoculture replicates" if any(str(m).startswith("integrated") for m in methods)
              else "median over replicates and studies")
-    lines = [f"  Growth rates: {named}, {merge}, batch monocultures only.",
-             "      The estimator sets where this matrix settles as well as how fast a simulation",
-             "      runs. The diagonal's r_i is that merged rate, while each",
-             "      off-diagonal uses its own comparison's two rates; x_j_star is the mean over the",
-             "      window that estimator fitted in; and the rate guards reject different curves. So",
-             "      the equilibrium below belongs to this estimator. The Growth rate method setting",
-             "      chooses it.",
-             ]
+    if derivation == "integrated":
+        lines = [f"  Growth rates: {named}, {merge}, batch monocultures only.",
+                 "      r_i is fitted together with A[i][i] from the organism's monoculture time courses,",
+                 "      and its row's off-diagonals from the co-cultures with those held fixed, so no",
+                 "      separate estimator is chosen: the Growth rate method setting is not read by this",
+                 "      derivation. The equilibrium below belongs to that fit.",
+                 ]
+    else:
+        lines = [f"  Growth rates: {named}, {merge}, batch monocultures only.",
+                 "      The estimator sets where this matrix settles as well as how fast a simulation",
+                 "      runs. The diagonal's r_i is that merged rate, while each",
+                 "      off-diagonal uses its own comparison's two rates; x_j_star is the mean over the",
+                 "      window that estimator fitted in; and the rate guards reject different curves. So",
+                 "      the equilibrium below belongs to this estimator. The Growth rate method setting",
+                 "      chooses it.",
+                 ]
     if got["lag_methods"]:
         lines.append(f"  Lag: {', '.join(got['lag_methods'])}, reported beside each rate in "
                      "growth_rates.csv. A gLV model has no lag term, so a simulation that should start "
@@ -1139,6 +1166,11 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "  growth_rates.csv        one growth rate per organism, with the estimator, the lag and the",
         "                          monoculture carrying capacity behind it, and the doubling time the",
         "                          rate implies, ln(2) / r, in the time unit of the rate",
+        "  MATCH THE TWO BY THE ORGANISM COLUMN, NEVER BY POSITION. growth_rates.csv holds every",
+        "      organism with a rate, in one order; each matrix holds only its own unit's organisms, in",
+        "      its own order. Rows 1 to n of the rates file are not the rates of an n x n matrix, and a",
+        "      simulation built that way runs without an error and settles somewhere else. In R:",
+        "      r <- rates$growth_rate[match(rownames(A), rates$organism)]",
         "",
         "THE COEFFICIENTS",
         "  A[i][j] is the effect of j on i, so rows are affected and columns are the actor:",
@@ -1167,7 +1199,7 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "      arcs disagree in sign is left at 0 and named below.",
         *_media_lines(net),
         *_dropout_lines(net),
-        *_rate_method_lines(got),
+        *_rate_method_lines(got, derivation_of(net)),
         "",
         "WHAT THIS MODEL ASSUMES",
         *MODEL_ASSUMPTIONS,

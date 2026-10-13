@@ -159,7 +159,7 @@ python -m grownet schema [--out FILE]
 - `derive --live --all` does what the page's All button does: every study in mGrowthDB, with every
   partner (a study argument limits it to those studies). With the default settings it reads the network
   derived once a day by `.github/workflows/all-network.yml` (the `all-network` release), when that is
-  less than a day old **and was derived by the same derivation your settings ask for**, and derives
+  less than 36 hours old **and was derived by the same derivation your settings ask for**, and derives
   live otherwise; `--no-published` always derives live. The derivation is part of the condition because a
   format id moves when a field changes meaning and the derivation is not a field, so the artifact and a
   live run can carry the same format and entirely different networks.

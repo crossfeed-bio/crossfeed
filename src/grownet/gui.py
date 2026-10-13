@@ -1073,7 +1073,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     `all_studies` is the page's All button (Karoline, 2026-09-28): the entries are ignored and every study
     mGrowthDB holds is derived, with every partner kept, still under the second box (media, experiments or
     studies) and Exclude these studies. With the default settings it is read from the network derived once a
-    day in the grownet repository when that is less than a day old and was derived by the same derivation
+    day in the grownet repository when that is less than 36 hours old and was derived by the same derivation
     these settings ask for (`grownet.published`, #96); `published`
     False, or any other setting, derives it live.
     """
@@ -1158,6 +1158,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
                      # drop-out designs reads curves nothing can use (#142 item 10)
                      keep=narrowed,
                      dropout=s["include_dropout"] and s["derivation"] != "integrated")
+    unread_studies = []
     for i, study_id in enumerate(studies):
         say(i, len(studies), f"Reading {study_id} ({i + 1} of {len(studies)})")
         try:
@@ -1171,6 +1172,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
                                               selection=selection)
         except MGrowthDBError as e:
             errors.append(f"{study_id}: {e}")
+            unread_studies.append(study_id)
             continue
         if only_entered:
             def entered(record, side):
@@ -1206,10 +1208,16 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     rate_nodes = {r[side] for r in records for side in ("source", "target")}
     records = kept
     # every setting the search ran with, so a downloaded network says how it was made (#78, #76)
+    # `studies` in meta is the studies READ, as the schema says: a study that answered 404 was written
+    # there as one of the sources, the run exited 0, and nothing in the file said anything failed (#247).
+    # The failures travel in the file now, so a reader of the file alone can tell a complete run.
+    read = [st for st in studies if st not in unread_studies]
     net = records_to_network(records, meta={
         "source_db": "mGrowthDB (live)", "query": "all" if all_studies else "species", "species": names,
-        "studies": studies, "settings": dict(s), "selection": selection, **extra})
-    net.meta["data"] = data_versions(client, studies, net.meta["derived_at"])
+        "studies": read, "settings": dict(s), "selection": selection, **extra})
+    net.meta["errors"] = list(errors)
+    net.meta["complete"] = not errors
+    net.meta["data"] = data_versions(client, read, net.meta["derived_at"])
     _current_names(net, current)
     # the growth rates, when the page asked for them: each organism's maximum specific growth rate in
     # monoculture, median over replicates and studies (Karoline, 2026-10-03). They travel in the network's

@@ -75,16 +75,19 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
    workflow, so a tag whose suite was red could reach PyPI with nothing but that approval in the way. Approve it; it publishes to PyPI and creates the GitHub release, with the notes taken from
    the changelog and the wheel, the source archive and `grownet-vX.Y.Z-windows.zip` attached.
 4. **Refresh the daily All network** (Actions, "all-network", Run workflow). The page and `derive --all`
-   read the published network only when it is less than a day old and speaks the current format, so until a
+   read the published network only when it is less than 36 hours old and speaks the current format, so until a
    run on the new code replaces it, All derives live instead. One click, and it matters most after a
-   release that changes the format id.
+   release that changes the format id. A run that keeps less than half the arcs of the artifact it would
+   replace is refused (#236); when the drop is meant, as after a release that changes the derivation, tick
+   `allow_drop` in the Run workflow form. Each run rewrites the release description from what it
+   produced, so the description is never edited by hand.
 5. **Check as a user would:** `uv tool install grownet` then `grownet gui` on a clean machine, and the zip on
    a Windows machine. A version on PyPI cannot be replaced: a mistake is fixed with a new version.
 
 ## If the daily All artifact is broken
 
 The `all-network` workflow publishes `all_result.json` as an asset of the `all-network` release, from
-`main`, once a day. Every installed copy reads it when it is less than a day old and speaks that copy's
+`main`, once a day. Every installed copy reads it when it is less than 36 hours old and speaks that copy's
 format id. If a bad artifact goes out, **delete that one asset**:
 
 ```bash
