@@ -42,6 +42,12 @@ content.
 
 ### Fixed
 
+- **All says why it was derived live, when the network derived once a day was not used** (#157): the
+  file was too old, from another format, derived another way, unreachable, or, worth reporting, fetched
+  and unreadable, which is a defect in grownet. All five used to look the same, and a defect in reading
+  the file was indistinguishable from a stale one.
+- **A search's notes reach the report and the command line**, not only the page: a value in Exclude
+  these studies that excluded nothing, a check asked for and not run, and the reason above.
 - **The page's report says what its search read and reused from mGrowthDB**, as the command line's has
   since #182: it printed no `reads:` line at all. The counts are this search's own. The page keeps one
   connection for an hour, so the command line's way of reading the totals would have reported every
