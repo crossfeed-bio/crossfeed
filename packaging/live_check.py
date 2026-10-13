@@ -14,7 +14,7 @@ count and no rate is asserted, only what must hold of any arc the tool writes.
   4. it is not empty, and every study an arc cites is in the network with something to cite.
 
 Usage: python packaging/live_check.py [OUT_DIR]
-  Reads OUT_DIR/all_result.json, the file the all-network workflow just derived and published, so the
+  Reads the file the all-network workflow just derived and published (published.FILE), so the
   default derivation is checked on the whole corpus without a second derivation, and derives one study in
   gLV mode, which the daily file does not exercise. Exits 1 and names every violation.
 """
@@ -136,6 +136,23 @@ def check_published(out_dir: str) -> tuple:
         problems += network_problems(absent, "All, below the threshold") if absent.edges else []
         problems += [f"All, below the threshold: {e.source} -> {e.target} has status {e.status}"
                      for e in absent.edges if e.status != "absent"]
+    # the same network in the older format, for installed copies (#289): every field one it declares, the
+    # arcs the same in number, and valid
+    legacy_path = Path(out_dir) / "all_result.json"
+    if legacy_path.exists():
+        from grownet.schema import validate_document
+        legacy = json.loads(legacy_path.read_text(encoding="utf-8"))
+        manifest = json.loads((Path(__file__).resolve().parents[1] / "schema" / "format_fields.json")
+                              .read_text(encoding="utf-8"))
+        fields = manifest["formats"].get(legacy["network"].get("schema"), {})
+        for kind, key in (("node", "nodes"), ("edge", "edges"), ("study", "studies")):
+            extra = {k for item in legacy["network"].get(key, []) for k in item} - set(fields.get(kind, ()))
+            if extra:
+                problems.append(f"legacy file: {key} carry fields {legacy['network'].get('schema')} does not "
+                                f"declare: {sorted(extra)}")
+        if len(legacy["network"].get("edges", [])) != len(net.edges):
+            problems.append("legacy file: a different number of arcs than the current one")
+        problems += [f"legacy file: invalid: {p}" for p in validate_document(legacy["network"])]
     return problems, f"All: {len(net.edges)} arcs" + (f", {len(absent.edges)} below the threshold" if absent else "")
 
 

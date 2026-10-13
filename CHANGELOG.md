@@ -6,6 +6,23 @@ content.
 
 ## [Unreleased]
 
+### Upgrading
+
+- **The format id moves to `grownet.interaction_network/v4`** (Karoline, 2026-10-12, #266), for five
+  optional fields a reader could not get from a `/v3` file. On an arc: `metric_unit`, the unit of
+  `metric_with` and `metric_without` (#214); `window` and `window_unit`, the interval the metric was
+  computed over, which an area depends on (#213); and `vs_other_removals`, a drop-out arc's strength minus
+  the median of the other drop-out arcs measured against the same full community (#209 option 2). On a
+  node: `taxon_id_refused`, why its `taxon_id` is not its identity, where mGrowthDB gave one id to
+  different strains of a study (#217 option b). Nothing a `/v3` field means changes, and `/v3` files still
+  read and validate. Live: study 8's arcs were measured over 30 h (100 arcs) and 20 h (15), which nothing
+  said before.
+- **The daily All network is published in both formats** (Karoline, 2026-10-12, #289: "Publish both"). A
+  copy fetches the file named by its own format id, `all_result.v4.json` from this version on, so a format
+  move never strands an installed copy again; and `all_result.json` keeps being written for installed
+  0.3.x and 0.4.x copies as the same network in `/v3`, the added fields removed. Checked with the released
+  0.4.0 from PyPI: it serves the `/v3` file (145 arcs) and refuses the `/v4` one, as it should.
+
 ### Added
 
 - **A study whose growth rates are slow as a block is named** (Karoline, 2026-10-12, #173: Craig's

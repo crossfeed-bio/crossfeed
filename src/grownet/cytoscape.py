@@ -101,6 +101,7 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
     # asserts set equality against the dataclass now, so the next field cannot stop here.
     nodes = [{"data": {"id": node.id, "name": node.name or node.id, "taxon_id": node.taxon_id,
                        "species": node.species, "identity": node.identity,
+                       "taxon_id_refused": node.taxon_id_refused,
                        "taxonomy": node.taxonomy, "model_ref": node.model_ref,
                        "genus": genus(node), "genus_color": colors[genus(node)]}}
              for node in net.nodes.values()]
@@ -141,6 +142,10 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
                 "se_rate_stage": getattr(edge, "se_rate_stage", None),
                 "se_rate_selection": getattr(edge, "se_rate_selection", None),
                 "rate_selection_spread": getattr(edge, "rate_selection_spread", None),
+                # v4: the unit of the two metric values, the interval, and a drop-out arc against the
+                # other removals of its target (#214, #213, #209)
+                "metric_unit": edge.metric_unit, "window": edge.window, "window_unit": edge.window_unit,
+                "vs_other_removals": edge.vs_other_removals,
                 # the gLV coefficient and what is known about it, the fit it came out of, the monoculture
                 # stage behind it, the target's capacity, and the rule behind a censored arc's bound.
                 # Every one of these was in the file and in GraphML and not here, found by comparing the
@@ -323,6 +328,7 @@ OPTIONAL_EDGE_COLUMNS = (("p_value", "Double"), ("q_value", "Double"), ("signifi
                          ("rate_mismatch_to_zero", "Double"), ("se_replicates", "Double"),
                          ("se_rate_stage", "Double"), ("se_rate_selection", "Double"),
                          ("rate_selection_spread", "Double"),
+                         ("window", "Double"), ("vs_other_removals", "Double"),
                          # the gLV coefficient and its error
                          ("coefficient", "Double"), ("coefficient_sd", "Double"),
                          ("coefficient_n", "Integer"), ("coefficient_sd_from_rate_stage", "Double"),

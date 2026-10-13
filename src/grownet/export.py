@@ -70,6 +70,7 @@ _KEYS = [
     ("n_taxonomy", "node", "taxonomy", "string"),
     ("n_model_ref", "node", "model_ref", "string"),
     ("n_taxon_id", "node", "taxon_id", "string"),
+    ("n_taxon_id_refused", "node", "taxon_id_refused", "string"),
     ("n_species", "node", "species", "string"),
     ("n_identity", "node", "identity", "string"),
     ("n_genus", "node", "genus", "string"),
@@ -126,6 +127,10 @@ _KEYS = [
     ("e_se_rate_stage", "edge", "se_rate_stage", "double"),
     ("e_se_rate_selection", "edge", "se_rate_selection", "double"),
     ("e_rate_selection_spread", "edge", "rate_selection_spread", "double"),
+    ("e_metric_unit", "edge", "metric_unit", "string"),
+    ("e_window", "edge", "window", "double"),
+    ("e_window_unit", "edge", "window_unit", "string"),
+    ("e_vs_other_removals", "edge", "vs_other_removals", "double"),
     ("e_rate_stage_method", "edge", "rate_stage_method", "string"),
     ("e_rate_stage_n", "edge", "rate_stage_n", "int"),
     ("e_merged_arcs", "edge", "merged_arcs", "int"),
@@ -205,6 +210,7 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(n, "n_taxonomy", node.taxonomy)
         _data(n, "n_model_ref", node.model_ref)
         _data(n, "n_taxon_id", node.taxon_id)
+        _data(n, "n_taxon_id_refused", node.taxon_id_refused)
         _data(n, "n_species", node.species)
         _data(n, "n_identity", node.identity)
         _data(n, "n_genus", genus(node))
@@ -274,6 +280,7 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         for name in ("fit_null_r2", "coefficient_sd", "coefficient_n",
                      "coefficient_sd_from_rate_stage", "se_replicates", "se_rate_stage",
                      "se_rate_selection", "rate_selection_spread",
+                     "metric_unit", "window", "window_unit", "vs_other_removals",
                      "rate_stage_method", "rate_stage_n", "fit_window_share",
                      "rate_mismatch_to_zero"):
             _data(ed, f"e_{name}", getattr(e, name, None))

@@ -444,6 +444,11 @@ Rules for this file:
   whether a near-scarce denominator is withheld and above what stated ratio; whether a capacity and the
   cells beside it must share a medium; and whether `reached_stationary` should certify at the end of a
   curve rather than over its last fifth, since it accepts a declining culture and records its peak.
+- 2026-10-12 (Karoline, on #266: "go with your recommendations"): **`grownet.interaction_network/v4`**,
+  one bump for five optional fields: `metric_unit`, `window`, `window_unit`, `vs_other_removals` on the
+  edge (#214, #213, #209 option 2) and `taxon_id_refused` on the node (#217 option b, keep the id and say
+  it is not a join key). Additions only: a reader who trusts `/v3` reads none of the new content as an old
+  quantity, which is her 2026-10-11 test for when the id moves.
 - 2026-10-12 (Karoline, #140 "Counts only" and #81 "I'd also pick b)"): a monoculture with no per-strain
   series gives its rate and lag from ONE culture-level plate count or flow cytometry trace, never OD and
   never a capacity; and a study's monoculture rates for an organism are not pooled when their first
@@ -865,7 +870,8 @@ history is not in the API, so a stored copy cannot tell it is stale (Karoline). 
 
 All is the one query whose cost grows with the whole of mGrowthDB (1,313 requests today, after #95), so
 `.github/workflows/all-network.yml` derives it once a day with `DEFAULTS` (`packaging/publish_all.py`,
-which refuses to publish a derivation with errors) and uploads `all_result.json` to the `all-network`
+which refuses to publish a derivation with errors) and uploads `all_result.v4.json`, named by the format id,
+and `all_result.json`, the same in `/v3` for installed 0.3.x and 0.4.x copies (#289), to the `all-network`
 release. `grownet.published` reads it back: `usable` (the settings are the defaults), `fresh` (its format
 and schema are this version's, and it is less than `MAX_AGE`, 36 hours, old) and `fetch` (None on any
 failure, so the caller derives live). `run_query(..., published=True)` tries it first; the publishing

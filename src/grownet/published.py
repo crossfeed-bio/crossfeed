@@ -26,7 +26,10 @@ from .model import SCHEMA, InteractionNetwork
 
 FORMAT = "grownet.all_result/v1"
 RELEASE_TAG = "all-network"
-FILE = "all_result.json"
+# The file a copy of grownet fetches is named by the format id it reads, so a format move never strands
+# an installed copy (Karoline, 2026-10-12, on #289: "Publish both"). Copies before /v4 fetch the bare
+# `all_result.json`, which the workflow keeps writing for them as /v3 (`packaging/publish_all.py`).
+FILE = f"all_result.{SCHEMA.rsplit('/', 1)[-1]}.json"
 URL = f"https://github.com/crossfeed-bio/crossfeed/releases/download/{RELEASE_TAG}/{FILE}"
 # 36 hours, not one day (Karoline, 2026-10-12, on #196: "Extend to 36 hours"). The workflow runs once a
 # day and GitHub starts scheduled runs late by a varying amount: the gap between two published artifacts

@@ -72,7 +72,7 @@ def test_the_release_description_says_what_this_run_produced_and_what_each_file_
     """It was written once, on the first run, so it could not be corrected by editing the workflow, and it
     promised "the default settings" for two files nothing checks against a reader's version (#236)."""
     notes = release_notes(_result())
-    for asset in (FILE, publish_all.NETWORK, publish_all.REPORT):
+    for asset in (FILE, publish_all.LEGACY["file"], publish_all.NETWORK, publish_all.REPORT):
         assert f"`{asset}`" in notes, f"{asset} is uploaded and not described"
     assert "2026-10-12T10:03:41+00:00" in notes and "grownet 0.4.0" in notes and "`replicate`" in notes
     assert "Nothing checks these two" in notes
@@ -113,7 +113,8 @@ def test_main_publishes_a_run_the_floor_allows_and_the_notes_are_not_an_asset(tm
         FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
     out = tmp_path / "out"
     assert publish_all.main(str(out), str(tmp_path / "notes.md"), previous=lambda: None) == 0
-    assert sorted(p.name for p in out.iterdir()) == sorted([FILE, publish_all.NETWORK, publish_all.REPORT])
+    assert sorted(p.name for p in out.iterdir()) == sorted([FILE, publish_all.LEGACY["file"], publish_all.NETWORK,
+                                                            publish_all.REPORT])
     assert "This run:" in (tmp_path / "notes.md").read_text(encoding="utf-8")
 
 
@@ -134,4 +135,56 @@ def test_the_network_names_the_commit_that_built_it(tmp_path, monkeypatch):
     assert doc["meta"]["build"] == {"commit": "abc123", "run": "42"}
     notes = []
     assert validate_document(doc, notes) == [] and not [n for n in notes if "declare" in n], notes
+
+
+def test_the_older_format_is_published_beside_the_current_one(tmp_path, monkeypatch):
+    """Karoline, 2026-10-12, on #289: "Publish both". Installed 0.3.x and 0.4.x copies fetch
+    `all_result.json` and refuse any schema but /v3; /v4 only added fields, so the same artifact with those
+    removed is a /v3 document. It must read as /v3 to the reader those copies run."""
+    from test_gui import FakeClient
+
+    from grownet import published
+    from grownet.gui import run_query
+    from grownet.schema import validate_document
+    monkeypatch.setattr(publish_all, "run_query", lambda *a, **k: run_query(
+        FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
+    out = tmp_path / "out"
+    assert publish_all.main(str(out), None, previous=lambda: None) == 0
+    assert FILE == "all_result.v4.json"
+    current = json.loads((out / FILE).read_text(encoding="utf-8"))
+    legacy = json.loads((out / "all_result.json").read_text(encoding="utf-8"))
+    assert current["network"]["schema"].endswith("/v4") and legacy["network"]["schema"].endswith("/v3")
+    manifest = json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
+    v3 = manifest["formats"]["grownet.interaction_network/v3"]
+    for kind, key in (("node", "nodes"), ("edge", "edges"), ("study", "studies")):
+        for item in legacy["network"][key]:
+            assert set(item) <= set(v3[kind]), (kind, set(item) - set(v3[kind]))
+    assert len(legacy["network"]["edges"]) == len(current["network"]["edges"])
+    notes = []
+    assert validate_document(legacy["network"], notes) == []
+    # and the identity is the legacy file's own, so a reader can recompute it
+    assert legacy["identity"]["content_sha256"] != current["identity"]["content_sha256"]
+    # read as an installed /v3 copy reads it: its own SCHEMA, and the derivation it asks for
+    monkeypatch.setattr(published, "SCHEMA", "grownet.interaction_network/v3")
+    derived = datetime.datetime.fromisoformat(legacy["network"]["meta"]["derived_at"])
+    assert published.why_not_fresh(legacy, derived + datetime.timedelta(hours=1), publish_all.DEFAULTS) is None
+
+
+def test_the_first_run_of_a_new_format_compares_with_the_legacy_file():
+    """`all_result.v4.json` does not exist before the first /v4 run, so the floor reads the legacy file
+    rather than comparing with nothing."""
+    import urllib.error
+
+    class Response(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def opener(url, timeout):
+        if url == publish_all.URL:
+            raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+        return Response(json.dumps({"network": {"edges": [{}] * 145}}).encode())
+    assert previous_arcs(opener) == 145
 
