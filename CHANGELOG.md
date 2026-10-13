@@ -16,6 +16,18 @@ content.
   the format id does not move, since `meta` is an open object. The test behind it now walks the syntax
   tree for every form a key can reach a network's `meta` by, where it read one form and saw 2 of the 20
   keys (#274).
+- **The daily All artifact's release description is rewritten by every run** and says what that run
+  produced: studies, organisms, arcs, when, by which version and which derivation. It was written once, on
+  the first run, so editing it in the workflow changed nothing, and it promised "the default settings" for
+  `all_network.json` and `all_report.txt`, which nothing checks against a reader's version. It now says so,
+  and which file the freshness rule governs (#236).
+- **A collapsed All derivation is no longer published.** A run with no arcs is refused, and so is one with
+  less than half the arcs of the artifact it replaces unless it is run by hand with `allow_drop`. The
+  workflow refused only a run with errors, so zero arcs published and was served to every reader at the
+  defaults until the next run (#236).
+- **`packaging/check_release.py` refuses a tag that already names another commit**, and with no tag reports
+  a tagged version as released rather than ready. It said `v0.3.0 is ready` on a tree whose v0.3.0 was
+  tagged and on PyPI (#236).
 
 ## [0.4.0] (2026-10-11)
 

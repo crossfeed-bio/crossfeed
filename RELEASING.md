@@ -77,7 +77,10 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
 4. **Refresh the daily All network** (Actions, "all-network", Run workflow). The page and `derive --all`
    read the published network only when it is less than a day old and speaks the current format, so until a
    run on the new code replaces it, All derives live instead. One click, and it matters most after a
-   release that changes the format id.
+   release that changes the format id. A run that keeps less than half the arcs of the artifact it would
+   replace is refused (#236); when the drop is meant, as after a release that changes the derivation, tick
+   `allow_drop` in the Run workflow form. Each run rewrites the release description from what it
+   produced, so the description is never edited by hand.
 5. **Check as a user would:** `uv tool install grownet` then `grownet gui` on a clean machine, and the zip on
    a Windows machine. A version on PyPI cannot be replaced: a mistake is fixed with a new version.
 
