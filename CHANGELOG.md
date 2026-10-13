@@ -8,6 +8,20 @@ content.
 
 ### Fixed
 
+- **The gLV package's files describe themselves correctly** (#210, #211):
+  - the zip's README says to match `growth_rates.csv` to a matrix **by the organism column, never by
+    position**: each matrix holds its own unit's organisms in its own order, and a positional read gave a
+    plausible, wrong simulation, off by factors of 2 to 4;
+  - in gLV mode the README no longer describes the off-diagonals with the comparison's formula, nineteen
+    lines after its own integrated description, nor says a setting chooses the estimator that the
+    integrated form does not read;
+  - cells "from a comparison where one side did not grow" are named only where they are in a matrix;
+  - `capacity_curves_left_out` writes a count of 0 as `0`, not as a blank that R reads as `NA`;
+  - a nonzero value below 5e-5 is no longer printed as `0`, which means no interaction; it is written
+    in scientific notation instead (`3e-05`), which `read.csv` reads, and every other number prints as before;
+  - in R, the coverage line counts organisms outside every matrix (it read "8 of 8" for an 11-organism
+    network), `summary()` gains `network_organisms`, and `glv_write()` writes the three rate columns it
+    was missing and the matrices at four significant digits, as the download does.
 - **A run that could not read everything now says so in the file it writes.** A study that answered 404
   was written into `meta.studies` (which the schema describes as the studies the search READ), the file
   carried no trace of the failure, and `grownet validate` passed it. Now `meta.studies` lists only the
