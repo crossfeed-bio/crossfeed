@@ -5,8 +5,9 @@ there if less than a day old", and "let's serve the All network from the grownet
 grownet cannot write to GitHub (it would need a credential anyone could take), and the repository holds
 no data from mGrowthDB (AGENTS.md). So a scheduled workflow (.github/workflows/all-network.yml) derives
 All with the default settings and replaces one file on a fixed release, outside git history; the page's
-All button and `grownet derive --all` read that file when it is less than a day old and the settings are
-the defaults, and otherwise derive live, as before. Nothing is ever uploaded by a user's copy.
+All button and `grownet derive --all` read that file when it is less than `MAX_AGE` (36 hours) old and
+the settings are the defaults, and otherwise derive live, as before. Nothing is ever uploaded by a user's
+copy.
 
 The file holds the whole result of the search, not only the network, so the page shows it as a live
 result: the arcs, the arcs the absence threshold left out, the studies, the pairs the data did not
@@ -27,7 +28,14 @@ FORMAT = "grownet.all_result/v1"
 RELEASE_TAG = "all-network"
 FILE = "all_result.json"
 URL = f"https://github.com/crossfeed-bio/crossfeed/releases/download/{RELEASE_TAG}/{FILE}"
-MAX_AGE = datetime.timedelta(days=1)
+# 36 hours, not one day (Karoline, 2026-10-12, on #196: "Extend to 36 hours"). The workflow runs once a
+# day and GitHub starts scheduled runs late by a varying amount: the gap between two published artifacts
+# reached 27h20m, and 7 of 12 consecutive gaps exceeded 24 hours (measured 2026-10-12), so with a one-day
+# window the file went stale most nights before its replacement landed, and every copy of grownet derived
+# All live from mGrowthDB at once, which is the load the workflow exists to prevent. The format id and the
+# derivation check are what keep a reader from a WRONG artifact; the age only bounds how old the data is,
+# and mGrowthDB uploads are rare. Recorded in METHOD_NOTES item 30, which said one day before.
+MAX_AGE = datetime.timedelta(hours=36)
 TIMEOUT = 15
 # The parts of a search result the file carries, besides the network. `absent` is handled separately
 # because it is an InteractionNetwork rather than plain JSON, which is why it used to be dropped: the
@@ -96,7 +104,7 @@ def usable(settings: dict, defaults: dict) -> bool:
 
 
 def fresh(payload: dict, now: datetime.datetime | None = None, settings: dict | None = None) -> bool:
-    """Whether a published file is this format, this schema, less than a day old, and derived the way the
+    """Whether a published file is this format, this schema, younger than `MAX_AGE`, and derived the way the
     caller would derive it.
 
     **`settings` defaults to None, which skips the derivation check**, and that is stated here because the
@@ -150,7 +158,7 @@ def why_not_fresh(payload: dict, now: datetime.datetime | None = None, settings:
 
 
 def fetch(settings: dict | None = None, why: list | None = None) -> dict | None:
-    """Today's published All result, or None when there is none, it is a day old or more, it was derived
+    """The published All result, or None when there is none, it is `MAX_AGE` old or more, it was derived
     by another derivation than `settings` asks for, or GitHub cannot be reached: the caller then derives
     live."""
     return fetch_from(urllib.request.urlopen, settings=settings, why=why)

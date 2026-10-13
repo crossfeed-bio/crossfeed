@@ -58,6 +58,74 @@ def _mean_sd(e) -> str:
     return f"log2 mean {e.strength:+.2f}" + ("" if e.sd is None else f" +/- {e.sd:.2f}")
 
 
+def shared_references(edges) -> list:
+    """[(target id, study ids, medium, how many arcs)]: drop-out arcs computed against ONE full-community
+    measurement of their target, where there are two or more (#209).
+
+    Every drop-out arc to a target compares the community without one member with the same full
+    community, so each such arc is (how the target fared in the full community) + (what this removal
+    did), and the first term is identical across all of them. On the live corpus the target explained
+    61.6 per cent of the variance of study 8's drop-out arcs and the removed member 11.1 (#209). Grouped by
+    the measurement itself, `metric_with`, within one study, medium and metric.
+    """
+    from collections import Counter
+    groups = Counter((e.target, tuple(e.study_ids), e.medium, e.metric, e.metric_with) for e in edges
+                     if e.evidence == "dropout" and e.metric_with is not None)
+    return sorted(((t, ids, medium, n) for (t, ids, medium, _m, _w), n in groups.items() if n >= 2),
+                  key=lambda g: (-g[3], g[0]))
+
+
+def opposed_designs(edges) -> list:
+    """[(source, target, [arcs])]: ordered pairs with a biculture arc and a drop-out arc of opposite effect.
+
+    Karoline, 2026-10-10: "concerning the conflict of arc signs between drop-out and pairs: it's of
+    interest - and just shows that higher order interactions matter." So this is a result to name, not a
+    disagreement to resolve: the pair alone and the pair inside a community pull opposite ways. Merging
+    is off by default, so each arc stood alone and a reader meeting either had no sign of the other (#207).
+    """
+    by_pair = {}
+    for e in edges:
+        if e.evidence in ("biculture", "dropout") and e.effect in ("facilitation", "inhibition"):
+            by_pair.setdefault((e.source, e.target), []).append(e)
+    out = []
+    for (source, target), arcs in sorted(by_pair.items()):
+        alone = {a.effect for a in arcs if a.evidence == "biculture"}
+        inside = {a.effect for a in arcs if a.evidence == "dropout"}
+        if any(x != y for x in alone for y in inside):
+            out.append((source, target, sorted(arcs, key=lambda a: (a.evidence, a.medium))))
+    return out
+
+
+def _design_lines(net, shown) -> list:
+    """The two things about drop-out arcs a reader cannot see one arc at a time (#207, #209)."""
+    name = {nid: node.name or nid for nid, node in net.nodes.items()}
+    lines = []
+    opposed = opposed_designs(shown)
+    if opposed:
+        lines.append("measured as a pair and inside a community, with opposite effects. A result, not an error: "
+                     "the pair alone and the pair among others pull opposite ways, which is what a "
+                     "higher-order interaction looks like, and gLV has no term for it:")
+        for source, target, arcs in opposed:
+            each = "; ".join(f"{a.effect} {a.strength:+.2f} ({a.evidence}"
+                             + (f", q {a.q_value:.2g}" if a.q_value is not None else "")
+                             + (f", {a.medium}" if a.medium else "") + ")"
+                             for a in arcs if a.strength is not None)
+            lines.append(f"  {name.get(source, source)} -> {name.get(target, target)}: {each}")
+        lines.append("")
+    shared = shared_references(shown)
+    if shared:
+        lines.append(f"drop-out arcs sharing one reference: {sum(g[3] for g in shared)} arcs in {len(shared)} "
+                     "group(s). Every drop-out arc to one target is computed against the same full-community "
+                     "measurement, so part of each is how the target fared in the full community and not "
+                     "what removing that member did. Compare the arcs of a group with each other before "
+                     "reading one alone:")
+        for target, ids, medium, n in shared:
+            lines.append(f"  {name.get(target, target)}: {n} arcs, {', '.join(ids)}"
+                         + (f", in {medium}" if medium else ""))
+        lines.append("")
+    return lines
+
+
 def _edge_line(net, e) -> str:
     # an arc left out of the network is listed from its own network, so its nodes are looked up there
     name = {nid: node.name or nid for nid, node in net.nodes.items()}
@@ -157,14 +225,25 @@ def report_text(result: dict) -> str:
     # what was read and what was reused, since a reader should be able to see that a network rests on
     # measurements kept from an earlier run, and which studies were read again because mGrowthDB has a
     # newer version of them (#182)
+    # The page's search carries its own counts in `reads`, since the page's client lives for an hour and
+    # its counters hold every search; the command line's run owns its client, so the client's totals are
+    # that run's. The page printed no line at all before (#187).
     client = result.get("client")
-    if client is not None and getattr(client, "cache_dir", None):
-        reused, fetched = getattr(client, "reused", 0), getattr(client, "fetched", 0)
-        refreshed = getattr(client, "refreshed", []) or []
-        line = (f"reads: {fetched} from mGrowthDB, {reused} reused from an earlier run "
+    reads = result.get("reads")
+    if reads is None and client is not None and getattr(client, "cache_dir", None):
+        reads = {"fetched": getattr(client, "fetched", 0), "reused": getattr(client, "reused", 0),
+                 "remembered": getattr(client, "remembered", 0),
+                 "refreshed": getattr(client, "refreshed", []) or [], "shared": False}
+    if reads and reads.get("shared"):
+        lines.append("reads: not counted for this search alone, because another search ran at the same time "
+                     "on the same connection to mGrowthDB")
+    elif reads:
+        line = (f"reads: {reads['fetched']} from mGrowthDB, {reads['reused']} reused from an earlier run "
                 f"(kept while a study's uploadedAt is unchanged)")
-        if refreshed:
-            line += f"; read again because their uploadedAt moved: {', '.join(sorted(refreshed))}"
+        if reads.get("remembered"):
+            line += f", {reads['remembered']} answered from what this session had already read"
+        if reads.get("refreshed"):
+            line += f"; read again because their uploadedAt moved: {', '.join(sorted(reads['refreshed']))}"
         lines.append(line)
     lines.append("")
 
@@ -273,7 +352,9 @@ def report_text(result: dict) -> str:
         lines.append("")
         lines.append("about this derivation:")
         lines += ["  " + line for line in textwrap.wrap(meta["provisional"], 110)]
-    for error in result["errors"]:
+    # from the network's meta when it carries them, so the report and the file cannot disagree; a result
+    # from before #247 has them only in the result
+    for error in meta.get("errors", result.get("errors", ())):
         lines.append(f"error: {error}")
     # the advisory messages of a search, which reached the page and neither this report nor the command
     # line: a value in Exclude these studies that excluded nothing, a check asked for and not run, the
@@ -289,6 +370,7 @@ def report_text(result: dict) -> str:
                      + (", left out of the network):" if left_out else "):"))
         lines += [_edge_line(absent_net, e) for e in absent]
     lines.append("")
+    lines += _design_lines(net, shown)
 
     rates = meta.get("growth_rates") or {}
     if rates:
