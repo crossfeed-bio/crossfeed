@@ -26,8 +26,11 @@ from pathlib import Path
 from grownet.published import FILE, from_payload
 from grownet.schema import validate_document
 
-# strength, weight and effect_over_sd are written rounded to 4 decimals; the coefficient is not rounded
+# strength, weight, sd and effect_over_sd are written rounded to 4 decimals; the coefficient is not rounded.
+# ROUNDED is a whole unit in the last place, the slack for an identity between two rounded values;
+# HALF_UNIT is the most rounding moves one value, which the per-arc bound below propagates.
 ROUNDED = 1e-4
+HALF_UNIT = 5e-5
 EXACT = 1e-9
 CENSORED = ("obligate", "abolished")
 
@@ -67,8 +70,13 @@ def arc_problems(e, derivation: str, k: float | None = None, names: dict | None 
         if s and e.effect != ("facilitation" if s > 0 else "inhibition"):
             out.append(f"{where}: effect {e.effect} disagrees with the sign of strength {s}")
         ratio = abs(s) / e.sd if e.sd else None
+        # recomputed from two values the file already rounded, so the honest tolerance is what that
+        # rounding allows for THIS arc, U/sd + |strength| U/sd^2, plus the ratio's own rounding U. A fixed
+        # tolerance sat three times above today's worst residual (3.7e-3 at sd 0.21) and the residual grows
+        # as 1/sd^2, so a smaller sd would have made it cry wolf or be loosened past use (Craig's agent,
+        # on #281). This bound is tighter than the fixed one on almost every arc, and cannot go stale.
         if ratio is not None and e.effect_over_sd is not None and \
-                abs(e.effect_over_sd - ratio) > 1e-3 * max(1, e.effect_over_sd):
+                abs(e.effect_over_sd - ratio) > HALF_UNIT / e.sd + abs(s) * HALF_UNIT / e.sd ** 2 + HALF_UNIT:
             out.append(f"{where}: effect_over_sd {e.effect_over_sd} is not |strength| / sd {ratio:.6g}")
         if k is not None and e.sd and e.status in ("present", "absent"):
             below = abs(s) < k * e.sd

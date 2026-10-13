@@ -108,3 +108,17 @@ def test_the_workflow_runs_it_after_publishing_with_its_own_issue():
     # the build-failure issue does not fire for a live-check failure, and its closing depends on the publish
     assert "if: failure() && steps.live.outcome != 'failure'" in wf
     assert "if: always() && steps.publish.outcome == 'success'" in wf
+
+
+def test_the_effect_over_sd_tolerance_follows_each_arc_s_own_rounding():
+    """Craig's agent, on #281: recomputing |strength| / sd from two rounded values carries an error of up to
+    U/sd + |strength| U/sd^2. A fixed 1e-3 sat three times above today's worst honest residual and would
+    have cried wolf on a smaller sd. The bound is per arc: honest rounding passes at a small sd, and a
+    corruption of 0.01 is still caught at an ordinary one."""
+    # strength 0.3 at sd 0.02: honest rounding can move the ratio by 0.04, and the old fixed tolerance,
+    # 1e-3 of a ratio of 15, was 0.015, so a residual of 0.03 cried wolf there and passes here
+    honest = _quantified(mw=2 ** 0.3, sd=0.02, effect_over_sd=round(0.3 / 0.02 + 0.03, 4))
+    assert not any("effect_over_sd" in p for p in network_problems(_net([honest]), "x"))
+    corrupt = _quantified(effect_over_sd=round(1.0 / 0.5 + 0.01, 4))
+    assert any("effect_over_sd" in p for p in network_problems(_net([corrupt]), "x"))
+
