@@ -41,3 +41,14 @@ def test_the_report_names_it_and_the_meta_carries_it():
     text = report_text({"network": net, "errors": [], "skipped": [], "resolved": [], "unresolved": [],
                         "studies": ["S2", "S4", "S7", "S18"]})
     assert "slow as a block: every rate from S18 (2, the fastest 0.0412)" in text
+
+
+def test_a_large_study_does_not_set_every_other_study_s_reference():
+    """Craig's agent, on #287: pooling rates let a study that gave twenty of them set the median every other
+    study is tested against. One study, one vote."""
+    big_slow = [0.03] * 20
+    rates = _rates(S1=[0.30, 0.32], S2=[0.28, 0.31], S3=[0.33, 0.29], S4=[0.05, 0.055], BIG=big_slow)
+    # pooled, the twenty slow rates would put the reference near 0.03 and S4 would look fast; per study,
+    # the reference is the median of five study medians and S4's 0.055 is 5.5 times below it
+    flagged = {s["study"] for s in matrix.slow_studies(rates)}
+    assert "S4" in flagged and "BIG" in flagged, flagged

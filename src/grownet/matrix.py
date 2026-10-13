@@ -338,9 +338,14 @@ def slow_studies(rates: dict) -> list:
             if value is not None and value > 0:
                 by_study.setdefault(sid, []).append(value)
     out = []
+    # one study, one vote: the reference is the median of the other studies' OWN medians, not of their
+    # pooled rates, so a study that gave twenty rates cannot set every other study's test. Pooling read
+    # the same as this while every study gave two or three, and would have drifted as they diverged
+    # (Craig's agent, on #287); it is what "slow as a block" against "the other studies" means.
+    medians = {sid: statistics.median(vs) for sid, vs in by_study.items()}
     for sid, values in sorted(by_study.items()):
-        others = [v for other, vs in by_study.items() if other != sid for v in vs]
-        if len(by_study) - 1 < SLOW_MIN_OTHER_STUDIES or not others:
+        others = [m for other, m in medians.items() if other != sid]
+        if len(others) < SLOW_MIN_OTHER_STUDIES:
             continue
         reference = statistics.median(others)
         if max(values) * SLOW_FACTOR < reference:

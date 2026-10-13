@@ -9,10 +9,11 @@ content.
 ### Added
 
 - **A study whose growth rates are slow as a block is named** (Karoline, 2026-10-12, #173: Craig's
-  agent's study-level tripwire, as a flag). When every rate from one study is more than 5 times slower than
-  the median of the other studies in the run, the report says so, and `meta.growth_rates.slow_studies`
-  carries it. Nothing is refused: slow can be the organisms or the study's conditions. On all of mGrowthDB
-  today it names SMGDB00000013 and SMGDB00000014 at the defaults (6.1 and 7.5 times) and nothing in gLV
+  agent's study-level tripwire, as a flag, "Keep 5x"). When every rate from one study is more than 5 times
+  slower than the median of the other studies' own medians in the run, the report says so, and
+  `meta.growth_rates.slow_studies` carries it. Nothing is refused: slow can be the organisms or the study's
+  conditions. On all of mGrowthDB today it names SMGDB00000013 at the defaults (6.6 times), which is the
+  sole source of the published rates of *A. tumefaciens* and *C. testosteroni* MWF001, and nothing in gLV
   mode.
 - **A check that reads the live corpus** (#237). Every other check was closed over the repository: the
   gate reads source, the suite is offline, the release check compares strings. After each daily publish,
