@@ -159,6 +159,12 @@ def check_published(out_dir: str) -> tuple:
         except Exception as e:     # noqa: BLE001 - named as that file, not as the current one (found in review)
             problems.append(f"{legacy_path.name}: could not be read: {type(e).__name__}: {e}")
             continue
+        invalid = [f"{legacy_path.name}: invalid: {p}" for p in validate_document(legacy["network"])]
+        problems += invalid
+        if invalid:
+            # its fields are not lists of objects to walk: `"nodes": null` raised here and was reported as
+            # the CURRENT file unreadable, losing its results (found in review)
+            continue
         fields = manifest["formats"].get(legacy["network"].get("schema"), {})
         for kind, key in (("node", "nodes"), ("edge", "edges"), ("study", "studies")):
             extra = {k for item in legacy["network"].get(key, []) for k in item} - set(fields.get(kind, ()))
@@ -167,7 +173,6 @@ def check_published(out_dir: str) -> tuple:
                                 f"does not declare: {sorted(extra)}")
         if len(legacy["network"].get("edges", [])) != len(net.edges):
             problems.append(f"{legacy_path.name}: a different number of arcs than the current one")
-        problems += [f"{legacy_path.name}: invalid: {p}" for p in validate_document(legacy["network"])]
     return problems, f"All: {len(net.edges)} arcs" + (f", {len(absent.edges)} below the threshold" if absent else "")
 
 

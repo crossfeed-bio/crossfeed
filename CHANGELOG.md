@@ -125,7 +125,8 @@ content.
 - **`grownet validate` reads a daily artifact** (`all_result.v4.json`) by validating the networks it carries,
   where it said "INVALID: schema is None" about a good file, and says so when an artifact carries none.
 - **The live check tells "could not run" from "a property broke"**, by exit code (2 against 1) and in the
-  issue it opens; the build-failure issue opens only when nothing was published.
+  issue it opens; the build-failure issue opens only when the publish step did not complete, and says
+  some files may already have been replaced.
 - **The release check refuses an empty version section** and a help-page release date that differs from
   the changelog's; RELEASING.md's checklist, emergency procedure (pause the workflow first) and its
   statements about which copies read which file for how long now match what is true.

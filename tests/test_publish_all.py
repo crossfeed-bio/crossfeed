@@ -286,14 +286,13 @@ def test_the_current_format_s_meta_snapshot_is_the_schema_s_while_it_is_current(
     assert publish_all.LEGACY_META[manifest["current"]] == set(META_PROPERTIES)
 
 
-def test_the_release_notes_name_the_commit_and_claim_nothing_more():
+def test_the_release_notes_name_the_commit_and_claim_nothing_more(monkeypatch):
+    # GitHub Actions sets GITHUB_REF_NAME on every job (the tag in release.yml, `<n>/merge` on a pull
+    # request), so the test sets it itself: reading the runner's made the tag job fail (found in review)
+    monkeypatch.delenv("GITHUB_REF_NAME", raising=False)
     result = _result()
     result["network"].meta["build"] = {"commit": "abc1234def", "run": "9"}
     notes = release_notes(result)
     assert "as of commit abc1234 of main" in notes and "unreleased" not in notes
-    import os
-    os.environ["GITHUB_REF_NAME"] = "some-branch"
-    try:
-        assert "as of commit abc1234 of some-branch" in release_notes(result), "a hand run from another branch"
-    finally:
-        del os.environ["GITHUB_REF_NAME"]
+    monkeypatch.setenv("GITHUB_REF_NAME", "some-branch")
+    assert "as of commit abc1234 of some-branch" in release_notes(result), "a hand run from another branch"

@@ -260,6 +260,18 @@ def test_a_broken_older_file_is_named_as_that_file(tmp_path, monkeypatch):
     problems, what = live_check.check_published(str(out))
     assert any(p.startswith("all_result.json: could not be read") for p in problems), problems
     assert what.startswith("All:"), "the current file was still checked"
+    # a file that parses but is malformed, which is what a bug in the legacy strip would write: `"nodes":
+    # null` raised in the field walk and reported the CURRENT file as unreadable (round 4 of the review)
+    import json
+    good = json.loads((out / "all_result.v4.json").read_text())
+    good["network"]["schema"] = "grownet.interaction_network/v3"
+    for key in ("nodes", "studies"):
+        broken = json.loads(json.dumps(good))
+        broken["network"][key] = None
+        (out / "all_result.json").write_text(json.dumps(broken))
+        problems, what = live_check.check_published(str(out))
+        assert f"all_result.json: invalid: {key} must be a list of objects" in problems, problems
+        assert what.startswith("All:"), "the current file was still checked"
 
 
 
