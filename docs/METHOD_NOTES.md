@@ -1387,9 +1387,13 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    daily Actions run and on the one-day freshness. SETTLED 2026-09-28 (Craig, through his agent on #96):
    "Yes to all three: publish, daily, and a network up to 24 hours old." WIDENED to 36 hours
    (Karoline, 2026-10-12, on #196: "Extend to 36 hours"), because GitHub starts the daily run late: the
-   gap between two artifacts reached 27h20m and 7 of 12 gaps exceeded a day, so with the one-day window
-   the file went stale most nights and every copy derived All live at once. Still one run a day, so the
-   load on mGrowthDB is unchanged. On whether mGrowthDB's terms
+   gap between two artifacts reached 27h20m. The reason is structural, as Craig's agent put it on #279:
+   the gap between runs of a daily cron IS one day plus a small positive scheduling delay, so the gaps
+   centre on 24 hours (ten of twelve within forty minutes of it) and a window equal to the cron period is
+   a coin flip every night, whatever the count (7 of 12 over on `created_at`, 6 on `run_started_at`).
+   Still one run a day, so the load on mGrowthDB is unchanged. A bound fitted to twelve nights is safe
+   here only because both sides fail visibly: past it, every copy derives live; inside it, the file says
+   when it was derived and from which data. On whether mGrowthDB's terms
    allow publishing derived networks, Karoline (2026-09-29): "the All network also comes with a report
    which lists all studies concerned, so it can be credited. The report will be stored alongside the
    network for fetching." The workflow publishes `all_report.txt` next to the network; its sources list
