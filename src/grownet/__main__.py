@@ -512,8 +512,19 @@ def _emit(a, net, skipped, extra, label, result):
         with open(a.out, "w", encoding="utf-8") as f:
             f.write(payload)
         print(f"wrote {a.out}: {len(net.nodes)} nodes, {len(net.edges)} edges")
+        if a.format == "matrix" and a.out != os.devnull:
+            # the grid carries no provenance and no key for 0 or NA, so it travels with a description
+            # (Karoline, 2026-10-12, on #212: a sidecar file)
+            from .matrix import about_name, matrix_about
+            about = about_name(a.out)
+            with open(about, "w", encoding="utf-8") as f:
+                f.write(matrix_about(net, os.path.basename(a.out)))
+            print(f"wrote {about}: what the matrix is, how it was made, and its 0 and NA cells")
     else:
         print(payload)
+        if a.format == "matrix":
+            print("the matrix's description (settings, the meaning of 0 and NA, the sources) is written "
+                  "beside it only with --out", file=sys.stderr)
 
     if a.report:
         # the same report the local page shows and downloads (#76): every setting, the version, every reason

@@ -8,6 +8,12 @@ content.
 
 ### Added
 
+- **The adjacency matrix CSV travels with a description of itself** (Karoline, 2026-10-12, #212: a
+  sidecar file). `--format matrix --out x.csv` writes `x.about.txt` beside it, and the page's format menu
+  has "Adjacency matrix: what it is (TXT)". It holds the version, date, derivation and metric, every
+  setting, which way the rows run, what `0` and `NA` mean, the pairs left at 0 for disagreeing in sign
+  (which the CSV dropped without a word), the `NA` cells with their bounds, the media and the sources.
+  The grid itself is unchanged, so a plain `read.csv` still reads it.
 - **The report names what no drop-out arc shows on its own** (#207, #209). It lists every ordered pair
   measured both as a pair and inside a community with **opposite effects**, both arcs together, as a
   result: in Karoline's words, it "just shows that higher order interactions matter". On the All network
