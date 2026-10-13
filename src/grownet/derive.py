@@ -1646,7 +1646,20 @@ def _merged(arcs: list) -> dict:
         if st["id"] not in {s["id"] for s in studies}:
             studies.append(st)
     conditions = list(dict.fromkeys(a.get("condition", "") for a in arcs))
-    return {**arcs[0], "strength": strength, "weight": None if strength is None else round(abs(strength), 4),
+
+    def agreed(key, empty):
+        """The members' value when they all carry the same one, else empty: a merged arc spread `arcs[0]`
+        and so said one member's window and metric values about a median of several (found in review)."""
+        values = {repr(a.get(key)) for a in arcs}
+        return arcs[0].get(key, empty) if len(values) == 1 else empty
+
+    return {**arcs[0],
+            # what was measured and over how long, only where every merged arc agrees; and never one
+            # removal's difference from its group, which a merged arc is not
+            "window": agreed("window", None), "window_unit": agreed("window_unit", ""),
+            "metric_unit": agreed("metric_unit", ""), "vs_other_removals": None,
+            "metric_with": agreed("metric_with", None), "metric_without": agreed("metric_without", None),
+            "strength": strength, "weight": None if strength is None else round(abs(strength), 4),
             "sd": None, "se": None, "effect_over_sd": None, "p_value": None, "q_value": None,
             "significance": None,
             "n_with": None, "n_without": None, "outcome": outcome,
@@ -1787,7 +1800,7 @@ PROVISIONAL = ("Each interaction compares a species' growth with and without its
                "deviations (the absence threshold, default 1: the mean plus or minus its standard deviation "
                "stays on one side of zero). Welch's t-test, corrected for multiple testing, is shown "
                "as supporting evidence and does not decide; with few replicates, more experiments may change "
-               "any of these results. Two limits of this derivation travel with every network it makes. "
+               "any of these results. Three limits of this derivation travel with every network it makes. "
                "An arc from a community compared with the same community without one member (evidence "
                "dropout) says the removed member affects the target, DIRECTLY OR THROUGH THE OTHERS, so it "
                "is not on its own evidence of an interaction between those two; each such arc is marked. "

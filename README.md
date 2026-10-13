@@ -753,7 +753,7 @@ what it did is recorded in [docs/METHOD_NOTES.md](https://github.com/crossfeed-b
 each, are in the same file.
 
 **What the data cannot settle is listed on its own**, in
-[docs/LIMITATIONS.md](https://github.com/crossfeed-bio/crossfeed/blob/main/docs/LIMITATIONS.md): seven questions, what grow**net** publishes instead of a
+[docs/LIMITATIONS.md](https://github.com/crossfeed-bio/crossfeed/blob/main/docs/LIMITATIONS.md): eight questions, what grow**net** publishes instead of a
 number that would imply each was settled, what would settle it, and what it blocks (nothing, in every
 case). The most general of them is that the tool **never establishes a mechanism**: an arc says a partner
 changed a growth outcome, not the route by which it did, which is why the output says effect rather than

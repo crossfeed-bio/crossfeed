@@ -403,3 +403,24 @@ def test_the_single_study_path_exits_one_on_an_incomplete_run_as_the_others_do(m
         meta = _json.loads(out.read_text(encoding="utf-8"))["meta"]
         assert meta["complete"] is (wanted == 0) and bool(meta["errors"]) is (wanted == 1), meta
     assert "INCOMPLETE" in capsys.readouterr().err
+
+
+def test_validate_reads_the_networks_inside_a_daily_artifact(tmp_path, capsys):
+    """Found in review: `grownet validate all_result.v4.json` said "INVALID: schema is None" about a good
+    file, because it is a search result carrying networks rather than a network."""
+    import json as _json
+
+    from test_gui import FakeClient
+
+    from grownet.gui import run_query
+    from grownet.published import to_payload
+    payload = to_payload(run_query(FakeClient(), [], {}, all_studies=True, published=False))
+    path = tmp_path / "all_result.v4.json"
+    path.write_text(_json.dumps(payload))
+    assert main(["validate", str(path)]) == 0
+    out = capsys.readouterr().out
+    assert "artifact" in out and "valid:" in out and "[network]" in out
+    payload["network"]["edges"] = "not a list"
+    path.write_text(_json.dumps(payload))
+    assert main(["validate", str(path)]) == 1, "a broken network inside is still refused"
+

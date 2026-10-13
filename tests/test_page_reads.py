@@ -114,3 +114,38 @@ def test_a_response_held_in_memory_is_counted():
     result["reads"] = {"fetched": 0, "reused": 0, "remembered": 24, "refreshed": [], "shared": False}
     assert "24 answered from what this session had already read" in report_text(result)
 
+
+
+def test_two_searches_at_once_are_both_marked_as_overlapping(monkeypatch):
+    """Found in review: the overlap test set `shared=True` by hand, so removing the marking in the job
+    runner left it green. Two searches here run through the real `_start`, the first held open until the
+    second has started, and both must say their reads cannot be told apart."""
+    import threading
+
+    started, release = threading.Event(), threading.Event()
+
+    def held(client, entries, settings, index, progress=None, all_studies=False):
+        if entries == ["first"]:
+            started.set()
+            release.wait(5)
+        return {"network": None, "errors": [], "notes": []}
+
+    monkeypatch.setattr(gui, "run_query", held)
+    monkeypatch.setattr(gui, "reads_since", lambda client, before, shared: {"shared": shared})
+
+    class Host:
+        state = {"index": {}, "index_built": __import__("time").monotonic(), "client": Counting()}
+        client_factory = Counting
+
+    host = Host()
+    first = gui._Handler._start(host, ["first"], {})
+    assert started.wait(5)
+    second = gui._Handler._start(host, ["second"], {})
+    second["thread"].join(5)
+    release.set()
+    first["thread"].join(5)
+    assert first["result"]["reads"] == {"shared": True} and second["result"]["reads"] == {"shared": True}
+    # and one alone is not
+    alone = gui._Handler._start(host, ["third"], {})
+    alone["thread"].join(5)
+    assert alone["result"]["reads"] == {"shared": False}

@@ -22,6 +22,10 @@ content.
   move never strands an installed copy again; and `all_result.json` keeps being written for installed
   0.3.x and 0.4.x copies as the same network in `/v3`, the added fields removed. Checked with the released
   0.4.0 from PyPI: it serves the `/v3` file (145 arcs) and refuses the `/v4` one, as it should.
+  **Installed 0.3.x copies** also fetch `all_result.json`, and 0.3.0 checks neither the derivation nor
+  anything but the format, with `integrated` as its default: since 2026-10-10 such a copy has been served
+  the comparison's network as its All at that default. The file cannot tell 0.3.x from 0.4.x apart, so the
+  answer is to upgrade.
 
 ### Added
 
@@ -53,20 +57,24 @@ content.
   reference**, by target: part of each such arc is how the target fared in that community rather than what
   removing the member did. On the All network that is 118 arcs in 17 groups. The `provisional` sentence
   says the second limit, and `docs/LIMITATIONS.md` gains entry 8. Nothing is merged, re-centred or
-  withheld: options 2 and 3 of #209 remain a method decision.
+  withheld. Option 2 of #209, each drop-out arc against the other removals of its target, is published as
+  `vs_other_removals` (under Upgrading); option 3, making that the comparison, was not taken.
 
 ### Changed
 
 - **A monoculture measured only as a whole culture gives its growth rate and lag from a count** (Karoline,
   #140: option 1 on 2026-10-07, "Counts only" on 2026-10-12): a plate count or flow cytometry, never optical
   density, and never a carrying capacity. The rate says where it came from (`rate_sources`, and in the
-  report). Such monocultures were dropped replicate by replicate. Live, study 9 gives *E. coli* LF82 and
-  *B. fragilis* NCTC 9343 a rate.
+  report). Such monocultures were dropped replicate by replicate. Measured on SMGDB00000009 through
+  `derive.growth_rates`, *E. coli* LF82 and *B. fragilis* NCTC 9343 get a rate from flow cytometry. No
+  command shows those two today: a rate is reported for the organisms of a network, and study 9 holds
+  monocultures alone.
 - **A growth rate is not pooled across monocultures that started more than 10 times apart** (Karoline,
   2026-10-12, #81 b), measured at each curve's first time point. The study's rates for that organism are
   left out and named. Live: *A. tumefaciens* (24 times) and *C. testosteroni* (101 times) in
-  SMGDB00000014, and *S. putrefaciens* (85 times) in SMGDB00000018, so the All network's rates for the
-  first two now come from SMGDB00000013 alone.
+  SMGDB00000014, so the All network's rates for both now come from SMGDB00000013 alone, and the run's
+  notes say why. Measured through `derive.growth_rates` over every study, *S. putrefaciens* in
+  SMGDB00000018 (85 times) is refused too, which no command shows today, since study 18 derives no arcs.
 
 
 - **In gLV mode an organism's published growth rate and carrying capacity no longer move with a display
@@ -87,6 +95,29 @@ content.
 
 ### Fixed
 
+- **A read that fails while the growth rates are read now marks the run incomplete** (#247's gap): the file
+  was marked complete before that stage ran, so the run exited 0 and an organism whose monocultures could
+  not be read looked as if it had no measurable rate.
+- **A merged arc says nothing one member said alone.** `--merge-genera` and `--merge-arcs` gave a merged
+  arc its first member's `window`, `metric_unit`, `metric_with`, `metric_without` and `vs_other_removals`;
+  these are now kept only where every member agrees, and `vs_other_removals` is never set on a merged arc.
+- **The gLV payload's `carrying_capacity_curves` counts curves**, as `growth_rates.csv` does, not fitted rows
+  (the slip #259 fixed for `replicates`).
+- **The matrix sidecar says "at most" for an abolished arc's bound**, which is an upper bound; it said "at
+  least". It also says when the run was incomplete, which within-genus arcs have no cell, and how to read
+  the CSV in R with its names intact; GraphML carries `complete`, `errors` and the build commit.
+- **One organism, one name**: the arcs below the threshold and gLV mode's fitted rates now carry the current
+  name, as the network does (#24).
+- **The daily artifact's `/v3` copy carries only meta keys 0.4.0 declares**, so an installed 0.4.0 does not
+  call it suspect; a copy is written for EVERY older format from `/v3` on, read from the manifest, so the
+  next format move strands no installed copy either.
+- **`grownet validate` reads a daily artifact** (`all_result.v4.json`) by validating the networks it carries,
+  where it said "INVALID: schema is None" about a good file.
+- **The live check tells "could not run" from "a property broke"**, by exit code (2 against 1) and in the
+  issue it opens; the build-failure issue opens only when nothing was published.
+- **The release check refuses an empty version section** and a help-page release date that differs from
+  the changelog's; RELEASING.md's checklist, emergency procedure (pause the workflow first) and its
+  statements about which copies read which file for how long now match what is true.
 - **A Baranyi start that ran off to an enormous rate raised `OverflowError`** instead of being rejected
   like any other unconverged start. First met on optical densities while building the above.
 

@@ -16,11 +16,13 @@ def test_drop_out_arcs_against_one_full_community_are_grouped():
     arcs += [_arc("d", "t", "inhibition", -1.0, "dropout", with_=3.5, medium="other")]   # another medium
     arcs += [_arc("e", "u", "inhibition", -1.0, "dropout", with_=2.0)]                     # alone
     arcs += [_arc("f", "t", "inhibition", -1.0, "biculture", with_=3.5)]                   # not a drop-out
+    arcs += [_arc("g", "t", "inhibition", -1.0, "dropout", with_=2.0)]                     # another reference
+    arcs += [_arc(s, "v", "inhibition", -1.0, "dropout", with_=5.0) for s in "hi"]          # a group of two
     net = records_to_network(arcs)
     groups = shared_references(net.edges)
-    assert [(g[0], g[2], g[3]) for g in groups] == [("t", "WC", 3)], groups
+    assert [(g[0], g[2], g[3]) for g in groups] == [("t", "WC", 3), ("v", "WC", 2)], groups
     text = "\n".join(_design_lines(net, net.edges))
-    assert "drop-out arcs sharing one reference: 3 arcs in 1 group(s)" in text
+    assert "drop-out arcs sharing one reference: 5 arcs in 2 group(s)" in text
     assert "  T: 3 arcs, S8, in WC" in text
 
 

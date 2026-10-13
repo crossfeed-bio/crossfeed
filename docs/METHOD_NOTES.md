@@ -858,7 +858,7 @@ parameter they had. No R2 comparison is quoted above for that reason.
     to `/v1` was `significance` going from the corrected p-value to -log10 of it, same name, same type.
     So the convention survives, narrowed to that case, and is in AGENTS.md as a hard rule rather than a
     note here.
-  - The emergency procedure is in RELEASING.md: delete the `all_result.json` asset and every copy derives
+  - The emergency procedure is in RELEASING.md: pause the workflow and delete the `all_result` assets (both formats since #289), and every copy derives
     live. Written down because it was found under pressure, and because the obvious alternative, landing a
     fix before the next scheduled run, is not available: the cron declares 03:17 UTC and has fired at
     09:12 to 10:31 on five consecutive days.

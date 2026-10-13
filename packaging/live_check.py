@@ -164,24 +164,49 @@ def check_glv_mode(study: str | None = None) -> tuple:
     result = run_query(MGrowthDBClient(cache_dir=None), [], {**glv_mode(dict(DEFAULTS)), "conditions": study},
                        all_studies=True, published=False)
     net = result["network"]
-    problems = [f"gLV mode, {study}: {e}" for e in result["errors"]]
-    problems += network_problems(net, f"gLV mode, {study}")
+    if result["errors"]:
+        # mGrowthDB could not be read: that is a run that could not check, not a property that broke
+        raise RuntimeError(f"gLV mode, {study}: mGrowthDB could not be read: {'; '.join(result['errors'])}")
+    problems = network_problems(net, f"gLV mode, {study}")
     if not any(e.coefficient is not None for e in net.edges):
         problems.append(f"gLV mode, {study}: no arc carries a coefficient, so the coefficient check ran on nothing")
     return problems, f"gLV mode, {study}: {len(net.edges)} arcs"
 
 
 def main(out_dir: str = "out") -> int:
-    problems, checked = [], []
+    """0 when every property holds, 1 when one breaks, 2 when the check could not run at all.
+
+    A crash or an mGrowthDB outage used to exit 1 and open an issue saying arcs broke a property, naming
+    none (found in review). The outcome is also written to `$GITHUB_OUTPUT`, so the workflow words the
+    issue by what happened.
+    """
+    import os
+    problems, checked, could_not = [], [], []
     for run in (lambda: check_published(out_dir), check_glv_mode):
-        found, what = run()
+        try:
+            found, what = run()
+        except Exception as e:     # noqa: BLE001 - any failure to run is reported as that, never as a violation
+            could_not.append(f"{type(e).__name__}: {e}")
+            continue
         problems += found
         checked.append(what)
-    print("live check: " + "; ".join(checked))
+    print("live check: " + ("; ".join(checked) or "nothing checked"))
     for p in problems:
         print(f"  {p}", file=sys.stderr)
-    print(f"live check: {len(problems)} violation(s)" if problems else "live check: every property holds")
-    return 1 if problems else 0
+    for c in could_not:
+        print(f"  could not run: {c}", file=sys.stderr)
+    outcome = "violation" if problems else "error" if could_not else "ok"
+    if os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+            f.write(f"outcome={outcome}\n")
+    if problems:
+        print(f"live check: {len(problems)} violation(s)")
+        return 1
+    if could_not:
+        print(f"live check: could not run ({len(could_not)} part(s)); this says nothing about the properties")
+        return 2
+    print("live check: every property holds")
+    return 0
 
 
 if __name__ == "__main__":

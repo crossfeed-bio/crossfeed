@@ -1146,9 +1146,12 @@ def test_a_curve_that_could_not_be_read_marks_the_file_incomplete():
             return super().get_measurement_series(context_id)
     r = run_query(Flaky(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"], {})
     assert r["network"].meta["complete"] is False and r["network"].meta["errors"] == r["errors"]
-    # the report reads them from the file, so the two cannot disagree
+    # the report reads them from the file, so the two cannot disagree: with the result's own list emptied,
+    # the file's errors still reach the report (the input had both equal, found in review)
     from grownet.report import report_text
-    assert all(f"error: {e}" in report_text(r) for e in r["errors"])
+    errors = list(r["errors"])
+    r["errors"] = []
+    assert errors and all(f"error: {e}" in report_text(r) for e in errors)
 
 
 def test_a_boolean_meta_key_is_checked_as_one():
@@ -1159,14 +1162,40 @@ def test_a_boolean_meta_key_is_checked_as_one():
     assert _meta_problems({"query": True}) == ["meta.query must be string, not bool"]
 
 
-def test_every_declared_meta_type_is_one_validate_can_check(monkeypatch):
-    """Craig's agent, on #276: `{"type": "integer"}` made validate raise KeyError. The import-time assertion
-    is what stops it; here the same rule is applied to a declaration that breaks it."""
+def test_every_declared_meta_type_is_one_validate_can_check():
+    """Craig's agent, on #276: `{"type": "integer"}` made validate raise KeyError. The module refuses to
+    import with such a declaration; shown by loading the module's own source with one planted (the first
+    version of this test only re-checked its own assertion, found in review)."""
+    import types
+    from pathlib import Path
+
     import pytest
 
-    from grownet import schema
-    assert {d["type"] for d in schema.META_PROPERTIES.values()} <= set(schema._META_TYPES)
-    bad = {**schema.META_PROPERTIES, "arcs": {"type": "integer"}}
-    with pytest.raises(AssertionError):
-        assert {d["type"] for d in bad.values()} <= set(schema._META_TYPES), "integer is not checked"
+    import grownet.schema as schema
+    source = Path(schema.__file__).read_text()
+    planted = source.replace("META_PROPERTIES = {",
+                             'META_PROPERTIES = {"arcs": {"type": "integer", "description": ""},', 1)
+    assert planted != source
+    def load(text):
+        module = types.ModuleType("grownet._schema_probe")
+        module.__package__, module.__file__ = "grownet", schema.__file__
+        exec(compile(text, schema.__file__, "exec"), module.__dict__)
+    with pytest.raises(AssertionError, match="integer"):
+        load(planted)
+    load(source)                       # the control: the module as shipped imports
 
+
+def test_a_read_that_fails_while_reading_growth_rates_marks_the_file_incomplete(monkeypatch):
+    """#247's gap, found in review: the file was marked complete before the rate stage ran, so a read that
+    failed there left `complete` true, exit 0, and organisms that looked as if they had no measurable rate."""
+    from grownet import gui
+    from grownet.adapter import UNREAD
+    monkeypatch.setattr(gui, "growth_rates",
+                        lambda *a, **k: ({}, [("mono B: rep 1", f"{UNREAD} its series: HTTP 500")]))
+    r = run_query(FakeClient(), [A, B], {"report_rates": True})
+    meta = r["network"].meta
+    assert meta["complete"] is False and any("while reading growth rates" in e for e in meta["errors"])
+    assert any("while reading growth rates" in e for e in r["errors"]), "the page and the exit code read these"
+    # and a rate stage that read everything leaves the run complete
+    monkeypatch.setattr(gui, "growth_rates", lambda *a, **k: ({}, []))
+    assert run_query(FakeClient(), [A, B], {"report_rates": True})["network"].meta["complete"] is True

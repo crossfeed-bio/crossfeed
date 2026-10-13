@@ -48,15 +48,18 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
 
 1. **A release pull request** that:
    - sets the version in `pyproject.toml` and in `src/grownet/__init__.py` (`__version__`);
-   - turns `## [x.y.z] (unreleased)` in `CHANGELOG.md` into `## [x.y.z] (YYYY-MM-DD)`, and starts a new
-     unreleased section above it if work continues;
+   - moves the entries under `## [Unreleased]` in `CHANGELOG.md` into a new `## [x.y.z] (YYYY-MM-DD)`
+     section below it, leaving `## [Unreleased]` empty; the release check refuses an empty version section;
+   - adds the version and the same date to `RELEASES` in `src/grownet/help.py`, the "what changed" list
+     the help page shows; the release check refuses a date there that differs from the changelog's;
    - sets `version:` and `date-released:` in `CITATION.cff` to the same version and the same date, and
      that date is **the day the tag is cut**: the release check refuses a date more than a day old, since
      a date prepared earlier is otherwise invisible to every other check. The
      check refuses a mismatch, and it is the file the citation widget and every generated BibTeX entry
      read: 0.3.0 was prepared with 0.2.0's date still in it, which nothing read at the time.
-   - bumps `Version:` in `r/DESCRIPTION` when anything in `r/` changed, since the R package is installed
-     from GitHub and its version is the only signal an installed copy is out of date.
+   - sets `Version:` in `r/DESCRIPTION` to the same version, on every release: the R package is installed
+     from GitHub, its version is the only signal an installed copy is out of date, and the release check
+     requires it.
    `python packaging/check_release.py vX.Y.Z` must say the tag is ready, and `make check` must pass:
    among other things it refuses texts that describe work in progress rather than the released state (an
    install line pointing at one of our branches, for example).
@@ -80,7 +83,9 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
    release that changes the format id. A run that keeps less than half the arcs of the artifact it would
    replace is refused (#236); when the drop is meant, as after a release that changes the derivation, tick
    `allow_drop` in the Run workflow form. Each run rewrites the release description from what it
-   produced, so the description is never edited by hand.
+   produced, so the description is never edited by hand. The daily run builds `main`, not a release, so
+   the floor meets a change to the derivation the morning after it MERGES: that is when to run it by hand
+   with `allow_drop`, if the drop is meant.
 5. **Check as a user would:** `uv tool install grownet` then `grownet gui` on a clean machine, and the zip on
    a Windows machine. A version on PyPI cannot be replaced: a mistake is fixed with a new version.
 
@@ -100,18 +105,31 @@ files the workflow writes.
 
 The `all-network` workflow publishes the All network as assets of the `all-network` release, from
 `main`, once a day: `all_result.<format>.json` (today `all_result.v4.json`), named by the format id a copy
-reads, and `all_result.json`, the same network in `/v3` for installed 0.3.x and 0.4.x copies (#289). Every
-copy reads its own file when it is less than 36 hours old. If a bad artifact goes out, **delete both**:
+reads, and `all_result.json`, the same network in `/v3` for installed 0.3.x and 0.4.x copies (#289). A
+copy of this version reads its file while it is less than 36 hours old; 0.3.x and 0.4.x read theirs while
+it is less than a day old. If a bad artifact goes out, **pause the workflow, then delete both**:
 
 ```bash
+gh workflow disable all-network
 gh release delete-asset all-network all_result.v4.json --yes
 gh release delete-asset all-network all_result.json --yes
 ```
 
+Pausing comes first because the next scheduled run would otherwise rebuild the same file from the same
+`main` and publish it again. Turn it back on with `gh workflow enable all-network` once the fix has merged;
+with both result files gone, that first run compares itself with `all_network.json` for the floor.
+
 `published.fetch` then gets nothing, returns `None`, and every copy derives live, which is the designed
 fallback and is what the All button does when GitHub is unreachable. `all_network.json` and
-`all_report.txt` can stay: nothing reads them to decide anything. Verify with
-`python -c "from grownet.published import fetch; print(fetch())"`, which should print `None`.
+`all_report.txt` can stay: nothing reads them to decide anything. Verify that both are gone for every
+reader, not only for the version installed where you check:
+
+```bash
+curl -sI https://github.com/crossfeed-bio/crossfeed/releases/download/all-network/all_result.v4.json | head -1
+curl -sI https://github.com/crossfeed-bio/crossfeed/releases/download/all-network/all_result.json | head -1
+```
+
+Each should answer 404.
 
 This was found under pressure on 2026-10-07, when #121's arc fields went out under an unchanged format id
 and the All button raised for every installed 0.2.0. It is written down because it is not obvious from

@@ -424,8 +424,14 @@ def matrix_about(net: InteractionNetwork, csv_name: str = "grownet_matrix.csv") 
              f"derived {meta.get('derived_at', '')} from {meta.get('source_db', 'mGrowthDB')}",
              f"describes {csv_name}, {len(names)} x {len(names)}. Keep this file beside it: the CSV alone "
              "does not say how it was made.",
-             "",
-             "READING IT"]
+             ""]
+    # an incomplete run's 0 cells include pairs from studies that were never read (#247; found in review)
+    if meta.get("complete") is False:
+        lines.append("INCOMPLETE: this run could not read everything it asked for, so a 0 below can be a pair")
+        lines.append("  from a study or curve that was never read:")
+        lines += [f"  {error}" for error in meta.get("errors") or []]
+        lines.append("")
+    lines.append("READING IT")
     lines += para("Rows are the affected organism and columns the actor: the cell in row i, column j is the "
                   "effect of j on i. The diagonal is 0, since this is the plain adjacency matrix; the gLV "
                   "package is where a diagonal is fitted.")
@@ -438,6 +444,13 @@ def matrix_about(net: InteractionNetwork, csv_name: str = "grownet_matrix.csv") 
                   + ", it was hidden as low quality, or the pair's arcs disagree in sign (listed below).")
     lines += para("NA is a comparison where one side did not grow, so no ratio exists: those cells are "
                   "listed below with the bound the network's arcs carry.")
+    within = counts(net).get("within_one_organism")
+    if within:
+        # a within-genus arc has no cell of its own: the diagonal is written there, as the page says (#248)
+        lines += para(f"{within} arc(s) are from one organism to itself, which --merge-genera produces, and "
+                      "have no cell in this matrix: the diagonal is written there.")
+    lines += para("In R: read.csv(file, row.names = 1, check.names = FALSE). Without check.names = FALSE, R "
+                  "rewrites the organism names in the header and they no longer match the row names.")
     lines.append("")
     settings = meta.get("settings") or {}
     lines.append("SETTINGS" if settings else "SETTINGS: none recorded; these records were already derived")
@@ -464,7 +477,11 @@ def matrix_about(net: InteractionNetwork, csv_name: str = "grownet_matrix.csv") 
     bounded = bounded_cells(net)
     if bounded:
         lines.append("NA CELLS (actor on affected, and the bound where the rule set one)")
-        lines += [f"  {actor} on {affected}" + ("" if bound is None else f": at least {bound:+.4g}")
+        # an obligate arc's bound is a lower one (at least this much facilitation), an abolished arc's an
+        # upper one (at most this much inhibition), as `derive.bounded_strength` says; this said "at
+        # least" for both (found in review)
+        lines += [f"  {actor} on {affected}" + ("" if bound is None else
+                                                f": {'at least' if bound > 0 else 'at most'} {bound:+.4g}")
                   for affected, actor, bound in bounded]
         lines.append("")
     found = media(net)
@@ -1433,7 +1450,12 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
              "lag_method": rates[nid].get("lag_method", ""),
              "carrying_capacity": rates[nid].get("capacity"),
              "carrying_capacity_unit": rates[nid].get("capacity_unit", ""),
-             "carrying_capacity_curves": rates[nid].get("capacity_n"),
+             # the curves the plateau rests on, as growth_rates.csv writes it: under the integrated form
+             # `capacity_n` counts fitted ROWS, so the payload said 1 where the zip said 3, the same slip #259
+             # fixed for `replicates` (found loading the payload into R in review)
+             "carrying_capacity_curves": (rates[nid].get("capacity_curves")
+                                          if rates[nid].get("capacity_curves") is not None
+                                          else rates[nid].get("capacity_n")),
              "carrying_capacity_left_out": [list(row) for row in
                                             (rates[nid].get("capacity_left_out") or [])],
              "carrying_capacity_media": list(rates[nid].get("capacity_media") or ()),

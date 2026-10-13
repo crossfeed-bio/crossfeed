@@ -55,10 +55,14 @@ def test_a_conflict_across_designs_is_told_apart_from_one_within_a_design():
 
 
 def test_an_na_cell_is_listed_with_its_bound():
-    net = _net([_arc("a", "b", None, outcome="obligate", strength_bound=2.5)])
+    """An obligate arc's bound is a lower one and an abolished arc's an upper one; the sidecar said "at
+    least" for both, so an abolished arc read "at least -2.5" (found in review)."""
+    net = _net([_arc("a", "b", None, outcome="obligate", strength_bound=2.5),
+                _arc("c", "b", None, outcome="abolished", strength_bound=-2.5)])
     assert "NA" in matrix.matrix_csv(net)
     about = matrix.matrix_about(net)
     assert "NA CELLS" in about and "A on B: at least +2.5" in about
+    assert "C on B: at most -2.5" in about
 
 
 def test_the_command_line_writes_it_beside_the_csv(tmp_path):

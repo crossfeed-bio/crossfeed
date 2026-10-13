@@ -507,7 +507,9 @@ EDGE_ATTRIBUTES = {
     "vs_other_removals": "a drop-out arc's strength minus the median strength of the other drop-out arcs "
                          "measured against the same full community (same target, study, medium and metric), "
                          "where there are at least two: what this removal did beyond the level the group "
-                         "shares. Empty for every other arc",
+                         "shares. The others include arcs below the absence threshold, which a default file "
+                         "leaves out, so derive with --include-absent to recompute it from the file. Empty "
+                         "for every other arc",
     "rate_stage_method": "how the monoculture stage was resampled for that number: a bootstrap of its "
                          "replicates where the stage is the median of one fit per replicate, or a "
                          "delete-one jackknife where it is one regression over all of their rows",

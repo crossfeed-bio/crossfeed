@@ -192,7 +192,8 @@ measurement, so each one is how the target fared in that community plus what thi
 the second part is about the member removed. Decomposing the 108 drop-out arcs of study 8 that carry a
 strength, the target explained **61.6 per cent** of their variance and the removed member **11.1 per cent**
 (#209). The comparison the design offers, each removal against the other removals of the same target, was
-named as a prerequisite under setting 5 of METHOD_NOTES and never written.
+named as a prerequisite under setting 5 of METHOD_NOTES, and is now published beside each arc rather than
+made the comparison.
 
 Where a pair is also measured on its own, the two designs can disagree, and that is a finding rather than
 an error: on the live corpus *Roseburia intestinalis* on *Blautia hydrogenotrophica* in Wilkins-Chalgren is
@@ -202,13 +203,15 @@ overlap that would let one design check the other is narrow: **3 ordered pairs**
 network are measured both ways (measured on the 0.4.0 artifact, 2026-10-12), and mGrowthDB holds no more.
 
 **Published instead.** Every drop-out arc is marked as possibly indirect, and the network's `provisional`
-sentence says both limits. The report lists the drop-out arcs that share one reference, by target, so a
+sentence says both limits. Each drop-out arc carries `vs_other_removals`, its strength minus the median of
+the other removals of its target against the same reference (#209 option 2, Karoline 2026-10-12). The report lists the drop-out arcs that share one reference, by target, so a
 reader compares the arcs of a group with each other before reading one alone, and it lists every pair
 measured both ways with opposite effects, with both arcs.
 
-**What would settle it.** For the shared reference, the comparison with the other removals, published
-beside the arc or made the comparison itself, which is a method decision (#209, options 2 and 3). For the
-designs disagreeing, nothing needs settling: it is the measurement.
+**What would settle it.** For the shared reference, making the comparison with the other removals the
+comparison itself, which was not taken (#209 option 3): under Karoline's reading that higher-order
+interactions matter, the level is part of what a drop-out arc means. For the designs disagreeing, nothing
+needs settling: it is the measurement.
 
 **Blocks.** Nothing.
 

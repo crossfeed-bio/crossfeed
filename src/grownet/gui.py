@@ -1239,6 +1239,10 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         # the derivation fitted a rate and a self-limitation per organism, and those are the parameters
         # that go with its coefficients (#127)
         organism_rates = {nid: entry for nid, entry in fitted.items() if nid in net.nodes}
+        # named as the network names the node, so one organism carries one name in the report and the
+        # files: the fitted rows still carried the name of the study they came from (#24)
+        organism_rates = {nid: {**entry, "name": net.nodes[nid].name or entry.get("name", nid)}
+                          for nid, entry in organism_rates.items()}
         # An organism whose fit implies no plateau is given the measured one inside `two_stage`, before
         # its partners are fitted against it, from the monocultures of its own condition (#142 item 7).
         # So there is no second pass here: it used to read every study's monocultures again to substitute
@@ -1253,6 +1257,16 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
                                          capacity_max_fall=s["capacity_max_fall"])
         organism_rates = matrix.for_nodes(net, found)
         skipped += rate_skips
+        # a read that failed while the rates were read leaves the run incomplete as surely as one that
+        # failed while the arcs were: the file was marked complete before this stage ran, so an organism
+        # whose monocultures could not be read looked as if it had no measurable rate (#247)
+        failed_rates = unread(rate_skips)
+        if failed_rates:
+            errors.append(f"{len(failed_rates)} replicate(s) or growth curve(s) could not be read from "
+                          f"mGrowthDB while reading growth rates (for example {failed_rates[0][0]}: "
+                          f"{failed_rates[0][1]}); the rates are incomplete, so run the search again")
+            net.meta["errors"] = list(errors)
+            net.meta["complete"] = False
         net.meta["growth_rates"] = matrix.rate_meta(
             net, organism_rates, rates.method_name(s["rate_method"], s["rate_window"]))
     # the steady-state check (#125): a chemostat satisfies A x = -(r - D) there, and those numbers were
@@ -1281,12 +1295,17 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         notes.append("no steady-state check: no growth rate could be computed for this network, and the "
                       "check scores the rates and the coefficients the run produced.")
     say(len(studies), len(studies), "Preparing the result")
+    # the arcs below the threshold, named as the network names them: the network's nodes are renamed to
+    # their current names and these were not, so one organism appeared under two names in one report (#24)
+    absent_net = records_to_network(absent_records) if absent_records else None
+    if absent_net is not None:
+        _current_names(absent_net, current)
     return {"entries": names, "settings": dict(s), "resolved": resolved["resolved"],
             "reasons": resolved["reasons"], "suggestions": resolved["suggestions"], "excluded": left_out,
             "all": all_studies, "genera": resolved["genera"],
             "partners_only": partners_only,
             "unresolved": resolved["unresolved"], "taxon_ids": resolved["taxon_ids"], "studies": studies,
-            "network": net, "absent": records_to_network(absent_records) if absent_records else None,
+            "network": net, "absent": absent_net,
             "rates": organism_rates, "steady": checked,
             "skipped": skipped, "errors": errors, "notes": notes,
             "hidden": extra["hidden"], "absence": extra["absence"]}

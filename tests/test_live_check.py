@@ -106,7 +106,10 @@ def test_the_workflow_runs_it_after_publishing_with_its_own_issue():
     assert wf.index("gh release upload all-network") < wf.index("python packaging/live_check.py out")
     assert "--label live-check-failed" in wf
     # the build-failure issue does not fire for a live-check failure, and its closing depends on the publish
-    assert "if: failure() && steps.live.outcome != 'failure'" in wf
+    # the build-failure issue only when nothing was published: not for a live check, not for a failed
+    # description or a failed close step after a successful publish (found in review)
+    assert "if: failure() && steps.publish.outcome != 'success'" in wf
+    assert "OUTCOME: ${{ steps.live.outputs.outcome }}" in wf
     assert "if: always() && steps.publish.outcome == 'success'" in wf
 
 
@@ -122,3 +125,67 @@ def test_the_effect_over_sd_tolerance_follows_each_arc_s_own_rounding():
     corrupt = _quantified(effect_over_sd=round(1.0 / 0.5 + 0.01, 4))
     assert any("effect_over_sd" in p for p in network_problems(_net([corrupt]), "x"))
 
+
+def test_a_check_that_could_not_run_is_not_reported_as_a_broken_property(tmp_path, monkeypatch, capsys):
+    """Found in review: an mGrowthDB outage made the check raise, exit 1, and open an issue saying arcs broke
+    a property while naming none. It now exits 2, says it could not run, and tells the workflow."""
+    import live_check
+    monkeypatch.setattr(live_check, "check_published", lambda out: (_ for _ in ()).throw(OSError("no file")))
+    monkeypatch.setattr(live_check, "check_glv_mode",
+                        lambda: (_ for _ in ()).throw(RuntimeError("mGrowthDB could not be read")))
+    output = tmp_path / "gh_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    assert live_check.main(str(tmp_path)) == 2
+    assert "outcome=error" in output.read_text() and "could not run" in capsys.readouterr().out
+    # and a real violation is still a violation
+    monkeypatch.setattr(live_check, "check_published", lambda out: (["All: weight 0.5 is not |strength|"], "All"))
+    monkeypatch.setattr(live_check, "check_glv_mode", lambda: ([], "gLV"))
+    output.write_text("")
+    assert live_check.main(str(tmp_path)) == 1 and "outcome=violation" in output.read_text()
+
+
+
+def test_the_checks_the_first_tests_did_not_reach():
+    """Found in review by deleting each check in turn: these survived the suite."""
+    # a censored arc that carries a strength
+    assert any("has no ratio" in p for p in network_problems(_net([_censored(strength=1.0)]), "x"))
+    # neither a medium nor a condition
+    assert any("medium or condition" in p for p in network_problems(_net([_quantified(medium="")]), "x"))
+    # an arc citing a study the network does not list
+    net = _net([_quantified()])
+    net.edges[0] = __import__("dataclasses").replace(net.edges[0], study_ids=("S404",))
+    assert any("does not list" in p for p in network_problems(net, "x"))
+
+
+def test_the_published_file_and_its_legacy_copy_are_checked(tmp_path, monkeypatch):
+    """`check_published` reads the current file, the arcs below the threshold and the /v3 copy; each part
+    is shown to catch what it is for."""
+    import json
+
+    import live_check
+    import publish_all
+    from test_gui import FakeClient
+
+    from grownet.gui import run_query
+    monkeypatch.setattr(publish_all, "run_query", lambda *a, **k: run_query(
+        FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
+    out = tmp_path / "out"
+    assert publish_all.main(str(out), None, previous=lambda: None) == 0
+    assert live_check.check_published(str(out))[0] == [], "a clean publish has nothing to report"
+    legacy = json.loads((out / "all_result.json").read_text())
+    legacy["network"]["edges"][0]["window"] = 30.0                           # a field /v3 does not declare
+    (out / "all_result.json").write_text(json.dumps(legacy))
+    assert any("does not declare" in p and "window" in p for p in live_check.check_published(str(out))[0])
+    legacy["network"]["edges"][0].pop("window")
+    legacy["network"]["edges"] = legacy["network"]["edges"] + legacy["network"]["edges"]   # arcs doubled
+    (out / "all_result.json").write_text(json.dumps(legacy))
+    assert any("different number of arcs" in p for p in live_check.check_published(str(out))[0])
+
+
+def test_a_glv_check_that_found_no_coefficient_says_so(monkeypatch):
+    import live_check
+
+    from grownet import gui
+    monkeypatch.setattr(gui, "run_query", lambda *a, **k: {"network": _net([_quantified()]), "errors": []})
+    problems, _ = live_check.check_glv_mode("S1")
+    assert any("ran on nothing" in p for p in problems)

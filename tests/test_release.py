@@ -465,3 +465,26 @@ def test_no_tag_in_the_clone_says_nothing_either_way(tmp_path):
     assert tagged_commit("v0.1.0", repo) is None                     # a repository without the tag
     assert check("v0.1.0", repo, today=FIXTURE_DAY)[0] == []
 
+
+def test_an_empty_release_section_is_refused(tmp_path):
+    """Found in review: a dated `## [0.5.0]` heading over nothing, with every entry still under
+    [Unreleased], printed "is ready" and the release notes held only the Windows paragraph."""
+    repo = _repo(tmp_path)
+    changelog = repo / "CHANGELOG.md"
+    changelog.write_text(changelog.read_text().replace("### Added\n- the first release\n\n", ""))
+    problems, _ = check("v0.1.0", repo, today=FIXTURE_DAY)
+    assert any("is empty" in p for p in problems), problems
+
+
+def test_the_help_page_s_release_date_must_be_the_changelog_s(tmp_path):
+    """Found in review: a full release with `("0.5.0", "2026-10-09", ...)` in help.RELEASES passed every
+    check while the changelog and the citation said another day."""
+    repo = _repo(tmp_path)
+    help_file = repo / "src" / "grownet" / "help.py"
+    help_file.write_text('RELEASES = [\n    ("0.1.0", "2026-09-28", ("first",)),\n]\n')
+    assert any("RELEASES dates 0.1.0 2026-09-28" in p for p in check("v0.1.0", repo, today=FIXTURE_DAY)[0])
+    help_file.write_text('RELEASES = [\n    ("0.1.0", "2026-10-01", ("first",)),\n]\n')
+    assert check("v0.1.0", repo, today=FIXTURE_DAY)[0] == []
+    help_file.write_text("RELEASES = []\n")
+    assert any("no entry for 0.1.0" in p for p in check("v0.1.0", repo, today=FIXTURE_DAY)[0])
+

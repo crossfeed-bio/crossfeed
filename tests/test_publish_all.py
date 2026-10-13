@@ -26,6 +26,7 @@ def test_a_fall_below_half_of_the_previous_artifact_needs_saying_so():
     assert refused and "70 arcs" in refused[0] and "145" in refused[0] and "allow_drop" in refused[0]
     assert floor(70, 145, allow_drop=True) == [], "a run by hand can say the drop is meant"
     assert floor(73, 145) == [], "half or more is a data update, not a collapse"
+    assert floor(73, 146) == [] and floor(72, 146), "exactly half publishes, one below refuses"
     # growth is never refused: the default went from 12 arcs to 145 on 2026-10-10
     assert floor(145, 12) == []
 
@@ -160,9 +161,14 @@ def test_the_older_format_is_published_beside_the_current_one(tmp_path, monkeypa
         for item in legacy["network"][key]:
             assert set(item) <= set(v3[kind]), (kind, set(item) - set(v3[kind]))
     assert len(legacy["network"]["edges"]) == len(current["network"]["edges"])
+    # no meta key an installed 0.4.0 does not declare, which its `validate` would note as suspect
+    assert set(legacy["network"]["meta"]) <= publish_all.LEGACY_META["grownet.interaction_network/v3"]
+    assert {"complete", "errors"} <= set(current["network"]["meta"]), "the current file keeps them"
     notes = []
     assert validate_document(legacy["network"], notes) == []
-    # and the identity is the legacy file's own, so a reader can recompute it
+    # and the identity is the legacy file's own, recomputable from it (it only differed from the current
+    # one before, which a constant hash also does; found in review)
+    assert legacy["identity"]["content_sha256"] == published._identity(legacy)["content_sha256"]
     assert legacy["identity"]["content_sha256"] != current["identity"]["content_sha256"]
     # read as an installed /v3 copy reads it: its own SCHEMA, and the derivation it asks for
     monkeypatch.setattr(published, "SCHEMA", "grownet.interaction_network/v3")
@@ -187,4 +193,33 @@ def test_the_first_run_of_a_new_format_compares_with_the_legacy_file():
             raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
         return Response(json.dumps({"network": {"edges": [{}] * 145}}).encode())
     assert previous_arcs(opener) == 145
+
+
+
+def test_every_older_format_from_v3_gets_its_own_file():
+    """Found in review: one hard-coded legacy entry meant that at /v5 nothing would write
+    `all_result.v4.json`, and every installed /v4 copy would derive All live. Every format id from /v3 to
+    the one before the current gets a file, read from the manifest."""
+    manifest = json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
+    assert publish_all.older_formats(manifest) == ["grownet.interaction_network/v3"]
+    assert publish_all.file_for("grownet.interaction_network/v3") == "all_result.json"
+    later = {**manifest, "formats": {**manifest["formats"], "grownet.interaction_network/v5":
+                                     manifest["formats"]["grownet.interaction_network/v4"]},
+             "current": "grownet.interaction_network/v5"}
+    assert publish_all.older_formats(later) == ["grownet.interaction_network/v3", "grownet.interaction_network/v4"]
+    assert publish_all.file_for("grownet.interaction_network/v4") == "all_result.v4.json"
+
+
+def test_the_arcs_below_the_threshold_are_written_in_the_older_format_too():
+    """The fake search has no absent network, so stripping it was never exercised (found in review)."""
+    payload = {"format": "grownet.all_result/v1",
+               "network": {"schema": "grownet.interaction_network/v4", "meta": {"tool": "grownet", "build": {}},
+                           "nodes": [{"id": "a", "taxon_id_refused": "x"}], "studies": [{"id": "S1"}],
+                           "edges": [{"source": "a", "target": "a", "effect": "facilitation", "window": 3.0}]}}
+    payload["absent"] = json.loads(json.dumps(payload["network"]))
+    legacy = publish_all.legacy_payload(payload)
+    for part in ("network", "absent"):
+        assert legacy[part]["schema"] == "grownet.interaction_network/v3"
+        assert "window" not in legacy[part]["edges"][0] and "taxon_id_refused" not in legacy[part]["nodes"][0]
+        assert "build" not in legacy[part]["meta"] and legacy[part]["meta"]["tool"] == "grownet"
 

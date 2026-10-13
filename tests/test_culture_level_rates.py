@@ -14,7 +14,7 @@ from grownet.rates import RateUnavailable, baranyi_fit
 STRAIN = "Escherichia coli LF82"
 
 
-def _logistic(start, rate=0.5, top=1e9, n=16):
+def _logistic(start, rate=0.5, top=1e9, n=40):
     """A logistic curve sampled every hour: a rate, a lag-free start and a plateau."""
     return [(float(t), top / (1 + (top / start - 1) * math.exp(-rate * t)), None) for t in range(n)]
 
@@ -62,6 +62,12 @@ def test_the_rate_and_lag_come_from_the_count_and_the_capacity_never(monkeypatch
     assert len(entry["values"]) == 3 and abs(entry["values"][0] - 0.5) < 0.1
     assert entry["sources"] == {"culture-level fc": 3}
     assert entry["capacity_by_medium"] == {}, "a plateau is never read from a culture-level trace"
+    # the curve DOES reach a plateau, so the empty capacity is the guard and not the data (found in review:
+    # a 16-point curve never reached stationary, so deleting the guard left this green)
+    from grownet.growth import GrowthCurve, reached_stationary
+    points = _logistic(1e5)
+    curve = GrowthCurve(STRAIN, [t for t, _, _ in points], [v for _, v, _ in points], "h", "Cells/mL")
+    assert reached_stationary(curve, curve.times[-1]) is True
     merged = derive.merge_rates([("S9", found)])
     (rate,) = merged.values()
     assert rate["rate_sources"] == {"culture-level fc": 3} and rate["capacity"] is None
@@ -86,9 +92,8 @@ def test_a_baranyi_start_that_runs_off_is_a_rejected_fit_not_a_crash():
         rates._fit_once = lambda xs, ys, start: ([start[0], 1e6, start[2], start[3]], 0.0)
         times = [float(t) for t in range(12)]
         values = [math.exp(0.3 * t) for t in times]
-        try:
+        import pytest
+        with pytest.raises(RateUnavailable):
             baranyi_fit(times, values)
-        except RateUnavailable:
-            pass
     finally:
         rates._fit_once = original

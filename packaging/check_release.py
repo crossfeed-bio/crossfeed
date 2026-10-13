@@ -65,6 +65,11 @@ def check(tag: str, root: Path = ROOT, releasing: bool = True, today=None) -> tu
         if "unreleased" in section.group(1).lower() and releasing:
             problems.append(f"CHANGELOG.md still marks {version} unreleased")
         notes = section.group(2).strip()
+        # a dated heading over nothing passed as ready, and the GitHub release then carried no changelog,
+        # with the entries left under [Unreleased] above it (found in review)
+        if releasing and not notes:
+            problems.append(f"CHANGELOG.md's section for {version} is empty; move the entries from "
+                            "[Unreleased] into it")
         # 0.3.0 was prepared with 0.2.0's release date still in CITATION.cff, which nothing read: the
         # citation widget and every generated BibTeX entry take the date from there (found 2026-10-06).
         # either spelling of the date, since the one this file demanded was not the only one Keep a
@@ -97,6 +102,18 @@ def check(tag: str, root: Path = ROOT, releasing: bool = True, today=None) -> tu
                                 "or tag on the day they name")
         if releasing and not heading:
             problems.append(f"CHANGELOG.md gives no date for {version}")
+        # the help page's "what changed" list carries the version and a date of its own, which nothing
+        # compared with the changelog: a full release with a different date there passed every check
+        # (found in review)
+        if releasing and heading:
+            help_text = (root / "src" / "grownet" / "help.py")
+            listed = re.search(rf'\("{re.escape(version)}", "([0-9-]+)"', help_text.read_text(encoding="utf-8")) \
+                if help_text.exists() else None
+            if help_text.exists() and not listed:
+                problems.append(f"src/grownet/help.py RELEASES has no entry for {version}")
+            elif listed and listed.group(1) != heading.group(1):
+                problems.append(f"src/grownet/help.py RELEASES dates {version} {listed.group(1)}, CHANGELOG.md "
+                                f"says {heading.group(1)}")
     # The R companion is versioned separately and RELEASING.md calls r/DESCRIPTION the only signal an
     # installed R copy is out of date, so a release that forgets it ships a package that cannot tell a
     # reader to update (#142 item 10).
