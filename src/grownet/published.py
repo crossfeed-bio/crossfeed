@@ -5,8 +5,9 @@ there if less than a day old", and "let's serve the All network from the grownet
 grownet cannot write to GitHub (it would need a credential anyone could take), and the repository holds
 no data from mGrowthDB (AGENTS.md). So a scheduled workflow (.github/workflows/all-network.yml) derives
 All with the default settings and replaces one file on a fixed release, outside git history; the page's
-All button and `grownet derive --all` read that file when it is less than a day old and the settings are
-the defaults, and otherwise derive live, as before. Nothing is ever uploaded by a user's copy.
+All button and `grownet derive --all` read that file when it is less than `MAX_AGE` (36 hours) old and
+the settings are the defaults, and otherwise derive live, as before. Nothing is ever uploaded by a user's
+copy.
 
 The file holds the whole result of the search, not only the network, so the page shows it as a live
 result: the arcs, the arcs the absence threshold left out, the studies, the pairs the data did not
@@ -27,7 +28,14 @@ FORMAT = "grownet.all_result/v1"
 RELEASE_TAG = "all-network"
 FILE = "all_result.json"
 URL = f"https://github.com/crossfeed-bio/crossfeed/releases/download/{RELEASE_TAG}/{FILE}"
-MAX_AGE = datetime.timedelta(days=1)
+# 36 hours, not one day (Karoline, 2026-10-12, on #196: "Extend to 36 hours"). The workflow runs once a
+# day and GitHub starts scheduled runs late by a varying amount: the gap between two published artifacts
+# reached 27h20m, and 7 of 12 consecutive gaps exceeded 24 hours (measured 2026-10-12), so with a one-day
+# window the file went stale most nights before its replacement landed, and every copy of grownet derived
+# All live from mGrowthDB at once, which is the load the workflow exists to prevent. The format id and the
+# derivation check are what keep a reader from a WRONG artifact; the age only bounds how old the data is,
+# and mGrowthDB uploads are rare. Recorded in METHOD_NOTES item 30, which said one day before.
+MAX_AGE = datetime.timedelta(hours=36)
 TIMEOUT = 15
 # The parts of a search result the file carries, besides the network. `absent` is handled separately
 # because it is an InteractionNetwork rather than plain JSON, which is why it used to be dropped: the
@@ -96,7 +104,7 @@ def usable(settings: dict, defaults: dict) -> bool:
 
 
 def fresh(payload: dict, now: datetime.datetime | None = None, settings: dict | None = None) -> bool:
-    """Whether a published file is this format, this schema, less than a day old, and derived the way the
+    """Whether a published file is this format, this schema, younger than `MAX_AGE`, and derived the way the
     caller would derive it.
 
     **`settings` defaults to None, which skips the derivation check**, and that is stated here because the
@@ -113,29 +121,59 @@ def fresh(payload: dict, now: datetime.datetime | None = None, settings: dict | 
     form's, 12 arcs against 145, with nothing between the reader and it. A format id moves when a FIELD
     changes meaning; which derivation filled the fields is not a field.
     """
-    if payload.get("format") != FORMAT or payload.get("network", {}).get("schema") != SCHEMA:
-        return False
+    return why_not_fresh(payload, now, settings) is None
+
+
+def why_not_fresh(payload: dict, now: datetime.datetime | None = None, settings: dict | None = None) -> str | None:
+    """Why a published file is not served, in a sentence for the page, or None when it is (#157).
+
+    `fresh` said only True or False, and every failure looked the same to a reader: the All button derived
+    live, and nothing said whether the file was old, from another version, or derived another way.
+    """
+    got = payload.get("format")
+    if got != FORMAT:
+        return f"it is in the format {got!r}, and this version of grownet reads {FORMAT!r}"
+    schema = payload.get("network", {}).get("schema")
+    if schema != SCHEMA:
+        return f"its network is {schema!r}, and this version of grownet writes {SCHEMA!r}"
     if settings is not None:
         made_by = (payload.get("network", {}).get("meta", {}).get("settings") or {}).get("derivation")
         if made_by is not None and made_by != settings.get("derivation"):
-            return False
+            return (f"it was derived by the {made_by} derivation, and these settings ask for the "
+                    f"{settings.get('derivation')} one")
     try:
         derived = datetime.datetime.fromisoformat(payload["network"]["meta"]["derived_at"])
     except (KeyError, TypeError, ValueError):
-        return False
+        return "it carries no time it was derived at"
+    if derived.tzinfo is None:
+        return "the time it was derived at has no offset"
     now = now or datetime.datetime.now(datetime.timezone.utc)
-    return derived.tzinfo is not None and datetime.timedelta(0) <= now - derived < MAX_AGE
+    age = now - derived
+    if age < datetime.timedelta(0):
+        return f"it says it was derived at {derived.isoformat()}, which is in the future"
+    if age >= MAX_AGE:
+        return (f"it is {age.total_seconds() / 3600:.0f} hours old, and it is served while less than "
+                f"{MAX_AGE.total_seconds() / 3600:.0f} hours old")
+    return None
 
 
-def fetch(settings: dict | None = None) -> dict | None:
-    """Today's published All result, or None when there is none, it is a day old or more, it was derived
+def fetch(settings: dict | None = None, why: list | None = None) -> dict | None:
+    """The published All result, or None when there is none, it is `MAX_AGE` old or more, it was derived
     by another derivation than `settings` asks for, or GitHub cannot be reached: the caller then derives
     live."""
-    return fetch_from(urllib.request.urlopen, settings=settings)
+    return fetch_from(urllib.request.urlopen, settings=settings, why=why)
 
 
-def fetch_from(opener, now: datetime.datetime | None = None, settings: dict | None = None) -> dict | None:
-    """`fetch` with the opener and the clock given, for tests."""
+def fetch_from(opener, now: datetime.datetime | None = None, settings: dict | None = None,
+               why: list | None = None) -> dict | None:
+    """`fetch` with the opener and the clock given, for tests.
+
+    `why`, when given, receives the reason a None was returned. The broad `except` below is right for a
+    fallback, and its cost was that a defect in `from_payload` or `fresh` looked exactly like a stale file,
+    with nothing to tell them apart (Craig's agent, on #143; #157). A file that was fetched and could not
+    be read now says so, and names the exception.
+    """
+    why = [] if why is None else why
     # every failure to read the published network is a reason to derive live, which is what the caller
     # does with None. `from_payload` is inside the guard because that is where an unreadable document
     # raises: a field a reader does not know used to come out of `Edge(**e)` as a TypeError, which is
@@ -145,6 +183,16 @@ def fetch_from(opener, now: datetime.datetime | None = None, settings: dict | No
     try:
         with opener(URL, timeout=TIMEOUT) as response:
             payload = json.loads(response.read().decode("utf-8"))
-        return from_payload(payload) if fresh(payload, now, settings) else None
-    except Exception:          # noqa: BLE001 - any unreadable artifact means derive live
+    except Exception as e:     # noqa: BLE001 - no artifact to read means derive live
+        why.append(f"it could not be fetched from GitHub ({type(e).__name__}: {e})")
+        return None
+    try:
+        reason = why_not_fresh(payload, now, settings)
+        if reason:
+            why.append(reason)
+            return None
+        return from_payload(payload)
+    except Exception as e:     # noqa: BLE001 - any unreadable artifact means derive live
+        why.append(f"it was fetched and could not be read ({type(e).__name__}: {e}). That is a defect in "
+                   "this version of grownet rather than in the file's age, worth reporting")
         return None

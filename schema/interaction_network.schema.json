@@ -76,7 +76,18 @@
         },
         "studies": {
           "type": "array",
-          "description": "recorded, not promised: the studies the search read"
+          "description": "recorded, not promised: the studies the search read; one it could not read is named in errors instead"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "recorded, not promised: what could not be read from mGrowthDB; empty when nothing failed"
+        },
+        "complete": {
+          "type": "boolean",
+          "description": "recorded, not promised: false when anything the run asked for could not be read, so the network holds less than the data does"
         },
         "study_id": {
           "type": "string",
@@ -85,6 +96,10 @@
         "settings": {
           "type": "object",
           "description": "recorded, not promised: every setting the run used"
+        },
+        "build": {
+          "type": "object",
+          "description": "recorded, not promised: the commit and the workflow run that built this file, where it was built by the repository's daily workflow"
         },
         "slice": {
           "type": "string",

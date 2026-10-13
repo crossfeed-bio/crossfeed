@@ -140,6 +140,23 @@ def test_the_current_name_is_the_most_recently_published_one():
     assert "faecalibacterium prausnitzii" in index and "faecalibacterium duncaniae" in index   # both resolve
 
 
+def test_the_current_name_keeps_the_strain_designation_mgrowthdb_gives_it():
+    """#24: the most recent study names taxon 411483 "Faecalibacterium duncaniae", with no designation,
+    while two earlier ones call it "Faecalibacterium duncaniae A2-165" (live, 2026-10-12). The current name
+    is the latest species, under the latest name mGrowthDB gives with a designation."""
+    from grownet.taxonomy import current_name
+    live = ["Faecalibacterium prausnitzii A2-165", "Faecalibacterium duncaniae A2-165",
+            "Faecalibacterium duncaniae A2-165", "Faecalibacterium duncaniae"]
+    assert current_name(live) == "Faecalibacterium duncaniae A2-165"
+    # a designation under the OLD species is not carried onto the new one: no name is composed
+    assert current_name(["Faecalibacterium prausnitzii A2-165", "Faecalibacterium duncaniae"]) == \
+        "Faecalibacterium duncaniae"
+    # the latest name stands when it carries a designation, even if an older one is longer
+    assert current_name(["Blautia hydrogenotrophica DSM 10507 T", "Blautia hydrogenotrophica DSM 10507"]) == \
+        "Blautia hydrogenotrophica DSM 10507"
+    assert current_name(["Roseburia intestinalis"]) == "Roseburia intestinalis"
+
+
 def test_a_genus_alone_stands_for_every_strain_of_it():
     # Karoline (2026-09-28): a genus entered resolves to all its strains in mGrowthDB, and the species it
     # expanded to are listed; "[Clostridium]" is placed outside Clostridium, so it is not Clostridium
