@@ -1012,8 +1012,8 @@ its plateau beside its partners in the same way, rather than left out, and the R
 partners suppress it harder than its own rate there is named instead, since a self-limitation at or above
 zero is not one. The package also carries
 <code>growth_rates.csv</code> (one rate per organism, matched to a matrix by the organism column and never
-by position, with how many values it rests on, and beside it the estimator, the lag, the carrying capacity and the <strong>doubling time</strong> the rate
-implies, <code>ln(2) / r</code> in the time unit of the rate. In gLV mode a rate is the median over every
+by position, with how many values it rests on, and beside it the estimator, the lag, the carrying
+capacity and the <strong>doubling time</strong> the rate implies, <code>ln(2) / r</code> in the time unit of the rate. In gLV mode a rate is the median over every
 row the derivation fitted for that organism, so no display setting moves it; a network derived with
 <code>--fixture</code> holds only the rows someone kept, so its rates follow the settings that made the
 fixture); and <code>README.txt</code>, which states
