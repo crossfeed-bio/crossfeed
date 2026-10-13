@@ -1203,3 +1203,21 @@ def test_the_rows_another_medium_holds_are_counted_as_rows():
     text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
                         "skipped": [], "entries": []})
     assert "2 row(s) gave no capacity" in text and "curve(s) gave no capacity" not in text, text
+
+
+def test_a_left_out_row_is_named_by_its_experimental_condition_and_a_row_in_another_unit_is_counted():
+    """Round 8 of the review. A left-out row was named by `fit_condition`, the fit's condition NUMBER
+    ("in 64.12691137298039" live, for SMGDB00000014's At_Ct_ROS), and a row whose plateau is in another
+    abundance unit was in no count at all, so "every curve that gave no capacity is named" did not hold."""
+    acid = "Minimal medium (MM) (+0.75% linoleic acid)"
+    both = "Minimal medium (MM) (+0.0015mm tbhq antioxidant, +0.75% linoleic acid)"
+    rows = [_rate_record(acid, 0.4, -4.0e-10), _rate_record(acid, 0.4, -8.0e-10),
+            {**_rate_record(both, 0.4, -1.0e-10), "source_name": "B", "condition": "At_Ct_TBHQ",
+             "fit_condition": 96.5},
+            {**_rate_record(acid, 0.4, -0.2, study="S2"), "fitted_self_unit": "OD", "source_name": "C",
+             "condition": "At_Ct_OD"}]
+    left = dict(integrated.fitted_rates(rows)["ncbi:1"]["capacity_left_out"])
+    assert "S1: the row fitted with B in At_Ct_TBHQ" in left, left
+    assert not any("96.5" in what for what in left)
+    assert "its plateau is in OD, and this organism's others in Cells/mL; left out rather than converted" == \
+        left["S2: the row fitted with C in At_Ct_OD"]

@@ -24,7 +24,7 @@ check: lint gate test release-check
 # the R companion package (r/): built and checked the way CRAN does, where R is installed
 r-check:
 	R CMD build r
-	R CMD check --no-manual grownet_*.tar.gz
+	NOT_CRAN=true R CMD check --no-manual grownet_*.tar.gz
 	rm -rf grownet_*.tar.gz grownet.Rcheck
 
 demo:

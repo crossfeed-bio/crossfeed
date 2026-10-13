@@ -847,6 +847,12 @@ def merge_rates(per_study) -> dict:
                                                        "other_units": [], "labels": []})
                 if found_here["unit"] != one["unit"]:
                     one["other_units"].append(f"{study_id} ({found_here['unit']})")
+                    # each such curve gave no capacity and is named, as within one study it already was;
+                    # across studies it was in no count at all (found in review)
+                    at["capacity_left_out"] += [
+                        (curve, f"its plateau is in {found_here['unit']}, and this organism's others in "
+                                f"{one['unit']}; left out rather than converted")
+                        for curve in found_here["curves"]]
                     continue
                 for spelling in found_here.get("labels") or ():
                     if spelling not in one["labels"]:

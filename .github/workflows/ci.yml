@@ -86,6 +86,9 @@ jobs:
         # run, so the check must not demand it
         env:
           _R_CHECK_FORCE_SUGGESTS_: "false"
+          # testthat skips `skip_on_cran()` tests unless this is set, and the listener's test is one: it
+          # was skipped on every run and had been failing since #120 (found in review)
+          NOT_CRAN: "true"
         run: |
           R CMD build r
           R CMD check --no-manual grownet_*.tar.gz

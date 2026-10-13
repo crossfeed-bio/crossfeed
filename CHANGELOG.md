@@ -125,7 +125,8 @@ content.
   that was not taken. A genus with no capacity names no medium for one, and the report, the README and
   the payload say when its strains' plateaus are in units that are not converted, with every such plateau
   counted as left out. Every curve or fitted row another medium holds is counted as left out, where one
-  entry per medium was counted as one.
+  entry per medium was counted as one, and so is every plateau another study measured in another
+  abundance unit, which was in no count. A left-out fitted row is named by its experimental condition.
 - **A rate from a culture-level count says so** in `capacity_source`, so `growth_rates.csv`, the gLV payload
   and the report name it, without a new field; a rate that also rests on per-strain curves does not blame
   the count for its missing capacity.
@@ -137,7 +138,7 @@ content.
 - **The live check reads every network in each older-format file**, the arcs below the threshold as well
   as the network, which 0.4.0 reads too, and checks that each file would be served by the copies that read
   it: its result format, its time and its derivation. An older-format file is written only in the result
-  format its readers accept.
+  format and with the derivation its readers accept (0.4.0's defaults ask for replicate).
 - **The live check tells "could not run" from "a property broke"**, by exit code (2 against 1) and in the
   issue it opens; the build-failure issue opens only when the publish step did not complete, and says
   some files may already have been replaced.

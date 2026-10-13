@@ -562,8 +562,11 @@ def test_a_genus_whose_plateaus_are_in_two_units_leaves_every_plateau_out_and_sa
     Strain a: 4 curves in WC and 3 in mGAM (named as left out by its own merge), Cells/mL; strain b: 3 in OD."""
     taken = ("r", "its plateau is in mGAM, and this organism's capacity is taken from WC, where more curves "
                   "reached a plateau")
-    rates = {"ncbi:1": {**_STRAIN, "name": "Blautia a", "capacity_curves": 4, "capacity_left_out": [taken] * 3},
-             "ncbi:2": {**_STRAIN, "name": "Blautia b", "capacity_unit": "OD", "capacity_curves": 3,
+    # capacity_n counts what each plateau rests on (rows here, as `n_label` says); capacity_curves is the
+    # monoculture replicates in gLV mode and is not what the left-out entries count (round 8 of the review)
+    rates = {"ncbi:1": {**_STRAIN, "name": "Blautia a", "capacity_n": 4, "capacity_curves": 9,
+                        "capacity_left_out": [taken] * 3},
+             "ncbi:2": {**_STRAIN, "name": "Blautia b", "capacity_unit": "OD", "capacity_n": 3, "capacity_curves": 9,
                         "capacity_left_out": [("q", "the curve never reached a plateau")]}}
     row = matrix.for_nodes(_GENUS_NET, rates)["blautia"]
     assert row["capacity"] is None and len(row["capacity_left_out"]) == 1 + 4 + 3 + 3
@@ -615,3 +618,17 @@ def test_the_genus_guards_the_seventh_review_round_left_open():
     # and the rule says what the capacity is, as the rate's
     assert "its capacity the median of the capacities of those of its strains that have one, in one unit" in \
         matrix.rate_meta(_GENUS_NET, matrix.for_nodes(_GENUS_NET, rates), "easylinear")["rule"]
+
+
+def test_a_split_unit_genus_of_replicate_rows_counts_its_curves():
+    """Round 8 of the review: the default derivation's strain rows carry no capacity_curves, and the count
+    must come from capacity_n there too; each plateau is named with its unit."""
+    strain = {k: v for k, v in _STRAIN.items() if k not in ("n_label", "capacity_curves", "replicates")}
+    rates = {"ncbi:1": {**strain, "name": "Blautia a", "capacity_n": 3},
+             "ncbi:2": {**strain, "name": "Blautia b", "capacity_unit": "OD", "capacity_n": 2}}
+    row = matrix.for_nodes(_GENUS_NET, rates)["blautia"]
+    names = [what for what, _ in row["capacity_left_out"]]
+    assert names == ["Blautia a: plateau 1 of 3 (Cells/mL)", "Blautia a: plateau 2 of 3 (Cells/mL)",
+                     "Blautia a: plateau 3 of 3 (Cells/mL)", "Blautia b: plateau 1 of 2 (OD)",
+                     "Blautia b: plateau 2 of 2 (OD)"], names
+    assert "5 curve(s) gave no capacity" in _genus_report(row)

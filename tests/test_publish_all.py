@@ -338,3 +338,37 @@ def test_an_older_file_is_written_only_with_the_derivation_its_readers_ask_for()
     assert publish_all.legacy_payload(payload, "grownet.interaction_network/v3")["format"] == "grownet.all_result/v1"
     meta.pop("settings")                                   # recording none, it is served
     assert publish_all.legacy_payload(payload, "grownet.interaction_network/v3")["format"] == "grownet.all_result/v1"
+
+
+def test_the_readers_of_the_current_format_are_this_version_while_it_is_current():
+    """Round 8 of the review: nothing checked the /v4 entry, which is read only after the next move, so a
+    change of the result format or the default derivation before then would leave it describing readers
+    that never existed. While /v4 is current its readers are this version."""
+    from grownet import gui, published
+    manifest = json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
+    assert publish_all.READERS[manifest["current"]] == {"format": published.FORMAT,
+                                                        "derivation": gui.DEFAULTS["derivation"]}
+
+
+def test_an_older_file_without_a_result_format_is_not_written():
+    """Round 8 of the review: 0.4.0 refuses a file with no format, and the strip accepted one."""
+    import pytest
+    payload = {"network": {"schema": "grownet.interaction_network/v4", "meta": {}, "nodes": [], "edges": [],
+                           "studies": []}}
+    with pytest.raises(ValueError, match="format is None"):
+        publish_all.legacy_payload(payload, "grownet.interaction_network/v3")
+
+
+def test_the_strip_judges_by_the_readers_even_after_the_default_moves(monkeypatch):
+    """Round 8 of the review: with the default at replicate, judging the strip by today's DEFAULTS rather
+    than by the readers' table could not be told apart. Moved to integrated, an integrated payload is still
+    refused for the /v3 readers, whose defaults ask for replicate."""
+    import pytest
+
+    from grownet import gui
+    monkeypatch.setitem(gui.DEFAULTS, "derivation", "integrated")
+    payload = {"format": "grownet.all_result/v1",
+               "network": {"schema": "grownet.interaction_network/v4",
+                           "meta": {"settings": {"derivation": "integrated"}}, "nodes": [], "edges": [], "studies": []}}
+    with pytest.raises(ValueError, match="derivation is 'integrated' and readers"):
+        publish_all.legacy_payload(payload, "grownet.interaction_network/v3")

@@ -309,8 +309,10 @@ def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None)
             for r in members:
                 if r.get("capacity") is None:
                     continue
-                n = (r["capacity_curves"] if r.get("capacity_curves") is not None else r.get("capacity_n", 0)) \
-                    + sum("capacity is taken from" in x[1] for x in r.get("capacity_left_out") or [])
+                # `capacity_n` counts what the plateau rests on in the unit of the left-out entries, curves
+                # or fitted rows; `capacity_curves` is monoculture replicates in gLV mode (found in review)
+                n = r.get("capacity_n", 0) + sum("capacity is taken from" in why
+                                                 for _, why in r.get("capacity_left_out") or [])
                 plateaus += [(f"{r.get('name', '')}: plateau {k + 1} of {n} ({r.get('capacity_unit', '')})", why)
                              for k in range(n)]
             capacity["capacity_left_out"] = kept + plateaus

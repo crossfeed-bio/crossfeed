@@ -555,3 +555,20 @@ def test_the_curves_another_medium_holds_are_counted_as_curves():
     text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
                         "skipped": [], "entries": []})
     assert "2 curve(s) gave no capacity" in text, text
+
+
+def test_a_plateau_another_study_measured_in_another_unit_is_named_as_left_out():
+    """Round 8 of the review: within one study a plateau in another unit is named ("left out rather than
+    converted"); across studies it was only listed in other_capacity_units, which nothing prints, and was in
+    no count. S2's two curves are in OD while S1's are in Cells/mL: both are named."""
+    s1 = _client({(1, A): _settles(plateau=1.0e8), (2, A): _settles(plateau=1.0e8)})
+    found1, _ = monoculture_rates(s1, [_mono_in("E1", A, [(1, "r1"), (2, "r2")], "mMCB")])
+    nid = next(iter(found1))
+    entry = found1[nid]
+    od = {key: {**block, "unit": "OD", "curves": ["S2 r3", "S2 r4"], "values": [0.8, 0.9]}
+          for key, block in entry["capacity_by_medium"].items()}
+    found2 = {nid: {**entry, "capacity_by_medium": od, "capacity_left_out": []}}
+    merged = merge_rates([("S1", found1), ("S2", found2)])[nid]
+    left = dict(merged["capacity_left_out"])
+    assert left.get("S2 r3", "").startswith("its plateau is in OD, and this organism's others in"), left
+    assert "S2 r4" in left and merged["capacity_n"] == 2

@@ -778,6 +778,15 @@ def rate_unit_of(curve) -> str:
     return f"1/{curve.time_unit}" if curve is not None and curve.time_unit else "1/h"
 
 
+
+def _row_label(study: str, record: dict) -> str:
+    """How a fitted row is named where it gave no capacity: its study, its partner and its experimental
+    condition. `fit_condition` is the fit's condition NUMBER, which named the row "in 64.1" (found in
+    review)."""
+    partner = record.get("source_name") or record.get("source")
+    return (f"{study or 'a study'}: the row fitted" + (f" with {partner}" if partner else "")
+            + (f" in {record['condition']}" if record.get("condition") else ""))
+
 def fitted_rates(records: list) -> dict:
     """{node id: the rate entry a package takes} from the arcs of an integrated run.
 
@@ -805,7 +814,8 @@ def fitted_rates(records: list) -> dict:
             "name": record.get("target_name", nid), "unit": record.get("fitted_rate_unit", "1/h"),
             "rates": [], "points": [], "studies": [], "per_study": {}, "other_units": [],
             "capacity_unit": "", "capacities": [], "capacity_points": [], "capacity_per_study": {},
-            "other_capacity_units": [], "r2": [], "conditions": [], "self_sources": [], "media": [],
+            "other_capacity_units": [], "unit_left_out": [], "r2": [], "conditions": [], "self_sources": [],
+            "media": [],
             "stage_n": [], "by_medium": {}})
         study = record.get("study_id", "")
         unit = record.get("fitted_rate_unit", "1/h")
@@ -843,6 +853,10 @@ def fitted_rates(records: list) -> dict:
         if capacity_unit != at["capacity_unit"]:
             if f"{study} ({capacity_unit})" not in at["other_capacity_units"]:
                 at["other_capacity_units"].append(f"{study} ({capacity_unit})")
+            # and named as a row that gave no capacity: it was in no count at all (found in review)
+            at["unit_left_out"].append((_row_label(study, record),
+                                        f"its plateau is in {capacity_unit}, and this organism's others in "
+                                        f"{at['capacity_unit']}; left out rather than converted"))
             continue
         # A capacity comes from ONE medium (Karoline, 2026-10-07): the plateau a fit implies sits beside
         # off-diagonals measured in one medium, so plateaus are collected per medium and the medium with
@@ -858,9 +872,7 @@ def fitted_rates(records: list) -> dict:
         one = at["by_medium"].setdefault(key, {"label": label, "values": [], "unit": capacity_unit,
                                                "points": [], "per_study": {}, "falls": [], "rows": []})
         one["values"].append(-rate / own)
-        partner = record.get("source_name") or record.get("source")
-        one["rows"].append(f"{study or 'a study'}: the row fitted" + (f" with {partner}" if partner else "")
-                           + (f" in {record['fit_condition']}" if record.get("fit_condition") else ""))
+        one["rows"].append(_row_label(study, record))
         one["points"].append(record.get("fit_points", 0))
         if record.get("fitted_capacity_fall") is not None:
             one["falls"].append(record["fitted_capacity_fall"])
@@ -879,10 +891,11 @@ def fitted_rates(records: list) -> dict:
         chosen = order[0][1] if order else None
         # one entry per row, so the list's length is the count the report and the csv give (found in
         # review: one entry per medium was counted as one)
-        left_out = [(row, f"its plateau is in {other['label']}, and this organism's capacity is taken from "
-                          f"{chosen['label']}, where more rows were fitted; plateaus are not pooled across "
-                          "media, since a capacity sits beside off-diagonals measured in one of them")
-                    for _key, other in order[1:] for row in other["rows"]]
+        left_out = list(at["unit_left_out"]) + [
+            (row, f"its plateau is in {other['label']}, and this organism's capacity is taken from "
+                  f"{chosen['label']}, where more rows were fitted; plateaus are not pooled across media, "
+                  "since a capacity sits beside off-diagonals measured in one of them")
+            for _key, other in order[1:] for row in other["rows"]]
         out[nid] = {
             "name": at["name"], "rate": statistics.median(at["rates"]), "unit": at["unit"],
             # what the median rests on: the fitted rows, which is what this derivation has instead of

@@ -425,3 +425,42 @@ def test_an_older_file_judged_by_its_readers_after_a_move_of_the_current_format(
     doc["network"]["meta"].pop("derived_at")
     (out / "all_result.json").write_text(json.dumps(doc))
     assert "all_result.json: its derived_at differs from the current file's" in live_check.check_published(str(out))[0]
+
+
+def test_after_a_move_of_the_default_derivation_the_older_file_is_judged_by_its_readers(tmp_path, monkeypatch):
+    """Round 8 of the review: the round-7 test changed only the older file, so judging it by the current
+    file's derivation again survived. Here the default moves to integrated and both files follow it: the
+    current file is served by this version, and the /v3 file is refused by 0.4.0, which asks for replicate.
+    Without a format a file is refused too."""
+    import json
+
+    import live_check
+    import publish_all
+    from test_gui import FakeClient
+
+    from grownet import gui
+    from grownet.gui import run_query
+    monkeypatch.setattr(publish_all, "run_query", lambda *a, **k: run_query(
+        FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
+    out = tmp_path / "out"
+    assert publish_all.main(str(out), None, previous=lambda: None) == 0
+    clean = (out / "all_result.json").read_text()
+    monkeypatch.setitem(gui.DEFAULTS, "derivation", "integrated")
+    for name in ("all_result.v4.json", "all_result.json"):
+        doc = json.loads((out / name).read_text())
+        doc["network"]["meta"]["settings"]["derivation"] = "integrated"
+        (out / name).write_text(json.dumps(doc))
+    problems = live_check.check_published(str(out))[0]
+    assert ("all_result.json: its derivation is 'integrated', and readers of grownet.interaction_network/v3 "
+            "accept 'replicate'") in problems, problems
+    assert not any(p.startswith("All:") for p in problems), problems
+    monkeypatch.undo()
+    for name in ("all_result.v4.json",):
+        doc = json.loads((out / name).read_text())
+        doc["network"]["meta"]["settings"]["derivation"] = "replicate"
+        (out / name).write_text(json.dumps(doc))
+    doc = json.loads(clean)
+    doc.pop("format")
+    (out / "all_result.json").write_text(json.dumps(doc))
+    assert ("all_result.json: its format is None, and readers of grownet.interaction_network/v3 accept "
+            "'grownet.all_result/v1'") in live_check.check_published(str(out))[0]

@@ -24,7 +24,9 @@ test_that("the listener takes a posted payload and answers what it received", {
     glv <- grownet_listen(port = port, timeout = 30, quiet = TRUE)
     expect_s3_class(glv, "grownet_glv")
     expect_equal(glv$organisms, c("A", "B", "C"))
-    expect_equal(suppressWarnings(glv_matrix(glv))["B", "A"], 1.5)
+    # the example payload's cell for B acting on A (rows affected, columns the actor); 1.5 was the old
+    # example's, and the test never ran to say so because nothing set NOT_CRAN (found in review)
+    expect_equal(suppressWarnings(glv_matrix(glv))["A", "B"], 2e-9)
     # and the sender was told what arrived, so grownet can report it on its page
     for (i in 1:50) {
         if (file.exists(paste0(body_file, ".answer"))) break
