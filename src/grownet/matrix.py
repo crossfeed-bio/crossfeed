@@ -259,9 +259,10 @@ def rows(net: InteractionNetwork, diagonal: float | None = None) -> tuple:
 
 
 class NodeRates(dict):
-    """The rates `for_nodes` returns, by node id, with `no_rate`: why a node that has strains with rates has
-    none itself, which `rate_meta` records beside `without_a_rate` (found in review: a genus left without a
-    rate for its strains' time units read as one with no monoculture at all)."""
+    """The rates `for_nodes` returns, by node id, with `no_rate`: {label: why} for a node with no rate where
+    the reason is known (a genus whose strains' rates are in time units that are not converted, or an
+    organism, or a genus of them, whose every study's rates were left out for their starting spread, #81),
+    which `rate_meta` records beside `without_a_rate`."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -952,9 +953,14 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
                 entry["media"].append(name)
         if value is None:
             actor, affected = _label(net.nodes[edge.source]), _label(net.nodes[edge.target])
+            own_rate = ((rates or {}).get(edge.target) or {}).get("rate")
             entry["reasons"].append(
                 f"no abundance for {actor} over {affected}'s growth window"
                 if edge.partner_abundance in (None, 0) else
+                # a merged arc is converted with the affected organism's own rate, and the arcs behind it did
+                # record theirs: "not recorded" was false of it (found in review)
+                f"a merged arc is converted with {affected}'s own growth rate, which it has none of"
+                if getattr(edge, "merged_arcs", None) and own_rate is None else
                 f"the rates behind this arc were not recorded (metric {edge.metric or 'unknown'})")
             continue
         entry["by_unit"].setdefault(unit, []).append(value)
@@ -1271,9 +1277,15 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                 across.append((_label(net.nodes[affected]), _label(net.nodes[actor]),
                                f"{' and '.join(missing)} could not be fitted, so this effect is in no "
                                "matrix"))
+    # an effect on or by an organism that is in no matrix is not "left at 0" in one: it is in none (found
+    # in review: the genus package listed such a pair as a 0)
+    outside = {name for name, _ in left_out}
     for (affected, actor), why in unfitted:
-        pairs_left_out.append((_label(net.nodes[affected]), _label(net.nodes[actor]),
-                               f"{why}, so the per-capita effect cannot be fitted"))
+        names = (_label(net.nodes[affected]), _label(net.nodes[actor]))
+        if outside & set(names):
+            across.append((*names, f"{why}; {' and '.join(n for n in names if n in outside)} is in no matrix"))
+        else:
+            pairs_left_out.append((*names, f"{why}, so the per-capita effect cannot be fitted"))
     # an organism whose plateau balance gave no usable limitation leaves the matrix it was put in
     for name, why in unusable:
         left_out.append((name, why))

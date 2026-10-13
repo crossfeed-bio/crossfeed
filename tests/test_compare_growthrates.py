@@ -88,3 +88,32 @@ def test_the_comparison_exits_as_its_docstring_says(monkeypatch, capsys):
     assert "INCOMPLETE" in capsys.readouterr().out
     monkeypatch.setattr(cg.shutil, "which", lambda name: None)
     assert cg.main(["S1"]) == 2, "without R the comparison says it did not run"
+
+
+def test_the_comparison_holds_its_tolerance_and_says_when_r_failed(monkeypatch):
+    """Round 16 of the review: the only disagreement tested was 0.3 against 0.31, so a looser tolerance
+    passed; and R exiting with an error (growthrates not installed) could report success. 1e-12 is relative
+    for a rate above 1 and absolute below it."""
+    import subprocess
+
+    import compare_growthrates as cg
+
+    import grownet.mgrowthdb as mgrowthdb
+    rows = [(1, "S1", "strain", [0, 1], [1, 2], 5.0, ""), (2, "S1", "strain", [0, 1], [1, 2], 0.001, "")]
+
+    def run_with(r_rates, returncode=0):
+        def fake_run(args, **kwargs):
+            with open(args[3], "w") as fh:
+                fh.write("curve,rate,message\n" + "".join(f"{cid},{rate!r},\n" for cid, rate in r_rates))
+            return subprocess.CompletedProcess(args, returncode, "", "there is no package called 'growthrates'")
+        monkeypatch.setattr(cg.shutil, "which", lambda name: "/usr/bin/Rscript")
+        monkeypatch.setattr(cg, "curves", lambda client, studies: rows)
+        monkeypatch.setattr(mgrowthdb, "MGrowthDBClient", lambda *a, **k: None)
+        monkeypatch.setattr(cg.subprocess, "run", fake_run)
+        return cg.main(["S1"])
+
+    assert run_with([(1, 5.0 + 3e-12), (2, 0.001 + 5e-13)]) == 0      # within: relative above 1, absolute below
+    assert run_with([(1, 5.0 + 3e-11), (2, 0.001)]) == 1              # 6e-12 relative: beyond
+    assert run_with([(1, 5.0), (2, 0.001 + 5e-12)]) == 1              # 5e-12 absolute: beyond
+    assert run_with([(1, 5.0), (2, 0.001 + 1e-9)]) == 1
+    assert run_with([(1, 5.0), (2, 0.001)], returncode=1) == 2, "a comparison R did not finish says it did not run"

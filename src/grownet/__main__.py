@@ -784,9 +784,11 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=DERIVE_EXAMPLES, formatter_class=argparse.RawDescriptionHelpFormatter)
     what = d.add_argument_group("what to derive")
     what.add_argument("study", nargs="?", default="",
-                      help="an mGrowthDB study id (e.g. SMGDB00000004) to derive every species in it; with "
-                           "--species, comma separated study ids to search instead of every study holding "
-                           "them, the same as naming them in --conditions (the page's second box)")
+                      help="an mGrowthDB study id (e.g. SMGDB00000004) to derive every species in it, named as "
+                           "that study names them (a species search and --all use each strain's current name, "
+                           "which needs the whole corpus read); with --species, comma separated study ids to "
+                           "search instead of every study holding them, the same as naming them in --conditions "
+                           "(the page's second box)")
     what.add_argument("--species", nargs="+", metavar="NAME",
                       help="species or strain names, NCBI taxon ids, or a genus (all its species): every study "
                            "holding them is searched and one network returned, as on the local page (needs "

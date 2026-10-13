@@ -673,3 +673,20 @@ def test_an_organism_that_grows_only_with_a_partner_says_why_it_has_no_rate_too(
     reasons = dict(matrix.coefficients(net, rates)["left_out"])
     assert "O" in reasons, reasons
     assert reasons["O"].endswith("; it has no growth rate: " + rates.no_rate["O"]), reasons["O"]
+    # with no reason known, nothing is added (round 16: "it has no growth rate: None" reached R)
+    bare = dict(matrix.coefficients(net, matrix.NodeRates({"p": {**_STRAIN, "name": "P"}}))["left_out"])
+    assert bare["O"].endswith("so its self-limitation cannot be fitted"), bare["O"]
+
+
+def test_a_merged_arc_on_a_genus_without_a_rate_says_so_and_is_in_no_matrix():
+    """Round 16 of the review: the genus package said "the rates behind this arc were not recorded" of a
+    merged arc whose members recorded theirs (it is converted with the affected genus's own rate, which it
+    lacked), and listed the pair as an effect "left at 0" though that genus is in no matrix."""
+    net = _net([dict(_arc("p", "o", -0.3266), source_name="Comamonas", target_name="Agrobacterium",
+                     merged_arcs=2, partner_abundance=2.78e8, partner_abundance_unit="Cells/mL",
+                     metric="growth_rate:easylinear:5")])
+    got = matrix.coefficients(net, {"p": {**_STRAIN, "name": "Comamonas"}})
+    assert not [row for row in got["pairs_left_out"] if row[0] == "Agrobacterium"], got["pairs_left_out"]
+    ((affected, actor, why),) = [row for row in got["across_units"] if row[0] == "Agrobacterium"]
+    assert why.startswith("a merged arc is converted with Agrobacterium's own growth rate, which it has none of")
+    assert why.endswith("; Agrobacterium is in no matrix"), why

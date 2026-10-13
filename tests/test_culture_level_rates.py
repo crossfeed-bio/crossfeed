@@ -109,8 +109,31 @@ def test_a_rate_is_not_pooled_across_starts_more_than_ten_times_apart(monkeypatc
     genus = records_to_network([{"source": "escherichia", "target": "x", "source_name": "Escherichia",
                                  "target_name": "X", "source_identity": "genus", "effect": "facilitation",
                                  "strength": 1.0, "study_id": "S14"}])
-    rows = matrix.for_nodes(genus, merged)
+    other = derive.OrganismRates(merged)
+    other.no_rate.update(merged.no_rate)
+    other.no_rate["ncbi:999"] = ("Klebsiella oxytoca", "its monocultures' growth rates were left out: S9: (#81)")
+    rows = matrix.for_nodes(genus, other)
+    # only this genus's strains: a refused strain of another genus is not named here (round 16)
     assert rows.no_rate == {"Escherichia": f"{name}: {why}"}, rows.no_rate
+    # a strain renamed into another genus (#24) gives its reason to the genus it is shown in now (round 16)
+    renamed = derive.OrganismRates()
+    renamed.no_rate["ncbi:562"] = (name, why)
+    shigella = records_to_network([{"source": "shigella", "target": "x", "source_name": "Shigella",
+                                    "target_name": "X", "source_identity": "genus", "effect": "facilitation",
+                                    "strength": 1.0, "study_id": "S14"}])
+    current = {562: "Shigella coli LF82"}
+    assert matrix.for_nodes(shigella, renamed, current).no_rate == {"Shigella": f"Shigella coli LF82: {why}"}
+    assert matrix.for_nodes(genus, renamed, current).no_rate == {}, "not on the genus it was read under"
+    # two refused strains of one genus, one of them renamed into it: both named, by their current names
+    renamed.no_rate["ncbi:563"] = ("Shigella flexneri 2a", "its monocultures' growth rates were left out: S9: x")
+    assert matrix.for_nodes(shigella, renamed, current).no_rate == {
+        "Shigella": f"Shigella coli LF82: {why}; Shigella flexneri 2a: its monocultures' growth rates were left "
+                    "out: S9: x"}
+    # a strain node with no rate is not given a refused sibling's reason (the guard on genus nodes)
+    sibling = records_to_network([{"source": "ncbi:83333", "target": "x", "source_name": "Shigella coli K12",
+                                   "target_name": "X", "source_identity": "ncbi", "effect": "facilitation",
+                                   "strength": 1.0, "study_id": "S14"}])
+    assert matrix.for_nodes(sibling, renamed, current).no_rate == {}
     near = CultureClient({"a": ["plates"], "b": ["plates"]}, starts={"a": 1e5, "b": 9e5})
     found, skipped = derive.monoculture_rates(near, [_exp(["a", "b"])], identities={})
     assert len(next(iter(found.values()))["values"]) == 2, "nine times apart is still one set"

@@ -136,6 +136,9 @@ content.
   said had no monoculture read or no rate from its curves (SMGDB00000014's two organisms), and a genus of
   such strains, naming them. The gLV package carries that reason beside "grows only with a partner", so
   R reads it, and R's print says `as_miasim()` stops only for an organism inside a matrix.
+- **`derive <study>` says it names organisms as that study does** (its help): the current name of #24 needs
+  the whole corpus read, which a species search and `--all` do and a single study does not, so the same
+  taxon can read "F. prausnitzii A2-165" there and "F. duncaniae A2-165" in a search.
 - **`derive <study> --merge-genera --report-rates` computes the genus rates** (in the default derivation):
   it asked for the monocultures of the genus nodes, which no monoculture is, and said no growth rate could
   be computed for any organism. This predates 0.4.0. A
