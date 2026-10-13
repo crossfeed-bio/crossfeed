@@ -315,7 +315,10 @@ def test_the_older_file_s_arcs_below_the_threshold_are_checked_too(tmp_path, mon
         # the double gives no arc below the threshold at the defaults, so one of its arcs is put there
         result = run_query(FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False)
         absent = copy.deepcopy(result["network"])
-        absent.edges = [dataclasses.replace(absent.edges[0], status="absent")]
+        # two, while the network has one, so comparing with the wrong network's count is caught (round 6)
+        first = absent.edges[0]
+        absent.edges = [dataclasses.replace(first, status="absent"),
+                        dataclasses.replace(first, status="absent", source=first.target, target=first.source)]
         return {**result, "absent": absent}
     monkeypatch.setattr(publish_all, "run_query", with_one_below)
     out = tmp_path / "out"
@@ -340,3 +343,46 @@ def test_the_older_file_s_arcs_below_the_threshold_are_checked_too(tmp_path, mon
         lambda d: d["absent"]["edges"][0].update(window=30.0)))
     assert f"{below}: a different number of arcs than the current one" in problems_with(
         lambda d: d["absent"].update(edges=d["absent"]["edges"] * 2))
+
+
+def test_a_file_its_reader_would_refuse_is_a_problem(tmp_path, monkeypatch):
+    """Round 6 of the review: a file in another result format, with no time it was derived at, or derived
+    by another derivation passed the check while every copy refused it and derived All live."""
+    import json
+
+    import live_check
+    import publish_all
+    from test_gui import FakeClient
+
+    from grownet.gui import run_query
+    monkeypatch.setattr(publish_all, "run_query", lambda *a, **k: run_query(
+        FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
+    out = tmp_path / "out"
+    assert publish_all.main(str(out), None, previous=lambda: None) == 0
+    assert live_check.check_published(str(out))[0] == []
+    current = json.loads((out / "all_result.v4.json").read_text())
+    older = json.loads((out / "all_result.json").read_text())
+
+    def problems_with(name, doc, change):
+        broken = json.loads(json.dumps(doc))
+        change(broken)
+        (out / name).write_text(json.dumps(broken))
+        try:
+            return live_check.check_published(str(out))[0]
+        finally:
+            (out / name).write_text(json.dumps(doc))
+
+    # the current file, as this version's reader sees it
+    assert any("would not be served at the defaults: it is in the format" in p for p in problems_with(
+        "all_result.v4.json", current, lambda d: d.update(format="grownet.all_result/v9")))
+    assert any("would not be served at the defaults: it carries no time" in p for p in problems_with(
+        "all_result.v4.json", current, lambda d: d["network"]["meta"].pop("derived_at")))
+    assert any("would not be served at the defaults: it was derived by the integrated" in p for p in problems_with(
+        "all_result.v4.json", current, lambda d: d["network"]["meta"]["settings"].update(derivation="integrated")))
+    # the older file, as its readers see it
+    assert any(p.startswith("all_result.json: in 'grownet.all_result/v9'") for p in problems_with(
+        "all_result.json", older, lambda d: d.update(format="grownet.all_result/v9")))
+    assert "all_result.json: its derived_at differs from the current file's" in problems_with(
+        "all_result.json", older, lambda d: d["network"]["meta"].update(derived_at="2020-01-01T00:00:00+00:00"))
+    assert "all_result.json: its derivation differs from the current file's" in problems_with(
+        "all_result.json", older, lambda d: d["network"]["meta"]["settings"].update(derivation="integrated"))

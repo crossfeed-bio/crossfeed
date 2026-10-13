@@ -60,6 +60,14 @@ LEGACY_META = {"grownet.interaction_network/v3": {
     "growth_rates"}}
 
 
+# The result format each older format's readers accept (`published.FORMAT` of the versions that read it:
+# 0.3.0 and 0.4.0 both read grownet.all_result/v1). A copy refuses a file in any other format and derives
+# All live, so an older file that kept the CURRENT format after a move of `published.FORMAT` would strand
+# every installed copy while every check passed (found in review).
+READER_FORMAT = {"grownet.interaction_network/v3": "grownet.all_result/v1",
+                 "grownet.interaction_network/v4": "grownet.all_result/v1"}
+
+
 def legacy_payload(payload: dict, legacy_schema: str = LEGACY["schema"]) -> dict:
     """`payload` as a `legacy_schema` document: every node, edge and study field that format does not
     declare is removed, read from `schema/format_fields.json`, and the identity is recomputed for it.
@@ -76,6 +84,11 @@ def legacy_payload(payload: dict, legacy_schema: str = LEGACY["schema"]) -> dict
             raise ValueError(f"{legacy_schema} declares {kind} fields the current format no longer has "
                              f"({sorted(removed)}): a reader of it cannot be served by removing fields, "
                              "which is a decision about that format, not something to publish silently")
+    wanted = READER_FORMAT.get(legacy_schema)
+    if payload.get("format") != wanted:
+        raise ValueError(f"the result is in {payload.get('format')!r} and readers of {legacy_schema} accept "
+                         f"{wanted!r}: a format move is a decision about those readers, not something to "
+                         "publish silently, since they would refuse the file and derive All live")
     out = json.loads(json.dumps(payload))
 
     def strip(network):

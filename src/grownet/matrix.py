@@ -328,7 +328,12 @@ def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None)
                     "capacity_curves": total(behind, "capacity_curves") if capacity["capacity"] is not None
                     else None,
                     "capacity_source": same(behind, "capacity_source"),
-                    "capacity_medium": same(behind, "capacity_medium"),
+                    # no capacity, no medium for it: plateaus in two units gave none, and the medium survived
+                    # beside an empty capacity in the report and the payload (found in review)
+                    "capacity_medium": same(behind, "capacity_medium") if capacity["capacity"] is not None else "",
+                    # the strains the capacity is the median of, so the report does not call one strain's
+                    # plateau "the median of the strains' capacities" (found in review)
+                    "capacity_from": sorted(r["name"] for r in behind) if capacity["capacity"] is not None else [],
                     # what a strain row says beside its numbers, which a merged row dropped while a genus
                     # of one strain kept it (found in review): the count's unit when the rows are fitted
                     # ones, so the report does not call them monoculture replicates; the lag's method; the
@@ -360,7 +365,9 @@ def _merged_capacity(members: list) -> dict:
     lags = [r["lag"] for r in members if r.get("lag") is not None]
     return {"capacity": statistics.median(sizes) if sizes else None,
             "capacity_unit": unit if sizes else "",
-            "capacity_n": sum(r.get("capacity_n", 0) for r in members) if sizes else 0,
+            # the rows or curves of the strains the median is of, as `capacity_curves` counts them
+            "capacity_n": sum(r.get("capacity_n", 0) for r in members
+                              if r.get("capacity") is not None and r.get("capacity_unit") == unit) if sizes else 0,
             "capacity_per_study": {}, "other_capacity_units": sorted(units) if not unit else [],
             "capacity_left_out": [x for r in members for x in r.get("capacity_left_out") or []],
             "lag": statistics.median(lags) if lags else None, "lag_n": len(lags)}
@@ -419,15 +426,20 @@ def slow_studies(rates: dict) -> list:
     return out
 
 
+def genus_rule(rates: dict) -> str:
+    """What the rule adds when a genus of several strains is among `rates`: its rate is the median of its
+    strains' rates, not of their pooled replicates or rows, which the rule alone said. One clause for the
+    network's rule and the package README, which said the old words after the rule was fixed (found in
+    review)."""
+    several = any(len(rate.get("merged_from") or ()) > 1 for rate in rates.values())
+    return "; a genus of several strains: the median of its strains' rates" if several else ""
+
+
 def rate_meta(net: InteractionNetwork, rates: dict, method: str) -> str:
     """The `growth_rates` block of a network's meta: the rule, a rate per organism, and the organisms that
     have none, so a downloaded network carries the rates it was reported with and says what is missing."""
-    rule = rate_rule(method)
-    if any(len(rate.get("merged_from") or ()) > 1 for rate in rates.values()):
-        # a genus of several strains is the median of its strains' rates, not of their pooled replicates
-        # or rows, which the rule alone said (found in review)
-        rule += "; a genus of several strains: the median of its strains' rates"
-    return {"rule": rule, "organisms": {nid: dict(rate) for nid, rate in rates.items()},
+    return {"rule": rate_rule(method) + genus_rule(rates),
+            "organisms": {nid: dict(rate) for nid, rate in rates.items()},
             "without_a_rate": sorted(_label(node) for nid, node in net.nodes.items() if nid not in rates),
             "slow_studies": slow_studies(rates)}
 
@@ -1277,7 +1289,7 @@ def coefficient_csv(block: dict) -> str:
     return out.getvalue()
 
 
-def _rate_method_lines(got: dict, derivation: str = "replicate") -> list:
+def _rate_method_lines(got: dict, derivation: str = "replicate", rates: dict | None = None) -> list:
     """What the README says about the estimator behind r, and what choosing another one would move.
 
     Per derivation, as `DIAGONAL_PROSE` and `OFF_DIAGONAL` are: a package built in gLV mode said, nineteen
@@ -1289,7 +1301,7 @@ def _rate_method_lines(got: dict, derivation: str = "replicate") -> list:
     named = ", ".join(methods) if methods else "not recorded"
     merge = ("the median over the fitted rows, each row's rate the median over that organism's "
              "monoculture replicates" if any(str(m).startswith("integrated") for m in methods)
-             else "median over replicates and studies")
+             else "median over replicates and studies") + genus_rule(rates or {})
     if derivation == "integrated":
         lines = [f"  Growth rates: {named}, {merge}, batch monocultures only.",
                  "      r_i is fitted together with A[i][i] from the organism's monoculture time courses,",
@@ -1363,7 +1375,7 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "      arcs disagree in sign is left at 0 and named below.",
         *_media_lines(net),
         *_dropout_lines(net),
-        *_rate_method_lines(got, derivation_of(net)),
+        *_rate_method_lines(got, derivation_of(net), rates),
         "",
         "WHAT THIS MODEL ASSUMES",
         *MODEL_ASSUMPTIONS,

@@ -248,7 +248,8 @@ def test_an_older_format_that_lost_a_field_is_refused_and_every_real_one_writes(
     format move that drops a field fails here, in CI, not at 03:17 after a whole derivation (found in review)."""
     import pytest
     manifest = json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
-    payload = {"network": {"schema": manifest["current"], "meta": {}, "nodes": [], "edges": [], "studies": []}}
+    payload = {"format": "grownet.all_result/v1",
+               "network": {"schema": manifest["current"], "meta": {}, "nodes": [], "edges": [], "studies": []}}
     for schema in publish_all.older_formats(manifest):
         assert publish_all.legacy_payload(payload, schema)["network"]["schema"] == schema
         assert schema in publish_all.LEGACY_META, f"no meta snapshot for {schema}"
@@ -308,3 +309,16 @@ def test_the_release_notes_name_every_older_file(monkeypatch):
         in notes
     assert "`all_result.v4.json` is the same network for copies that read the older " \
         "`grownet.interaction_network/v4`" in notes
+
+
+def test_an_older_file_is_written_only_in_the_result_format_its_readers_accept():
+    """Round 6 of the review: the strip kept the current result format, so the day `published.FORMAT`
+    moves every 0.3.x and 0.4.x copy would refuse its file and derive All live, with every check green."""
+    import pytest
+    payload = {"format": "grownet.all_result/v2",
+               "network": {"schema": "grownet.interaction_network/v4", "meta": {}, "nodes": [], "edges": [],
+                           "studies": []}}
+    with pytest.raises(ValueError, match="accept 'grownet.all_result/v1'"):
+        publish_all.legacy_payload(payload, "grownet.interaction_network/v3")
+    assert publish_all.legacy_payload({**payload, "format": "grownet.all_result/v1"},
+                                      "grownet.interaction_network/v3")["format"] == "grownet.all_result/v1"

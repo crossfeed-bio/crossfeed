@@ -399,9 +399,12 @@ def report_text(result: dict) -> str:
                              + (" and per-strain series" if (rate.get("rate_sources") or {}).get("per-strain")
                                 else "") + "; no capacity is taken from a culture-level trace")
             if rate.get("capacity") is not None:
+                behind = rate.get("capacity_from") or []
                 extra.append(f"carrying capacity {rate['capacity']:.4g} {rate.get('capacity_unit', '')}"
-                             + (", the median of the strains' capacities, resting on "
-                                if len(strains) > 1 else " from ")
+                             + (f", the median of the {len(behind)} strains' capacities ({', '.join(behind)}), "
+                                "resting on " if len(strains) > 1 and len(behind) > 1
+                                else f", {behind[0]}'s alone, from " if len(strains) > 1 and behind
+                                else " from ")
                              + f"{rate.get('capacity_n', 0)} "
                              + ("row(s)" if rate.get("n_label") else "curve(s)"))
                 # a certified curve that grew, peaked and then declined has its peak recorded as the
@@ -425,11 +428,19 @@ def report_text(result: dict) -> str:
             if rate.get("capacity_medium"):
                 extra.append(f"capacity measured in {rate['capacity_medium']}")
                 # more than one spelling means the alias table merged names that disagree, which is said
+                # nor any medium the capacity rests on: a genus whose strains plateaued in different media
+                # printed each of them as a spelling the alias table merged (found in review)
                 spellings = [name for name in (rate.get("capacity_medium_spellings") or [])
-                             if name != rate["capacity_medium"]]
+                             if name != rate["capacity_medium"] and name not in (rate.get("capacity_media") or [])]
                 if spellings:
                     extra.append("also recorded as " + ", ".join(spellings)
                                  + ", read as one medium by the alias table")
+            # a genus whose strains plateaued in different units has no capacity, and says why: nothing is
+            # converted between abundance units (found in review)
+            units = rate.get("other_capacity_units") or []
+            if rate.get("capacity") is None and len(units) > 1:
+                extra.append("no capacity: its strains' plateaus are in different units ("
+                             + ", ".join(units) + "), which are not converted")
             others = rate.get("capacity_other_media") or []
             if others:
                 extra.append(f"{len(others)} other medium(s) hold a plateau of this organism, named below")

@@ -120,8 +120,10 @@ content.
   from; a genus of one strain is that strain's row. It counted fitted rows and left the provenance empty.
   A genus row of several strains also keeps the lag's method, the plateau's fall, media and other media,
   and sends its replicates in the gLV payload, where it sent null beside the zip's count. The report and
-  the rule say its rate and capacity are the median of its strains' own, resting on the counts given;
-  "median of 7 monoculture replicate(s)" named a median that was not taken.
+  the rule (and the gLV package README) say its rate and capacity are the median of its strains' own,
+  naming the strains and resting on the counts given; "median of 7 monoculture replicate(s)" named a median
+  that was not taken. A genus with no capacity names no medium for one, and says when its strains'
+  plateaus are in units that are not converted.
 - **A rate from a culture-level count says so** in `capacity_source`, so `growth_rates.csv`, the gLV payload
   and the report name it, without a new field; a rate that also rests on per-strain curves does not blame
   the count for its missing capacity.
@@ -131,7 +133,9 @@ content.
 - **`grownet validate` reads a daily artifact** (`all_result.v4.json`) by validating the networks it carries,
   where it said "INVALID: schema is None" about a good file, and says so when an artifact carries none.
 - **The live check reads every network in each older-format file**, the arcs below the threshold as well
-  as the network, which 0.4.0 reads too.
+  as the network, which 0.4.0 reads too, and checks that each file would be served by the copies that read
+  it: its result format, its time and its derivation. An older-format file is written only in the result
+  format its readers accept.
 - **The live check tells "could not run" from "a property broke"**, by exit code (2 against 1) and in the
   issue it opens; the build-failure issue opens only when the publish step did not complete, and says
   some files may already have been replaced.

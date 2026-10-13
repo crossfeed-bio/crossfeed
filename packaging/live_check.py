@@ -131,9 +131,18 @@ def network_problems(net, label: str) -> list:
 
 def check_published(out_dir: str) -> tuple:
     """(problems, what was checked) for the file the workflow just wrote."""
-    result = from_payload(json.loads((Path(out_dir) / FILE).read_text(encoding="utf-8")))
+    payload = json.loads((Path(out_dir) / FILE).read_text(encoding="utf-8"))
+    result = from_payload(payload)
     net = result["network"]
     problems = network_problems(net, "All")
+    # whether the copy that reads it would serve it: a file every copy refuses (another format, no time it
+    # was derived at, another derivation) passed every check here while every copy derived All live, the
+    # load the file exists to prevent (found in review)
+    from grownet.gui import DEFAULTS
+    from grownet.published import why_not_fresh
+    refused = why_not_fresh(payload, settings=DEFAULTS)
+    if refused:
+        problems.append(f"All: {FILE} would not be served at the defaults: {refused}")
     absent = result.get("absent")
     if absent is not None:
         problems += network_problems(absent, "All, below the threshold") if absent.edges else []
@@ -161,6 +170,18 @@ def check_published(out_dir: str) -> tuple:
         # the network AND the arcs below the threshold, which 0.4.0 reads too: a copy whose `absent` was
         # dropped served no arc below the threshold, and one whose `absent.edges` was null made every 0.4.0
         # copy derive All live, with nothing checked (found in review)
+        # what a reader of that format checks before serving it: the result format it reads, and the same
+        # derivation and time as the current file (found in review)
+        if legacy.get("format") != publish_all.READER_FORMAT.get(schema):
+            problems.append(f"{legacy_path.name}: in {legacy.get('format')!r}, which readers of {schema} do "
+                            f"not read ({publish_all.READER_FORMAT.get(schema)!r})")
+        for what, path in (("derived_at", ("derived_at",)), ("derivation", ("settings", "derivation"))):
+            def at(doc, path=path):
+                for key in path:
+                    doc = doc.get(key) if isinstance(doc, dict) else None
+                return doc
+            if at((legacy.get("network") or {}).get("meta")) != at(payload["network"].get("meta")):
+                problems.append(f"{legacy_path.name}: its {what} differs from the current file's")
         parts = [("network", net)] + ([("absent", absent)] if absent is not None else [])
         for part, current in parts:
             problems += _older_part(legacy_path.name, schema, part, legacy.get(part), current, manifest)
