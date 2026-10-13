@@ -1661,5 +1661,20 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    that route is an **export of mGrowthDB's community time series** in the shape those tools read, which
    is complementary rather than duplicative, and would be a small task of its own.
 
+40. **A genus's carrying capacity, and techniques measured in different units** (Karoline, 2026-10-13,
+   answering two questions the review of the 0.5.0 candidate raised). (a) A strain's capacity keeps to one
+   medium (2026-10-07), and a genus of several strains took the median of its strains' capacities whatever
+   their media, labeled "mixed: ...". Her words: "genus networks can't help but pool across media. If that's
+   properly documented, then alright". So it stays, and the Merge to genus help says it: a genus arc is the
+   median of arcs from its strains' media, and its rate and capacity are the medians of its strains'. (b)
+   Where one organism's plateaus are in different units, the unit of the first study read won. Her words:
+   "we cannot compare plateaus in different units, so the arc should only be computed if the same units can
+   be compared. if different measurement techniques are available for the same studies, then priority
+   should be given to the one with more time points. In the advanced options, we need to add a setting to
+   optionally specify a technique." Measured on the corpus the same day: no strain has two per-strain
+   techniques in one study, no replicate has both plate counts and flow cytometry at culture level, and
+   different techniques share a unit string across studies (Blautia hydrogenotrophica is "Cells/mL" by 16S,
+   qPCR and flow cytometry), so how (b) is built is being settled with her.
+
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

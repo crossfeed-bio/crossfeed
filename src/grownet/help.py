@@ -254,7 +254,12 @@ SETTINGS = {
                      "genus to itself; absent arcs become one absent arc per genus pair, hidden as before. With "
                      "Merge parallel arcs on as well, the arcs of each pair are merged across studies first, so "
                      "a pair measured in several studies counts once. The genus is the first word of the name "
-                     "mGrowthDB records, not NCBI's lineage, so a reclassified genus follows its names."),
+                     "mGrowthDB records, not NCBI's lineage, so a reclassified genus follows its names. A genus "
+                     "network pools across media: a genus arc is the median of arcs measured in whatever media "
+                     "its strains were, and its medium lists them all; with growth rates reported, a genus's "
+                     "rate and carrying capacity are the medians of its strains' own, and its capacity's medium "
+                     "reads \"mixed: ...\" where the strains plateaued in different media. A strain's capacity "
+                     "keeps to one medium; a genus cannot, which is why the medium is named."),
     "min_studies": ("Minimum supporting studies", "--min-studies N",
                     "Keeps arcs resting on at least this many studies. Above 1 it needs merged arcs, since an "
                     "arc as derived rests on one study."),
