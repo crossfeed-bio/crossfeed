@@ -753,7 +753,8 @@ def test_the_rate_rule_does_not_claim_one_merge_where_there_are_two():
 
 
 def _rate_record(medium, rate, own, study="S1", fall=None):
-    return {"target": "ncbi:1", "target_name": "A", "fitted_rate": rate, "fitted_self": own,
+    # `source` as live records carry it beside `source_name`, so a row is named by its partner's name
+    return {"target": "ncbi:1", "target_name": "A", "source": "ncbi:2", "fitted_rate": rate, "fitted_self": own,
             "fitted_rate_unit": "1/h", "fitted_self_unit": "Cells/mL", "study_id": study,
             "rate_stage_n": 3, "fit_points": 7, "medium": medium, "fitted_capacity_fall": fall}
 
@@ -1215,9 +1216,25 @@ def test_a_left_out_row_is_named_by_its_experimental_condition_and_a_row_in_anot
             {**_rate_record(both, 0.4, -1.0e-10), "source_name": "B", "condition": "At_Ct_TBHQ",
              "fit_condition": 96.5},
             {**_rate_record(acid, 0.4, -0.2, study="S2"), "fitted_self_unit": "OD", "source_name": "C",
-             "condition": "At_Ct_OD"}]
+             "condition": "At_Ct_OD"},
+            # a second row in that unit from the same study is named too (round 9)
+            {**_rate_record(acid, 0.4, -0.3, study="S2"), "fitted_self_unit": "OD", "source_name": "E",
+             "condition": "At_Ct_OD2"}]
     left = dict(integrated.fitted_rates(rows)["ncbi:1"]["capacity_left_out"])
+    assert "S2: the row fitted with E in At_Ct_OD2" in left, left
     assert "S1: the row fitted with B in At_Ct_TBHQ" in left, left
     assert not any("96.5" in what for what in left)
     assert "its plateau is in OD, and this organism's others in Cells/mL; left out rather than converted" == \
         left["S2: the row fitted with C in At_Ct_OD"]
+
+
+def test_a_row_whose_rate_is_in_another_time_unit_is_named_as_left_out():
+    """Round 9 of the review: such a row was skipped before its plateau was counted, and named nowhere."""
+    acid = "Minimal medium (MM) (+0.75% linoleic acid)"
+    rows = [_rate_record(acid, 0.4, -4.0e-10),
+            {**_rate_record(acid, 9.6, -9.6e-9, study="S2"), "fitted_rate_unit": "1/d", "source_name": "D",
+             "condition": "C_day"}]
+    got = integrated.fitted_rates(rows)["ncbi:1"]
+    assert got["other_units"] == ["S2 (1/d)"]
+    assert dict(got["capacity_left_out"])["S2: the row fitted with D in C_day"] == (
+        "its rate is in 1/d, and this organism's others in 1/h; left out rather than converted")

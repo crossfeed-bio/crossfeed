@@ -303,16 +303,17 @@ def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None)
             units = ", ".join(capacity["other_capacity_units"])
             why = f"this genus's strains plateaued in different units ({units}), which are not converted, so it " \
                   "has no capacity"
-            kept = [x for r in members for x in r.get("capacity_left_out") or []
-                    if "capacity is taken from" not in x[1]]
+            # a strain's plateaus in other media keep their own names, with this reason in place of "taken
+            # from": their unit is their medium's, which the strain row does not carry (found in review)
+            kept = [(what, why if "capacity is taken from" in reason else reason)
+                    for r in members for what, reason in r.get("capacity_left_out") or []]
             plateaus = []
             for r in members:
                 if r.get("capacity") is None:
                     continue
-                # `capacity_n` counts what the plateau rests on in the unit of the left-out entries, curves
-                # or fitted rows; `capacity_curves` is monoculture replicates in gLV mode (found in review)
-                n = r.get("capacity_n", 0) + sum("capacity is taken from" in why
-                                                 for _, why in r.get("capacity_left_out") or [])
+                # `capacity_n` counts what the plateau rests on, curves or fitted rows, in the capacity's
+                # own unit; `capacity_curves` is monoculture replicates in gLV mode (found in review)
+                n = r.get("capacity_n", 0)
                 plateaus += [(f"{r.get('name', '')}: plateau {k + 1} of {n} ({r.get('capacity_unit', '')})", why)
                              for k in range(n)]
             capacity["capacity_left_out"] = kept + plateaus

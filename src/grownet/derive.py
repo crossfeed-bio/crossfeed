@@ -624,8 +624,9 @@ def _collect_capacity(entry: dict, curve, label: str, medium: dict | None = None
         at["labels"].append(medium["label"])
     if curve.abundance_unit != at["unit"]:
         entry["capacity_left_out"].append(
-            (label, f"the plateau is in {curve.abundance_unit}, and this organism's others in "
-                    f"{at['unit']}; left out rather than converted"))
+            # the unit is this medium's, which the published capacity may not be in (found in review)
+            (label, f"the plateau is in {curve.abundance_unit}, and the other plateaus in {medium['label']} "
+                    f"are in {at['unit']}; left out rather than converted"))
         return
     at["values"].append(curve_features(curve)["max"])
     at["falls"].append(fall)
@@ -824,21 +825,28 @@ def merge_rates(per_study) -> dict:
     merged: dict = {}
     for study_id, found in per_study:
         for nid, entry in found.items():
-            at = merged.setdefault(nid, {"name": entry["name"], "unit": entry["unit"], "values": [],
+            # the rate's unit is set by the first study that GAVE a rate: a study with plateaus and no rate
+            # (curves too short for the window) set it to "", and every later study's rates were then
+            # dropped as another unit, the organism with them (found in review)
+            at = merged.setdefault(nid, {"name": entry["name"], "unit": "", "values": [],
                                          "studies": [], "per_study": {}, "other_units": [],
                                          "method": entry.get("method", ""), "lags": [],
                                          "lag_method": entry.get("lag_method", ""),
                                          "by_medium": {}, "capacity_left_out": []})
+            if entry["values"] and not at["unit"]:
+                at["unit"] = entry["unit"]
             if entry["values"] and entry["unit"] != at["unit"]:
+                # a rate in another time unit is not converted; its study's plateaus have no time unit and
+                # are kept below, where this `continue` used to drop them from every count (found in review)
                 at["other_units"].append(f"{study_id} ({entry['unit']})")
-                continue
-            if entry["values"]:
-                at["values"] += list(entry["values"])
-                at["studies"].append(study_id)
-                at["per_study"][study_id] = median(entry["values"])
-            at["lags"] += list(entry.get("lags") or [])
-            for source, n in (entry.get("sources") or {}).items():
-                at.setdefault("sources", {})[source] = at.setdefault("sources", {}).get(source, 0) + n
+            else:
+                if entry["values"]:
+                    at["values"] += list(entry["values"])
+                    at["studies"].append(study_id)
+                    at["per_study"][study_id] = median(entry["values"])
+                at["lags"] += list(entry.get("lags") or [])
+                for source, n in (entry.get("sources") or {}).items():
+                    at.setdefault("sources", {})[source] = at.setdefault("sources", {}).get(source, 0) + n
             at["capacity_left_out"] += list(entry.get("capacity_left_out") or [])
             for key, found_here in (entry.get("capacity_by_medium") or {}).items():
                 one = at["by_medium"].setdefault(key, {"label": found_here["label"],
@@ -850,8 +858,8 @@ def merge_rates(per_study) -> dict:
                     # each such curve gave no capacity and is named, as within one study it already was;
                     # across studies it was in no count at all (found in review)
                     at["capacity_left_out"] += [
-                        (curve, f"its plateau is in {found_here['unit']}, and this organism's others in "
-                                f"{one['unit']}; left out rather than converted")
+                        (curve, f"its plateau is in {found_here['unit']}, and the other plateaus in "
+                                f"{found_here['label']} are in {one['unit']}; left out rather than converted")
                         for curve in found_here["curves"]]
                     continue
                 for spelling in found_here.get("labels") or ():

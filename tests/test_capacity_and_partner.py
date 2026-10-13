@@ -8,6 +8,7 @@ with them, since the integrated form starts there and the rate estimators disagr
 This task only adds fields: nothing an arc already said changes.
 """
 import math
+import statistics
 
 import pytest
 from test_growth_rates import A, _client, _mono  # the fake mGrowthDB API of the rate tests
@@ -570,5 +571,62 @@ def test_a_plateau_another_study_measured_in_another_unit_is_named_as_left_out()
     found2 = {nid: {**entry, "capacity_by_medium": od, "capacity_left_out": []}}
     merged = merge_rates([("S1", found1), ("S2", found2)])[nid]
     left = dict(merged["capacity_left_out"])
-    assert left.get("S2 r3", "").startswith("its plateau is in OD, and this organism's others in"), left
+    # the unit is decided per medium, so the message says the medium's other plateaus (round 9)
+    assert left.get("S2 r3", "") == ("its plateau is in OD, and the other plateaus in mMCB are in Cells/mL; "
+                                     "left out rather than converted"), left
     assert "S2 r4" in left and merged["capacity_n"] == 2
+
+
+def test_a_study_with_plateaus_and_no_rate_does_not_drop_the_organism_whatever_the_order():
+    """Round 9 of the review: the organism's rate unit was taken from the first study READ, so a study whose
+    curves certify a plateau but are too short for the rate window set it to "", every later study's rates
+    were dropped as another unit, and the organism with them, rate and capacity, in that order only."""
+    client = _client({(1, A): _settles(plateau=1.0e8), (2, A): _settles(plateau=1.0e8)})
+    found, _ = monoculture_rates(client, [_mono_in("E1", A, [(1, "r1"), (2, "r2")], "mMCB")])
+    nid = next(iter(found))
+    rated = found[nid]
+    assert rated["values"], "the control: this study gives a rate"
+    plateaus_only = {nid: {**rated, "values": [], "unit": "", "sources": {}, "lags": []}}
+    for order in ([("S1", plateaus_only), ("S2", found)], [("S2", found), ("S1", plateaus_only)]):
+        merged = merge_rates(order)
+        assert nid in merged, [s for s, _ in order]
+        assert merged[nid]["rate"] == pytest.approx(statistics.median(rated["values"]))
+        assert merged[nid]["studies"] == ["S2"] and merged[nid]["capacity_n"] == 4
+    # a first study with no rate but a unit recorded does not decide the unit either
+    per_day = {nid: {**rated, "unit": "1/d"}}
+    unit_only = {nid: {**rated, "values": [], "unit": "1/h", "sources": {}, "lags": []}}
+    merged = merge_rates([("S1", unit_only), ("S2", per_day)])[nid]
+    assert merged["unit"] == "1/d" and merged["studies"] == ["S2"] and merged["other_units"] == []
+
+
+def test_a_study_whose_rates_are_in_another_time_unit_keeps_its_plateaus_and_says_so():
+    """Round 9 of the review: a rate in 1/d is not converted, and its study's plateaus, which have no time
+    unit, were dropped from every count with it; the left-out rates were in the JSON only."""
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    client = _client({(1, A): _settles(plateau=1.0e8), (2, A): _settles(plateau=1.0e8)})
+    found, _ = monoculture_rates(client, [_mono_in("E1", A, [(1, "r1"), (2, "r2")], "mMCB")])
+    nid = next(iter(found))
+    per_day = {nid: {**found[nid], "unit": "1/d"}}
+    merged = merge_rates([("S1", found), ("S2", per_day)])[nid]
+    assert merged["other_units"] == ["S2 (1/d)"] and merged["studies"] == ["S1"]
+    assert merged["capacity_n"] == 4, "S2's plateaus count: a plateau has no time unit"
+    net = InteractionNetwork()
+    net.meta["growth_rates"] = {"rule": "r", "organisms": {nid: merged}}
+    text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "rates in another time unit left out: S2 (1/d)" in text, text
+
+
+def test_a_plateau_in_another_unit_within_one_study_names_its_medium():
+    """Round 9 of the review: the reason said "this organism's others in X" while X is the unit of that one
+    medium's plateaus, which the published capacity need not be in."""
+    from grownet.derive import _collect_capacity
+    entry = {"capacity_by_medium": {}, "capacity_left_out": []}
+    medium = {"key": "wc", "label": "WC"}
+    for label, unit in (("r1", "Cells/mL"), ("r2", "OD")):
+        points = _settles()
+        curve = GrowthCurve(A, [t for t, _, _ in points], [v for _, v, _ in points], "h", unit)
+        _collect_capacity(entry, curve, label, medium)
+    assert entry["capacity_left_out"] == [("r2", "the plateau is in OD, and the other plateaus in WC are in "
+                                                 "Cells/mL; left out rather than converted")]

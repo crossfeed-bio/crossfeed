@@ -822,6 +822,12 @@ def fitted_rates(records: list) -> dict:
         if unit != at["unit"]:
             if f"{study} ({unit})" not in at["other_units"]:
                 at["other_units"].append(f"{study} ({unit})")
+            # a row whose plateau is then in no count is named, as every row that gave no capacity is
+            # (found in review)
+            if (record.get("fitted_self") or 0) < 0:
+                at["unit_left_out"].append((_row_label(study, record),
+                                            f"its rate is in {unit}, and this organism's others in "
+                                            f"{at['unit']}; left out rather than converted"))
             continue
         at["rates"].append(rate)
         at["points"].append(record.get("fit_points", 0))

@@ -441,6 +441,10 @@ def report_text(result: dict) -> str:
             if rate.get("capacity") is None and len(units) > 1:
                 extra.append("no capacity: its strains' plateaus are in different units ("
                              + ", ".join(units) + "), which are not converted")
+            # rates in another time unit are not converted, and said so: only the JSON carried them
+            # (found in review)
+            if rate.get("other_units"):
+                extra.append("rates in another time unit left out: " + ", ".join(rate["other_units"]))
             others = rate.get("capacity_other_media") or []
             if others:
                 extra.append(f"{len(others)} other medium(s) hold a plateau of this organism, named below")

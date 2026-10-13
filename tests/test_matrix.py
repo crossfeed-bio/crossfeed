@@ -571,6 +571,8 @@ def test_a_genus_whose_plateaus_are_in_two_units_leaves_every_plateau_out_and_sa
     row = matrix.for_nodes(_GENUS_NET, rates)["blautia"]
     assert row["capacity"] is None and len(row["capacity_left_out"]) == 1 + 4 + 3 + 3
     assert not any("taken from" in why for _, why in row["capacity_left_out"])
+    # a strain's plateaus in another medium keep their own names; their unit is their medium's (round 9)
+    assert [what for what, _ in row["capacity_left_out"]].count("r") == 3
     assert sum("plateaued in different units (Cells/mL, OD)" in why for _, why in row["capacity_left_out"]) == 10
     table = matrix.rates_csv({"blautia": row}).splitlines()
     assert dict(zip(table[0].split(","), table[1].split(","), strict=True))["capacity_curves_left_out"] == "11"
