@@ -356,13 +356,18 @@ def _derive(a):
         errors.append(f"{len(failed)} replicate(s) or growth curve(s) could not be read from mGrowthDB (for "
                       f"example {failed[0][0]}: {failed[0][1]}); the result is incomplete, so run it again")
         print(f"warning: {errors[0]}", file=sys.stderr)
+    net.meta["errors"] = list(errors)
+    net.meta["complete"] = not errors
     organism_rates = {}
     if a.report_rates:
         organism_rates, skipped = _rates_of(a, client, [a.study], net, skipped, records)
     result = {"study": a.study, "entries": [], "resolved": [], "unresolved": [], "studies": [a.study],
               "rates": organism_rates, "client": client if a.live else None,
               "skipped": skipped, "errors": errors, "network": net}
-    return _emit(a, net, skipped, extra, a.study, result)
+    code = _emit(a, net, skipped, extra, a.study, result)
+    # the species and All paths exit 1 on an incomplete run since #243; this path exited 0 when curves
+    # could not be read, so the two paths still disagreed about the same failure (#247)
+    return _incomplete(result) if code == 0 else code
 
 
 def _species_flags(a) -> str:
@@ -432,12 +437,17 @@ def _derive_species(a):
     # into `errors` and exited 0, so a script could not tell a complete run from an incomplete one
     # (#247). This is safe to key on only because `errors` is fetch failures and nothing else now:
     # the advisory messages travel in `notes`, which is the split #242 makes.
-    if code == 0 and result.get("errors"):
-        print(f"\nthis run is INCOMPLETE: {len(result['errors'])} study or curve could not be read from "
-              "mGrowthDB (the messages are above). The network holds what was readable; run it again when "
-              "mGrowthDB is reachable if you need all of it.", file=sys.stderr)
-        return 1
-    return code
+    return _incomplete(result) if code == 0 else code
+
+
+def _incomplete(result) -> int:
+    """1, with the reason, when a run could not read everything it asked for; 0 otherwise."""
+    if not result.get("errors"):
+        return 0
+    print(f"\nthis run is INCOMPLETE: {len(result['errors'])} study or curve could not be read from "
+          "mGrowthDB (the messages are above). The network holds what was readable, and its meta records "
+          "the errors; run it again when mGrowthDB is reachable if you need all of it.", file=sys.stderr)
+    return 1
 
 
 def _rates_of(a, client, study_ids, net, skipped, records=None):
