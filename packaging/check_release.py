@@ -12,6 +12,7 @@ caught it, and a citation that misstates the version is exactly the kind of thin
 """
 import datetime
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -106,7 +107,32 @@ def check(tag: str, root: Path = ROOT, releasing: bool = True, today=None) -> tu
     elif r_version.group(1).strip() != version:
         problems.append(f"r/DESCRIPTION says Version {r_version.group(1).strip()}, pyproject.toml says "
                         f"{version}")
+    # A version is a promise about content and a tag is never reused, so a tag that already names another
+    # commit is a release that has happened: the check said `v0.3.0 is ready` on a tree whose v0.3.0 was
+    # tagged and on PyPI (#236). The tag naming THIS commit is the release workflow itself, which runs on
+    # the tag it checks.
+    spent = tagged_commit(tag, root) if releasing else None
+    if spent and spent[0] != spent[1]:
+        problems.append(f"the tag {tag} already names {spent[0][:7]}, not this commit: {tag} is released, "
+                        "and a tag is never reused, so a new release needs a new version")
     return problems, notes
+
+
+def tagged_commit(tag: str, root: Path = ROOT) -> str | None:
+    """The commit `tag` names in this clone, or None when the clone has no such tag or no git.
+
+    None is not "untagged": `actions/checkout` fetches no tags, so in CI this says nothing either way, and
+    every use of it below only adds a problem or a sentence when a tag IS found.
+    """
+    def rev(ref):
+        try:
+            out = subprocess.run(["git", "rev-parse", "-q", "--verify", ref], cwd=root, capture_output=True,
+                                 text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return out.stdout.strip() or None
+    found = rev(f"refs/tags/{tag}^{{commit}}")
+    return found and (found, rev("HEAD"))
 
 
 def current_version(root: Path = ROOT) -> str:
@@ -156,6 +182,14 @@ def main(argv) -> int:
         return 1
     if notes_file:
         Path(notes_file).write_text(release_notes(tag, notes) + "\n", encoding="utf-8")
+    # With no tag the check is about the version this tree would release, and once that version is tagged
+    # "is ready" is false: it is released, and what the tree holds is the next one, unversioned (#236).
+    # Not a failure, since every build between two releases is in that state.
+    spent = None if releasing else tagged_commit(tag)
+    if spent:
+        print(f"release check: {tag} is released (tagged at {spent[0][:7]}); this tree is consistent with it, "
+              "and the next release needs a new version")
+        return 0
     print(f"release check: {tag} is ready")
     return 0
 
