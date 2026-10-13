@@ -18,12 +18,17 @@ def test_each_curve_falls_in_the_class_the_rates_docstring_names():
                     "") == "departure 1"
     # 2: R refuses any value <= 0; grownet drops those points and fits
     assert classify(0.3, "", None, "dependent variable y must be positive") == "departure 2"
+    # 2 then 1: R refuses the values <= 0, and grownet's refit over what remains falls <= 0
+    assert classify(None, "the steepest window rises at 0.1 per time unit, but the refit ... falls to", None,
+                    "dependent variable y must be positive") == "departure 2+1"
     # 3: no rising window; R fits nothing, grownet returns its slope, <= 0
     assert classify(-0.002, "", None, NO_SEGMENT) == "departure 3"
+    assert classify(0.0, "", None, NO_SEGMENT) == "departure 3", "a flat curve's slope is 0, which is <= 0"
 
 
 def test_a_departure_nobody_named_is_other_which_fails_the_comparison():
     assert classify(None, "some new reason", 0.4, "") == "other"         # R fits, grownet not, not a refit
+    assert classify(None, "too few points", -0.5, "") == "other"         # a negative R rate needs the refit
     assert classify(0.4, "", None, NO_SEGMENT) == "other"                # a positive rate where R finds none
     assert classify(0.4, "", None, "something else") == "other"
     assert "other" in CLASSES

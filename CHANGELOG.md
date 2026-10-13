@@ -141,6 +141,9 @@ content.
   next format move strands no installed copy either.
 - **`grownet validate` reads a daily artifact** (`all_result.v4.json`) by validating the networks it carries,
   where it said "INVALID: schema is None" about a good file, and says so when an artifact carries none.
+- **In gLV mode, `replicates` and `capacity_curves` count every monoculture set behind a rate or a
+  capacity**, one per study and condition matched, where the largest set alone was counted: SMGDB00000007's
+  organisms rest on 6 monoculture replicates, not 3, and Comamonas in SMGDB00000014 on 9.
 - **The live check's tolerance for `effect_over_sd` is the exact rounding bound** (Craig's agent on #281,
   correcting the first-order one it had given): honest rounding reached past the old bound at every sd,
   by 2x at sd 1e-4. It is applied to every arc with an sd above the rounding, and the check says on how
@@ -184,9 +187,11 @@ content.
 - **A growth curve whose steepest window rises can no longer return a negative "maximum growth rate"**
   (Karoline, 2026-10-12, #229). The refit over growthrates' first-to-last span can fall below zero when two
   rises are separated by a deep fall, and a non-positive rate read downstream as no growth. Such a curve
-  now has no rate, with the reason, and its replicate is left out as any unreadable rate is. This is the
-  one place grownet departs from growthrates, which returns the negative number. On all of mGrowthDB it is
-  2 of 1090 strain curves, both in SMGDB00000005's chemostats, which the default leaves out.
+  now has no rate, with the reason, and its replicate is left out as any unreadable rate is, where
+  growthrates returns the negative number: one of the three places grownet departs from growthrates, which
+  `grownet.rates` names and `packaging/compare_growthrates.py` counts. On all of mGrowthDB it is 2 of 1090
+  strain curves (a hand count), both in SMGDB00000005's chemostats, which the default leaves out; one of
+  the two also holds a value <= 0, which growthrates refuses first.
 - **The growth-rate docstring says what `easylinear` does** (#229). It said the refit spans "every window
   whose slope reaches" the quota; it spans from the first such window to the end of the last, every
   window between included, which is what `growthrates`' `fit_easylinear` does. Kept as it is (Karoline,

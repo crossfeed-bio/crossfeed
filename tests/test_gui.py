@@ -1293,3 +1293,10 @@ def test_the_page_gives_a_known_reason_for_no_rate():
     html = html_module.unescape(gui._without_a_rate({"network": net}))
     assert "No growth rate for Blautia: its strains' growth rates are in different time units" in html
     assert "No monoculture growth rate for Roseburia:" in html and "for Blautia, " not in html
+    # every organism with its reason known: the page still says it (round 13 of the review)
+    net.meta["growth_rates"]["without_a_rate"] = ["Blautia"]
+    alone = html_module.unescape(gui._without_a_rate({"network": net}))
+    assert alone.startswith("<p class=\"hint\">No growth rate for Blautia:") and "monoculture" not in alone
+    # and the reason is escaped as page text
+    net.meta["growth_rates"]["why_without_a_rate"] = {"Blautia": "rates in <1/h> and <1/d>"}
+    assert "&lt;1/h&gt;" in gui._without_a_rate({"network": net})

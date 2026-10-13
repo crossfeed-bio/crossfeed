@@ -1290,3 +1290,19 @@ def test_the_counts_and_provenance_behind_a_fitted_capacity_and_rate():
     # two rows of one study share its set: counted once
     one_study = integrated.fitted_rates([rec("S1", -4e-10, 3, fit), rec("S1", -4e-10, 3, fit)])["ncbi:1"]
     assert one_study["capacity_curves"] == 3 and one_study["replicates"] == 3
+
+
+def test_one_study_can_hold_several_monoculture_sets():
+    """Round 13 of the review: keyed by study, three rows of SMGDB00000014 fitted from three monoculture
+    sets of 3 (one per condition) reported 3 replicates behind Comamonas' rate where 9 stood behind it.
+    A set is the monoculture experiments a row matched, after the co-culture's own."""
+    def rec(coculture, monoculture):
+        return {**_rate_record("WC", 0.4, -4e-10, study="S14"), "rate_stage_n": 3,
+                "experiments": [coculture, monoculture]}
+    got = integrated.fitted_rates([rec("C1", "M1"), rec("C2", "M2"), rec("C3", "M3")])["ncbi:1"]
+    assert got["replicates"] == 9 and got["capacity_curves"] == 9
+    shared = integrated.fitted_rates([rec("C1", "M1"), rec("C2", "M1")])["ncbi:1"]
+    assert shared["replicates"] == 3, "two co-cultures matched to one monoculture set count it once"
+    # the co-culture's own id is the first, whatever it sorts as (Z after M): it is not part of the set
+    later = integrated.fitted_rates([rec("Z1", "M1"), rec("Z2", "M1")])["ncbi:1"]
+    assert later["replicates"] == 3

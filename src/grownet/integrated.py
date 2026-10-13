@@ -787,6 +787,14 @@ def _row_label(study: str, record: dict) -> str:
     return (f"{study or 'a study'}: the row fitted" + (f" with {partner}" if partner else "")
             + (f" in {record['condition']}" if record.get("condition") else ""))
 
+
+def _stage_set(study: str, record: dict):
+    """The monoculture set a row's rate stage was fitted from: the monoculture experiments it matched
+    (`experiments` after the co-culture's own), as one study can hold several, one per condition; the
+    study alone where a row does not say (found in review: keyed by study, three sets of 3 counted 3)."""
+    monocultures = tuple(sorted((record.get("experiments") or [])[1:]))
+    return (study, monocultures)
+
 def fitted_rates(records: list) -> dict:
     """{node id: the rate entry a package takes} from the arcs of an integrated run.
 
@@ -834,9 +842,11 @@ def fitted_rates(records: list) -> dict:
             # replicate sets. Writing the row count into that column made a rate from three monocultures
             # read as resting on one culture, which is how the gLV example's thinness went unnoticed
             # (#155 item 13).
-            # one monoculture set per study: its rows agree on its size, and two studies are two sets
+            # one entry per monoculture set: its rows agree on its size, and two sets are two sets, whether in
+            # two studies or in one (one per condition)
             if record.get("rate_stage_n"):
-                at["stage_n"][study] = max(at["stage_n"].get(study, 0), record["rate_stage_n"])
+                key = _stage_set(study, record)
+                at["stage_n"][key] = max(at["stage_n"].get(key, 0), record["rate_stage_n"])
             at["per_study"].setdefault(study, []).append(rate)
             if study and study not in at["studies"]:
                 at["studies"].append(study)
@@ -882,7 +892,8 @@ def fitted_rates(records: list) -> dict:
         # row, a capacity from rows in another time unit (whose rate is left out) carried the other rows'
         # stage size and source, and a substituted diagonal went unlisted (found in review)
         if record.get("rate_stage_n"):
-            one["stage_n"][study] = max(one["stage_n"].get(study, 0), record["rate_stage_n"])
+            key = _stage_set(study, record)
+            one["stage_n"][key] = max(one["stage_n"].get(key, 0), record["rate_stage_n"])
         if record.get("fitted_self_source") and record["fitted_self_source"] not in one["sources"]:
             one["sources"].append(record["fitted_self_source"])
         one["points"].append(record.get("fit_points", 0))
@@ -915,8 +926,8 @@ def fitted_rates(records: list) -> dict:
             # count of replicates and this path never had any (it used to report time points under that
             # name, and merging rows would have added them up)
             "n": len(at["rates"]), "n_label": "fitted row(s)", "points": sum(at["points"]),
-            # the monoculture replicates behind the rate: one set per study, summed over the studies (the
-            # largest alone counted one study's where two stood behind it, found in review)
+            # the monoculture replicates behind the rate: one entry per monoculture set, summed (the largest
+            # alone counted one set where several stood behind it, found in review)
             "replicates": sum(at["stage_n"].values()) if at["stage_n"] else None,
             # sorted, so the whole entry is a function of the rows and not of the order they arrived in
             "studies": sorted(at["studies"]),

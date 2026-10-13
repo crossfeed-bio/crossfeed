@@ -13,11 +13,14 @@ without R it stops with exit code 2 rather than skipping, since a comparison tha
 studies named, counted by the kind of subject (`strain`, `metabolite`, or whatever else mGrowthDB records).
 Each curve falls in exactly one class:
 
-* `both`: both give a rate; they must agree to 1e-12 relative, and any that does not is a failure;
+* `both`: both give a rate; they must agree to 1e-12, relative for a rate above 1 and absolute below it,
+  and any that does not is a failure;
 * `neither`: neither gives a rate;
 * `departure 1`: the steepest window rose and grownet's refit came out <= 0, so grownet gives no rate
   where `growthrates` returns the negative number (Karoline, 2026-10-12, on #229 (a));
 * `departure 2`: a value <= 0; `growthrates` refuses the curve, grownet drops those points (#229 (b));
+* `departure 2+1`: both at once: `growthrates` refuses the curve for a value <= 0, and grownet, having
+  dropped those points, finds its refit <= 0 and gives no rate, so neither has a rate;
 * `departure 3`: no rising window; `growthrates` fits nothing ("no positively growing segment"), grownet
   returns its steepest slope, which is <= 0;
 * `other`: anything else, which is a failure, because it is a departure nobody has named.
@@ -34,7 +37,7 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
-CLASSES = ("both", "neither", "departure 1", "departure 2", "departure 3", "other")
+CLASSES = ("both", "neither", "departure 1", "departure 2", "departure 2+1", "departure 3", "other")
 AGREE = 1e-12
 
 R_SCRIPT = r"""
@@ -59,7 +62,8 @@ def classify(grownet_rate, grownet_why: str, r_rate, r_message: str) -> str:
     if grownet_rate is not None and r_rate is not None:
         return "both"
     if grownet_rate is None and r_rate is None:
-        return "neither"
+        both_named = "refit" in (grownet_why or "") and "y must be positive" in (r_message or "")
+        return "departure 2+1" if both_named else "neither"
     if grownet_rate is None:
         return "departure 1" if "refit" in (grownet_why or "") and r_rate <= 0 else "other"
     if "y must be positive" in (r_message or ""):

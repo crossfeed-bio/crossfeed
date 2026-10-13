@@ -17,12 +17,15 @@ and on 2026-09-27 that the implementation is its own option:
   and the review): the 468 curves of the bioreplicates of SMGDB00000004 and SMGDB00000005 that are not
   averages, counted by subject kind as mGrowthDB records it (strain, metabolite, and `bioreplicate` for a
   culture-level count). Identical on all 339 curves both fit, to 5e-15 (97 strain, 157 metabolite, 85
-  culture-level); 23 neither fits. The other 106 are the THREE places grownet departs from the reference:
+  culture-level); 20 neither fits. The other 109 are the THREE places grownet departs from the reference,
+  one of them twice (3 curves are departures 2 and 1 at once: R refuses a value <= 0, and grownet's refit
+  over the rest falls <= 0, so neither gives a rate):
     1. a refit that comes out <= 0 although the steepest window rose has NO rate here, with the reason,
        where `growthrates` returns the negative number as the maximum growth rate; a non-positive rate
        would read downstream as no growth (Karoline, 2026-10-12, on #229 (a)). 3 curves, all SMGDB00000005
-       chemostats: one strain (-0.01218 /h) and two metabolites; 2 of 1090 strain curves over the whole
-       corpus;
+       chemostats: one strain (-0.01218 /h) and two metabolites, and 3 more together with departure 2 (one
+       strain and two metabolites); 2 of 1090 strain curves over the whole corpus, a hand count the
+       script does not make;
     2. `growthrates` refuses a curve holding any value <= 0, while this drops those points and fits the
        rest (#229 (b), kept as it is). 87 curves: 18 strain, all SMGDB00000005 chemostats, and 69
        metabolites;
