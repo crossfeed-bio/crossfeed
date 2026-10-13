@@ -1203,6 +1203,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
                       "search again")
     # the derivation that made these records says what it tests and what is provisional in it: the words
     # used to be the specified comparison's whatever had derived the network (#142 item 5)
+    fitted_rows = list(records)
     kept, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"],
                               s["no_growth_alpha"], s["no_growth_factor"], s["merge_arcs"], s["min_studies"],
                               s["merge_genera"], support_level(names), s["max_adjusted_p"],
@@ -1230,7 +1231,10 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # monoculture, median over replicates and studies (Karoline, 2026-10-03). They travel in the network's
     # meta, so a downloaded network carries the rates it was reported with.
     organism_rates = {}
-    fitted = integrated.fitted_rates(records) if s.get("derivation") == "integrated" else {}
+    # from every row the derivation fitted, not the ones the display kept: the rate is a property of the
+    # organism, and it moved by 14 per cent with --include-absent while it was a median over the arcs
+    # that survived (Karoline, 2026-10-12, on #204: option 1)
+    fitted = integrated.fitted_rates(fitted_rows) if s.get("derivation") == "integrated" else {}
     if fitted:
         # the derivation fitted a rate and a self-limitation per organism, and those are the parameters
         # that go with its coefficients (#127)
