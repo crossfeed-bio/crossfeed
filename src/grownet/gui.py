@@ -1242,7 +1242,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         # --merge-genera the nodes are genera and the fitted rates strains, so a filter on `nid in
         # net.nodes` kept none and the report said no rate could be computed (found in review); and the
         # fitted rows carried the name of the study they came from rather than the current one (#24)
-        organism_rates = matrix.for_nodes(net, fitted)
+        organism_rates = matrix.for_nodes(net, fitted, current)
         # An organism whose fit implies no plateau is given the measured one inside `two_stage`, before
         # its partners are fitted against it, from the monocultures of its own condition (#142 item 7).
         # So there is no second pass here: it used to read every study's monocultures again to substitute
@@ -1255,7 +1255,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
                                          rate_method=s["rate_method"], window=s["rate_window"],
                                          spike_factor=s["spike_factor"], progress=say,
                                          capacity_max_fall=s["capacity_max_fall"])
-        organism_rates = matrix.for_nodes(net, found)
+        organism_rates = matrix.for_nodes(net, found, current)
         skipped += rate_skips
         # a read that failed while the rates were read leaves the run incomplete as surely as one that
         # failed while the arcs were: the file was marked complete before this stage ran, so an organism

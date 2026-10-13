@@ -107,8 +107,10 @@ content.
   least". It also says when the run was incomplete, which within-genus arcs have no cell, and how to read
   the CSV in R with its names intact; GraphML carries `complete`, `errors` and the build commit.
 - **One organism, one name**: the arcs below the threshold and gLV mode's fitted rates now carry the current
-  name, as the network does, and `--merge-genera` groups and lists a renamed strain by it (#24). The report's
-  pairs the data did not support name organisms as their study does, and say so.
+  name, as the network does, and `--merge-genera` groups and lists a renamed strain, its arcs and its
+  growth rate, by it (#24). The report's
+  pairs the data did not support and its notes on the data read name organisms as their study does, and
+  say so.
 - **A merged arc keeps no single comparison's bound, capacity, coefficient or fit**: every such field is kept
   only where all merged arcs agree, a merged arc's coefficient is the median of its members', and in a gLV
   package its cell is labeled as a merged arc's, not as one from a network saved before the rates were
@@ -116,6 +118,8 @@ content.
   could be computed, and arcs from an organism to itself are counted as arcs. A genus row in
   `growth_rates.csv` counts its strains' replicates and plateau curves and says where its capacity came
   from; a genus of one strain is that strain's row. It counted fitted rows and left the provenance empty.
+  A genus row of several strains also keeps the lag's method, the plateau's fall and media, and says
+  "fitted row(s)" in the report where it said "monoculture replicate(s)".
 - **A rate from a culture-level count says so** in `capacity_source`, so `growth_rates.csv`, the gLV payload
   and the report name it, without a new field; a rate that also rests on per-strain curves does not blame
   the count for its missing capacity.

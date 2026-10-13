@@ -447,3 +447,15 @@ def test_the_command_line_with_genera_merged_reports_the_fitted_rates_too(monkey
     lines = out.read_text(encoding="utf-8").splitlines()[1:]
     assert [line.split(",")[0] for line in lines] == ["Roseburia"], lines      # the genus node, by its name
     assert float(lines[0].split(",")[1]) == 0.4                                # the median of 0.3 and 0.5
+
+
+def test_glv_mode_names_a_renamed_strain_s_fitted_rate_on_its_genus_by_its_current_name():
+    """Round 4 of the review (#24): the fitted rates carry the study's name, and the genus row listed the
+    strain by it while the arcs used the current one."""
+    from grownet.taxonomy import SpeciesIndex
+    index = SpeciesIndex({"faecalibacterium prausnitzii": {853: A}, "blautia hydrogenotrophica": {53443: B}},
+                         current={853: "Faecalibacterium duncaniae A2-165"})
+    r = run_query(TimeCourseClient(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"],
+                  {**glv_mode({}), "merge_genera": True}, index=index)
+    organisms = r["network"].meta["growth_rates"]["organisms"]
+    assert organisms["Faecalibacterium"]["merged_from"] == ["Faecalibacterium duncaniae A2-165"], organisms

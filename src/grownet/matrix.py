@@ -258,14 +258,26 @@ def rows(net: InteractionNetwork, diagonal: float | None = None) -> tuple:
     return names, matrix, [(net.nodes[a].name or a, net.nodes[b].name or b) for a, b in conflicts]
 
 
-def for_nodes(net: InteractionNetwork, rates: dict) -> dict:
+def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None) -> dict:
     """The growth rates keyed by this network's own node ids.
 
     A rate belongs to a strain, as a monoculture does, while a network merged to the genus level
     (`derive.merge_genus`) has one node per genus. Such a node takes the median of the rates of the
     strains of its genus, with their replicates counted and their studies kept, so a genus network can be
     simulated too.
+
+    `current` maps a taxon id to its current name (#24), as `derive.merge_genus` takes it: a strain's rate
+    carries the name its study used, so it joined its genus, and was listed in `merged_from`, by that name
+    while the arcs used the current one, and a strain moved to another genus left that genus with no rate
+    (found in review).
     """
+    current = current or {}
+
+    def current_name(key, rate):
+        taxon = key.removeprefix("ncbi:")
+        return current.get(int(taxon), rate.get("name", "")) if key.startswith("ncbi:") and taxon.isdigit() \
+            else rate.get("name", "")
+    rates = {key: {**rate, "name": current_name(key, rate)} for key, rate in rates.items()}
     out = {}
     for nid, node in net.nodes.items():
         if nid in rates:
@@ -296,6 +308,7 @@ def for_nodes(net: InteractionNetwork, rates: dict) -> dict:
         def same(rows, key):
             values = {r.get(key) or "" for r in rows}
             return values.pop() if len(values) == 1 else "mixed: " + "; ".join(sorted(v for v in values if v))
+        falls = [r["capacity_fall"] for r in behind if r.get("capacity_fall") is not None]
         units = {r["unit"] for r in members}
         out[nid] = {"name": label, "rate": statistics.median(r["rate"] for r in members),
                     "unit": members[0]["unit"] if len(units) == 1 else "",
@@ -311,6 +324,17 @@ def for_nodes(net: InteractionNetwork, rates: dict) -> dict:
                     else None,
                     "capacity_source": same(behind, "capacity_source"),
                     "capacity_medium": same(behind, "capacity_medium"),
+                    # what a strain row says beside its numbers, which a merged row dropped while a genus
+                    # of one strain kept it (found in review): the count's unit when the rows are fitted
+                    # ones, so the report does not call them monoculture replicates; the lag's method; the
+                    # plateau's fall (Karoline, 2026-10-07: it travels with the plateau) and its media
+                    **({"n_label": same(members, "n_label")} if any(r.get("n_label") for r in members) else {}),
+                    "lag_method": same([r for r in members if r.get("lag") is not None], "lag_method")
+                    if capacity["lag"] is not None else "",
+                    "capacity_fall": statistics.median(falls) if capacity["capacity"] is not None and falls
+                    else None,
+                    "capacity_media": sorted({m for r in behind for m in r.get("capacity_media") or ()})
+                    if capacity["capacity"] is not None else [],
                     "merged_from": sorted(r["name"] for r in members)}
     return out
 

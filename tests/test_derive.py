@@ -1166,6 +1166,11 @@ def test_a_renamed_strain_is_merged_and_listed_by_its_current_name():
     # a reclassification across genera moves the arc to the genus the node is shown in
     (moved,), _ = merge_genus([old], merge=True, current={411483: "Ruminococcus duncaniae A2-165"})
     assert moved["target"] == "Ruminococcus"
+    # the source side is renamed as the target is
+    source = {**_garc(1.0, FP, BH, source="ncbi:411483"), "source_taxon_id": "411483", "source_identity": "ncbi"}
+    (moved_source,), _ = merge_genus([source], merge=True, current={411483: "Ruminococcus duncaniae A2-165"})
+    assert moved_source["source"] == "Ruminococcus"
+    assert moved_source["merged_pairs"] == ["Ruminococcus duncaniae -> Blautia hydrogenotrophica"]
     # a side keyed by name is not renamed even when its id has a current name
     by_name = {**old, "target_identity": "name"}
     (kept,), _ = merge_genus([by_name], merge=True, current=current)

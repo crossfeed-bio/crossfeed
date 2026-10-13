@@ -469,7 +469,8 @@ def report_text(result: dict) -> str:
     if notes:
         # these are notes about the INPUT, not pairs: counting them under the heading above said a
         # condition was a pair that gave no edge while an arc derived from it was reported above (#232)
-        lines.append(f"notes on the data read ({len(notes)}), which are not pairs:")
+        lines.append(f"notes on the data read ({len(notes)}), which are not pairs, named as their study names "
+                     "them:")
         lines += [f"  - {label}: {reason}" for label, reason in notes]
         lines.append("")
 

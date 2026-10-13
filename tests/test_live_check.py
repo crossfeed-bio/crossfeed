@@ -265,6 +265,11 @@ def test_a_broken_older_file_is_named_as_that_file(tmp_path, monkeypatch):
     import json
     good = json.loads((out / "all_result.v4.json").read_text())
     good["network"]["schema"] = "grownet.interaction_network/v3"
+    # a network that is not there at all is named as that file too, which the edges probe is for
+    (out / "all_result.json").write_text(json.dumps({**good, "network": None}))
+    problems, what = live_check.check_published(str(out))
+    assert any(p.startswith("all_result.json: could not be read") for p in problems), problems
+    assert what.startswith("All:")
     for key in ("nodes", "studies"):
         broken = json.loads(json.dumps(good))
         broken["network"][key] = None

@@ -366,3 +366,59 @@ def test_a_genus_row_counts_replicates_and_keeps_where_its_capacity_came_from():
     none = matrix.for_nodes(net, {"ncbi:2": b5, "ncbi:3": b4})["blautia"]
     assert none["capacity"] is None and none["capacity_curves"] is None
     assert none["capacity_source"] == "mixed: none: no plateau; none: the fit implies none"
+
+
+def test_a_renamed_strain_s_rate_joins_its_genus_by_its_current_name():
+    """Round 4 of the review (#24): the genus merge of the arcs used the current name and the rates the
+    study's, so `merged_from` said F. prausnitzii beside arcs saying F. duncaniae, and a strain moved to
+    another genus left that genus with no rate, hence no diagonal."""
+    rate = {"name": "Faecalibacterium prausnitzii A2-165", "rate": 0.7, "unit": "1/h", "n": 3, "studies": ["S1"]}
+    genus = dict(source_identity="genus", target_identity="genus")
+    same = _net([dict(_arc("faecalibacterium", "blautia", 1.0), source_name="Faecalibacterium",
+                      target_name="Blautia", **genus)])
+    row = matrix.for_nodes(same, {"ncbi:411483": rate}, {411483: "Faecalibacterium duncaniae A2-165"})
+    assert row["faecalibacterium"]["merged_from"] == ["Faecalibacterium duncaniae A2-165"]
+    assert matrix.for_nodes(same, {"ncbi:411483": rate})["faecalibacterium"]["merged_from"] == [
+        "Faecalibacterium prausnitzii A2-165"], "without current names, the study's (the control)"
+    moved = _net([dict(_arc("ruminococcus", "blautia", 1.0), source_name="Ruminococcus", target_name="Blautia",
+                       **genus)])
+    assert "ruminococcus" not in matrix.for_nodes(moved, {"ncbi:411483": rate})
+    got = matrix.for_nodes(moved, {"ncbi:411483": rate}, {411483: "Ruminococcus duncaniae A2-165"})
+    assert got["ruminococcus"]["rate"] == 0.7
+    # a rate keyed otherwise is not renamed, as a name-keyed node is not, even when its key is the id's digits
+    kept = matrix.for_nodes(same, {"411483": rate}, {411483: "Faecalibacterium duncaniae A2-165"})
+    assert kept["faecalibacterium"]["merged_from"] == ["Faecalibacterium prausnitzii A2-165"]
+
+
+def test_a_genus_row_of_several_strains_says_what_a_strain_row_says_beside_its_numbers():
+    """Round 4 of the review. A genus of several strains dropped `n_label`, so the report called the summed
+    fitted rows "monoculture replicate(s)" and the capacity rows "curve(s)" where growth_rates.csv said 5;
+    and it dropped the lag's method, the plateau's fall and its media, which a genus of one strain kept."""
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    net = _net([dict(_arc("blautia", "roseburia", 1.0), source_name="Blautia", target_name="Roseburia",
+                     source_identity="genus", target_identity="genus")])
+    strain = {"rate": 0.3, "unit": "1/h", "n": 1, "n_label": "fitted row(s)", "studies": ["S1"],
+              "lag": 0.5, "lag_method": "baranyi", "capacity": 1e8, "capacity_unit": "Cells/mL", "capacity_n": 1,
+              "capacity_curves": 3, "replicates": 3, "capacity_fall": 2.0, "capacity_media": ["WC"],
+              "capacity_medium": "WC", "capacity_source": "fitted from the monoculture time courses"}
+    rates = {"ncbi:1": {**strain, "name": "Blautia hydrogenotrophica"},
+             "ncbi:2": {**strain, "name": "Blautia wexlerae", "capacity_curves": 2, "replicates": 2,
+                        "capacity_fall": 4.0}}
+    row = matrix.for_nodes(net, rates)["blautia"]
+    assert row["n_label"] == "fitted row(s)" and row["lag_method"] == "baranyi"
+    assert row["capacity_fall"] == 3.0 and row["capacity_media"] == ["WC"]       # median of 2 and 4
+    csv_row = dict(zip(*[line.split(",") for line in matrix.rates_csv({"blautia": row}).splitlines()[:2]],
+                       strict=True))
+    assert csv_row["lag_method"] == "baranyi" and csv_row["capacity_fall_from_peak"] == "3"
+    shown = InteractionNetwork()
+    shown.meta["growth_rates"] = {"rule": "r", "organisms": {"blautia": row}}
+    text = report_text({"network": shown, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "median of 2 fitted row(s)" in text and "monoculture replicate(s)" not in text, text
+    assert "from 2 row(s)" in text, text
+    # a strain with no capacity and no medium neither makes the medium "mixed" nor adds a fall
+    bare = {**strain, "name": "Blautia obeum", "capacity": None, "capacity_medium": "", "capacity_media": [],
+            "capacity_fall": 9.0, "capacity_curves": None}       # whatever it carries, it is not behind the capacity
+    partial = matrix.for_nodes(net, {"ncbi:1": rates["ncbi:1"], "ncbi:3": bare})["blautia"]
+    assert partial["capacity_medium"] == "WC" and partial["capacity_fall"] == 2.0

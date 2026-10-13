@@ -107,7 +107,8 @@ def test_a_culture_level_rate_says_why_it_has_no_capacity(monkeypatch):
     monkeypatch.setattr(derive, "replicates_for_experiment", lambda *a, **k: ([], []))
     found, _ = derive.monoculture_rates(client, [_exp(["r1", "r2"])], identities={})
     (rate,) = derive.merge_rates([("S9", found)]).values()
-    assert "culture-level fc count (2 replicate(s))" in rate["capacity_source"]
+    assert rate["capacity_source"] == ("none: the rate is from a culture-level fc count (2 replicate(s)), which "
+                                       "never gives a capacity"), rate["capacity_source"]
     assert "never gives a capacity" in matrix.rates_csv({"x": rate})
 
 
@@ -165,3 +166,41 @@ def test_the_payload_sends_no_capacity_curve_count_without_a_capacity():
     rates = {k: {kk: vv for kk, vv in v.items() if kk != "capacity_curves"} for k, v in rates.items()}
     detail = matrix.glv_payload(_net(PAIR), rates)["growth_rate_detail"]
     assert {d["carrying_capacity_curves"] for d in detail} == {None}
+
+
+def test_the_report_says_its_skip_lines_name_organisms_as_their_study_does():
+    """Rounds 3 and 4 of the review (#24): the interactions use a strain's current name and the lines on
+    what was skipped quote its study, so both headings say so; deleting either clause left the suite green."""
+    from grownet import report
+    from grownet.model import InteractionNetwork
+    text = report.report_text({
+        "network": InteractionNetwork(), "resolved": [], "unresolved": [], "studies": [], "errors": [],
+        "entries": [], "skipped": [("A organism -> B organism [EXP_1]", "no growth (auc) in either set"),
+                                   ("EXP_9", "no monoculture of the target")]})
+    assert "pairs the data did not support (1), named as their study names them:" in text, text
+    assert "notes on the data read (1), which are not pairs, named as their study names them:" in text, text
+
+
+def test_a_rate_with_no_recorded_source_is_not_called_culture_level(monkeypatch):
+    """Round 4 of the review: without the `sources and` guard, an entry recording no sources was said to be
+    "from a culture-level , which never gives a capacity"."""
+    client = CultureClient({"r1": ["fc"]})
+    monkeypatch.setattr(derive, "replicates_for_experiment", lambda *a, **k: ([], []))
+    found, _ = derive.monoculture_rates(client, [_exp(["r1"])], identities={})
+    ((nid, entry),) = found.items()
+    (rate,) = derive.merge_rates([("S1", {nid: {**entry, "sources": {}}})]).values()
+    assert "culture-level" not in (rate.get("capacity_source") or "")
+
+
+def test_the_report_keeps_a_culture_level_reason_it_has_not_already_said():
+    """Round 4 of the review: a genus row carries no `rate_sources`, so the clause the report de-duplicates
+    against is not there, and the capacity_source is the only reason it gives."""
+    from grownet import report
+    from grownet.model import InteractionNetwork
+    why = derive.CULTURE_NONE + " fc count (3 replicate(s)), which never gives a capacity"
+    net = InteractionNetwork()
+    net.meta["growth_rates"] = {"rule": "r", "organisms": {"g": {
+        "name": "G", "rate": 0.3, "unit": "1/h", "n": 3, "capacity": None, "capacity_source": why}}}
+    text = report.report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                               "skipped": [], "entries": []})
+    assert why in text, text

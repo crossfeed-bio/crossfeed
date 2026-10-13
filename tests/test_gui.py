@@ -570,6 +570,23 @@ def test_a_strain_is_named_by_its_current_name():
     assert any("Faecalibacterium duncaniae" in p for p in pairs), pairs
 
 
+def test_a_renamed_strain_s_rate_is_listed_by_its_current_name_on_its_genus(monkeypatch):
+    """Round 4 of the review (#24): the page passes the current names to the rates too, so a genus row's
+    `merged_from` names the strain as the arcs do. The double's monocultures are too short for a rate, so
+    the rate stage is served as it reads them: by taxon id, under the study's name."""
+    from grownet import gui
+    from grownet.taxonomy import SpeciesIndex
+    index = SpeciesIndex({"faecalibacterium prausnitzii": {853: A}, "blautia hydrogenotrophica": {53443: B}},
+                         current={853: "Faecalibacterium duncaniae A2-165"})
+    monkeypatch.setattr(gui, "growth_rates", lambda *a, **k: ({"ncbi:853": {
+        "name": A, "rate": 0.4, "unit": "1/h", "n": 2, "studies": ["S1"]}}, []))
+    r = run_query(FakeClient(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"],
+                  {"include_absent": True, "derivation": "replicate", "merge_genera": True, "report_rates": True},
+                  index=index)
+    organisms = r["network"].meta["growth_rates"]["organisms"]
+    assert organisms["Faecalibacterium"]["merged_from"] == ["Faecalibacterium duncaniae A2-165"], organisms
+
+
 
 def test_a_node_keyed_by_name_keeps_its_own_name_when_its_taxon_id_is_shared():
     # Audit 2026-09-28: SMGDB00000008 gives Lachnoclostridium clostridioforme 2_1_49FAA and L. symbiosum
