@@ -97,6 +97,10 @@
           "type": "object",
           "description": "recorded, not promised: every setting the run used"
         },
+        "build": {
+          "type": "object",
+          "description": "recorded, not promised: the commit and the workflow run that built this file, where it was built by the repository's daily workflow"
+        },
         "slice": {
           "type": "string",
           "description": "recorded, not promised: which slice script wrote this network: fp_bh is the FP/BH study, end to end, from grownet.slices.fp_bh"

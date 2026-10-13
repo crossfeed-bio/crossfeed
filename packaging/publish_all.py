@@ -107,6 +107,13 @@ def main(out: str, notes: str | None = None, previous=previous_arcs) -> int:
     if refused:
         print("not published:", *refused, sep="\n  ", file=sys.stderr)
         return 1
+    # which code made this file, beside `tool_version`: the daily artifact is built from main's HEAD while
+    # `__version__` stays at the last release, so two artifacts a week apart can carry one version and
+    # different content, and only the commit says whether the tool or mGrowthDB changed (Craig's agent,
+    # on #285). `all_result.json` had it in its `identity` block; `all_network.json`, the file a reader
+    # downloads by hand, had nothing.
+    if os.environ.get("GITHUB_SHA"):
+        net.meta["build"] = {"commit": os.environ["GITHUB_SHA"], "run": os.environ.get("GITHUB_RUN_ID", "")}
     folder = Path(out)
     folder.mkdir(parents=True, exist_ok=True)
     (folder / FILE).write_text(json.dumps(to_payload(result)) + "\n", encoding="utf-8")

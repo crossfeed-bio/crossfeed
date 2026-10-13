@@ -115,3 +115,23 @@ def test_main_publishes_a_run_the_floor_allows_and_the_notes_are_not_an_asset(tm
     assert publish_all.main(str(out), str(tmp_path / "notes.md"), previous=lambda: None) == 0
     assert sorted(p.name for p in out.iterdir()) == sorted([FILE, publish_all.NETWORK, publish_all.REPORT])
     assert "This run:" in (tmp_path / "notes.md").read_text(encoding="utf-8")
+
+
+def test_the_network_names_the_commit_that_built_it(tmp_path, monkeypatch):
+    """Craig's agent, on #285: the daily artifact is built from main under the last release's tool_version,
+    so two files a week apart can carry one version and different content. The commit says which."""
+    from test_gui import FakeClient
+
+    from grownet.gui import run_query
+    from grownet.schema import validate_document
+    monkeypatch.setattr(publish_all, "run_query", lambda *a, **k: run_query(
+        FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
+    monkeypatch.setenv("GITHUB_SHA", "abc123")
+    monkeypatch.setenv("GITHUB_RUN_ID", "42")
+    out = tmp_path / "out"
+    assert publish_all.main(str(out), None, previous=lambda: None) == 0
+    doc = json.loads((out / publish_all.NETWORK).read_text(encoding="utf-8"))
+    assert doc["meta"]["build"] == {"commit": "abc123", "run": "42"}
+    notes = []
+    assert validate_document(doc, notes) == [] and not [n for n in notes if "declare" in n], notes
+
