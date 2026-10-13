@@ -42,6 +42,12 @@ content.
 
 ### Fixed
 
+- **A growth curve whose steepest window rises can no longer return a negative "maximum growth rate"**
+  (Karoline, 2026-10-12, #229). The refit over growthrates' first-to-last span can fall below zero when two
+  rises are separated by a deep fall, and a non-positive rate read downstream as no growth. Such a curve
+  now has no rate, with the reason, and its replicate is left out as any unreadable rate is. This is the
+  one place grownet departs from growthrates, which returns the negative number. On all of mGrowthDB it is
+  2 of 1090 strain curves, both in SMGDB00000005's chemostats, which the default leaves out.
 - **The growth-rate docstring says what `easylinear` does** (#229). It said the refit spans "every window
   whose slope reaches" the quota; it spans from the first such window to the end of the last, every
   window between included, which is what `growthrates`' `fit_easylinear` does. Kept as it is (Karoline,
