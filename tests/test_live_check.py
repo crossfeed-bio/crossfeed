@@ -573,6 +573,9 @@ def test_make_r_check_fails_on_a_skipped_r_test(tmp_path):
     makefile = ROOT / "Makefile"
     if not makefile.exists():
         pytest.skip("no Makefile in this tree (an unpacked sdist)")
+    if sys.platform == "win32":
+        # `make r-check` runs on Unix; the bash a Windows runner finds is not the shell make would use there
+        pytest.skip("make r-check is a Unix recipe")
     line = next(x.strip() for x in makefile.read_text().splitlines() if "SKIP 0 |" in x and "grep" in x)
     rout = tmp_path / "grownet.Rcheck" / "tests"
     rout.mkdir(parents=True)
