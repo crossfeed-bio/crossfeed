@@ -341,7 +341,9 @@ def report_text(result: dict) -> str:
         lines.append("")
         lines.append("about this derivation:")
         lines += ["  " + line for line in textwrap.wrap(meta["provisional"], 110)]
-    for error in result["errors"]:
+    # from the network's meta when it carries them, so the report and the file cannot disagree; a result
+    # from before #247 has them only in the result
+    for error in meta.get("errors", result.get("errors", ())):
         lines.append(f"error: {error}")
     lines.append("")
 

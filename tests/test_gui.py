@@ -1086,3 +1086,63 @@ def test_the_glv_example_button_ignores_a_setting_left_in_the_form(server):
     # and the settings gLV mode does set are still set, so this did not simply ignore the press
     assert said["conditions"] == gui.GLV_EXAMPLE_STUDY
     assert said["report_rates"] is True
+
+
+def test_a_study_that_could_not_be_read_is_not_written_as_a_source_and_the_file_says_it_failed():
+    """#247: a study that answered 404 went into `meta.studies`, which the schema describes as "the studies
+    the search read", the run exited 0, and the file carried no trace of the failure, so `validate` passed
+    it and a reader of the file alone could not tell a complete run from an incomplete one."""
+    from grownet.schema import validate_document
+
+    class OneGone(FakeClient):
+        def search(self, strain_ncbi_ids=None, metabolite_chebi_ids=None):
+            return {"studies": [self.study_id, "SMGDB0000002"]}       # the second answers 404
+    r = run_query(OneGone(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"], {})
+    meta = r["network"].meta
+    assert r["network"].edges, "the readable study still derives"
+    assert meta["studies"] == ["SMGDB00000001"], meta["studies"]
+    assert meta["complete"] is False and any("SMGDB0000002" in e for e in meta["errors"])
+    notes = []
+    assert validate_document(r["network"].to_dict(), notes) == []
+    assert any("INCOMPLETE" in n and f"{len(meta['errors'])} error(s)" in n for n in notes), notes
+
+    # the positive control: a complete run says so, and validate says nothing about it
+    ok = run_query(FakeClient(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"], {})
+    assert ok["network"].meta["complete"] is True and ok["network"].meta["errors"] == []
+    notes = []
+    validate_document(ok["network"].to_dict(), notes)
+    assert not [n for n in notes if "INCOMPLETE" in n], notes
+
+
+def test_a_curve_that_could_not_be_read_marks_the_file_incomplete():
+    class Flaky(FakeClient):
+        def get_measurement_series(self, context_id):
+            if context_id.startswith("co/0/"):
+                raise MGrowthDBError("mGrowthDB returned HTTP 500 for a series (server error)", status=500)
+            return super().get_measurement_series(context_id)
+    r = run_query(Flaky(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"], {})
+    assert r["network"].meta["complete"] is False and r["network"].meta["errors"] == r["errors"]
+    # the report reads them from the file, so the two cannot disagree
+    from grownet.report import report_text
+    assert all(f"error: {e}" in report_text(r) for e in r["errors"])
+
+
+def test_a_boolean_meta_key_is_checked_as_one():
+    from grownet.schema import _meta_problems
+    assert _meta_problems({"complete": True}) == [] and _meta_problems({"complete": False}) == []
+    assert _meta_problems({"complete": "no"}) == ["meta.complete must be boolean, not str"]
+    # and a boolean is still refused where it is not declared one
+    assert _meta_problems({"query": True}) == ["meta.query must be string, not bool"]
+
+
+def test_every_declared_meta_type_is_one_validate_can_check(monkeypatch):
+    """Craig's agent, on #276: `{"type": "integer"}` made validate raise KeyError. The import-time assertion
+    is what stops it; here the same rule is applied to a declaration that breaks it."""
+    import pytest
+
+    from grownet import schema
+    assert {d["type"] for d in schema.META_PROPERTIES.values()} <= set(schema._META_TYPES)
+    bad = {**schema.META_PROPERTIES, "arcs": {"type": "integer"}}
+    with pytest.raises(AssertionError):
+        assert {d["type"] for d in bad.values()} <= set(schema._META_TYPES), "integer is not checked"
+

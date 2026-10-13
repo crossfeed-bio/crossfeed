@@ -20,6 +20,26 @@ content.
 
 ### Fixed
 
+- **The gLV package's files describe themselves correctly** (#210, #211):
+  - the zip's README says to match `growth_rates.csv` to a matrix **by the organism column, never by
+    position**: each matrix holds its own unit's organisms in its own order, and a positional read gave a
+    plausible, wrong simulation, off by factors of 2 to 4;
+  - in gLV mode the README no longer describes the off-diagonals with the comparison's formula, nineteen
+    lines after its own integrated description, nor says a setting chooses the estimator that the
+    integrated form does not read;
+  - cells "from a comparison where one side did not grow" are named only where they are in a matrix;
+  - `capacity_curves_left_out` writes a count of 0 as `0`, not as a blank that R reads as `NA`;
+  - a nonzero value below 5e-5 is no longer printed as `0`, which means no interaction; it is written
+    in scientific notation instead (`3e-05`), which `read.csv` reads, and every other number prints as before;
+  - in R, the coverage line counts organisms outside every matrix (it read "8 of 8" for an 11-organism
+    network), `summary()` gains `network_organisms`, and `glv_write()` writes the three rate columns it
+    was missing and the matrices at four significant digits, as the download does.
+- **A run that could not read everything now says so in the file it writes.** A study that answered 404
+  was written into `meta.studies` (which the schema describes as the studies the search READ), the file
+  carried no trace of the failure, and `grownet validate` passed it. Now `meta.studies` lists only the
+  studies read, `meta.errors` names what failed, `meta.complete` is false, and `validate` notes the file
+  as incomplete. The report reads the errors from the file. And `derive <study> --live` exits 1 when
+  curves could not be read, as the species and All paths have since #243 (#247).
 - **0.4.0 called its own output suspect.** `grownet validate` on a network 0.4.0 derived said `meta has
   'project', which this version of the format does not declare`, and the same for `settings_not_used`:
   both keys were added in 0.4.0 and never declared in the schema. A third, `slice`, written by
@@ -28,6 +48,18 @@ content.
   the format id does not move, since `meta` is an open object. The test behind it now walks the syntax
   tree for every form a key can reach a network's `meta` by, where it read one form and saw 2 of the 20
   keys (#274).
+- **The daily All artifact's release description is rewritten by every run** and says what that run
+  produced: studies, organisms, arcs, when, by which version and which derivation. It was written once, on
+  the first run, so editing it in the workflow changed nothing, and it promised "the default settings" for
+  `all_network.json` and `all_report.txt`, which nothing checks against a reader's version. It now says so,
+  and which file the freshness rule governs (#236).
+- **A collapsed All derivation is no longer published.** A run with no arcs is refused, and so is one with
+  less than half the arcs of the artifact it replaces unless it is run by hand with `allow_drop`. The
+  workflow refused only a run with errors, so zero arcs published and was served to every reader at the
+  defaults until the next run (#236).
+- **`packaging/check_release.py` refuses a tag that already names another commit**, and with no tag reports
+  a tagged version as released rather than ready. It said `v0.3.0 is ready` on a tree whose v0.3.0 was
+  tagged and on PyPI (#236).
 
 ## [0.4.0] (2026-10-11)
 
