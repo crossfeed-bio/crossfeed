@@ -1199,3 +1199,32 @@ def test_a_read_that_fails_while_reading_growth_rates_marks_the_file_incomplete(
     # and a rate stage that read everything leaves the run complete
     monkeypatch.setattr(gui, "growth_rates", lambda *a, **k: ({}, []))
     assert run_query(FakeClient(), [A, B], {"report_rates": True})["network"].meta["complete"] is True
+
+
+def test_a_study_unreadable_while_reading_rates_marks_the_run_incomplete(monkeypatch):
+    """Round 2 of the review: the rate stage worded a whole study it could not read as "could not be read",
+    which `adapter.unread` does not see, so the run stayed complete with exit 0."""
+    from grownet import derive
+    from grownet.mgrowthdb import MGrowthDBError
+
+    class Unreadable(FakeClient):
+        reading_rates = False
+
+        def get_study(self, study_id):
+            if self.reading_rates:
+                raise MGrowthDBError("mGrowthDB returned HTTP 503", status=503)
+            return super().get_study(study_id)
+    client = Unreadable()
+    real = derive.growth_rates
+
+    def rates_with_outage(*a, **k):
+        client.reading_rates = True
+        return real(*a, **k)
+    monkeypatch.setattr(gui_module(), "growth_rates", rates_with_outage)
+    r = run_query(client, [A, B], {"report_rates": True})
+    assert r["network"].meta["complete"] is False and r["errors"], r["errors"]
+
+
+def gui_module():
+    from grownet import gui
+    return gui

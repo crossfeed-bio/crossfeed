@@ -67,7 +67,8 @@ def check(tag: str, root: Path = ROOT, releasing: bool = True, today=None) -> tu
         notes = section.group(2).strip()
         # a dated heading over nothing passed as ready, and the GitHub release then carried no changelog,
         # with the entries left under [Unreleased] above it (found in review)
-        if releasing and not notes:
+        # headings with nothing under them are still an empty section (found in review)
+        if releasing and not re.sub(r"(?m)^#{1,6} .*$", "", notes).strip():
             problems.append(f"CHANGELOG.md's section for {version} is empty; move the entries from "
                             "[Unreleased] into it")
         # 0.3.0 was prepared with 0.2.0's release date still in CITATION.cff, which nothing read: the

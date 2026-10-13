@@ -203,8 +203,12 @@ def counts(net: InteractionNetwork) -> dict:
     # reported printed as 0, which in that file means no interaction (#248). They are counted apart so
     # the two numbers agree and the page can say what has no cell.
     self_pairs = sum(1 for a, b in values if a == b)
+    # the ARCS from an organism to itself, counted directly: counting self pairs in `values` missed the
+    # ones a sign conflict dropped from it, so a sidecar said 1 where the file held 5 (found in review)
+    self_arcs = sum(1 for e in net.edges if e.source == e.target
+                    and ((e.status != "absent" and e.strength is not None) or _censored(e)))
     return {"arcs": in_a_cell, "cells": len(values) - self_pairs, "organisms": len(net.nodes),
-            "within_one_organism": self_pairs}
+            "within_one_organism": self_arcs}
 
 
 def bounded_cells(net: InteractionNetwork) -> list:
@@ -427,9 +431,15 @@ def matrix_about(net: InteractionNetwork, csv_name: str = "grownet_matrix.csv") 
              ""]
     # an incomplete run's 0 cells include pairs from studies that were never read (#247; found in review)
     if meta.get("complete") is False:
-        lines.append("INCOMPLETE: this run could not read everything it asked for, so a 0 below can be a pair")
-        lines.append("  from a study or curve that was never read:")
-        lines += [f"  {error}" for error in meta.get("errors") or []]
+        errors = meta.get("errors") or []
+        # a failure while the growth rates were read touches no cell of this matrix (found in review)
+        if errors and all("while reading growth rates" in e for e in errors):
+            lines.append("INCOMPLETE: some growth rates could not be read; the cells below are not affected:")
+        else:
+            lines.append("INCOMPLETE: this run could not read everything it asked for, so a 0 below can be a "
+                         "pair")
+            lines.append("  from a study or curve that was never read:")
+        lines += [f"  {error}" for error in errors]
         lines.append("")
     lines.append("READING IT")
     lines += para("Rows are the affected organism and columns the actor: the cell in row i, column j is the "
@@ -456,6 +466,9 @@ def matrix_about(net: InteractionNetwork, csv_name: str = "grownet_matrix.csv") 
     lines.append("SETTINGS" if settings else "SETTINGS: none recorded; these records were already derived")
     lines += [f"  {key}: {json.dumps(settings[key], default=str)}" for key in sorted(settings)]
     lines.append("")
+    # a pair of an organism with itself has no cell, so it is not "left at 0": the within-one-organism line
+    # covers it (found in review)
+    conflicts = [(affected, actor) for affected, actor in conflicts if affected != actor]
     if conflicts:
         # Which designs disagree, per pair: across a biculture and a drop-out is the pairwise effect and
         # the in-community effect pulling opposite ways, which the report names as a result (#207);
@@ -747,6 +760,16 @@ def _per_arc(edge, fallback_rate: float | None = None) -> tuple:
         return None, ""
     if edge.metric_with is not None and edge.metric_without is not None:
         return (edge.metric_with - edge.metric_without) / edge.partner_abundance, "rates"
+    # a merged arc is the median of several comparisons and carries no single one's two rates: its fitted
+    # coefficient is the median of its members' where it has one, and otherwise its cell is taken from its
+    # median log2 ratio, which the README says under its own heading, NOT as a network saved before the
+    # rates were recorded (found in review: the merge fix had sent merged arcs to that wrong label)
+    if edge.merged_arcs:
+        if edge.coefficient is not None:
+            return edge.coefficient, "rates"
+        if edge.strength is not None and fallback_rate:
+            return fallback_rate * (2 ** edge.strength - 1) / edge.partner_abundance, "merged"
+        return None, ""
     if edge.strength is not None and fallback_rate:
         return fallback_rate * (2 ** edge.strength - 1) / edge.partner_abundance, "ratio"
     return None, ""
@@ -826,7 +849,8 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
                         # medium each was measured in, and a cell that pools two environments is named
                         # rather than reading as one measurement (found 2026-10-06)
                         "media": list(entry["media"]),
-                        "how": "ratio" if "ratio" in entry["how"] else "rates"}
+                        "how": ("ratio" if "ratio" in entry["how"] else
+                                "merged" if "merged" in entry["how"] else "rates")}
     return values, conflicts, unfitted
 
 
@@ -1149,6 +1173,8 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             "from_absolute_rates": all(entry["how"] == "rates" for entry in values.values()),
             "from_the_ratio": [(_label(net.nodes[a]), _label(net.nodes[b]))
                                for (a, b), entry in values.items() if entry["how"] == "ratio"],
+            "from_merged_ratio": [(_label(net.nodes[a]), _label(net.nodes[b]))
+                                  for (a, b), entry in values.items() if entry["how"] == "merged"],
             "obligate_rows": list(rows_fitted), "plateau_rows": list(plateau_rows),
             # only cells that are in a matrix: an organism left out of every block took its censored
             # cells with it, and the README named them as entering the median of their pair while
@@ -1343,6 +1369,14 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
                   "  the same number whenever that rate is the arc's own rate without the actor. Derive",
                   "  again to have them from the measurements themselves (actor on affected):"]
         lines += [f"      {actor} on {affected}" for affected, actor in got["from_the_ratio"]]
+        lines.append("")
+    if got.get("from_merged_ratio"):
+        lines += ["CELLS FROM MERGED ARCS, TAKEN FROM THEIR MEDIAN LOG2 RATIO",
+                  "  Each of these is a merged arc, the median of several comparisons, so it carries no one",
+                  "  comparison's two rates: its cell uses r_i (2^L - 1) / x_j with L the arcs' median log2",
+                  "  ratio and the organism's reported rate. Derive without merging to have a cell per",
+                  "  comparison (actor on affected):"]
+        lines += [f"      {actor} on {affected}" for affected, actor in got["from_merged_ratio"]]
         lines.append("")
     if got.get("censored_cells"):
         lines += ["CELLS FROM A COMPARISON WHERE ONE SIDE DID NOT GROW",

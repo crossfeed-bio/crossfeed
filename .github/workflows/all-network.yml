@@ -54,13 +54,41 @@ jobs:
             --latest=false --title "All network, derived once a day" --notes-file notes.md
           gh release upload all-network out/* --clobber
       - name: describe what was published
+        id: describe
         # its own step, after the upload, so a failure here cannot make the build-failure issue below say
         # "did not publish" about assets that were already replaced (found in review)
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit all-network --notes-file notes.md
+      - name: say when the description could not be set
+        # the assets are new and the description is the previous run's, which says it describes "the
+        # files below as they are now": that is worth an issue of its own (found in review)
+        if: always() && steps.describe.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create all-network-description-stale --color FBCA04 --force \
+            --description "The daily All network was published and its release description could not be updated"
+          open=$(gh issue list --label all-network-description-stale --state open --json number -q '.[0].number')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "Again: $RUN"
+          else
+            gh issue create --label all-network-description-stale --title "The daily All network's description is stale" --body "The run $RUN published new assets and could not update the release description, so the description is the previous run's. This issue closes itself when a run updates it."
+          fi
+      - name: close the description issue once a run updates it
+        if: always() && steps.describe.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          for n in $(gh issue list --label all-network-description-stale --state open --json number -q '.[].number'); do
+            gh issue close "$n" --comment "Described again: $RUN"
+          done
       - name: check the properties of what was derived from the live corpus
         id: live
+        # whenever the files went out, whatever happened to the description after them
+        if: always() && steps.publish.outcome == 'success'
         # The only check in the project that reads a real mGrowthDB response (#237). It runs AFTER the
         # publish, on the file just written, so it adds no derivation of All and does not block one:
         # a violation is the code's, and every copy derives the same thing live. One study is derived in
@@ -74,10 +102,10 @@ jobs:
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           gh label create live-check-failed --color D93F0B --force \
-            --description "What grownet derives from the live corpus broke a property it promises"
+            --description "The live check of what grownet derives failed: a broken property or a run that could not check"
           open=$(gh issue list --label live-check-failed --state open --json number -q '.[0].number')
           if [ -n "$open" ]; then
-            gh issue comment "$open" --body "Failed again: $RUN"
+            gh issue comment "$open" --body "Failed again ($OUTCOME): $RUN"
           else
             if [ "$OUTCOME" = "violation" ]; then
               what="found arcs that break a property the tool promises (the log of that step names each one)"

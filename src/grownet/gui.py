@@ -1238,11 +1238,11 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     if fitted:
         # the derivation fitted a rate and a self-limitation per organism, and those are the parameters
         # that go with its coefficients (#127)
-        organism_rates = {nid: entry for nid, entry in fitted.items() if nid in net.nodes}
-        # named as the network names the node, so one organism carries one name in the report and the
-        # files: the fitted rows still carried the name of the study they came from (#24)
-        organism_rates = {nid: {**entry, "name": net.nodes[nid].name or entry.get("name", nid)}
-                          for nid, entry in organism_rates.items()}
+        # keyed by the network's own nodes and named as it names them, as the measured rates are: with
+        # --merge-genera the nodes are genera and the fitted rates strains, so a filter on `nid in
+        # net.nodes` kept none and the report said no rate could be computed (found in review); and the
+        # fitted rows carried the name of the study they came from rather than the current one (#24)
+        organism_rates = matrix.for_nodes(net, fitted)
         # An organism whose fit implies no plateau is given the measured one inside `two_stage`, before
         # its partners are fitted against it, from the monocultures of its own condition (#142 item 7).
         # So there is no second pass here: it used to read every study's monocultures again to substitute

@@ -97,3 +97,25 @@ def test_a_baranyi_start_that_runs_off_is_a_rejected_fit_not_a_crash():
             baranyi_fit(times, values)
     finally:
         rates._fit_once = original
+
+
+def test_a_culture_level_rate_says_why_it_has_no_capacity(monkeypatch):
+    """Round 2 of the review: nothing a consumer reads said a rate came from a culture-level count; the
+    existing capacity_source carries it, with no new field in grownet.glv/v1."""
+    from grownet import matrix
+    client = CultureClient({"r1": ["fc"], "r2": ["fc"]})
+    monkeypatch.setattr(derive, "replicates_for_experiment", lambda *a, **k: ([], []))
+    found, _ = derive.monoculture_rates(client, [_exp(["r1", "r2"])], identities={})
+    (rate,) = derive.merge_rates([("S9", found)]).values()
+    assert "culture-level fc count (2 replicate(s))" in rate["capacity_source"]
+    assert "never gives a capacity" in matrix.rates_csv({"x": rate})
+
+
+def test_the_payload_counts_capacity_curves_not_fitted_rows():
+    """Round 1 fixed carrying_capacity_curves to prefer the curve count, and nothing failed without it."""
+    from test_payload_v1 import PAIR, RATES, _net
+
+    from grownet import matrix
+    rates = {k: {**v, "capacity_curves": 4, "capacity_n": 1} for k, v in RATES.items()}
+    detail = matrix.glv_payload(_net(PAIR), rates)["growth_rate_detail"]
+    assert {d["carrying_capacity_curves"] for d in detail} == {4}

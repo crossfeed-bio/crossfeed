@@ -74,3 +74,23 @@ def test_the_command_line_writes_it_beside_the_csv(tmp_path):
     assert "describes net.csv" in about and "SETTINGS: none recorded" in about
     assert matrix.about_name("a/b/grownet_matrix.csv") == "a/b/grownet_matrix.about.txt"
     assert matrix.about_name("matrix") == "matrix.about.txt"
+
+
+def test_an_incomplete_run_says_so_beside_the_grid_and_in_graphml():
+    """Round 2 of the review: neither the sidecar's INCOMPLETE block nor GraphML's completeness keys had a
+    test that failed without them; and a failure only in the rate stage touches no cell."""
+    import xml.etree.ElementTree as ET
+
+    from grownet.export import to_graphml
+    net = _net([_arc("a", "b", 1.5)])
+    net.meta.update({"complete": False, "errors": ["S9: HTTP 404"]})
+    about = matrix.matrix_about(net)
+    assert "INCOMPLETE" in about and "a 0 below can be a" in about and "S9: HTTP 404" in about
+    net.meta["errors"] = ["2 replicate(s) could not be read while reading growth rates"]
+    assert "the cells below are not affected" in matrix.matrix_about(net)
+    ns = "{http://graphml.graphdrawing.org/xmlns}"
+    graph = ET.fromstring(to_graphml(net)).find(f"{ns}graph")
+    data = {d.get("key"): d.text for d in graph.findall(f"{ns}data")}
+    assert data["g_complete"] == "false" and "growth rates" in data["g_errors"]
+    net.meta.update({"complete": True, "errors": []})
+    assert "INCOMPLETE" not in matrix.matrix_about(net)

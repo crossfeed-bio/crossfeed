@@ -491,6 +491,8 @@ def _rates_of(a, client, study_ids, net, skipped, records=None):
             if entry.get("capacity") is None:
                 print(f"{entry.get('name', nid)}: {entry.get('capacity_source') or 'no plateau'}, so it "
                       "has no self-limitation and no row in a matrix", file=sys.stderr)
+        # keyed by the network's own nodes and named as it names them, as on the page (found in review)
+        fitted = matrix.for_nodes(net, fitted)
         net.meta["growth_rates"] = matrix.rate_meta(net, fitted, INTEGRATED)
         return fitted, skipped
     found, rate_skips = growth_rates(client, study_ids, wanted=set(net.nodes),

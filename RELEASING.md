@@ -111,12 +111,13 @@ it is less than a day old. If a bad artifact goes out, **pause the workflow, the
 
 ```bash
 gh workflow disable all-network
-gh release delete-asset all-network all_result.v4.json --yes
-gh release delete-asset all-network all_result.json --yes
+gh run list --workflow all-network --status in_progress --json databaseId -q '.[].databaseId' | xargs -n1 gh run cancel
+gh release view all-network --json assets -q '.assets[].name' | grep '^all_result' | xargs -n1 -I{} gh release delete-asset all-network {} --yes
 ```
 
 Pausing comes first because the next scheduled run would otherwise rebuild the same file from the same
-`main` and publish it again. Turn it back on with `gh workflow enable all-network` once the fix has merged;
+`main` and publish it again, and disabling does not stop a run already going, hence the cancel. Every
+`all_result*.json` goes, one per format a copy may read, not only the two there today. Turn it back on with `gh workflow enable all-network` once the fix has merged;
 with both result files gone, that first run compares itself with `all_network.json` for the floor.
 
 `published.fetch` then gets nothing, returns `None`, and every copy derives live, which is the designed

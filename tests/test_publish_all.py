@@ -223,3 +223,47 @@ def test_the_arcs_below_the_threshold_are_written_in_the_older_format_too():
         assert "window" not in legacy[part]["edges"][0] and "taxon_id_refused" not in legacy[part]["nodes"][0]
         assert "build" not in legacy[part]["meta"] and legacy[part]["meta"]["tool"] == "grownet"
 
+
+def test_with_both_result_files_gone_the_floor_reads_all_network_json():
+    """The emergency procedure deletes both result files and leaves all_network.json; the floor then
+    compares with it rather than treating the night as a first run. Nothing tested it (found in review)."""
+    import urllib.error
+
+    class Response(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def opener(url, timeout):
+        if url.endswith(publish_all.NETWORK):
+            return Response(json.dumps({"schema": "x", "edges": [{}] * 140}).encode())
+        raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+    assert previous_arcs(opener) == 140
+
+
+def test_an_older_format_that_lost_a_field_is_refused_and_every_real_one_writes():
+    """The subset refusal and the real manifest: every format from /v3 to the current can be written, so a
+    format move that drops a field fails here, in CI, not at 03:17 after a whole derivation (found in review)."""
+    import pytest
+    manifest = json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
+    payload = {"network": {"schema": manifest["current"], "meta": {}, "nodes": [], "edges": [], "studies": []}}
+    for schema in publish_all.older_formats(manifest):
+        assert publish_all.legacy_payload(payload, schema)["network"]["schema"] == schema
+        assert schema in publish_all.LEGACY_META, f"no meta snapshot for {schema}"
+    assert manifest["current"] in publish_all.LEGACY_META, "the snapshot for the format that will be older next"
+    # no released format ever lost a field, so the refusal is shown on a manifest where one did
+    fake_root = Path(__import__("tempfile").mkdtemp())
+    (fake_root / "schema").mkdir()
+    dropped = json.loads(json.dumps(manifest))
+    dropped["formats"]["grownet.interaction_network/v3"]["edge"].append("a_field_v4_removed")
+    (fake_root / "schema" / "format_fields.json").write_text(json.dumps(dropped))
+    original = publish_all.ROOT
+    try:
+        publish_all.ROOT = fake_root
+        with pytest.raises(ValueError, match="no longer has"):
+            publish_all.legacy_payload(payload, "grownet.interaction_network/v3")
+    finally:
+        publish_all.ROOT = original
+

@@ -639,6 +639,10 @@ const GRAPH_META={absence_rule:m=>(m.absence||{}).rule,
   schema_url:()=>SCHEMA_URL,
   project_url:()=>PROJECT_URL,
   display_columns:()=>DISPLAY_COLUMNS_NOTE,
+  // whether the run was complete, its errors joined as grownet.export joins them, and the build commit
+  // (#247, #285): the page wrote "," where Python writes "; " and had no accessor for the commit
+  errors:m=>(m.errors&&m.errors.length)?m.errors.join("; "):null,
+  build_commit:m=>(m.build||{}).commit,
   studies:(m,net)=>{const ss=net.studies||[];
     const line=s=>[s.id,s.citation||"",s.url||"",s.license?`[${s.license}]`:""].filter(x=>x).join(" ").trim();
     return ss.length?ss.map(line).join("; "):null;}};

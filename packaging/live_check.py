@@ -16,7 +16,8 @@ count and no rate is asserted, only what must hold of any arc the tool writes.
 Usage: python packaging/live_check.py [OUT_DIR]
   Reads the file the all-network workflow just derived and published (published.FILE), so the
   default derivation is checked on the whole corpus without a second derivation, and derives one study in
-  gLV mode, which the daily file does not exercise. Exits 1 and names every violation.
+  gLV mode, which the daily file does not exercise. Exits 1 and names every violation, and exits 2
+  when the gLV-mode study could not be read from mGrowthDB, which says nothing about the properties.
 """
 import json
 import math
@@ -24,6 +25,8 @@ import sys
 from pathlib import Path
 
 from grownet.published import FILE, from_payload
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # publish_all, beside this file
 from grownet.schema import validate_document
 
 # strength, weight, sd and effect_over_sd are written rounded to 4 decimals; the coefficient is not rounded.
@@ -136,23 +139,30 @@ def check_published(out_dir: str) -> tuple:
         problems += network_problems(absent, "All, below the threshold") if absent.edges else []
         problems += [f"All, below the threshold: {e.source} -> {e.target} has status {e.status}"
                      for e in absent.edges if e.status != "absent"]
-    # the same network in the older format, for installed copies (#289): every field one it declares, the
-    # arcs the same in number, and valid
-    legacy_path = Path(out_dir) / "all_result.json"
-    if legacy_path.exists():
-        from grownet.schema import validate_document
+    # the same network in every older format, for installed copies (#289): each file written for a format
+    # from /v3 on, every field one that format declares, the arcs the same in number, and valid. It looped
+    # over one hard-coded name, so at the next move the /v4 copy would have gone out unchecked (found in
+    # review).
+    import publish_all
+
+    from grownet.schema import validate_document
+    manifest = json.loads((Path(__file__).resolve().parents[1] / "schema" / "format_fields.json")
+                          .read_text(encoding="utf-8"))
+    for schema in publish_all.older_formats(manifest):
+        legacy_path = Path(out_dir) / publish_all.file_for(schema)
+        if not legacy_path.exists():
+            problems.append(f"{legacy_path.name}: not written, so copies reading {schema} get nothing")
+            continue
         legacy = json.loads(legacy_path.read_text(encoding="utf-8"))
-        manifest = json.loads((Path(__file__).resolve().parents[1] / "schema" / "format_fields.json")
-                              .read_text(encoding="utf-8"))
         fields = manifest["formats"].get(legacy["network"].get("schema"), {})
         for kind, key in (("node", "nodes"), ("edge", "edges"), ("study", "studies")):
             extra = {k for item in legacy["network"].get(key, []) for k in item} - set(fields.get(kind, ()))
             if extra:
-                problems.append(f"legacy file: {key} carry fields {legacy['network'].get('schema')} does not "
-                                f"declare: {sorted(extra)}")
+                problems.append(f"{legacy_path.name}: {key} carry fields {legacy['network'].get('schema')} "
+                                f"does not declare: {sorted(extra)}")
         if len(legacy["network"].get("edges", [])) != len(net.edges):
-            problems.append("legacy file: a different number of arcs than the current one")
-        problems += [f"legacy file: invalid: {p}" for p in validate_document(legacy["network"])]
+            problems.append(f"{legacy_path.name}: a different number of arcs than the current one")
+        problems += [f"{legacy_path.name}: invalid: {p}" for p in validate_document(legacy["network"])]
     return problems, f"All: {len(net.edges)} arcs" + (f", {len(absent.edges)} below the threshold" if absent else "")
 
 
@@ -182,14 +192,21 @@ def main(out_dir: str = "out") -> int:
     """
     import os
     problems, checked, could_not = [], [], []
-    for run in (lambda: check_published(out_dir), check_glv_mode):
-        try:
-            found, what = run()
-        except Exception as e:     # noqa: BLE001 - any failure to run is reported as that, never as a violation
-            could_not.append(f"{type(e).__name__}: {e}")
-            continue
+    # the published file is local and was just written: one grownet cannot read IS a broken property (every
+    # copy's fetch would refuse it), never "could not run" (found in review)
+    try:
+        found, what = check_published(out_dir)
         problems += found
         checked.append(what)
+    except Exception as e:         # noqa: BLE001 - an unreadable published file is a violation
+        problems.append(f"All: the published file could not be read: {type(e).__name__}: {e}")
+    # the gLV-mode study is read from mGrowthDB, so a failure there is an outage or a crash: could not run
+    try:
+        found, what = check_glv_mode()
+        problems += found
+        checked.append(what)
+    except Exception as e:         # noqa: BLE001 - reported as could not run, never as a violation
+        could_not.append(f"{type(e).__name__}: {e}")
     print("live check: " + ("; ".join(checked) or "nothing checked"))
     for p in problems:
         print(f"  {p}", file=sys.stderr)

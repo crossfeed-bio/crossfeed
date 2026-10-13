@@ -424,3 +424,25 @@ def test_validate_reads_the_networks_inside_a_daily_artifact(tmp_path, capsys):
     path.write_text(_json.dumps(payload))
     assert main(["validate", str(path)]) == 1, "a broken network inside is still refused"
 
+
+
+def test_the_single_study_path_marks_a_rate_stage_failure_incomplete(monkeypatch, tmp_path):
+    """Round 2 of the review: the CLI's own rate-stage block had no test that failed without it."""
+    import json as _json
+
+    from test_gui import FakeClient
+
+    import grownet.__main__ as cli
+    import grownet.mgrowthdb as mgrowthdb
+    from grownet.adapter import UNREAD
+    monkeypatch.setattr(mgrowthdb, "MGrowthDBClient", lambda *a, **k: FakeClient())
+    real = cli._rates_of
+
+    def failing(a, client, study_ids, net, skipped, records=None):
+        rates, skips = real(a, client, study_ids, net, skipped, records)
+        return rates, skips + [("mono B: rep 1", f"{UNREAD} its series: HTTP 500")]
+    monkeypatch.setattr(cli, "_rates_of", failing)
+    out = tmp_path / "n.json"
+    code = main(["derive", "SMGDB00000001", "--live", "--report-rates", "--out", str(out)])
+    meta = _json.loads(out.read_text(encoding="utf-8"))["meta"]
+    assert code == 1 and meta["complete"] is False and any("growth rates" in e for e in meta["errors"])

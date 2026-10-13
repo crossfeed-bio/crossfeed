@@ -141,7 +141,11 @@ def test_the_viewer_writes_the_same_graphml_as_the_command_line(tmp_path):
     # and the graph-level meta the viewer was reading at the wrong depth
     meta = {"absence": {"rule": "|log2 mean| < k sd", "k": 1.0, "absent": 7},
             "hidden": {"low_quality": 2, "absent": 7},
-            "statistics": {"test": "two-sided t-test of the fitted log2 strength against no effect"}}
+            "statistics": {"test": "two-sided t-test of the fitted log2 strength against no effect"},
+            # the run's completeness, its errors and the build commit: the two writers disagreed on all
+            # three while this fixture carried none of them (found in review)
+            "complete": False, "errors": ["first failure", "second failure"],
+            "build": {"commit": "abc1234", "run": "1"}}
     net = records_to_network([record], meta)
     doc = json.loads(net.to_json())
     script = tmp_path / "run.js"

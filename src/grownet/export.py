@@ -153,7 +153,9 @@ def _data(parent, key, value):
         return
     d = ET.SubElement(parent, f"{{{_NS}}}data")
     d.set("key", key)
-    d.text = str(value)
+    # xsd:boolean is "true" or "false"; str(False) is "False", which the page wrote differently (found in
+    # review: the two writers disagreed on g_complete)
+    d.text = str(value).lower() if isinstance(value, bool) else str(value)
 
 
 # Kept SHORT and in one place, because `gui/index.html` writes the same GraphML and

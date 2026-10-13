@@ -143,3 +143,50 @@ def test_vs_other_removals_is_a_median_within_one_study_and_metric():
     assert [r["vs_other_removals"] for r in group] == [1.0 - 4.0, 2.0 - 4.0, 4.0 - 2.0, 10.0 - 2.0]
     assert all(r["vs_other_removals"] is None for r in [*other_study, *other_metric]), "groups of two"
 
+
+
+def test_a_merged_arc_keeps_no_one_comparison_s_bound_capacity_or_fit():
+    """Round 2 of the review: after the first fix the merge still spread `arcs[0]` for every field it did
+    not name, so a quantified genus arc carried one obligate member's bound and rule and one member's
+    coefficient and fit. Every field describing one comparison is now kept only where all agree; the
+    coefficient is the members' median, as the strength is."""
+    from grownet.derive import COMPARISON_FIELDS, _merged
+    first = {"source": "a", "target": "b", "strength": None, "outcome": "obligate", "study_id": "S1",
+             "strength_bound": 3.47, "bound_rule": "no growth: at most 1.5 times its start",
+             "target_capacity": 6.3e8, "coefficient": -4.35e-10, "coefficient_unit": "1/(h x Cells/mL)",
+             "fit_r2": 0.983, "rate_mismatch_to_zero": -0.15}
+    second = {**first, "strength": 4.4, "outcome": "quantified", "strength_bound": None, "bound_rule": "",
+              "target_capacity": 5.0e8, "coefficient": -5.57e-10, "fit_r2": 0.91, "rate_mismatch_to_zero": -0.2}
+    merged = _merged([first, second])
+    for key in ("strength_bound", "target_capacity", "fit_r2", "rate_mismatch_to_zero"):
+        assert merged[key] is None, key
+    assert merged["bound_rule"] == "" and merged["coefficient_unit"] == "1/(h x Cells/mL)"
+    assert abs(merged["coefficient"] - (-4.35e-10 + -5.57e-10) / 2) < 1e-20, "the members' median"
+    assert {"strength_bound", "coefficient", "fit_r2", "se_rate_selection"} <= set(COMPARISON_FIELDS)
+
+
+def test_a_merged_arc_s_cell_is_labelled_as_a_merged_arc_not_an_old_network():
+    """The merge fix emptied a merged arc's two rates, which sent its gLV cell to the fallback labelled "a
+    network derived before the two absolute rates were recorded ... derive again", false of a merged arc."""
+    from grownet.matrix import _per_arc
+    from grownet.model import Edge
+    base = dict(source="a", target="b", effect="inhibition", strength=-0.5, partner_abundance=2e8,
+                merged_arcs=2)
+    assert _per_arc(Edge(**base, coefficient=-4.96e-10), 0.4) == (-4.96e-10, "rates")
+    value, how = _per_arc(Edge(**base), 0.4)
+    assert how == "merged" and abs(value - 0.4 * (2 ** -0.5 - 1) / 2e8) < 1e-20
+    assert _per_arc(Edge(**{**base, "merged_arcs": None}), 0.4)[1] == "ratio", "an unmerged old arc"
+
+
+def test_arcs_from_an_organism_to_itself_are_counted_as_arcs():
+    """Round 2: the count was of self PAIRS left in the matrix, so a genus with arcs of both signs to itself
+    (dropped as a conflict) read as 1 where the file held 5; and the conflict list named the self pair as a
+    0 cell, which it has none of."""
+    from grownet import matrix
+    net = records_to_network([
+        {"source": "g", "target": "g", "effect": "inhibition", "strength": -1.0, "study_id": "S1"},
+        {"source": "g", "target": "g", "effect": "facilitation", "strength": 1.0, "study_id": "S1"},
+        {"source": "h", "target": "h", "effect": "inhibition", "strength": -0.5, "study_id": "S1"}])
+    assert matrix.counts(net)["within_one_organism"] == 3
+    about = matrix.matrix_about(net)
+    assert "3 arc(s) are from one organism to itself" in about and "DISAGREE IN SIGN" not in about

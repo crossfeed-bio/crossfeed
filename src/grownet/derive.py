@@ -28,7 +28,7 @@ from statistics import mean, median
 from . import media as media_rules
 from . import rates
 from . import selection as selecting
-from .adapter import culture_trace_replicates, replicates_for_experiment
+from .adapter import UNREAD, culture_trace_replicates, replicates_for_experiment
 from .growth import (
     SPIKE_FACTOR,
     GrowthCurve,
@@ -780,7 +780,10 @@ def growth_rates(client, study_ids, wanted=None, rate_method: str = None, window
             study = client.get_study(study_id)
             exps = [client.get_experiment(e["id"]) for e in study.get("experiments", [])]
         except MGrowthDBError as e:
-            skipped.append((f"growth rates of {study_id}", f"could not be read: {e}"))
+            # worded with UNREAD, so `adapter.unread` sees it and the run is marked incomplete: "could not be
+            # read" is not "could not read", and a study unreadable during the rates left the run complete
+            # with exit 0 (found in review)
+            skipped.append((f"growth rates of {study_id}", f"{UNREAD} it: {e}"))
             continue
         found, skips = monoculture_rates(client, exps, wanted, rate_method, window, spike_factor,
                                          capacity_max_fall=capacity_max_fall)
@@ -888,6 +891,14 @@ def merge_rates(per_study) -> dict:
                     "capacity_medium_spellings": list(chosen["labels"]) if chosen else [],
                     "capacity_media": [chosen["label"]] if chosen else [],
                     "capacity_other_media": [other["label"] for _key, other in order[1:]]}
+        # a rate from a culture-level count says so where every consumer already reads the capacity's
+        # provenance: growth_rates.csv's capacity_source, the gLV payload's carrying_capacity_source and
+        # the report, without a new field in the released grownet.glv/v1 (found in review)
+        culture = {k: n for k, n in (at.get("sources") or {}).items() if k != "per-strain"}
+        if culture and out[nid]["capacity"] is None:
+            out[nid]["capacity_source"] = ("none: the rate is from a " + ", ".join(
+                f"{k} count ({n} replicate(s))" for k, n in sorted(culture.items()))
+                + ", which never gives a capacity")
     return out
 
 
@@ -1617,6 +1628,16 @@ def select_edges(records, include_low_quality: bool = False, include_absent: boo
     return edges, hidden
 
 
+# The fields that describe one comparison rather than a pair: a merged arc keeps them only where all its arcs
+# agree (`_merged`). Window, metric values and vs_other_removals are handled beside them.
+COMPARISON_FIELDS = (
+    "strength_bound", "bound_rule", "target_capacity", "target_capacity_unit", "target_capacity_n",
+    "coefficient", "coefficient_unit", "coefficient_sd", "coefficient_n", "coefficient_sd_from_rate_stage",
+    "fit_r2", "fit_condition", "fit_null_r2", "fit_window_share", "rate_mismatch_to_zero",
+    "se_replicates", "se_rate_stage", "se_rate_selection", "rate_selection_spread", "rate_stage_method",
+    "rate_stage_n")
+
+
 def _merged(arcs: list) -> dict:
     """One arc for several arcs of one source, target and sign (register item 14, Karoline 2026-09-27).
 
@@ -1653,7 +1674,17 @@ def _merged(arcs: list) -> dict:
         values = {repr(a.get(key)) for a in arcs}
         return arcs[0].get(key, empty) if len(values) == 1 else empty
 
-    return {**arcs[0],
+    # Every field that describes ONE comparison keeps its value only where all merged arcs agree: a merged
+    # arc spread `arcs[0]`, so a genus arc that was the median of five carried one obligate member's bound
+    # and rule beside a quantified median strength, and one member's coefficient and fit (found in review).
+    one_comparison = {key: agreed(key, "" if isinstance(arcs[0].get(key), str) else None)
+                      for key in COMPARISON_FIELDS if key in arcs[0]}
+    # the coefficient of a merged arc is the median of its members', as its strength is the median of
+    # theirs, where every member has one in one unit; the gLV package's cell for the arc is that median
+    coefficients = [a.get("coefficient") for a in arcs]
+    if all(c is not None for c in coefficients) and len({a.get("coefficient_unit") for a in arcs}) == 1:
+        one_comparison["coefficient"] = median(coefficients)
+    return {**arcs[0], **one_comparison,
             # what was measured and over how long, only where every merged arc agrees; and never one
             # removal's difference from its group, which a merged arc is not
             "window": agreed("window", None), "window_unit": agreed("window_unit", ""),

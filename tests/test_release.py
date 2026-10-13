@@ -474,6 +474,10 @@ def test_an_empty_release_section_is_refused(tmp_path):
     changelog.write_text(changelog.read_text().replace("### Added\n- the first release\n\n", ""))
     problems, _ = check("v0.1.0", repo, today=FIXTURE_DAY)
     assert any("is empty" in p for p in problems), problems
+    # headings over nothing are empty too
+    headings_only = "## [0.1.0] (2026-10-01)\n\n### Added\n\n### Fixed\n"
+    changelog.write_text(changelog.read_text().replace("## [0.1.0] (2026-10-01)\n", headings_only))
+    assert any("is empty" in p for p in check("v0.1.0", repo, today=FIXTURE_DAY)[0])
 
 
 def test_the_help_page_s_release_date_must_be_the_changelog_s(tmp_path):

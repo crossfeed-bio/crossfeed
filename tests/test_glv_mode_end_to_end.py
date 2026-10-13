@@ -410,3 +410,11 @@ def test_the_command_line_takes_the_rate_from_every_fitted_row_too(monkeypatch, 
         got[bool(flag)] = float(line.split(",")[1])
     assert got[False] == got[True] == 0.4, got
 
+
+
+def test_glv_mode_with_genera_merged_still_reports_the_fitted_rates():
+    """Round 2 of the review: the fitted rates are keyed by strain and a genus-merged network by genus, so
+    filtering on `nid in net.nodes` kept none and the report said no growth rate could be computed."""
+    r = run_query(TimeCourseClient(), [A, B], {**glv_mode({}), "merge_genera": True})
+    organisms = (r["network"].meta.get("growth_rates") or {}).get("organisms", {})
+    assert organisms and set(organisms) <= set(r["network"].nodes), organisms

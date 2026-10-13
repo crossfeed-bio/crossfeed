@@ -108,6 +108,13 @@ content.
   the CSV in R with its names intact; GraphML carries `complete`, `errors` and the build commit.
 - **One organism, one name**: the arcs below the threshold and gLV mode's fitted rates now carry the current
   name, as the network does (#24).
+- **A merged arc keeps no single comparison's bound, capacity, coefficient or fit**: every such field is kept
+  only where all merged arcs agree, a merged arc's coefficient is the median of its members', and in a gLV
+  package its cell is labeled as a merged arc's, not as one from a network saved before the rates were
+  recorded. gLV mode with `--merge-genera` reports the fitted rates on the genus nodes, where it said none
+  could be computed, and arcs from an organism to itself are counted as arcs.
+- **A rate from a culture-level count says so** in `capacity_source`, so `growth_rates.csv`, the gLV payload
+  and the report name it, without a new field.
 - **The daily artifact's `/v3` copy carries only meta keys 0.4.0 declares**, so an installed 0.4.0 does not
   call it suspect; a copy is written for EVERY older format from `/v3` on, read from the manifest, so the
   next format move strands no installed copy either.

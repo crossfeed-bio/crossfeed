@@ -110,6 +110,10 @@ def test_the_workflow_runs_it_after_publishing_with_its_own_issue():
     # description or a failed close step after a successful publish (found in review)
     assert "if: failure() && steps.publish.outcome != 'success'" in wf
     assert "OUTCOME: ${{ steps.live.outputs.outcome }}" in wf
+    # a failed description has its own issue, and does not stop the live check (found in review)
+    assert "if: always() && steps.describe.outcome == 'failure'" in wf
+    live = wf[wf.index("id: live"):wf.index("run: python packaging/live_check.py out")]
+    assert "if: always() && steps.publish.outcome == 'success'" in live
     assert "if: always() && steps.publish.outcome == 'success'" in wf
 
 
@@ -130,13 +134,19 @@ def test_a_check_that_could_not_run_is_not_reported_as_a_broken_property(tmp_pat
     """Found in review: an mGrowthDB outage made the check raise, exit 1, and open an issue saying arcs broke
     a property while naming none. It now exits 2, says it could not run, and tells the workflow."""
     import live_check
-    monkeypatch.setattr(live_check, "check_published", lambda out: (_ for _ in ()).throw(OSError("no file")))
+    monkeypatch.setattr(live_check, "check_published", lambda out: ([], "All"))
     monkeypatch.setattr(live_check, "check_glv_mode",
                         lambda: (_ for _ in ()).throw(RuntimeError("mGrowthDB could not be read")))
     output = tmp_path / "gh_output"
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
     assert live_check.main(str(tmp_path)) == 2
     assert "outcome=error" in output.read_text() and "could not run" in capsys.readouterr().out
+    # but a published file grownet cannot read is a broken property, not a check that could not run: it
+    # is local and was just written, and every copy's fetch would refuse it (found in review)
+    monkeypatch.setattr(live_check, "check_published",
+                        lambda out: (_ for _ in ()).throw(TypeError("Edge.__init__() missing 'source'")))
+    output.write_text("")
+    assert live_check.main(str(tmp_path)) == 1 and "outcome=violation" in output.read_text()
     # and a real violation is still a violation
     monkeypatch.setattr(live_check, "check_published", lambda out: (["All: weight 0.5 is not |strength|"], "All"))
     monkeypatch.setattr(live_check, "check_glv_mode", lambda: ([], "gLV"))

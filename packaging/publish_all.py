@@ -50,7 +50,14 @@ def older_formats(manifest: dict | None = None) -> list:
 LEGACY_META = {"grownet.interaction_network/v3": {
     "tool", "tool_version", "derived_on", "derived_at", "source_db", "provisional", "absence", "statistics",
     "query", "species", "studies", "study_id", "settings", "selection", "no_growth", "filters", "hidden",
-    "merge", "genus", "data", "growth_rates"}}
+    "merge", "genus", "data", "growth_rates"},
+    # this version's, for the copies that will read /v4 once the format moves on (found in review: only /v3
+    # was listed, so the next move would have left /v4 copies noting the newer meta keys as suspect)
+    "grownet.interaction_network/v4": {
+    "tool", "tool_version", "project", "settings_not_used", "derived_on", "derived_at", "source_db",
+    "provisional", "absence", "statistics", "query", "species", "studies", "errors", "complete", "study_id",
+    "settings", "build", "slice", "selection", "no_growth", "filters", "hidden", "merge", "genus", "data",
+    "growth_rates"}}
 
 
 def legacy_payload(payload: dict, legacy_schema: str = LEGACY["schema"]) -> dict:
@@ -164,7 +171,7 @@ def release_notes(result: dict) -> str:
     # the daily file is built from main, ahead of the version it names: say which commit, so "by grownet
     # 0.4.0" is not read as the released 0.4.0, which refuses the current file (found in review)
     commit = (meta.get("build") or {}).get("commit", "")
-    built = f" as of commit {commit[:7]} (unreleased work since that version)" if commit else ""
+    built = f" as of commit {commit[:7]} of main" if commit else ""
     return f"""The All network of mGrowthDB, derived with grownet's default settings by \
 `.github/workflows/all-network.yml` and replaced by each run. Every run rewrites this description, so it \
 describes the files below as they are now.
