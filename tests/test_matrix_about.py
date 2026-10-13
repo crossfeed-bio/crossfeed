@@ -94,3 +94,8 @@ def test_an_incomplete_run_says_so_beside_the_grid_and_in_graphml():
     assert data["g_complete"] == "false" and "growth rates" in data["g_errors"]
     net.meta.update({"complete": True, "errors": []})
     assert "INCOMPLETE" not in matrix.matrix_about(net)
+
+
+def test_the_sidecar_gives_the_r_line_that_keeps_the_names():
+    about = matrix.matrix_about(_net([_arc("a", "b", 1.5)]))
+    assert "read.csv(file, row.names = 1, check.names = FALSE)" in about

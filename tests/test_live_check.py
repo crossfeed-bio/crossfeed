@@ -199,3 +199,41 @@ def test_a_glv_check_that_found_no_coefficient_says_so(monkeypatch):
     monkeypatch.setattr(gui, "run_query", lambda *a, **k: {"network": _net([_quantified()]), "errors": []})
     problems, _ = live_check.check_glv_mode("S1")
     assert any("ran on nothing" in p for p in problems)
+
+
+def test_an_invalid_legacy_file_and_a_present_arc_among_the_absent_ones_are_caught(tmp_path, monkeypatch):
+    """Round 2 of the review: deleting the legacy-validity check, or the absent-status check, survived."""
+    import json
+
+    import live_check
+    import publish_all
+    from test_gui import FakeClient
+
+    from grownet.gui import run_query
+    monkeypatch.setattr(publish_all, "run_query", lambda *a, **k: run_query(
+        FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
+    out = tmp_path / "out"
+    assert publish_all.main(str(out), None, previous=lambda: None) == 0
+    legacy_path = out / "all_result.json"
+    legacy = json.loads(legacy_path.read_text())
+    legacy["network"]["edges"][0]["effect"] = "not an effect"             # invalid, same arc count
+    legacy_path.write_text(json.dumps(legacy))
+    assert any("all_result.json: invalid" in p for p in live_check.check_published(str(out))[0])
+    current_path = out / "all_result.v4.json"
+    current = json.loads(current_path.read_text())
+    edge = dict(current["network"]["edges"][0], status="present")
+    current["absent"] = {**current["network"], "edges": [edge]}
+    current_path.write_text(json.dumps(current))
+    assert any("below the threshold" in p and "status present" in p
+               for p in live_check.check_published(str(out))[0])
+
+
+def test_mgrowthdb_errors_in_the_glv_study_mean_could_not_run(tmp_path, monkeypatch):
+    """Round 2: ignoring `result["errors"]` of the gLV-mode study survived."""
+    import live_check
+
+    from grownet import gui
+    monkeypatch.setattr(gui, "run_query", lambda *a, **k: {"network": _net([_quantified()]),
+                                                            "errors": ["S2: HTTP 503"]})
+    monkeypatch.setattr(live_check, "check_published", lambda out: ([], "All"))
+    assert live_check.main(str(tmp_path)) == 2

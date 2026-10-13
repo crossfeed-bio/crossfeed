@@ -1228,3 +1228,28 @@ def test_a_study_unreadable_while_reading_rates_marks_the_run_incomplete(monkeyp
 def gui_module():
     from grownet import gui
     return gui
+
+
+def test_the_arcs_below_the_threshold_carry_the_current_names(monkeypatch):
+    """Round 2 of the review: the absent network was not renamed to the current names, so one organism had
+    two names in one report (#24); nothing tested it."""
+    from grownet import gui
+    real = gui._current_names
+
+    def marking(net, current):
+        real(net, current)
+        for nid, node in list(net.nodes.items()):
+            net.nodes[nid] = __import__("dataclasses").replace(node, name=f"{node.name} (current)")
+    monkeypatch.setattr(gui, "_current_names", marking)
+    r = run_query(FakeClient(), [A, B], {})
+    assert r["absent"] is not None and r["absent"].nodes
+    assert all(n.name.endswith("(current)") for n in r["absent"].nodes.values())
+
+
+def test_the_report_reads_errors_from_a_result_saved_before_247():
+    """A result from before #247 carries its errors only in the result; the report still prints them."""
+    from grownet.report import report_text
+    r = run_query(FakeClient(), [A, B], {})
+    r["network"].meta.pop("errors", None)
+    r["errors"] = ["S9: HTTP 404"]
+    assert "error: S9: HTTP 404" in report_text(r)

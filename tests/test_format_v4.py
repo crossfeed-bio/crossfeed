@@ -190,3 +190,42 @@ def test_arcs_from_an_organism_to_itself_are_counted_as_arcs():
     assert matrix.counts(net)["within_one_organism"] == 3
     about = matrix.matrix_about(net)
     assert "3 arc(s) are from one organism to itself" in about and "DISAGREE IN SIGN" not in about
+
+
+def test_the_integrated_form_carries_a_refused_taxon_id_too(monkeypatch):
+    """Round 2 of the review: the refusal was tested through `derive._record` only, and the integrated form
+    builds its own records, so blanking it there survived."""
+    import json
+
+    import test_glv_mode_end_to_end as e2e
+    from test_glv_mode_end_to_end import A, B, TimeCourseClient
+
+    from grownet.gui import glv_mode, run_query
+    # one NCBI id for two strains of one study, in the experiments the client serves (they are built at
+    # import, so patching TAXA afterwards changed nothing: the first version of this test did that)
+    shared = json.loads(json.dumps(e2e.EXPERIMENTS))
+    for exp in shared:
+        for strain in exp["communityStrains"]:
+            strain["NCBId"] = e2e.TAXA[A]
+
+    class SharedId(TimeCourseClient):
+        def study_experiments(self, study_id):
+            return shared
+
+        def get_experiment(self, experiment_id):
+            return next(e for e in shared if e["id"] == experiment_id)
+    r = run_query(SharedId(), [A, B], glv_mode({}))
+    # BOTH strains share the id, so both nodes, the arc's source and its target, carry the refusal
+    nodes = list(r["network"].nodes.values())
+    assert len(nodes) == 2 and all("not a join key" in n.taxon_id_refused for n in nodes), nodes
+
+
+def test_a_merged_arc_drops_unit_and_value_fields_its_members_disagree_on():
+    """Round 2: the fixture's members agreed on window_unit, metric_unit and metric_without, so only the
+    "kept" branch was tested."""
+    from grownet.derive import _merged
+    a = {"source": "a", "target": "b", "strength": 1.0, "study_id": "S1", "window_unit": "h",
+         "metric_unit": "Cells/mL x h", "metric_without": 1.0}
+    b = {**a, "window_unit": "min", "metric_unit": "CFUs/mL x h", "metric_without": 2.0}
+    merged = _merged([a, b])
+    assert (merged["window_unit"], merged["metric_unit"], merged["metric_without"]) == ("", "", None)

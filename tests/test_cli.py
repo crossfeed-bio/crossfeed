@@ -446,3 +446,18 @@ def test_the_single_study_path_marks_a_rate_stage_failure_incomplete(monkeypatch
     code = main(["derive", "SMGDB00000001", "--live", "--report-rates", "--out", str(out)])
     meta = _json.loads(out.read_text(encoding="utf-8"))["meta"]
     assert code == 1 and meta["complete"] is False and any("growth rates" in e for e in meta["errors"])
+
+
+def test_validate_reads_the_absent_network_of_an_artifact_too(tmp_path, capsys):
+    """Round 2 of the review: leaving out `absent`, or keeping the first code instead of the worst, survived."""
+    import json as _json
+
+    from test_gui import FakeClient
+
+    from grownet.gui import run_query
+    from grownet.published import to_payload
+    payload = to_payload(run_query(FakeClient(), [], {}, all_studies=True, published=False))
+    payload["absent"] = {**payload["network"], "edges": "not a list"}
+    path = tmp_path / "all_result.v4.json"
+    path.write_text(_json.dumps(payload))
+    assert main(["validate", str(path)]) == 1, "a broken absent network is refused even after a good one"

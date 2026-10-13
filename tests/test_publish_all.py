@@ -267,3 +267,19 @@ def test_an_older_format_that_lost_a_field_is_refused_and_every_real_one_writes(
     finally:
         publish_all.ROOT = original
 
+
+
+def test_the_legacy_meta_keys_are_0_4_0_s_own():
+    """Round 2 of the review: the test compared the legacy file with LEGACY_META itself, so a key added to
+    the constant survived. 0.4.0's META_PROPERTIES, pinned (git show v0.4.0:src/grownet/schema.py)."""
+    assert publish_all.LEGACY_META["grownet.interaction_network/v3"] == {
+        "absence", "data", "derived_at", "derived_on", "filters", "genus", "growth_rates", "hidden", "merge",
+        "no_growth", "provisional", "query", "selection", "settings", "source_db", "species", "statistics",
+        "studies", "study_id", "tool", "tool_version"}
+
+
+def test_the_release_notes_name_the_commit_and_claim_nothing_more():
+    result = _result()
+    result["network"].meta["build"] = {"commit": "abc1234def", "run": "9"}
+    notes = release_notes(result)
+    assert "as of commit abc1234 of main" in notes and "unreleased" not in notes
