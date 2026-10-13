@@ -1389,7 +1389,7 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    (Karoline, 2026-10-12, on #196: "Extend to 36 hours"), because GitHub starts the daily run late: the
    gap between two artifacts reached 27h20m. The reason is structural, as Craig's agent put it on #279:
    the gap between runs of a daily cron IS one day plus a small positive scheduling delay, so the gaps
-   centre on 24 hours (ten of twelve within forty minutes of it) and a window equal to the cron period is
+   center on 24 hours (ten of twelve within forty minutes of it) and a window equal to the cron period is
    a coin flip every night, whatever the count (7 of 12 over on `created_at`, 6 on `run_started_at`).
    Still one run a day, so the load on mGrowthDB is unchanged. A bound fitted to twelve nights is safe
    here only because both sides fail visibly: past it, every copy derives live; inside it, the file says
