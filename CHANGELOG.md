@@ -42,6 +42,13 @@ content.
 
 ### Fixed
 
+- **The page's report says what its search read and reused from mGrowthDB**, as the command line's has
+  since #182: it printed no `reads:` line at all. The counts are this search's own. The page keeps one
+  connection for an hour, so the command line's way of reading the totals would have reported every
+  earlier search as this one's. When another search ran at the same time, the report says the two cannot
+  be told apart rather than printing a mixed count. And it counts the responses the client answered
+  from memory, which nothing counted: run live, a second search over the same studies said "0 from
+  mGrowthDB, 0 reused" about a network built from 429 responses (#187).
 - **A growth curve whose steepest window rises can no longer return a negative "maximum growth rate"**
   (Karoline, 2026-10-12, #229). The refit over growthrates' first-to-last span can fall below zero when two
   rises are separated by a deep fall, and a non-positive rate read downstream as no growth. Such a curve
