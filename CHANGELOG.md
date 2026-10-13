@@ -17,7 +17,8 @@ content.
     integrated form does not read;
   - cells "from a comparison where one side did not grow" are named only where they are in a matrix;
   - `capacity_curves_left_out` writes a count of 0 as `0`, not as a blank that R reads as `NA`;
-  - a nonzero value below 5e-5 is no longer printed as `0`, which means no interaction;
+  - a nonzero value below 5e-5 is no longer printed as `0`, which means no interaction; it is written
+    in scientific notation instead (`3e-05`), which `read.csv` reads, and every other number prints as before;
   - in R, the coverage line counts organisms outside every matrix (it read "8 of 8" for an 11-organism
     network), `summary()` gains `network_organisms`, and `glv_write()` writes the three rate columns it
     was missing and the matrices at four significant digits, as the download does.
