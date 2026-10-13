@@ -1135,8 +1135,11 @@ and the README: that is the one mistake this style can make.
   switch (`button.switch` with a track and a knob in `brand.CSS`), green when on and white when off, with
   `aria-pressed` for anyone who cannot see it. It stays a submit button, so the page keeps its no-JavaScript
   rule: the server re-renders the switch the other way.
-- `matrix.media(net)` feeds the gLV README, the payload's caveats and the R printout: a package built from
-  several media says so in capitals, because a simulation is of one environment. The All network spans six.
+- `matrix.media(net)` is every arc's media (the payload's `caveats.media`); the gLV README and the R printout
+  warn from `cell_media`, the media of the cells the matrices hold, and name the media of arcs in no cell
+  apart, because a simulation is of one environment and an arc in no cell is not in it. A block's `media`
+  is its cells'; its `arc_media` (the arcs between its organisms, or the network's) is what
+  `steady._fits` matches a chemostat against, so a matrix holding no cell still has an environment.
 
 ## Gotchas
 

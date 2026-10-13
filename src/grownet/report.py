@@ -27,6 +27,10 @@ def _value(key: str, value) -> str:
         return "on"
     if value is False:
         return "off"
+    if isinstance(value, str) and "\n" in value:
+        # a multi-line setting (the second box's one entry per line) on one report line: its second entry
+        # stood alone at the start of the next line (found in review)
+        return ", ".join(line.strip() for line in value.splitlines() if line.strip()) or "none"
     return "none" if value == "" else str(value)
 
 

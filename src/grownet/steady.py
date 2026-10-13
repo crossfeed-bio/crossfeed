@@ -308,10 +308,17 @@ def predicted(block: dict, rates: dict, dilution: float, organisms: list = None)
     return {"values": values, "notes": notes, "why_not": "", "without_interactions": without}
 
 
+def _environment(block: dict) -> list:
+    """The media a matrix stands for: those of the arcs between its organisms (`arc_media`), which a matrix
+    holding no cell has too, where `media` names only the cells' (found in review); `media` for a block
+    built before `arc_media` existed."""
+    return [name for name in (block.get("arc_media") or block.get("media") or []) if name]
+
+
 def _fits(block: dict, unit: str, medium: str, organisms: set) -> bool:
     """Whether this matrix can be compared with a run in `unit` and `medium`: same abundance unit, at
     least one organism in common, and the same medium where the package records one at all."""
-    named = [name for name in block.get("media") or [] if name]
+    named = _environment(block)
     return bool(block["abundance_unit"] == unit and organisms.intersection(block["organisms"])
                 and (not named or any(same_medium(name, medium) for name in named)))
 
@@ -345,8 +352,7 @@ def check(coefficients: dict, rates: dict, seen: list) -> list:
                       if _fits(b, entry["unit"], entry["medium"], here)), None)
         if block is None:
             units = sorted({b["abundance_unit"] for b in coefficients["matrices"]})
-            media_names = sorted({name for b in coefficients["matrices"]
-                                  for name in b.get("media") or [] if name})
+            media_names = sorted({name for b in coefficients["matrices"] for name in _environment(b)})
             theirs = ", ".join(media_names) or "an unrecorded medium"
             if not any(here.intersection(b["organisms"]) for b in coefficients["matrices"]):
                 result["why_not"] = ("no organism of this run is in the package, so there is nothing to "
@@ -377,7 +383,7 @@ def check(coefficients: dict, rates: dict, seen: list) -> list:
         # across one says which entry of the table made that happen (Karoline, 2026-10-07)
         from .media import key_from_label_with_aliases
         fired = list(key_from_label_with_aliases(entry["medium"])[1])
-        for name in block.get("media") or []:
+        for name in _environment(block):
             for pair in key_from_label_with_aliases(name)[1]:
                 if pair not in fired:
                     fired.append(pair)
@@ -407,7 +413,7 @@ def check(coefficients: dict, rates: dict, seen: list) -> list:
             result["rows"].append(row)
         result["used"] = True
         result["left_out"] = [name for name in entry["organisms"] if name not in shared]
-        if not [name for name in block.get("media") or [] if name]:
+        if not _environment(block):
             result["note"] = ("the package records no medium, so this comparison does not know whether "
                               "the two were measured in the same environment")
         out.append(result)

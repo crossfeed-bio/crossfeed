@@ -126,8 +126,11 @@ content.
   left for an unusable self-limitation counts only the cells, media and sign conflicts it still holds,
   and that organism's effects are in no matrix, not also left at 0. A cell names only the media of the
   arcs in it; the lists of cells from the ratio, from merged arcs or from a comparison where one side did
-  not grow hold only cells a matrix holds; and the warning about several media (README and R, from the
-  payload's new `cell_media`) is about the media of the cells, naming those of arcs in no cell apart.
+  not grow hold only cells a matrix holds, each labeled only by the arcs in it; and the warning about
+  several media (README and R, from the payload's new `cell_media`) is about the media of the effects
+  between organisms, naming those of arcs in no cell apart, and a package whose matrices hold no effect
+  says so. The steady-state check still matches a matrix by the media of the arcs between its organisms.
+  The report prints several entries of the second box on its one line.
   R reads `pairs_left_out`, `across_units` and `arcs_left_out` with their actors and prints them.
 - **A merged arc keeps no single comparison's bound, capacity, coefficient or fit**: every such field is kept
   only where all merged arcs agree, a merged arc's coefficient is the median of its members', and in a gLV

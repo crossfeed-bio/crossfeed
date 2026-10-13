@@ -68,7 +68,10 @@ as_grownet_glv <- function(payload) {
                  across_units = effects_frame(caveats$across_units),
                  arcs_left_out = effects_frame(caveats$arcs_left_out),
                  media = vapply(caveats$media, as.character, character(1)),
-                 cell_media = vapply(caveats$cell_media, as.character, character(1)),
+                 # NULL in a package from before it was written, which names only every arc's media; empty
+                 # in a package whose matrices hold no effect between organisms (found in review)
+                 cell_media = if (is.null(caveats$cell_media)) NULL else
+                     vapply(caveats$cell_media, as.character, character(1)),
                  dropout_arcs = as_number(caveats$dropout_arcs),
                  without_a_rate = vapply(caveats$without_a_rate, as.character, character(1)),
                  abundance_units = vapply(caveats$abundance_units, as.character, character(1)),
@@ -315,13 +318,22 @@ print.grownet_glv <- function(x, ...) {
     # the simulation, and a matrix of one medium was warned about the media of arcs in no matrix (found in
     # review). A package from before names only every arc's media.
     cells_in <- x$caveats$cell_media
-    if (length(cells_in) > 1) {
-        cat(sprintf(paste0("   * these cells come from %d media, and a simulation is of one environment:\n",
-                           "       %s\n       grownet's second box (media, experiments or studies) keeps ",
-                           "one.\n"),
-                    length(cells_in), paste(cells_in, collapse = ", ")))
-    } else if (length(cells_in) == 1) {
-        cat(sprintf("   * every cell was measured in one medium: %s\n", cells_in))
+    if (!is.null(cells_in) && !length(cells_in) && length(x$caveats$media)) {
+        cat(sprintf("   * no effect between organisms is in the matrices; the network's arcs, in no cell, come from %s\n",
+                    paste(x$caveats$media, collapse = ", ")))
+    } else if (length(cells_in)) {
+        if (length(cells_in) > 1) {
+            cat(sprintf(paste0("   * these effects come from %d media, and a simulation is of one environment:\n",
+                               "       %s\n       grownet's second box (media, experiments or studies) keeps ",
+                               "one.\n"),
+                        length(cells_in), paste(cells_in, collapse = ", ")))
+        } else {
+            cat(sprintf("   * every effect between organisms was measured in one medium: %s\n", cells_in))
+        }
+        others <- setdiff(x$caveats$media, cells_in)
+        if (length(others)) {
+            cat(sprintf("     the network's other arcs, in no cell, come from %s\n", paste(others, collapse = ", ")))
+        }
     } else if (length(x$caveats$media) > 1) {
         cat(sprintf(paste0("   * these arcs come from %d media, and a simulation is of one environment:\n",
                            "       %s\n       grownet's second box (media, experiments or studies) keeps ",

@@ -238,9 +238,9 @@ def test_arcs_beside_a_cell_of_0_are_not_said_to_be_beside_a_median():
     assert got["arcs_left_out"] == []
     ((affected, actor, why),) = got["pairs_left_out"]
     assert (affected, actor) == ("A", "B")
-    assert why == ("B's abundance beside A is in CFUs/mL, and this matrix is in Cells/mL; left out rather than "
-                   "converted; 1 arc(s) of this pair measure the actor in Cells/mL and the rest in CFUs/mL; "
-                   "abundances are never converted, so they are left out")
+    assert why == ("B's abundance beside A is in CFUs/mL, not in Cells/mL, the unit of the matrix they were placed "
+                   "in; left out rather than converted; 1 arc(s) of this pair measure the actor in Cells/mL and "
+                   "the rest in CFUs/mL; abundances are never converted, so they are left out")
     net = records_to_network([dict(_arc("b", "a", 0.6, 0.4), study_id="S1"),
                               dict(_arc("b", "a", -0.1, 0.4), strength=None, effect="inhibition", study_id="S2"),
                               dict(_arc("b", "a", 0.7, 0.4, unit="CFUs/mL"), study_id="S3")])
@@ -287,7 +287,7 @@ def test_a_matrix_counts_only_the_cells_and_media_it_still_holds():
     got = matrix.coefficients(net, rates)
     (block,) = got["matrices"]
     assert block["organisms"] == ["B", "C"] and block["cells"] == 1 and block["pooled_media"] == []
-    assert block["media"] == ["M3"]
+    assert block["media"] == ["M3"] and block["arc_media"] == ["M3"]
     assert "2 organism(s), 1 fitted cell(s), every cell in 1/(h x Cells/mL), measured in M3\n" in \
         matrix.readme_from(got, net, rates)
     assert matrix.glv_payload(net, rates)["matrices"][0]["pooled_media"] == []
@@ -356,8 +356,8 @@ def test_an_effect_of_an_organism_that_left_is_not_also_left_at_0():
     assert "A" in [name for name, _ in got["left_out"]]
     assert got["pairs_left_out"] == []
     assert dict(((a, b), w) for a, b, w in got["across_units"])[("A", "C")] == (
-        "A could not be fitted, so this effect is in no matrix; C's abundance beside A is in CFUs/mL, and this "
-        "matrix is in Cells/mL; left out rather than converted")
+        "A could not be fitted, so this effect is in no matrix; C's abundance beside A is in CFUs/mL, not in "
+        "Cells/mL, the unit of the matrix they were placed in; left out rather than converted")
 
 
 def test_a_cell_pools_only_the_media_of_the_arcs_in_it():
@@ -407,7 +407,41 @@ def test_a_cell_left_at_0_is_not_described_as_a_cell():
     net = records_to_network([_arc("a", "b", 0.3, 0.2), old, _arc("c", "b", 0.3, 0.2, unit="CFUs/mL")])
     got = matrix.coefficients(net, rates)
     assert ("A", "B") in [row[:2] for row in got["across_units"]] and got["from_the_ratio"] == []
+    # the cells the matrices do hold all come from two rates (round 20)
+    assert got["from_absolute_rates"] is True
     assert "CELLS TAKEN FROM THE LOG2 RATIO" not in matrix.readme_from(got, net, rates)
+    # a merged arc whose cell is left at 0 for its unit is not a cell from merged arcs (round 20)
+    merged = {**_arc("a", "b", 0.3, 0.2, unit="CFUs/mL"), "strength": -0.5, "effect": "inhibition", "sd": 0.1,
+              "merged_arcs": 2, "metric_with": None, "metric_without": None}
+    rates = {"a": _rate("A", 0.4, 1e9), "b": _rate("B", 0.4, 1e9)}
+    got = matrix.coefficients(records_to_network([merged]), rates)
+    assert got["pairs_left_out"] and got["from_merged_ratio"] == []
+    got = matrix.coefficients(records_to_network([{**merged, "partner_abundance_unit": "Cells/mL"}]), rates)
+    assert got["from_merged_ratio"] == [("B", "A")]
+
+
+def test_a_cell_is_labeled_only_by_the_arcs_in_it():
+    """Round 20 of the review: B on A has two rate arcs with B counted in Cells/mL, which make the cell
+    ((0.6 - 0.4) / 2e8 = 1e-9 and (0.65 - 0.4) / 2e8 = 1.25e-9, median 1.125e-9), and one arc with B in
+    CFUs/mL that is not in it. When that arc was obligate the cell was listed as one from a comparison where
+    one side did not grow, and when it was saved before the rates were recorded, as one taken from the
+    log2 ratio."""
+    from grownet import matrix
+    from grownet.mgrowthdb import records_to_network
+    rates = {"a": _rate("A", 0.4, 1e9), "b": _rate("B", 0.2, 5e8)}
+    two = [{**_arc("b", "a", 0.6, 0.4), "condition": "x"}, {**_arc("b", "a", 0.65, 0.4), "condition": "y"}]
+    obligate = {**_arc("b", "a", 0.8, 0.0, unit="CFUs/mL"), "strength": None, "outcome": "obligate",
+                "condition": "o"}
+    old = {**_arc("b", "a", 0.8, 0.4, unit="CFUs/mL"), "metric_with": None, "metric_without": None,
+           "condition": "r"}
+    for other in (obligate, old):
+        got = matrix.coefficients(records_to_network([_arc("a", "b", 0.3, 0.2), *two, other]), rates)
+        assert _cell(got["matrices"][0], "A", "B") == pytest.approx(1.125e-9)
+        assert got["censored_cells"] == [] and got["from_the_ratio"] == []
+    # control: in the cell's own unit each is in it, and labels it
+    got = matrix.coefficients(records_to_network([_arc("a", "b", 0.3, 0.2),
+                                                  {**obligate, "partner_abundance_unit": "Cells/mL"}]), rates)
+    assert got["censored_cells"] == [("A", "B")]
 
 
 def test_the_media_warning_is_about_the_cells_the_matrices_hold():
@@ -423,16 +457,19 @@ def test_the_media_warning_is_about_the_cells_the_matrices_hold():
     got = matrix.coefficients(net, rates)
     assert got["cell_media"] == ["WC"]
     readme = matrix.readme_from(got, net, rates)
-    assert "Every cell of the matrices was measured in one medium: WC." in readme
+    assert "Every effect between two organisms in the matrices was measured in one medium: WC." in readme
     assert "The network's other arcs, in no cell, come from LB." in readme
     assert "THESE ARCS COME FROM" not in readme
     caveats = matrix.glv_payload(net, rates)["caveats"]
     assert caveats["cell_media"] == ["WC"] and caveats["media"] == ["WC", "LB"]
-    # control: a cell that pools WC and LB is warned about
+    # control: a cell that pools WC and LB is warned about, and C on A, in M3, named apart (round 20)
     net = records_to_network([_arc("a", "b", 0.3, 0.2), _arc("b", "a", 0.6, 0.4),
-                              {**_arc("b", "a", 0.7, 0.4, medium="LB"), "condition": "x"}])
+                              {**_arc("b", "a", 0.7, 0.4, medium="LB"), "condition": "x"},
+                              _arc("c", "a", 0.6, 0.4, medium="M3")])
     got = matrix.coefficients(net, rates)
-    assert "THESE CELLS COME FROM 2 MEDIA" in matrix.readme_from(got, net, rates)
+    readme = matrix.readme_from(got, net, rates)
+    assert "THESE EFFECTS COME FROM 2 MEDIA" in readme
+    assert "The network's other arcs, in no cell, come from M3." in readme
 
 
 def test_a_matrix_left_with_no_cell_names_no_media():
@@ -450,4 +487,10 @@ def test_a_matrix_left_with_no_cell_names_no_media():
     got = matrix.coefficients(net, rates)
     (block,) = got["matrices"]
     assert block["organisms"] == ["B", "C"] and block["cells"] == 0 and block["media"] == []
-    assert "2 organism(s), 0 fitted cell(s), every cell in 1/(h x Cells/mL)\n" in matrix.readme_from(got, net, rates)
+    readme = matrix.readme_from(got, net, rates)
+    assert "2 organism(s), 0 fitted cell(s), every cell in 1/(h x Cells/mL)\n" in readme
+    # and the package says no effect is in the matrices, rather than warning about the media of arcs in
+    # none; a steady state is still matched against the network's media, no arc joining B and C (round 20)
+    assert ("No effect between two organisms is in the matrices; the network's arcs, in no cell, come from "
+            "WC, M2.") in readme and "THESE ARCS COME FROM" not in readme
+    assert block["arc_media"] == ["WC", "M2"]

@@ -313,3 +313,24 @@ def test_the_page_setting_and_the_command_line_flag_are_one_setting():
     assert "--steady-check" in {o for action in derive._actions for o in action.option_strings}
     assert DEFAULTS["steady_check"] is False                      # off by default on both
     assert parse_settings({"steady_check": ["1"]})["steady_check"] is True
+
+
+def test_a_matrix_holding_no_cell_still_stands_for_its_arcs_medium():
+    """Round 20 of the review: a matrix's media became those of the cells it holds, so a matrix whose only
+    pair is a sign conflict (B on A, +1.0 and -1.0, in WC) recorded none, and a chemostat in mMCB was scored
+    against it with a note that the package records no medium. The arcs between its organisms are in WC,
+    so the run is refused as another environment, as it was before."""
+    def arc(effect, strength):
+        return {"source": _gs(B), "target": _gs(A), "source_name": B, "target_name": A,
+                "effect": effect, "strength": strength, "status": "present", "outcome": "quantified",
+                "study_id": "S1", "metric": "growth_rate:easylinear:5", "evidence": "biculture",
+                "medium": "Wilkins-Chalgren Anaerobe Broth (WC)", "partner_abundance": 2.0e8,
+                "partner_abundance_unit": "Cells/mL", "partner_abundance_n": 3}
+    got = matrix.coefficients(records_to_network([arc("facilitation", 1.0), arc("inhibition", -1.0)]), RATES)
+    (block,) = got["matrices"]
+    assert block["cells"] == 0 and block["media"] == []
+    assert block["arc_media"] == ["Wilkins-Chalgren Anaerobe Broth (WC)"]
+    client = _client({(1, A): _flat(3.0e8)})
+    seen = steady.observed(client, [_chemostat("E1", "x", [A], [(1, "V1")], medium="mMCB")])
+    (result,) = steady.check(got, RATES, seen)
+    assert not result["used"] and "the package in Wilkins-Chalgren Anaerobe Broth (WC)" in result["why_not"]

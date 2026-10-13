@@ -190,8 +190,8 @@ def test_a_pair_measured_in_another_unit_than_the_affected_organism_is_named():
     arcs = [dict(PAIR[0], partner_abundance=1.0e7, partner_abundance_unit="CFUs/mL"), PAIR[1]]
     got, block = _one(_net(arcs), RATES)
     assert _cell(block, "A", "B") == 0.0
-    assert got["pairs_left_out"] == [("A", "B", "B's abundance beside A is in CFUs/mL, and this matrix is "
-                                      "in Cells/mL; left out rather than converted")]
+    assert got["pairs_left_out"] == [("A", "B", "B's abundance beside A is in CFUs/mL, not in Cells/mL, the unit "
+                                      "of the matrix they were placed in; left out rather than converted")]
 
 
 def test_a_network_derived_from_areas_cannot_be_converted():
