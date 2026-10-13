@@ -143,6 +143,66 @@ def _abundance_unit(context: dict) -> str:
             or context.get("techniqueType") or "")
 
 
+# The culture-level traces a monoculture's rate may come from, preferred in this order (#140, Karoline
+# 2026-10-07: "yes to #140 with option 1", and 2026-10-12: "Counts only"). Plate counts and flow
+# cytometry, never optical density: a rate is invariant to a proxy's scale but not to its linearity, and
+# OD saturates where counts do not (Craig's agent, on #140). Built with OD first, SMGDB00000010's OD,
+# six points over 168 h starting at the medium's own 0.6, gave rates of 0.0007 to 0.009 /h that entered
+# published medians, and OD first readings near 0.001 tripped the starting-density rule on noise. pH and
+# metabolites measure the medium, not the culture's size.
+CULTURE_TECHNIQUES = ("plates", "fc")
+
+
+def culture_trace_replicates(client, experiment: dict, species: str) -> tuple:
+    """(replicates, skipped) for a MONOCULTURE whose bioreplicates carry no per-strain series: the strain's
+    curve taken from a culture-level trace, by `CULTURE_TECHNIQUES` order (#140).
+
+    Only for a monoculture, where the whole culture is the one strain. The curve's `technique` says
+    "culture-level <technique>", so whatever reads it can tell. What it may supply is decided by the
+    caller: a growth rate and a lag, never a carrying capacity, since a plateau is read exactly where a
+    culture-level proxy is least likely to be proportional to cell number.
+    """
+    replicates, skipped = [], []
+    label = experiment.get("name") or experiment.get("id") or "experiment"
+    for stub in experiment.get("bioreplicates", []):
+        try:
+            bioreplicate = client.get_bioreplicate(stub["id"])
+        except Exception as e:  # noqa: BLE001 - one unreadable bioreplicate must not lose the others
+            skipped.append((f"{label}: {stub.get('name', stub.get('id'))}", f"{UNREAD} it: {e}"))
+            continue
+        name = bioreplicate.get("name") or str(bioreplicate.get("id"))
+        if bioreplicate.get("isAverage"):
+            continue
+        by_technique: dict = {}
+        for context in bioreplicate.get("measurementContexts", []):
+            if (context.get("subject") or {}).get("type") == "bioreplicate":
+                by_technique.setdefault(context.get("techniqueType") or "", []).append(context)
+        technique = next((t for t in CULTURE_TECHNIQUES if len(by_technique.get(t, ())) == 1), None)
+        if technique is None:
+            skipped.append((f"{label}: {name}", "no per-strain series and no single culture-level count (plates or "
+                                                 "flow cytometry) to take a growth rate from"))
+            continue
+        context = by_technique[technique][0]
+        try:
+            points = client.get_measurement_series(context["id"])
+        except Exception as e:  # noqa: BLE001 - report the context, keep the others
+            skipped.append((f"{label}: {name}", f"{UNREAD} its culture-level {technique} series: {e}"))
+            continue
+        if len(points) < MIN_POINTS:
+            skipped.append((f"{label}: {name}", f"{len(points)} measured time point(s) in its culture-level "
+                                                 f"{technique} series; a curve needs {MIN_POINTS}"))
+            continue
+        try:
+            curve = GrowthCurve(species, [t for t, _, _ in points], [v for _, v, _ in points],
+                                bioreplicate.get("measurementTimeUnits") or "", _abundance_unit(context),
+                                f"culture-level {technique}")
+        except ValueError as e:
+            skipped.append((f"{label}: {name}", f"culture-level {technique}: {e}"))
+            continue
+        replicates.append(Replicate([curve], name, {}))
+    return replicates, skipped
+
+
 def replicates_for_experiment(client, experiment: dict, spike_factor: float = SPIKE_FACTOR) -> tuple:
     """(replicates, skipped) for one mGrowthDB experiment.
 

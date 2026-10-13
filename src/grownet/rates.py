@@ -276,6 +276,11 @@ def baranyi_fit(times, values) -> dict:
         if result is None:
             continue
         params, residual = result
+        # a start can run off to a log-rate no float holds: math.exp raised OverflowError there, first met
+        # on SMGDB00000025's optical densities when #140 began reading them, and that is a fit that did
+        # not converge, like any other rejected start
+        if not params[1] < _MAX_EXP:
+            continue
         mu = math.exp(params[1])
         if not 1e-3 < mu < 5 * max(slope, 1e-3):
             continue                        # an optimum far from the steepest observed slope is not credible
