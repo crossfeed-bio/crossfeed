@@ -723,8 +723,10 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
         _refuse_pooling_across_starts(entry, skipped)
     # an organism is kept when it has a rate or a certified plateau: a study where the estimator fitted
     # no rate still measured the plateau, and dropping it there made the capacity estimator-dependent
-    # across studies as well (found 2026-10-06)
-    return {nid: e for nid, e in found.items() if e["values"] or e["capacity_by_medium"]}, skipped
+    # across studies as well (found 2026-10-06); and one whose rates were refused for their starting
+    # spread, so the reason reaches the organism (found in review)
+    return {nid: e for nid, e in found.items() if e["values"] or e["capacity_by_medium"] or e.get("refused")}, \
+        skipped
 
 
 # How far apart, as a ratio, the measured starting densities of one organism's monocultures in one study
@@ -750,10 +752,12 @@ def _refuse_pooling_across_starts(entry: dict, skipped: list) -> None:
     low, high = min(s for s, _ in starts), max(s for s, _ in starts)
     if high <= MAX_START_SPREAD * low:
         return
-    skipped.append((f"{entry['name']} monocultures, growth rate",
-                    f"they started from {low:.3g} to {high:.3g} {units.pop()}, {high / low:.0f} times apart, and "
-                    f"a rate is not pooled across starting densities more than {MAX_START_SPREAD:g} times apart "
-                    "(#81): left out for this study"))
+    why = (f"they started from {low:.3g} to {high:.3g} {units.pop()}, {high / low:.0f} times apart, and a rate "
+           f"is not pooled across starting densities more than {MAX_START_SPREAD:g} times apart (#81)")
+    skipped.append((f"{entry['name']} monocultures, growth rate", why + ": left out for this study"))
+    # kept with the organism, so an organism left with no rate at all says why where its rate would be
+    # (found in review: the page named two causes, both false, for SMGDB00000014's two organisms)
+    entry["refused"] = why
     entry["values"], entry["replicates"], entry["lags"] = [], [], []
     entry["sources"] = {}
 
@@ -796,6 +800,16 @@ def growth_rates(client, study_ids, wanted=None, rate_method: str = None, window
 # how a rate from culture-level counts alone begins its capacity_source, which the report reads (#140)
 CULTURE_NONE = "none: the rate is from a culture-level"
 
+
+class OrganismRates(dict):
+    """The rates `merge_rates` returns, by node id, with `no_rate`: why an organism whose monocultures were
+    read has no rate, where that is known (every study's rates refused for their starting spread, #81), so
+    `matrix.for_nodes` can carry it to the page, the report and the package (found in review)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.no_rate: dict = {}
+
 def merge_rates(per_study) -> dict:
     """{node id: {"name", "rate", "unit", "n", "studies", "per_study", ...}}: one growth rate per organism.
 
@@ -833,6 +847,8 @@ def merge_rates(per_study) -> dict:
                                          "method": entry.get("method", ""), "lags": [],
                                          "lag_method": entry.get("lag_method", ""),
                                          "by_medium": {}, "capacity_left_out": []})
+            if entry.get("refused"):
+                at.setdefault("refused", []).append(f"{study_id}: {entry['refused']}")
             if entry["values"] and not at["unit"]:
                 at["unit"] = entry["unit"]
             if entry["values"] and entry["unit"] != at["unit"]:
@@ -869,9 +885,11 @@ def merge_rates(per_study) -> dict:
                 one["falls"] += list(found_here["falls"])
                 one["curves"] += list(found_here["curves"])
                 one["per_study"][study_id] = median(found_here["values"])
-    out = {}
+    out = OrganismRates()
     for nid, at in merged.items():
         if not at["values"]:
+            if at.get("refused"):
+                out.no_rate[nid] = "its monocultures' growth rates were left out: " + "; ".join(at["refused"])
             continue
         # the medium with the most certified curves is the one published; a tie goes to the first label,
         # so the choice does not depend on the order the studies were read in

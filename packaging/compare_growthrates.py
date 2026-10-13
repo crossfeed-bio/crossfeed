@@ -73,6 +73,12 @@ def classify(grownet_rate, grownet_why: str, r_rate, r_message: str) -> str:
     return "other"
 
 
+def table_complete(table: Counter, curves_read: int) -> bool:
+    """Whether every curve read is in a class the table prints: a class left out of CLASSES dropped its
+    curves from the printed table without a word (found in review)."""
+    return sum(table.values()) == curves_read and all(cls in CLASSES for cls, _kind in table)
+
+
 def curves(client, studies) -> list:
     """(curve id, study, kind, times, values, grownet rate or None, why) for every curve the doc counts."""
     from grownet.rates import RateUnavailable, easylinear_fit
@@ -138,6 +144,10 @@ def main(studies: list) -> int:
         print(f"  DIFFER: {item}")
     for item in others:
         print(f"  UNNAMED: {item}")
+    if not table_complete(table, len(rows)):
+        print(f"  INCOMPLETE: the table holds {sum(table.values())} of {len(rows)} curves, or a class it does "
+              "not print")
+        return 1
     return 1 if differ or others else 0
 
 

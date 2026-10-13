@@ -78,7 +78,23 @@ def test_a_rate_is_not_pooled_across_starts_more_than_ten_times_apart(monkeypatc
     monkeypatch.setattr(derive, "replicates_for_experiment", lambda *a, **k: ([], []))
     wide = CultureClient({"a": ["plates"], "b": ["plates"]}, starts={"a": 1e4, "b": 1.01e6})
     found, skipped = derive.monoculture_rates(wide, [_exp(["a", "b"])], identities={})
-    assert found == {} and any("101 times apart" in why for _, why in skipped), skipped
+    assert any("101 times apart" in why for _, why in skipped), skipped
+    # no rate, and the reason travels with the organism to where its rate would be (round 14 of the
+    # review: the page said no monoculture was read, or its curves gave none, both false)
+    ((nid, entry),) = found.items()
+    assert entry["values"] == [] and "101 times apart" in entry["refused"]
+    merged = derive.merge_rates([("S14", found)])
+    assert nid not in merged and merged.no_rate[nid].startswith("its monocultures' growth rates were left out: S14:")
+    from grownet import gui, matrix
+    from grownet.mgrowthdb import records_to_network
+    net = records_to_network([{"source": nid, "target": "x", "source_name": "Comamonas testosteroni",
+                               "target_name": "X", "source_identity": "ncbi", "effect": "facilitation",
+                               "strength": 1.0, "study_id": "S14"}])
+    rows = matrix.for_nodes(net, merged)
+    net.meta["growth_rates"] = matrix.rate_meta(net, rows, "m")
+    hint = gui._without_a_rate({"network": net})
+    assert "No growth rate for Comamonas testosteroni: its monocultures&#x27; growth rates were left out" in hint, hint
+    assert "101 times apart" in hint
     near = CultureClient({"a": ["plates"], "b": ["plates"]}, starts={"a": 1e5, "b": 9e5})
     found, skipped = derive.monoculture_rates(near, [_exp(["a", "b"])], identities={})
     assert len(next(iter(found.values()))["values"]) == 2, "nine times apart is still one set"

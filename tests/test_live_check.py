@@ -530,6 +530,11 @@ def test_the_published_check_says_where_its_ratio_check_was_loose(tmp_path, monk
     doc["absent"] = {**doc["network"], "edges": [{**edge, "status": "absent"}]}
     (out / "all_result.v4.json").write_text(json.dumps(doc))
     assert "effect_over_sd checked only loosely on 2 arc(s)" in live_check.check_published(str(out))[1]
+    # and an arc of the network that cannot be checked is counted beside the below-threshold part, as the
+    # loose ones are (round 14: keeping only the last part's unchecked count survived)
+    doc["network"]["edges"].append({**edge, "source": edge["target"], "target": edge["source"], "sd": 0.0})
+    (out / "all_result.v4.json").write_text(json.dumps(doc))
+    assert "effect_over_sd not checked on 1 arc(s)" in live_check.check_published(str(out))[1]
 
 
 def test_an_honest_corner_arc_passes_the_arc_check_itself_and_gl_v_mode_says_where_it_was_loose(monkeypatch):

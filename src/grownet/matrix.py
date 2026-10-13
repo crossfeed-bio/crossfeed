@@ -282,6 +282,8 @@ def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None)
     (found in review).
     """
     current = current or {}
+    # why an organism whose monocultures were read has no rate, by node id (`derive.OrganismRates`)
+    refused = dict(getattr(rates, "no_rate", {}))
 
     def current_name(key, rate):
         taxon = key.removeprefix("ncbi:")
@@ -290,6 +292,8 @@ def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None)
     rates = {key: {**rate, "name": current_name(key, rate)} for key, rate in rates.items()}
     out = NodeRates()
     for nid, node in net.nodes.items():
+        if nid not in rates and nid in refused:
+            out.no_rate[_label(node)] = refused[nid]
         if nid in rates:
             # the node's own name, which is the strain's current one (#24), so the rates file, the report
             # and the network all call it the same thing

@@ -131,7 +131,9 @@ content.
   and every later study's rates and the organism were dropped in that order); a study or fitted row whose
   rates are in another time unit keeps its plateaus, in both derivations, and the report names the rates
   left out. A genus whose strains' rates are in different time units has no rate, where the median was
-  taken across them, and the report, the README and `meta.growth_rates.why_without_a_rate` say why. A
+  taken across them, and the report, the README and `meta.growth_rates.why_without_a_rate` say why; so
+  does an organism whose every study's rates were left out for their starting spread (#81), which the page
+  said had no monoculture read or no rate from its curves (SMGDB00000014's two organisms). A
   capacity in gLV mode reports the stage size and source of the rows it is taken from.
 - **A rate from a culture-level count says so** in `capacity_source`, so `growth_rates.csv`, the gLV payload
   and the report name it, without a new field; a rate that also rests on per-strain curves does not blame

@@ -1300,3 +1300,6 @@ def test_the_page_gives_a_known_reason_for_no_rate():
     # and the reason is escaped as page text
     net.meta["growth_rates"]["why_without_a_rate"] = {"Blautia": "rates in <1/h> and <1/d>"}
     assert "&lt;1/h&gt;" in gui._without_a_rate({"network": net})
+    # and so is the name, which can hold anything a study wrote
+    net.meta["growth_rates"].update(without_a_rate=["B & <c>"], why_without_a_rate={"B & <c>": "why"})
+    assert "No growth rate for B &amp; &lt;c&gt;: why" in gui._without_a_rate({"network": net})
