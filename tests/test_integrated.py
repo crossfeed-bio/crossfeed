@@ -1270,3 +1270,23 @@ def test_a_capacity_from_rows_in_another_time_unit_reports_their_own_provenance(
            "study_id": "S1", "outcome": "quantified", "metric": integrated.METRIC}
     net = records_to_network([arc])
     assert matrix.coefficients(net, matrix.for_nodes(net, {"ncbi:1": got}))["substituted_rows"] == [("Blautia a", sub)]
+
+
+def test_the_counts_and_provenance_behind_a_fitted_capacity_and_rate():
+    """Round 12 of the review: the reason a capacity is missing (from every row when no medium has one)
+    was untested; so was a chosen medium with two sources (keeping the first hid a substituted diagonal);
+    and the monoculture replicates behind a capacity or rate from two studies were the larger study's set
+    alone, where both sets stand behind it (3 + 8 = 11)."""
+    sub = "-r/K at the measured plateau 1e+08 Cells/mL of 3 monoculture curve(s): the fit implies none"
+    fit = "fitted from the monoculture time courses"
+
+    def rec(study, own, n, source):
+        return {**_rate_record("WC", 0.4, own, study=study), "rate_stage_n": n, "fitted_self_source": source}
+    none = integrated.fitted_rates([rec("S1", 1e-10, 3, "the fit implies no plateau")])["ncbi:1"]
+    assert none["capacity"] is None and none["capacity_source"] == "the fit implies no plateau"
+    got = integrated.fitted_rates([rec("S1", -4e-10, 3, fit), rec("S2", -4e-10, 8, sub)])["ncbi:1"]
+    assert got["capacity_source"] == f"{fit}; {sub}"
+    assert got["capacity_curves"] == 11 and got["replicates"] == 11 and got["capacity_n"] == 2
+    # two rows of one study share its set: counted once
+    one_study = integrated.fitted_rates([rec("S1", -4e-10, 3, fit), rec("S1", -4e-10, 3, fit)])["ncbi:1"]
+    assert one_study["capacity_curves"] == 3 and one_study["replicates"] == 3

@@ -143,8 +143,10 @@ content.
   where it said "INVALID: schema is None" about a good file, and says so when an artifact carries none.
 - **The live check's tolerance for `effect_over_sd` is the exact rounding bound** (Craig's agent on #281,
   correcting the first-order one it had given): honest rounding reached past the old bound at every sd,
-  by 2x at sd 1e-4. Where the bound passes a tenth of the value the arc is not checked, and the check
-  says on how many arcs (none in today's All network).
+  by 2x at sd 1e-4. It is applied to every arc with an sd above the rounding, and the check says on how
+  many arcs it was loose (the bound above a tenth of the value) or could not run (none in today's All
+  network). `packaging/compare_growthrates.py` makes the counts `grownet.rates` states against R's
+  `growthrates`, on a selection of curves it states.
 - **The live check reads every network in each older-format file**, the arcs below the threshold as well
   as the network, which 0.4.0 reads too, and checks that each file would be served by the copies that read
   it: its result format, its time and its derivation. An older-format file is written only in the result

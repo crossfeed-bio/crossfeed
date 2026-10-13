@@ -466,18 +466,17 @@ def test_after_a_move_of_the_default_derivation_the_older_file_is_judged_by_its_
             "'grownet.all_result/v1'") in live_check.check_published(str(out))[0]
 
 
-def test_an_honestly_rounded_ratio_is_never_flagged_and_a_check_that_cannot_tell_is_not_run():
+def test_a_correctly_rounded_ratio_is_never_flagged_and_a_loose_check_is_said_to_be():
     """Craig's agent on #281, correcting the first-order bound it had given: honest rounding reaches the
     corner (|s| + U) / (sd - U), which the old bound missed at every sd (by 2x at sd 1e-4). Every corner of
-    every arc here must pass the exact bound; and where the bound passes a tenth of the value, the arc is
-    not checked rather than checked by a tolerance that has swallowed it."""
+    every arc here passes the exact bound. Where the bound passes a tenth of the value the check is loose,
+    and said to be, but still made: skipping it lost gross errors the bound catches (round 12 of the
+    review: strength 0 written with a ratio of 5 passed)."""
     import live_check
     u = live_check.HALF_UNIT
     for sd in (0.02, 0.005, 0.001, 0.0005, 0.0002, 0.0001):
-        for strength in (0.0001, 0.05, 0.3, 1.0, 4.0):
+        for strength in (0.0, 0.0001, 0.05, 0.3, 1.0, 4.0):
             tolerance = live_check.ratio_tolerance(strength, sd)
-            if tolerance is None:
-                continue
             for true_s in (strength - u, strength, strength + u):
                 for true_sd in (sd - u, sd, sd + u):
                     if true_sd <= 0 or true_s < 0:
@@ -489,11 +488,100 @@ def test_an_honestly_rounded_ratio_is_never_flagged_and_a_check_that_cannot_tell
     corner = abs(round((0.3 + u) / (0.02 - u), 4) - 0.3 / 0.02)
     old = u / 0.02 + 0.3 * u / 0.02 ** 2 + u
     assert old < corner <= live_check.ratio_tolerance(0.3, 0.02), (old, corner)
-    # at sd 1e-4 and strength 1 the bound is half the ratio of 10000: not checked, and counted
-    assert live_check.ratio_tolerance(1.0, 0.0001) is None
     from grownet.mgrowthdb import records_to_network
-    net = records_to_network([{"source": "a", "target": "b", "effect": "facilitation", "strength": 1.0,
-                               "sd": 0.0001, "effect_over_sd": 10000.0, "study_id": "S1"},
-                              {"source": "c", "target": "b", "effect": "facilitation", "strength": 1.0,
-                               "sd": 0.2, "effect_over_sd": 5.0, "study_id": "S1"}])
-    assert live_check.unchecked_ratios(net) == 1
+
+    def arc(source, strength, sd, eos):
+        return {"source": source, "target": "b", "effect": "facilitation" if strength >= 0 else "inhibition",
+                "strength": strength, "sd": sd, "effect_over_sd": eos, "study_id": "S1"}
+    net = records_to_network([arc("a", 1.0, 0.0001, 10000.0),     # loose: the bound is half the value
+                              arc("c", 1.0, 0.2, 5.0),             # tight
+                              arc("d", 0.5, 0.0, 10000.0)])        # no sd above the rounding: not checked
+    assert live_check.ratio_coverage(net) == (1, 1)
+    note = live_check.coverage_note(net, None)
+    assert "checked only loosely on 1 arc(s)" in note and "not checked on 1 arc(s)" in note
+    # a gross error where the check is loose is still caught: strength 0 written with a ratio of 5
+    assert any("effect_over_sd" in p for p in network_problems(records_to_network([arc("a", 0.0, 0.3, 5.0)]), "x"))
+
+
+def test_the_published_check_says_where_its_ratio_check_was_loose(tmp_path, monkeypatch):
+    """Round 12 of the review: replacing the count in `check_published` by 0 left the suite green, so the
+    summary's "checked only loosely" was untested where it is said."""
+    import json
+
+    import live_check
+    import publish_all
+    from test_gui import FakeClient
+
+    from grownet.gui import run_query
+    monkeypatch.setattr(publish_all, "run_query", lambda *a, **k: run_query(
+        FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
+    out = tmp_path / "out"
+    assert publish_all.main(str(out), None, previous=lambda: None) == 0
+    assert "loosely" not in live_check.check_published(str(out))[1]
+    doc = json.loads((out / "all_result.v4.json").read_text())
+    # the double's arc has no strength, so it is given one, with an sd at the smallest a file can carry;
+    # other properties may break, and only the summary is read here
+    edge = doc["network"]["edges"][0]
+    edge.update(strength=1.0, weight=1.0, effect="facilitation", sd=0.0001, effect_over_sd=10000.0)
+    (out / "all_result.v4.json").write_text(json.dumps(doc))
+    assert "effect_over_sd checked only loosely on 1 arc(s)" in live_check.check_published(str(out))[1]
+
+
+def test_an_honest_corner_arc_passes_the_arc_check_itself_and_gl_v_mode_says_where_it_was_loose(monkeypatch):
+    """Round 12 of the review: the corner test called `ratio_tolerance` only, so putting the first-order
+    bound back inline in `arc_problems` survived; and the gLV-mode summary's coverage note was untested."""
+    import live_check
+
+    from grownet import gui
+    from grownet.mgrowthdb import records_to_network
+    honest = records_to_network([{"source": "a", "target": "b", "effect": "facilitation", "strength": 0.3,
+                                  "sd": 0.02, "effect_over_sd": 15.0401, "study_id": "S1"}])
+    assert not [p for p in network_problems(honest, "x") if "effect_over_sd" in p]
+    loose = records_to_network([{"source": "a", "target": "b", "effect": "facilitation", "strength": 1.0,
+                                 "sd": 0.0001, "effect_over_sd": 10000.0, "study_id": "S1",
+                                 "coefficient": 1e-9, "coefficient_unit": "1/(h x Cells/mL)"}])
+    monkeypatch.setattr(gui, "run_query", lambda *a, **k: {"network": loose, "errors": []})
+    _problems, what = live_check.check_glv_mode("S1")
+    assert what.startswith("gLV mode, S1: 1 arcs") and "checked only loosely on 1 arc(s)" in what, what
+
+
+def test_the_ratio_floor_and_the_smallest_sd():
+    """Round 12 of the review: the floor's value was unpinned (0.5 passed), and no honest arc at the
+    smallest sd a file carries went through the arc check: true 1.00004 / 6e-5, written 1.0, 0.0001 and
+    16667.3333, must not be called corrupt."""
+    import live_check
+
+    from grownet.mgrowthdb import records_to_network
+    honest = records_to_network([{"source": "a", "target": "b", "effect": "facilitation", "strength": 1.0,
+                                  "sd": 0.0001, "effect_over_sd": 16667.3333, "study_id": "S1"}])
+    assert not [p for p in network_problems(honest, "x") if "effect_over_sd" in p]
+    # strength 0.0005, sd 0.01: the bound is 0.1065 of the ratio of 0.05, just past a tenth
+    edge = {"source": "a", "target": "b", "effect": "facilitation", "sd": 0.01, "study_id": "S1"}
+    just_past = records_to_network([{**edge, "strength": 0.0005, "effect_over_sd": 0.05}])
+    within = records_to_network([{**edge, "strength": 0.05, "effect_over_sd": 5.0}])
+    assert live_check.ratio_coverage(just_past) == (1, 0) and live_check.ratio_coverage(within) == (0, 0)
+    assert live_check.MAX_RATIO_TOLERANCE == 0.1
+
+
+def test_make_r_check_fails_on_a_skipped_r_test(tmp_path):
+    """Round 12 of the review: the guard test pinned text, so `exit 0` in place of `exit 1` kept it green.
+    The Makefile's own guard line is run on a planted summary."""
+    import re
+    import subprocess
+
+    import pytest
+    makefile = ROOT / "Makefile"
+    if not makefile.exists():
+        pytest.skip("no Makefile in this tree (an unpacked sdist)")
+    line = next(x.strip() for x in makefile.read_text().splitlines() if "SKIP 0 |" in x and "grep" in x)
+    rout = tmp_path / "grownet.Rcheck" / "tests"
+    rout.mkdir(parents=True)
+    planted = (("[ FAIL 0 | WARN 0 | SKIP 1 | PASS 119 ]", 1), ("[ FAIL 0 | WARN 0 | SKIP 0 | PASS 126 ]", 0))
+    for summary, code in planted:
+        (rout / "testthat.Rout").write_text(summary + "\n")
+        done = subprocess.run(["bash", "-c", re.sub(r"^@", "", line)], cwd=tmp_path, capture_output=True)
+        assert (done.returncode != 0) == bool(code), (summary, done.returncode)
+    ci = (ROOT / ".github" / "workflows" / "ci.yml")
+    if ci.exists():
+        step = ci.read_text().split("- name: refuse a skipped R test", 1)[1].split("- name:", 1)[0]
+        assert "continue-on-error" not in step

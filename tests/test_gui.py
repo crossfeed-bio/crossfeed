@@ -1278,3 +1278,18 @@ def test_the_report_reads_errors_from_a_result_saved_before_247():
     r["network"].meta.pop("errors", None)
     r["errors"] = ["S9: HTTP 404"]
     assert "error: S9: HTTP 404" in report_text(r)
+
+
+def test_the_page_gives_a_known_reason_for_no_rate():
+    """Round 12 of the review: a genus left without a rate because its strains' rates are in different time
+    units was said to have no monoculture read and no rate from its curves, both false."""
+    from grownet import gui
+    from grownet.model import InteractionNetwork
+    net = InteractionNetwork()
+    net.meta["growth_rates"] = {"without_a_rate": ["Blautia", "Roseburia"],
+                                "why_without_a_rate": {"Blautia": "its strains' growth rates are in different "
+                                                                  "time units (Blautia a 1/h; Blautia b 1/d)"}}
+    import html as html_module
+    html = html_module.unescape(gui._without_a_rate({"network": net}))
+    assert "No growth rate for Blautia: its strains' growth rates are in different time units" in html
+    assert "No monoculture growth rate for Roseburia:" in html and "for Blautia, " not in html

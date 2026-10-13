@@ -12,22 +12,23 @@ and on 2026-09-27 that the implementation is its own option:
   between them, and the rate it returns can lie below the quota. That is `growthrates`' own behavior,
   `tp <- seq(min(candidates), max(candidates) + h - 1)` in `fit_easylinear` 0.8.5, and it is kept so the
   rates agree with the reference and with mGrowthDB (Karoline, 2026-10-12, on #229: option 2). Checked
-  against `growthrates` 0.8.5 on all 468 curves of SMGDB00000004 and SMGDB00000005 (organisms and
-  metabolites; re-counted 2026-10-13): identical on all 339 curves both fit, to 5e-15. 23 neither fits.
-  The other 106 are the THREE places grownet departs from the reference, each with its count among the
-  468 (the 342 this said before counted departure 1's three curves as fitted by both, from before it
-  was introduced; Craig's agent on #286):
+  against `growthrates` 0.8.5 by `packaging/compare_growthrates.py`, which states the curves it takes and
+  is how these counts are made (2026-10-13; counted by hand they went stale twice, Craig's agent on #286
+  and the review): the 468 curves of the bioreplicates of SMGDB00000004 and SMGDB00000005 that are not
+  averages, counted by subject kind as mGrowthDB records it (strain, metabolite, and `bioreplicate` for a
+  culture-level count). Identical on all 339 curves both fit, to 5e-15 (97 strain, 157 metabolite, 85
+  culture-level); 23 neither fits. The other 106 are the THREE places grownet departs from the reference:
     1. a refit that comes out <= 0 although the steepest window rose has NO rate here, with the reason,
        where `growthrates` returns the negative number as the maximum growth rate; a non-positive rate
        would read downstream as no growth (Karoline, 2026-10-12, on #229 (a)). 3 curves, all SMGDB00000005
-       chemostats: one organism count (-0.01218 /h) and two metabolites; 2 of 1090 strain curves over the
-       whole corpus;
+       chemostats: one strain (-0.01218 /h) and two metabolites; 2 of 1090 strain curves over the whole
+       corpus;
     2. `growthrates` refuses a curve holding any value <= 0, while this drops those points and fits the
-       rest (#229 (b), kept as it is). 87 curves: 18 organism curves, all SMGDB00000005 chemostats, and 69
+       rest (#229 (b), kept as it is). 87 curves: 18 strain, all SMGDB00000005 chemostats, and 69
        metabolites;
     3. a curve with no rising window: `growthrates` fits nothing ("no positively growing segment"), while
-       this returns its steepest slope, which is <= 0 and reads downstream as no growth. 16 curves: 6
-       organism curves, all SMGDB00000005 chemostats, and 10 metabolites.
+       this returns its steepest slope, which is <= 0 and reads downstream as no growth. 16 curves: 5
+       strain and 1 culture-level, all SMGDB00000005 chemostats, and 10 metabolites.
   This prose used to say "widen it to span every window whose slope reaches QUOTA", which neither
   implementation does (#229).
   With the default window of 5 it reproduces mGrowthDB's own reported rates

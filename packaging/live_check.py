@@ -38,28 +38,51 @@ EXACT = 1e-9
 CENSORED = ("obligate", "abolished")
 
 
-# The most a check of effect_over_sd may allow, as a share of the value it checks. Past it the rounding
-# bound has swallowed the quantity, and a check that cannot tell an error smaller than the value from none
-# is not reported as one: the arc is counted as not checked instead (Craig's agent on #281, by the 0
-# versus NA convention of #129).
+# The share of the value past which a check of effect_over_sd is said to be loose: the rounding bound
+# has then grown to more than a tenth of what it checks, so an error smaller than that cannot be told from
+# none. Such an arc is still checked, since the exact bound never flags a correctly rounded arc and a gross
+# error still shows, and the check says on how many arcs it was loose (Craig's agent on #281, by the 0
+# versus NA convention of #129; applying the floor as a skip lost errors it caught, found in review).
 MAX_RATIO_TOLERANCE = 0.1
 
 
 def ratio_tolerance(strength: float, sd: float) -> float | None:
-    """How far |strength| / sd recomputed from the file may sit from its effect_over_sd, or None where the
-    rounding leaves nothing to check. The exact bound: rounding can push the true ratio to the corner
-    (|s| + U) / (sd - U), which exceeds the first-order U/sd + |s| U/sd^2 by sd / (sd - U), and is short by
-    half at sd 1e-4 (Craig's agent's correction on #281); plus the ratio's own half unit."""
-    if not sd or sd <= HALF_UNIT:
+    """How far |strength| / sd recomputed from the file may sit from its effect_over_sd, or None where there
+    is no ratio to recompute (sd at or below the rounding). The exact bound: rounding can push the true
+    ratio to the corner (|s| + U) / (sd - U), which exceeds the first-order U/sd + |s| U/sd^2 by
+    sd / (sd - U), and is short by half at sd 1e-4 (Craig's agent's correction on #281); plus the ratio's
+    own half unit."""
+    if sd is None or sd <= HALF_UNIT:
         return None
-    bound = HALF_UNIT * (sd + abs(strength)) / (sd * (sd - HALF_UNIT)) + HALF_UNIT
-    return bound if bound <= MAX_RATIO_TOLERANCE * abs(strength) / sd else None
+    return HALF_UNIT * (sd + abs(strength)) / (sd * (sd - HALF_UNIT)) + HALF_UNIT
 
 
-def unchecked_ratios(net) -> int:
-    """The arcs whose effect_over_sd the rounding leaves nothing to check, said with what was checked."""
-    return sum(1 for e in net.edges if e.strength is not None and e.sd and e.effect_over_sd is not None
-               and ratio_tolerance(e.strength, e.sd) is None)
+def ratio_coverage(net) -> tuple:
+    """(loose, not checked): the arcs whose effect_over_sd check allows more than a tenth of the value, and
+    those carrying one with no sd above the rounding to recompute it from, said with what was checked."""
+    loose = unchecked = 0
+    for e in net.edges:
+        if e.strength is None or e.effect_over_sd is None or e.sd is None:
+            continue
+        tolerance = ratio_tolerance(e.strength, e.sd)
+        if tolerance is None:
+            unchecked += 1
+        elif tolerance > MAX_RATIO_TOLERANCE * max(abs(e.strength) / e.sd, abs(e.effect_over_sd)):
+            loose += 1
+    return loose, unchecked
+
+
+def coverage_note(*nets) -> str:
+    """What the effect_over_sd check could not hold tightly, for the summary line; empty when nothing."""
+    loose = unchecked = 0
+    for net in nets:
+        if net is not None:
+            a, b = ratio_coverage(net)
+            loose, unchecked = loose + a, unchecked + b
+    parts = ([f"effect_over_sd checked only loosely on {loose} arc(s), where rounding allows more than a "
+              "tenth of the value"] if loose else []) + \
+            ([f"effect_over_sd not checked on {unchecked} arc(s) with no sd above the rounding"] if unchecked else [])
+    return "".join(f"; {p}" for p in parts)
 
 
 def _have(e, *names):
@@ -100,9 +123,9 @@ def arc_problems(e, derivation: str, k: float | None = None, names: dict | None 
         # recomputed from two values the file already rounded, so the honest tolerance is what that
         # rounding allows for THIS arc (`ratio_tolerance`). A fixed tolerance sat three times above today's
         # worst residual (3.7e-3 at sd 0.21) and the residual grows as 1/sd^2, so a smaller sd would have
-        # made it cry wolf or be loosened past use (Craig's agent, on #281); where the bound passes a tenth
-        # of the value the arc is not checked, and counted as such.
-        tolerance = ratio_tolerance(s, e.sd) if e.sd else None
+        # made it cry wolf or be loosened past use (Craig's agent, on #281). Exact, so it is applied to every
+        # arc with a ratio, and the summary says where it was loose (`coverage_note`).
+        tolerance = ratio_tolerance(s, e.sd) if e.sd is not None else None
         if ratio is not None and e.effect_over_sd is not None and tolerance is not None and \
                 abs(e.effect_over_sd - ratio) > tolerance:
             out.append(f"{where}: effect_over_sd {e.effect_over_sd} is not |strength| / sd {ratio:.6g}")
@@ -213,10 +236,8 @@ def check_published(out_dir: str) -> tuple:
         parts = [("network", net)] + ([("absent", absent)] if absent is not None else [])
         for part, current in parts:
             problems += _older_part(legacy_path.name, schema, part, legacy.get(part), current, manifest)
-    unchecked = unchecked_ratios(net) + (unchecked_ratios(absent) if absent is not None else 0)
     return problems, (f"All: {len(net.edges)} arcs" + (f", {len(absent.edges)} below the threshold" if absent else "")
-                      + (f"; effect_over_sd not checked on {unchecked} arc(s), whose sd is too small for its "
-                         "rounding to tell" if unchecked else ""))
+                      + coverage_note(net, absent))
 
 
 def _older_part(name: str, schema: str, part: str, doc, current, manifest: dict) -> list:
@@ -258,7 +279,7 @@ def check_glv_mode(study: str | None = None) -> tuple:
     problems = network_problems(net, f"gLV mode, {study}")
     if not any(e.coefficient is not None for e in net.edges):
         problems.append(f"gLV mode, {study}: no arc carries a coefficient, so the coefficient check ran on nothing")
-    return problems, f"gLV mode, {study}: {len(net.edges)} arcs"
+    return problems, f"gLV mode, {study}: {len(net.edges)} arcs" + coverage_note(net)
 
 
 def main(out_dir: str = "out") -> int:

@@ -620,14 +620,20 @@ def _glv_url(token: str, result: dict) -> str:
 def _without_a_rate(result: dict) -> str:
     """The organisms of the network that have no growth rate, said on the page, since a gLV simulation
     needs a rate for each of them from elsewhere."""
-    missing = (result["network"].meta.get("growth_rates") or {}).get("without_a_rate") or []
+    rates = result["network"].meta.get("growth_rates") or {}
+    why = rates.get("why_without_a_rate") or {}
+    # an organism whose reason is known says it, rather than the general one, which named two causes that
+    # were both false for a genus whose strains had rates in different time units (found in review)
+    known = "".join(f"<p class=\"hint\">No growth rate for {_esc(name)}: {_esc(why[name])}.</p>"
+                    for name in rates.get("without_a_rate") or [] if name in why)
+    missing = [name for name in rates.get("without_a_rate") or [] if name not in why]
     if not missing:
-        return ""
+        return known
     shown = ", ".join(_esc(name) for name in missing[:6])
     more = f" and {len(missing) - 6} more" if len(missing) > 6 else ""
-    return (f"<p class=\"hint\">No monoculture growth rate for {shown}{more}: no batch monoculture of it was "
-            "read, or its curves gave no rate. A gLV simulation needs a rate for each of them from elsewhere; "
-            "the report says why each one has none.</p>")
+    return known + (f"<p class=\"hint\">No monoculture growth rate for {shown}{more}: no batch monoculture of it "
+                    "was read, or its curves gave no rate. A gLV simulation needs a rate for each of them from "
+                    "elsewhere; the report says why each one has none.</p>")
 
 
 def _unresolved_list(result: dict) -> str:

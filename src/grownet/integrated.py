@@ -816,7 +816,7 @@ def fitted_rates(records: list) -> dict:
             "capacity_unit": "", "capacities": [], "capacity_points": [], "capacity_per_study": {},
             "other_capacity_units": [], "unit_left_out": [], "r2": [], "conditions": [], "self_sources": [],
             "media": [],
-            "stage_n": [], "by_medium": {}})
+            "stage_n": {}, "by_medium": {}})
         study = record.get("study_id", "")
         unit = record.get("fitted_rate_unit", "1/h")
         if unit != at["unit"]:
@@ -834,8 +834,9 @@ def fitted_rates(records: list) -> dict:
             # replicate sets. Writing the row count into that column made a rate from three monocultures
             # read as resting on one culture, which is how the gLV example's thinness went unnoticed
             # (#155 item 13).
+            # one monoculture set per study: its rows agree on its size, and two studies are two sets
             if record.get("rate_stage_n"):
-                at["stage_n"].append(record["rate_stage_n"])
+                at["stage_n"][study] = max(at["stage_n"].get(study, 0), record["rate_stage_n"])
             at["per_study"].setdefault(study, []).append(rate)
             if study and study not in at["studies"]:
                 at["studies"].append(study)
@@ -874,14 +875,14 @@ def fitted_rates(records: list) -> dict:
         key = key_from_label(label)
         one = at["by_medium"].setdefault(key, {"label": label, "values": [], "unit": capacity_unit,
                                                "points": [], "per_study": {}, "falls": [], "rows": [],
-                                               "stage_n": [], "sources": []})
+                                               "stage_n": {}, "sources": []})
         one["values"].append(-rate / own)
         one["rows"].append(_row_label(study, record))
         # the provenance of THIS medium's plateaus, which the published capacity reports: taken from every
         # row, a capacity from rows in another time unit (whose rate is left out) carried the other rows'
         # stage size and source, and a substituted diagonal went unlisted (found in review)
         if record.get("rate_stage_n"):
-            one["stage_n"].append(record["rate_stage_n"])
+            one["stage_n"][study] = max(one["stage_n"].get(study, 0), record["rate_stage_n"])
         if record.get("fitted_self_source") and record["fitted_self_source"] not in one["sources"]:
             one["sources"].append(record["fitted_self_source"])
         one["points"].append(record.get("fit_points", 0))
@@ -914,8 +915,9 @@ def fitted_rates(records: list) -> dict:
             # count of replicates and this path never had any (it used to report time points under that
             # name, and merging rows would have added them up)
             "n": len(at["rates"]), "n_label": "fitted row(s)", "points": sum(at["points"]),
-            # one monoculture set per organism, so the rows agree on it; the largest is that set's size
-            "replicates": max(at["stage_n"]) if at["stage_n"] else None,
+            # the monoculture replicates behind the rate: one set per study, summed over the studies (the
+            # largest alone counted one study's where two stood behind it, found in review)
+            "replicates": sum(at["stage_n"].values()) if at["stage_n"] else None,
             # sorted, so the whole entry is a function of the rows and not of the order they arrived in
             "studies": sorted(at["studies"]),
             "per_study": {study: statistics.median(values) for study, values in at["per_study"].items()},
@@ -933,7 +935,7 @@ def fitted_rates(records: list) -> dict:
             "capacity_other_media": [other["label"] for _key, other in order[1:]],
             # the capacity is -r/A_ii from the same monoculture stage, so the curves behind it are that
             # stage's replicates, not the rows the median was taken over
-            "capacity_curves": (max(chosen["stage_n"]) if (chosen and chosen["stage_n"]) else None),
+            "capacity_curves": (sum(chosen["stage_n"].values()) if (chosen and chosen["stage_n"]) else None),
             "capacity_points": sum(chosen["points"]) if chosen else 0,
             "capacity_per_study": ({study: statistics.median(values)
                                     for study, values in chosen["per_study"].items()} if chosen else {}),
