@@ -159,7 +159,7 @@ python -m grownet schema [--out FILE]
 - `derive --live --all` does what the page's All button does: every study in mGrowthDB, with every
   partner (a study argument limits it to those studies). With the default settings it reads the network
   derived once a day by `.github/workflows/all-network.yml` (the `all-network` release), when that is
-  less than a day old **and was derived by the same derivation your settings ask for**, and derives
+  less than 36 hours old **and was derived by the same derivation your settings ask for**, and derives
   live otherwise; `--no-published` always derives live. The derivation is part of the condition because a
   format id moves when a field changes meaning and the derivation is not a field, so the artifact and a
   live run can carry the same format and entirely different networks.
@@ -172,7 +172,10 @@ python -m grownet schema [--out FILE]
 - `--format graphml` emits GraphML (for Cytoscape, igraph, networkx, Gephi) instead of the neutral JSON.
 - `--conditions NAME ...` is the page's second box: media, experiment ids or study ids. A study id given
   this way replaces the old study argument for `--species` searches.
-- `--format matrix` emits the adjacency matrix as CSV: the organisms in the header row and in the first
+- `--format matrix` emits the adjacency matrix as CSV, and with `--out x.csv` writes `x.about.txt` beside
+  it: the version, the date, the derivation, the metric, every setting, the meaning of `0` and `NA`, the
+  pairs left at 0, the `NA` cells with their bounds, and the sources, none of which the grid itself can
+  carry (#212). In the CSV: the organisms in the header row and in the first
   column, and a cell holding the log2 mean of the comparison, so `A[i][j]` is the effect of j on i. Each
   organism appears once, so arcs of one pair are merged across conditions and studies by their median, a
   pair whose arcs disagree in sign is left at 0, and an empty cell or an arc below the absence threshold

@@ -6,8 +6,23 @@ and on 2026-09-27 that the implementation is its own option:
 * `easylinear` (the default): the maximum specific growth rate by the method of Hall et al. (2014) as the
   growthrates R package implements it in `fit_easylinear`, which mGrowthDB uses for the rates it reports.
   Fit a straight line to log abundance over every window of `window` consecutive points, take the steepest,
-  widen it to span every window whose slope reaches `QUOTA` of that maximum, and fit once more over the
-  widened range. With the default window of 5 it reproduces mGrowthDB's own reported rates
+  mark every window whose slope reaches `QUOTA` of that maximum, and fit once more over the range from the
+  FIRST marked window to the end of the LAST. Every window between them is inside that range whether or
+  not it reached the quota, so when the marked windows are not contiguous the refit takes in the stretch
+  between them, and the rate it returns can lie below the quota. That is `growthrates`' own behavior,
+  `tp <- seq(min(candidates), max(candidates) + h - 1)` in `fit_easylinear` 0.8.5, and it is kept so the
+  rates agree with the reference and with mGrowthDB (Karoline, 2026-10-12, on #229: option 2). Checked
+  against `growthrates` 0.8.5 on every curve of SMGDB00000004 and SMGDB00000005: identical on all 342
+  curves both fit, to 5e-15. grownet departs from the reference in exactly TWO named places:
+    1. a refit that comes out <= 0 although the steepest window rose has NO rate here, with the reason,
+       where `growthrates` returns the negative number as the maximum growth rate (-0.01218 /h on a
+       chemostat of SMGDB00000005); a non-positive rate would read downstream as no growth (Karoline,
+       2026-10-12, on #229 (a)). 2 of 1090 strain curves, both chemostat;
+    2. `growthrates` refuses a curve holding any value <= 0, while this drops those points and fits the
+       rest (19 organism curves in studies 4 and 5, all chemostat; #229 (b), kept as it is).
+  This prose used to say "widen it to span every window whose slope reaches QUOTA", which neither
+  implementation does (#229).
+  With the default window of 5 it reproduces mGrowthDB's own reported rates
   (`measurementContexts[].growthRate`): on SMGDB00000004, **119 of 119 comparable curves within 10 per
   cent, median ratio 1.0001**, and over the whole corpus **2132 of 2161, median ratio 0.9998**
   (re-measured live 2026-10-11; it said "43 of 46" from an earlier and smaller corpus, which is the class
@@ -111,6 +126,17 @@ def easylinear_fit(times, values, window: int = DEFAULT_WINDOW, quota: float = Q
     candidates = [i for i, s in enumerate(slopes) if s >= quota * best]
     first, last = min(candidates), max(candidates) + window
     fit = _line(xs[first:last], ys[first:last])
+    if fit[0] <= 0:
+        # The steepest window rises and the refit over the first-to-last span, which is growthrates' own,
+        # does not: the windows between two separated rises fell far enough to turn the slope. The
+        # reference returns that number as the maximum specific growth rate (-0.01218 /h on a chemostat of
+        # SMGDB00000005), and a non-positive rate reads downstream as NO GROWTH, which feeds the obligate and
+        # abolished outcomes, for a culture whose steepest stretch was growing. So it is no rate, with the
+        # reason (Karoline, 2026-10-12, on #229: "go with your recommendations"). Only here does this
+        # depart from growthrates; a curve with no rising window at all still returns its rate as it is.
+        raise RateUnavailable(f"the steepest window rises at {best:.4g} per time unit, but the refit from the "
+                              f"first to the last window within {quota:g} of it falls to {fit[0]:.4g}, so "
+                              "this curve has no maximum growth rate by this method")
     return {"rate": fit[0], "start": xs[first], "end": xs[last - 1], "points": last - first}
 
 
@@ -250,6 +276,11 @@ def baranyi_fit(times, values) -> dict:
         if result is None:
             continue
         params, residual = result
+        # a start can run off to a log-rate no float holds: math.exp raised OverflowError there, first met
+        # on SMGDB00000025's optical densities when #140 began reading them, and that is a fit that did
+        # not converge, like any other rejected start
+        if not params[1] < _MAX_EXP:
+            continue
         mu = math.exp(params[1])
         if not 1e-3 < mu < 5 * max(slope, 1e-3):
             continue                        # an optimum far from the steepest observed slope is not credible

@@ -101,12 +101,24 @@ META_PROPERTIES = {
                                              "and how many comparisons it ran over"},
     "query": {"type": "string", "description": _RECORDED + "what was searched: species, all, or a study"},
     "species": {"type": "array", "description": _RECORDED + "the names typed into the search"},
-    "studies": {"type": "array", "description": _RECORDED + "the studies the search read"},
+    "studies": {"type": "array", "description": _RECORDED + "the studies the search read; one it could "
+                                                 "not read is named in errors instead"},
+    # a run that could not read a study wrote it here as a source and recorded the failure nowhere in the
+    # file, so `validate` passed it and a reader could not tell a complete run from an incomplete one (#247)
+    "errors": {"type": "array", "items": {"type": "string"},
+               "description": _RECORDED + "what could not be read from mGrowthDB; empty when nothing failed"},
+    "complete": {"type": "boolean",
+                 "description": _RECORDED + "false when anything the run asked for could not be read, so "
+                                            "the network holds less than the data does"},
     # a single-study derivation records which study it was, and this was emitted and undeclared: the
     # agreement test covered node, edge and study and not `meta`, so nothing compared the two (#155 item 14)
     "study_id": {"type": "string", "description": _RECORDED + "the one study this network was derived "
                                                   "from, where a derivation read a single study"},
     "settings": {"type": "object", "description": _RECORDED + "every setting the run used"},
+    # the daily artifact is built from main between releases, under the last release's tool_version
+    "build": {"type": "object",
+              "description": _RECORDED + "the commit and the workflow run that built this file, where it "
+                                         "was built by the repository's daily workflow"},
     # written by `grownet.slices.fp_bh` and undeclared for as long as that module has existed, found by
     # Craig's agent on #274 with a syntax-tree walk; the test that came with #274 read only the
     # `net.meta["x"] = ` form and this key arrives as a `meta=` dict literal
@@ -268,7 +280,14 @@ def _objs(x):
     return x if isinstance(x, list) and all(isinstance(i, dict) for i in x) else None
 
 
-_META_TYPES = {"string": str, "array": list, "object": dict}
+_META_TYPES = {"string": str, "array": list, "object": dict, "boolean": bool}
+# Every type a meta key is declared with must be one `_meta_problems` can check: one it cannot made
+# `grownet validate` raise KeyError on a good file, and the meta key walk of #274 proves a key is DECLARED,
+# not that its declared type is honored (Craig's agent, on #276). Failing at import puts it on the
+# developer's machine rather than in a reader's validate.
+assert {d["type"] for d in META_PROPERTIES.values()} <= set(_META_TYPES), (
+    "a meta key is declared with a type _META_TYPES does not check: "
+    f"{sorted({d['type'] for d in META_PROPERTIES.values()} - set(_META_TYPES))}")
 
 
 def _meta_problems(meta: dict, notes: list = None) -> list:
@@ -290,8 +309,15 @@ def _meta_problems(meta: dict, notes: list = None) -> list:
         if value is None:
             continue
         kind = _META_TYPES[declared["type"]]
-        if not isinstance(value, kind) or isinstance(value, bool):
+        # bool is an int in Python and none of the other kinds, so it is refused everywhere but where a
+        # boolean is declared
+        if not isinstance(value, kind) or (isinstance(value, bool) and kind is not bool):
             problems.append(f"meta.{key} must be {declared['type']}, not {type(value).__name__}")
+    # a valid file can still be an incomplete run, and the file is the only thing a later reader has (#247)
+    if meta.get("complete") is False and notes is not None:
+        errors = meta.get("errors") if isinstance(meta.get("errors"), list) else []
+        notes.append(f"this network records {len(errors)} error(s) and is INCOMPLETE: it holds what could be "
+                     "read from mGrowthDB, not all the run asked for (meta.errors names them)")
     return problems
 
 

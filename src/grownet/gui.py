@@ -533,7 +533,8 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
                 "<button class=\"primary\" type=\"submit\">Download network</button> "
                 "<select name=\"format\" aria-label=\"Network format\">"
                 "<option value=\"json\">JSON</option><option value=\"graphml\">GraphML</option>"
-                "<option value=\"matrix\">Adjacency matrix (CSV)</option></select></form>")
+                "<option value=\"matrix\">Adjacency matrix (CSV)</option>"
+                "<option value=\"matrix_about\">Adjacency matrix: what it is (TXT)</option></select></form>")
     cytoscape = (f"<form class=\"inline\" method=\"post\" action=\"/cytoscape?token={t}{tail}\">"
                  "<button type=\"submit\">Send to Cytoscape</button></form>")
     report = (f"<details class=\"report\"><summary class=\"btn\">Report</summary>"
@@ -1072,7 +1073,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     `all_studies` is the page's All button (Karoline, 2026-09-28): the entries are ignored and every study
     mGrowthDB holds is derived, with every partner kept, still under the second box (media, experiments or
     studies) and Exclude these studies. With the default settings it is read from the network derived once a
-    day in the grownet repository when that is less than a day old and was derived by the same derivation
+    day in the grownet repository when that is less than 36 hours old and was derived by the same derivation
     these settings ask for (`grownet.published`, #96); `published`
     False, or any other setting, derives it live.
     """
@@ -1083,9 +1084,12 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     s = {**DEFAULTS, **(settings or {})}
     if all_studies and published and daily.usable(s, DEFAULTS):
         say(0, None, "Reading today's All network from the grownet repository")
-        found = daily.fetch(s)      # and only if it was derived the way this search would derive it
+        why_live = []
+        found = daily.fetch(s, why=why_live)   # only if derived the way this search would derive it
         if found:
             return found
+    else:
+        why_live = []
     names = [] if all_studies else split_entries(entries)    # one per line, and at commas and semicolons
     say(0, None, "Looking up the species in mGrowthDB")
     index = species_index(client) if index is None else index
@@ -1099,6 +1103,10 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     # asked for and not run. Putting the second kind in the first made an empty network caused by the
     # reader's own setting read as a database failure, in a run where every request succeeded.
     errors, notes, skipped, records = [], [], [], []
+    # why the network derived once a day was not served, when it was asked for: a stale file and a defect
+    # in reading one looked the same before (#157)
+    notes += [f"the network derived once a day in the grownet repository was not used, so All was derived "
+              f"live: {reason}" for reason in why_live]
 
     # the second box: study ids in it narrow the search as "Only these studies" used to, media and
     # experiment ids are matched per experiment inside the derivation (#113)
@@ -1157,6 +1165,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
                      # drop-out designs reads curves nothing can use (#142 item 10)
                      keep=narrowed,
                      dropout=s["include_dropout"] and s["derivation"] != "integrated")
+    unread_studies = []
     for i, study_id in enumerate(studies):
         say(i, len(studies), f"Reading {study_id} ({i + 1} of {len(studies)})")
         try:
@@ -1170,6 +1179,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
                                               selection=selection)
         except MGrowthDBError as e:
             errors.append(f"{study_id}: {e}")
+            unread_studies.append(study_id)
             continue
         if only_entered:
             def entered(record, side):
@@ -1193,6 +1203,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
                       "search again")
     # the derivation that made these records says what it tests and what is provisional in it: the words
     # used to be the specified comparison's whatever had derived the network (#142 item 5)
+    fitted_rows = list(records)
     kept, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"],
                               s["no_growth_alpha"], s["no_growth_factor"], s["merge_arcs"], s["min_studies"],
                               s["merge_genera"], support_level(names), s["max_adjusted_p"],
@@ -1205,16 +1216,25 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     rate_nodes = {r[side] for r in records for side in ("source", "target")}
     records = kept
     # every setting the search ran with, so a downloaded network says how it was made (#78, #76)
+    # `studies` in meta is the studies READ, as the schema says: a study that answered 404 was written
+    # there as one of the sources, the run exited 0, and nothing in the file said anything failed (#247).
+    # The failures travel in the file now, so a reader of the file alone can tell a complete run.
+    read = [st for st in studies if st not in unread_studies]
     net = records_to_network(records, meta={
         "source_db": "mGrowthDB (live)", "query": "all" if all_studies else "species", "species": names,
-        "studies": studies, "settings": dict(s), "selection": selection, **extra})
-    net.meta["data"] = data_versions(client, studies, net.meta["derived_at"])
+        "studies": read, "settings": dict(s), "selection": selection, **extra})
+    net.meta["errors"] = list(errors)
+    net.meta["complete"] = not errors
+    net.meta["data"] = data_versions(client, read, net.meta["derived_at"])
     _current_names(net, current)
     # the growth rates, when the page asked for them: each organism's maximum specific growth rate in
     # monoculture, median over replicates and studies (Karoline, 2026-10-03). They travel in the network's
     # meta, so a downloaded network carries the rates it was reported with.
     organism_rates = {}
-    fitted = integrated.fitted_rates(records) if s.get("derivation") == "integrated" else {}
+    # from every row the derivation fitted, not the ones the display kept: the rate is a property of the
+    # organism, and it moved by 14 per cent with --include-absent while it was a median over the arcs
+    # that survived (Karoline, 2026-10-12, on #204: option 1)
+    fitted = integrated.fitted_rates(fitted_rows) if s.get("derivation") == "integrated" else {}
     if fitted:
         # the derivation fitted a rate and a self-limitation per organism, and those are the parameters
         # that go with its coefficients (#127)
@@ -1281,6 +1301,37 @@ KEPT_JOBS = 20
 # while the page runs is found without a restart (code review of 2026-09-28)
 INDEX_MAX_AGE = 3600
 _INDEX_LOCK = threading.Lock()
+_RUNNING_LOCK = threading.Lock()
+
+
+def reads_since(client, before: tuple, shared: bool) -> dict | None:
+    """What one search read, as the difference of the client's counters over it, for the report (#187).
+
+    The page keeps one client for an hour, whose counters also hold the species list and every earlier
+    search, so the command line's way, handing `report_text` the client, would print the session's total
+    as this search's. A search also fans out to worker threads, so the reads cannot be told apart by
+    thread: when another search ran at the same time, `shared` says the difference holds both.
+    None when the client keeps nothing, as on the command line, and then `before` is None too.
+
+    The difference is sound only because a search's worker threads end with it: `fetch.prefetch_studies`
+    uses `with ThreadPoolExecutor(...)`, which waits for every future on exit, so no read of this search
+    lands in the next one's difference unflagged (checked by Craig's agent, on #283).
+    """
+    if before is None or not getattr(client, "cache_dir", None):
+        return None
+    (fetched, reused, remembered, refreshed), now = before, _counters(client)
+    return {"fetched": now[0] - fetched, "reused": now[1] - reused, "remembered": now[2] - remembered,
+            "refreshed": [sid for sid in now[3] if sid not in refreshed], "shared": shared}
+
+
+def _counters(client) -> tuple:
+    """(fetched, reused, remembered, refreshed) of a client that keeps a cache.
+
+    Read directly, with no defaults: defaults made a real client missing a counter report "0 from
+    mGrowthDB, 0 reused", the silence this line exists to end (Craig's agent, on #283). Only a client with
+    a `cache_dir` reaches here, which every real client has and no test double defines.
+    """
+    return client.fetched, client.reused, client.remembered, list(client.refreshed)
 
 
 def prune_jobs(jobs: dict, keep: int = KEPT_JOBS) -> None:
@@ -1396,6 +1447,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             # package is where the diagonal is -1 (Karoline, 2026-10-03)
             self._send(matrix.matrix_csv(result["network"]), "text/csv; charset=utf-8",
                        f"{TITLE}_matrix.csv")
+        elif fmt == "matrix_about":
+            # what the grid is, which the CSV cannot carry without breaking a plain read.csv (#212)
+            self._send(matrix.matrix_about(result["network"], f"{TITLE}_matrix.csv"),
+                       "text/plain; charset=utf-8", matrix.about_name(f"{TITLE}_matrix.csv"))
         else:
             self._send(result["network"].to_json(), "application/json", f"{TITLE}_network.json")
 
@@ -1556,8 +1611,22 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                         self.state["client"] = fresh
                         self.state["index_built"] = time.monotonic()
                     client = self.state["client"]
-                job["result"] = run_query(client, entries, settings, self.state["index"], progress=progress,
-                                          all_studies=all_studies)
+                # any overlap marks both searches, since either one's difference then holds the other's reads
+                with _RUNNING_LOCK:
+                    running = self.state.setdefault("running", {})
+                    for other in running.values():
+                        other["overlapped"] = True
+                    job["overlapped"] = bool(running)
+                    running[job["id"]] = job
+                before = _counters(client) if getattr(client, "cache_dir", None) else None
+                try:
+                    result = run_query(client, entries, settings, self.state["index"], progress=progress,
+                                       all_studies=all_studies)
+                finally:
+                    with _RUNNING_LOCK:
+                        running.pop(job["id"], None)
+                result["reads"] = reads_since(client, before, job["overlapped"])
+                job["result"] = result
                 job["status"] = "done"
             except MGrowthDBError as e:
                 job.update(status="failed", error=f"mGrowthDB is not reachable: {e}")

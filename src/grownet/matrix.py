@@ -314,11 +314,52 @@ def rate_rule(method: str) -> str:
     return f"{method} in monoculture, median over replicates and studies; batch experiments only"
 
 
+# The study-level tripwire of #173 (Craig's agent's framing, built on Karoline's 2026-10-12 decision): a
+# study whose rates are ALL this many times slower than the median rate of the other studies in the same
+# run is named. A flag and never a refusal, since slow is not wrong; and an internal comparison, so it
+# carries no citation burden. Five is the low end of the gap that motivated it: SMGDB00000018's four fits
+# sat five to fifteen times below the corpus median of 0.2245 /h, together, while the next slowest study's
+# fastest fit was within it.
+SLOW_FACTOR = 5.0
+# fewer other studies than this and their median is not a reference worth comparing a study with
+SLOW_MIN_OTHER_STUDIES = 3
+
+
+def slow_studies(rates: dict) -> list:
+    """[{"study", "rates", "fastest", "others_median", "factor"}]: studies every rate of which is more than
+    `SLOW_FACTOR` times slower than the median rate of the other studies (#173).
+
+    Read from each organism's `per_study`, so a study enters with every rate it gave, whichever organism
+    it went to, and an organism's merged rate that rests partly on such a study is visible as such.
+    """
+    by_study: dict = {}
+    for rate in rates.values():
+        for sid, value in (rate.get("per_study") or {}).items():
+            if value is not None and value > 0:
+                by_study.setdefault(sid, []).append(value)
+    out = []
+    # one study, one vote: the reference is the median of the other studies' OWN medians, not of their
+    # pooled rates, so a study that gave twenty rates cannot set every other study's test. Pooling read
+    # the same as this while every study gave two or three, and would have drifted as they diverged
+    # (Craig's agent, on #287); it is what "slow as a block" against "the other studies" means.
+    medians = {sid: statistics.median(vs) for sid, vs in by_study.items()}
+    for sid, values in sorted(by_study.items()):
+        others = [m for other, m in medians.items() if other != sid]
+        if len(others) < SLOW_MIN_OTHER_STUDIES:
+            continue
+        reference = statistics.median(others)
+        if max(values) * SLOW_FACTOR < reference:
+            out.append({"study": sid, "rates": len(values), "fastest": max(values),
+                        "others_median": reference, "factor": reference / max(values)})
+    return out
+
+
 def rate_meta(net: InteractionNetwork, rates: dict, method: str) -> str:
     """The `growth_rates` block of a network's meta: the rule, a rate per organism, and the organisms that
     have none, so a downloaded network carries the rates it was reported with and says what is missing."""
     return {"rule": rate_rule(method), "organisms": {nid: dict(rate) for nid, rate in rates.items()},
-            "without_a_rate": sorted(_label(node) for nid, node in net.nodes.items() if nid not in rates)}
+            "without_a_rate": sorted(_label(node) for nid, node in net.nodes.items() if nid not in rates),
+            "slow_studies": slow_studies(rates)}
 
 
 def _number(value: float | None) -> str:
@@ -327,7 +368,12 @@ def _number(value: float | None) -> str:
     did not grow at all (#129)."""
     if value is None:
         return "NA"
-    return "0" if value == 0 else f"{value:.4f}".rstrip("0").rstrip(".")
+    if value == 0:
+        return "0"
+    text = f"{value:.4f}".rstrip("0").rstrip(".")
+    # four decimal places print any |value| below 5e-5 as `0` or `-0`, and `0` is documented as no
+    # interaction; four significant digits there instead, as `_coefficient` writes them (#211)
+    return f"{value:.4g}" if text in ("0", "-0") else text
 
 
 def matrix_csv(net: InteractionNetwork, diagonal: float | None = None) -> str:
@@ -339,6 +385,98 @@ def matrix_csv(net: InteractionNetwork, diagonal: float | None = None) -> str:
     for name, row in zip(names, matrix, strict=True):
         writer.writerow([name, *(_number(v) for v in row)])
     return out.getvalue()
+
+
+# The file written beside the adjacency matrix CSV (Karoline, 2026-10-12, on #212: "Sidecar file").
+ABOUT_SUFFIX = ".about.txt"
+
+
+def about_name(csv_name: str) -> str:
+    """The sidecar's name for a matrix file: `x.csv` gives `x.about.txt`."""
+    stem = csv_name[:-4] if csv_name.lower().endswith(".csv") else csv_name
+    return stem + ABOUT_SUFFIX
+
+
+def matrix_about(net: InteractionNetwork, csv_name: str = "grownet_matrix.csv") -> str:
+    """What the adjacency matrix CSV is, for the file written beside it (#212).
+
+    The CSV is a bare grid: no tool, version, date, derivation, metric or threshold, nothing saying rows are
+    the affected organism, and no key for `0` or `NA`, while changing a setting changes every number and
+    the file looks the same. A comment header would sit inside the grid, and R's `read.csv` does not skip
+    `#` lines unless told to, so the description travels beside the grid instead. It also names the
+    pairs `matrix_csv` leaves at 0 for disagreeing in sign, which the CSV used to drop silently.
+    """
+    import json
+    import textwrap
+
+    from . import brand
+    from .help import EDGE_ATTRIBUTES
+
+    meta = net.meta
+    names, _, conflicts = rows(net)
+    k = (meta.get("absence") or {}).get("k")
+    metrics = sorted({e.metric for e in net.edges if e.metric})
+
+    def para(text, indent="  "):
+        return textwrap.wrap(text, 106, initial_indent=indent, subsequent_indent=indent + "    ")
+
+    lines = [f"{brand.NAME} {meta.get('tool_version', '')}: adjacency matrix",
+             f"derived {meta.get('derived_at', '')} from {meta.get('source_db', 'mGrowthDB')}",
+             f"describes {csv_name}, {len(names)} x {len(names)}. Keep this file beside it: the CSV alone "
+             "does not say how it was made.",
+             "",
+             "READING IT"]
+    lines += para("Rows are the affected organism and columns the actor: the cell in row i, column j is the "
+                  "effect of j on i. The diagonal is 0, since this is the plain adjacency matrix; the gLV "
+                  "package is where a diagonal is fitted.")
+    lines += para(f"A cell is the median strength of the arcs of that ordered pair. Strength is "
+                  f"{EDGE_ATTRIBUTES['strength']}.")
+    lines += para(f"Derivation: {derivation_of(net)}. Metric: {', '.join(metrics) or 'not recorded'}. "
+                  "Both change every number here, and the file looks the same either way.")
+    lines += para("0 is no arc in this network for the pair: none was derived, the comparison fell below "
+                  "the absence threshold" + (f" (k = {k})" if k not in (None, "") else "")
+                  + ", it was hidden as low quality, or the pair's arcs disagree in sign (listed below).")
+    lines += para("NA is a comparison where one side did not grow, so no ratio exists: those cells are "
+                  "listed below with the bound the network's arcs carry.")
+    lines.append("")
+    settings = meta.get("settings") or {}
+    lines.append("SETTINGS" if settings else "SETTINGS: none recorded; these records were already derived")
+    lines += [f"  {key}: {json.dumps(settings[key], default=str)}" for key in sorted(settings)]
+    lines.append("")
+    if conflicts:
+        # Which designs disagree, per pair: across a biculture and a drop-out is the pairwise effect and
+        # the in-community effect pulling opposite ways, which the report names as a result (#207);
+        # within one design it is condition or replicate scatter, a different thing to tell a reader.
+        # Listed under one heading they read as one cause (Craig's agent, reading #278 and #280 together).
+        _, conflicting = cells(net)
+        designs = {}
+        for affected_id, actor_id in conflicting:
+            kinds = sorted({e.evidence or "unknown" for e in net.edges
+                            if e.target == affected_id and e.source == actor_id})
+            designs[(_label(net.nodes[affected_id]), _label(net.nodes[actor_id]))] = (
+                "across designs: " + " and ".join(kinds) if len(kinds) > 1
+                else f"within one design: every arc {kinds[0] if kinds else 'unknown'}")
+        lines.append("LEFT AT 0 BECAUSE THE ARCS OF THE PAIR DISAGREE IN SIGN (actor on affected). Some disagree")
+        lines.append("  between designs and some within one; each says which:")
+        lines += [f"  {actor} on {affected} ({designs.get((affected, actor), 'design not recorded')})"
+                  for affected, actor in dict.fromkeys(conflicts)]
+        lines.append("")
+    bounded = bounded_cells(net)
+    if bounded:
+        lines.append("NA CELLS (actor on affected, and the bound where the rule set one)")
+        lines += [f"  {actor} on {affected}" + ("" if bound is None else f": at least {bound:+.4g}")
+                  for affected, actor, bound in bounded]
+        lines.append("")
+    found = media(net)
+    if found:
+        lines.append("MEDIA THE ARCS COME FROM")
+        lines += [f"  {m}" for m in found]
+        lines.append("")
+    lines.append("SOURCES (cite the studies behind the arcs you use)")
+    lines += [f"  {sid}: {study.citation or 'no citation recorded'}"
+              + (f" [{study.license}]" if study.license else "") + (f" {study.url}" if study.url else "")
+              for sid, study in sorted(net.studies.items())] or ["  none"]
+    return "\n".join(lines) + "\n"
 
 
 def derivation_of(net: InteractionNetwork | None) -> str:
@@ -496,7 +634,10 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
                           else rate.get("capacity_n", "")) if capacity is not None else "",
                          # an empty capacity reads as absence unless the curves that gave none are
                          # counted where the capacity itself is read (found 2026-10-06)
-                         len(rate.get("capacity_left_out") or "") or "",
+                         # 0 is a count, and a blank is what R reads as NA, which is the cell the
+                         # column exists to tell apart from "no capacity at all" (#211 item 5); blank
+                         # only where the derivation did not record the curves at all
+                         "" if "capacity_left_out" not in rate else len(rate.get("capacity_left_out") or ()),
                          # a plateau is the peak of a curve that may have declined after it, so what the
                          # curves held at their last measurement travels with it (Karoline, 2026-10-07)
                          "" if rate.get("capacity_fall") is None else f"{rate['capacity_fall']:.4g}",
@@ -992,8 +1133,13 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             "from_the_ratio": [(_label(net.nodes[a]), _label(net.nodes[b]))
                                for (a, b), entry in values.items() if entry["how"] == "ratio"],
             "obligate_rows": list(rows_fitted), "plateau_rows": list(plateau_rows),
+            # only cells that are in a matrix: an organism left out of every block took its censored
+            # cells with it, and the README named them as entering the median of their pair while
+            # WHAT IS NOT IN HERE listed the same organisms as excluded (#211 item 2)
             "censored_cells": [(_label(net.nodes[a]), _label(net.nodes[b]))
-                               for (a, b), entry in values.items() if entry["censored"]],
+                               for (a, b), entry in values.items()
+                               if entry["censored"] and any(a in block["ids"] and b in block["ids"]
+                                                            for block in matrices)],
             "metric": metrics[0] if metrics else "",
             # the integrated path's equivalent of `plateau_rows`: an organism whose fit implied no
             # plateau, so a measured one was put in its place. `plateau_rows` is populated from
@@ -1022,21 +1168,35 @@ def coefficient_csv(block: dict) -> str:
     return out.getvalue()
 
 
-def _rate_method_lines(got: dict) -> list:
-    """What the README says about the estimator behind r, and what choosing another one would move."""
+def _rate_method_lines(got: dict, derivation: str = "replicate") -> list:
+    """What the README says about the estimator behind r, and what choosing another one would move.
+
+    Per derivation, as `DIAGONAL_PROSE` and `OFF_DIAGONAL` are: a package built in gLV mode said, nineteen
+    lines below its own integrated description, that "each off-diagonal uses its own comparison's two
+    rates" and that the Growth rate method setting chooses the estimator, which the integrated form does
+    not read (#211 item 1).
+    """
     methods = got["rate_methods"]
     named = ", ".join(methods) if methods else "not recorded"
     merge = ("the median over the fitted rows, each row's rate the median over that organism's "
              "monoculture replicates" if any(str(m).startswith("integrated") for m in methods)
              else "median over replicates and studies")
-    lines = [f"  Growth rates: {named}, {merge}, batch monocultures only.",
-             "      The estimator sets where this matrix settles as well as how fast a simulation",
-             "      runs. The diagonal's r_i is that merged rate, while each",
-             "      off-diagonal uses its own comparison's two rates; x_j_star is the mean over the",
-             "      window that estimator fitted in; and the rate guards reject different curves. So",
-             "      the equilibrium below belongs to this estimator. The Growth rate method setting",
-             "      chooses it.",
-             ]
+    if derivation == "integrated":
+        lines = [f"  Growth rates: {named}, {merge}, batch monocultures only.",
+                 "      r_i is fitted together with A[i][i] from the organism's monoculture time courses,",
+                 "      and its row's off-diagonals from the co-cultures with those held fixed, so no",
+                 "      separate estimator is chosen: the Growth rate method setting is not read by this",
+                 "      derivation. The equilibrium below belongs to that fit.",
+                 ]
+    else:
+        lines = [f"  Growth rates: {named}, {merge}, batch monocultures only.",
+                 "      The estimator sets where this matrix settles as well as how fast a simulation",
+                 "      runs. The diagonal's r_i is that merged rate, while each",
+                 "      off-diagonal uses its own comparison's two rates; x_j_star is the mean over the",
+                 "      window that estimator fitted in; and the rate guards reject different curves. So",
+                 "      the equilibrium below belongs to this estimator. The Growth rate method setting",
+                 "      chooses it.",
+                 ]
     if got["lag_methods"]:
         lines.append(f"  Lag: {', '.join(got['lag_methods'])}, reported beside each rate in "
                      "growth_rates.csv. A gLV model has no lag term, so a simulation that should start "
@@ -1061,6 +1221,11 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "  growth_rates.csv        one growth rate per organism, with the estimator, the lag and the",
         "                          monoculture carrying capacity behind it, and the doubling time the",
         "                          rate implies, ln(2) / r, in the time unit of the rate",
+        "  MATCH THE TWO BY THE ORGANISM COLUMN, NEVER BY POSITION. growth_rates.csv holds every",
+        "      organism with a rate, in one order; each matrix holds only its own unit's organisms, in",
+        "      its own order. Rows 1 to n of the rates file are not the rates of an n x n matrix, and a",
+        "      simulation built that way runs without an error and settles somewhere else. In R:",
+        "      r <- rates$growth_rate[match(rownames(A), rates$organism)]",
         "",
         "THE COEFFICIENTS",
         "  A[i][j] is the effect of j on i, so rows are affected and columns are the actor:",
@@ -1089,7 +1254,7 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "      arcs disagree in sign is left at 0 and named below.",
         *_media_lines(net),
         *_dropout_lines(net),
-        *_rate_method_lines(got),
+        *_rate_method_lines(got, derivation_of(net)),
         "",
         "WHAT THIS MODEL ASSUMES",
         *MODEL_ASSUMPTIONS,

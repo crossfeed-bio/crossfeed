@@ -236,6 +236,10 @@ class MGrowthDBClient:
         self.reused = 0                # responses served from the kept files, for the report
         self.fetched = 0               # responses read from mGrowthDB
         self.refreshed: list = []      # studies whose `uploadedAt` moved, so their responses were dropped
+        # responses this client already held in memory: on the page, whose client lives for an hour, a
+        # second search over the same studies reads nothing and reuses nothing from disk, and its report
+        # said "0 from mGrowthDB, 0 reused" about a network built entirely from measurements (#187)
+        self.remembered = 0
         # one kept-open connection per thread: a new HTTPS connection per request cost about 120 ms against
         # 55 ms on an open one, and the parallel prefetch (grownet.fetch) gives each worker its own
         self._local = threading.local()
@@ -314,6 +318,8 @@ class MGrowthDBClient:
 
     def _cache_get(self, key: str):
         if self._mem is not None and key in self._mem:
+            with self._index_lock:
+                self.remembered += 1
             return self._mem[key]
         if not self.cache_dir:
             return None
