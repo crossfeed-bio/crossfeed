@@ -60,12 +60,14 @@ LEGACY_META = {"grownet.interaction_network/v3": {
     "growth_rates"}}
 
 
-# The result format each older format's readers accept (`published.FORMAT` of the versions that read it:
-# 0.3.0 and 0.4.0 both read grownet.all_result/v1). A copy refuses a file in any other format and derives
-# All live, so an older file that kept the CURRENT format after a move of `published.FORMAT` would strand
-# every installed copy while every check passed (found in review).
-READER_FORMAT = {"grownet.interaction_network/v3": "grownet.all_result/v1",
-                 "grownet.interaction_network/v4": "grownet.all_result/v1"}
+# What each older format's readers accept before they serve the file: the result format (`published.FORMAT`
+# of the versions that read it: 0.3.0 and 0.4.0 both read grownet.all_result/v1) and the derivation their
+# default settings ask for (0.4.0's DEFAULTS say replicate; 0.3.x checks none). A copy refuses any other
+# and derives All live, so an older file that followed a move of the current format or the current default
+# derivation would strand every installed copy while every check passed (found in review). The /v4 entry
+# is this version's, for when the format moves on.
+READERS = {"grownet.interaction_network/v3": {"format": "grownet.all_result/v1", "derivation": "replicate"},
+           "grownet.interaction_network/v4": {"format": "grownet.all_result/v1", "derivation": "replicate"}}
 
 
 def legacy_payload(payload: dict, legacy_schema: str = LEGACY["schema"]) -> dict:
@@ -84,11 +86,16 @@ def legacy_payload(payload: dict, legacy_schema: str = LEGACY["schema"]) -> dict
             raise ValueError(f"{legacy_schema} declares {kind} fields the current format no longer has "
                              f"({sorted(removed)}): a reader of it cannot be served by removing fields, "
                              "which is a decision about that format, not something to publish silently")
-    wanted = READER_FORMAT.get(legacy_schema)
-    if payload.get("format") != wanted:
-        raise ValueError(f"the result is in {payload.get('format')!r} and readers of {legacy_schema} accept "
-                         f"{wanted!r}: a format move is a decision about those readers, not something to "
-                         "publish silently, since they would refuse the file and derive All live")
+    readers = READERS.get(legacy_schema) or {}
+    derivation = ((payload.get("network") or {}).get("meta") or {}).get("settings", {}) or {}
+    # as the readers judge: a format other than theirs, or a derivation recorded and not theirs (they serve
+    # a file that records none)
+    for what, got in (("format", payload.get("format")), ("derivation", derivation.get("derivation"))):
+        if got != readers.get(what) and (what == "format" or got is not None):
+            raise ValueError(f"the result's {what} is {got!r} and readers of {legacy_schema} accept "
+                             f"{readers.get(what)!r}: moving it is a decision about those readers, not "
+                             "something to publish silently, since they would refuse the file and derive "
+                             "All live")
     out = json.loads(json.dumps(payload))
 
     def strip(network):

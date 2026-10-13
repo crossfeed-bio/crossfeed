@@ -446,7 +446,7 @@ def report_text(result: dict) -> str:
                 extra.append(f"{len(others)} other medium(s) hold a plateau of this organism, named below")
             left = rate.get("capacity_left_out") or []
             if left:
-                extra.append(f"{len(left)} curve(s) gave no capacity")
+                extra.append(f"{len(left)} {'row(s)' if rate.get('n_label') else 'curve(s)'} gave no capacity")
             # a derivation that fits each row has fitted rows rather than monoculture replicates, and
             # says so, so the count is not read as a number of cultures (#142 item 4)
             of = (f"median of the {len(strains)} strains' rates ({', '.join(strains)}), resting on "

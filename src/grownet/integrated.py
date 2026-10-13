@@ -856,8 +856,11 @@ def fitted_rates(records: list) -> dict:
         label = record.get("medium") or ""
         key = key_from_label(label)
         one = at["by_medium"].setdefault(key, {"label": label, "values": [], "unit": capacity_unit,
-                                               "points": [], "per_study": {}, "falls": []})
+                                               "points": [], "per_study": {}, "falls": [], "rows": []})
         one["values"].append(-rate / own)
+        partner = record.get("source_name") or record.get("source")
+        one["rows"].append(f"{study or 'a study'}: the row fitted" + (f" with {partner}" if partner else "")
+                           + (f" in {record['fit_condition']}" if record.get("fit_condition") else ""))
         one["points"].append(record.get("fit_points", 0))
         if record.get("fitted_capacity_fall") is not None:
             one["falls"].append(record["fitted_capacity_fall"])
@@ -874,11 +877,12 @@ def fitted_rates(records: list) -> dict:
         # choice does not depend on the order the rows arrived in. `merge_rates` chooses the same way.
         order = sorted(at["by_medium"].items(), key=lambda kv: (-len(kv[1]["values"]), kv[1]["label"]))
         chosen = order[0][1] if order else None
-        left_out = [(f"{len(other['values'])} fitted row(s) in {other['label']}",
-                     f"this organism's capacity is taken from {chosen['label']}, where more rows were "
-                     "fitted; plateaus are not pooled across media, since a capacity sits beside "
-                     "off-diagonals measured in one of them")
-                    for _key, other in order[1:]]
+        # one entry per row, so the list's length is the count the report and the csv give (found in
+        # review: one entry per medium was counted as one)
+        left_out = [(row, f"its plateau is in {other['label']}, and this organism's capacity is taken from "
+                          f"{chosen['label']}, where more rows were fitted; plateaus are not pooled across "
+                          "media, since a capacity sits beside off-diagonals measured in one of them")
+                    for _key, other in order[1:] for row in other["rows"]]
         out[nid] = {
             "name": at["name"], "rate": statistics.median(at["rates"]), "unit": at["unit"],
             # what the median rests on: the fitted rows, which is what this derivation has instead of

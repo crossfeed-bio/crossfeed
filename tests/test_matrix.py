@@ -554,3 +554,64 @@ def test_a_strain_whose_replicates_are_empty_counts_its_rows():
     rates = {"ncbi:1": {**_STRAIN, "name": "Blautia a", "n": 2, "replicates": None},
              "ncbi:2": {**_STRAIN, "name": "Blautia b", "n": 3, "replicates": 4}}
     assert matrix.for_nodes(_GENUS_NET, rates)["blautia"]["replicates"] == 6
+
+
+def test_a_genus_whose_plateaus_are_in_two_units_leaves_every_plateau_out_and_says_why():
+    """Round 7 of the review: such a genus has no capacity, while growth_rates.csv said 1 curve was left out
+    of 10 that plateaued, and the report kept a strain's "capacity is taken from WC" beside no capacity.
+    Strain a: 4 curves in WC and 3 in mGAM (named as left out by its own merge), Cells/mL; strain b: 3 in OD."""
+    taken = ("r", "its plateau is in mGAM, and this organism's capacity is taken from WC, where more curves "
+                  "reached a plateau")
+    rates = {"ncbi:1": {**_STRAIN, "name": "Blautia a", "capacity_curves": 4, "capacity_left_out": [taken] * 3},
+             "ncbi:2": {**_STRAIN, "name": "Blautia b", "capacity_unit": "OD", "capacity_curves": 3,
+                        "capacity_left_out": [("q", "the curve never reached a plateau")]}}
+    row = matrix.for_nodes(_GENUS_NET, rates)["blautia"]
+    assert row["capacity"] is None and len(row["capacity_left_out"]) == 1 + 4 + 3 + 3
+    assert not any("taken from" in why for _, why in row["capacity_left_out"])
+    assert sum("plateaued in different units (Cells/mL, OD)" in why for _, why in row["capacity_left_out"]) == 10
+    table = matrix.rates_csv({"blautia": row}).splitlines()
+    assert dict(zip(table[0].split(","), table[1].split(","), strict=True))["capacity_curves_left_out"] == "11"
+    text = _genus_report(row)
+    assert "11 row(s) gave no capacity" in text and "taken from" not in text, text
+
+
+def test_the_integrated_package_readme_states_the_genus_rule_too():
+    """Round 7 of the review: the clause was tested on the replicate README only, and the integrated one,
+    which gLV mode writes, has its own wording."""
+    net = _net([dict(_arc("blautia", "roseburia", 1.0), source_name="Blautia", target_name="Roseburia",
+                     source_identity="genus", target_identity="genus", metric="integrated:two_stage",
+                     coefficient=-1e-10)])
+    net.meta["settings"] = {"derivation": "integrated"}
+    rates = matrix.for_nodes(net, {"ncbi:1": {**_STRAIN, "name": "Blautia a", "method": "integrated:two_stage"},
+                                   "ncbi:2": {**_STRAIN, "name": "Blautia b", "method": "integrated:two_stage"}})
+    readme = matrix.readme_from(matrix.coefficients(net, rates), net, rates)
+    assert "the median over the fitted rows" in readme, "the integrated wording"
+    assert "a genus of several strains: the median of its strains' rates" in readme
+
+
+def test_the_genus_guards_the_seventh_review_round_left_open():
+    """Round 7 of the review, mutants that survived: the count of strains behind a capacity, a genus with
+    no capacity listing strains behind one, the units sentence on a row that has a capacity, a unitless
+    capacity counted into capacity_n; and the reason the README and the payload give for no capacity."""
+    rates = {"ncbi:1": {**_STRAIN, "name": "Blautia a"}, "ncbi:2": {**_STRAIN, "name": "Blautia b"},
+             "ncbi:3": {**_STRAIN, "name": "Blautia c", "capacity": None, "capacity_n": 0}}
+    three = matrix.for_nodes(_GENUS_NET, rates)["blautia"]
+    assert "the median of the 2 strains' capacities (Blautia a, Blautia b)" in _genus_report(three)
+    split = matrix.for_nodes(_GENUS_NET, {"ncbi:1": {**_STRAIN, "name": "Blautia a"},
+                                          "ncbi:2": {**_STRAIN, "name": "Blautia b", "capacity_unit": "OD"}})
+    assert split["blautia"]["capacity_from"] == []
+    # integrated.py writes a strain row with a capacity and plateaus in other units beside it
+    has_one = {**_STRAIN, "name": "Blautia a", "other_capacity_units": ["S1 (OD)", "S2 (CFU/mL)"]}
+    assert "no capacity" not in _genus_report(has_one)
+    unitless = {"ncbi:1": {**_STRAIN, "name": "Blautia a", "capacity_n": 2},
+                "ncbi:2": {**_STRAIN, "name": "Blautia b", "capacity_unit": "", "capacity_n": 3}}
+    assert matrix.for_nodes(_GENUS_NET, unitless)["blautia"]["capacity_n"] == 2
+    # the README and the payload give the true reason: the plateaus were reached, in two units
+    got = matrix.coefficients(_GENUS_NET, split)
+    reasons = dict(got["left_out"])
+    assert "its strains' plateaus are in different units (Cells/mL, OD), which are not converted" in \
+        reasons["Blautia"], reasons
+    assert "reached stationary phase" not in reasons["Blautia"]
+    # and the rule says what the capacity is, as the rate's
+    assert "its capacity the median of the capacities of those of its strains that have one, in one unit" in \
+        matrix.rate_meta(_GENUS_NET, matrix.for_nodes(_GENUS_NET, rates), "easylinear")["rule"]

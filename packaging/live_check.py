@@ -170,18 +170,21 @@ def check_published(out_dir: str) -> tuple:
         # the network AND the arcs below the threshold, which 0.4.0 reads too: a copy whose `absent` was
         # dropped served no arc below the threshold, and one whose `absent.edges` was null made every 0.4.0
         # copy derive All live, with nothing checked (found in review)
-        # what a reader of that format checks before serving it: the result format it reads, and the same
-        # derivation and time as the current file (found in review)
-        if legacy.get("format") != publish_all.READER_FORMAT.get(schema):
-            problems.append(f"{legacy_path.name}: in {legacy.get('format')!r}, which readers of {schema} do "
-                            f"not read ({publish_all.READER_FORMAT.get(schema)!r})")
-        for what, path in (("derived_at", ("derived_at",)), ("derivation", ("settings", "derivation"))):
-            def at(doc, path=path):
-                for key in path:
-                    doc = doc.get(key) if isinstance(doc, dict) else None
-                return doc
-            if at((legacy.get("network") or {}).get("meta")) != at(payload["network"].get("meta")):
-                problems.append(f"{legacy_path.name}: its {what} differs from the current file's")
+        # what a reader of that format checks before serving it: the result format it reads and the
+        # derivation its defaults ask for, both from its own versions rather than from the current file,
+        # which moves with the current defaults (found in review); and the time, the current file's
+        readers = publish_all.READERS.get(schema) or {}
+        meta = (legacy.get("network") or {}).get("meta") if isinstance(legacy.get("network"), dict) else None
+        meta = meta if isinstance(meta, dict) else {}
+        derivation = (meta.get("settings") or {}).get("derivation") if isinstance(meta.get("settings"), dict) \
+            else None
+        for what, got in (("format", legacy.get("format")), ("derivation", derivation)):
+            # as the readers judge: they serve a file that records no derivation
+            if got != readers.get(what) and (what == "format" or got is not None):
+                problems.append(f"{legacy_path.name}: its {what} is {got!r}, and readers of {schema} accept "
+                                f"{readers.get(what)!r}")
+        if meta.get("derived_at") != payload["network"].get("meta", {}).get("derived_at"):
+            problems.append(f"{legacy_path.name}: its derived_at differs from the current file's")
         parts = [("network", net)] + ([("absent", absent)] if absent is not None else [])
         for part, current in parts:
             problems += _older_part(legacy_path.name, schema, part, legacy.get(part), current, manifest)

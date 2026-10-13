@@ -315,8 +315,11 @@ def test_a_capacity_is_taken_from_one_medium_and_the_others_are_named():
     assert merged["capacity_other_media"] == ["mMCB (+acetate)"]
     assert merged["capacity_n"] == 2
     (what, why) = merged["capacity_left_out"][-1]
-    assert what == "1 curve(s) in mMCB (+acetate)"
-    assert "not pooled across media" in why and "taken from mMCB" in why
+    # one entry per curve, named as every other left-out curve is (round 7 of the review: one entry per
+    # medium was counted as one curve however many it held)
+    assert what.endswith("replicate r3"), what
+    assert "its plateau is in mMCB (+acetate)" in why and "not pooled across media" in why
+    assert "taken from mMCB" in why
 
 
 def test_the_medium_with_the_most_curves_wins_whatever_order_the_studies_came_in():
@@ -524,3 +527,31 @@ def test_the_measured_plateau_names_every_curve_it_refuses():
     # that arm is defensive. Written down rather than left as an untested line a reader wonders about.
     # and with no list to report into it still works, since the caller may not pass one
     assert _measured_plateau(reps, "A", spike_factor=100) is not None
+
+
+def test_the_curves_another_medium_holds_are_counted_as_curves():
+    """Round 7 of the review: the other medium's curves were one left-out entry, so "N curve(s) gave no
+    capacity" and growth_rates.csv's capacity_curves_left_out counted media, saying 1 beside "no capacity
+    from 3 curve(s) in mGAM". Three curves plateau in the base medium and two with acetate: two are left
+    out, and each is named."""
+    import csv as csv_module
+    import io as io_module
+
+    from grownet import matrix
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    client = _client({(i, A): _settles(plateau=1.0e8) for i in (1, 2, 3)}
+                     | {(i, A): _settles(plateau=3.0e8) for i in (4, 5)})
+    exps = [_mono_in("E1", A, [(1, "r1"), (2, "r2"), (3, "r3")], "mMCB"),
+            _mono_in("E2", A, [(4, "r4"), (5, "r5")], "mMCB", "mMCB with initial acetate")]
+    found, _ = monoculture_rates(client, exps)
+    nid = next(iter(found))
+    merged = merge_rates([("S1", found)])[nid]
+    assert [what.rsplit(" ", 1)[-1] for what, _ in merged["capacity_left_out"]] == ["r4", "r5"]
+    table = list(csv_module.reader(io_module.StringIO(matrix.rates_csv({nid: merged}))))
+    assert dict(zip(table[0], table[1], strict=True))["capacity_curves_left_out"] == "2"
+    net = InteractionNetwork()
+    net.meta["growth_rates"] = {"rule": "r", "organisms": {nid: merged}}
+    text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "2 curve(s) gave no capacity" in text, text

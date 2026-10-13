@@ -322,3 +322,19 @@ def test_an_older_file_is_written_only_in_the_result_format_its_readers_accept()
         publish_all.legacy_payload(payload, "grownet.interaction_network/v3")
     assert publish_all.legacy_payload({**payload, "format": "grownet.all_result/v1"},
                                       "grownet.interaction_network/v3")["format"] == "grownet.all_result/v1"
+
+
+def test_an_older_file_is_written_only_with_the_derivation_its_readers_ask_for():
+    """Round 7 of the review: the first move of the default derivation would make every installed copy
+    refuse its older file (0.4.0's DEFAULTS ask for replicate), with every check green."""
+    import pytest
+    meta = {"settings": {"derivation": "integrated"}}
+    payload = {"format": "grownet.all_result/v1",
+               "network": {"schema": "grownet.interaction_network/v4", "meta": meta, "nodes": [], "edges": [],
+                           "studies": []}}
+    with pytest.raises(ValueError, match="derivation is 'integrated' and readers of grownet.interaction_network/v3"):
+        publish_all.legacy_payload(payload, "grownet.interaction_network/v3")
+    meta["settings"]["derivation"] = "replicate"
+    assert publish_all.legacy_payload(payload, "grownet.interaction_network/v3")["format"] == "grownet.all_result/v1"
+    meta.pop("settings")                                   # recording none, it is served
+    assert publish_all.legacy_payload(payload, "grownet.interaction_network/v3")["format"] == "grownet.all_result/v1"

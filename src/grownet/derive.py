@@ -864,11 +864,13 @@ def merge_rates(per_study) -> dict:
         order = sorted(at["by_medium"].items(), key=lambda kv: (-len(kv[1]["values"]), kv[1]["label"]))
         chosen = order[0][1] if order else None
         left_out = list(at["capacity_left_out"])
+        # one entry per curve, as every other entry here is: one entry per medium was counted as one curve
+        # in "N curve(s) gave no capacity" and in capacity_curves_left_out (found in review)
         for _key, other in order[1:]:
-            left_out.append((f"{len(other['values'])} curve(s) in {other['label']}",
-                             f"this organism's capacity is taken from {chosen['label']}, where more "
-                             "curves reached a plateau; plateaus are not pooled across media, since a "
-                             "capacity sits beside off-diagonals measured in one of them"))
+            left_out += [(curve, f"its plateau is in {other['label']}, and this organism's capacity is taken "
+                                 f"from {chosen['label']}, where more curves reached a plateau; plateaus are "
+                                 "not pooled across media, since a capacity sits beside off-diagonals "
+                                 "measured in one of them") for curve in other["curves"]]
         out[nid] = {"name": at["name"], "rate": median(at["values"]), "unit": at["unit"],
                     "n": len(at["values"]), "studies": at["studies"], "per_study": at["per_study"],
                     "other_units": at["other_units"], "method": at["method"],

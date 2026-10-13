@@ -380,9 +380,48 @@ def test_a_file_its_reader_would_refuse_is_a_problem(tmp_path, monkeypatch):
     assert any("would not be served at the defaults: it was derived by the integrated" in p for p in problems_with(
         "all_result.v4.json", current, lambda d: d["network"]["meta"]["settings"].update(derivation="integrated")))
     # the older file, as its readers see it
-    assert any(p.startswith("all_result.json: in 'grownet.all_result/v9'") for p in problems_with(
-        "all_result.json", older, lambda d: d.update(format="grownet.all_result/v9")))
+    assert ("all_result.json: its format is 'grownet.all_result/v9', and readers of "
+            "grownet.interaction_network/v3 accept 'grownet.all_result/v1'") in problems_with(
+        "all_result.json", older, lambda d: d.update(format="grownet.all_result/v9"))
     assert "all_result.json: its derived_at differs from the current file's" in problems_with(
         "all_result.json", older, lambda d: d["network"]["meta"].update(derived_at="2020-01-01T00:00:00+00:00"))
-    assert "all_result.json: its derivation differs from the current file's" in problems_with(
+    # the derivation is judged against what its readers' defaults ask for, not against the current file,
+    # which moves with this version's defaults (round 7)
+    assert ("all_result.json: its derivation is 'integrated', and readers of grownet.interaction_network/v3 "
+            "accept 'replicate'") in problems_with(
         "all_result.json", older, lambda d: d["network"]["meta"]["settings"].update(derivation="integrated"))
+    # a file that records no derivation is served by them, so it is not a problem
+    assert problems_with("all_result.json", older, lambda d: d["network"]["meta"]["settings"].pop("derivation")) == []
+
+
+def test_an_older_file_judged_by_its_readers_after_a_move_of_the_current_format(tmp_path, monkeypatch):
+    """Round 7 of the review: no test moved `published.FORMAT`, so comparing the older file's format with
+    the current file's, not with what its readers read, survived; nor did any older file lack derived_at,
+    which 0.4.0 refuses."""
+    import json
+
+    import live_check
+    import publish_all
+    from test_gui import FakeClient
+
+    import grownet.published as published
+    from grownet.gui import run_query
+    monkeypatch.setattr(publish_all, "run_query", lambda *a, **k: run_query(
+        FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
+    out = tmp_path / "out"
+    assert publish_all.main(str(out), None, previous=lambda: None) == 0
+    clean = {name: (out / name).read_text() for name in ("all_result.v4.json", "all_result.json")}
+    monkeypatch.setattr(published, "FORMAT", "grownet.all_result/v2")
+    for name, text in clean.items():
+        doc = json.loads(text)
+        doc["format"] = "grownet.all_result/v2"
+        (out / name).write_text(json.dumps(doc))
+    problems = live_check.check_published(str(out))[0]
+    assert any(p.startswith("all_result.json: its format is 'grownet.all_result/v2'") for p in problems), problems
+    monkeypatch.undo()
+    for name, text in clean.items():
+        (out / name).write_text(text)
+    doc = json.loads(clean["all_result.json"])
+    doc["network"]["meta"].pop("derived_at")
+    (out / "all_result.json").write_text(json.dumps(doc))
+    assert "all_result.json: its derived_at differs from the current file's" in live_check.check_published(str(out))[0]

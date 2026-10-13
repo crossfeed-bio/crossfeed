@@ -779,7 +779,8 @@ def test_a_fitted_capacity_comes_from_one_medium_as_the_decision_says():
     assert got["capacity_medium"] == acid
     assert got["capacity_media"] == [acid] and got["capacity_other_media"] == [both]
     left_out = got["capacity_left_out"]
-    assert len(left_out) == 1 and "1 fitted row(s)" in left_out[0][0] and both in left_out[0][0]
+    # one entry per row, so the count the report and the csv give is the rows' (round 7 of the review)
+    assert len(left_out) == 1 and "the row fitted" in left_out[0][0] and f"its plateau is in {both}" in left_out[0][1]
     assert "not pooled across media" in left_out[0][1]
     # the rate itself is still the median over every row, whatever the medium: a rate is a property of
     # the organism in each medium it was measured in, and only the plateau is the one the matrix sits on
@@ -1184,3 +1185,21 @@ def test_the_spike_limit_applies_under_the_integrated_form_too():
 
     # and at a limit nothing reaches, nothing is dropped
     assert _unspiked_for(reps, ["A", "B"], 1e9, {"name": "E1"}, lambda e: "E1")[0] == reps
+
+
+def test_the_rows_another_medium_holds_are_counted_as_rows():
+    """Round 7 of the review: one left-out entry per medium was counted as one, and the report called the
+    rows curves. Two rows in the antioxidant medium are two entries, and the report says rows."""
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    acid = "Minimal medium (MM) (+0.75% linoleic acid)"
+    both = "Minimal medium (MM) (+0.0015mm tbhq antioxidant, +0.75% linoleic acid)"
+    got = integrated.fitted_rates([_rate_record(acid, 0.4, -4.0e-10), _rate_record(acid, 0.4, -8.0e-10),
+                                   _rate_record(acid, 0.4, -6.0e-10), _rate_record(both, 0.4, -1.0e-10),
+                                   _rate_record(both, 0.4, -2.0e-10)])["ncbi:1"]
+    assert len(got["capacity_left_out"]) == 2
+    net = InteractionNetwork()
+    net.meta["growth_rates"] = {"rule": "r", "organisms": {"ncbi:1": got}}
+    text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "2 row(s) gave no capacity" in text and "curve(s) gave no capacity" not in text, text

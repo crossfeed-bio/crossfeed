@@ -120,10 +120,12 @@ content.
   from; a genus of one strain is that strain's row. It counted fitted rows and left the provenance empty.
   A genus row of several strains also keeps the lag's method, the plateau's fall, media and other media,
   and sends its replicates in the gLV payload, where it sent null beside the zip's count. The report and
-  the rule (and the gLV package README) say its rate and capacity are the median of its strains' own,
-  naming the strains and resting on the counts given; "median of 7 monoculture replicate(s)" named a median
-  that was not taken. A genus with no capacity names no medium for one, and says when its strains'
-  plateaus are in units that are not converted.
+  the rule and the gLV package README say its rate and capacity are the median of its strains' own, and
+  the report names those strains and the counts the medians rest on; "median of 7 monoculture replicate(s)" named a median
+  that was not taken. A genus with no capacity names no medium for one, and the report, the README and
+  the payload say when its strains' plateaus are in units that are not converted, with every such plateau
+  counted as left out. Every curve or fitted row another medium holds is counted as left out, where one
+  entry per medium was counted as one.
 - **A rate from a culture-level count says so** in `capacity_source`, so `growth_rates.csv`, the gLV payload
   and the report name it, without a new field; a rate that also rests on per-strain curves does not blame
   the count for its missing capacity.

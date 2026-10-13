@@ -296,6 +296,24 @@ def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None)
             continue
 
         capacity = _merged_capacity(members)
+        if capacity["capacity"] is None and capacity["other_capacity_units"]:
+            # the strains plateaued in units that are not converted, so every plateau they reached is left
+            # out, one entry per curve or row as everywhere else, and no strain's "taken from <medium>"
+            # stands beside a genus with no capacity (found in review)
+            units = ", ".join(capacity["other_capacity_units"])
+            why = f"this genus's strains plateaued in different units ({units}), which are not converted, so it " \
+                  "has no capacity"
+            kept = [x for r in members for x in r.get("capacity_left_out") or []
+                    if "capacity is taken from" not in x[1]]
+            plateaus = []
+            for r in members:
+                if r.get("capacity") is None:
+                    continue
+                n = (r["capacity_curves"] if r.get("capacity_curves") is not None else r.get("capacity_n", 0)) \
+                    + sum("capacity is taken from" in x[1] for x in r.get("capacity_left_out") or [])
+                plateaus += [(f"{r.get('name', '')}: plateau {k + 1} of {n} ({r.get('capacity_unit', '')})", why)
+                             for k in range(n)]
+            capacity["capacity_left_out"] = kept + plateaus
         # the strains whose plateau the merged capacity is the median of; with none, every strain says why
         behind = [r for r in members if r.get("capacity") is not None
                   and r.get("capacity_unit") == capacity["capacity_unit"]] if capacity["capacity"] is not None \
@@ -432,7 +450,8 @@ def genus_rule(rates: dict) -> str:
     network's rule and the package README, which said the old words after the rule was fixed (found in
     review)."""
     several = any(len(rate.get("merged_from") or ()) > 1 for rate in rates.values())
-    return "; a genus of several strains: the median of its strains' rates" if several else ""
+    return ("; a genus of several strains: the median of its strains' rates, and its capacity the median of "
+            "the capacities of those of its strains that have one, in one unit" if several else "")
 
 
 def rate_meta(net: InteractionNetwork, rates: dict, method: str) -> str:
@@ -1100,6 +1119,12 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             left_out.append((name, "no growth rate, and no arc saying it grows only with a partner, so "
                                    "neither its own limitation nor the effect of anything on it can be "
                                    "fitted"))
+        elif len(rate.get("other_capacity_units") or []) > 1:
+            # a genus whose strains plateaued in different units: its curves DID reach a plateau, and the
+            # README and the payload said none had (found in review). Empty on every strain row without one.
+            left_out.append((name, "its strains' plateaus are in different units ("
+                                   + ", ".join(rate["other_capacity_units"]) + "), which are not converted, "
+                                   "so its self-limitation is not fitted"))
         else:
             left_out.append((name, "no carrying capacity from a curve that reached stationary phase, so "
                                    "its self-limitation is not fitted"))
