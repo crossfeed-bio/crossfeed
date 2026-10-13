@@ -112,3 +112,21 @@ test_that("scaling fitted coefficients warns, since nothing about their units as
     expect_equal(scaled$scaled_by, 1 / 2e-9)
     expect_equal(glv_matrix(scaled)["A", "B"], 1)
 })
+
+test_that("the coverage line counts the organisms outside every matrix too", {
+    # It counted against the matrices' organisms, and an organism without a rate is what is left out of
+    # them, so a live corpus object read "8 of 8 organisms" for an 11-organism network (#211 item 3).
+    inside <- paste(capture.output(print(example_glv())), collapse = "\n")
+    expect_match(inside, "growth rates: 2 of the 3 organisms in a matrix")
+    expect_false(grepl("more in the network", inside))       # C has no rate and IS in the matrix
+    payload <- example_payload()
+    payload$caveats$without_a_rate <- list("C", "D", "E")      # D and E are in no matrix
+    glv <- grownet:::as_grownet_glv(payload)
+    text <- paste(capture.output(print(glv)), collapse = "\n")
+    expect_match(text, "2 of the 3 organisms in a matrix")
+    expect_match(text, "2 more in the network have none and are in no matrix")
+    summary_of <- NULL
+    invisible(capture.output(summary_of <- summary(glv)))
+    expect_equal(summary_of$organisms, 3)
+    expect_equal(summary_of$network_organisms, 5)
+})

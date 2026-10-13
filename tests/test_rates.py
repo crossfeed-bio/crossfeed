@@ -128,3 +128,23 @@ def test_a_refit_that_turns_negative_under_a_rising_window_is_no_rate():
     falling = [5, 4, 3, 2, 1, 0, -1]
     assert easylinear_fit(list(range(7)), [math.exp(y) for y in falling], window=5)["rate"] < 0
 
+
+def test_easylinear_refits_from_the_first_marked_window_to_the_last_as_growthrates_does():
+    """#229, decided as option 2 (Karoline, 2026-10-12): the refit spans the first window that reaches the
+    quota to the end of the last, with every window between included, which is `growthrates`'
+    `seq(min(candidates), max(candidates) + h - 1)`. A "fix" to the longest contiguous run would stop the
+    rates agreeing with the reference and with mGrowthDB, so this pins the reference's behavior.
+
+    Two equally steep rises separated by a fall: both are marked, and the refit spans the fall too.
+    """
+    import math
+
+    from grownet.rates import easylinear_fit
+    logs = [0, 1, 2, 3, 4, 5, 4, 3, 2, 1, 2, 3, 4, 5, 6, 7]       # rise, fall, rise: slope 1 per hour
+    times = list(range(len(logs)))
+    got = easylinear_fit(times, [math.exp(y) for y in logs], window=5)
+    assert (got["start"], got["end"]) == (0, 14), got           # first rising window to the last one's end
+    assert got["points"] == 15 and got["rate"] < 0.95 * 1.0       # below the quota, as the reference returns
+    # the reference's own answer on this curve, from growthrates 0.8.5: points 0 to 14, mumax 0.2142857
+    assert abs(got["rate"] - 0.2142857) < 1e-7, got
+

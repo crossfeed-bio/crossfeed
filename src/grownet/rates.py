@@ -6,8 +6,19 @@ and on 2026-09-27 that the implementation is its own option:
 * `easylinear` (the default): the maximum specific growth rate by the method of Hall et al. (2014) as the
   growthrates R package implements it in `fit_easylinear`, which mGrowthDB uses for the rates it reports.
   Fit a straight line to log abundance over every window of `window` consecutive points, take the steepest,
-  widen it to span every window whose slope reaches `QUOTA` of that maximum, and fit once more over the
-  widened range. With the default window of 5 it reproduces mGrowthDB's own reported rates
+  mark every window whose slope reaches `QUOTA` of that maximum, and fit once more over the range from the
+  FIRST marked window to the end of the LAST. Every window between them is inside that range whether or
+  not it reached the quota, so when the marked windows are not contiguous the refit takes in the stretch
+  between them, and the rate it returns can lie below the quota, or even be negative where the steepest
+  window rose. That is `growthrates`' own behavior, `tp <- seq(min(candidates), max(candidates) + h - 1)`
+  in `fit_easylinear` 0.8.5, and it is kept so the rates agree with the reference and with mGrowthDB
+  (Karoline, 2026-10-12, on #229: option 2). Checked against `growthrates` 0.8.5 on every curve of
+  SMGDB00000004 and SMGDB00000005: identical on all 342 curves both fit, to 5e-15, including a negative
+  rate of -0.01218 on a chemostat curve whose steepest window rose. One difference from the reference
+  remains: `growthrates` refuses a curve holding any value <= 0, while this drops those points and fits
+  the rest (19 organism curves there, all chemostat). This prose used to say "widen it to span every
+  window whose slope reaches QUOTA", which neither implementation does (#229).
+  With the default window of 5 it reproduces mGrowthDB's own reported rates
   (`measurementContexts[].growthRate`): on SMGDB00000004, **119 of 119 comparable curves within 10 per
   cent, median ratio 1.0001**, and over the whole corpus **2132 of 2161, median ratio 0.9998**
   (re-measured live 2026-10-11; it said "43 of 46" from an earlier and smaller corpus, which is the class
