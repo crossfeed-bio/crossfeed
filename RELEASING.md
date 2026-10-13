@@ -93,16 +93,18 @@ comparison and `coefficient` is `(metric_with - metric_without) / partner_abunda
 form, the network validates with no undeclared key, and nothing is empty (#237). It is the one check that
 reads a real mGrowthDB response. A violation opens an issue labeled `live-check-failed`, whose run log
 names every arc; the artifact was published anyway, because every copy derives the same thing live, so
-the fix is in the code. Run it by hand with `python packaging/live_check.py DIR`, where `DIR` holds an
-`all_result.json`.
+the fix is in the code. Run it by hand with `python packaging/live_check.py DIR`, where `DIR` holds the
+files the workflow writes.
 
 ## If the daily All artifact is broken
 
-The `all-network` workflow publishes `all_result.json` as an asset of the `all-network` release, from
-`main`, once a day. Every installed copy reads it when it is less than 36 hours old and speaks that copy's
-format id. If a bad artifact goes out, **delete that one asset**:
+The `all-network` workflow publishes the All network as assets of the `all-network` release, from
+`main`, once a day: `all_result.<format>.json` (today `all_result.v4.json`), named by the format id a copy
+reads, and `all_result.json`, the same network in `/v3` for installed 0.3.x and 0.4.x copies (#289). Every
+copy reads its own file when it is less than 36 hours old. If a bad artifact goes out, **delete both**:
 
 ```bash
+gh release delete-asset all-network all_result.v4.json --yes
 gh release delete-asset all-network all_result.json --yes
 ```
 

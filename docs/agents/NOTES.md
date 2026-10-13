@@ -870,7 +870,8 @@ history is not in the API, so a stored copy cannot tell it is stale (Karoline). 
 
 All is the one query whose cost grows with the whole of mGrowthDB (1,313 requests today, after #95), so
 `.github/workflows/all-network.yml` derives it once a day with `DEFAULTS` (`packaging/publish_all.py`,
-which refuses to publish a derivation with errors) and uploads `all_result.json` to the `all-network`
+which refuses to publish a derivation with errors) and uploads `all_result.v4.json`, named by the format id,
+and `all_result.json`, the same in `/v3` for installed 0.3.x and 0.4.x copies (#289), to the `all-network`
 release. `grownet.published` reads it back: `usable` (the settings are the defaults), `fresh` (its format
 and schema are this version's, and it is less than `MAX_AGE`, 36 hours, old) and `fetch` (None on any
 failure, so the caller derives live). `run_query(..., published=True)` tries it first; the publishing

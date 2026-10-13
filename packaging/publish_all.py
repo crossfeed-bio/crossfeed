@@ -2,7 +2,8 @@
 
 Run by .github/workflows/all-network.yml, which uploads the files it writes to the `all-network` release.
 Usage: python packaging/publish_all.py OUT_DIR [NOTES_FILE]
-Writes all_result.json (what the page and `grownet derive --all` read), all_network.json and all_report.txt,
+Writes all_result.<format>.json (what the page and `grownet derive --all` read), all_result.json (the same as
+the older format installed copies read), all_network.json and all_report.txt,
 and, when given NOTES_FILE, the release description for this run, which the workflow sets on every run.
 """
 import json
@@ -14,8 +15,43 @@ from pathlib import Path
 
 from grownet.gui import DEFAULTS, run_query
 from grownet.mgrowthdb import MGrowthDBClient
-from grownet.published import FILE, MAX_AGE, TIMEOUT, URL, to_payload
+from grownet.published import FILE, MAX_AGE, RELEASE_TAG, TIMEOUT, URL, _identity, to_payload
 from grownet.report import report_text
+
+ROOT = Path(__file__).resolve().parents[1]
+
+# What installed 0.3.x and 0.4.x copies fetch and accept: `published.fresh` there requires the network's
+# schema id to equal their own, /v3, so the /v4 artifact would send every one of them to derive All live
+# from mGrowthDB until upgraded, which is the load the daily file exists to prevent (Craig's agent, on
+# #289). /v4 only ADDED fields, so the same artifact with those fields removed IS a /v3 document, and it is
+# written under the name those copies already fetch (Karoline, 2026-10-12: "Publish both").
+LEGACY = {"file": "all_result.json", "schema": "grownet.interaction_network/v3"}
+LEGACY_URL = f"https://github.com/crossfeed-bio/crossfeed/releases/download/{RELEASE_TAG}/{LEGACY['file']}"
+
+
+def legacy_payload(payload: dict, legacy_schema: str = LEGACY["schema"]) -> dict:
+    """`payload` as a `legacy_schema` document: every node, edge and study field that format does not
+    declare is removed, read from `schema/format_fields.json`, and the identity is recomputed for it.
+
+    Only a format that was ADDED to can be written down this way; a changed meaning cannot be removed by
+    dropping a field, so the manifest's entry for the legacy id is the whole contract.
+    """
+    declared = json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
+    fields = declared["formats"][legacy_schema]
+    out = json.loads(json.dumps(payload))
+
+    def strip(network):
+        if not isinstance(network, dict):
+            return
+        network["schema"] = legacy_schema
+        for key, kind in (("nodes", "node"), ("edges", "edge"), ("studies", "study")):
+            network[key] = [{k: v for k, v in item.items() if k in set(fields[kind])}
+                            for item in network.get(key, [])]
+    strip(out.get("network"))
+    strip(out.get("absent"))
+    out.pop("identity", None)
+    out["identity"] = _identity(out)
+    return out
 
 NETWORK, REPORT = "all_network.json", "all_report.txt"
 
@@ -35,13 +71,18 @@ def previous_arcs(opener=urllib.request.urlopen) -> int | str | None:
     not "no previous artifact" but "cannot tell whether this run collapsed", and it used to switch the
     half check off on exactly the night it might be needed.
     """
-    try:
-        with opener(URL, timeout=TIMEOUT) as response:
-            return len(json.loads(response.read().decode("utf-8"))["network"]["edges"])
-    except urllib.error.HTTPError as e:
-        return None if e.code == 404 else f"GitHub answered HTTP {e.code}"
-    except Exception as e:     # noqa: BLE001 - every other failure is reported, and refuses below
-        return f"{type(e).__name__}: {e}"
+    # the first run under a new format id has no file of its own yet, so it compares with the legacy file
+    for url in (URL, LEGACY_URL):
+        try:
+            with opener(url, timeout=TIMEOUT) as response:
+                return len(json.loads(response.read().decode("utf-8"))["network"]["edges"])
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                continue
+            return f"GitHub answered HTTP {e.code}"
+        except Exception as e:     # noqa: BLE001 - every other failure is reported, and refuses below
+            return f"{type(e).__name__}: {e}"
+    return None
 
 
 def floor(arcs: int, previous: int | None, allow_drop: bool = False) -> list:
@@ -88,10 +129,13 @@ at {meta.get('derived_at')} by grownet {meta.get('tool_version')}, derivation `{
 - `{FILE}` is the file grownet reads. A copy of grownet uses it only when it is {_age(MAX_AGE)}, written \
 in the format and schema that copy reads, and derived by the derivation the copy's settings ask for; \
 otherwise that copy derives All live from mGrowthDB.
+- `{LEGACY['file']}` is the same network for copies that read the older `{LEGACY['schema']}`: the fields \
+added since are removed and nothing else differs, so an installed copy keeps reading the daily file until \
+it is upgraded.
 - `{NETWORK}` and `{REPORT}` are the same network and its report, for reading. **Nothing checks these two \
 against the grownet you have**: a file downloaded by hand is whatever the last run produced, so read \
-`meta.tool_version`, `meta.derived_at` and `meta.settings.derivation` inside `{NETWORK}` before comparing \
-it with your own derivation.
+`meta.tool_version`, `meta.build` (the commit), `meta.derived_at` and `meta.settings.derivation` inside \
+`{NETWORK}` before comparing it with your own derivation.
 
 Every arc cites the studies it comes from, and the report lists them with their titles and DOIs.
 """
@@ -116,7 +160,9 @@ def main(out: str, notes: str | None = None, previous=previous_arcs) -> int:
         net.meta["build"] = {"commit": os.environ["GITHUB_SHA"], "run": os.environ.get("GITHUB_RUN_ID", "")}
     folder = Path(out)
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / FILE).write_text(json.dumps(to_payload(result)) + "\n", encoding="utf-8")
+    payload = to_payload(result)
+    (folder / FILE).write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    (folder / LEGACY["file"]).write_text(json.dumps(legacy_payload(payload)) + "\n", encoding="utf-8")
     (folder / NETWORK).write_text(net.to_json() + "\n", encoding="utf-8")
     (folder / REPORT).write_text(report_text(result), encoding="utf-8")
     if notes:
