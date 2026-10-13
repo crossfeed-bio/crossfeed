@@ -117,10 +117,14 @@ content.
   conflict left at 0, and alone it wrote a 0 named nowhere. Every arc's direction now counts, converted or
   not, as it does in the adjacency matrix; a merged arc with no median ratio says so.
 - **The gLV package says where each left-out effect is**: an effect on or by an organism in no matrix, or
-  between two organisms in different matrices, is listed as in no matrix, not as left at 0; arcs left out
-  of a cell that still holds a value are listed apart; and the unit sentence counts the effects between
-  organisms counted differently that were measured, where it said none ever was. R reads every pair
-  caveat with its actor (`pairs_left_out`, `across_units`, `arcs_left_out`) and prints them.
+  between two organisms in different matrices, is listed as in no matrix, not as left at 0, once with all
+  its reasons; a pair whose arcs disagree in sign is named there too when its organisms share no matrix,
+  where it was named nowhere; arcs left out of a cell that still holds a value are listed apart, among
+  them an arc that gives no number beside arcs that do, which was dropped without a word, while arcs
+  beside a cell of 0 are listed with that cell; and the unit sentence counts the effects between
+  organisms counted differently that were measured, where it said none ever was. A matrix an organism
+  left for an unusable self-limitation counts only the cells, media and sign conflicts it still holds. R reads `pairs_left_out`,
+  `across_units` and `arcs_left_out` with their actors and prints them.
 - **A merged arc keeps no single comparison's bound, capacity, coefficient or fit**: every such field is kept
   only where all merged arcs agree, a merged arc's coefficient is the median of its members', and in a gLV
   package its cell is labeled as a merged arc's, not as one from a network saved before the rates were

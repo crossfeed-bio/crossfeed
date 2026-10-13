@@ -290,7 +290,7 @@ print.grownet_glv <- function(x, ...) {
     for (part in list(list(x$caveats$pairs_left_out, "effect(s) are left at 0 (actor on affected)"),
                       list(x$caveats$across_units, "effect(s) are in no matrix (actor on affected)"),
                       list(x$caveats$arcs_left_out,
-                           "arc(s) are not in their pair's cell, the median of its other arcs (actor on affected)"))) {
+                           "pair(s) have arcs left out of their cell, the median of the pair's other arcs (actor on affected)"))) {
         effects <- part[[1]]
         if (!is.null(effects) && nrow(effects)) {
             cat(sprintf("   * %d %s:\n", nrow(effects), part[[2]]))

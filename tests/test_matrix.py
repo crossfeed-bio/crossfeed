@@ -705,8 +705,10 @@ def test_the_package_routes_each_left_out_effect_where_it_is():
     ((affected, actor, why),) = got["arcs_left_out"]
     assert (affected, actor) == ("A", "B") and "1 arc(s) of this pair measure the actor in CFUs/mL" in why
     assert "cannot be fitted" not in why
+    # and the payload carries it for R, which prints it (round 18: no test read the payload's list)
+    assert matrix.glv_payload(split, rates)["caveats"]["arcs_left_out"] == [["A", "B", why]]
     readme = matrix.readme_from(got, split, rates)
-    assert "These arcs are not in their pair's cell" in readme and "These effects are left at 0" not in readme
+    assert "These pairs have arcs left out of their cell" in readme and "These effects are left at 0" not in readme
     merged = _net([dict(_arc("b", "a", 1.0), strength=None, weight=None, outcome="obligate", merged_arcs=3,
                         partner_abundance=2e8, metric="growth_rate:easylinear:5")])
     reasons = {(a, b): w for a, b, w in matrix.coefficients(merged, rates)["pairs_left_out"]}
@@ -742,6 +744,12 @@ def test_a_merged_obligate_arc_still_counts_in_the_sign_check():
     # members that all bound nothing stay that way
     nothing = _merged([{**member, "strength_bound": None}, {**member, "study_id": "S2", "strength_bound": None}])
     assert nothing["bound_rule"] == member["bound_rule"]
+    # members whose bounds agree keep the bound and its rule; one bounded member beside one that bounds
+    # nothing keeps neither, as no single bound is the merged arc's (round 18: both survived as mutants)
+    agree = _merged([{**member, "strength_bound": 5.14}, {**member, "study_id": "S2", "strength_bound": 5.14}])
+    assert (agree["strength_bound"], agree["bound_rule"]) == (5.14, member["bound_rule"])
+    mixed = _merged([{**member, "strength_bound": 5.14}, {**member, "study_id": "S2", "strength_bound": None}])
+    assert (mixed["strength_bound"], mixed["bound_rule"]) == (None, "")
 
 
 def test_an_unfitted_effect_is_routed_by_where_its_organisms_are():

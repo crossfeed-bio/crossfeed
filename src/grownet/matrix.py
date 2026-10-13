@@ -971,7 +971,7 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
                 # its members compared their rates; merged without a median ratio (some did not grow on
                 # one side) it has no number to convert (found in review)
                 "a merged arc whose members do not all have a ratio carries no median ratio and no "
-                "coefficient, so it has no cell; derive without merging for one per comparison"
+                "coefficient (derive without merging for one per comparison)"
                 if getattr(edge, "merged_arcs", None) and edge.strength is None else
                 f"the rates behind this arc were not recorded (metric {edge.metric or 'unknown'})")
             continue
@@ -988,6 +988,12 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
             continue
         unit = max(entry["by_unit"], key=lambda u: len(entry["by_unit"][u]))
         numbers = entry["by_unit"][unit]
+        # an arc that gave no number beside arcs that did was left out of the median without a word (found
+        # in review)
+        if entry["reasons"]:
+            unfitted.append((pair, f"{len(entry['reasons'])} arc(s) of this pair give no number ("
+                                   + "; ".join(dict.fromkeys(entry["reasons"])) + "), so they are left out of "
+                                   "this pair's median"))
         # the arcs of this pair counted in another unit are not merged into it and are not converted, so
         # they are named here. They used to disappear, against the README's promise that a pair outside a
         # matrix's unit is named (found 2026-10-06)
@@ -995,7 +1001,7 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
             if other != unit:
                 unfitted.append((pair, f"{len(dropped)} arc(s) of this pair measure the actor in {other} "
                                        f"and the rest in {unit}; abundances are never converted, so they "
-                                       "are left out of this cell"))
+                                       "are left out of this pair's median"))
         if any(v > 0 for v in numbers) and any(v < 0 for v in numbers):
             conflicts.append(pair)
             continue
@@ -1098,6 +1104,18 @@ def unit_file(abundance_unit: str) -> str:
     """The abundance unit as part of a file name: "Cells/mL" becomes "Cells_per_mL"."""
     safe = abundance_unit.replace("/", "_per_")
     return "".join(c if c.isalnum() or c in "_-." else "_" for c in safe)
+
+
+def _block_media(net: InteractionNetwork, ids) -> list:
+    """The media of the arcs between the organisms of one matrix, or the network's when none joins them."""
+    here, found = set(ids), []
+    for edge in net.edges:
+        if edge.status == "absent" or edge.source not in here or edge.target not in here:
+            continue
+        for name in (edge.medium or "").split("; "):
+            if name and name not in found:
+                found.append(name)
+    return found or media(net)
 
 
 def coefficients(net: InteractionNetwork, rates: dict) -> dict:
@@ -1212,7 +1230,7 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                 continue
             keep.append(nid)
         names = [_label(net.nodes[nid]) for nid in keep]
-        table, filled = [], 0
+        table, filled = [], []
         pooled: list = []
         for i, affected in enumerate(keep):
             rate = rates.get(affected) or {}
@@ -1234,7 +1252,7 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                     row.append(0.0)
                     continue
                 row.append(entry["value"])
-                filled += 1
+                filled.append((affected, actor))
                 if len(entry.get("media") or ()) > 1:
                     pooled.append((*label_pair, ", ".join(entry["media"])))
             if rate.get("rate") is not None and rate.get("capacity"):
@@ -1262,20 +1280,10 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                                      "plateau, where its partners' effect outweighs its own rate, so no "
                                      "limitation can be fitted for it"))
             table.append(row)
-        here = set(keep)
-        block_media = []
-        for edge in net.edges:
-            if edge.status == "absent" or edge.source not in here or edge.target not in here:
-                continue
-            for name in (edge.medium or "").split("; "):
-                if name and name not in block_media:
-                    block_media.append(name)
-        matrices.append({"abundance_unit": abundance_unit, "media": block_media or media(net),
+        matrices.append({"abundance_unit": abundance_unit, "media": _block_media(net, keep),
                          "unit": coefficient_unit(rate_unit, abundance_unit),
                          "rate_unit": rate_unit, "organisms": names, "ids": keep, "matrix": table,
-                         "cells": filled, "pooled_media": pooled,
-                         "conflicts": [(_label(net.nodes[a]), _label(net.nodes[b]))
-                                       for a, b in conflicts if a in keep and b in keep],
+                         "cells": len(filled), "filled": filled, "pooled_media": pooled, "conflicts": [],
                          "file": f"interaction_matrix.{unit_file(abundance_unit)}.csv"})
 
     # an organism whose plateau balance gave no usable limitation leaves the matrix it was put in
@@ -1289,22 +1297,42 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                 block["organisms"] = [block["organisms"][k] for k in keep_at]
                 block["ids"] = [block["ids"][k] for k in keep_at]
                 block["matrix"] = [[block["matrix"][i][j] for j in keep_at] for i in keep_at]
+                # and its cells and pooled media with it: the README counted cells the matrix no longer
+                # holds (found in review)
+                block["filled"] = [(a, b) for a, b in block["filled"] if a in block["ids"] and b in block["ids"]]
+                block["cells"] = len(block["filled"])
+                block["pooled_media"] = [row for row in block["pooled_media"]
+                                         if row[0] in block["organisms"] and row[1] in block["organisms"]]
+                block["media"] = _block_media(net, block["ids"])
     # a pair whose two organisms sit in different matrices has no cell in either; worked out after the
     # unusable organisms left theirs, whose effects are then named as in no matrix (found in review)
     where = {nid: block["abundance_unit"] for block in matrices for nid in block["ids"]}
-    for affected, actor in values:
-        if affected in where and actor in where and where[affected] != where[actor]:
-            across.append((_label(net.nodes[affected]), _label(net.nodes[actor]),
-                           f"{_label(net.nodes[actor])} is counted in {where[actor]} and "
-                           f"{_label(net.nodes[affected])} in {where[affected]}, so this effect is in "
-                           "neither matrix"))
-        elif affected not in where or actor not in where:
+    # a pair whose arcs disagree in sign is named in the matrix that holds both its organisms, worked out
+    # after the unusable organisms left theirs: before, one that left was still named there as left at 0
+    # (found in review)
+    for block in matrices:
+        here = set(block["ids"])
+        block["conflicts"] = [(_label(net.nodes[a]), _label(net.nodes[b]))
+                              for a, b in conflicts if a in here and b in here]
+    # one row per pair, so that a pair with several reasons is one effect, and is counted once as one
+    # (found in review: a cross-unit pair with arcs in two partner units read as two effects)
+    across_at: dict = {}
+    for (affected, actor), conflict in [(pair, False) for pair in values] + [(pair, True) for pair in conflicts]:
+        if affected in where and actor in where and where[affected] == where[actor]:
+            continue
+        sign = "its arcs disagree in sign, so they are not merged; " if conflict else ""
+        if affected in where and actor in where:
+            why = (f"{_label(net.nodes[actor])} is counted in {where[actor]} and "
+                   f"{_label(net.nodes[affected])} in {where[affected]}, so this effect is in neither matrix")
+        else:
             missing = [_label(net.nodes[nid]) for nid in (affected, actor)
                        if nid not in where and nid in net.nodes]
-            if missing:
-                across.append((_label(net.nodes[affected]), _label(net.nodes[actor]),
-                               f"{' and '.join(missing)} could not be fitted, so this effect is in no "
-                               "matrix"))
+            if not missing:
+                continue
+            why = f"{' and '.join(missing)} could not be fitted, so this effect is in no matrix"
+        # a conflict between organisms in no common matrix was named nowhere (found in review)
+        across_at[(affected, actor)] = len(across)
+        across.append((_label(net.nodes[affected]), _label(net.nodes[actor]), sign + why))
     # an effect on or by an organism that is in no matrix is not "left at 0" in one: it is in none (found
     # in review: the genus package listed such a pair as a 0); routed after the unusable organisms left
     # their matrices, which are in none either. Arcs left out of a cell that still holds a value (the pair's
@@ -1314,15 +1342,35 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
     for (affected, actor), why in unfitted:
         names = (_label(net.nodes[affected]), _label(net.nodes[actor]))
         missing = [n for n in names if n in outside]
-        if missing:
+        if (affected, actor) in across_at:
+            at = across_at[(affected, actor)]
+            across[at] = (*names, f"{across[at][2]}; {why}")
+        elif missing:
+            across_at[(affected, actor)] = len(across)
             across.append((*names, f"{why}; {' and '.join(missing)} {'is' if len(missing) == 1 else 'are'} "
                                    "in no matrix"))
         elif affected in where and actor in where and where[affected] != where[actor]:
             # two organisms in different matrices: no cell to leave at 0 (found in review)
+            across_at[(affected, actor)] = len(across)
             across.append((*names, f"{why}; {names[1]} is counted in {where[actor]} and {names[0]} in "
                                    f"{where[affected]}, so this effect is in neither matrix"))
+        elif ((affected, actor) in values and affected in where and actor in where
+              and values[(affected, actor)]["unit"] == where[affected]):
+            # the pair's cell holds the median of its other arcs, which is what this list says of it
+            at = next((k for k, row in enumerate(arcs_left_out) if row[:2] == names), None)
+            if at is None:
+                arcs_left_out.append((*names, why))
+            else:
+                arcs_left_out[at] = (*names, f"{arcs_left_out[at][2]}; {why}")
         elif (affected, actor) in values or (affected, actor) in conflicts:
-            arcs_left_out.append((*names, why))
+            # its cell is 0, for its other arcs' unit or their signs, so these arcs are not beside a median
+            # either (found in review: they were said to be)
+            at = next((k for k, row in enumerate(pairs_left_out) if row[:2] == names), None)
+            if at is not None:
+                pairs_left_out[at] = (*names, f"{pairs_left_out[at][2]}; {why}")
+            else:
+                pairs_left_out.append((*names, f"{why}; its other arcs disagree in sign, so its cell is left "
+                                               "at 0"))
         else:
             pairs_left_out.append((*names, f"{why}, so the per-capita effect cannot be fitted"))
     matrices = [block for block in matrices if block["organisms"]]
@@ -1584,9 +1632,9 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         lines.append("  are left at 0 rather than averaged (actor on affected):")
         lines += [f"      {actor} on {affected}" for affected, actor in dict.fromkeys(conflicts)]
     else:
-        # what `conflicts` counts here is coefficients; the adjacency sidecar counts arcs, and a pair can
-        # disagree there and not here (found in review)
-        lines.append("  No pair's coefficients disagreed in sign.")
+        # only the pairs inside a matrix: a pair outside every matrix whose arcs disagree is named with the
+        # effects in no matrix, below, and "no pair disagreed" was false beside it (found in review)
+        lines.append("  No pair in a matrix has arcs of opposite sign.")
     if got["left_out"]:
         lines.append("  These organisms are in no matrix, because a coefficient of theirs cannot be fitted:")
         lines += [f"      {name}: {why}" for name, why in got["left_out"]]
@@ -1597,8 +1645,8 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         lines += [f"      {actor} on {affected}: {why}"
                   for affected, actor, why in dict.fromkeys(got["pairs_left_out"])]
     if got.get("arcs_left_out"):
-        lines.append("  These arcs are not in their pair's cell, which is the median of the pair's other arcs"
-                     " (actor on affected):")
+        lines.append("  These pairs have arcs left out of their cell, which is the median of the pair's other"
+                     " arcs (actor on affected):")
         lines += [f"      {actor} on {affected}: {why}" for affected, actor, why in dict.fromkeys(got["arcs_left_out"])]
     if got["across_units"]:
         lines.append("  These effects are in no matrix:")
