@@ -8,6 +8,12 @@ content.
 
 ### Fixed
 
+- **A run that could not read everything now says so in the file it writes.** A study that answered 404
+  was written into `meta.studies` (which the schema describes as the studies the search READ), the file
+  carried no trace of the failure, and `grownet validate` passed it. Now `meta.studies` lists only the
+  studies read, `meta.errors` names what failed, `meta.complete` is false, and `validate` notes the file
+  as incomplete. The report reads the errors from the file. And `derive <study> --live` exits 1 when
+  curves could not be read, as the species and All paths have since #243 (#247).
 - **0.4.0 called its own output suspect.** `grownet validate` on a network 0.4.0 derived said `meta has
   'project', which this version of the format does not declare`, and the same for `settings_not_used`:
   both keys were added in 0.4.0 and never declared in the schema. A third, `slice`, written by
