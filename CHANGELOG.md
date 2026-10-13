@@ -128,8 +128,10 @@ content.
   entry per medium was counted as one, and so is every plateau another study measured in another
   abundance unit, which was in no count. A left-out fitted row is named by its experimental condition.
   A study with plateaus and no rate no longer decides an organism's rate unit (the first study read did,
-  and every later study's rates and the organism were dropped in that order); a study whose rates are in
-  another time unit keeps its plateaus, and the report names the rates left out.
+  and every later study's rates and the organism were dropped in that order); a study or fitted row whose
+  rates are in another time unit keeps its plateaus, in both derivations, and the report names the rates
+  left out. A genus whose strains' rates are in different time units has no rate, where the median was
+  taken across them.
 - **A rate from a culture-level count says so** in `capacity_source`, so `growth_rates.csv`, the gLV payload
   and the report name it, without a new field; a rate that also rests on per-strain curves does not blame
   the count for its missing capacity.
@@ -149,7 +151,8 @@ content.
   help-page release date that differs from the changelog's; RELEASING.md's checklist, emergency procedure (pause the workflow first) and its
   statements about which copies read which file for how long now match what is true.
 - **The R listener's test runs in CI.** It is a `skip_on_cran()` test and nothing set `NOT_CRAN`, so it was
-  skipped since #120 while failing on the example's changed matrix; CI and `make r-check` set it now.
+  skipped since #120 while failing on the example's changed matrix; CI and `make r-check` set it now, and
+  fail unless the R tests report `SKIP 0`.
 - **A Baranyi start that ran off to an enormous rate raised `OverflowError`** instead of being rejected
   like any other unconverged start. First met on optical densities while building the above.
 

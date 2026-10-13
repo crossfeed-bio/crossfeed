@@ -1079,8 +1079,9 @@ simulator takes (register item 32, Karoline 2026-10-03). What a later agent need
 - Checking the R side: `make r-check`, or `R CMD build r && NOT_CRAN=true R CMD check --no-manual
   grownet_*.tar.gz`. The tests live in `r/tests/testthat` and include a real POST into the listener, which
   is a `skip_on_cran()` test: **without `NOT_CRAN=true` testthat skips it and the check still says OK**. It
-  was skipped that way from #120 to 2026-10-13 while it failed (it expected the old example's cell), so
-  look for `SKIP 0` in the test summary. CI runs the same thing in the `r-package` job (#112), with R,
+  was skipped that way from #120 to 2026-10-13 while it failed (it expected the old example's cell).
+  `make r-check` and CI's `r-package` job therefore fail unless `grownet.Rcheck/tests/testthat.Rout`
+  says `SKIP 0`; a bare `R CMD check` does not, so read that file yourself if you run one. CI runs the same thing in the `r-package` job (#112), with R,
   jsonlite and testthat from Ubuntu's own packages so that no third-party action is added and nothing is
   compiled, `NOT_CRAN=true`, and `_R_CHECK_FORCE_SUGGESTS_=false` because miaSim is only named in examples
   that do not run.

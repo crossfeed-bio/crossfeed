@@ -557,7 +557,8 @@ def test_a_fitted_rate_in_another_unit_is_named_not_converted():
     got = integrated.fitted_rates(rows)["a"]
     assert got["rate"] == pytest.approx(0.4) and got["unit"] == "1/h"
     assert got["other_units"] == ["S2 (1/day)"]
-    assert got["capacity_unit"] == "Cells/mL" and got["capacity_n"] == 1
+    # S2's plateau stays: K = -r/A_ii has no time unit (round 10 of the review); S3's is in g/L
+    assert got["capacity_unit"] == "Cells/mL" and got["capacity_n"] == 2
     assert got["other_capacity_units"] == ["S3 (g/L)"]
 
 
@@ -1228,13 +1229,17 @@ def test_a_left_out_row_is_named_by_its_experimental_condition_and_a_row_in_anot
         left["S2: the row fitted with C in At_Ct_OD"]
 
 
-def test_a_row_whose_rate_is_in_another_time_unit_is_named_as_left_out():
-    """Round 9 of the review: such a row was skipped before its plateau was counted, and named nowhere."""
+def test_a_row_whose_rate_is_in_another_time_unit_keeps_its_plateau():
+    """Rounds 9 and 10 of the review: such a row was skipped before its plateau was counted, then named as
+    left out; but K = -r/A_ii has no time unit when r and A_ii come from one fit, so the plateau stays,
+    as `derive.merge_rates` keeps such a study's, and only the rate is left out. Two 1/d rows in S2:
+    9.6/9.6e-9 and 4.8/4.8e-9 both imply 1e9, beside S1's 0.4/4e-10 = 1e9."""
     acid = "Minimal medium (MM) (+0.75% linoleic acid)"
     rows = [_rate_record(acid, 0.4, -4.0e-10),
-            {**_rate_record(acid, 9.6, -9.6e-9, study="S2"), "fitted_rate_unit": "1/d", "source_name": "D",
-             "condition": "C_day"}]
+            {**_rate_record(acid, 9.6, -9.6e-9, study="S2"), "fitted_rate_unit": "1/d"},
+            {**_rate_record(acid, 4.8, -4.8e-9, study="S2"), "fitted_rate_unit": "1/d"}]
     got = integrated.fitted_rates(rows)["ncbi:1"]
     assert got["other_units"] == ["S2 (1/d)"]
-    assert dict(got["capacity_left_out"])["S2: the row fitted with D in C_day"] == (
-        "its rate is in 1/d, and this organism's others in 1/h; left out rather than converted")
+    assert got["rate"] == pytest.approx(0.4) and got["n"] == 1 and got["studies"] == ["S1"], "the rate is S1's"
+    assert got["capacity_n"] == 3 and got["capacity"] == pytest.approx(1.0e9)
+    assert got["capacity_left_out"] == []

@@ -820,37 +820,34 @@ def fitted_rates(records: list) -> dict:
         study = record.get("study_id", "")
         unit = record.get("fitted_rate_unit", "1/h")
         if unit != at["unit"]:
+            # a rate in another time unit is not converted, and its row's plateau stays: K = -r/A_ii has no
+            # time unit when r and A_ii come from one fit, as `derive.merge_rates` keeps such a study's
+            # plateaus (found in review: it was named as left out, and before that in no count)
             if f"{study} ({unit})" not in at["other_units"]:
                 at["other_units"].append(f"{study} ({unit})")
-            # a row whose plateau is then in no count is named, as every row that gave no capacity is
-            # (found in review)
-            if (record.get("fitted_self") or 0) < 0:
-                at["unit_left_out"].append((_row_label(study, record),
-                                            f"its rate is in {unit}, and this organism's others in "
-                                            f"{at['unit']}; left out rather than converted"))
-            continue
-        at["rates"].append(rate)
-        at["points"].append(record.get("fit_points", 0))
-        # the monoculture replicates stage 1 fitted this organism's rate from. `n` below counts the
-        # fitted rows, which is what this path merges over, and the CSV's `replicates` column has meant
-        # monoculture replicates since 0.2.0, where it was right because the only derivation compared
-        # replicate sets. Writing the row count into that column made a rate from three monocultures
-        # read as resting on one culture, which is how the gLV example's thinness went unnoticed
-        # (#155 item 13).
-        if record.get("rate_stage_n"):
-            at["stage_n"].append(record["rate_stage_n"])
-        at["per_study"].setdefault(study, []).append(rate)
-        if study and study not in at["studies"]:
-            at["studies"].append(study)
-        if record.get("fit_r2") is not None:
-            at["r2"].append(record["fit_r2"])
-        if record.get("fit_condition") is not None:
-            at["conditions"].append(record["fit_condition"])
-        source = record.get("fitted_self_source", "")
-        if source and source not in at["self_sources"]:
-            at["self_sources"].append(source)
-        if record.get("medium") and record["medium"] not in at["media"]:
-            at["media"].append(record["medium"])
+        else:
+            at["rates"].append(rate)
+            at["points"].append(record.get("fit_points", 0))
+            # the monoculture replicates stage 1 fitted this organism's rate from. `n` below counts the
+            # fitted rows, which is what this path merges over, and the CSV's `replicates` column has meant
+            # monoculture replicates since 0.2.0, where it was right because the only derivation compared
+            # replicate sets. Writing the row count into that column made a rate from three monocultures
+            # read as resting on one culture, which is how the gLV example's thinness went unnoticed
+            # (#155 item 13).
+            if record.get("rate_stage_n"):
+                at["stage_n"].append(record["rate_stage_n"])
+            at["per_study"].setdefault(study, []).append(rate)
+            if study and study not in at["studies"]:
+                at["studies"].append(study)
+            if record.get("fit_r2") is not None:
+                at["r2"].append(record["fit_r2"])
+            if record.get("fit_condition") is not None:
+                at["conditions"].append(record["fit_condition"])
+            source = record.get("fitted_self_source", "")
+            if source and source not in at["self_sources"]:
+                at["self_sources"].append(source)
+            if record.get("medium") and record["medium"] not in at["media"]:
+                at["media"].append(record["medium"])
         if not (own and own < 0 and rate > 0):
             continue
         capacity_unit = record.get("fitted_self_unit", "")

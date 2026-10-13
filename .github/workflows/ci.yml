@@ -92,6 +92,12 @@ jobs:
         run: |
           R CMD build r
           R CMD check --no-manual grownet_*.tar.gz
+      - name: refuse a skipped R test
+        # `R CMD check` says OK over a skipped test, and the listener's skipped that way from #120 while it
+        # failed, so the summary is read rather than trusted (found in review)
+        run: |
+          cat grownet.Rcheck/tests/testthat.Rout | grep -E '^\[ FAIL'
+          grep -q 'SKIP 0 |' grownet.Rcheck/tests/testthat.Rout
       - name: show the check log when it fails
         if: failure()
         run: cat grownet.Rcheck/00check.log || true

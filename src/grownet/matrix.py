@@ -333,11 +333,18 @@ def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None)
         media = sorted({m for r in behind for m in r.get("capacity_media") or ()}) \
             if capacity["capacity"] is not None else []
         units = {r["unit"] for r in members}
+        if len(units) > 1:
+            # strains whose rates are in different time units have no median: it was taken across them,
+            # with the unit "", and the matrix read it in its own unit (found in review). Which unit should
+            # win is not decided here, so the genus has no rate and is listed among those without one.
+            continue
         out[nid] = {"name": label, "rate": statistics.median(r["rate"] for r in members),
-                    "unit": members[0]["unit"] if len(units) == 1 else "",
+                    "unit": members[0]["unit"],
                     "n": sum(r.get("n", 0) for r in members),
                     "studies": sorted({s for r in members for s in r.get("studies", ())}),
-                    "per_study": {}, "other_units": [],
+                    # the strains' own rates left out in another time unit, which the report prints
+                    "per_study": {}, "other_units": [f"{r.get('name', '')}: {u}" for r in members
+                                                     for u in r.get("other_units") or ()],
                     "method": members[0].get("method", ""),
                     **capacity,
                     # replicates and plateau curves are counted, and the capacity's provenance kept, as a

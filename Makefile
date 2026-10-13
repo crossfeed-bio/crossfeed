@@ -25,6 +25,8 @@ check: lint gate test release-check
 r-check:
 	R CMD build r
 	NOT_CRAN=true R CMD check --no-manual grownet_*.tar.gz
+	@# a skipped test still reads OK: the listener's test was skipped from #120 while it failed
+	grep -q 'SKIP 0 |' grownet.Rcheck/tests/testthat.Rout || { cat grownet.Rcheck/tests/testthat.Rout; exit 1; }
 	rm -rf grownet_*.tar.gz grownet.Rcheck
 
 demo:

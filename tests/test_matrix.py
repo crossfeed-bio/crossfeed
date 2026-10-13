@@ -634,3 +634,17 @@ def test_a_split_unit_genus_of_replicate_rows_counts_its_curves():
                      "Blautia a: plateau 3 of 3 (Cells/mL)", "Blautia b: plateau 1 of 2 (OD)",
                      "Blautia b: plateau 2 of 2 (OD)"], names
     assert "5 curve(s) gave no capacity" in _genus_report(row)
+
+
+def test_a_genus_whose_strains_rates_are_in_different_time_units_has_no_rate():
+    """Round 10 of the review: the median was taken across 1/h and 1/d with the unit "", the matrix read it
+    in its own unit, and the report printed a doubling time in hours. Which unit wins is not decided, so the
+    genus has none, and is listed without a rate. A strain's own rates in another unit are carried up."""
+    rates = {"ncbi:1": {**_STRAIN, "name": "Blautia a", "unit": "1/h", "other_units": ["S2 (1/d)"]},
+             "ncbi:2": {**_STRAIN, "name": "Blautia b", "rate": 7.2, "unit": "1/d"}}
+    assert "blautia" not in matrix.for_nodes(_GENUS_NET, rates)
+    assert "Blautia" in matrix.rate_meta(_GENUS_NET, matrix.for_nodes(_GENUS_NET, rates), "m")["without_a_rate"]
+    same = {"ncbi:1": rates["ncbi:1"], "ncbi:2": {**rates["ncbi:2"], "rate": 0.3, "unit": "1/h"}}
+    row = matrix.for_nodes(_GENUS_NET, same)["blautia"]
+    assert row["unit"] == "1/h" and row["other_units"] == ["Blautia a: S2 (1/d)"]
+    assert "rates in another time unit left out: Blautia a: S2 (1/d)" in _genus_report(row)

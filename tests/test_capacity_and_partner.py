@@ -607,10 +607,17 @@ def test_a_study_whose_rates_are_in_another_time_unit_keeps_its_plateaus_and_say
     client = _client({(1, A): _settles(plateau=1.0e8), (2, A): _settles(plateau=1.0e8)})
     found, _ = monoculture_rates(client, [_mono_in("E1", A, [(1, "r1"), (2, "r2")], "mMCB")])
     nid = next(iter(found))
-    per_day = {nid: {**found[nid], "unit": "1/d"}}
+    alone = merge_rates([("S1", found)])[nid]
+    # S2's lags are in days, its sources are its rates', and it named a curve of its own as left out
+    per_day = {nid: {**found[nid], "unit": "1/d", "lags": [x / 24 for x in found[nid].get("lags") or []] + [9.9],
+                     "capacity_left_out": [("S2 r5", "the curve never reached a plateau")]}}
     merged = merge_rates([("S1", found), ("S2", per_day)])[nid]
     assert merged["other_units"] == ["S2 (1/d)"] and merged["studies"] == ["S1"]
     assert merged["capacity_n"] == 4, "S2's plateaus count: a plateau has no time unit"
+    # and nothing of S2's rate side: its lags and sources stay out, its own left-out curve stays named
+    assert (merged["lag"], merged["lag_n"], merged["rate_sources"]) == (alone["lag"], alone["lag_n"],
+                                                                         alone["rate_sources"])
+    assert ("S2 r5", "the curve never reached a plateau") in merged["capacity_left_out"]
     net = InteractionNetwork()
     net.meta["growth_rates"] = {"rule": "r", "organisms": {nid: merged}}
     text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
