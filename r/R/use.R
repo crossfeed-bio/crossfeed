@@ -159,6 +159,12 @@ glv_readme <- function(x, print = TRUE) {
         carrying_capacity = text("carrying_capacity"),
         capacity_unit = text("carrying_capacity_unit"),
         capacity_curves = text("carrying_capacity_curves"),
+        # the three the download has and this did not (#211 item 4). The count of curves left out is a
+        # count, 0 included, as the download writes it: a blank there reads as NA in R
+        capacity_curves_left_out = vapply(detail, function(d) length(d$carrying_capacity_left_out),
+                                          integer(1)),
+        capacity_fall_from_peak = text("carrying_capacity_fall_from_peak"),
+        capacity_medium = text("carrying_capacity_medium"),
         capacity_source = text("carrying_capacity_source"),
         # derived from the column beside it and adds no measurement, as the download's last column is
         doubling_time = ifelse(is.na(rate) | rate <= 0, NA_real_, log(2) / rate),
@@ -188,7 +194,9 @@ glv_write <- function(x, dir) {
             "interaction_matrix.csv"
         }
         path <- file.path(dir, name)
-        write.csv(block$interactions, path)
+        # four significant digits, which is what README.md says the matrix CSV keeps and what the
+        # download writes; this wrote full double precision (#211 item 4)
+        write.csv(signif(block$interactions, 4), path)
         written <- c(written, path)
     }
     rates_path <- file.path(dir, "growth_rates.csv")

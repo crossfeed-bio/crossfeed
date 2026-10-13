@@ -356,13 +356,18 @@ def _derive(a):
         errors.append(f"{len(failed)} replicate(s) or growth curve(s) could not be read from mGrowthDB (for "
                       f"example {failed[0][0]}: {failed[0][1]}); the result is incomplete, so run it again")
         print(f"warning: {errors[0]}", file=sys.stderr)
+    net.meta["errors"] = list(errors)
+    net.meta["complete"] = not errors
     organism_rates = {}
     if a.report_rates:
         organism_rates, skipped = _rates_of(a, client, [a.study], net, skipped, records)
     result = {"study": a.study, "entries": [], "resolved": [], "unresolved": [], "studies": [a.study],
               "rates": organism_rates, "client": client if a.live else None,
               "skipped": skipped, "errors": errors, "network": net}
-    return _emit(a, net, skipped, extra, a.study, result)
+    code = _emit(a, net, skipped, extra, a.study, result)
+    # the species and All paths exit 1 on an incomplete run since #243; this path exited 0 when curves
+    # could not be read, so the two paths still disagreed about the same failure (#247)
+    return _incomplete(result) if code == 0 else code
 
 
 def _species_flags(a) -> str:
@@ -410,6 +415,8 @@ def _derive_species(a):
               + (f" (did you mean: {', '.join(hints)}?)" if hints else ""), file=sys.stderr)
     for error in result["errors"]:
         print(error, file=sys.stderr)
+    for note in result.get("notes", ()):
+        print(f"note: {note}", file=sys.stderr)
     print("studies searched: " + (", ".join(result["studies"]) or "none"), file=sys.stderr)
     net = result["network"]
     problems = net.validate()
@@ -432,12 +439,17 @@ def _derive_species(a):
     # into `errors` and exited 0, so a script could not tell a complete run from an incomplete one
     # (#247). This is safe to key on only because `errors` is fetch failures and nothing else now:
     # the advisory messages travel in `notes`, which is the split #242 makes.
-    if code == 0 and result.get("errors"):
-        print(f"\nthis run is INCOMPLETE: {len(result['errors'])} study or curve could not be read from "
-              "mGrowthDB (the messages are above). The network holds what was readable; run it again when "
-              "mGrowthDB is reachable if you need all of it.", file=sys.stderr)
-        return 1
-    return code
+    return _incomplete(result) if code == 0 else code
+
+
+def _incomplete(result) -> int:
+    """1, with the reason, when a run could not read everything it asked for; 0 otherwise."""
+    if not result.get("errors"):
+        return 0
+    print(f"\nthis run is INCOMPLETE: {len(result['errors'])} study or curve could not be read from "
+          "mGrowthDB (the messages are above). The network holds what was readable, and its meta records "
+          "the errors; run it again when mGrowthDB is reachable if you need all of it.", file=sys.stderr)
+    return 1
 
 
 def _rates_of(a, client, study_ids, net, skipped, records=None):
@@ -502,8 +514,19 @@ def _emit(a, net, skipped, extra, label, result):
         with open(a.out, "w", encoding="utf-8") as f:
             f.write(payload)
         print(f"wrote {a.out}: {len(net.nodes)} nodes, {len(net.edges)} edges")
+        if a.format == "matrix" and a.out != os.devnull:
+            # the grid carries no provenance and no key for 0 or NA, so it travels with a description
+            # (Karoline, 2026-10-12, on #212: a sidecar file)
+            from .matrix import about_name, matrix_about
+            about = about_name(a.out)
+            with open(about, "w", encoding="utf-8") as f:
+                f.write(matrix_about(net, os.path.basename(a.out)))
+            print(f"wrote {about}: what the matrix is, how it was made, and its 0 and NA cells")
     else:
         print(payload)
+        if a.format == "matrix":
+            print("the matrix's description (settings, the meaning of 0 and NA, the sources) is written "
+                  "beside it only with --out", file=sys.stderr)
 
     if a.report:
         # the same report the local page shows and downloads (#76): every setting, the version, every reason
@@ -732,7 +755,7 @@ def build_parser() -> argparse.ArgumentParser:
                            "--live; the study argument then limits it to those studies)")
     what.add_argument("--no-published", action="store_true",
                       help="with --all, derive live even when the network derived once a day in the grownet "
-                           "repository is less than a day old, was derived by the same derivation this run would "
+                           "repository is less than 36 hours old, was derived by the same derivation this run would "
                            "use, and the settings are the defaults; otherwise it derives live")
     what.add_argument("--no-cache", action="store_true",
                       help="read everything from mGrowthDB again, instead of reusing what an earlier run "

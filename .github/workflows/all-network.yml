@@ -2,7 +2,7 @@ name: all-network
 
 # Derives the All network of mGrowthDB once a day with the default settings and publishes it as the assets of
 # one fixed release, `all-network`, replacing the previous day's (#96). The page's All button and
-# `grownet derive --all` read it when it is less than a day old and the settings are the defaults, and derive
+# `grownet derive --all` read it when it is less than 36 hours old and the settings are the defaults, and derive
 # live otherwise. Release assets are not in git, so no data enters the repository. Scheduled runs use the
 # default branch only; "Run workflow" on the Actions tab starts one by hand.
 
@@ -10,6 +10,11 @@ on:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
+    inputs:
+      allow_drop:
+        description: "Publish even if this run has less than half the arcs of the artifact it replaces"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -31,19 +36,59 @@ jobs:
           python-version: "3.12"
       - run: pip install .
       - name: derive All
-        run: python packaging/publish_all.py out
+        id: derive
+        env:
+          # empty on a scheduled run, so the floor in publish_all.py applies (#236)
+          ALLOW_DROP: ${{ inputs.allow_drop }}
+        run: python packaging/publish_all.py out notes.md
       - name: publish
+        id: publish
         env:
           GH_TOKEN: ${{ github.token }}
+        # The description is set on EVERY run from notes.md, which publish_all.py writes from what the run
+        # produced. It used to be the `--notes` of `gh release create` behind `||`, so it was written once,
+        # on 2026-09-29, and editing it here changed nothing on the release (#236). notes.md is outside
+        # out/, so it is not uploaded as an asset.
         run: |
           gh release view all-network >/dev/null 2>&1 || gh release create all-network --prerelease \
-            --latest=false --title "All network, derived once a day" \
-            --notes "The All network of mGrowthDB, derived with the default settings by .github/workflows/all-network.yml and replaced once a day. grownet reads all_result.json when it is less than a day old; all_network.json and all_report.txt are the same network and its report. Every arc cites the studies it comes from."
+            --latest=false --title "All network, derived once a day" --notes-file notes.md
           gh release upload all-network out/* --clobber
+          gh release edit all-network --notes-file notes.md
+      - name: check the properties of what was derived from the live corpus
+        id: live
+        # The only check in the project that reads a real mGrowthDB response (#237). It runs AFTER the
+        # publish, on the file just written, so it adds no derivation of All and does not block one:
+        # a violation is the code's, and every copy derives the same thing live. One study is derived in
+        # gLV mode besides, which the daily file does not exercise. A violation opens its own issue.
+        run: python packaging/live_check.py out
+      - name: say when a property of the live derivation fails
+        if: failure() && steps.live.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create live-check-failed --color D93F0B --force \
+            --description "What grownet derives from the live corpus broke a property it promises"
+          open=$(gh issue list --label live-check-failed --state open --json number -q '.[0].number')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "Failed again: $RUN"
+          else
+            gh issue create --label live-check-failed --title "A property of the live derivation failed" --body "The run $RUN derived from the live mGrowthDB and \`packaging/live_check.py\` found arcs that break a property the tool promises (the log of that step names each one). The All network was published as derived. This issue closes itself when the check passes."
+          fi
+      - name: close the live-check issue once the check passes
+        if: always() && steps.live.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          for n in $(gh issue list --label live-check-failed --state open --json number -q '.[].number'); do
+            gh issue close "$n" --comment "Every property holds again: $RUN"
+          done
       - name: say so when the build fails
-        # a failed day leaves the file to age past a day, and every copy of grownet then derives All live
-        # from mGrowthDB at once, so a failure opens an issue (Craig's agent, #96)
-        if: failure()
+        # a failed day leaves the file to age past 36 hours, and every copy of grownet then derives All live
+        # from mGrowthDB at once, so a failure opens an issue (Craig's agent, #96). Not for the live check,
+        # which runs after a successful publish and has its own issue above.
+        if: failure() && steps.live.outcome != 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -54,10 +99,10 @@ jobs:
           if [ -n "$open" ]; then
             gh issue comment "$open" --body "Failed again: $RUN"
           else
-            gh issue create --label all-network-failed --title "The daily All network failed" --body "The run $RUN did not publish the All network. Until a run succeeds, the published file ages past a day and every copy of grownet derives All live from mGrowthDB. This issue closes itself when a run succeeds."
+            gh issue create --label all-network-failed --title "The daily All network failed" --body "The run $RUN did not publish the All network. Until a run succeeds, the published file ages past 36 hours and every copy of grownet derives All live from mGrowthDB. This issue closes itself when a run succeeds."
           fi
       - name: close the failure issue once a build succeeds
-        if: success()
+        if: always() && steps.publish.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
