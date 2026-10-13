@@ -68,6 +68,7 @@ as_grownet_glv <- function(payload) {
                  across_units = effects_frame(caveats$across_units),
                  arcs_left_out = effects_frame(caveats$arcs_left_out),
                  media = vapply(caveats$media, as.character, character(1)),
+                 cell_media = vapply(caveats$cell_media, as.character, character(1)),
                  dropout_arcs = as_number(caveats$dropout_arcs),
                  without_a_rate = vapply(caveats$without_a_rate, as.character, character(1)),
                  abundance_units = vapply(caveats$abundance_units, as.character, character(1)),
@@ -310,7 +311,18 @@ print.grownet_glv <- function(x, ...) {
                            "one organism on\n       another. grownet's Include drop-out communities leaves ",
                            "them out.\n"), dropout))
     }
-    if (length(x$caveats$media) > 1) {
+    # the media of the cells the matrices hold, where the package names them: an arc in no cell is not in
+    # the simulation, and a matrix of one medium was warned about the media of arcs in no matrix (found in
+    # review). A package from before names only every arc's media.
+    cells_in <- x$caveats$cell_media
+    if (length(cells_in) > 1) {
+        cat(sprintf(paste0("   * these cells come from %d media, and a simulation is of one environment:\n",
+                           "       %s\n       grownet's second box (media, experiments or studies) keeps ",
+                           "one.\n"),
+                    length(cells_in), paste(cells_in, collapse = ", ")))
+    } else if (length(cells_in) == 1) {
+        cat(sprintf("   * every cell was measured in one medium: %s\n", cells_in))
+    } else if (length(x$caveats$media) > 1) {
         cat(sprintf(paste0("   * these arcs come from %d media, and a simulation is of one environment:\n",
                            "       %s\n       grownet's second box (media, experiments or studies) keeps ",
                            "one.\n"),

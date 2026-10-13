@@ -830,11 +830,22 @@ def _dropout_lines(net: InteractionNetwork) -> list:
             "      Advanced settings, and derive again to leave them out."]
 
 
-def _media_lines(net: InteractionNetwork) -> list:
-    """What the README says about the environments behind the numbers."""
+def _media_lines(net: InteractionNetwork, cell_media=None) -> list:
+    """What the README says about the environments behind the numbers: those of the cells the matrices
+    hold when `cell_media` names them, since an arc in no cell is not in the simulation (found in review:
+    a matrix of one medium was warned about the media of arcs in no matrix)."""
     names = media(net)
     if not names:
         return ["  The media these arcs were measured in are not recorded in this network."]
+    if cell_media:
+        others = [name for name in names if name not in cell_media]
+        rest = ([f"      The network's other arcs, in no cell, come from {', '.join(others)}."] if others else [])
+        if len(cell_media) == 1:
+            return [f"  Every cell of the matrices was measured in one medium: {cell_media[0]}.", *rest]
+        return [f"  THESE CELLS COME FROM {len(cell_media)} MEDIA, and a gLV simulation is of one environment:",
+                *[f"      {name}" for name in cell_media],
+                "      Select one in grownet's second box (media, experiments or studies) and derive again to",
+                "      keep a single environment.", *rest]
     if len(names) == 1:
         return [f"  Every arc was measured in one medium: {names[0]}."]
     return [f"  THESE ARCS COME FROM {len(names)} MEDIA, and a gLV simulation is of one environment:",
@@ -936,7 +947,7 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
         unit = edge.partner_abundance_unit or ""
         value, how = _per_arc(edge, ((rates or {}).get(edge.target) or {}).get("rate"))
         entry = per_pair.setdefault(pair, {"by_unit": {}, "reasons": [], "censored": False,
-                                           "how": set(), "media": [], "directions": []})
+                                           "how": set(), "media": {}, "directions": []})
         # every arc's direction counts in the sign check, converted or not, as `cells` counts it: an
         # obligate arc that could not be converted beside an inhibition left the inhibition's number in the
         # cell, where main named the pair's sign conflict (found in review)
@@ -955,9 +966,6 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
                 f"{edge.outcome!r}, which the no-growth rule does not produce a bound for, so neither "
                 "the bound nor a cell can be read from it")
             continue
-        for name in (edge.medium or "").split("; "):
-            if name and name not in entry["media"]:
-                entry["media"].append(name)
         if value is None:
             actor, affected = _label(net.nodes[edge.source]), _label(net.nodes[edge.target])
             own_rate = ((rates or {}).get(edge.target) or {}).get("rate")
@@ -976,6 +984,12 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
                 f"the rates behind this arc were not recorded (metric {edge.metric or 'unknown'})")
             continue
         entry["by_unit"].setdefault(unit, []).append(value)
+        # the media behind the numbers of each unit: an arc that gives no number, or one in another unit,
+        # is not in the cell, and its medium was said to be pooled into it (found in review)
+        unit_media = entry["media"].setdefault(unit, [])
+        for name in (edge.medium or "").split("; "):
+            if name and name not in unit_media:
+                unit_media.append(name)
         entry["censored"] = entry["censored"] or censored
         entry["how"].add(how)
     values, conflicts, unfitted = {}, [], []
@@ -992,8 +1006,7 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
         # in review)
         if entry["reasons"]:
             unfitted.append((pair, f"{len(entry['reasons'])} arc(s) of this pair give no number ("
-                                   + "; ".join(dict.fromkeys(entry["reasons"])) + "), so they are left out of "
-                                   "this pair's median"))
+                                   + "; ".join(dict.fromkeys(entry["reasons"])) + "), so they are left out"))
         # the arcs of this pair counted in another unit are not merged into it and are not converted, so
         # they are named here. They used to disappear, against the README's promise that a pair outside a
         # matrix's unit is named (found 2026-10-06)
@@ -1001,7 +1014,7 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
             if other != unit:
                 unfitted.append((pair, f"{len(dropped)} arc(s) of this pair measure the actor in {other} "
                                        f"and the rest in {unit}; abundances are never converted, so they "
-                                       "are left out of this pair's median"))
+                                       "are left out"))
         if any(v > 0 for v in numbers) and any(v < 0 for v in numbers):
             conflicts.append(pair)
             continue
@@ -1010,7 +1023,7 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
                         # the media behind this cell: arcs of a pair are merged by their median whatever
                         # medium each was measured in, and a cell that pools two environments is named
                         # rather than reading as one measurement (found 2026-10-06)
-                        "media": list(entry["media"]),
+                        "media": list(entry["media"].get(unit, [])),
                         "how": ("ratio" if "ratio" in entry["how"] else
                                 "merged" if "merged" in entry["how"] else "rates")}
     return values, conflicts, unfitted
@@ -1106,16 +1119,16 @@ def unit_file(abundance_unit: str) -> str:
     return "".join(c if c.isalnum() or c in "_-." else "_" for c in safe)
 
 
-def _block_media(net: InteractionNetwork, ids) -> list:
-    """The media of the arcs between the organisms of one matrix, or the network's when none joins them."""
-    here, found = set(ids), []
-    for edge in net.edges:
-        if edge.status == "absent" or edge.source not in here or edge.target not in here:
-            continue
-        for name in (edge.medium or "").split("; "):
-            if name and name not in found:
+def _block_media(filled, values: dict) -> list:
+    """The media behind the cells one matrix holds, none when it holds none: an arc between its organisms
+    that is in no cell is not measured in it, and the network's media, the fallback this had, named those of
+    arcs that left the matrix with an organism (found in review)."""
+    found = []
+    for pair in filled:
+        for name in values[pair].get("media") or ():
+            if name not in found:
                 found.append(name)
-    return found or media(net)
+    return found
 
 
 def coefficients(net: InteractionNetwork, rates: dict) -> dict:
@@ -1149,6 +1162,7 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
     only_with = {e.target for e in net.edges if e.status != "absent" and e.metric_without == 0
                  and e.metric_with not in (None, 0)}
     left_out, pairs_left_out, across, rows_fitted = [], [], [], []
+    unit_mismatch: list = []
     unusable, plateau_rows = [], []
 
     # an organism belongs to the matrix of the unit its own abundance was measured in: its monoculture
@@ -1245,10 +1259,12 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                     continue
                 label_pair = (_label(net.nodes[affected]), _label(net.nodes[actor]))
                 if entry["unit"] != abundance_unit:
-                    pairs_left_out.append((*label_pair,
-                                           f"{label_pair[1]}'s abundance beside {label_pair[0]} is in "
-                                           f"{entry['unit']}, and this matrix is in {abundance_unit}; "
-                                           "left out rather than converted"))
+                    # placed once the organisms that leave have left: a pair of one that leaves is in no
+                    # matrix, not left at 0 in this one (found in review)
+                    unit_mismatch.append(((affected, actor),
+                                          f"{label_pair[1]}'s abundance beside {label_pair[0]} is in "
+                                          f"{entry['unit']}, and this matrix is in {abundance_unit}; "
+                                          "left out rather than converted"))
                     row.append(0.0)
                     continue
                 row.append(entry["value"])
@@ -1280,7 +1296,7 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                                      "plateau, where its partners' effect outweighs its own rate, so no "
                                      "limitation can be fitted for it"))
             table.append(row)
-        matrices.append({"abundance_unit": abundance_unit, "media": _block_media(net, keep),
+        matrices.append({"abundance_unit": abundance_unit, "media": _block_media(filled, values),
                          "unit": coefficient_unit(rate_unit, abundance_unit),
                          "rate_unit": rate_unit, "organisms": names, "ids": keep, "matrix": table,
                          "cells": len(filled), "filled": filled, "pooled_media": pooled, "conflicts": [],
@@ -1303,7 +1319,7 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                 block["cells"] = len(block["filled"])
                 block["pooled_media"] = [row for row in block["pooled_media"]
                                          if row[0] in block["organisms"] and row[1] in block["organisms"]]
-                block["media"] = _block_media(net, block["ids"])
+                block["media"] = _block_media(block["filled"], values)
     # a pair whose two organisms sit in different matrices has no cell in either; worked out after the
     # unusable organisms left theirs, whose effects are then named as in no matrix (found in review)
     where = {nid: block["abundance_unit"] for block in matrices for nid in block["ids"]}
@@ -1333,6 +1349,12 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
         # a conflict between organisms in no common matrix was named nowhere (found in review)
         across_at[(affected, actor)] = len(across)
         across.append((_label(net.nodes[affected]), _label(net.nodes[actor]), sign + why))
+    for (affected, actor), why in unit_mismatch:
+        if (affected, actor) in across_at:
+            at = across_at[(affected, actor)]
+            across[at] = (*across[at][:2], f"{across[at][2]}; {why}")
+        else:
+            pairs_left_out.append((_label(net.nodes[affected]), _label(net.nodes[actor]), why))
     # an effect on or by an organism that is in no matrix is not "left at 0" in one: it is in none (found
     # in review: the genus package listed such a pair as a 0); routed after the unusable organisms left
     # their matrices, which are in none either. Arcs left out of a cell that still holds a value (the pair's
@@ -1406,21 +1428,25 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
         block["equilibrium"] = answer
         block["not_above_zero"] = [name for name, value
                                    in zip(block["organisms"], answer, strict=True) if value <= 0]
+    # the cells the matrices hold: a pair left at 0, or in no matrix, has no cell to describe, and was
+    # listed as one taken from the ratio, from merged arcs, or from a comparison where one side did not
+    # grow (found in review; #211 item 2 fixed the last for organisms in no matrix only)
+    held = {pair for block in matrices for pair in block["filled"]}
+    cells_held = {pair: entry for pair, entry in values.items() if pair in held}
     return {"matrices": matrices, "left_out": left_out, "pairs_left_out": pairs_left_out,
             "across_units": across, "arcs_left_out": arcs_left_out, "floors": [],
-            "from_absolute_rates": all(entry["how"] == "rates" for entry in values.values()),
+            "from_absolute_rates": all(entry["how"] == "rates" for entry in cells_held.values()),
+            "cell_media": list(dict.fromkeys(name for entry in cells_held.values() for name in entry["media"])),
             "from_the_ratio": [(_label(net.nodes[a]), _label(net.nodes[b]))
-                               for (a, b), entry in values.items() if entry["how"] == "ratio"],
+                               for (a, b), entry in cells_held.items() if entry["how"] == "ratio"],
             "from_merged_ratio": [(_label(net.nodes[a]), _label(net.nodes[b]))
-                                  for (a, b), entry in values.items() if entry["how"] == "merged"],
+                                  for (a, b), entry in cells_held.items() if entry["how"] == "merged"],
             "obligate_rows": list(rows_fitted), "plateau_rows": list(plateau_rows),
             # only cells that are in a matrix: an organism left out of every block took its censored
             # cells with it, and the README named them as entering the median of their pair while
             # WHAT IS NOT IN HERE listed the same organisms as excluded (#211 item 2)
             "censored_cells": [(_label(net.nodes[a]), _label(net.nodes[b]))
-                               for (a, b), entry in values.items()
-                               if entry["censored"] and any(a in block["ids"] and b in block["ids"]
-                                                            for block in matrices)],
+                               for (a, b), entry in cells_held.items() if entry["censored"]],
             "metric": metrics[0] if metrics else "",
             # the integrated path's equivalent of `plateau_rows`: an organism whose fit implied no
             # plateau, so a measured one was put in its place. `plateau_rows` is populated from
@@ -1533,7 +1559,7 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "      the threshold judged it no interaction.",
         "  Arcs of one ordered pair are merged across conditions and studies by their median; a pair whose",
         "      arcs disagree in sign is left at 0 and named below.",
-        *_media_lines(net),
+        *_media_lines(net, got.get("cell_media")),
         *_dropout_lines(net),
         *_rate_method_lines(got, derivation_of(net), rates),
         "",
@@ -1796,6 +1822,8 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
             "substituted_rows": [list(row) for row in got.get("substituted_rows", [])],
             "from_the_ratio": [list(row) for row in got.get("from_the_ratio", [])],
             "media": media(net),
+            # the media of the cells the matrices hold, which a simulation is of: `media` is every arc's
+            "cell_media": list(got.get("cell_media") or []),
             "dropout_arcs": dropout_arcs(net),
             "absence_k": meta.get("absence", {}).get("k"),
             "without_a_rate": missing,

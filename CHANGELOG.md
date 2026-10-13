@@ -123,8 +123,12 @@ content.
   them an arc that gives no number beside arcs that do, which was dropped without a word, while arcs
   beside a cell of 0 are listed with that cell; and the unit sentence counts the effects between
   organisms counted differently that were measured, where it said none ever was. A matrix an organism
-  left for an unusable self-limitation counts only the cells, media and sign conflicts it still holds. R reads `pairs_left_out`,
-  `across_units` and `arcs_left_out` with their actors and prints them.
+  left for an unusable self-limitation counts only the cells, media and sign conflicts it still holds,
+  and that organism's effects are in no matrix, not also left at 0. A cell names only the media of the
+  arcs in it; the lists of cells from the ratio, from merged arcs or from a comparison where one side did
+  not grow hold only cells a matrix holds; and the warning about several media (README and R, from the
+  payload's new `cell_media`) is about the media of the cells, naming those of arcs in no cell apart.
+  R reads `pairs_left_out`, `across_units` and `arcs_left_out` with their actors and prints them.
 - **A merged arc keeps no single comparison's bound, capacity, coefficient or fit**: every such field is kept
   only where all merged arcs agree, a merged arc's coefficient is the median of its members', and in a gLV
   package its cell is labeled as a merged arc's, not as one from a network saved before the rates were

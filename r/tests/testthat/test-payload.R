@@ -187,3 +187,19 @@ test_that("the unit sentence says what was measured between organisms counted di
     expect_match(text, "1 effect(s) between organisms counted differently were measured and are in no matrix",
                  fixed = TRUE)
 })
+
+
+test_that("the media line is about the cells the matrices hold where the package names them", {
+    # found in review: a matrix of one medium was warned about the media of arcs in no matrix
+    payload <- example_payload()
+    payload$caveats$media <- list("WC", "LB")
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
+    expect_match(text, "these arcs come from 2 media", fixed = TRUE)
+    payload$caveats$cell_media <- list("WC")
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
+    expect_match(text, "every cell was measured in one medium: WC", fixed = TRUE)
+    expect_false(grepl("these arcs come from", text, fixed = TRUE))
+    payload$caveats$cell_media <- list("WC", "LB")
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
+    expect_match(text, "these cells come from 2 media", fixed = TRUE)
+})
