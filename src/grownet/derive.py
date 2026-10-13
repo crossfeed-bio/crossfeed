@@ -28,7 +28,7 @@ from statistics import mean, median
 from . import media as media_rules
 from . import rates
 from . import selection as selecting
-from .adapter import replicates_for_experiment
+from .adapter import culture_trace_replicates, replicates_for_experiment
 from .growth import (
     SPIKE_FACTOR,
     GrowthCurve,
@@ -632,11 +632,18 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
         if wanted is not None and node["id"] not in wanted:
             continue
         replicates, skips = replicates_for_experiment(client, exp, spike_factor)
+        # a monoculture measured only at the culture level gives its rate and lag from that trace, and
+        # never its capacity (Karoline, 2026-10-07, #140: "yes to #140 with option 1"). Its replicates
+        # are otherwise dropped one by one as "no usable per-strain series".
+        # only when NO per-strain series could be built at all: a strain-level curve is always preferred
+        culture_level = not replicates
+        if culture_level:
+            replicates, skips = culture_trace_replicates(client, exp, name)
         skipped += skips
         entry = found.setdefault(node["id"], {"name": name, "values": [], "unit": "", "replicates": [],
                                               "method": method, "lag_method": rates.LAG_METHOD,
                                               "lags": [], "capacity_by_medium": {},
-                                              "capacity_left_out": []})
+                                              "capacity_left_out": [], "starts": [], "sources": {}})
         medium = media_identity(exp)
         for i, rep in enumerate(replicates):
             label = f"{name} monoculture [{exp.get('name', '') or _exp_id(exp)}], replicate {rep.name or i}"
@@ -656,11 +663,11 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
                 value = feature(curve.times, curve.values)
             except rates.RateUnavailable as e:
                 skipped.append((label, f"no growth rate: {e}"))
-                _collect_capacity(entry, curve, label, medium, capacity_max_fall)
+                _capacity_unless_culture(entry, curve, label, medium, capacity_max_fall, culture_level)
                 continue
             if value <= 0:
                 skipped.append((label, f"non-positive growth rate ({value:g})"))
-                _collect_capacity(entry, curve, label, medium, capacity_max_fall)
+                _capacity_unless_culture(entry, curve, label, medium, capacity_max_fall, culture_level)
                 continue
             unit = f"1/{curve.time_unit}"
             if not entry["unit"]:
@@ -668,10 +675,16 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
             if unit != entry["unit"]:
                 skipped.append((label, f"growth rate in {unit}, and this organism's other rates are in "
                                        f"{entry['unit']}; left out rather than converted"))
-                _collect_capacity(entry, curve, label, medium, capacity_max_fall)
+                _capacity_unless_culture(entry, curve, label, medium, capacity_max_fall, culture_level)
                 continue
             entry["values"].append(value)
             entry["replicates"].append(rep.name or str(i))
+            # what the curve started at, for the rule against pooling across starting densities (#81),
+            # and where the rate came from, which travels with it (#140)
+            entry["starts"].append((curve.values[0] if curve.values and curve.values[0] > 0 else None,
+                                    curve.abundance_unit, label))
+            source = curve.technique if culture_level else "per-strain"
+            entry["sources"][source] = entry["sources"].get(source, 0) + 1
             # the lag always comes from the Baranyi fit, the only estimator that has one, whichever
             # estimator produced the rate (Karoline, 2026-10-06: "use the lag from Baranyi and easylinear
             # since it works better"). A curve the Baranyi guards reject keeps its rate and has no lag.
@@ -679,11 +692,51 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
                 entry["lags"].append(rates.baranyi_fit(curve.times, curve.values)["lag"])
             except rates.RateUnavailable:
                 pass
-            _collect_capacity(entry, curve, label, medium, capacity_max_fall)
+            _capacity_unless_culture(entry, curve, label, medium, capacity_max_fall, culture_level)
+    for entry in found.values():
+        _refuse_pooling_across_starts(entry, skipped)
     # an organism is kept when it has a rate or a certified plateau: a study where the estimator fitted
     # no rate still measured the plateau, and dropping it there made the capacity estimator-dependent
     # across studies as well (found 2026-10-06)
     return {nid: e for nid, e in found.items() if e["values"] or e["capacity_by_medium"]}, skipped
+
+
+# How far apart, as a ratio, the measured starting densities of one organism's monocultures in one study
+# may be and still be pooled into one rate (Karoline, 2026-10-12, on #81: "I'd also pick b)").
+MAX_START_SPREAD = 10.0
+
+
+def _refuse_pooling_across_starts(entry: dict, skipped: list) -> None:
+    """Leave out a study's rates for an organism whose monocultures started more than `MAX_START_SPREAD`
+    times apart, measured at each curve's first time point (#81).
+
+    A study that varies the starting density on purpose, as SMGDB00000015's Allee design does from 1e2 to
+    9e6, makes the density the independent variable, and a median over it is not one organism's rate.
+    mGrowthDB's `inoculumConcentration` is empty there, so the first measured value is the density, as
+    Karoline set on 2026-10-08. Nothing is chosen among the densities: the study's rates for that organism
+    are left out and named, and other studies still give it a rate. Only rates: a capacity is a plateau,
+    where the start no longer is what differs.
+    """
+    starts = [(s, unit) for s, unit, _ in entry.get("starts") or [] if s]
+    units = {unit for _, unit in starts}
+    if len(starts) < 2 or len(units) != 1:
+        return
+    low, high = min(s for s, _ in starts), max(s for s, _ in starts)
+    if high <= MAX_START_SPREAD * low:
+        return
+    skipped.append((f"{entry['name']} monocultures, growth rate",
+                    f"they started from {low:.3g} to {high:.3g} {units.pop()}, {high / low:.0f} times apart, and "
+                    f"a rate is not pooled across starting densities more than {MAX_START_SPREAD:g} times apart "
+                    "(#81): left out for this study"))
+    entry["values"], entry["replicates"], entry["lags"] = [], [], []
+    entry["sources"] = {}
+
+
+def _capacity_unless_culture(entry, curve, label, medium, capacity_max_fall, culture_level) -> None:
+    """A capacity from a per-strain curve only: never from a culture-level trace (#140, option 1)."""
+    if culture_level:
+        return
+    _collect_capacity(entry, curve, label, medium, capacity_max_fall)
 
 
 def growth_rates(client, study_ids, wanted=None, rate_method: str = None, window: int = None,
@@ -753,6 +806,8 @@ def merge_rates(per_study) -> dict:
                 at["studies"].append(study_id)
                 at["per_study"][study_id] = median(entry["values"])
             at["lags"] += list(entry.get("lags") or [])
+            for source, n in (entry.get("sources") or {}).items():
+                at.setdefault("sources", {})[source] = at.setdefault("sources", {}).get(source, 0) + n
             at["capacity_left_out"] += list(entry.get("capacity_left_out") or [])
             for key, found_here in (entry.get("capacity_by_medium") or {}).items():
                 one = at["by_medium"].setdefault(key, {"label": found_here["label"],
@@ -788,6 +843,9 @@ def merge_rates(per_study) -> dict:
                     "other_units": at["other_units"], "method": at["method"],
                     "lag": median(at["lags"]) if at["lags"] else None, "lag_n": len(at["lags"]),
                     "lag_method": at["lag_method"] if at["lags"] else "",
+                    # where the rates came from: "per-strain", or "culture-level <technique>" for a
+                    # monoculture measured only as a whole culture, with how many replicates each (#140)
+                    "rate_sources": dict(at.get("sources") or {}),
                     "capacity": median(chosen["values"]) if chosen else None,
                     "capacity_unit": chosen["unit"] if chosen else "",
                     "capacity_n": len(chosen["values"]) if chosen else 0,
@@ -1701,6 +1759,9 @@ PROVISIONAL = ("Each interaction compares a species' growth with and without its
                "An arc from a community compared with the same community without one member (evidence "
                "dropout) says the removed member affects the target, DIRECTLY OR THROUGH THE OTHERS, so it "
                "is not on its own evidence of an interaction between those two; each such arc is marked. "
+               "Every drop-out arc to one target is also computed against the same full-community "
+               "measurement, so part of each is how the target fared in that community rather than what "
+               "removing this member did; the report counts the arcs that share one. "
                "And a gLV coefficient computed from this comparison is a difference of two separately "
                "fitted growth rates divided by one partner mean, which carries the organism's own density "
                "as a confound that no number of replicates removes; gLV mode fits the row instead, which "

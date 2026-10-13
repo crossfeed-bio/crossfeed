@@ -444,6 +444,11 @@ Rules for this file:
   whether a near-scarce denominator is withheld and above what stated ratio; whether a capacity and the
   cells beside it must share a medium; and whether `reached_stationary` should certify at the end of a
   curve rather than over its last fifth, since it accepts a declining culture and records its peak.
+- 2026-10-12 (Karoline, #140 "Counts only" and #81 "I'd also pick b)"): a monoculture with no per-strain
+  series gives its rate and lag from ONE culture-level plate count or flow cytometry trace, never OD and
+  never a capacity; and a study's monoculture rates for an organism are not pooled when their first
+  measured values are more than 10x apart (`derive.MAX_START_SPREAD`). OD was excluded after measuring:
+  study 10's OD starts at the medium's 0.6 and gave 0.0007 to 0.009 /h.
 - 2026-10-08: the id is **`grownet.interaction_network/v3`** from 0.3.0, and the entries below are why it
   was `/v2` and `/v1`. It moved from `/v2` to `/v3` before 0.3.0 shipped, for the two optional edge fields
   of #155 item 1 (`se_rate_selection`, `rate_selection_spread`). **A field addition moves the id whether
@@ -574,7 +579,11 @@ Rules for this file:
 - 2026-09-18 (Karoline): species and strain names are resolved through mGrowthDB, never by querying NCBI
   directly. mGrowthDB is linked to NCBI through a local import that is kept up to date, so following its
   naming keeps one source of truth. The current name for a taxon id is the one in the most recently
-  published study holding it (#24).
+  published study holding it (#24). Refined 2026-10-12 (Karoline, on #24: "Yes, strain level"): where
+  that study names only the species, the current name is the latest name mGrowthDB gives under the same
+  species WITH a strain designation (`taxonomy.current_name`). Only names mGrowthDB uses are shown; a
+  designation is never moved from an old species name onto a new one. Live, 2 of 63 taxa change:
+  411483 becomes "Faecalibacterium duncaniae A2-165" and 74426 "Collinsella aerofaciens RCC 1377".
 - 2026-09-18 (Craig, on merging #17): the optional `evidence` and `community` edge fields are accepted
   into the neutral format (item 4 of "Open decisions"). `evidence` is `biculture` (mono versus bi-culture,
   direct) or `dropout` (possibly indirect), and `community` records the members of the full community.
@@ -827,7 +836,9 @@ replicates are compared. Strain identities and description variants still come f
 ## Growth rate metric (#41, built 2026-09-27)
 
 `crossfeed.rates`: `easylinear` reimplements growthrates' fit_easylinear (windows of h points starting at
-points 1 to N minus h, steepest slope, widened to every window within quota 0.95 of it, refit), and matched mGrowthDB's
+points 1 to N minus h, steepest slope, refit from the first window within quota 0.95 of it to the end of the
+last, every window between included, exactly as growthrates' `tp <- seq(min(candidates), max(candidates) + h - 1)`
+does; #229 checked it against growthrates 0.8.5, identical to 5e-15), and matched mGrowthDB's
 reported growthRate on 190 of 192 curves within 10% (SMGDB00000002, 4, 7, 13; median ratio 1.00 each);
 keeping growthrates' loop, which skips the last possible window, matched better on study 13. `baranyi` is the prototype's
 guarded Levenberg-Marquardt fit (multi-start, mu within 5x the steepest slope, R2 >= 0.9); a rejected fit
@@ -856,12 +867,13 @@ All is the one query whose cost grows with the whole of mGrowthDB (1,313 request
 `.github/workflows/all-network.yml` derives it once a day with `DEFAULTS` (`packaging/publish_all.py`,
 which refuses to publish a derivation with errors) and uploads `all_result.json` to the `all-network`
 release. `grownet.published` reads it back: `usable` (the settings are the defaults), `fresh` (its format
-and schema are this version's, and it is less than `MAX_AGE`, one day, old) and `fetch` (None on any
+and schema are this version's, and it is less than `MAX_AGE`, 36 hours, old) and `fetch` (None on any
 failure, so the caller derives live). `run_query(..., published=True)` tries it first; the publishing
 script passes `published=False`, and so does `--no-published`. `tests/conftest.py` stubs `fetch` so no
 test reaches GitHub; `fetch_from` takes the opener and the clock. This is a cache across sessions, which
 was ruled out above for species searches; for All, Karoline asked for it with a bound: "serve from there
-if less than a day old". Users' copies only read: writing would need a credential in every copy.
+if less than a day old", widened to 36 hours on 2026-10-12 because GitHub starts the daily run late (#196).
+Users' copies only read: writing would need a credential in every copy.
 
 ## Cytoscape (CyREST) quirks
 

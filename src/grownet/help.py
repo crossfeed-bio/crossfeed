@@ -712,7 +712,7 @@ def render_help(token: str, defaults: dict, example: tuple, job: str = "") -> st
 mGrowthDB), or NCBI taxon ids. grownet looks them up in mGrowthDB, reads the growth curves of every study
 that holds them, and derives the interactions between them on this machine. The All button ignores the
 box and derives every study in mGrowthDB, with every partner. With the default settings, All reads the
-network the grownet repository derives from mGrowthDB once a day, when it is less than a day old and
+network the grownet repository derives from mGrowthDB once a day, when it is less than 36 hours old and
 was derived by the same derivation your settings ask for, which
 spares mGrowthDB the 1,926 requests a cold corpus run sends, or
 the 54 a warm one does (measured 2026-10-11;
@@ -927,7 +927,10 @@ merging then uses only the arcs that passed.</p>
 
 <h2 id="glv">The matrix, the growth rates and gLV</h2>
 <p><strong>The adjacency matrix.</strong> The format menu writes the network as a square table of
-comma-separated values, the organisms in the header row and in the first column. A cell holds the log2
+comma-separated values, the organisms in the header row and in the first column. The table carries no
+settings, version or date, so the entry below it, <em>Adjacency matrix: what it is</em>, writes a text
+file to keep beside it: how it was made, every setting, what 0 and NA mean in it, the pairs left at 0,
+and the studies to cite. From the command line it is written beside the CSV. A cell holds the log2
 mean of the comparison, so <code>A[i][j]</code> is the effect of j on i: rows are affected, columns are
 the actor. Each organism appears once, so arcs of one pair from several conditions or studies are merged
 by their median, the same rule the Merge arcs setting uses; a pair whose arcs disagree in sign is left at
@@ -1008,9 +1011,12 @@ beside that partner. An organism that does grow alone but whose monocultures nev
 its plateau beside its partners in the same way, rather than left out, and the README names it; one whose
 partners suppress it harder than its own rate there is named instead, since a self-limitation at or above
 zero is not one. The package also carries
-<code>growth_rates.csv</code> (one rate per organism, in the same order, with how many values it rests on,
-and beside it the estimator, the lag, the carrying capacity and the <strong>doubling time</strong> the rate
-implies, <code>ln(2) / r</code> in the time unit of the rate); and <code>README.txt</code>, which states
+<code>growth_rates.csv</code> (one rate per organism, matched to a matrix by the organism column and never
+by position, with how many values it rests on, and beside it the estimator, the lag, the carrying capacity
+and the <strong>doubling time</strong> the rate implies, <code>ln(2) / r</code> in the time unit of the
+rate. In gLV mode a rate is the median over every row the derivation fitted for that organism, so no
+display setting moves it; a network derived with <code>--fixture</code> holds only the rows someone kept,
+so its rates follow the settings that made the fixture); and <code>README.txt</code>, which states
 every formula and unit, names any pair left at 0 for disagreeing in sign, names every organism and every
 effect that could not be fitted and why, and names the media the arcs were measured in: a simulation is of
 one environment, so a package built from several media says so in capitals and points at the second box
