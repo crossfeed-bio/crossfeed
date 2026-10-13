@@ -858,12 +858,13 @@ All is the one query whose cost grows with the whole of mGrowthDB (1,313 request
 `.github/workflows/all-network.yml` derives it once a day with `DEFAULTS` (`packaging/publish_all.py`,
 which refuses to publish a derivation with errors) and uploads `all_result.json` to the `all-network`
 release. `grownet.published` reads it back: `usable` (the settings are the defaults), `fresh` (its format
-and schema are this version's, and it is less than `MAX_AGE`, one day, old) and `fetch` (None on any
+and schema are this version's, and it is less than `MAX_AGE`, 36 hours, old) and `fetch` (None on any
 failure, so the caller derives live). `run_query(..., published=True)` tries it first; the publishing
 script passes `published=False`, and so does `--no-published`. `tests/conftest.py` stubs `fetch` so no
 test reaches GitHub; `fetch_from` takes the opener and the clock. This is a cache across sessions, which
 was ruled out above for species searches; for All, Karoline asked for it with a bound: "serve from there
-if less than a day old". Users' copies only read: writing would need a credential in every copy.
+if less than a day old", widened to 36 hours on 2026-10-12 because GitHub starts the daily run late (#196).
+Users' copies only read: writing would need a credential in every copy.
 
 ## Cytoscape (CyREST) quirks
 

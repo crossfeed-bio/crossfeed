@@ -712,7 +712,7 @@ def render_help(token: str, defaults: dict, example: tuple, job: str = "") -> st
 mGrowthDB), or NCBI taxon ids. grownet looks them up in mGrowthDB, reads the growth curves of every study
 that holds them, and derives the interactions between them on this machine. The All button ignores the
 box and derives every study in mGrowthDB, with every partner. With the default settings, All reads the
-network the grownet repository derives from mGrowthDB once a day, when it is less than a day old and
+network the grownet repository derives from mGrowthDB once a day, when it is less than 36 hours old and
 was derived by the same derivation your settings ask for, which
 spares mGrowthDB the 1,926 requests a cold corpus run sends, or
 the 54 a warm one does (measured 2026-10-11;
@@ -927,7 +927,10 @@ merging then uses only the arcs that passed.</p>
 
 <h2 id="glv">The matrix, the growth rates and gLV</h2>
 <p><strong>The adjacency matrix.</strong> The format menu writes the network as a square table of
-comma-separated values, the organisms in the header row and in the first column. A cell holds the log2
+comma-separated values, the organisms in the header row and in the first column. The table carries no
+settings, version or date, so the entry below it, <em>Adjacency matrix: what it is</em>, writes a text
+file to keep beside it: how it was made, every setting, what 0 and NA mean in it, the pairs left at 0,
+and the studies to cite. From the command line it is written beside the CSV. A cell holds the log2
 mean of the comparison, so <code>A[i][j]</code> is the effect of j on i: rows are affected, columns are
 the actor. Each organism appears once, so arcs of one pair from several conditions or studies are merged
 by their median, the same rule the Merge arcs setting uses; a pair whose arcs disagree in sign is left at
