@@ -269,6 +269,13 @@ def _objs(x):
 
 
 _META_TYPES = {"string": str, "array": list, "object": dict, "boolean": bool}
+# Every type a meta key is declared with must be one `_meta_problems` can check: one it cannot made
+# `grownet validate` raise KeyError on a good file, and the meta key walk of #274 proves a key is DECLARED,
+# not that its declared type is honored (Craig's agent, on #276). Failing at import puts it on the
+# developer's machine rather than in a reader's validate.
+assert {d["type"] for d in META_PROPERTIES.values()} <= set(_META_TYPES), (
+    "a meta key is declared with a type _META_TYPES does not check: "
+    f"{sorted({d['type'] for d in META_PROPERTIES.values()} - set(_META_TYPES))}")
 
 
 def _meta_problems(meta: dict, notes: list = None) -> list:

@@ -1133,3 +1133,16 @@ def test_a_boolean_meta_key_is_checked_as_one():
     assert _meta_problems({"complete": "no"}) == ["meta.complete must be boolean, not str"]
     # and a boolean is still refused where it is not declared one
     assert _meta_problems({"query": True}) == ["meta.query must be string, not bool"]
+
+
+def test_every_declared_meta_type_is_one_validate_can_check(monkeypatch):
+    """Craig's agent, on #276: `{"type": "integer"}` made validate raise KeyError. The import-time assertion
+    is what stops it; here the same rule is applied to a declaration that breaks it."""
+    import pytest
+
+    from grownet import schema
+    assert {d["type"] for d in schema.META_PROPERTIES.values()} <= set(schema._META_TYPES)
+    bad = {**schema.META_PROPERTIES, "arcs": {"type": "integer"}}
+    with pytest.raises(AssertionError):
+        assert {d["type"] for d in bad.values()} <= set(schema._META_TYPES), "integer is not checked"
+
