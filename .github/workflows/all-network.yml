@@ -139,7 +139,7 @@ jobs:
           if [ -n "$open" ]; then
             gh issue comment "$open" --body "Failed again: $RUN"
           else
-            gh issue create --label all-network-failed --title "The daily All network failed" --body "The run $RUN did not publish the All network. Until a run succeeds, the published files age past what each installed copy accepts (36 hours for the current version, a day for 0.3.x and 0.4.x) and every copy of grownet derives All live from mGrowthDB. This issue closes itself when a run succeeds."
+            gh issue create --label all-network-failed --title "The daily All network failed" --body "The run $RUN did not complete the publish of the All network, so some files may already have been replaced and others not. Until a run succeeds, the published files age past what each installed copy accepts (36 hours for the current version, a day for 0.3.x and 0.4.x) and every copy of grownet derives All live from mGrowthDB. This issue closes itself when a run succeeds."
           fi
       - name: close the failure issue once a build succeeds
         if: always() && steps.publish.outcome == 'success'

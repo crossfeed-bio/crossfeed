@@ -1207,7 +1207,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     kept, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"],
                               s["no_growth_alpha"], s["no_growth_factor"], s["merge_arcs"], s["min_studies"],
                               s["merge_genera"], support_level(names), s["max_adjusted_p"],
-                              s["include_absent"], deriver=deriver)
+                              s["include_absent"], deriver=deriver, current=current)
     # output_meta sets each record's status in place, so the arcs it left out below the threshold are still
     # here to show in their own section: the page reports them, the file holds what the page counts
     absent_records = [] if s["include_absent"] else [r for r in records if r.get("status") == ABSENT]
@@ -1262,7 +1262,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         # whose monocultures could not be read looked as if it had no measurable rate (#247)
         failed_rates = unread(rate_skips)
         if failed_rates:
-            errors.append(f"{len(failed_rates)} replicate(s) or growth curve(s) could not be read from "
+            errors.append(f"{len(failed_rates)} study(ies), replicate(s) or growth curve(s) could not be read from "
                           f"mGrowthDB while reading growth rates (for example {failed_rates[0][0]}: "
                           f"{failed_rates[0][1]}); the rates are incomplete, so run the search again")
             net.meta["errors"] = list(errors)

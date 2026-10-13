@@ -229,3 +229,79 @@ def test_a_merged_arc_drops_unit_and_value_fields_its_members_disagree_on():
     b = {**a, "window_unit": "min", "metric_unit": "CFUs/mL x h", "metric_without": 2.0}
     merged = _merged([a, b])
     assert (merged["window_unit"], merged["metric_unit"], merged["metric_without"]) == ("", "", None)
+
+
+def test_every_field_of_one_comparison_is_kept_only_where_the_members_agree():
+    """Round 3 of the review: the test above covered 7 of the 21 fields, so dropping any of the other 14
+    from COMPARISON_FIELDS left the suite green. Here the members disagree on every one."""
+    from grownet.derive import COMPARISON_FIELDS, _merged
+    # written out, not read from the tuple, so a field dropped from it fails here
+    assert set(COMPARISON_FIELDS) == {
+        "strength_bound", "bound_rule", "target_capacity", "target_capacity_unit", "target_capacity_n",
+        "coefficient", "coefficient_unit", "coefficient_sd", "coefficient_n", "coefficient_sd_from_rate_stage",
+        "fit_r2", "fit_condition", "fit_null_r2", "fit_window_share", "rate_mismatch_to_zero",
+        "se_replicates", "se_rate_stage", "se_rate_selection", "rate_selection_spread", "rate_stage_method",
+        "rate_stage_n"}
+    first = {"source": "a", "target": "b", "strength": 1.0, "outcome": "quantified", "study_id": "S1"}
+    second = {**first, "strength": 3.0, "study_id": "S2"}
+    for i, key in enumerate(COMPARISON_FIELDS):
+        first[key], second[key] = (f"{key} one", f"{key} two") if key in (
+            "bound_rule", "target_capacity_unit", "fit_condition", "rate_stage_method") else (i + 1.0, i + 2.0)
+    first["coefficient_unit"] = second["coefficient_unit"] = "1/(h x Cells/mL)"   # so the median is taken
+    merged = _merged([first, second])
+    for key in COMPARISON_FIELDS:
+        if key == "coefficient":
+            assert merged[key] == (first[key] + second[key]) / 2, "the members' median"
+        elif key == "coefficient_unit":
+            assert merged[key] == "1/(h x Cells/mL)"
+        else:
+            assert merged[key] in (None, ""), key
+    # a median over three is the middle one, not the mean (median and mean of two agree)
+    third = {**second, "strength": 5.0, "study_id": "S3", "coefficient": 100.0}
+    assert _merged([first, second, third])["coefficient"] == second["coefficient"]
+
+
+def test_a_merged_coefficient_needs_every_member_s_in_one_unit():
+    """Round 3 of the review: with `any` for `all`, a member without a coefficient made the median raise,
+    and without the unit condition it took a median across units."""
+    from grownet.derive import _merged
+    one = {"source": "a", "target": "b", "strength": 1.0, "outcome": "quantified", "study_id": "S1",
+           "coefficient": -4e-10, "coefficient_unit": "1/(h x Cells/mL)"}
+    other_unit = {**one, "study_id": "S2", "coefficient": -6e-2, "coefficient_unit": "1/(h x OD)"}
+    assert _merged([one, other_unit])["coefficient"] is None
+    missing = {**one, "study_id": "S2", "coefficient": None}
+    assert _merged([one, missing])["coefficient"] is None
+
+
+def test_a_package_with_a_merged_arc_says_its_cell_came_from_the_median_ratio():
+    """Round 3 of the review: `_per_arc` labels a merged arc's cell, and nothing downstream was tested, so
+    the README could say every cell came from measured rates while one came from the merged ratio."""
+    from grownet import matrix
+    net = records_to_network([
+        {"source": "a", "target": "b", "source_name": "A", "target_name": "B", "effect": "inhibition",
+         "strength": -0.5, "sd": 0.1, "study_id": "S1", "merged_arcs": 2, "partner_abundance": 2e8,
+         "partner_abundance_unit": "Cells/mL", "outcome": "quantified", "metric": "growth_rate:easylinear:5"}])
+    rates = {nid: {"name": nid.upper(), "rate": 0.4, "unit": "1/h", "n": 3, "studies": ["S1"],
+                   "capacity": 1e9, "capacity_unit": "Cells/mL", "capacity_n": 3} for nid in ("a", "b")}
+    got = matrix.coefficients(net, rates)
+    assert got["from_absolute_rates"] is False
+    assert got["from_merged_ratio"] == [("B", "A")] and got["from_the_ratio"] == []
+    readme = matrix.readme_from(got, net, rates)
+    assert "CELLS FROM MERGED ARCS, TAKEN FROM THEIR MEDIAN LOG2 RATIO" in readme and "A on B" in readme
+    assert "a network derived before the two absolute rates" not in readme
+
+
+def test_only_present_quantified_arcs_to_oneself_count_as_within_one_organism():
+    """Round 3 of the review: the count's condition was untested, so counting every self arc, or the absent
+    and censored ones, left the suite green."""
+    from grownet import matrix
+    net = records_to_network([
+        {"source": "g", "target": "g", "effect": "inhibition", "strength": -1.0, "study_id": "S1"},
+        {"source": "g", "target": "g", "effect": "facilitation", "strength": 0.05, "sd": 1.0,
+         "status": "absent", "study_id": "S1"},
+        {"source": "h", "target": "h", "effect": "facilitation", "strength": None, "outcome": "obligate",
+         "study_id": "S1"},                                   # censored: it reports an extreme, so it counts
+        {"source": "k", "target": "k", "effect": "facilitation", "strength": None, "outcome": "quantified",
+         "study_id": "S1"},                                   # no number and no extreme: nothing to count
+        {"source": "a", "target": "b", "effect": "inhibition", "strength": -1.0, "study_id": "S1"}])
+    assert matrix.counts(net)["within_one_organism"] == 2

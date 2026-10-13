@@ -107,30 +107,32 @@ The `all-network` workflow publishes the All network as assets of the `all-netwo
 `main`, once a day: `all_result.<format>.json` (today `all_result.v4.json`), named by the format id a copy
 reads, and `all_result.json`, the same network in `/v3` for installed 0.3.x and 0.4.x copies (#289). A
 copy of this version reads its file while it is less than 36 hours old; 0.3.x and 0.4.x read theirs while
-it is less than a day old. If a bad artifact goes out, **pause the workflow, then delete both**:
+it is less than a day old. If a bad artifact goes out, **pause the workflow, then delete every result file**:
 
 ```bash
 gh workflow disable all-network
-gh run list --workflow all-network --status in_progress --json databaseId -q '.[].databaseId' | xargs -n1 gh run cancel
-gh release view all-network --json assets -q '.assets[].name' | grep '^all_result' | xargs -n1 -I{} gh release delete-asset all-network {} --yes
+for status in in_progress queued pending waiting; do
+  gh run list --workflow all-network --status "$status" --json databaseId -q '.[].databaseId' | xargs -r -n1 gh run cancel
+done
+gh release view all-network --json assets -q '.assets[].name' | grep '^all_result' | xargs -r -I{} gh release delete-asset all-network {} --yes
 ```
 
 Pausing comes first because the next scheduled run would otherwise rebuild the same file from the same
-`main` and publish it again, and disabling does not stop a run already going, hence the cancel. Every
+`main` and publish it again, and disabling does not stop a run already going or one queued behind it, hence the cancel. Every
 `all_result*.json` goes, one per format a copy may read, not only the two there today. Turn it back on with `gh workflow enable all-network` once the fix has merged;
-with both result files gone, that first run compares itself with `all_network.json` for the floor.
+with every result file gone, that first run compares itself with `all_network.json` for the floor.
 
 `published.fetch` then gets nothing, returns `None`, and every copy derives live, which is the designed
 fallback and is what the All button does when GitHub is unreachable. `all_network.json` and
-`all_report.txt` can stay: nothing reads them to decide anything. Verify that both are gone for every
-reader, not only for the version installed where you check:
+`all_report.txt` stay: no copy of grownet reads them, and the next run's floor compares itself with
+`all_network.json`. Verify that every result file is gone for every reader, not only for the version
+installed where you check:
 
 ```bash
-curl -sI https://github.com/crossfeed-bio/crossfeed/releases/download/all-network/all_result.v4.json | head -1
-curl -sI https://github.com/crossfeed-bio/crossfeed/releases/download/all-network/all_result.json | head -1
+gh release view all-network --json assets -q '.assets[].name' | grep '^all_result'
 ```
 
-Each should answer 404.
+It should print nothing.
 
 This was found under pressure on 2026-10-07, when #121's arc fields went out under an unchanged format id
 and the All button raised for every installed 0.2.0. It is written down because it is not obvious from

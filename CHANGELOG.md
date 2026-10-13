@@ -102,24 +102,28 @@ content.
   arc its first member's `window`, `metric_unit`, `metric_with`, `metric_without` and `vs_other_removals`;
   these are now kept only where every member agrees, and `vs_other_removals` is never set on a merged arc.
 - **The gLV payload's `carrying_capacity_curves` counts curves**, as `growth_rates.csv` does, not fitted rows
-  (the slip #259 fixed for `replicates`).
+  (the slip #259 fixed for `replicates`), and is empty where there is no capacity, where it sent 0.
 - **The matrix sidecar says "at most" for an abolished arc's bound**, which is an upper bound; it said "at
   least". It also says when the run was incomplete, which within-genus arcs have no cell, and how to read
   the CSV in R with its names intact; GraphML carries `complete`, `errors` and the build commit.
 - **One organism, one name**: the arcs below the threshold and gLV mode's fitted rates now carry the current
-  name, as the network does (#24).
+  name, as the network does, and `--merge-genera` groups and lists a renamed strain by it (#24). The report's
+  pairs the data did not support name organisms as their study does, and say so.
 - **A merged arc keeps no single comparison's bound, capacity, coefficient or fit**: every such field is kept
   only where all merged arcs agree, a merged arc's coefficient is the median of its members', and in a gLV
   package its cell is labeled as a merged arc's, not as one from a network saved before the rates were
   recorded. gLV mode with `--merge-genera` reports the fitted rates on the genus nodes, where it said none
-  could be computed, and arcs from an organism to itself are counted as arcs.
+  could be computed, and arcs from an organism to itself are counted as arcs. A genus row in
+  `growth_rates.csv` counts its strains' replicates and plateau curves and says where its capacity came
+  from; a genus of one strain is that strain's row. It counted fitted rows and left the provenance empty.
 - **A rate from a culture-level count says so** in `capacity_source`, so `growth_rates.csv`, the gLV payload
-  and the report name it, without a new field.
+  and the report name it, without a new field; a rate that also rests on per-strain curves does not blame
+  the count for its missing capacity.
 - **The daily artifact's `/v3` copy carries only meta keys 0.4.0 declares**, so an installed 0.4.0 does not
   call it suspect; a copy is written for EVERY older format from `/v3` on, read from the manifest, so the
   next format move strands no installed copy either.
 - **`grownet validate` reads a daily artifact** (`all_result.v4.json`) by validating the networks it carries,
-  where it said "INVALID: schema is None" about a good file.
+  where it said "INVALID: schema is None" about a good file, and says so when an artifact carries none.
 - **The live check tells "could not run" from "a property broke"**, by exit code (2 against 1) and in the
   issue it opens; the build-failure issue opens only when nothing was published.
 - **The release check refuses an empty version section** and a help-page release date that differs from

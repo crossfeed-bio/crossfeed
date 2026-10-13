@@ -12,6 +12,7 @@ import textwrap
 
 from . import interaction
 from .adapter import about_a_pair, condensed
+from .derive import CULTURE_NONE
 from .help import SETTINGS
 from .mgrowthdb import MGROWTHDB_API, NO_DATABASE_VERSION
 from .rates import doubling_time, time_unit
@@ -411,7 +412,9 @@ def report_text(result: dict) -> str:
             # can ask for.
             # where the self-limitation behind the diagonal came from: fitted with the partners, or
             # -r/K at a measured plateau because the fit implied none (#142 item 7)
-            if rate.get("capacity_source"):
+            # the culture-level clause above already says why there is no capacity, which this sentence
+            # repeated (found in review)
+            if rate.get("capacity_source") and not (culture and rate["capacity_source"].startswith(CULTURE_NONE)):
                 extra.append(rate["capacity_source"])
             if rate.get("capacity_medium"):
                 extra.append(f"capacity measured in {rate['capacity_medium']}")
@@ -457,7 +460,9 @@ def report_text(result: dict) -> str:
     skips = condensed(result["skipped"])
     pairs = [(label, reason) for label, reason in skips if about_a_pair(label, reason)]
     notes = [(label, reason) for label, reason in skips if not about_a_pair(label, reason)]
-    lines.append(f"pairs the data did not support ({len(pairs)}):" if pairs
+    # each line points at rows of one study, so it names the organisms as that study does, not by the
+    # current name the interactions above use (#24): said, so an old name here is not read as a slip
+    lines.append(f"pairs the data did not support ({len(pairs)}), named as their study names them:" if pairs
                  else "pairs the data did not support: none")
     lines += [f"  - {label}: {reason}" for label, reason in pairs]
     lines.append("")

@@ -119,3 +119,49 @@ def test_the_payload_counts_capacity_curves_not_fitted_rows():
     rates = {k: {**v, "capacity_curves": 4, "capacity_n": 1} for k, v in RATES.items()}
     detail = matrix.glv_payload(_net(PAIR), rates)["growth_rate_detail"]
     assert {d["carrying_capacity_curves"] for d in detail} == {4}
+
+
+def test_a_rate_partly_from_per_strain_curves_does_not_blame_the_count_for_its_missing_capacity(monkeypatch):
+    """Round 3 of the review: a rate from 3 per-strain replicates and 1 culture-level count has no capacity
+    because the per-strain curves never plateaued, and capacity_source blamed the culture-level count."""
+    client = CultureClient({"r1": ["fc"]})
+    monkeypatch.setattr(derive, "replicates_for_experiment", lambda *a, **k: ([], []))
+    culture, _ = derive.monoculture_rates(client, [_exp(["r1"])], identities={})
+    ((nid, entry),) = culture.items()
+    per_strain = {nid: {**entry, "values": entry["values"] * 3, "sources": {"per-strain": 3}}}
+    (rate,) = derive.merge_rates([("S1", per_strain), ("S2", culture)]).values()
+    assert rate["rate_sources"] == {"per-strain": 3, "culture-level fc": 1}, rate["rate_sources"]
+    assert rate["capacity"] is None
+    assert "culture-level" not in (rate.get("capacity_source") or "")
+    # and alone, the count is still named (the control)
+    (alone,) = derive.merge_rates([("S2", culture)]).values()
+    assert alone["capacity_source"].startswith(derive.CULTURE_NONE)
+
+
+def test_the_report_says_once_why_a_culture_level_rate_has_no_capacity(monkeypatch):
+    """Round 3 of the review: the report printed the culture-level clause and then capacity_source, which
+    says the same thing."""
+    from grownet import report
+    client = CultureClient({"r1": ["fc"], "r2": ["fc"], "r3": ["fc"]})
+    monkeypatch.setattr(derive, "replicates_for_experiment", lambda *a, **k: ([], []))
+    found, _ = derive.monoculture_rates(client, [_exp(["r1", "r2", "r3"])], identities={})
+    (rate,) = derive.merge_rates([("S9", found)]).values()
+    from grownet.model import InteractionNetwork
+    net = InteractionNetwork()
+    net.meta["growth_rates"] = {"rule": "r", "organisms": {"x": {**rate, "name": "X"}}}
+    text = report.report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                               "skipped": [], "entries": []})
+    assert "culture-level fc (3 replicate(s))" in text, text      # said once
+    assert "never gives a capacity" not in text, "and not again"
+
+
+def test_the_payload_sends_no_capacity_curve_count_without_a_capacity():
+    """Round 3 of the review: growth_rates.csv leaves capacity_curves empty where there is no capacity, and
+    the payload fell back to capacity_n and sent 0, so R's glv_write wrote 0 for the same run."""
+    from test_payload_v1 import PAIR, RATES, _net
+
+    from grownet import matrix
+    rates = {k: {**v, "capacity": None, "capacity_n": 0} for k, v in RATES.items()}
+    rates = {k: {kk: vv for kk, vv in v.items() if kk != "capacity_curves"} for k, v in rates.items()}
+    detail = matrix.glv_payload(_net(PAIR), rates)["growth_rate_detail"]
+    assert {d["carrying_capacity_curves"] for d in detail} == {None}

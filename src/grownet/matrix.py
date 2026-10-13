@@ -277,6 +277,25 @@ def for_nodes(net: InteractionNetwork, rates: dict) -> dict:
         members = [r for r in rates.values() if genus_name(r.get("name", "")) == genus_name(label)]
         if node.identity != "genus" or not members:
             continue
+        # a genus of one strain IS that strain: its row is the strain's, whole, which the merge below
+        # turned into fitted-row counts and dropped the capacity's provenance from (found in review)
+        if len(members) == 1:
+            out[nid] = {**members[0], "name": label, "merged_from": [members[0].get("name", "")]}
+            continue
+
+        capacity = _merged_capacity(members)
+        # the strains whose plateau the merged capacity is the median of; with none, every strain says why
+        behind = [r for r in members if r.get("capacity") is not None
+                  and r.get("capacity_unit") == capacity["capacity_unit"]] if capacity["capacity"] is not None \
+            else members
+
+        def total(rows, key):
+            values = [r.get(key) for r in rows]
+            return sum(values) if all(isinstance(v, int) for v in values) else None
+
+        def same(rows, key):
+            values = {r.get(key) or "" for r in rows}
+            return values.pop() if len(values) == 1 else "mixed: " + "; ".join(sorted(v for v in values if v))
         units = {r["unit"] for r in members}
         out[nid] = {"name": label, "rate": statistics.median(r["rate"] for r in members),
                     "unit": members[0]["unit"] if len(units) == 1 else "",
@@ -284,7 +303,14 @@ def for_nodes(net: InteractionNetwork, rates: dict) -> dict:
                     "studies": sorted({s for r in members for s in r.get("studies", ())}),
                     "per_study": {}, "other_units": [],
                     "method": members[0].get("method", ""),
-                    **_merged_capacity(members),
+                    **capacity,
+                    # replicates and plateau curves are counted, and the capacity's provenance kept, as a
+                    # strain row has them, rather than the fitted-row counts `n` stands for
+                    "replicates": total(members, "replicates"),
+                    "capacity_curves": total(behind, "capacity_curves") if capacity["capacity"] is not None
+                    else None,
+                    "capacity_source": same(behind, "capacity_source"),
+                    "capacity_medium": same(behind, "capacity_medium"),
                     "merged_from": sorted(r["name"] for r in members)}
     return out
 
@@ -1487,9 +1513,11 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
              # the curves the plateau rests on, as growth_rates.csv writes it: under the integrated form
              # `capacity_n` counts fitted ROWS, so the payload said 1 where the zip said 3, the same slip #259
              # fixed for `replicates` (found loading the payload into R in review)
-             "carrying_capacity_curves": (rates[nid].get("capacity_curves")
-                                          if rates[nid].get("capacity_curves") is not None
-                                          else rates[nid].get("capacity_n")),
+             # and, as there, nothing where there is no capacity: the fallback sent 0 where the zip's
+             # csv is empty (found in review)
+             "carrying_capacity_curves": None if rates[nid].get("capacity") is None else (
+                 rates[nid].get("capacity_curves") if rates[nid].get("capacity_curves") is not None
+                 else rates[nid].get("capacity_n")),
              "carrying_capacity_left_out": [list(row) for row in
                                             (rates[nid].get("capacity_left_out") or [])],
              "carrying_capacity_media": list(rates[nid].get("capacity_media") or ()),

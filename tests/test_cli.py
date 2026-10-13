@@ -445,7 +445,9 @@ def test_the_single_study_path_marks_a_rate_stage_failure_incomplete(monkeypatch
     out = tmp_path / "n.json"
     code = main(["derive", "SMGDB00000001", "--live", "--report-rates", "--out", str(out)])
     meta = _json.loads(out.read_text(encoding="utf-8"))["meta"]
-    assert code == 1 and meta["complete"] is False and any("growth rates" in e for e in meta["errors"])
+    assert code == 1 and meta["complete"] is False
+    assert any(e.startswith("1 study(ies), replicate(s) or growth curve(s)") and "growth rates" in e
+               for e in meta["errors"]), meta["errors"]
 
 
 def test_validate_reads_the_absent_network_of_an_artifact_too(tmp_path, capsys):
@@ -461,3 +463,13 @@ def test_validate_reads_the_absent_network_of_an_artifact_too(tmp_path, capsys):
     path = tmp_path / "all_result.v4.json"
     path.write_text(_json.dumps(payload))
     assert main(["validate", str(path)]) == 1, "a broken absent network is refused even after a good one"
+
+
+def test_validate_says_why_an_artifact_with_no_network_fails(tmp_path, capsys):
+    """Round 3 of the review: an artifact whose `network` and `absent` were both null exited 1 after its
+    header line alone."""
+    import json as _json
+    path = tmp_path / "all_result.v4.json"
+    path.write_text(_json.dumps({"format": "grownet.all_result/v1", "network": None, "absent": None}))
+    assert main(["validate", str(path)]) == 1
+    assert "carries no network" in capsys.readouterr().out

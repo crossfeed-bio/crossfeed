@@ -112,6 +112,11 @@ def test_the_workflow_runs_it_after_publishing_with_its_own_issue():
     assert "OUTCOME: ${{ steps.live.outputs.outcome }}" in wf
     # a failed description has its own issue, and does not stop the live check (found in review)
     assert "if: always() && steps.describe.outcome == 'failure'" in wf
+    describe = wf[wf.index("- name: describe what was published"):wf.index("- name: say when the description")]
+    assert "id: describe" in describe, "without the id the stale-description issue never opens or closes"
+    closing = wf[wf.index("- name: close the description issue"):]
+    assert "if: always() && steps.describe.outcome == 'success'" in closing[:200]
+    assert 'Failed again ($OUTCOME)' in wf
     live = wf[wf.index("id: live"):wf.index("run: python packaging/live_check.py out")]
     assert "if: always() && steps.publish.outcome == 'success'" in live
     assert "if: always() && steps.publish.outcome == 'success'" in wf
@@ -237,3 +242,39 @@ def test_mgrowthdb_errors_in_the_glv_study_mean_could_not_run(tmp_path, monkeypa
                                                             "errors": ["S2: HTTP 503"]})
     monkeypatch.setattr(live_check, "check_published", lambda out: ([], "All"))
     assert live_check.main(str(tmp_path)) == 2
+
+
+def test_a_broken_older_file_is_named_as_that_file(tmp_path, monkeypatch):
+    """Round 3 of the review: a truncated all_result.json was reported as "the published file could not be
+    read", which reads as the current file, and the current file's results were thrown away."""
+    import live_check
+    import publish_all
+    from test_gui import FakeClient
+
+    from grownet.gui import run_query
+    monkeypatch.setattr(publish_all, "run_query", lambda *a, **k: run_query(
+        FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
+    out = tmp_path / "out"
+    assert publish_all.main(str(out), None, previous=lambda: None) == 0
+    (out / "all_result.json").write_text("{truncated")
+    problems, what = live_check.check_published(str(out))
+    assert any(p.startswith("all_result.json: could not be read") for p in problems), problems
+    assert what.startswith("All:"), "the current file was still checked"
+
+
+
+def test_an_older_file_that_was_not_written_is_named(tmp_path, monkeypatch):
+    """Round 3 of the review: deleting the "not written" problem left the suite green."""
+    import live_check
+    import publish_all
+    from test_gui import FakeClient
+
+    from grownet.gui import run_query
+    monkeypatch.setattr(publish_all, "run_query", lambda *a, **k: run_query(
+        FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
+    out = tmp_path / "out"
+    assert publish_all.main(str(out), None, previous=lambda: None) == 0
+    (out / "all_result.json").unlink()
+    problems, _ = live_check.check_published(str(out))
+    assert any(p.startswith("all_result.json: not written, so copies reading grownet.interaction_network/v3")
+               for p in problems), problems

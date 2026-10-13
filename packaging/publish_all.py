@@ -171,7 +171,9 @@ def release_notes(result: dict) -> str:
     # the daily file is built from main, ahead of the version it names: say which commit, so "by grownet
     # 0.4.0" is not read as the released 0.4.0, which refuses the current file (found in review)
     commit = (meta.get("build") or {}).get("commit", "")
-    built = f" as of commit {commit[:7]} of main" if commit else ""
+    # the branch the run built, which is main on a schedule and whatever was chosen on a hand run
+    branch = os.environ.get("GITHUB_REF_NAME") or "main"
+    built = f" as of commit {commit[:7]} of {branch}" if commit else ""
     return f"""The All network of mGrowthDB, derived with grownet's default settings by \
 `.github/workflows/all-network.yml` and replaced by each run. Every run rewrites this description, so it \
 describes the files below as they are now.

@@ -1149,3 +1149,24 @@ def test_the_skip_list_separates_pairs_from_notes_about_the_data():
                             f"3 average replicate(s) left out ({AVERAGE})")
     assert not about_a_pair("A organism -> B organism [EXP_1]",
                             f"3 average replicate(s) left out ({AVERAGE})")
+
+
+def test_a_renamed_strain_is_merged_and_listed_by_its_current_name():
+    """Round 3 of the review (#24): 411483 is Faecalibacterium prausnitzii A2-165 in an older study and
+    F. duncaniae A2-165 in the newest, and its node shows the newer name, while the genus merge listed the
+    pair as "... -> Faecalibacterium prausnitzii". Only a side keyed by its taxon id is renamed, as for the
+    nodes: a name-keyed side may share its id with another species."""
+    old = {**_garc(1.0, BH, FP, target="ncbi:411483"), "target_taxon_id": "411483", "target_identity": "ncbi"}
+    current = {411483: "Faecalibacterium duncaniae A2-165"}
+    (arc,), _ = merge_genus([old], merge=True, current=current)
+    assert arc["merged_pairs"] == ["Blautia hydrogenotrophica -> Faecalibacterium duncaniae"]
+    # without the current names, the study's (the control)
+    (before,), _ = merge_genus([old], merge=True)
+    assert before["merged_pairs"] == ["Blautia hydrogenotrophica -> Faecalibacterium prausnitzii"]
+    # a reclassification across genera moves the arc to the genus the node is shown in
+    (moved,), _ = merge_genus([old], merge=True, current={411483: "Ruminococcus duncaniae A2-165"})
+    assert moved["target"] == "Ruminococcus"
+    # a side keyed by name is not renamed even when its id has a current name
+    by_name = {**old, "target_identity": "name"}
+    (kept,), _ = merge_genus([by_name], merge=True, current=current)
+    assert kept["merged_pairs"] == ["Blautia hydrogenotrophica -> Faecalibacterium prausnitzii"]

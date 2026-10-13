@@ -371,7 +371,7 @@ def _derive(a):
         # file was marked complete before this stage ran (#247)
         failed_rates = unread(skipped[before:])
         if failed_rates:
-            errors.append(f"{len(failed_rates)} replicate(s) or growth curve(s) could not be read from "
+            errors.append(f"{len(failed_rates)} study(ies), replicate(s) or growth curve(s) could not be read from "
                           f"mGrowthDB while reading growth rates (for example {failed_rates[0][0]}: "
                           f"{failed_rates[0][1]}); the rates are incomplete, so run it again")
             print(f"warning: {errors[-1]}", file=sys.stderr)
@@ -709,11 +709,15 @@ def _validate(a):
     if isinstance(doc, dict) and str(doc.get("format", "")).startswith("grownet.all_result/"):
         parts = [(name, doc[name]) for name in ("network", "absent") if isinstance(doc.get(name), dict)]
         print(f"{a.file} is a {doc['format']} artifact; validating the network(s) it carries")
+        if not parts:
+            # it exited 1 after the header alone (found in review)
+            print(f"INVALID: {a.file} carries no network (both `network` and `absent` are empty)")
+            return 1
         codes = []
         for name, network in parts:
             inner = argparse.Namespace(file=f"{a.file} [{name}]", _doc=network)
             codes.append(_validate_doc(inner))
-        return max(codes or [1])
+        return max(codes)
     return _validate_doc(argparse.Namespace(file=a.file, _doc=doc))
 
 

@@ -88,6 +88,12 @@ def test_an_incomplete_run_says_so_beside_the_grid_and_in_graphml():
     assert "INCOMPLETE" in about and "a 0 below can be a" in about and "S9: HTTP 404" in about
     net.meta["errors"] = ["2 replicate(s) could not be read while reading growth rates"]
     assert "the cells below are not affected" in matrix.matrix_about(net)
+    # one failure of each kind: the arcs' failure decides (round 3 of the review, `all` for `any`)
+    both = ["S9: HTTP 404", "2 replicate(s) could not be read while reading growth rates"]
+    net.meta["errors"] = list(both)
+    mixed = matrix.matrix_about(net)
+    assert "a 0 below can be a" in mixed and "the cells below are not affected" not in mixed
+    net.meta["errors"] = both[1:]
     ns = "{http://graphml.graphdrawing.org/xmlns}"
     graph = ET.fromstring(to_graphml(net)).find(f"{ns}graph")
     data = {d.get("key"): d.text for d in graph.findall(f"{ns}data")}

@@ -562,6 +562,12 @@ def test_a_strain_is_named_by_its_current_name():
     assert (node.name, node.species) == ("Faecalibacterium duncaniae A2-165", "faecalibacterium duncaniae")
     assert r["resolved"][0] == ("Faecalibacterium prausnitzii", {853: "Faecalibacterium duncaniae A2-165"})
     assert len(r["network"].edges) == 2
+    # merged to the genus, the pairs behind each arc name it by that name too (round 3 of the review)
+    merged = run_query(FakeClient(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"],
+                       {"include_absent": True, "derivation": "replicate", "merge_genera": True}, index=index)
+    pairs = [p for e in merged["network"].edges for p in (e.merged_pairs or ())]
+    assert pairs and all("prausnitzii" not in p for p in pairs), pairs
+    assert any("Faecalibacterium duncaniae" in p for p in pairs), pairs
 
 
 
@@ -1196,6 +1202,8 @@ def test_a_read_that_fails_while_reading_growth_rates_marks_the_file_incomplete(
     meta = r["network"].meta
     assert meta["complete"] is False and any("while reading growth rates" in e for e in meta["errors"])
     assert any("while reading growth rates" in e for e in r["errors"]), "the page and the exit code read these"
+    assert any(e.startswith("1 study(ies), replicate(s) or growth curve(s)") for e in meta["errors"]), \
+        "a failed study is counted with the replicates and curves (round 3 of the review)"
     # and a rate stage that read everything leaves the run complete
     monkeypatch.setattr(gui, "growth_rates", lambda *a, **k: ({}, []))
     assert run_query(FakeClient(), [A, B], {"report_rates": True})["network"].meta["complete"] is True

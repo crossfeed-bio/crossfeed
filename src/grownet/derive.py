@@ -792,6 +792,9 @@ def growth_rates(client, study_ids, wanted=None, rate_method: str = None, window
     return merge_rates(per_study), skipped
 
 
+# how a rate from culture-level counts alone begins its capacity_source, which the report reads (#140)
+CULTURE_NONE = "none: the rate is from a culture-level"
+
 def merge_rates(per_study) -> dict:
     """{node id: {"name", "rate", "unit", "n", "studies", "per_study", ...}}: one growth rate per organism.
 
@@ -894,10 +897,12 @@ def merge_rates(per_study) -> dict:
         # a rate from a culture-level count says so where every consumer already reads the capacity's
         # provenance: growth_rates.csv's capacity_source, the gLV payload's carrying_capacity_source and
         # the report, without a new field in the released grownet.glv/v1 (found in review)
-        culture = {k: n for k, n in (at.get("sources") or {}).items() if k != "per-strain"}
-        if culture and out[nid]["capacity"] is None:
-            out[nid]["capacity_source"] = ("none: the rate is from a " + ", ".join(
-                f"{k} count ({n} replicate(s))" for k, n in sorted(culture.items()))
+        # only when the rate rests on culture-level counts alone: beside per-strain curves the capacity is
+        # missing because those never plateaued, not because of the count (found in review)
+        sources = at.get("sources") or {}
+        if sources and "per-strain" not in sources and out[nid]["capacity"] is None:
+            out[nid]["capacity_source"] = (CULTURE_NONE + " " + ", ".join(
+                f"{k.removeprefix('culture-level ')} count ({n} replicate(s))" for k, n in sorted(sources.items()))
                 + ", which never gives a capacity")
     return out
 
@@ -1779,7 +1784,7 @@ def _pair(arc: dict, level: str, name_of: dict) -> str:
     return " -> ".join(genus_species(n).capitalize() for n in names)
 
 
-def merge_genus(edges: list, merge: bool = False, level: str = "species") -> tuple:
+def merge_genus(edges: list, merge: bool = False, level: str = "species", current: dict | None = None) -> tuple:
     """(edges, meta) with every node merged into its genus and the arcs between two genera merged by sign.
 
     Karoline's choices (2026-09-28): an advanced setting, off by default; nodes merge at the genus level
@@ -1789,7 +1794,20 @@ def merge_genus(edges: list, merge: bool = False, level: str = "species") -> tup
     itself; absent arcs are recorded as before, one per genus pair, and hidden like any absent arc. It runs
     after `merge_parallel`, so with both settings on a pair measured in several studies counts once.
     The genus is the first word of the name mGrowthDB gives (`model.genus_name`), not NCBI's lineage.
+
+    `current` maps a taxon id to its current name, the one its most recent study uses (#24). A strain node
+    is shown by that name, so its genus and its `merged_pairs` are taken from it too, rather than from the
+    name the study behind each arc used: 411483 was merged and listed as F. prausnitzii while its node read
+    F. duncaniae (found in review). As for the nodes, only a side whose identity is its taxon id is renamed.
     """
+    current = current or {}
+
+    def organism(e, side):
+        taxon = str(e.get(f"{side}_taxon_id") or "")
+        if e.get(f"{side}_identity") == "ncbi" and taxon.isdigit() and int(taxon) in current:
+            return current[int(taxon)]
+        return _organism(e, side)
+
     info = {"merge_genus": merge, "level": level, "genus_arcs": 0,
             "rule": "nodes by genus; arcs by source genus, target genus and sign; median of the log2 means"}
     if not merge:
@@ -1797,10 +1815,10 @@ def merge_genus(edges: list, merge: bool = False, level: str = "species") -> tup
     groups, name_of = {}, {}
     for e in edges:
         for side in ("source", "target"):
-            name_of.setdefault(e[side], _organism(e, side))
+            name_of.setdefault(e[side], organism(e, side))
     for e in edges:
         kind = ABSENT if e.get("status") == ABSENT else e.get("effect")
-        key = (genus_name(_organism(e, "source")), genus_name(_organism(e, "target")), kind)
+        key = (genus_name(organism(e, "source")), genus_name(organism(e, "target")), kind)
         groups.setdefault(key, []).append(e)
     out = []
     for (source, target, kind), arcs in groups.items():
@@ -1941,7 +1959,7 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
                 no_growth_factor: float = None, merge_arcs: bool = False, min_studies: int = 1,
                 merge_genera: bool = False, support_level: str = "species",
                 max_adjusted_p: float | None = None, include_absent: bool = False,
-                deriver=None) -> tuple:
+                deriver=None, current: dict | None = None) -> tuple:
     """(edges, meta) for writing a network.
 
     Sets each record's `status` from the absence threshold k (None, undetermined, for a low-quality
@@ -1955,6 +1973,8 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
     come from it: a derivation states what it tests and what is provisional about it, as it already
     states its `name` and `method`. Without it the specified comparison's words are used, which is what
     every network said before 2026-10-07 whatever had derived it (#142 item 5).
+
+    `current` (taxon id to current name, #24) names the strains that the genus merge groups and lists.
     """
     for record in records:
         # a low-quality edge is never read as the absence of an interaction (Karoline, on #40; #50)
@@ -1967,7 +1987,7 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
     if max_adjusted_p is not None:
         hidden["not_significant"] = significance_filter["left_out"]
     edges, merge = merge_parallel(edges, merge_arcs, min_studies)
-    edges, genus = merge_genus(edges, merge_genera, support_level)
+    edges, genus = merge_genus(edges, merge_genera, support_level, current)
     said = dict(getattr(deriver, "statistics", None) or STATISTICS)
     statistics = {**said, "correction": said["correction"].format(name=CORRECTIONS[correction][0]),
                   "tests": tests, "filter": significance_filter}

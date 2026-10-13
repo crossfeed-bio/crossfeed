@@ -278,8 +278,22 @@ def test_the_legacy_meta_keys_are_0_4_0_s_own():
         "studies", "study_id", "tool", "tool_version"}
 
 
+def test_the_current_format_s_meta_snapshot_is_the_schema_s_while_it_is_current():
+    """Round 3 of the review: nothing tied the snapshot to the schema, so a meta key added before the next
+    move would leave the snapshot short of what the format's files held, and a legacy copy would strip it."""
+    from grownet.schema import META_PROPERTIES
+    manifest = json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
+    assert publish_all.LEGACY_META[manifest["current"]] == set(META_PROPERTIES)
+
+
 def test_the_release_notes_name_the_commit_and_claim_nothing_more():
     result = _result()
     result["network"].meta["build"] = {"commit": "abc1234def", "run": "9"}
     notes = release_notes(result)
     assert "as of commit abc1234 of main" in notes and "unreleased" not in notes
+    import os
+    os.environ["GITHUB_REF_NAME"] = "some-branch"
+    try:
+        assert "as of commit abc1234 of some-branch" in release_notes(result), "a hand run from another branch"
+    finally:
+        del os.environ["GITHUB_REF_NAME"]

@@ -153,7 +153,12 @@ def check_published(out_dir: str) -> tuple:
         if not legacy_path.exists():
             problems.append(f"{legacy_path.name}: not written, so copies reading {schema} get nothing")
             continue
-        legacy = json.loads(legacy_path.read_text(encoding="utf-8"))
+        try:
+            legacy = json.loads(legacy_path.read_text(encoding="utf-8"))
+            legacy["network"]["edges"]
+        except Exception as e:     # noqa: BLE001 - named as that file, not as the current one (found in review)
+            problems.append(f"{legacy_path.name}: could not be read: {type(e).__name__}: {e}")
+            continue
         fields = manifest["formats"].get(legacy["network"].get("schema"), {})
         for kind, key in (("node", "nodes"), ("edge", "edges"), ("study", "studies")):
             extra = {k for item in legacy["network"].get(key, []) for k in item} - set(fields.get(kind, ()))

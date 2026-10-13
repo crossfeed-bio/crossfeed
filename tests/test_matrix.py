@@ -318,3 +318,51 @@ def test_a_diagonal_that_is_not_a_fit_is_named_in_the_readme():
     # and the section is absent when every diagonal is a fit, though the prose still names it
     plain = matrix.readme_from({**got, "substituted_rows": []}, net, {})
     assert heading not in plain and "DIAGONALS THAT ARE NOT A FIT below names" in plain
+
+
+def test_a_genus_row_counts_replicates_and_keeps_where_its_capacity_came_from():
+    """Round 3 of the review, on a live gLV package with --merge-genera: Agrobacterium has one strain, whose
+    row says 3 replicates, 3 capacity curves and a capacity fitted from the monoculture time courses, and
+    its genus row said 1, 1 and nothing. A genus of one strain is that strain; a genus of several sums the
+    replicates and the curves its capacity rests on, and says where the capacity came from, or that the
+    strains disagree."""
+    net = _net([dict(_arc("agro", "blautia", 1.0), source_name="Agrobacterium", target_name="Blautia",
+                     source_identity="genus", target_identity="genus")])
+    fitted = "fitted from the monoculture time courses"
+    agro = {"name": "Agrobacterium tumefaciens C58", "rate": 0.6, "unit": "1/h", "n": 1, "replicates": 3,
+            "studies": ["S1"], "capacity": 2e8, "capacity_unit": "Cells/mL", "capacity_n": 1,
+            "capacity_curves": 3, "capacity_source": fitted, "capacity_medium": "WC",
+            "per_study": {"S1": 0.6}, "capacity_left_out": [["S1 rep 4", "no plateau"]]}
+    b1 = {"name": "Blautia hydrogenotrophica", "rate": 0.3, "unit": "1/h", "n": 1, "replicates": 3,
+          "studies": ["S1"], "capacity": 1e8, "capacity_unit": "Cells/mL", "capacity_n": 1,
+          "capacity_curves": 3, "capacity_source": fitted, "capacity_medium": "WC"}
+    b2 = {**b1, "name": "Blautia wexlerae", "replicates": 2, "capacity": 3e8, "capacity_curves": 2}
+    aligned = matrix.for_nodes(net, {"ncbi:1": agro, "ncbi:2": b1, "ncbi:3": b2})
+
+    one = aligned["agro"]
+    assert {k: one[k] for k in ("replicates", "capacity_curves", "capacity_source", "capacity_medium")} == \
+        {"replicates": 3, "capacity_curves": 3, "capacity_source": fitted, "capacity_medium": "WC"}
+    assert one["name"] == "Agrobacterium" and one["merged_from"] == ["Agrobacterium tumefaciens C58"]
+    # whole: what a merge of several empties is the strain's here
+    assert one["per_study"] == {"S1": 0.6} and one["capacity_left_out"] == [["S1 rep 4", "no plateau"]]
+
+    two = aligned["blautia"]
+    assert two["capacity"] == 2e8                                   # median of 1e8 and 3e8
+    assert two["replicates"] == 5 and two["capacity_curves"] == 5   # 3 + 2, not the 2 fitted rows
+    assert two["capacity_source"] == fitted and two["capacity_medium"] == "WC"
+
+    # strains that disagree say so, rather than one of them speaking for the genus
+    b3 = {**b2, "capacity_source": "-r/K at the measured plateau", "capacity_medium": "mMCB"}
+    mixed = matrix.for_nodes(net, {"ncbi:2": b1, "ncbi:3": b3})["blautia"]
+    assert mixed["capacity_source"] == f"mixed: -r/K at the measured plateau; {fitted}"
+    assert mixed["capacity_medium"] == "mixed: WC; mMCB"
+    # and a strain with no plateau neither counts curves nor speaks for the capacity it is not in
+    b4 = {**b2, "capacity": None, "capacity_curves": None, "capacity_source": "none: no plateau"}
+    partial = matrix.for_nodes(net, {"ncbi:2": b1, "ncbi:3": b4})["blautia"]
+    assert partial["capacity"] == 1e8 and partial["capacity_curves"] == 3
+    assert partial["capacity_source"] == fitted and partial["replicates"] == 5
+    # with no capacity at all there are no curves to count, and every strain's reason is kept
+    b5 = {**b1, "capacity": None, "capacity_curves": 0, "capacity_source": "none: the fit implies none"}
+    none = matrix.for_nodes(net, {"ncbi:2": b5, "ncbi:3": b4})["blautia"]
+    assert none["capacity"] is None and none["capacity_curves"] is None
+    assert none["capacity_source"] == "mixed: none: no plateau; none: the fit implies none"

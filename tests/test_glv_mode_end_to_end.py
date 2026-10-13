@@ -418,3 +418,32 @@ def test_glv_mode_with_genera_merged_still_reports_the_fitted_rates():
     r = run_query(TimeCourseClient(), [A, B], {**glv_mode({}), "merge_genera": True})
     organisms = (r["network"].meta.get("growth_rates") or {}).get("organisms", {})
     assert organisms and set(organisms) <= set(r["network"].nodes), organisms
+
+
+def test_the_command_line_with_genera_merged_reports_the_fitted_rates_too(monkeypatch, tmp_path):
+    """Round 3 of the review: the page's half of the fix above had a test and the command line's did not, so
+    deleting `matrix.for_nodes` from `__main__._rates_of` left every test green and the rates file empty:
+    the fitted rates are keyed by strain and a genus-merged network has genus nodes."""
+    from test_gui import FakeClient
+
+    import grownet.derive as derive
+    import grownet.mgrowthdb as mgrowthdb
+    from grownet.__main__ import main
+
+    def row(source, name, rate):
+        return {"source": source, "target": "b", "source_name": name, "target_name": "Roseburia intestinalis",
+                "source_identity": "ncbi", "target_identity": "ncbi",
+                "effect": "facilitation", "strength": 2.0, "weight": 2.0, "sd": 0.5, "se": 0.25,
+                "p_value": 0.01, "n_with": 3, "n_without": 3, "outcome": "quantified", "study_id": "S1",
+                "metric": "integrated:two_stage", "fitted_rate": rate, "fitted_rate_unit": "1/h",
+                "evidence": "biculture", "medium": "WC"}
+
+    rows = [row("a", "Blautia obeum", 0.3), row("c", "Blautia wexlerae", 0.5)]
+    monkeypatch.setattr(derive, "derive_interactions", lambda *a, **k: ([dict(r) for r in rows], []))
+    monkeypatch.setattr(mgrowthdb, "MGrowthDBClient", lambda *a, **k: FakeClient())
+    out = tmp_path / "r.csv"
+    main(["derive", "SMGDB00000001", "--live", "--glv-mode", "--merge-genera", "--rates", str(out), "--out",
+          str(tmp_path / "n.json")])
+    lines = out.read_text(encoding="utf-8").splitlines()[1:]
+    assert [line.split(",")[0] for line in lines] == ["Roseburia"], lines      # the genus node, by its name
+    assert float(lines[0].split(",")[1]) == 0.4                                # the median of 0.3 and 0.5
