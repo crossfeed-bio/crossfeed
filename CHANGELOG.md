@@ -42,6 +42,11 @@ content.
 
 ### Fixed
 
+- **A strain is shown by its current strain name, not the bare species**, where mGrowthDB's most recent
+  study names only the species (Karoline, 2026-10-12, #24). The current name is now the latest name
+  mGrowthDB gives under that species with a strain designation: taxon 411483 is "Faecalibacterium
+  duncaniae A2-165" rather than "Faecalibacterium duncaniae", and 74426 "Collinsella aerofaciens RCC
+  1377". 2 of mGrowthDB's 63 taxa change. Only names the database itself uses are shown.
 - **All says why it was derived live, when the network derived once a day was not used** (#157): the
   file was too old, from another format, derived another way, unreachable, or, worth reporting, fetched
   and unreadable, which is a defect in grownet. All five used to look the same, and a defect in reading

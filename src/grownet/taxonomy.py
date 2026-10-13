@@ -72,12 +72,29 @@ def species_index(client, max_studies: int = MAX_STUDIES, progress=None) -> dict
             for name, taxon in _strain_entries(exp):
                 index.setdefault(genus_species(name), {}).setdefault(taxon, name)
         published.append(((client.get_study(sid) or {}).get("publishedAt") or "", order, experiments))
-    current = {}
+    seen: dict = {}
     for _, _, experiments in sorted(published, key=lambda p: (p[0], p[1])):    # the latest publication last
         for exp in experiments:
             for name, taxon in _strain_entries(exp):
-                current[taxon] = name
+                seen.setdefault(taxon, []).append(name)
+    current = {taxon: current_name(names) for taxon, names in seen.items()}
     return SpeciesIndex(index, current=current, studies=ids)
+
+
+def current_name(names: list) -> str:
+    """The current name of a taxon from every name mGrowthDB gives it, oldest publication first (#24).
+
+    The species is the most recent study's. The name is the most recent one under that species that
+    carries a strain designation, where the most recent study gives none: taxon 411483 is "Faecalibacterium
+    prausnitzii A2-165" in SMGDB00000004, "Faecalibacterium duncaniae A2-165" in studies 5 and 11, and
+    "Faecalibacterium duncaniae" in study 10, the latest, so the strain was shown as the bare species and
+    the designation a reader searched by was dropped. Only names mGrowthDB itself uses are returned: a
+    designation is never moved from one name onto another (Karoline: data are corrected in mGrowthDB, not
+    in the tool).
+    """
+    latest = names[-1]
+    designated = [n for n in names if genus_species(n) == genus_species(latest) and len(n.split()) > 2]
+    return designated[-1] if designated else latest
 
 
 def _species_index_one_by_one(client, max_studies: int) -> dict:

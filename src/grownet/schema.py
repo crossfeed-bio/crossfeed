@@ -115,6 +115,10 @@ META_PROPERTIES = {
     "study_id": {"type": "string", "description": _RECORDED + "the one study this network was derived "
                                                   "from, where a derivation read a single study"},
     "settings": {"type": "object", "description": _RECORDED + "every setting the run used"},
+    # the daily artifact is built from main between releases, under the last release's tool_version
+    "build": {"type": "object",
+              "description": _RECORDED + "the commit and the workflow run that built this file, where it "
+                                         "was built by the repository's daily workflow"},
     # written by `grownet.slices.fp_bh` and undeclared for as long as that module has existed, found by
     # Craig's agent on #274 with a syntax-tree walk; the test that came with #274 read only the
     # `net.meta["x"] = ` form and this key arrives as a `meta=` dict literal
