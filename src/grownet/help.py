@@ -712,7 +712,7 @@ def render_help(token: str, defaults: dict, example: tuple, job: str = "") -> st
 mGrowthDB), or NCBI taxon ids. grownet looks them up in mGrowthDB, reads the growth curves of every study
 that holds them, and derives the interactions between them on this machine. The All button ignores the
 box and derives every study in mGrowthDB, with every partner. With the default settings, All reads the
-network the grownet repository derives from mGrowthDB once a day, when it is less than a day old and
+network the grownet repository derives from mGrowthDB once a day, when it is less than 36 hours old and
 was derived by the same derivation your settings ask for, which
 spares mGrowthDB the 1,926 requests a cold corpus run sends, or
 the 54 a warm one does (measured 2026-10-11;

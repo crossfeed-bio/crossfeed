@@ -730,7 +730,13 @@ def test_the_daily_all_network_is_used_when_fresh_and_the_settings_are_the_defau
         return io.BytesIO(json.dumps(payload).encode())
     in_23_hours = published.fetch_from(opener, now=derived + datetime.timedelta(hours=23))
     assert in_23_hours["network"].edges == live["network"].edges and in_23_hours["skipped"] == live["skipped"]
-    assert published.fetch_from(opener, now=derived + datetime.timedelta(hours=25)) is None   # a day: live
+    # 36 hours since 2026-10-12 (#196): a run GitHub starts late is still served, which at one day it was
+    # not, on 7 of 12 measured nights; past 36 hours it derives live
+    late = published.fetch_from(opener, now=derived + datetime.timedelta(hours=27, minutes=20))
+    assert late is not None, "the longest measured gap between two runs must still be served"
+    assert published.fetch_from(opener, now=derived + datetime.timedelta(hours=35, minutes=59)) is not None
+    assert published.fetch_from(opener, now=derived + datetime.timedelta(hours=36)) is None
+    assert published.MAX_AGE == datetime.timedelta(hours=36)
     # `fetch` takes the search's settings now, so the artifact's own derivation can be compared with
     # the one the reader asked for (2026-10-10)
     monkeypatch.setattr(published, "fetch",

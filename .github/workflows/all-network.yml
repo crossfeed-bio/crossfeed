@@ -2,7 +2,7 @@ name: all-network
 
 # Derives the All network of mGrowthDB once a day with the default settings and publishes it as the assets of
 # one fixed release, `all-network`, replacing the previous day's (#96). The page's All button and
-# `grownet derive --all` read it when it is less than a day old and the settings are the defaults, and derive
+# `grownet derive --all` read it when it is less than 36 hours old and the settings are the defaults, and derive
 # live otherwise. Release assets are not in git, so no data enters the repository. Scheduled runs use the
 # default branch only; "Run workflow" on the Actions tab starts one by hand.
 
@@ -53,7 +53,7 @@ jobs:
           gh release upload all-network out/* --clobber
           gh release edit all-network --notes-file notes.md
       - name: say so when the build fails
-        # a failed day leaves the file to age past a day, and every copy of grownet then derives All live
+        # a failed day leaves the file to age past 36 hours, and every copy of grownet then derives All live
         # from mGrowthDB at once, so a failure opens an issue (Craig's agent, #96)
         if: failure()
         env:
@@ -66,7 +66,7 @@ jobs:
           if [ -n "$open" ]; then
             gh issue comment "$open" --body "Failed again: $RUN"
           else
-            gh issue create --label all-network-failed --title "The daily All network failed" --body "The run $RUN did not publish the All network. Until a run succeeds, the published file ages past a day and every copy of grownet derives All live from mGrowthDB. This issue closes itself when a run succeeds."
+            gh issue create --label all-network-failed --title "The daily All network failed" --body "The run $RUN did not publish the All network. Until a run succeeds, the published file ages past 36 hours and every copy of grownet derives All live from mGrowthDB. This issue closes itself when a run succeeds."
           fi
       - name: close the failure issue once a build succeeds
         if: success()
