@@ -84,7 +84,15 @@ def test_a_rate_is_not_pooled_across_starts_more_than_ten_times_apart(monkeypatc
     ((nid, entry),) = found.items()
     assert entry["values"] == [] and "101 times apart" in entry["refused"]
     merged = derive.merge_rates([("S14", found)])
-    assert nid not in merged and merged.no_rate[nid].startswith("its monocultures' growth rates were left out: S14:")
+    name, why = merged.no_rate[nid]
+    assert nid not in merged and why.startswith("its monocultures' growth rates were left out: S14:")
+    # every study's reason is kept, not the last one read (round 15 of the review)
+    both = derive.merge_rates([("S14", found), ("S15", found)]).no_rate[nid][1]
+    assert "S14: they started" in both and "S15: they started" in both
+    # refused in one study and measured in another: a rate, and no reason for having none (round 15)
+    measured = {nid: {**entry, "values": [0.5, 0.6], "refused": None, "sources": {"per-strain": 2}}}
+    mixed = derive.merge_rates([("S14", found), ("S15", measured)])
+    assert nid in mixed and nid not in mixed.no_rate
     from grownet import gui, matrix
     from grownet.mgrowthdb import records_to_network
     net = records_to_network([{"source": nid, "target": "x", "source_name": "Comamonas testosteroni",
@@ -95,6 +103,14 @@ def test_a_rate_is_not_pooled_across_starts_more_than_ten_times_apart(monkeypatc
     hint = gui._without_a_rate({"network": net})
     assert "No growth rate for Comamonas testosteroni: its monocultures&#x27; growth rates were left out" in hint, hint
     assert "101 times apart" in hint
+    # and a genus of such strains says whose they were (round 15: keyed by strain id, it never reached the
+    # genus node, and the page gave the general reason, both causes false)
+    assert name == "Escherichia coli LF82"
+    genus = records_to_network([{"source": "escherichia", "target": "x", "source_name": "Escherichia",
+                                 "target_name": "X", "source_identity": "genus", "effect": "facilitation",
+                                 "strength": 1.0, "study_id": "S14"}])
+    rows = matrix.for_nodes(genus, merged)
+    assert rows.no_rate == {"Escherichia": f"{name}: {why}"}, rows.no_rate
     near = CultureClient({"a": ["plates"], "b": ["plates"]}, starts={"a": 1e5, "b": 9e5})
     found, skipped = derive.monoculture_rates(near, [_exp(["a", "b"])], identities={})
     assert len(next(iter(found.values()))["values"]) == 2, "nine times apart is still one set"

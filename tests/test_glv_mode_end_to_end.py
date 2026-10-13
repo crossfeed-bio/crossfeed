@@ -459,3 +459,38 @@ def test_glv_mode_names_a_renamed_strain_s_fitted_rate_on_its_genus_by_its_curre
                   {**glv_mode({}), "merge_genera": True}, index=index)
     organisms = r["network"].meta["growth_rates"]["organisms"]
     assert organisms["Faecalibacterium"]["merged_from"] == ["Faecalibacterium duncaniae A2-165"], organisms
+
+
+def test_the_command_line_measures_rates_for_a_genus_network_too(monkeypatch, tmp_path):
+    """Round 15 of the review: `derive <study> --live --merge-genera --report-rates` asked for the
+    monocultures of the network's nodes, which are genera, so no rate was computed for any; the page asks
+    for the organisms of the arcs before the merge. The rate stage answers only for what it is asked."""
+    from test_gui import FakeClient
+
+    import grownet.derive as derive
+    import grownet.mgrowthdb as mgrowthdb
+    from grownet.__main__ import main
+
+    def row(source, name):
+        return {"source": source, "target": "b", "source_name": name, "target_name": "Roseburia intestinalis",
+                "source_identity": "ncbi", "target_identity": "ncbi", "effect": "facilitation", "strength": 2.0,
+                "weight": 2.0, "sd": 0.5, "se": 0.25, "p_value": 0.01, "n_with": 3, "n_without": 3,
+                "outcome": "quantified", "study_id": "S1", "metric": "growth_rate:easylinear:5",
+                "metric_with": 0.4, "metric_without": 0.1, "evidence": "biculture", "medium": "WC"}
+
+    measured = {"a": {"name": "Blautia obeum", "rate": 0.3, "unit": "1/h", "n": 3, "studies": ["S1"]},
+                "c": {"name": "Blautia wexlerae", "rate": 0.5, "unit": "1/h", "n": 3, "studies": ["S1"]},
+                "b": {"name": "Roseburia intestinalis", "rate": 0.2, "unit": "1/h", "n": 3, "studies": ["S1"]}}
+
+    def growth_rates(client, studies, wanted=None, **kwargs):
+        return {k: v for k, v in measured.items() if k in (wanted or ())}, []
+    rows = [row("a", "Blautia obeum"), row("c", "Blautia wexlerae")]
+    monkeypatch.setattr(derive, "derive_interactions", lambda *a, **k: ([dict(r) for r in rows], []))
+    monkeypatch.setattr(derive, "growth_rates", growth_rates)
+    monkeypatch.setattr(mgrowthdb, "MGrowthDBClient", lambda *a, **k: FakeClient())
+    out = tmp_path / "r.csv"
+    main(["derive", "SMGDB00000001", "--live", "--derivation", "replicate", "--metric", "growth_rate",
+          "--merge-genera", "--report-rates", "--rates", str(out), "--out", str(tmp_path / "n.json")])
+    lines = {line.split(",")[0]: line for line in out.read_text(encoding="utf-8").splitlines()[1:]}
+    assert set(lines) == {"Blautia", "Roseburia"}, lines
+    assert float(lines["Blautia"].split(",")[1]) == 0.4                         # the median of 0.3 and 0.5

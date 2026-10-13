@@ -293,7 +293,7 @@ def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None)
     out = NodeRates()
     for nid, node in net.nodes.items():
         if nid not in rates and nid in refused:
-            out.no_rate[_label(node)] = refused[nid]
+            out.no_rate[_label(node)] = refused[nid][1]
         if nid in rates:
             # the node's own name, which is the strain's current one (#24), so the rates file, the report
             # and the network all call it the same thing
@@ -301,6 +301,13 @@ def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None)
             continue
         label = _label(node)
         members = [r for r in rates.values() if genus_name(r.get("name", "")) == genus_name(label)]
+        if node.identity == "genus" and not members:
+            # a genus whose strains' rates were all refused says whose and why, as a strain does (found in
+            # review: keyed by strain id, the reason never reached the genus node)
+            whose = [f"{current_name(key, {'name': name})}: {why}" for key, (name, why) in sorted(refused.items())
+                     if genus_name(current_name(key, {"name": name})) == genus_name(label)]
+            if whose:
+                out.no_rate[label] = "; ".join(whose)
         if node.identity != "genus" or not members:
             continue
         # a genus of one strain IS that strain: its row is the strain's, whole, which the merge below
@@ -488,7 +495,8 @@ def rate_meta(net: InteractionNetwork, rates: dict, method: str) -> str:
     return {"rule": rate_rule(method) + genus_rule(rates),
             "organisms": {nid: dict(rate) for nid, rate in rates.items()},
             "without_a_rate": sorted(_label(node) for nid, node in net.nodes.items() if nid not in rates),
-            # why, where one is known (an organism with strains that have rates)
+            # why, where one is known: strains whose rates are in time units not converted, or rates all
+            # left out for their starting spread (#81)
             "why_without_a_rate": dict(getattr(rates, "no_rate", {})),
             "slow_studies": slow_studies(rates)}
 
@@ -1142,9 +1150,13 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             rows_fitted.append((name, _label(net.nodes[obligate[nid][0][0]])))
             continue
         if nid in only_with:
+            # and why it has no rate of its own, where that is known: R reads only these reasons (found in
+            # review: Agrobacterium's #81 refusal reached the report and not the package)
+            known = (getattr(rates, "no_rate", {}) or {}).get(name) if rate.get("rate") is None else None
             left_out.append((name, "it grows only with a partner and reached no certified plateau beside "
                                    "one, in the same abundance unit as that partner, so its "
-                                   "self-limitation cannot be fitted"))
+                                   "self-limitation cannot be fitted" + (f"; it has no growth rate: {known}"
+                                                                         if known else "")))
         elif rate.get("rate") is None and name in getattr(rates, "no_rate", {}):
             # its strains have rates, in units that are not converted: the README said it had none at all
             # (found in review)

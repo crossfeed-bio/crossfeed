@@ -661,3 +661,15 @@ def test_a_genus_whose_strains_rates_are_in_different_time_units_has_no_rate():
     row = matrix.for_nodes(_GENUS_NET, same)["blautia"]
     assert row["unit"] == "1/h" and row["other_units"] == ["Blautia a: S2 (1/d)", "Blautia b: S3 (1/min)"]
     assert "rates in another time unit left out: Blautia a: S2 (1/d)" in _genus_report(row)
+
+
+def test_an_organism_that_grows_only_with_a_partner_says_why_it_has_no_rate_too():
+    """Round 15 of the review: Agrobacterium in SMGDB00000014 grows only with a partner and had its rates
+    refused for their starting spread; the package said only the first, and R reads only the package."""
+    net = _net([dict(_arc("p", "o", 1.0), outcome="obligate", strength=None, weight=None, source_name="P",
+                     target_name="O", metric="growth_rate:easylinear:5", metric_with=0.4, metric_without=0.0)])
+    rates = matrix.NodeRates({"p": {**_STRAIN, "name": "P"}})
+    rates.no_rate["O"] = "its monocultures' growth rates were left out: S14: they started 24 times apart (#81)"
+    reasons = dict(matrix.coefficients(net, rates)["left_out"])
+    assert "O" in reasons, reasons
+    assert reasons["O"].endswith("; it has no growth rate: " + rates.no_rate["O"]), reasons["O"]

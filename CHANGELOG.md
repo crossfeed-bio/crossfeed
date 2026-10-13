@@ -133,7 +133,12 @@ content.
   left out. A genus whose strains' rates are in different time units has no rate, where the median was
   taken across them, and the report, the README and `meta.growth_rates.why_without_a_rate` say why; so
   does an organism whose every study's rates were left out for their starting spread (#81), which the page
-  said had no monoculture read or no rate from its curves (SMGDB00000014's two organisms). A
+  said had no monoculture read or no rate from its curves (SMGDB00000014's two organisms), and a genus of
+  such strains, naming them. The gLV package carries that reason beside "grows only with a partner", so
+  R reads it, and R's print says `as_miasim()` stops only for an organism inside a matrix.
+- **`derive <study> --merge-genera --report-rates` computes the genus rates** (in the default derivation):
+  it asked for the monocultures of the genus nodes, which no monoculture is, and said no growth rate could
+  be computed for any organism. This predates 0.4.0. A
   capacity in gLV mode reports the stage size and source of the rows it is taken from.
 - **A rate from a culture-level count says so** in `capacity_source`, so `growth_rates.csv`, the gLV payload
   and the report name it, without a new field; a rate that also rests on per-strain curves does not blame

@@ -1261,7 +1261,8 @@ publication dates, which change when a study is corrected. A search run with Rep
 carries <code>meta.growth_rates</code>: the rule the rates follow, a rate per organism with its unit, how
 many monoculture replicates it rests on, the studies behind it and each study's own median, and
 <code>without_a_rate</code>, the organisms that have none, with <code>why_without_a_rate</code> giving the
-reason where one is known (a genus whose strains' rates are in time units that are not converted).</p>
+reason where one is known: a genus whose strains' rates are in time units that are not converted, or an
+organism, or a genus of them, whose every study's rates were left out for their starting spread (#81).</p>
 {edges}
 {nodes}
 

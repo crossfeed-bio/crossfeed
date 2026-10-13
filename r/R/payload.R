@@ -239,7 +239,18 @@ print.grownet_glv <- function(x, ...) {
     if (length(x$caveats$without_a_rate)) {
         cat(sprintf("   * %d organism(s) have no growth rate: %s\n",
                     length(x$caveats$without_a_rate), paste(x$caveats$without_a_rate, collapse = ", ")))
-        cat("       a simulation needs one from elsewhere; as_miasim() stops until you give it.\n")
+        # as_miasim() stops only for one inside a matrix; the others it simulates without (found in review)
+        missing <- unlist(x$caveats$without_a_rate)
+        inside <- intersect(missing, x$organisms)
+        if (length(inside)) {
+            cat("       a simulation needs one from elsewhere for ", paste(inside, collapse = ", "),
+                "; as_miasim() stops until you give it.\n", sep = "")
+        }
+        outside <- setdiff(missing, x$organisms)
+        if (length(outside)) {
+            cat("       ", paste(outside, collapse = ", "),
+                " are in no matrix; as_miasim() simulates without them.\n", sep = "")
+        }
     }
     left_out <- x$caveats$left_out
     if (nrow(left_out)) {

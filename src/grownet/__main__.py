@@ -495,7 +495,11 @@ def _rates_of(a, client, study_ids, net, skipped, records=None):
         fitted = matrix.for_nodes(net, fitted)
         net.meta["growth_rates"] = matrix.rate_meta(net, fitted, INTEGRATED)
         return fitted, skipped
-    found, rate_skips = growth_rates(client, study_ids, wanted=set(net.nodes),
+    # the organisms of the arcs before any merge to the genus, as the page asks for them: with
+    # --merge-genera the nodes are genera, no monoculture is of a genus, and no rate was computed (found in
+    # review; this predates 0.4.0)
+    wanted = set(net.nodes) | {r[side] for r in records or () for side in ("source", "target") if r.get(side)}
+    found, rate_skips = growth_rates(client, study_ids, wanted=wanted,
                                      rate_method=a.rate_method, window=a.rate_window,
                                      spike_factor=a.spike_factor,
                                      capacity_max_fall=a.capacity_max_fall)

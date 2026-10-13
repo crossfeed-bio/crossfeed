@@ -125,6 +125,9 @@ test_that("the coverage line counts the organisms outside every matrix too", {
     text <- paste(capture.output(print(glv)), collapse = "\n")
     expect_match(text, "2 of the 3 organisms in a matrix")
     expect_match(text, "2 more in the network have none and are in no matrix")
+    # as_miasim() stops for C, which is in a matrix, and simulates without D and E (found in review)
+    expect_match(text, "needs one from elsewhere for C; as_miasim() stops", fixed = TRUE)
+    expect_match(text, "D, E are in no matrix; as_miasim() simulates without them", fixed = TRUE)
     summary_of <- NULL
     invisible(capture.output(summary_of <- summary(glv)))
     expect_equal(summary_of$organisms, 3)

@@ -802,9 +802,10 @@ CULTURE_NONE = "none: the rate is from a culture-level"
 
 
 class OrganismRates(dict):
-    """The rates `merge_rates` returns, by node id, with `no_rate`: why an organism whose monocultures were
-    read has no rate, where that is known (every study's rates refused for their starting spread, #81), so
-    `matrix.for_nodes` can carry it to the page, the report and the package (found in review)."""
+    """The rates `merge_rates` returns, by node id, with `no_rate`: {node id: (name, why)} for an organism
+    whose monocultures were read and gave no rate, where that is known (every study's rates refused for
+    their starting spread, #81), so `matrix.for_nodes` can carry it to the page, the report and the
+    package, for a strain and for its genus (found in review)."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -889,7 +890,9 @@ def merge_rates(per_study) -> dict:
     for nid, at in merged.items():
         if not at["values"]:
             if at.get("refused"):
-                out.no_rate[nid] = "its monocultures' growth rates were left out: " + "; ".join(at["refused"])
+                # with the name the study gave, so a genus of such strains can say whose they were
+                out.no_rate[nid] = (at["name"],
+                                    "its monocultures' growth rates were left out: " + "; ".join(at["refused"]))
             continue
         # the medium with the most certified curves is the one published; a tie goes to the first label,
         # so the choice does not depend on the order the studies were read in
