@@ -145,7 +145,6 @@ def check_published(out_dir: str) -> tuple:
     # review).
     import publish_all
 
-    from grownet.schema import validate_document
     manifest = json.loads((Path(__file__).resolve().parents[1] / "schema" / "format_fields.json")
                           .read_text(encoding="utf-8"))
     for schema in publish_all.older_formats(manifest):
@@ -159,21 +158,38 @@ def check_published(out_dir: str) -> tuple:
         except Exception as e:     # noqa: BLE001 - named as that file, not as the current one (found in review)
             problems.append(f"{legacy_path.name}: could not be read: {type(e).__name__}: {e}")
             continue
-        invalid = [f"{legacy_path.name}: invalid: {p}" for p in validate_document(legacy["network"])]
-        problems += invalid
-        if invalid:
-            # its fields are not lists of objects to walk: `"nodes": null` raised here and was reported as
-            # the CURRENT file unreadable, losing its results (found in review)
-            continue
-        fields = manifest["formats"].get(legacy["network"].get("schema"), {})
-        for kind, key in (("node", "nodes"), ("edge", "edges"), ("study", "studies")):
-            extra = {k for item in legacy["network"].get(key, []) for k in item} - set(fields.get(kind, ()))
-            if extra:
-                problems.append(f"{legacy_path.name}: {key} carry fields {legacy['network'].get('schema')} "
-                                f"does not declare: {sorted(extra)}")
-        if len(legacy["network"].get("edges", [])) != len(net.edges):
-            problems.append(f"{legacy_path.name}: a different number of arcs than the current one")
+        # the network AND the arcs below the threshold, which 0.4.0 reads too: a copy whose `absent` was
+        # dropped served no arc below the threshold, and one whose `absent.edges` was null made every 0.4.0
+        # copy derive All live, with nothing checked (found in review)
+        parts = [("network", net)] + ([("absent", absent)] if absent is not None else [])
+        for part, current in parts:
+            problems += _older_part(legacy_path.name, schema, part, legacy.get(part), current, manifest)
     return problems, f"All: {len(net.edges)} arcs" + (f", {len(absent.edges)} below the threshold" if absent else "")
+
+
+def _older_part(name: str, schema: str, part: str, doc, current, manifest: dict) -> list:
+    """The problems of one network inside an older-format file: there, valid, in that format, every field
+    one the format declares, and the same arcs in number as the current file's."""
+    from grownet.schema import validate_document
+    label = name if part == "network" else f"{name}, below the threshold"
+    if not isinstance(doc, dict):
+        return [f"{label}: missing, while the current file has it"]
+    invalid = [f"{label}: invalid: {p}" for p in validate_document(doc)]
+    if invalid:
+        # its fields are not lists of objects to walk: `"nodes": null` raised here and was reported as the
+        # CURRENT file unreadable, losing its results (found in review)
+        return invalid
+    problems = []
+    if doc.get("schema") != schema:
+        problems.append(f"{label}: says {doc.get('schema')}, where the file is for {schema}")
+    fields = manifest["formats"].get(schema, {})
+    for kind, key in (("node", "nodes"), ("edge", "edges"), ("study", "studies")):
+        extra = {k for item in doc.get(key, []) for k in item} - set(fields.get(kind, ()))
+        if extra:
+            problems.append(f"{label}: {key} carry fields {schema} does not declare: {sorted(extra)}")
+    if len(doc.get("edges", [])) != len(current.edges):
+        problems.append(f"{label}: a different number of arcs than the current one")
+    return problems
 
 
 def check_glv_mode(study: str | None = None) -> tuple:

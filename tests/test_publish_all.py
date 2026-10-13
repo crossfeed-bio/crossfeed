@@ -296,3 +296,15 @@ def test_the_release_notes_name_the_commit_and_claim_nothing_more(monkeypatch):
     assert "as of commit abc1234 of main" in notes and "unreleased" not in notes
     monkeypatch.setenv("GITHUB_REF_NAME", "some-branch")
     assert "as of commit abc1234 of some-branch" in release_notes(result), "a hand run from another branch"
+
+
+def test_the_release_notes_name_every_older_file(monkeypatch):
+    """Round 5 of the review: the description named the one LEGACY file, while a file is written for every
+    older format, so from /v5 on the /v4 file would go undescribed."""
+    monkeypatch.setattr(publish_all, "older_formats", lambda manifest=None: [
+        "grownet.interaction_network/v3", "grownet.interaction_network/v4"])
+    notes = release_notes(_result())
+    assert "`all_result.json` is the same network for copies that read the older `grownet.interaction_network/v3`" \
+        in notes
+    assert "`all_result.v4.json` is the same network for copies that read the older " \
+        "`grownet.interaction_network/v4`" in notes

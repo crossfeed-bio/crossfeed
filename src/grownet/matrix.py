@@ -309,6 +309,8 @@ def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None)
             values = {r.get(key) or "" for r in rows}
             return values.pop() if len(values) == 1 else "mixed: " + "; ".join(sorted(v for v in values if v))
         falls = [r["capacity_fall"] for r in behind if r.get("capacity_fall") is not None]
+        media = sorted({m for r in behind for m in r.get("capacity_media") or ()}) \
+            if capacity["capacity"] is not None else []
         units = {r["unit"] for r in members}
         out[nid] = {"name": label, "rate": statistics.median(r["rate"] for r in members),
                     "unit": members[0]["unit"] if len(units) == 1 else "",
@@ -319,7 +321,10 @@ def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None)
                     **capacity,
                     # replicates and plateau curves are counted, and the capacity's provenance kept, as a
                     # strain row has them, rather than the fitted-row counts `n` stands for
-                    "replicates": total(members, "replicates"),
+                    # a measured strain row counts its replicates in `n` and has no `replicates`, which made
+                    # this None and the payload send null beside the csv's count (found in review)
+                    "replicates": total([{"replicates": r["replicates"] if r.get("replicates") is not None
+                                          else r.get("n")} for r in members], "replicates"),
                     "capacity_curves": total(behind, "capacity_curves") if capacity["capacity"] is not None
                     else None,
                     "capacity_source": same(behind, "capacity_source"),
@@ -333,7 +338,13 @@ def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None)
                     if capacity["lag"] is not None else "",
                     "capacity_fall": statistics.median(falls) if capacity["capacity"] is not None and falls
                     else None,
-                    "capacity_media": sorted({m for r in behind for m in r.get("capacity_media") or ()})
+                    "capacity_media": media,
+                    # and every other medium a plateau of these strains is in, and the spellings the alias
+                    # table read as the medium, which the report names (found in review)
+                    "capacity_other_media": sorted({m for r in behind for m in r.get("capacity_other_media") or ()}
+                                                   - set(media)) if capacity["capacity"] is not None else [],
+                    "capacity_medium_spellings": sorted({m for r in behind
+                                                         for m in r.get("capacity_medium_spellings") or ()})
                     if capacity["capacity"] is not None else [],
                     "merged_from": sorted(r["name"] for r in members)}
     return out
@@ -411,7 +422,12 @@ def slow_studies(rates: dict) -> list:
 def rate_meta(net: InteractionNetwork, rates: dict, method: str) -> str:
     """The `growth_rates` block of a network's meta: the rule, a rate per organism, and the organisms that
     have none, so a downloaded network carries the rates it was reported with and says what is missing."""
-    return {"rule": rate_rule(method), "organisms": {nid: dict(rate) for nid, rate in rates.items()},
+    rule = rate_rule(method)
+    if any(len(rate.get("merged_from") or ()) > 1 for rate in rates.values()):
+        # a genus of several strains is the median of its strains' rates, not of their pooled replicates
+        # or rows, which the rule alone said (found in review)
+        rule += "; a genus of several strains: the median of its strains' rates"
+    return {"rule": rule, "organisms": {nid: dict(rate) for nid, rate in rates.items()},
             "without_a_rate": sorted(_label(node) for nid, node in net.nodes.items() if nid not in rates),
             "slow_studies": slow_studies(rates)}
 
@@ -1527,7 +1543,9 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
              # released format with `PREVIOUS_GLV_FORMATS` beside it, so a new field moves that id,
              # which is a decision about the package rather than a fix to it. Anyone who wants the row
              # count has it in the network's own `meta.growth_rates`, as `n` with `n_label`.
-             "replicates": rates[nid].get("replicates", rates[nid].get("n")),
+             # as growth_rates.csv writes it: `n` where the count is missing OR empty (found in review)
+             "replicates": rates[nid]["replicates"] if rates[nid].get("replicates") is not None
+             else rates[nid].get("n"),
              "studies": list(rates[nid].get("studies", ())),
              "per_study": dict(rates[nid].get("per_study", {})),
              "method": rates[nid].get("method", ""), "lag": rates[nid].get("lag"),

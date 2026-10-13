@@ -492,3 +492,17 @@ def test_the_help_page_s_release_date_must_be_the_changelog_s(tmp_path):
     help_file.write_text("RELEASES = []\n")
     assert any("no entry for 0.1.0" in p for p in check("v0.1.0", repo, today=FIXTURE_DAY)[0])
 
+
+
+def test_entries_left_under_unreleased_are_refused_at_a_tag(tmp_path):
+    """Round 5 of the review: RELEASING.md leaves [Unreleased] empty at a tag, and an entry left there
+    passed as ready, missing from the release's notes, which come from the version's section."""
+    repo = _repo(tmp_path)
+    changelog = repo / "CHANGELOG.md"
+    text = changelog.read_text()
+    assert "## [0.1.0]" in text
+    changelog.write_text(text.replace("## [0.1.0]", "## [Unreleased]\n\n### Added\n\n## [0.1.0]", 1))
+    assert check("v0.1.0", repo, today=FIXTURE_DAY)[0] == [], "headings alone under [Unreleased] are empty"
+    changelog.write_text(text.replace("## [0.1.0]", "## [Unreleased]\n\n### Added\n- **Left behind**\n\n## [0.1.0]",
+                                      1))
+    assert any("still has entries under [Unreleased]" in p for p in check("v0.1.0", repo, today=FIXTURE_DAY)[0])

@@ -174,6 +174,12 @@ def release_notes(result: dict) -> str:
     # the branch the run built, which is main on a schedule and whatever was chosen on a hand run
     branch = os.environ.get("GITHUB_REF_NAME") or "main"
     built = f" as of commit {commit[:7]} of {branch}" if commit else ""
+    # one line per older format, as one file is written for each: naming LEGACY alone would leave the
+    # /v4 file out of the description from the move to /v5 on (found in review)
+    older = "\n".join(
+        f"- `{file_for(schema)}` is the same network for copies that read the older `{schema}`: the fields "
+        "added since are removed and nothing else differs, so an installed copy keeps reading the daily file "
+        "until it is upgraded." for schema in older_formats())
     return f"""The All network of mGrowthDB, derived with grownet's default settings by \
 `.github/workflows/all-network.yml` and replaced by each run. Every run rewrites this description, so it \
 describes the files below as they are now.
@@ -184,9 +190,7 @@ at {meta.get('derived_at')} by grownet {meta.get('tool_version')}{built}, deriva
 - `{FILE}` is the file grownet reads. A copy of grownet uses it only when it is {_age(MAX_AGE)}, written \
 in the format and schema that copy reads, and derived by the derivation the copy's settings ask for; \
 otherwise that copy derives All live from mGrowthDB.
-- `{LEGACY['file']}` is the same network for copies that read the older `{LEGACY['schema']}`: the fields \
-added since are removed and nothing else differs, so an installed copy keeps reading the daily file until \
-it is upgraded.
+{older}
 - `{NETWORK}` and `{REPORT}` are the same network and its report, for reading. **Nothing checks these two \
 against the grownet you have**: a file downloaded by hand is whatever the last run produced, so read \
 `meta.tool_version`, `meta.build` (the commit), `meta.derived_at` and `meta.settings.derivation` inside \

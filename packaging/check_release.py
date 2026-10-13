@@ -57,6 +57,13 @@ def check(tag: str, root: Path = ROOT, releasing: bool = True, today=None) -> tu
     if not dated:
         problems.append("CITATION.cff has no date-released")
     changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+    # RELEASING.md leaves [Unreleased] empty at a tag: an entry left there is missing from the release's
+    # notes, which come from the version's section, and the tagged tree calls it unreleased (found in
+    # review)
+    unreleased = re.search(r"^## \[Unreleased\][^\n]*$(.*?)(?=^## \[|\Z)", changelog, re.M | re.S)
+    if releasing and unreleased and re.sub(r"(?m)^#{1,6} .*$", "", unreleased.group(1)).strip():
+        problems.append("CHANGELOG.md still has entries under [Unreleased]; move them into the section for "
+                        f"{version}")
     section = re.search(rf"^## \[{re.escape(version)}\](.*?)$(.*?)(?=^## \[|\Z)", changelog, re.M | re.S)
     if not section:
         problems.append(f"CHANGELOG.md has no section for {version}")

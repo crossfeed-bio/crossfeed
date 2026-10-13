@@ -295,3 +295,48 @@ def test_an_older_file_that_was_not_written_is_named(tmp_path, monkeypatch):
     problems, _ = live_check.check_published(str(out))
     assert any(p.startswith("all_result.json: not written, so copies reading grownet.interaction_network/v3")
                for p in problems), problems
+
+
+def test_the_older_file_s_arcs_below_the_threshold_are_checked_too(tmp_path, monkeypatch):
+    """Round 5 of the review: the older-format loop checked `network` only. 0.4.0 reads `absent` too: one
+    dropped served no arc below the threshold, and `absent.edges: null` made every 0.4.0 copy derive All
+    live, while the check said nothing."""
+    import copy
+    import dataclasses
+    import json
+
+    import live_check
+    import publish_all
+    from test_gui import FakeClient
+
+    from grownet.gui import run_query
+
+    def with_one_below(*a, **k):
+        # the double gives no arc below the threshold at the defaults, so one of its arcs is put there
+        result = run_query(FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False)
+        absent = copy.deepcopy(result["network"])
+        absent.edges = [dataclasses.replace(absent.edges[0], status="absent")]
+        return {**result, "absent": absent}
+    monkeypatch.setattr(publish_all, "run_query", with_one_below)
+    out = tmp_path / "out"
+    assert publish_all.main(str(out), None, previous=lambda: None) == 0
+    clean = json.loads((out / "all_result.json").read_text())
+    assert clean["absent"]["edges"], "an arc below the threshold, so there is one to lose"
+    assert live_check.check_published(str(out))[0] == []
+
+    def problems_with(change):
+        broken = json.loads(json.dumps(clean))
+        change(broken)
+        (out / "all_result.json").write_text(json.dumps(broken))
+        return live_check.check_published(str(out))[0]
+
+    below = "all_result.json, below the threshold"
+    assert f"{below}: missing, while the current file has it" in problems_with(lambda d: d.update(absent=None))
+    assert f"{below}: invalid: edges must be a list of objects" in problems_with(
+        lambda d: d["absent"].update(edges=None))
+    assert any(p.startswith(f"{below}: says grownet.interaction_network/v4") for p in problems_with(
+        lambda d: d["absent"].update(schema="grownet.interaction_network/v4")))
+    assert any(p.startswith(f"{below}: edges carry fields") and "window" in p for p in problems_with(
+        lambda d: d["absent"]["edges"][0].update(window=30.0)))
+    assert f"{below}: a different number of arcs than the current one" in problems_with(
+        lambda d: d["absent"].update(edges=d["absent"]["edges"] * 2))

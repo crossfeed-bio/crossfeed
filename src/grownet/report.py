@@ -381,6 +381,10 @@ def report_text(result: dict) -> str:
         for nid, rate in sorted(organisms.items(), key=lambda kv: str(kv[1].get("name", kv[0])).lower()):
             per_study = "; ".join(f"{sid} {value:.4g}" for sid, value in sorted(rate.get("per_study", {}).items()))
             extra = []
+            # a genus of several strains is the median of the strains' own rates and capacities, which rest
+            # on these counts between them: "median of 7 replicate(s)" named a median that was not taken
+            # (found in review)
+            strains = rate.get("merged_from") or []
             # ln(2) / rate, so a rate no stage judges for plausibility is at least stated in the form a
             # reader judges (#173): 0.0147 /h says nothing, 47 h says it at a glance
             double = doubling_time(rate.get("rate"), rate.get("unit", "1/h"))
@@ -396,7 +400,9 @@ def report_text(result: dict) -> str:
                                 else "") + "; no capacity is taken from a culture-level trace")
             if rate.get("capacity") is not None:
                 extra.append(f"carrying capacity {rate['capacity']:.4g} {rate.get('capacity_unit', '')}"
-                             f" from {rate.get('capacity_n', 0)} "
+                             + (", the median of the strains' capacities, resting on "
+                                if len(strains) > 1 else " from ")
+                             + f"{rate.get('capacity_n', 0)} "
                              + ("row(s)" if rate.get("n_label") else "curve(s)"))
                 # a certified curve that grew, peaked and then declined has its peak recorded as the
                 # plateau, so what it held at the last measurement is published beside it (Karoline,
@@ -432,7 +438,9 @@ def report_text(result: dict) -> str:
                 extra.append(f"{len(left)} curve(s) gave no capacity")
             # a derivation that fits each row has fitted rows rather than monoculture replicates, and
             # says so, so the count is not read as a number of cultures (#142 item 4)
-            lines.append(f"  - {rate.get('name', nid)}: {rate['rate']:.4g} {rate.get('unit', '')}, median of "
+            of = (f"median of the {len(strains)} strains' rates ({', '.join(strains)}), resting on "
+                  if len(strains) > 1 else "median of ")
+            lines.append(f"  - {rate.get('name', nid)}: {rate['rate']:.4g} {rate.get('unit', '')}, {of}"
                          f"{rate.get('n', 0)} {rate.get('n_label', 'monoculture replicate(s)')}"
                          + (f" ({per_study})" if per_study else "")
                          + ("; " + ", ".join(extra) if extra else ""))

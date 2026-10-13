@@ -118,8 +118,10 @@ content.
   could be computed, and arcs from an organism to itself are counted as arcs. A genus row in
   `growth_rates.csv` counts its strains' replicates and plateau curves and says where its capacity came
   from; a genus of one strain is that strain's row. It counted fitted rows and left the provenance empty.
-  A genus row of several strains also keeps the lag's method, the plateau's fall and media, and says
-  "fitted row(s)" in the report where it said "monoculture replicate(s)".
+  A genus row of several strains also keeps the lag's method, the plateau's fall, media and other media,
+  and sends its replicates in the gLV payload, where it sent null beside the zip's count. The report and
+  the rule say its rate and capacity are the median of its strains' own, resting on the counts given;
+  "median of 7 monoculture replicate(s)" named a median that was not taken.
 - **A rate from a culture-level count says so** in `capacity_source`, so `growth_rates.csv`, the gLV payload
   and the report name it, without a new field; a rate that also rests on per-strain curves does not blame
   the count for its missing capacity.
@@ -128,11 +130,13 @@ content.
   next format move strands no installed copy either.
 - **`grownet validate` reads a daily artifact** (`all_result.v4.json`) by validating the networks it carries,
   where it said "INVALID: schema is None" about a good file, and says so when an artifact carries none.
+- **The live check reads every network in each older-format file**, the arcs below the threshold as well
+  as the network, which 0.4.0 reads too.
 - **The live check tells "could not run" from "a property broke"**, by exit code (2 against 1) and in the
   issue it opens; the build-failure issue opens only when the publish step did not complete, and says
   some files may already have been replaced.
-- **The release check refuses an empty version section** and a help-page release date that differs from
-  the changelog's; RELEASING.md's checklist, emergency procedure (pause the workflow first) and its
+- **The release check refuses an empty version section**, entries left under [Unreleased] at a tag, and a
+  help-page release date that differs from the changelog's; RELEASING.md's checklist, emergency procedure (pause the workflow first) and its
   statements about which copies read which file for how long now match what is true.
 - **A Baranyi start that ran off to an enormous rate raised `OverflowError`** instead of being rejected
   like any other unconverged start. First met on optical densities while building the above.
