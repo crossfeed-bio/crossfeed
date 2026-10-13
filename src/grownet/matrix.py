@@ -403,8 +403,22 @@ def matrix_about(net: InteractionNetwork, csv_name: str = "grownet_matrix.csv") 
     lines += [f"  {key}: {json.dumps(settings[key], default=str)}" for key in sorted(settings)]
     lines.append("")
     if conflicts:
-        lines.append("LEFT AT 0 BECAUSE THE ARCS OF THE PAIR DISAGREE IN SIGN (actor on affected)")
-        lines += [f"  {actor} on {affected}" for affected, actor in dict.fromkeys(conflicts)]
+        # Which designs disagree, per pair: across a biculture and a drop-out is the pairwise effect and
+        # the in-community effect pulling opposite ways, which the report names as a result (#207);
+        # within one design it is condition or replicate scatter, a different thing to tell a reader.
+        # Listed under one heading they read as one cause (Craig's agent, reading #278 and #280 together).
+        _, conflicting = cells(net)
+        designs = {}
+        for affected_id, actor_id in conflicting:
+            kinds = sorted({e.evidence or "unknown" for e in net.edges
+                            if e.target == affected_id and e.source == actor_id})
+            designs[(_label(net.nodes[affected_id]), _label(net.nodes[actor_id]))] = (
+                "across designs: " + " and ".join(kinds) if len(kinds) > 1
+                else f"within one design: every arc {kinds[0] if kinds else 'unknown'}")
+        lines.append("LEFT AT 0 BECAUSE THE ARCS OF THE PAIR DISAGREE IN SIGN (actor on affected). Some disagree")
+        lines.append("  between designs and some within one; each says which:")
+        lines += [f"  {actor} on {affected} ({designs.get((affected, actor), 'design not recorded')})"
+                  for affected, actor in dict.fromkeys(conflicts)]
         lines.append("")
     bounded = bounded_cells(net)
     if bounded:

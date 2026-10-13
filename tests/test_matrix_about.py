@@ -40,7 +40,18 @@ def test_the_pairs_the_grid_leaves_at_zero_for_disagreeing_are_named():
     net = _net([_arc("a", "b", 1.5), _arc("a", "b", -1.2, study_id="S2")])
     assert "0" in matrix.matrix_csv(net).splitlines()[1]
     about = matrix.matrix_about(net)
-    assert "DISAGREE IN SIGN" in about and "A on B" in about
+    assert "DISAGREE IN SIGN" in about and "A on B (within one design: every arc unknown)" in about
+
+
+def test_a_conflict_across_designs_is_told_apart_from_one_within_a_design():
+    """Craig's agent, reading #278 and #280 together: of the All network's three sign conflicts one is
+    biculture against drop-out, the result #278 names, and two are scatter among biculture arcs."""
+    across = _net([_arc("a", "b", 1.5, evidence="biculture"), _arc("a", "b", -1.2, evidence="dropout",
+                                                                    study_id="S2")])
+    within = _net([_arc("a", "b", 1.5, evidence="biculture"), _arc("a", "b", -1.2, evidence="biculture",
+                                                                    study_id="S2")])
+    assert "A on B (across designs: biculture and dropout)" in matrix.matrix_about(across)
+    assert "A on B (within one design: every arc biculture)" in matrix.matrix_about(within)
 
 
 def test_an_na_cell_is_listed_with_its_bound():
