@@ -196,8 +196,14 @@ print.grownet_glv <- function(x, ...) {
                            "was measured. glv_matrix(x, unit = )\n       takes one.\n"),
                     paste(vapply(x$matrices, function(m) m$abundance_unit, character(1)), collapse = ", ")))
     }
-    cat(sprintf("  growth rates: %d of %d organisms%s\n", with_rate, length(x$organisms),
-                if (nzchar(x$growth_rate_unit)) paste0(" (", x$growth_rate_unit, ")") else ""))
+    # counted against the organisms in a matrix, and an organism without a rate is what is left out of
+    # the matrices, so this read "8 of 8" for an 11-organism network while caveats$without_a_rate named
+    # the other 3 (#211 item 3). The ones outside every matrix are now counted where the coverage is.
+    outside <- setdiff(x$caveats$without_a_rate, x$organisms)
+    cat(sprintf("  growth rates: %d of the %d organisms in a matrix%s%s\n", with_rate, length(x$organisms),
+                if (nzchar(x$growth_rate_unit)) paste0(" (", x$growth_rate_unit, ")") else "",
+                if (length(outside)) sprintf("; %d more in the network have none and are in no matrix",
+                                             length(outside)) else ""))
     cat("  A[i, j] is the effect of j on i: rows are affected, columns are the actor.\n")
     if (x$fitted) {
         # the package's own sentence, which says what its derivation fitted: an integrated cell is not a
@@ -287,6 +293,8 @@ print.grownet_glv <- function(x, ...) {
 summary.grownet_glv <- function(object, ...) {
     print(object)
     invisible(list(organisms = length(object$organisms),
+                   # `organisms` is the matrices' count; the network's includes those with no rate
+                   network_organisms = length(union(object$organisms, object$caveats$without_a_rate)),
                    fitted = object$fitted,
                    matrices = length(object$matrices),
                    with_a_rate = sum(!is.na(object$growth_rates)),

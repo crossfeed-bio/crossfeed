@@ -104,3 +104,31 @@ test_that("a fit with no bounded state says so when it is printed, and scaling i
     expect_match(text, "A x = -r")
     expect_false(grepl("glv_scale\\(x\\) brings them down", text))
 })
+
+test_that("the written files keep what the download keeps", {
+    # #211 item 4: three of the download's columns were missing, and the matrices were written at full
+    # double precision where README.md promises four significant digits
+    payload <- example_payload()
+    payload$growth_rate_detail[[1]]$carrying_capacity_left_out <- list()
+    payload$growth_rate_detail[[2]]$carrying_capacity_left_out <- list(list("x", "no plateau"))
+    payload$growth_rate_detail[[1]]$carrying_capacity_fall_from_peak <- 0.9
+    payload$growth_rate_detail[[1]]$carrying_capacity_medium <- "WC"
+    payload$matrices[[1]]$interactions[[1]][[2]] <- 2.123456789e-9
+    glv <- grownet:::as_grownet_glv(payload)
+    dir <- file.path(tempdir(), "glv-keeps")
+    on.exit(unlink(dir, recursive = TRUE))
+    glv_write(glv, dir)
+    rates <- utils::read.csv(file.path(dir, "growth_rates.csv"), stringsAsFactors = FALSE)
+    expect_equal(names(rates), c("organism", "growth_rate", "unit", "replicates", "studies", "method",
+                                 "lag", "lag_method", "carrying_capacity", "capacity_unit",
+                                 "capacity_curves", "capacity_curves_left_out",
+                                 "capacity_fall_from_peak", "capacity_medium", "capacity_source",
+                                 "doubling_time"))
+    # a count, 0 included, never NA
+    expect_equal(rates$capacity_curves_left_out, c(0L, 1L))
+    expect_equal(rates$capacity_fall_from_peak[1], 0.9)
+    expect_equal(rates$capacity_medium[1], "WC")
+    cell <- utils::read.csv(file.path(dir, "interaction_matrix.Cells_per_mL.csv"), row.names = 1,
+                            check.names = FALSE)["A", "B"]
+    expect_equal(cell, 2.123e-9)
+})

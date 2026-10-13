@@ -377,3 +377,29 @@ def test_the_matrix_format_says_include_absent_cannot_apply_to_it(capsys):
     as_json = run("json", False)
     assert "keep them with --include-absent" in as_json
     assert "no effect with --format matrix" not in as_json
+
+
+def test_the_single_study_path_exits_one_on_an_incomplete_run_as_the_others_do(monkeypatch, tmp_path, capsys):
+    """#247: the species and All paths exit 1 when something could not be read (#243); `derive <study>
+    --live` exited 0 when curves could not be read, so the paths still disagreed about the same failure.
+    The file it writes records the failure too."""
+    import json as _json
+
+    from test_gui import FakeClient
+
+    import grownet.mgrowthdb as mgrowthdb
+    from grownet.mgrowthdb import MGrowthDBError
+
+    class Flaky(FakeClient):
+        def get_measurement_series(self, context_id):
+            if context_id.startswith("co/0/"):
+                raise MGrowthDBError("mGrowthDB returned HTTP 500 for a series (server error)", status=500)
+            return super().get_measurement_series(context_id)
+
+    for client, wanted in ((FakeClient, 0), (Flaky, 1)):
+        monkeypatch.setattr(mgrowthdb, "MGrowthDBClient", lambda *a, _c=client, **k: _c())
+        out = tmp_path / f"{client.__name__}.json"
+        assert main(["derive", "SMGDB00000001", "--live", "--out", str(out)]) == wanted, client.__name__
+        meta = _json.loads(out.read_text(encoding="utf-8"))["meta"]
+        assert meta["complete"] is (wanted == 0) and bool(meta["errors"]) is (wanted == 1), meta
+    assert "INCOMPLETE" in capsys.readouterr().err

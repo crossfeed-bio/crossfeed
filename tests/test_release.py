@@ -123,7 +123,9 @@ def test_the_check_runs_with_no_tag_against_this_tree(tmp_path, capsys):
     from check_release import current_version
     assert current_version() == __import__("grownet").__version__
     assert main([]) == 0
-    assert "is ready" in capsys.readouterr().out
+    # "is ready" before the tag, "is released" after it, in a clone that has the tag (#236)
+    out = capsys.readouterr().out
+    assert "is ready" in out or "is released (tagged at" in out, out
 
 
 def test_a_tree_in_development_can_be_green_and_honest_at_once(tmp_path):
@@ -408,3 +410,58 @@ def test_the_sdist_carries_every_doc_the_suite_reads(tmp_path):
     assert f"gui/{viewer}" in found, "an os.path.join is invisible to the extraction"
     assert not covered(f"{top}/{leaf_join}"), "the coverage test would pass a file the manifest lacks"
     assert covered(f"{top}/METHOD_" + "NOTES.md"), "the coverage test would fail a carried file"
+
+
+def _git(repo, *args):
+    import os
+    import subprocess
+    who = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.org", "GIT_COMMITTER_NAME": "t",
+           "GIT_COMMITTER_EMAIL": "t@example.org"}
+    # the whole environment, since git on Windows needs more than PATH; HOME moved so no user config (a
+    # signing key, a hook path) reaches the scratch repository
+    subprocess.run(["git", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", *args], cwd=repo,
+                   check=True, capture_output=True, env={**os.environ, **who, "HOME": str(repo)})
+
+
+def test_a_tag_that_already_names_another_commit_is_refused(tmp_path, capsys, monkeypatch):
+    """#236: `check_release.py` said `release check: v0.3.0 is ready` on a tree whose v0.3.0 was already
+    tagged and on PyPI. A tag is never reused, so a tag naming another commit is a release that happened.
+
+    The same tag naming THIS commit is the release workflow, which runs on the tag it checks, and must
+    pass; and with no tag given, a tagged version is reported as released rather than ready, with exit 0,
+    since every build between two releases is in that state.
+    """
+    import check_release
+    repo = _repo(tmp_path)
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "release")
+    _git(repo, "tag", "v0.1.0")
+    assert check("v0.1.0", repo, today=FIXTURE_DAY)[0] == [], "the release workflow, on its own tag"
+
+    (repo / "later.txt").write_text("a change after the release\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "later")
+    problems, _ = check("v0.1.0", repo, today=FIXTURE_DAY)
+    assert any("already names" in p and "v0.1.0 is released" in p for p in problems), problems
+    # a tree in development is not refused: it is told what it is
+    assert check("v0.1.0", repo, releasing=False, today=FIXTURE_DAY)[0] == []
+
+    # and `make check`'s no-tag run says "released", not "ready", once the clone has the tag
+    monkeypatch.setattr(check_release, "tagged_commit", lambda tag, root=None: ("a" * 40, "b" * 40))
+    assert main([]) == 0
+    out = capsys.readouterr().out
+    assert "is released (tagged at aaaaaaa)" in out and "is ready" not in out, out
+
+
+def test_no_tag_in_the_clone_says_nothing_either_way(tmp_path):
+    """`actions/checkout` fetches no tags, so a clone without the tag must not be read as "untagged"."""
+    from check_release import tagged_commit
+    repo = _repo(tmp_path)
+    assert tagged_commit("v0.1.0", repo) is None                     # not a git repository at all
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "release")
+    assert tagged_commit("v0.1.0", repo) is None                     # a repository without the tag
+    assert check("v0.1.0", repo, today=FIXTURE_DAY)[0] == []
+
