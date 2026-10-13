@@ -440,6 +440,13 @@ def report_text(result: dict) -> str:
         missing = rates.get("without_a_rate") or []
         if missing:
             lines.append("  no growth rate (a gLV simulation needs one from elsewhere): " + ", ".join(missing))
+        # the study-level tripwire of #173: a flag, never a refusal, so it says what to check
+        for slow in rates.get("slow_studies") or []:
+            lines.append(f"  slow as a block: every rate from {slow['study']} ({slow['rates']}, the fastest "
+                         f"{slow['fastest']:.4g}) is {slow['factor']:.1f} times slower than the median of the other "
+                         f"studies here ({slow['others_median']:.4g}). That can be the organisms, or the study's "
+                         "medium, temperature or measurement: worth checking against it before these rates are "
+                         "used together")
         lines.append("")
 
     if result.get("steady") is not None:
