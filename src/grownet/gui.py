@@ -1300,9 +1300,13 @@ def reads_since(client, before: tuple, shared: bool) -> dict | None:
     search, so the command line's way, handing `report_text` the client, would print the session's total
     as this search's. A search also fans out to worker threads, so the reads cannot be told apart by
     thread: when another search ran at the same time, `shared` says the difference holds both.
-    None when the client keeps nothing, as on the command line.
+    None when the client keeps nothing, as on the command line, and then `before` is None too.
+
+    The difference is sound only because a search's worker threads end with it: `fetch.prefetch_studies`
+    uses `with ThreadPoolExecutor(...)`, which waits for every future on exit, so no read of this search
+    lands in the next one's difference unflagged (checked by Craig's agent, on #283).
     """
-    if not getattr(client, "cache_dir", None):
+    if before is None or not getattr(client, "cache_dir", None):
         return None
     (fetched, reused, remembered, refreshed), now = before, _counters(client)
     return {"fetched": now[0] - fetched, "reused": now[1] - reused, "remembered": now[2] - remembered,
@@ -1310,9 +1314,13 @@ def reads_since(client, before: tuple, shared: bool) -> dict | None:
 
 
 def _counters(client) -> tuple:
-    """(fetched, reused, remembered, refreshed) of a client, zero for one that counts nothing (a double)."""
-    return (getattr(client, "fetched", 0), getattr(client, "reused", 0), getattr(client, "remembered", 0),
-            list(getattr(client, "refreshed", None) or []))
+    """(fetched, reused, remembered, refreshed) of a client that keeps a cache.
+
+    Read directly, with no defaults: defaults made a real client missing a counter report "0 from
+    mGrowthDB, 0 reused", the silence this line exists to end (Craig's agent, on #283). Only a client with
+    a `cache_dir` reaches here, which every real client has and no test double defines.
+    """
+    return client.fetched, client.reused, client.remembered, list(client.refreshed)
 
 
 def prune_jobs(jobs: dict, keep: int = KEPT_JOBS) -> None:
@@ -1599,7 +1607,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                         other["overlapped"] = True
                     job["overlapped"] = bool(running)
                     running[job["id"]] = job
-                before = _counters(client)
+                before = _counters(client) if getattr(client, "cache_dir", None) else None
                 try:
                     result = run_query(client, entries, settings, self.state["index"], progress=progress,
                                        all_studies=all_studies)

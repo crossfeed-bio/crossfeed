@@ -72,6 +72,22 @@ def test_reads_are_the_difference_over_the_search():
                                                   "refreshed": ["S2"], "shared": False}
     client.cache_dir = None
     assert reads_since(client, before, False) is None, "nothing kept, nothing to say, as on the command line"
+    assert reads_since(client, None, False) is None
+
+
+def test_a_real_client_missing_a_counter_raises_rather_than_reporting_zero():
+    """Craig's agent, on #283: defaults in `_counters` turned a renamed or missing counter on a real client
+    into "0 from mGrowthDB", the silence #187 removed, reached from the other side."""
+    import pytest
+
+    from grownet.gui import _counters
+
+    class Renamed(Counting):
+        def __init__(self):
+            super().__init__()
+            del self.remembered
+    with pytest.raises(AttributeError):
+        _counters(Renamed())
 
 
 def test_a_search_that_overlapped_another_does_not_print_a_mixed_count():
