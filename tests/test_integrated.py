@@ -1243,3 +1243,30 @@ def test_a_row_whose_rate_is_in_another_time_unit_keeps_its_plateau():
     assert got["rate"] == pytest.approx(0.4) and got["n"] == 1 and got["studies"] == ["S1"], "the rate is S1's"
     assert got["capacity_n"] == 3 and got["capacity"] == pytest.approx(1.0e9)
     assert got["capacity_left_out"] == []
+
+
+def test_a_capacity_from_rows_in_another_time_unit_reports_their_own_provenance():
+    """Round 11 of the review: once a row in another time unit kept its plateau, a capacity taken from such
+    rows (here YCFA, two rows, 1/d) still carried the 1/h row's stage size and its "fitted" source, so a
+    diagonal substituted at a measured plateau was not listed among the substituted rows."""
+    from grownet import matrix
+    from grownet.mgrowthdb import records_to_network
+    sub = "-r/K at the measured plateau 1e+08 Cells/mL of 3 monoculture curve(s): the fit implies none"
+
+    def rec(study, unit, medium, rate, own, n, source, condition):
+        return {"target": "ncbi:1", "target_name": "Blautia a", "source": "ncbi:2", "source_name": "Roseburia b",
+                "fitted_rate": rate, "fitted_self": own, "fitted_rate_unit": unit, "fitted_self_unit": "Cells/mL",
+                "study_id": study, "rate_stage_n": n, "fit_points": 7, "medium": medium, "condition": condition,
+                "fitted_self_source": source, "fitted_capacity_fall": 1.0 if source == sub else None}
+    rows = [rec("S1", "1/h", "WC", 0.4, -4e-10, 3, "fitted from the monoculture time courses", "c1"),
+            rec("S2", "1/d", "YCFA", 9.6, -9.6e-8, 8, sub, "c2"),
+            rec("S2", "1/d", "YCFA", 9.6, -9.6e-8, 8, sub, "c3")]
+    got = integrated.fitted_rates(rows)["ncbi:1"]
+    assert got["capacity_medium"] == "YCFA" and got["capacity"] == pytest.approx(1e8)
+    assert got["capacity_curves"] == 8 and got["capacity_source"] == sub
+    assert got["rate"] == pytest.approx(0.4) and got["replicates"] == 3, "the rate side stays the 1/h row's"
+    arc = {"source": "ncbi:2", "target": "ncbi:1", "source_name": "Roseburia b", "target_name": "Blautia a",
+           "effect": "inhibition", "strength": -1e-9, "weight": 1.0, "status": "present", "sd": 1e-10,
+           "study_id": "S1", "outcome": "quantified", "metric": integrated.METRIC}
+    net = records_to_network([arc])
+    assert matrix.coefficients(net, matrix.for_nodes(net, {"ncbi:1": got}))["substituted_rows"] == [("Blautia a", sub)]

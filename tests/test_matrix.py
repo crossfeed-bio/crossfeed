@@ -642,8 +642,21 @@ def test_a_genus_whose_strains_rates_are_in_different_time_units_has_no_rate():
     genus has none, and is listed without a rate. A strain's own rates in another unit are carried up."""
     rates = {"ncbi:1": {**_STRAIN, "name": "Blautia a", "unit": "1/h", "other_units": ["S2 (1/d)"]},
              "ncbi:2": {**_STRAIN, "name": "Blautia b", "rate": 7.2, "unit": "1/d"}}
-    assert "blautia" not in matrix.for_nodes(_GENUS_NET, rates)
-    assert "Blautia" in matrix.rate_meta(_GENUS_NET, matrix.for_nodes(_GENUS_NET, rates), "m")["without_a_rate"]
+    got = matrix.for_nodes(_GENUS_NET, rates)
+    assert "blautia" not in got
+    meta = matrix.rate_meta(_GENUS_NET, got, "m")
+    assert "Blautia" in meta["without_a_rate"]
+    # and says why, in the meta, the report and the README (round 11 of the review)
+    why = ("its strains' growth rates are in different time units (Blautia a 1/h; Blautia b 1/d), which are not "
+           "converted")
+    assert meta["why_without_a_rate"] == {"Blautia": why}
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    shown = InteractionNetwork()
+    shown.meta["growth_rates"] = meta
+    assert f"      Blautia: {why}" in report_text({"network": shown, "resolved": [], "unresolved": [], "studies": [],
+                                                    "errors": [], "skipped": [], "entries": []})
+    assert dict(matrix.coefficients(_GENUS_NET, got)["left_out"])["Blautia"].startswith(why)
     same = {"ncbi:1": rates["ncbi:1"], "ncbi:2": {**rates["ncbi:2"], "rate": 0.3, "unit": "1/h"}}
     row = matrix.for_nodes(_GENUS_NET, same)["blautia"]
     assert row["unit"] == "1/h" and row["other_units"] == ["Blautia a: S2 (1/d)"]

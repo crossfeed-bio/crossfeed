@@ -1255,7 +1255,8 @@ the whole database, so <code>meta.data</code> holds when it was read and each st
 publication dates, which change when a study is corrected. A search run with Report growth rates also
 carries <code>meta.growth_rates</code>: the rule the rates follow, a rate per organism with its unit, how
 many monoculture replicates it rests on, the studies behind it and each study's own median, and
-<code>without_a_rate</code>, the organisms that have none.</p>
+<code>without_a_rate</code>, the organisms that have none, with <code>why_without_a_rate</code> giving the
+reason where one is known (a genus whose strains' rates are in time units that are not converted).</p>
 {edges}
 {nodes}
 

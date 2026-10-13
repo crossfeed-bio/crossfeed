@@ -258,6 +258,16 @@ def rows(net: InteractionNetwork, diagonal: float | None = None) -> tuple:
     return names, matrix, [(net.nodes[a].name or a, net.nodes[b].name or b) for a, b in conflicts]
 
 
+class NodeRates(dict):
+    """The rates `for_nodes` returns, by node id, with `no_rate`: why a node that has strains with rates has
+    none itself, which `rate_meta` records beside `without_a_rate` (found in review: a genus left without a
+    rate for its strains' time units read as one with no monoculture at all)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.no_rate: dict = {}
+
+
 def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None) -> dict:
     """The growth rates keyed by this network's own node ids.
 
@@ -278,7 +288,7 @@ def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None)
         return current.get(int(taxon), rate.get("name", "")) if key.startswith("ncbi:") and taxon.isdigit() \
             else rate.get("name", "")
     rates = {key: {**rate, "name": current_name(key, rate)} for key, rate in rates.items()}
-    out = {}
+    out = NodeRates()
     for nid, node in net.nodes.items():
         if nid in rates:
             # the node's own name, which is the strain's current one (#24), so the rates file, the report
@@ -336,7 +346,11 @@ def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None)
         if len(units) > 1:
             # strains whose rates are in different time units have no median: it was taken across them,
             # with the unit "", and the matrix read it in its own unit (found in review). Which unit should
-            # win is not decided here, so the genus has no rate and is listed among those without one.
+            # win is not decided here, so the genus has no rate and is listed among those without one, with
+            # the reason
+            out.no_rate[label] = ("its strains' growth rates are in different time units ("
+                                  + "; ".join(f"{r.get('name', '')} {r['unit']}" for r in members)
+                                  + "), which are not converted")
             continue
         out[nid] = {"name": label, "rate": statistics.median(r["rate"] for r in members),
                     "unit": members[0]["unit"],
@@ -470,6 +484,8 @@ def rate_meta(net: InteractionNetwork, rates: dict, method: str) -> str:
     return {"rule": rate_rule(method) + genus_rule(rates),
             "organisms": {nid: dict(rate) for nid, rate in rates.items()},
             "without_a_rate": sorted(_label(node) for nid, node in net.nodes.items() if nid not in rates),
+            # why, where one is known (an organism with strains that have rates)
+            "why_without_a_rate": dict(getattr(rates, "no_rate", {})),
             "slow_studies": slow_studies(rates)}
 
 
@@ -1125,6 +1141,11 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             left_out.append((name, "it grows only with a partner and reached no certified plateau beside "
                                    "one, in the same abundance unit as that partner, so its "
                                    "self-limitation cannot be fitted"))
+        elif rate.get("rate") is None and name in getattr(rates, "no_rate", {}):
+            # its strains have rates, in units that are not converted: the README said it had none at all
+            # (found in review)
+            left_out.append((name, rates.no_rate[name] + ", so it has no growth rate and nothing on it can be "
+                                   "fitted"))
         elif rate.get("rate") is None:
             left_out.append((name, "no growth rate, and no arc saying it grows only with a partner, so "
                                    "neither its own limitation nor the effect of anything on it can be "

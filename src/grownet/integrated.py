@@ -873,9 +873,17 @@ def fitted_rates(records: list) -> dict:
         label = record.get("medium") or ""
         key = key_from_label(label)
         one = at["by_medium"].setdefault(key, {"label": label, "values": [], "unit": capacity_unit,
-                                               "points": [], "per_study": {}, "falls": [], "rows": []})
+                                               "points": [], "per_study": {}, "falls": [], "rows": [],
+                                               "stage_n": [], "sources": []})
         one["values"].append(-rate / own)
         one["rows"].append(_row_label(study, record))
+        # the provenance of THIS medium's plateaus, which the published capacity reports: taken from every
+        # row, a capacity from rows in another time unit (whose rate is left out) carried the other rows'
+        # stage size and source, and a substituted diagonal went unlisted (found in review)
+        if record.get("rate_stage_n"):
+            one["stage_n"].append(record["rate_stage_n"])
+        if record.get("fitted_self_source") and record["fitted_self_source"] not in one["sources"]:
+            one["sources"].append(record["fitted_self_source"])
         one["points"].append(record.get("fit_points", 0))
         if record.get("fitted_capacity_fall") is not None:
             one["falls"].append(record["fitted_capacity_fall"])
@@ -925,7 +933,7 @@ def fitted_rates(records: list) -> dict:
             "capacity_other_media": [other["label"] for _key, other in order[1:]],
             # the capacity is -r/A_ii from the same monoculture stage, so the curves behind it are that
             # stage's replicates, not the rows the median was taken over
-            "capacity_curves": (max(at["stage_n"]) if (at["stage_n"] and chosen) else None),
+            "capacity_curves": (max(chosen["stage_n"]) if (chosen and chosen["stage_n"]) else None),
             "capacity_points": sum(chosen["points"]) if chosen else 0,
             "capacity_per_study": ({study: statistics.median(values)
                                     for study, values in chosen["per_study"].items()} if chosen else {}),
@@ -936,7 +944,8 @@ def fitted_rates(records: list) -> dict:
             "fit_condition": max(at["conditions"]) if at["conditions"] else None,
             # where the self-limitation behind the diagonal came from, and the media the rows were
             # measured in, so a reader of the package can see both (#142 items 6 and 7)
-            "capacity_source": "; ".join(at["self_sources"]),
+            # from the medium the capacity is taken from; with no capacity, every row's says why
+            "capacity_source": "; ".join(chosen["sources"] if chosen else at["self_sources"]),
             "media": sorted(at["media"])}
     return out
 
