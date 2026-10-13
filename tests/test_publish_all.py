@@ -30,11 +30,27 @@ def test_a_fall_below_half_of_the_previous_artifact_needs_saying_so():
     assert floor(145, 12) == []
 
 
-def test_an_unreadable_previous_artifact_compares_with_nothing():
-    def fails(url, timeout):
+def test_an_unreadable_previous_artifact_refuses_and_only_a_404_compares_with_nothing():
+    """It failed OPEN: every read failure returned None, which skipped the half check, so a 503 on the
+    night a derivation collapsed published the collapse (Craig's agent, on #275). Now only a 404, the
+    first run, means there is nothing to compare with."""
+    import urllib.error
+
+    def offline(url, timeout):
         raise OSError("offline")
-    assert previous_arcs(fails) is None
-    assert floor(5, previous_arcs(fails)) == [], "only the zero floor applies then"
+
+    def missing(url, timeout):
+        raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+
+    def unavailable(url, timeout):
+        raise urllib.error.HTTPError(url, 503, "Service Unavailable", {}, None)
+    assert previous_arcs(missing) is None and floor(5, previous_arcs(missing)) == []
+    for opener, says in ((offline, "OSError: offline"), (unavailable, "HTTP 503")):
+        reason = previous_arcs(opener)
+        assert says in reason, reason
+        refused = floor(145, reason)
+        assert refused and "could not be read" in refused[0] and "allow_drop" in refused[0]
+        assert floor(145, reason, allow_drop=True) == [], "a hand run can still publish"
 
     class Response(io.BytesIO):
         def __enter__(self):

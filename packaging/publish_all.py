@@ -8,6 +8,7 @@ and, when given NOTES_FILE, the release description for this run, which the work
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -26,14 +27,21 @@ NETWORK, REPORT = "all_network.json", "all_report.txt"
 MIN_SHARE_OF_PREVIOUS = 0.5
 
 
-def previous_arcs(opener=urllib.request.urlopen) -> int | None:
-    """How many arcs the artifact being replaced carries, or None when it cannot be read: then the run is
-    compared with nothing, and only the zero floor applies."""
+def previous_arcs(opener=urllib.request.urlopen) -> int | str | None:
+    """How many arcs the artifact being replaced carries; None when there is none (GitHub answers 404,
+    which is the first run); or, as a string, why it could not be read.
+
+    The floor fails CLOSED on the last (Craig's agent, on #275): a timeout, a 503 or a truncated body is
+    not "no previous artifact" but "cannot tell whether this run collapsed", and it used to switch the
+    half check off on exactly the night it might be needed.
+    """
     try:
         with opener(URL, timeout=TIMEOUT) as response:
             return len(json.loads(response.read().decode("utf-8"))["network"]["edges"])
-    except Exception:          # noqa: BLE001 - no previous artifact is a reason to skip the comparison
-        return None
+    except urllib.error.HTTPError as e:
+        return None if e.code == 404 else f"GitHub answered HTTP {e.code}"
+    except Exception as e:     # noqa: BLE001 - every other failure is reported, and refuses below
+        return f"{type(e).__name__}: {e}"
 
 
 def floor(arcs: int, previous: int | None, allow_drop: bool = False) -> list:
@@ -44,7 +52,11 @@ def floor(arcs: int, previous: int | None, allow_drop: bool = False) -> list:
     """
     if arcs == 0:
         return ["the derivation produced no arcs at all, which no data update explains"]
-    if previous and arcs < MIN_SHARE_OF_PREVIOUS * previous and not allow_drop:
+    if isinstance(previous, str) and not allow_drop:
+        return [f"the artifact this run would replace could not be read ({previous}), so a collapse cannot "
+                "be ruled out. If GitHub was only unreachable, run the workflow again, or by hand with "
+                "allow_drop set"]
+    if isinstance(previous, int) and previous and arcs < MIN_SHARE_OF_PREVIOUS * previous and not allow_drop:
         return [f"the derivation produced {arcs} arcs where the artifact it would replace has {previous}, "
                 f"less than {MIN_SHARE_OF_PREVIOUS:.0%} of them. If that is meant, run the workflow by hand "
                 "with allow_drop set"]
