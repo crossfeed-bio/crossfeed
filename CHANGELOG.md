@@ -42,6 +42,11 @@ content.
 
 ### Fixed
 
+- **The growth-rate docstring says what `easylinear` does** (#229). It said the refit spans "every window
+  whose slope reaches" the quota; it spans from the first such window to the end of the last, every
+  window between included, which is what `growthrates`' `fit_easylinear` does. Kept as it is (Karoline,
+  2026-10-12: option 2): checked against `growthrates` 0.8.5 on studies 4 and 5, the two agree to 5e-15
+  on all 342 curves both fit. No number changes.
 - **The gLV package's files describe themselves correctly** (#210, #211):
   - the zip's README says to match `growth_rates.csv` to a matrix **by the organism column, never by
     position**: each matrix holds its own unit's organisms in its own order, and a positional read gave a
