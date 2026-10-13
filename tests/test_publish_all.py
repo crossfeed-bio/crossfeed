@@ -372,3 +372,19 @@ def test_the_strip_judges_by_the_readers_even_after_the_default_moves(monkeypatc
                            "meta": {"settings": {"derivation": "integrated"}}, "nodes": [], "edges": [], "studies": []}}
     with pytest.raises(ValueError, match="derivation is 'integrated' and readers"):
         publish_all.legacy_payload(payload, "grownet.interaction_network/v3")
+
+
+def test_the_r_check_refuses_a_skipped_test_in_ci_and_in_make():
+    """Round 11 of the review: deleting either `SKIP 0` guard passed the suite, which is how the listener's
+    test stayed skipped and failing from #120 on. The R check says OK over a skipped test."""
+    import pytest
+    workflow, makefile = ROOT / ".github" / "workflows" / "ci.yml", ROOT / "Makefile"
+    if not workflow.exists() or not makefile.exists():
+        pytest.skip("no .github or Makefile in this tree (an unpacked sdist)")
+    ci = workflow.read_text(encoding="utf-8")
+    job = ci[ci.index("  r-package:"):]
+    job = job[:job.index("\n  windows-app:")] if "\n  windows-app:" in job else job
+    assert 'NOT_CRAN: "true"' in job and "grep -q 'SKIP 0 |' grownet.Rcheck/tests/testthat.Rout" in job
+    recipe = makefile.read_text(encoding="utf-8").split("r-check:", 1)[1].split("\n\n", 1)[0]
+    assert "NOT_CRAN=true R CMD check" in recipe
+    assert "grep -q 'SKIP 0 |' grownet.Rcheck/tests/testthat.Rout" in recipe
