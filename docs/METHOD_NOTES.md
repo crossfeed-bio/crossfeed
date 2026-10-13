@@ -1387,10 +1387,14 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    daily Actions run and on the one-day freshness. SETTLED 2026-09-28 (Craig, through his agent on #96):
    "Yes to all three: publish, daily, and a network up to 24 hours old." WIDENED to 36 hours
    (Karoline, 2026-10-12, on #196: "Extend to 36 hours"), because GitHub starts the daily run late: the
-   gap between two artifacts reached 27h20m. The reason is structural, as Craig's agent put it on #279:
-   the gap between runs of a daily cron IS one day plus a small positive scheduling delay, so the gaps
-   center on 24 hours (ten of twelve within forty minutes of it) and a window equal to the cron period is
-   a coin flip every night, whatever the count (7 of 12 over on `created_at`, 6 on `run_started_at`).
+   gap between two published artifacts reached 27h20m (from the first hand-run artifact, 2026-09-29, to
+   the first scheduled one). The reason is structural, as Craig's agent put it on #279: the gap between
+   runs of a daily cron IS one day plus a small positive scheduling delay, so the gaps center on 24 hours
+   (9 of the 12 scheduled gaps to 2026-10-12 within forty minutes of it) and a window equal to the cron
+   period is a coin flip every night, whatever the count: 7 of 12 over 24 hours between run ENDS, when
+   the files land (`updated_at`), 6 between run starts (`created_at` and `run_started_at`, which are
+   identical). Corrected 2026-10-13 after Craig's agent measured the run fields on #279 and found the two
+   counts this note gave to equal fields.
    Still one run a day, so the load on mGrowthDB is unchanged. A bound fitted to twelve nights is safe
    here only because both sides fail visibly: past it, every copy derives live; inside it, the file says
    when it was derived and from which data. On whether mGrowthDB's terms

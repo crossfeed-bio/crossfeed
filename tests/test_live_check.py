@@ -464,3 +464,36 @@ def test_after_a_move_of_the_default_derivation_the_older_file_is_judged_by_its_
     (out / "all_result.json").write_text(json.dumps(doc))
     assert ("all_result.json: its format is None, and readers of grownet.interaction_network/v3 accept "
             "'grownet.all_result/v1'") in live_check.check_published(str(out))[0]
+
+
+def test_an_honestly_rounded_ratio_is_never_flagged_and_a_check_that_cannot_tell_is_not_run():
+    """Craig's agent on #281, correcting the first-order bound it had given: honest rounding reaches the
+    corner (|s| + U) / (sd - U), which the old bound missed at every sd (by 2x at sd 1e-4). Every corner of
+    every arc here must pass the exact bound; and where the bound passes a tenth of the value, the arc is
+    not checked rather than checked by a tolerance that has swallowed it."""
+    import live_check
+    u = live_check.HALF_UNIT
+    for sd in (0.02, 0.005, 0.001, 0.0005, 0.0002, 0.0001):
+        for strength in (0.0001, 0.05, 0.3, 1.0, 4.0):
+            tolerance = live_check.ratio_tolerance(strength, sd)
+            if tolerance is None:
+                continue
+            for true_s in (strength - u, strength, strength + u):
+                for true_sd in (sd - u, sd, sd + u):
+                    if true_sd <= 0 or true_s < 0:
+                        continue
+                    written = round(true_s / true_sd, 4)
+                    assert abs(written - strength / sd) <= tolerance, (sd, strength, true_s, true_sd)
+    # at the sd of the earlier test, strength 0.3: the honest corner deviates by 0.0401, which the old
+    # first-order bound (0.04005) flagged as corrupt and the exact one allows
+    corner = abs(round((0.3 + u) / (0.02 - u), 4) - 0.3 / 0.02)
+    old = u / 0.02 + 0.3 * u / 0.02 ** 2 + u
+    assert old < corner <= live_check.ratio_tolerance(0.3, 0.02), (old, corner)
+    # at sd 1e-4 and strength 1 the bound is half the ratio of 10000: not checked, and counted
+    assert live_check.ratio_tolerance(1.0, 0.0001) is None
+    from grownet.mgrowthdb import records_to_network
+    net = records_to_network([{"source": "a", "target": "b", "effect": "facilitation", "strength": 1.0,
+                               "sd": 0.0001, "effect_over_sd": 10000.0, "study_id": "S1"},
+                              {"source": "c", "target": "b", "effect": "facilitation", "strength": 1.0,
+                               "sd": 0.2, "effect_over_sd": 5.0, "study_id": "S1"}])
+    assert live_check.unchecked_ratios(net) == 1
