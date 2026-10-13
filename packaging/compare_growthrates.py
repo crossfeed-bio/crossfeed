@@ -7,7 +7,8 @@ in review), so the comparison that produces them lives here, where anyone can ru
     python packaging/compare_growthrates.py SMGDB00000004 SMGDB00000005
 
 It reads the studies from mGrowthDB (through the usual cache) and needs R with `growthrates` installed;
-without R it stops with exit code 2 rather than skipping, since a comparison that did not run says nothing.
+without R, or when R fails (for example without `growthrates`), it stops with exit code 2 rather than
+skipping, since a comparison that did not run says nothing.
 
 **The curves it takes:** every measurement context of every bioreplicate that is not an average, in the
 studies named, counted by the kind of subject (`strain`, `metabolite`, or whatever else mGrowthDB records).
@@ -25,7 +26,8 @@ Each curve falls in exactly one class:
   returns its steepest slope, which is <= 0;
 * `other`: anything else, which is a failure, because it is a departure nobody has named.
 
-Exit code 0 when every curve is in a named class and every `both` agrees, 1 otherwise, 2 when R is missing.
+Exit code 0 when every curve is in a named class and every `both` agrees, 1 otherwise, 2 when R is missing
+or fails.
 """
 from __future__ import annotations
 

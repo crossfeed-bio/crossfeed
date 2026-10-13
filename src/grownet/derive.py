@@ -1721,6 +1721,13 @@ def _merged(arcs: list) -> dict:
     # and rule beside a quantified median strength, and one member's coefficient and fit (found in review).
     one_comparison = {key: agreed(key, "" if isinstance(arcs[0].get(key), str) else None)
                       for key in COMPARISON_FIELDS if key in arcs[0]}
+    # the rule stays only beside the bound it produced: members whose bounds differ keep the same rule
+    # text, and a rule with no bound reads as "the rule bounds nothing" (shape 2 of
+    # `matrix._reports_an_extreme`), which dropped a merged obligate arc from the gLV package without a
+    # word, where main named the pair's sign conflict (found in review). Members that all bound nothing
+    # stay that.
+    if one_comparison.get("strength_bound") is None and any(a.get("strength_bound") is not None for a in arcs):
+        one_comparison["bound_rule"] = ""
     # the coefficient of a merged arc is the median of its members', as its strength is the median of
     # theirs, where every member has one in one unit; the gLV package's cell for the arc is that median
     coefficients = [a.get("coefficient") for a in arcs]

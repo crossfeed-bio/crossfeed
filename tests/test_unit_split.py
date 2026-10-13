@@ -44,7 +44,7 @@ def test_the_result_section_says_how_many_matrices_the_package_will_hold():
               "taxon_ids": [], "partners_only": 0, "absent": None, "all": False}
     page = render_result("tok", result)
     assert "2 matrices" in page and "CFUs/mL" in page and "Cells/mL" in page
-    assert "No effect between them" in page and "separate systems" in page
+    assert "An effect between organisms counted differently is in no matrix" in page and "separate systems" in page
 
     # one unit, the usual case: nothing new on the page
     result["network"] = records_to_network([_arc("b", "a", "Cells/mL")])

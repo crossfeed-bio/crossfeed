@@ -116,4 +116,5 @@ def test_the_comparison_holds_its_tolerance_and_says_when_r_failed(monkeypatch):
     assert run_with([(1, 5.0 + 3e-11), (2, 0.001)]) == 1              # 6e-12 relative: beyond
     assert run_with([(1, 5.0), (2, 0.001 + 5e-12)]) == 1              # 5e-12 absolute: beyond
     assert run_with([(1, 5.0), (2, 0.001 + 1e-9)]) == 1
+    assert run_with([(1, 5.0 - 3e-11), (2, 0.001)]) == 1             # grownet higher counts too (round 17)
     assert run_with([(1, 5.0), (2, 0.001)], returncode=1) == 2, "a comparison R did not finish says it did not run"

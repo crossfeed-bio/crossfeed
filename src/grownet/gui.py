@@ -590,9 +590,9 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
     unit_hint = (f"<p class=\"hint\">These organisms are counted in {len(units)} abundance units "
                  f"({_esc(', '.join(units))}), so the package will hold {len(units)} matrices, one per "
                  "unit: a cell is per-capita, in 1/(time x abundance), and nothing is converted between "
-                 "units because a cell mass conversion would have to be invented. No effect between them "
-                 "was measured either, since organisms counted differently were never grown together, so "
-                 "they are separate systems rather than one matrix with corners missing.</p>"
+                 "units because a cell mass conversion would have to be invented. An effect between "
+                 "organisms counted differently is in no matrix, and the package names any that was "
+                 "measured; most are separate systems rather than one matrix with corners missing.</p>"
                  if len(units) > 1 else "")
     r_hint = (f"<p class=\"hint\">Send to R needs an R session waiting for it: install the companion package "
               f"once with <code>{_esc(rbridge.INSTALL_R)}</code> (if that answers 404, see the help), then run "

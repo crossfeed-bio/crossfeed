@@ -111,6 +111,16 @@ content.
   growth rate, by it (#24). The report's
   pairs the data did not support and its notes on the data read name organisms as their study does, and
   say so.
+- **A merged obligate or abolished arc counts in the gLV package's sign check again.** Merged members
+  whose bounds differ kept their shared rule without its bound, which read as "the rule bounds nothing",
+  and the arc dropped out: beside an opposite arc the cell held that arc's number where it is a sign
+  conflict left at 0, and alone it wrote a 0 named nowhere. Every arc's direction now counts, converted or
+  not, as it does in the adjacency matrix; a merged arc with no median ratio says so.
+- **The gLV package says where each left-out effect is**: an effect on or by an organism in no matrix, or
+  between two organisms in different matrices, is listed as in no matrix, not as left at 0; arcs left out
+  of a cell that still holds a value are listed apart; and the unit sentence counts the effects between
+  organisms counted differently that were measured, where it said none ever was. R reads every pair
+  caveat with its actor (`pairs_left_out`, `across_units`, `arcs_left_out`) and prints them.
 - **A merged arc keeps no single comparison's bound, capacity, coefficient or fit**: every such field is kept
   only where all merged arcs agree, a merged arc's coefficient is the median of its members', and in a gLV
   package its cell is labeled as a merged arc's, not as one from a network saved before the rates were

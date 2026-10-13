@@ -690,3 +690,82 @@ def test_a_merged_arc_on_a_genus_without_a_rate_says_so_and_is_in_no_matrix():
     ((affected, actor, why),) = [row for row in got["across_units"] if row[0] == "Agrobacterium"]
     assert why.startswith("a merged arc is converted with Agrobacterium's own growth rate, which it has none of")
     assert why.endswith("; Agrobacterium is in no matrix"), why
+
+
+def test_the_package_routes_each_left_out_effect_where_it_is():
+    """Round 17 of the review. (1) A pair whose arcs split across units still has a cell from the rest; the
+    split-off arcs were listed under "left at 0 ... cannot be fitted" beside that value. (2) A merged arc with
+    no median ratio said the rates behind it were not recorded. (3) Two organisms in no matrix read "is"."""
+    split = _net([dict(_arc("b", "a", 1.0, study_id=s), partner_abundance=2e8, partner_abundance_unit=u,
+                       metric="growth_rate:easylinear:5", metric_with=0.4, metric_without=0.2)
+                  for s, u in (("S1", "Cells/mL"), ("S2", "Cells/mL"), ("S3", "CFUs/mL"))])
+    rates = {nid: {**_STRAIN, "name": nid.upper()} for nid in ("a", "b")}
+    got = matrix.coefficients(split, rates)
+    assert not got["pairs_left_out"], got["pairs_left_out"]
+    ((affected, actor, why),) = got["arcs_left_out"]
+    assert (affected, actor) == ("A", "B") and "1 arc(s) of this pair measure the actor in CFUs/mL" in why
+    assert "cannot be fitted" not in why
+    readme = matrix.readme_from(got, split, rates)
+    assert "These arcs are not in their pair's cell" in readme and "These effects are left at 0" not in readme
+    merged = _net([dict(_arc("b", "a", 1.0), strength=None, weight=None, outcome="obligate", merged_arcs=3,
+                        partner_abundance=2e8, metric="growth_rate:easylinear:5")])
+    reasons = {(a, b): w for a, b, w in matrix.coefficients(merged, rates)["pairs_left_out"]}
+    assert reasons[("A", "B")].startswith("a merged arc whose members do not all have a ratio"), reasons
+    both = _net([dict(_arc("b", "a", -0.3), merged_arcs=2, partner_abundance=2e8,
+                      metric="growth_rate:easylinear:5")])
+    ((_, _, why),) = matrix.coefficients(both, {})["across_units"]
+    assert why.endswith("; A and B are in no matrix"), why
+
+
+def test_a_merged_obligate_arc_still_counts_in_the_sign_check():
+    """Round 17 of the review (High, a regression from main): two obligate arcs with different bounds
+    merged into an arc with no bound but the same rule, read as "the rule bounds nothing", and dropped out
+    of the package without a word; beside an inhibition the cell then held the inhibition's number, where
+    main named the pair's sign conflict. Alone, the obligate pair wrote a 0 named nowhere."""
+    from grownet.derive import _merged
+    member = {"source": "a", "target": "c", "source_name": "A", "target_name": "C", "effect": "facilitation",
+              "strength": None, "outcome": "obligate", "status": "present", "study_id": "S1",
+              "bound_rule": "no growth: at most 1.5 times its start", "metric": "growth_rate:easylinear:5",
+              "metric_with": 0.4, "metric_without": 0.0, "partner_abundance": 2e8,
+              "partner_abundance_unit": "Cells/mL"}
+    merged = _merged([{**member, "strength_bound": 5.14}, {**member, "study_id": "S2", "strength_bound": 4.42,
+                                                           "metric_with": 0.5}])
+    assert merged["strength_bound"] is None and merged["bound_rule"] == "", "no rule without its bound"
+    inhibition = {**member, "effect": "inhibition", "strength": -0.3558, "outcome": "quantified",
+                  "bound_rule": "", "study_id": "S3", "metric_with": 0.3, "metric_without": 0.4}
+    rates = {nid: {**_STRAIN, "name": nid.upper()} for nid in ("a", "c")}
+    both = matrix.coefficients(_net([merged, inhibition]), rates)
+    assert ("C", "A") in [(a, b) for block in both["matrices"] for a, b in block["conflicts"]], both["matrices"]
+    alone = matrix.coefficients(_net([merged]), rates)
+    named = {(a, b): why for a, b, why in alone["pairs_left_out"]}
+    assert named[("C", "A")].startswith("a merged arc whose members do not all have a ratio"), named
+    # members that all bound nothing stay that way
+    nothing = _merged([{**member, "strength_bound": None}, {**member, "study_id": "S2", "strength_bound": None}])
+    assert nothing["bound_rule"] == member["bound_rule"]
+
+
+def test_an_unfitted_effect_is_routed_by_where_its_organisms_are():
+    """Round 17 of the review: an unfitted pair whose organisms sit in different unit matrices was listed
+    as left at 0 though no cell exists; the actor, not only the affected, can be the one in no matrix; and a
+    plain arc with no recorded rates is not called a merged one."""
+    c_ml = dict(_STRAIN, capacity_unit="Cells/mL")
+    od = dict(_STRAIN, capacity_unit="OD")
+    rates = {"a": {**c_ml, "name": "A"}, "b": {**od, "name": "B"}, "c": {**c_ml, "name": "C"}}
+    net = _net([dict(_arc("b", "a", 0.5), partner_abundance=None, metric="growth_rate:easylinear:5"),
+                dict(_arc("c", "a", 0.5), partner_abundance=2e8, metric="growth_rate:easylinear:5")])
+    got = matrix.coefficients(net, rates)
+    across = {(a, b): why for a, b, why in got["across_units"]}
+    assert across[("A", "B")].endswith("B is counted in OD and A in Cells/mL, so this effect is in neither matrix")
+    plain = {(a, b): why for a, b, why in got["pairs_left_out"]}
+    assert ("A", "B") not in plain
+    # and the package then says an effect between organisms counted differently was measured (round 17)
+    assert "1 effect(s) between organisms counted differently were measured" in \
+        matrix.glv_payload(net, rates)["caveats"]["units"]
+    # the actor in no matrix: D acts on A, and A is in one
+    actor_out = _net([dict(_arc("d", "a", 0.5), partner_abundance=None, metric="growth_rate:easylinear:5")])
+    ((affected, actor, why),) = matrix.coefficients(actor_out, {"a": {**c_ml, "name": "A"}})["across_units"]
+    assert (affected, actor) == ("A", "D") and why.endswith("; D is in no matrix"), why
+    # a plain arc on an organism with no rate: not called a merged arc
+    plain_arc = _net([dict(_arc("a", "d", 0.5), partner_abundance=2e8, metric="growth_rate:easylinear:5")])
+    ((_, _, why),) = matrix.coefficients(plain_arc, {"a": {**c_ml, "name": "A"}})["across_units"]
+    assert "merged arc" not in why and why.startswith("the rates behind this arc were not recorded"), why

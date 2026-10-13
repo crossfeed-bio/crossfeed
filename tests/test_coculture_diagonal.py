@@ -117,3 +117,23 @@ def test_the_fitted_diagonal_does_not_depend_on_the_order_the_arcs_arrive_in():
     first, second = one["matrices"][0], other["matrices"][0]
     assert _cell(first, "A", "A") == pytest.approx(-2.5e-9, rel=1e-9)
     assert _cell(first, "A", "A") == _cell(second, "A", "A")
+
+
+def test_an_effect_on_an_organism_dropped_as_unusable_is_in_no_matrix_not_left_at_0():
+    """Round 17 of the review: the routing ran before the organisms whose plateau balance gave no usable
+    limitation left their matrix, so the README said A is in no matrix and listed C on A as left at 0. And
+    the package's sentence about sign counts coefficients, which the adjacency sidecar does not."""
+    from grownet import matrix
+    from grownet.mgrowthdb import records_to_network
+    arcs = [_arc("b", "a", 0.05, 0.4, x_j=2.0e8, capacity=3.0e8),
+            _arc("a", "b", 0.3, 0.2, x_j=3.0e8, capacity=4.0e8),
+            _arc("c", "a", 0.6, 0.4, x_j=None)]
+    rates = {"a": _rate("A", 0.4, None), "b": _rate("B", 0.2, 5.0e8), "c": _rate("C", 0.3, 5.0e8)}
+    net = records_to_network(arcs)
+    got = matrix.coefficients(net, rates)
+    assert "A" in [name for name, _ in got["left_out"]], got["left_out"]
+    assert not [row for row in got["pairs_left_out"] if "A" in row[:2]], got["pairs_left_out"]
+    assert [row[:2] for row in got["across_units"] if row[:2] == ("A", "C")] == [("A", "C")], got["across_units"]
+    # and A's fitted effects, which left its matrix with it, are named as in no matrix too
+    assert {("A", "B"), ("B", "A")} <= {row[:2] for row in got["across_units"]}, got["across_units"]
+    assert "No pair's coefficients disagreed in sign." in matrix.readme_from(got, net, rates)

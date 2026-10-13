@@ -61,7 +61,12 @@ as_grownet_glv <- function(payload) {
                  censored_cells = pairs_frame(caveats$censored_cells, value = FALSE),
                  sign_conflicts = pairs_frame(caveats$sign_conflicts, value = FALSE),
                  left_out = reasons_frame(caveats$left_out),
-                 pairs_left_out = reasons_frame(caveats$pairs_left_out),
+                 # (affected, actor, why): read as reasons, the actor was dropped, so two pairs on one
+                 # organism could not be told apart, and the effects in no matrix were not read at all
+                 # (found in review)
+                 pairs_left_out = effects_frame(caveats$pairs_left_out),
+                 across_units = effects_frame(caveats$across_units),
+                 arcs_left_out = effects_frame(caveats$arcs_left_out),
                  media = vapply(caveats$media, as.character, character(1)),
                  dropout_arcs = as_number(caveats$dropout_arcs),
                  without_a_rate = vapply(caveats$without_a_rate, as.character, character(1)),
@@ -141,6 +146,19 @@ reasons_frame <- function(items) {
                stringsAsFactors = FALSE)
 }
 
+# The (affected, actor, reason) effects a caveat names, as a data frame.
+#' @noRd
+effects_frame <- function(items) {
+    if (is.null(items) || !length(items)) {
+        return(data.frame(affected = character(0), actor = character(0), why = character(0),
+                          stringsAsFactors = FALSE))
+    }
+    data.frame(affected = vapply(items, function(p) chr(p[[1]]), character(1)),
+               actor = vapply(items, function(p) chr(p[[2]]), character(1)),
+               why = vapply(items, function(p) chr(p[[3]]), character(1)),
+               stringsAsFactors = FALSE)
+}
+
 # The cells a caveat names, as a data frame, so a user can subset or loop over them.
 #' @noRd
 pairs_frame <- function(items, value) {
@@ -191,10 +209,17 @@ print.grownet_glv <- function(x, ...) {
                     if (nzchar(block$unit)) paste0(", every cell in ", block$unit) else ""))
     }
     if (length(x$matrices) > 1) {
+        # what was measured between them comes from the package's own rows (found in review)
+        between <- sum(grepl("neither matrix", x$caveats$across_units$why, fixed = TRUE))
+        measured <- if (between) {
+            sprintf("%d effect(s) between organisms counted differently were measured and are in no matrix", between)
+        } else {
+            "no effect between organisms counted differently was measured"
+        }
         cat(sprintf(paste0("   * one matrix per abundance unit (%s): abundances are never converted ",
-                           "between units,\n       and no effect between organisms counted differently ",
-                           "was measured. glv_matrix(x, unit = )\n       takes one.\n"),
-                    paste(vapply(x$matrices, function(m) m$abundance_unit, character(1)), collapse = ", ")))
+                           "between units,\n       and %s. glv_matrix(x, unit = )\n       takes one.\n"),
+                    paste(vapply(x$matrices, function(m) m$abundance_unit, character(1)), collapse = ", "),
+                    measured))
     }
     # counted against the organisms in a matrix, and an organism without a rate is what is left out of
     # the matrices, so this read "8 of 8" for an 11-organism network while caveats$without_a_rate named
@@ -258,6 +283,20 @@ print.grownet_glv <- function(x, ...) {
                     nrow(left_out)))
         for (i in seq_len(nrow(left_out))) {
             cat("       fitted: ", left_out$what[i], ": ", left_out$why[i], "\n", sep = "")
+        }
+    }
+    # the effects the matrices hold at 0 for want of a coefficient, and those in no matrix at all, as the
+    # package README lists them (found in review: R said neither)
+    for (part in list(list(x$caveats$pairs_left_out, "effect(s) are left at 0 (actor on affected)"),
+                      list(x$caveats$across_units, "effect(s) are in no matrix (actor on affected)"),
+                      list(x$caveats$arcs_left_out,
+                           "arc(s) are not in their pair's cell, the median of its other arcs (actor on affected)"))) {
+        effects <- part[[1]]
+        if (!is.null(effects) && nrow(effects)) {
+            cat(sprintf("   * %d %s:\n", nrow(effects), part[[2]]))
+            for (i in seq_len(nrow(effects))) {
+                cat("       ", effects$actor[i], " on ", effects$affected[i], ": ", effects$why[i], "\n", sep = "")
+            }
         }
     }
     if (!x$fitted) {

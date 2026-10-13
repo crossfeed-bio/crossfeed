@@ -144,3 +144,34 @@ test_that("the coverage line counts the organisms outside every matrix too", {
     expect_equal(summary_of$organisms, 3)
     expect_equal(summary_of$network_organisms, 5)
 })
+
+
+test_that("the effects left at 0 and those in no matrix keep their actor and reach the print", {
+    # found in review: pairs were read as (what, why), dropping the actor, and across_units not at all
+    payload <- example_payload()
+    payload$caveats$pairs_left_out <- list(list("A", "B", "no abundance"), list("A", "C", "no abundance"))
+    payload$caveats$across_units <- list(list("A", "D", "D is in no matrix"))
+    glv <- grownet:::as_grownet_glv(payload)
+    expect_equal(glv$caveats$pairs_left_out$actor, c("B", "C"))
+    expect_equal(glv$caveats$pairs_left_out$affected, c("A", "A"))
+    expect_equal(glv$caveats$across_units$actor, "D")
+    text <- paste(capture.output(print(glv)), collapse = "\n")
+    expect_match(text, "2 effect(s) are left at 0 (actor on affected):", fixed = TRUE)
+    expect_match(text, "C on A: no abundance", fixed = TRUE)
+    expect_match(text, "1 effect(s) are in no matrix (actor on affected):", fixed = TRUE)
+    expect_match(text, "D on A: D is in no matrix", fixed = TRUE)
+    payload$caveats$arcs_left_out <- list(list("A", "B", "1 arc(s) of this pair measure the actor in OD"))
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
+    expect_match(text, "1 arc(s) are not in their pair's cell", fixed = TRUE)
+})
+
+test_that("the unit sentence says what was measured between organisms counted differently", {
+    # found in review: it said nothing was measured whatever the package's own rows held
+    payload <- two_unit_payload()
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
+    expect_match(text, "no effect between organisms counted differently was measured", fixed = TRUE)
+    payload$caveats$across_units <- list(list("A", "D", "D is counted in CFUs/mL and A in Cells/mL, so this effect is in neither matrix"))
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
+    expect_match(text, "1 effect(s) between organisms counted differently were measured and are in no matrix",
+                 fixed = TRUE)
+})

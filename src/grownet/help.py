@@ -1044,8 +1044,9 @@ so nothing in the package is a convention and nothing needs scaling to match the
 never converted between units, which is why each unit has its own matrix: a cell mass conversion would
 have to be invented, while the dynamics are the same in any unit. The result section says before the
 download when a search spans several units, and how many matrices that means. It is not a loss: organisms
-counted differently were never grown together in mGrowthDB, so no effect between them was measured, and
-the matrices are separate systems rather than one matrix with corners missing. If you do want them in one
+counted differently are seldom grown together in mGrowthDB, so an effect between them is seldom measured,
+and the matrices are separate systems rather than one matrix with corners missing; where one was measured,
+the package names it among the effects in no matrix. If you do want them in one
 matrix, the factor is yours to apply and to report, as a scaling factor is. A simulation of these numbers can still
 grow without bound and come back as NA, which now says something about the measurements, two organisms
 fitted as facilitating each other more than each limits itself, rather than about a convention; the
