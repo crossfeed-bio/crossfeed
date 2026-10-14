@@ -141,6 +141,13 @@ def _log_values(reps, species, role, prop, method, skipped, spike_factor=SPIKE_F
             continue
         try:
             value = prop(rep, species)
+        except rates.NoRise as e:
+            # no window rises: no growth rate, and no growth, read as the non-positive property it used to
+            # return was (Karoline, 2026-10-14, #293)
+            skipped.append((label, f"no growth rate: {e}"))
+            if no_growth is not None:
+                no_growth.append(label)
+            continue
         except rates.RateUnavailable as e:
             # no growth rate for this curve (too few points, a rejected fit): left out and reported, never
             # replaced by another number, and not read as no growth (#41)

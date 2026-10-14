@@ -84,6 +84,12 @@ content.
   its matrix's own unit, where the unit with the most arcs was taken and a tie decided by arc order. The
   technique travels as `capacity_technique` in `growth_rates.csv` and as `carrying_capacity_technique` in
   the gLV payload.
+- **A curve with no rising window has no growth rate, and is still read as not grown** (Karoline,
+  2026-10-14, #293: "No rate, still no growth"). It returned its steepest slope, <= 0, where R's
+  `growthrates` fits nothing; it now gives no rate with the reason, as #229 (a) does for a refit that falls
+  <= 0, and a comparison reads it as not grown, so no arc changes (measured live: SMGDB00000014 and All
+  with `--metric growth_rate`, All in gLV mode). Against `growthrates` on SMGDB00000004 and 5, 55 curves
+  now have no rate on either side, and the two remaining departures cover 74 curves.
 - **A monoculture measured only as a whole culture gives its growth rate and lag from a count** (Karoline,
   #140: option 1 on 2026-10-07, "Counts only" on 2026-10-12): a plate count or flow cytometry, never optical
   density, and never a carrying capacity. The rate says where it came from (`rate_sources`, and in the

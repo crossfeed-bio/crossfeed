@@ -29,9 +29,11 @@ def test_each_curve_falls_in_the_class_the_rates_docstring_names():
     # 2 then 1: R refuses the values <= 0, and grownet's refit over what remains falls <= 0
     assert classify(None, "the steepest window rises at 0.1 per time unit, but the refit ... falls to", None,
                     "dependent variable y must be positive") == "departure 2+1"
-    # 3: no rising window; R fits nothing, grownet returns its slope, <= 0
-    assert classify(-0.002, "", None, NO_SEGMENT) == "departure 3"
-    assert classify(0.0, "", None, NO_SEGMENT) == "departure 3", "a flat curve's slope is 0, which is <= 0"
+    # no rising window: since #293 neither gives a rate, and a slope <= 0 returned for it again is a
+    # departure nobody named, which fails the comparison
+    assert classify(None, "no window rises: the steepest slope is -0.002", None, NO_SEGMENT) == "neither"
+    assert classify(-0.002, "", None, NO_SEGMENT) == "other"
+    assert "departure 3" not in CLASSES
 
 
 def test_a_departure_nobody_named_is_other_which_fails_the_comparison():
