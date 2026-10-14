@@ -193,3 +193,24 @@ def test_the_artifact_carries_something_a_reader_can_quote(monkeypatch):
     local = published.to_payload(result)["identity"]
     assert (local["run"], local["commit"]) == ("", "")
     assert local["content_sha256"] == ident["content_sha256"], "the hash must not depend on the run"
+
+
+def test_the_published_network_is_fetched_against_the_systems_trust_store(monkeypatch):
+    """The same certificate file problem as mGrowthDB's (2026-10-14): the request to GitHub verifies
+    against the operating system's roots too."""
+    import urllib.request
+
+    import truststore
+
+    from grownet import published
+
+    monkeypatch.undo()             # conftest's stand-in for `fetch`, the function under test here
+    seen = {}
+
+    def urlopen(url, timeout=None, context=None):
+        seen["context"] = context
+        raise OSError("offline")
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    assert published.fetch() is None
+    assert isinstance(seen["context"], truststore.SSLContext)

@@ -7,7 +7,8 @@ Checks:
   1. secrets          no api keys, tokens, or private keys in tracked text
   2. no-raw-data      no pulled or raw experimental data committed (only synthetic tests/fixtures)
   3. no-local-paths   no absolute local-machine paths (the repo is portable and self-contained)
-  4. self-contained   every import under src/ resolves to the standard library or grownet itself
+  4. self-contained   every import under src/ resolves to the standard library, grownet itself, or a
+                     dependency declared in pyproject.toml
   5. house-style      docs use ASCII punctuation and US spelling; prose carries no hedging caveats
   6. schema-contract  the shipped JSON Schema matches the code, and an emitted network passes the
                      dependency-free validator (which is a SUBSET of that schema: see schema.py)
@@ -166,8 +167,18 @@ def check_no_local_paths(rels):
     return bad
 
 
+def declared_dependencies(pyproject):
+    """The names in `[project] dependencies`, as they are imported. A dependency declared there is one every
+    install brings, so importing it is not a requirement hidden from a user; one not declared is (truststore,
+    grownet's first, 2026-10-14). The distribution name has to be the import name, as truststore's is."""
+    found = re.search(r"^dependencies\s*=\s*\[(.*?)\]", pyproject or "", re.M | re.S)
+    names = re.findall(r"[\"']\s*([A-Za-z0-9][A-Za-z0-9._-]*)", found.group(1)) if found else []
+    return {n.lower().replace("-", "_").replace(".", "_") for n in names}
+
+
 def check_self_contained(rels):
     bad = []
+    declared = declared_dependencies(_read("pyproject.toml"))
     for rel in rels:
         r = rel.replace("\\", "/")
         if not (r.startswith("src/") and r.endswith(".py")):
@@ -188,8 +199,9 @@ def check_self_contained(rels):
             else:
                 continue
             for m in mods:
-                if m != "grownet" and m not in STDLIB:
-                    bad.append(f"{r}: imports {m!r} (not stdlib or grownet; declare it or drop it)")
+                if m != "grownet" and m not in STDLIB and m not in declared:
+                    bad.append(f"{r}: imports {m!r} (not stdlib, grownet or a dependency declared in "
+                               "pyproject.toml; declare it or drop it)")
     return bad
 
 

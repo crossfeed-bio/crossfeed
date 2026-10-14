@@ -1,6 +1,7 @@
 """The mGrowthDB client: caching, retries and kept-open connections, with the network faked or local."""
 import http.server
 import json
+import ssl
 import threading
 
 import pytest
@@ -60,6 +61,30 @@ def test_exhausted_retries_raise(monkeypatch):
     c = MGrowthDBClient(retries=2, backoff=0)
     with pytest.raises(MGrowthDBError, match="could not reach"):
         c.get_study("S")
+
+
+def test_https_to_mgrowthdb_is_verified_against_the_systems_trust_store():
+    """The Python uv installs reads macOS's certificate file, which lacks the root behind mGrowthDB's
+    certificate, so a copy installed as the README says could not read mGrowthDB on a Mac (2026-10-14).
+    The connection verifies against the operating system's roots instead, and still checks the name and
+    requires a certificate."""
+    import truststore
+
+    conn = MGrowthDBClient(base_url="https://mgrowthdb.example/api/v1", cache=False)._connection()
+    assert isinstance(conn._context, truststore.SSLContext)
+    assert conn._context.check_hostname and conn._context.verify_mode == ssl.CERT_REQUIRED
+
+
+def test_a_certificate_the_system_does_not_trust_is_named_and_not_retried(monkeypatch):
+    """It said "could not reach mGrowthDB ... check your network", which sends a reader to the wrong
+    place, and a retry cannot change whether a certificate is trusted."""
+    calls = []
+    _sending(monkeypatch, [ssl.SSLCertVerificationError(1, "certificate verify failed")], calls)
+    c = MGrowthDBClient(retries=3, backoff=0)
+    with pytest.raises(MGrowthDBError, match="could not verify mGrowthDB's certificate") as got:
+        c.get_study("S")
+    assert "check your network" not in str(got.value) and "date and its certificates" in str(got.value)
+    assert len(calls) == 1
 
 
 def test_404_is_not_retried(monkeypatch):

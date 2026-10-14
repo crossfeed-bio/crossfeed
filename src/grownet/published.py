@@ -22,6 +22,7 @@ import json
 import os
 import urllib.request
 
+from . import tls
 from .model import SCHEMA, InteractionNetwork
 
 FORMAT = "grownet.all_result/v1"
@@ -165,7 +166,9 @@ def fetch(settings: dict | None = None, why: list | None = None) -> dict | None:
     """The published All result, or None when there is none, it is `MAX_AGE` old or more, it was derived
     by another derivation than `settings` asks for, or GitHub cannot be reached: the caller then derives
     live."""
-    return fetch_from(urllib.request.urlopen, settings=settings, why=why)
+    def opener(url, timeout=None):
+        return urllib.request.urlopen(url, timeout=timeout, context=tls.context())   # noqa: S310 - https
+    return fetch_from(opener, settings=settings, why=why)
 
 
 def fetch_from(opener, now: datetime.datetime | None = None, settings: dict | None = None,

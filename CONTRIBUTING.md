@@ -54,8 +54,8 @@ If you enabled `pre-commit install`, these run automatically on every commit.
 `checks/gate.py` is self-contained (no dependency on any private path) and blocks a class of mistake per
 check: committed secrets, raw or pulled experimental data (only the synthetic fixtures under
 `tests/fixtures/` belong in the repository, never data pulled from mGrowthDB or shared by a collaborator),
-absolute local-machine paths, imports that are not the standard library or grownet, the house style,
-and a schema contract. See [docs/DATA_GOVERNANCE.md](docs/DATA_GOVERNANCE.md) for the data rules.
+absolute local-machine paths, imports that are not the standard library, grownet or a declared dependency,
+the house style, and a schema contract. See [docs/DATA_GOVERNANCE.md](docs/DATA_GOVERNANCE.md) for the data rules.
 
 House style, checked on documentation: ASCII punctuation (use a comma, colon, parentheses, or the word
 "to" for a range rather than an em dash or en dash), US spelling, and direct prose with no hedging

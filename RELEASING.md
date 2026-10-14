@@ -87,7 +87,11 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
    the floor meets a change to the derivation the morning after it MERGES: that is when to run it by hand
    with `allow_drop`, if the drop is meant.
 5. **Check as a user would:** `uv tool install grownet` then `grownet gui` on a clean machine, and the zip on
-   a Windows machine. A version on PyPI cannot be replaced: a mistake is fixed with a new version.
+   a Windows machine, and press **Example** so that the page reads mGrowthDB: the page opening proves
+   nothing about the network. CI never reads mGrowthDB, and a Python with its own certificates (conda,
+   Homebrew) hides a certificate problem, which is how every release up to 0.4.0 shipped unable to read
+   mGrowthDB from a Mac with uv's Python (2026-10-14). A version on PyPI cannot be replaced: a mistake is
+   fixed with a new version.
 
 ## If the live check fails
 

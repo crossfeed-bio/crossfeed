@@ -15,7 +15,10 @@ authors = [
     { name = "KU Leuven, Lab of Molecular Bacteriology" },
 ]
 keywords = ["microbial-interactions", "cross-feeding", "mGrowthDB", "metabolic-modeling", "open-science"]
-dependencies = []
+dependencies = [
+    # verify HTTPS against the operating system's certificates (grownet/tls.py, 2026-10-14)
+    "truststore>=0.10",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]

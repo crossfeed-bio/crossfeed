@@ -12,8 +12,9 @@ grow**net** was called crossfeed until 2026-09-27 (#71). The package, the module
 `grownet`; the repository keeps the old name for now, so its address is still `crossfeed-bio/crossfeed`.
 
 It is a thin client: it pulls from mGrowthDB and emits a network. Nothing to host, nothing to pay for on a
-shared server, no runtime dependencies (the client is pure Python standard library). A well-run
-repository, one per contributor, is all it needs.
+shared server, and one runtime dependency (the client is pure Python standard library, with `truststore` so
+that HTTPS is verified against your operating system's certificates). A well-run repository, one per
+contributor, is all it needs.
 
 This README is the full guide: install and run it, read and validate the output format, and plug in your
 own derivation method. Nothing here needs another document to follow.
@@ -769,8 +770,8 @@ it rests on, and a gLV package states what the model assumes.
 
 Discipline is a feature here. Every commit and every CI run passes the same self-contained gate
 (`checks/gate.py`): no committed secrets, no raw or pulled data (only the synthetic fixtures under
-`tests/fixtures/`), no local-machine paths, imports that resolve to the standard library or the package
-itself, a documented house style, and a schema contract that keeps the shipped schema in step with the
+`tests/fixtures/`), no local-machine paths, imports that resolve to the standard library, the package
+itself or a dependency `pyproject.toml` declares, a documented house style, and a schema contract that keeps the shipped schema in step with the
 code. The tests run on Python 3.10 to 3.12 on Linux, and on Windows and macOS. Get the same checks locally
 with `make check`, or run them on every commit with `pre-commit install`. The R companion package has its
 own checks, `make r-check` where R is installed, and CI runs the same build and `R CMD check` on every

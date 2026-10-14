@@ -32,6 +32,8 @@ content.
   anything but the format, with `integrated` as its default: since 2026-10-10 such a copy has been served
   the comparison's network as its All at that default. The file cannot tell 0.3.x from 0.4.x apart, so the
   answer is to upgrade.
+- **grownet now has one runtime dependency, `truststore`**, which `pip`, `uv tool` and `pipx` install with
+  it; the Windows program carries it inside. See Fixed.
 
 ### Added
 
@@ -123,6 +125,14 @@ content.
 
 ### Fixed
 
+- **A copy installed with uv on a Mac can read mGrowthDB** (Karoline, 2026-10-14: "Add truststore"). The
+  Python uv installs reads macOS's certificate file, which does not hold the root behind mGrowthDB's
+  certificate since 23 July 2026, so every request failed with CERTIFICATE_VERIFY_FAILED in every release,
+  on the install route the README gives for a Mac. HTTPS is now verified against the operating system's
+  certificates (the keychain on macOS, the certificate store on Windows), with `truststore`, grownet's
+  first runtime dependency; the name is still checked and a certificate still required. Measured: the
+  same install fails without it and reads mGrowthDB and GitHub with it. A certificate the system does not
+  trust now says so, and is not retried, where it said "check your network".
 - **A read that fails while the growth rates are read now marks the run incomplete** (#247's gap): the file
   was marked complete before that stage ran, so the run exited 0 and an organism whose monocultures could
   not be read looked as if it had no measurable rate.

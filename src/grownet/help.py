@@ -619,7 +619,8 @@ DECISIONS = (
      "Errors in mGrowthDB records are fixed in mGrowthDB, so every user sees the same data."),
     ("Everything runs on your machine.",
      "The page is served from 127.0.0.1 with a token, has no JavaScript, and the tool needs nothing beyond "
-     "Python's standard library."),
+     "Python's standard library and truststore, which checks mGrowthDB's certificate against your "
+     "computer's own."),
 )
 
 # (question, answer as HTML)
