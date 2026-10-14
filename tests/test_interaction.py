@@ -607,3 +607,22 @@ def test_one_members_technique_mismatch_leaves_out_its_own_arcs_only():
     assert not any(a["target"] == B for a in r["arcs"])
     assert any(label.endswith(f"-> {B}") and "measured by different techniques" in reason
                for label, reason in r["skipped"])
+
+
+def test_a_monoculture_that_never_rises_has_no_rate_and_still_makes_the_arc_obligate():
+    """Karoline, 2026-10-14, #293: "No rate, still no growth". B's monocultures fall (exp(-0.1 t), so every
+    window's slope is -0.1 and none rises), and B grows with A (exp(0.3 t)). B's monocultures have no growth
+    rate, and are read as not grown, so the arc is obligate as it was when they returned the slope -0.1;
+    left out as curves without a rate (#41), the comparison would have had no monoculture set and no arc
+    (live: three obligate arcs of SMGDB00000014)."""
+    times = tuple(float(t) for t in range(10))
+
+    def curve(species, rate, start=1e6):
+        return GrowthCurve(species, times, tuple(start * math.exp(rate * t) for t in times), "h", "Cells/mL")
+    mono_a = [Replicate([curve(A, 0.3)], f"a{i}") for i in range(3)]
+    mono_b = [Replicate([curve(B, -0.1)], f"b{i}") for i in range(3)]
+    co = [Replicate([curve(A, 0.3), curve(B, 0.3)], f"c{i}") for i in range(3)]
+    r = interaction_strength(mono_a, mono_b, co, A, B, method="growth_rate:easylinear:5")
+    assert r["species_b"]["outcome"] == "obligate"
+    reasons = [why for label, why in r["skipped"] if label.startswith(f"{B}: monoculture")]
+    assert len(reasons) == 3 and all(why.startswith("no growth rate: no window rises") for why in reasons)

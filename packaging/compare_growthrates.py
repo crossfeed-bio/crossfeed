@@ -22,8 +22,6 @@ Each curve falls in exactly one class:
 * `departure 2`: a value <= 0; `growthrates` refuses the curve, grownet drops those points (#229 (b));
 * `departure 2+1`: both at once: `growthrates` refuses the curve for a value <= 0, and grownet, having
   dropped those points, finds its refit <= 0 and gives no rate, so neither has a rate;
-* `departure 3`: no rising window; `growthrates` fits nothing ("no positively growing segment"), grownet
-  returns its steepest slope, which is <= 0;
 * `other`: anything else, which is a failure, because it is a departure nobody has named.
 
 Exit code 0 when every curve is in a named class and every `both` agrees, 1 otherwise, 2 when R is missing
@@ -39,7 +37,9 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
-CLASSES = ("both", "neither", "departure 1", "departure 2", "departure 2+1", "departure 3", "other")
+# no "departure 3" since #293: a curve with no rising window has no rate on either side, so it is among
+# "neither", and a slope <= 0 returned for it again would be "other", a failure
+CLASSES = ("both", "neither", "departure 1", "departure 2", "departure 2+1", "other")
 AGREE = 1e-12
 
 R_SCRIPT = r"""
@@ -70,8 +70,6 @@ def classify(grownet_rate, grownet_why: str, r_rate, r_message: str) -> str:
         return "departure 1" if "refit" in (grownet_why or "") and r_rate <= 0 else "other"
     if "y must be positive" in (r_message or ""):
         return "departure 2"
-    if "no positively growing segment" in (r_message or "") and grownet_rate <= 0:
-        return "departure 3"
     return "other"
 
 

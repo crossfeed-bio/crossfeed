@@ -1675,6 +1675,15 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    techniques in one study, no replicate has both plate counts and flow cytometry at culture level, and
    different techniques share a unit string across studies (Blautia hydrogenotrophica is "Cells/mL" by 16S,
    qPCR and flow cytometry), so how (b) is built is being settled with her.
+41. **A curve with no rising window** (SETTLED, Karoline, 2026-10-14, #293). `easylinear` returned the
+   steepest window's slope, <= 0, where `growthrates` fits nothing ("no positively growing segment"): 16 of
+   the 468 curves of SMGDB00000004 and 5 (#286's re-count). Asked whether such a curve should get no rate,
+   as #229 (a) does for a refit that falls <= 0, her answer was "No rate". Shown that a curve without a rate
+   is left out of a comparison (#41), so that three obligate arcs of SMGDB00000014 (Comamonas on
+   Agrobacterium, whose Agrobacterium monocultures never rise) would disappear, her answer was "No rate,
+   still no growth". So `rates.NoRise` gives no rate, with the reason, and a comparison reads the curve as
+   not grown, as it read the slope; every live arc was measured unchanged (SMGDB00000014 and All with
+   `--metric growth_rate`, All in gLV mode).
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

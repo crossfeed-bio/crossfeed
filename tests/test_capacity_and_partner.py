@@ -49,9 +49,11 @@ def test_the_rate_fit_says_which_window_it_used():
 
 
 def test_a_flat_curve_has_no_window_to_report():
+    """A flat curve has no window that rises, so no rate and no window (#293: it returned a slope of 0
+    with no window before)."""
     times, values = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [1e6] * 7
-    fit = rates.easylinear_fit(times, values)
-    assert fit["rate"] <= 0 and fit["start"] is None and fit["end"] is None
+    with pytest.raises(rates.NoRise, match="steepest slope is 0 per time unit"):
+        rates.easylinear_fit(times, values)
 
 
 def _baranyi_curve(mu, lag, points=24, step=0.5, y0=START, d=RISE):
