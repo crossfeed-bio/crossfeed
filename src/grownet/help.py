@@ -1037,10 +1037,12 @@ rate. In gLV mode a rate is the median over every row the derivation fitted for 
 display setting moves it; a network derived with <code>--fixture</code> holds only the rows someone kept,
 so its rates follow the settings that made the fixture); and <code>README.txt</code>, which states
 every formula and unit, names any pair left at 0 for disagreeing in sign, names every organism and every
-effect that could not be fitted and why, and names the media the arcs were measured in: a simulation is of
-one environment, so a package built from several media says so in capitals and points at the second box
-(<a href="#where">choosing where to look</a>). Every cell is a per-capita effect in 1/(time x abundance),
-so nothing in the package is a convention and nothing needs scaling to match the rest. Abundances are
+effect that could not be fitted and why, and names the media its effects between organisms were measured in,
+matrix by matrix: a simulation is of one environment and takes one matrix, so a matrix whose effects come
+from several media is named in capitals with a pointer to the second box
+(<a href="#where">choosing where to look</a>), and matrices of one medium each are named with theirs.
+Every cell is a per-capita effect in 1/(time x abundance), so nothing in the package is a convention
+and nothing needs scaling to match the rest. Abundances are
 never converted between units, which is why each unit has its own matrix: a cell mass conversion would
 have to be invented, while the dynamics are the same in any unit. The result section says before the
 download when a search spans several units, and how many matrices that means. It is not a loss: organisms

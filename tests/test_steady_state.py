@@ -369,13 +369,16 @@ def test_arcs_that_join_a_matrix_and_record_no_medium_are_not_given_the_network_
                 "medium": medium, "partner_abundance": 2.0e8, "metric_with": 0.6, "metric_without": 0.4,
                 "partner_abundance_unit": unit, "partner_abundance_n": 3}
     other = "Some other organism"
-    got = matrix.coefficients(records_to_network([arc(B, A, None), arc(other, A, "LB", unit="CFUs/mL")]), RATES)
+    # and A on B, between the matrix's own organisms, in LB with B counted in CFUs/mL: in no cell, so it
+    # does not decide the matrix's medium either (round 22)
+    got = matrix.coefficients(records_to_network([arc(B, A, None), arc(other, A, "LB", unit="CFUs/mL"),
+                                                  arc(A, B, "LB", unit="CFUs/mL")]), RATES)
     block = got["matrices"][0]
-    assert block["media"] == [] and block["arc_media"] == []
+    assert block["media"] == [] and block["arc_media"] == ["LB"]
     client = _client({(1, A): _flat(3.0e8), (1, B): _flat(2.0e8)})
     seen = steady.observed(client, [_chemostat("E1", "x", [A, B], [(1, "V1")])])
     (result,) = steady.check(got, RATES, seen)
-    assert result["used"] and "records no medium" in result["note"]
+    assert result["used"] and "the effects in this matrix record no medium" in result["note"]
 
 
 def test_a_matrix_holding_no_cell_is_scored_by_its_arcs_medium_with_its_aliases():
@@ -399,3 +402,29 @@ def test_a_matrix_holding_no_cell_is_scored_by_its_arcs_medium_with_its_aliases(
     (result,) = steady.check(got, RATES, seen)
     assert result["used"] and result.get("note") is None
     assert result["medium_aliases"] == [["wilkins chalgren", "wilkins chalgren anaerobe broth"]]
+
+
+def test_a_check_that_could_not_look_chemostats_up_says_so():
+    """Round 22 of the review: a genus package (genus nodes carry no taxon id) and a search that failed both
+    read "mGrowthDB holds no continuous culture of these organisms", while the strain run of the same study
+    scores two chemostats. The check now says it did not run, and why."""
+    from grownet.model import InteractionNetwork, Node
+    genus = InteractionNetwork()
+    genus.nodes["genus:Bacteroides"] = Node(id="genus:Bacteroides", name="Bacteroides", taxon_id="")
+
+    class Failing:
+        def search(self, **_):
+            raise OSError("connection refused")
+    found = steady.find(Failing(), genus)
+    assert found == [] and "no organism of this network has a taxon id" in found.why_not
+    text = steady.as_text(steady.check({"matrices": []}, {}, found))
+    assert text.startswith("steady-state check: not checked, because no organism of this network has a taxon id")
+    assert "holds no continuous culture" not in text
+    strains = records_to_network([{"source": "ncbi:1", "target": "ncbi:2", "source_name": B, "target_name": A,
+                                   "source_taxon_id": "1", "target_taxon_id": "2",
+                                   "effect": "facilitation", "strength": 1.0, "status": "present", "study_id": "S1"}])
+    failed = steady.find(Failing(), strains)
+    assert "the search for chemostats of these organisms failed (connection refused)" in steady.as_text(
+        steady.check({"matrices": []}, {}, failed))
+    # control: a search that ran and found none still says mGrowthDB holds none
+    assert "holds no continuous culture" in steady.as_text(steady.check({"matrices": []}, {}, []))

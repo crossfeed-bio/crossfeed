@@ -662,6 +662,12 @@ def test_all_narrowed_by_the_second_box_does_not_claim_the_whole_database(server
     # from "Studies searched:", and twice from the embedded report's settings block, so asserting the id
     # alone passed however the heading was worded
     assert "matching SMGDB00000002" in page and "Clear them to derive" in page
+    # two entries, one holding a comma, are joined with "; " (round 22)
+    data = b"all=1&species=&conditions=SMGDB00000002%0D%0AWilkins-Chalgren%2C+anaerobic"
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
+        page = r.read().decode("utf-8")
+    # in the page's own list, not only in the report embedded below it, which says the same
+    assert "<li>every study matching SMGDB00000002; Wilkins-Chalgren, anaerobic" in page
 
     # and the OTHER control that narrows All, which the first version of this test did not cover and the
     # fix therefore did not either: Exclude these studies, which the code comment named all along

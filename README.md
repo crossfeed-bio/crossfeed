@@ -452,8 +452,9 @@ digits and `/glv.json` carries the raw float, so the two routes agree to four si
 more: a reader who diffs them will find a difference in the fifth, and neither is wrong. And `README.txt`,
 which states every formula and unit, names the pairs left at 0 for disagreeing in sign, every organism and
 effect that could not be fitted and why, and the media its effects between organisms were measured in. A
-simulation is of one environment, so a package whose effects come from several media says so and points at
-the second box; each organism's capacity media are in `growth_rates.csv`. Every cell is a
+simulation is of one environment and takes one matrix, so a package with a matrix whose effects come from
+several media says so and points at the second box, and one whose matrices hold one medium each names
+each; each organism's capacity media are in `growth_rates.csv`. Every cell is a
 per-capita effect in 1/(time x abundance), so nothing in the package is a convention and nothing needs
 scaling; abundances are never converted between units, which is why each unit has its own matrix.
 

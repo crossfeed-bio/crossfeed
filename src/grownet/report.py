@@ -266,7 +266,8 @@ def report_text(result: dict) -> str:
         if narrowed or excluded:
             which = []
             if narrowed:
-                which.append("matching " + ", ".join(x.strip() for x in narrowed))
+                # "; " as the settings line joins them: a medium's name can hold a comma (found in review)
+                which.append("matching " + "; ".join(x.strip() for x in narrowed))
             if excluded:
                 which.append("excluding " + ", ".join(excluded))
             lines.append(f"query: All, narrowed: every study {' and '.join(which)}, with every partner")
@@ -337,13 +338,17 @@ def report_text(result: dict) -> str:
         lines.append(f"q-value filter (q is the adjusted p-value): interactions above "
                      f"{applied['max_adjusted_p']:g} left out: "
                      f"{applied.get('left_out', 0)}; kept untested (no p-value): {applied.get('untested', 0)}")
-    if rule and rule.get("applied") is False:
+    if rule and rule.get("applied") is False and rule.get("why"):
         # a derivation without the rule says so, rather than a count of nothing (found in review: the
         # integrated report printed "alpha None, factor None; 0 obligate, 0 abolished")
-        lines.append(f"no-growth rule: not applied; {rule.get('why', '')}")
+        lines.append(f"no-growth rule: not applied; {rule['why']}")
     elif rule:
+        # alpha 0 is the documented way to switch the check off: it ran as configured, and says so (found
+        # in review: it printed "not applied; " with nothing after it)
+        off = " (alpha 0 switches the check off)" if rule.get("applied") is False else ""
         lines.append(f"no-growth rule: {rule.get('test', '')}; alpha {rule.get('alpha')}, factor "
-                     f"{rule.get('factor')}; {rule.get('obligate', 0)} obligate, {rule.get('abolished', 0)} abolished")
+                     f"{rule.get('factor')}{off}; {rule.get('obligate', 0)} obligate, "
+                     f"{rule.get('abolished', 0)} abolished")
     merge = meta.get("merge", {})
     if merge.get("merge_arcs") or merge.get("min_studies", 1) > 1:
         lines.append(f"merged arcs: {merge.get('rule', '')}; {merge.get('merged', 0)} merged, "

@@ -651,3 +651,11 @@ def test_a_derivation_without_the_no_growth_rule_says_so_in_the_report():
                         "skipped": [], "entries": []})
     assert "no-growth rule: not applied; the integrated derivation has no no-growth rule" in text
     assert "alpha None" not in text
+    # alpha 0, the documented switch, is the rule as configured: its line keeps its numbers (round 22: it
+    # printed "not applied; " with nothing after it)
+    from grownet.interaction import rule_meta
+    net.meta["no_growth"] = {**rule_meta(0.0, None), "obligate": 2, "abolished": 0}
+    text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "alpha 0.0, factor 1.5 (alpha 0 switches the check off); 2 obligate, 0 abolished" in text
+    assert "not applied" not in text

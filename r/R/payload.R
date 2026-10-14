@@ -102,7 +102,8 @@ as_matrices <- function(items) {
                          nrow = n, ncol = n, byrow = TRUE, dimnames = list(organisms, organisms))
         list(organisms = organisms, interactions = values,
              abundance_unit = chr(item$abundance_unit), unit = chr(item$unit),
-             media = vapply(item$media, as.character, character(1)), cells = as_number(item$cells))
+             media = vapply(item$media, as.character, character(1)), cells = as_number(item$cells),
+             cells_without_medium = as_number(item$cells_without_medium))
     })
 }
 
@@ -314,44 +315,7 @@ print.grownet_glv <- function(x, ...) {
                            "one organism on\n       another. grownet's Include drop-out communities leaves ",
                            "them out.\n"), dropout))
     }
-    # the media of the cells the matrices hold, where the package names them: an arc in no cell is not in
-    # the simulation, and a matrix of one medium was warned about the media of arcs in no matrix (found in
-    # review). A package from before names only every arc's media.
-    cells_in <- x$caveats$cell_media
-    held <- any(vapply(x$matrices, function(m) isTRUE(m$cells > 0), logical(1)))
-    if (!is.null(cells_in) && !length(cells_in) && length(x$caveats$media)) {
-        # no cell, or cells whose arcs record no medium (found in review: both read as no cell)
-        cat(if (held) "   * the effects between organisms in the matrices record no medium; the network's other arcs, in no cell, come from "
-            else "   * no effect between organisms is in the matrices; the network's arcs, in no cell, come from ",
-            paste(x$caveats$media, collapse = ", "), "\n", sep = "")
-    } else if (length(cells_in)) {
-        # each matrix holding a cell, with its own media: a simulation takes one matrix, so two matrices of
-        # one medium each are not a mix of environments (found in review)
-        with_cells <- Filter(function(m) isTRUE(m$cells > 0), x$matrices)
-        one_each <- length(with_cells) > 1 && all(vapply(with_cells, function(m) length(m$media) <= 1, logical(1)))
-        if (length(cells_in) > 1 && one_each) {
-            cat("   * each matrix's effects between organisms were measured in one medium, and a simulation takes one matrix:\n")
-            for (m in with_cells) if (length(m$media)) cat("       ", m$abundance_unit, ": ", m$media, "\n", sep = "")
-        } else if (length(cells_in) > 1) {
-            cat(sprintf(paste0("   * these effects come from %d media, and a simulation is of one environment:\n",
-                               "       %s\n       grownet's second box (media, experiments or studies) keeps ",
-                               "one.\n"),
-                        length(cells_in), paste(cells_in, collapse = ", ")))
-        } else {
-            cat(sprintf("   * every effect between organisms was measured in one medium: %s\n", cells_in))
-        }
-        others <- setdiff(x$caveats$media, cells_in)
-        if (length(others)) {
-            cat(sprintf("     the network's other arcs, in no cell, come from %s\n", paste(others, collapse = ", ")))
-        }
-    } else if (length(x$caveats$media) > 1) {
-        cat(sprintf(paste0("   * these arcs come from %d media, and a simulation is of one environment:\n",
-                           "       %s\n       grownet's second box (media, experiments or studies) keeps ",
-                           "one.\n"),
-                    length(x$caveats$media), paste(x$caveats$media, collapse = ", ")))
-    } else if (length(x$caveats$media) == 1) {
-        cat(sprintf("   * every arc was measured in one medium: %s\n", x$caveats$media))
-    }
+    print_media(x)
     steep <- stronger_than_self(x)
     if (steep && x$fitted) {
         cat(sprintf(paste0("   * %d cell(s) outweigh the organism's own limitation on the diagonal. A fit ",
@@ -387,4 +351,65 @@ summary.grownet_glv <- function(object, ...) {
                    sign_conflicts = nrow(object$caveats$sign_conflicts),
                    left_out = object$caveats$left_out$what,
                    without_a_rate = object$caveats$without_a_rate))
+}
+
+
+# The media line of the print, as the package README states it: about the cells each matrix holds, since
+# an arc in no cell is not in a simulation and a simulation takes one matrix. A matrix whose effects come
+# from several media is warned about, one of a single medium is not, and cells whose arcs record no medium
+# are named. A package written before `cell_media` names every arc's media, as it did. Found in review over
+# several rounds: warnings about arcs in no cell, about two matrices of one medium each, and cells that
+# record no medium left out.
+#' @noRd
+print_media <- function(x) {
+    media <- x$caveats$media
+    cells_in <- x$caveats$cell_media
+    if (is.null(cells_in)) {
+        if (length(media) > 1) {
+            cat(sprintf(paste0("   * these arcs come from %d media, and a simulation is of one environment:\n",
+                               "       %s\n       grownet's second box (media, experiments or studies) keeps ",
+                               "one.\n"),
+                        length(media), paste(media, collapse = ", ")))
+        } else if (length(media) == 1) {
+            cat(sprintf("   * every arc was measured in one medium: %s\n", media))
+        }
+        return(invisible(NULL))
+    }
+    held <- Filter(function(m) isTRUE(m$cells > 0), x$matrices)
+    if (!length(held)) {
+        if (length(media)) {
+            cat("   * no effect between organisms is in the matrices; the network's arcs, in no cell, come from ",
+                paste(media, collapse = ", "), "\n", sep = "")
+        }
+        return(invisible(NULL))
+    }
+    unrecorded <- function(m) if (isTRUE(m$cells_without_medium > 0)) m$cells_without_medium else 0
+    kinds <- vapply(held, function(m) length(m$media) + (unrecorded(m) > 0), numeric(1))
+    if (all(kinds <= 1)) {
+        if (length(held) == 1) {
+            m <- held[[1]]
+            if (length(m$media)) {
+                cat(sprintf("   * every effect between organisms was measured in one medium: %s\n", m$media))
+            } else {
+                cat("   * the effects between organisms in the matrices record no medium\n")
+            }
+        } else {
+            cat("   * each matrix's effects between organisms were measured in one medium, and a simulation takes one matrix:\n")
+            for (m in held) {
+                cat("       ", m$abundance_unit, ": ", if (length(m$media)) m$media else "no medium recorded", "\n", sep = "")
+            }
+        }
+    } else {
+        cat("   * a matrix's effects come from more than one medium, and a simulation is of one environment:\n")
+        for (m in held) {
+            parts <- c(m$media, if (unrecorded(m)) sprintf("%d cell(s) recording no medium", unrecorded(m)))
+            cat("       ", m$abundance_unit, " matrix: ", paste(parts, collapse = ", "), "\n", sep = "")
+        }
+        cat("       grownet's second box (media, experiments or studies) keeps one.\n")
+    }
+    others <- setdiff(media, cells_in)
+    if (length(others)) {
+        cat(sprintf("     the network's other arcs, in no cell, come from %s\n", paste(others, collapse = ", ")))
+    }
+    invisible(NULL)
 }

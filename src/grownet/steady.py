@@ -193,6 +193,19 @@ def observed(client, exps: list, spike_factor: float = SPIKE_FACTOR) -> list:
     return out
 
 
+class Found(list):
+    """Observed steady states, and `why_not`: why none could be looked up at all, which is not the same
+    as mGrowthDB holding none (found in review: a genus package and a failed search both read as "holds no
+    continuous culture of these organisms")."""
+    why_not = ""
+
+
+def _found(items=(), why_not: str = "") -> Found:
+    out = Found(items)
+    out.why_not = why_not
+    return out
+
+
 def find(client, net, progress=None) -> list:
     """The observed steady states of every continuous culture mGrowthDB holds for this network's
     organisms, including studies the search itself never read.
@@ -203,11 +216,13 @@ def find(client, net, progress=None) -> list:
     """
     taxa = sorted({node.taxon_id for node in net.nodes.values() if node.taxon_id})
     if not taxa:
-        return []
+        return _found(why_not="no organism of this network has a taxon id to look chemostats up by (a genus "
+                              "node has none, and a chemostat holds strains): derive without merging genera "
+                              "to check the strains")
     try:
         found = client.search(strain_ncbi_ids=",".join(str(t) for t in taxa))
-    except Exception:            # noqa: BLE001 - a check that cannot look studies up reports nothing
-        return []
+    except Exception as e:       # noqa: BLE001 - a check that cannot look studies up says so
+        return _found(why_not=f"the search for chemostats of these organisms failed ({e})")
     studies = list(found.get("studies", []))
     out = []
     for i, sid in enumerate(studies):
@@ -220,7 +235,7 @@ def find(client, net, progress=None) -> list:
         for entry in observed(client, exps):
             entry["study_id"] = entry["study_id"] or sid
             out.append(entry)
-    return out
+    return _found(out)
 
 
 # How ill-conditioned a matrix may be and still have an equilibrium printed. A condition number of 1e8
@@ -416,10 +431,15 @@ def check(coefficients: dict, rates: dict, seen: list) -> list:
         result["used"] = True
         result["left_out"] = [name for name in entry["organisms"] if name not in shared]
         if not _environment(block):
-            result["note"] = ("the package records no medium, so this comparison does not know whether "
-                              "the two were measured in the same environment")
+            # what records no medium: this matrix's effects, or the arcs between its organisms when it holds
+            # none; "the package" was said where the network's other arcs did record one (found in review)
+            what = ("the effects in this matrix record" if block.get("cells") or "arc_media" not in block
+                    else "the arcs between this matrix's organisms record")
+            result["note"] = (f"{what} no medium, so this comparison does not know whether the two were "
+                              "measured in the same environment")
         out.append(result)
-    return out
+    # why nothing could be looked up travels with the result, to the report and the package
+    return _found(out, getattr(seen, "why_not", ""))
 
 
 def _number(value: float) -> str:
@@ -428,6 +448,8 @@ def _number(value: float) -> str:
 
 def as_text(checks: list) -> str:
     """The check as the report and the package print it: one block per chemostat."""
+    if not checks and getattr(checks, "why_not", ""):
+        return f"steady-state check: not checked, because {checks.why_not}.\n"
     if not checks:
         return ("steady-state check: mGrowthDB holds no continuous culture of these organisms, so there "
                 "is nothing to score this package against.\n")

@@ -808,7 +808,8 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
             species_heading = f"<h2>All, narrowed by {which}</h2>"
             parts = []
             if narrowed:
-                shown_filter = ", ".join(_esc(x.strip()) for x in narrowed[:3])
+                # "; " as the report joins them: a medium's name can hold a comma (found in review)
+                shown_filter = "; ".join(_esc(x.strip()) for x in narrowed[:3])
                 more = f" and {len(narrowed) - 3} more" if len(narrowed) > 3 else ""
                 parts.append(f"matching {shown_filter}{more}")
             if excluded_ids:

@@ -1099,3 +1099,14 @@ def test_every_derive_path_records_the_same_settings_and_follows_the_steady_chec
     assert not unreachable, f"these page settings no command-line flag sets: {unreachable}"
     assert len(wired) == len(DEFAULTS) == 23, (
         f"the page has {len(DEFAULTS)} settings and this test wires {len(wired)}: a new one needs a case")
+
+
+def test_the_report_query_line_and_the_page_heading_join_the_second_box_with_semicolons():
+    """Round 22 of the review: the report's query line and the page heading joined the second box's
+    entries with ", ", so "SMGDB00000014" and "Wilkins-Chalgren, anaerobic" read as three entries."""
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    text = report_text({"network": InteractionNetwork(), "resolved": [], "unresolved": [], "studies": [],
+                        "errors": [], "skipped": [], "entries": [], "all": True,
+                        "settings": {"conditions": "SMGDB00000014\nWilkins-Chalgren, anaerobic"}})
+    assert "matching SMGDB00000014; Wilkins-Chalgren, anaerobic" in text

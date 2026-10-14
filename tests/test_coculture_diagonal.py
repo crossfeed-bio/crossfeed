@@ -477,7 +477,7 @@ def test_the_media_warning_is_about_the_cells_the_matrices_hold():
                               _arc("c", "a", 0.6, 0.4, medium="M3")])
     got = matrix.coefficients(net, rates)
     readme = matrix.readme_from(got, net, rates)
-    assert "THESE EFFECTS COME FROM 2 MEDIA" in readme
+    assert "A MATRIX'S EFFECTS COME FROM MORE THAN ONE MEDIUM" in readme and "Cells/mL matrix: WC, LB" in readme
     assert "The network's other arcs, in no cell, come from M3." in readme
 
 
@@ -537,12 +537,21 @@ def test_two_matrices_of_one_medium_each_are_not_a_mix_of_environments():
     readme = matrix.readme_from(got, net, rates)
     assert "Each matrix's effects between organisms were measured in one medium" in readme
     assert "      Cells/mL: WC\n" in readme and "      CFUs/mL: LB\n" in readme
-    assert "THESE EFFECTS COME FROM" not in readme
+    assert "MORE THAN ONE MEDIUM" not in readme
     # control: a second WC arc on C in CFUs/mL makes that matrix pool two media, which is warned about
     net = records_to_network([_arc("b", "a", 0.6, 0.4), _arc("d", "c", 0.8, 0.4, medium="LB", unit="CFUs/mL"),
                               {**_arc("d", "c", 0.7, 0.4, unit="CFUs/mL"), "condition": "x"}])
     readme = matrix.readme_from(matrix.coefficients(net, rates), net, rates)
-    assert "THESE EFFECTS COME FROM 2 MEDIA" in readme and "      CFUs/mL matrix: LB, WC\n" in readme
+    assert "A MATRIX'S EFFECTS COME FROM MORE THAN ONE MEDIUM" in readme
+    # every matrix is named with its media, the one of a single medium too (round 22)
+    assert "      CFUs/mL matrix: LB, WC\n" in readme and "      Cells/mL matrix: WC\n" in readme
+    # a third matrix, in OD, whose one cell records no medium, is listed as such, not left out (round 22)
+    rates = {**rates, "e": _rate("E", 0.5, 0.8, "OD"), "f": _rate("F", 0.5, 0.6, "OD")}
+    net = records_to_network([_arc("b", "a", 0.6, 0.4), _arc("d", "c", 0.8, 0.4, medium="LB", unit="CFUs/mL"),
+                              {**_arc("f", "e", 0.8, 0.4, unit="OD"), "medium": None}])
+    readme = matrix.readme_from(matrix.coefficients(net, rates), net, rates)
+    assert "Each matrix's effects between organisms were measured in one medium" in readme
+    assert "      OD: no medium recorded\n" in readme and "MORE THAN ONE MEDIUM" not in readme
 
 
 def test_the_model_assumption_does_not_say_every_cell_is_from_two_organisms():
@@ -554,6 +563,55 @@ def test_the_model_assumption_does_not_say_every_cell_is_from_two_organisms():
     rates = {"a": _rate("A", 0.4, 6e8), "b": _rate("B", 0.2, 5.0e8)}
     readme = matrix.readme_from(matrix.coefficients(net, rates), net, rates)
     assert "Every cell here was measured between two organisms" not in readme
-    assert "the diagonal comes from monocultures" in readme
-    assert "unless it is from a drop-out design" in \
+    assert "its monoculture, or its co-culture plateau where the README says so" in readme
+    assert "unless it comes from a drop-out design" in \
         matrix.glv_payload(net, rates)["caveats"]["model_assumptions"]["pairwise_only"]
+
+
+def test_every_matrix_holding_a_cell_is_described_with_its_media_and_unrecorded_cells():
+    """Round 22 of the review: cells whose arcs record no medium vanished from the media lines. (A) Cells/mL
+    cells in WC and CFUs/mL cells recording none read as "every effect ... one medium: WC"; (A1) one
+    matrix with a WC cell and a cell recording none read the same; (C) a warning about a matrix pooling WC
+    and LB counted the CFUs/mL matrix's medium X and named only the pooling matrix."""
+    from grownet import matrix
+    from grownet.mgrowthdb import records_to_network
+
+    def none(record):
+        return {**record, "medium": None}
+    cfu = "CFUs/mL"
+    rates = {"a": _rate("A", 0.4, 1e9), "b": _rate("B", 0.2, 5e8), "c": _rate("C", 0.4, 1e9, unit=cfu),
+             "d": _rate("D", 0.2, 5e8, unit=cfu)}
+
+    def readme(records):
+        net = records_to_network(records)
+        return matrix.readme_from(matrix.coefficients(net, rates), net, rates)
+    text = readme([_arc("b", "a", 0.6, 0.4), none(_arc("d", "c", 0.6, 0.4, unit=cfu))])
+    assert "Every effect between two organisms" not in text
+    assert "      Cells/mL: WC\n" in text and "      CFUs/mL: no medium recorded\n" in text
+    text = readme([_arc("b", "a", 0.6, 0.4), none(_arc("a", "b", 0.3, 0.2))])
+    assert "A MATRIX'S EFFECTS COME FROM MORE THAN ONE MEDIUM" in text
+    assert "      Cells/mL matrix: WC, 1 cell(s) recording no medium\n" in text
+    text = readme([_arc("b", "a", 0.6, 0.4), {**_arc("b", "a", 0.7, 0.4, medium="LB"), "condition": "z"},
+                   _arc("d", "c", 0.6, 0.4, unit=cfu, medium="X")])
+    assert "      Cells/mL matrix: WC, LB\n" in text and "      CFUs/mL matrix: X\n" in text
+    # the payload carries the count R prints
+    net = records_to_network([_arc("b", "a", 0.6, 0.4), none(_arc("a", "b", 0.3, 0.2))])
+    (block,) = matrix.glv_payload(net, rates)["matrices"]
+    assert block["cells_without_medium"] == 1 and block["media"] == ["WC"]
+
+
+def test_a_cell_recording_no_medium_leaves_the_count_with_its_organism():
+    """Round 22 of the review: A leaves the matrix for an unusable self-limitation, taking B on A, whose arc
+    records no medium. The B and C matrix holds C on B, in M3, alone, so it is of one medium and counts no
+    cell recording none."""
+    from grownet import matrix
+    from grownet.mgrowthdb import records_to_network
+    net = records_to_network([{**_arc("b", "a", 0.05, 0.4, x_j=2.0e8, capacity=3.0e8), "medium": None},
+                              _arc("a", "b", 0.3, 0.2, x_j=3.0e8, capacity=4.0e8),
+                              _arc("c", "a", 0.6, 0.4), _arc("c", "b", 0.6, 0.4, medium="M3")])
+    rates = {"a": _rate("A", 0.4, None), "b": _rate("B", 0.2, 5.0e8), "c": _rate("C", 0.3, 5.0e8)}
+    got = matrix.coefficients(net, rates)
+    (block,) = got["matrices"]
+    assert block["organisms"] == ["B", "C"] and block["unrecorded"] == 0
+    assert "Every effect between two organisms in the matrices was measured in one medium: M3." in \
+        matrix.readme_from(got, net, rates)
