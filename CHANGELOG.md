@@ -129,15 +129,19 @@ content.
   not grow hold only cells a matrix holds, each labeled only by the arcs in it; and the warning about
   several media (README and R, from the payload's new `cell_media`) is about the media of the effects
   between organisms, matrix by matrix since a simulation takes one matrix: a matrix whose effects come
-  from several media is warned about, matrices of one medium each are named so, cells whose arcs record
-  no medium are named (each matrix's `cells_without_medium` in the payload), a package whose matrices
-  hold no effect says so, and the media of arcs in no cell are named apart. The steady-state check matches a matrix by the media of its cells, or, holding none, of the arcs between
+  from several media is warned about, matrices of one medium each are named so, cells with an arc that
+  records no medium are named and not taken for a second medium (each matrix's
+  `cells_with_unrecorded_medium` in the payload), a package whose matrices hold no effect says so, and
+  the media of arcs in no cell are named apart. The drop-out count is of the arcs in the cells
+  (`dropout_arcs_in_cells`), with the network's others named apart. The steady-state check matches a matrix by the media of its cells, or, holding none, of the arcs between
   its organisms.
   The report prints several entries of the second box on its one line, joined with "; " there, in its
   query line and in the page heading since a medium's name can hold a comma, and says a derivation without
   the no-growth rule did not apply it, where it printed a count of nothing. The steady-state check says
   it did not run when no organism has a taxon id to look chemostats up by (a genus package) or the
-  search failed, where it said mGrowthDB holds no continuous culture of them. The model assumption no
+  search failed or no study it named could be read, where it said mGrowthDB holds no continuous culture
+  of them, and names the studies it could not read; a matrix with a cell recording no medium is scored
+  with a note saying so. At alpha 0 the report no longer prints the no-growth factor, which is not read. The model assumption no
   longer says every cell was measured between two organisms.
   R reads `pairs_left_out`, `across_units` and `arcs_left_out` with their actors and prints them.
 - **A merged arc keeps no single comparison's bound, capacity, coefficient or fit**: every such field is kept

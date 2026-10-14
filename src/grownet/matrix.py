@@ -821,15 +821,24 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
     return out.getvalue()
 
 
-def _dropout_lines(net: InteractionNetwork) -> list:
-    """What the README says about arcs that may act through a third species."""
+def _dropout_lines(net: InteractionNetwork, in_cells=None) -> list:
+    """What the README says about arcs that may act through a third species: those in the cells when
+    `in_cells` counts them, since an arc in no cell is in no simulation and deriving again to leave it out
+    changes no cell (found in review); the network's otherwise."""
     n = dropout_arcs(net)
-    if not n:
-        return ["  Every arc compares two organisms directly; none comes from a drop-out design."]
-    return [f"  {n} ARC(S) COME FROM DROP-OUT DESIGNS, a community against the same community without one",
-            "      member, so the effect may run through a third species, which a gLV coefficient is not",
-            "      meant to include. Press gLV mode on the page, or untick Include drop-out communities in",
-            "      Advanced settings, and derive again to leave them out."]
+    if in_cells is None:
+        in_cells, elsewhere = n, 0
+    else:
+        elsewhere = max(n - in_cells, 0)
+    rest = ([f"      The network's other {elsewhere} drop-out arc(s) are in no cell."] if elsewhere else [])
+    if not in_cells:
+        return ["  Every arc in the cells compares two organisms directly; none comes from a drop-out design."
+                if elsewhere else "  Every arc compares two organisms directly; none comes from a drop-out design.",
+                *rest]
+    return [f"  {in_cells} ARC(S) IN THE CELLS COME FROM DROP-OUT DESIGNS, a community against the same community",
+            "      without one member, so the effect may run through a third species, which a gLV coefficient is",
+            "      not meant to include. Press gLV mode on the page, or untick Include drop-out communities in",
+            "      Advanced settings, and derive again to leave them out.", *rest]
 
 
 def _media_lines(net: InteractionNetwork, cell_media=None, held=None) -> list:
@@ -860,19 +869,30 @@ def _media_lines(net: InteractionNetwork, cell_media=None, held=None) -> list:
     rest = [f"      The network's other arcs, in no cell, come from {', '.join(others)}."] if others else []
 
     def described(found, unrecorded):
-        return ", ".join([*found, *([f"{unrecorded} cell(s) recording no medium"] if unrecorded else [])])
+        return ", ".join([*found, *([f"{unrecorded} cell(s) with an arc recording no medium"] if unrecorded else [])])
 
-    if all(len(found) + bool(unrecorded) <= 1 for _, found, unrecorded in held):
+    # a recorded medium beside cells recording none is not a second medium: whether they share it is
+    # not recorded, which is said rather than warned about as a mix (found in review)
+    def one(found, unrecorded):
+        if found and unrecorded:
+            return (f"{found[0]}, and {unrecorded} cell(s) with an arc recording no medium, so whether they "
+                    "share it is not recorded")
+        return found[0] if found else "no medium recorded"
+
+    if not any(len(found) > 1 for _, found, _ in held):
         if len(held) == 1:
-            ((_, found, _),) = held
-            if found:
+            ((_, found, unrecorded),) = held
+            if found and not unrecorded:
                 return [f"  Every effect between two organisms in the matrices was measured in one medium: "
                         f"{found[0]}.", *rest]
+            if found:
+                return [f"  The effects between organisms in the matrices were measured in {found[0]}, and",
+                        f"      {unrecorded} cell(s) have an arc recording no medium, so whether they share it is",
+                        "      not recorded.", *rest]
             return ["  The effects between organisms in the matrices record no medium.", *rest]
-        return ["  Each matrix's effects between organisms were measured in one medium, and a simulation takes",
-                "      one matrix:",
-                *[f"      {unit}: {found[0] if found else 'no medium recorded'}" for unit, found, _ in held],
-                *rest]
+        return ["  Each matrix's effects between organisms come from at most one recorded medium, and a",
+                "      simulation takes one matrix:",
+                *[f"      {unit}: {one(found, unrecorded)}" for unit, found, unrecorded in held], *rest]
     return ["  A MATRIX'S EFFECTS COME FROM MORE THAN ONE MEDIUM, and a gLV simulation is of one environment:",
             *[f"      {unit} matrix: {described(found, unrecorded)}" for unit, found, unrecorded in held],
             "      Select one in grownet's second box (media, experiments or studies) and derive again to",
@@ -1015,6 +1035,14 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
         for name in (edge.medium or "").split("; "):
             if name and name not in unit_media:
                 unit_media.append(name)
+        # the drop-out arcs in the cell, which the README counts rather than the network's (found in review)
+        if "dropout" in (edge.evidence or ""):
+            entry.setdefault("dropout", {}).setdefault(unit, 0)
+            entry["dropout"][unit] += 1
+        # an arc in the cell that records no medium: a cell of WC and such an arc read as of WC alone
+        # (found in review)
+        if not any(name for name in (edge.medium or "").split("; ")):
+            entry.setdefault("unrecorded", set()).add(unit)
         # kept per unit, as the media are: an arc in another unit is not in the cell, and labeled it as one
         # from the ratio or from a comparison where one side did not grow (found in review)
         entry["censored"][unit] = entry["censored"].get(unit, False) or censored
@@ -1051,6 +1079,8 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
                         # medium each was measured in, and a cell that pools two environments is named
                         # rather than reading as one measurement (found 2026-10-06)
                         "media": list(entry["media"].get(unit, [])),
+                        "unrecorded_arc": unit in entry.get("unrecorded", ()),
+                        "dropout_arcs": entry.get("dropout", {}).get(unit, 0),
                         "how": ("ratio" if "ratio" in entry["how"][unit] else
                                 "merged" if "merged" in entry["how"][unit] else "rates")}
     return values, conflicts, unfitted
@@ -1345,7 +1375,7 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                          "unit": coefficient_unit(rate_unit, abundance_unit),
                          "rate_unit": rate_unit, "organisms": names, "ids": keep, "matrix": table,
                          "cells": len(filled), "filled": filled, "pooled_media": pooled, "conflicts": [],
-                         "unrecorded": sum(1 for pair in filled if not values[pair].get("media")),
+                         "unrecorded": sum(1 for pair in filled if values[pair].get("unrecorded_arc")),
                          "file": f"interaction_matrix.{unit_file(abundance_unit)}.csv"})
 
     # an organism whose plateau balance gave no usable limitation leaves the matrix it was put in
@@ -1363,7 +1393,7 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                 # holds (found in review)
                 block["filled"] = [(a, b) for a, b in block["filled"] if a in block["ids"] and b in block["ids"]]
                 block["cells"] = len(block["filled"])
-                block["unrecorded"] = sum(1 for pair in block["filled"] if not values[pair].get("media"))
+                block["unrecorded"] = sum(1 for pair in block["filled"] if values[pair].get("unrecorded_arc"))
                 block["pooled_media"] = [row for row in block["pooled_media"]
                                          if row[0] in block["organisms"] and row[1] in block["organisms"]]
                 block["media"] = _block_media(block["filled"], values)
@@ -1485,6 +1515,7 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             "across_units": across, "arcs_left_out": arcs_left_out, "floors": [],
             "from_absolute_rates": all(entry["how"] == "rates" for entry in cells_held.values()),
             "cell_media": list(dict.fromkeys(name for entry in cells_held.values() for name in entry["media"])),
+            "dropout_in_cells": sum(entry.get("dropout_arcs", 0) for entry in cells_held.values()),
             "from_the_ratio": [(_label(net.nodes[a]), _label(net.nodes[b]))
                                for (a, b), entry in cells_held.items() if entry["how"] == "ratio"],
             "from_merged_ratio": [(_label(net.nodes[a]), _label(net.nodes[b]))
@@ -1610,7 +1641,7 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         *_media_lines(net, got["cell_media"] if "cell_media" in got else None,
                       [(block["abundance_unit"], block.get("media") or [], block.get("unrecorded", 0))
                        for block in got["matrices"] if block.get("cells")]),
-        *_dropout_lines(net),
+        *_dropout_lines(net, got.get("dropout_in_cells")),
         *_rate_method_lines(got, derivation_of(net), rates),
         "",
         "WHAT THIS MODEL ASSUMES",
@@ -1776,7 +1807,7 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
                       "organisms": list(block["organisms"]), "interactions": block["matrix"],
                       "media": list(block["media"]), "cells": block["cells"], "file": block["file"],
                       # the cells whose arcs record no medium, which `media` cannot say (found in review)
-                      "cells_without_medium": block.get("unrecorded", 0),
+                      "cells_with_unrecorded_medium": block.get("unrecorded", 0),
                       # where this matrix settles, so a reader does not have to solve it to find out
                       # that it settles nowhere with every organism above zero
                       "equilibrium": (list(block["equilibrium"])
@@ -1878,6 +1909,8 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
             # the media of the cells the matrices hold, which a simulation is of: `media` is every arc's
             "cell_media": list(got.get("cell_media") or []),
             "dropout_arcs": dropout_arcs(net),
+            # the drop-out arcs in the cells, which a simulation holds: `dropout_arcs` is the network's
+            "dropout_arcs_in_cells": got.get("dropout_in_cells"),
             "absence_k": meta.get("absence", {}).get("k"),
             "without_a_rate": missing,
             "rate_methods": got["rate_methods"],

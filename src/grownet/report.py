@@ -345,9 +345,11 @@ def report_text(result: dict) -> str:
     elif rule:
         # alpha 0 is the documented way to switch the check off: it ran as configured, and says so (found
         # in review: it printed "not applied; " with nothing after it)
-        off = " (alpha 0 switches the check off)" if rule.get("applied") is False else ""
-        lines.append(f"no-growth rule: {rule.get('test', '')}; alpha {rule.get('alpha')}, factor "
-                     f"{rule.get('factor')}{off}; {rule.get('obligate', 0)} obligate, "
+        # the factor is not read when alpha 0 switches the check off, so it is not printed as if it were
+        # (found in review)
+        how = ("alpha 0 switches the check off, and the factor with it" if rule.get("applied") is False
+               else f"alpha {rule.get('alpha')}, factor {rule.get('factor')}")
+        lines.append(f"no-growth rule: {rule.get('test', '')}; {how}; {rule.get('obligate', 0)} obligate, "
                      f"{rule.get('abolished', 0)} abolished")
     merge = meta.get("merge", {})
     if merge.get("merge_arcs") or merge.get("min_studies", 1) > 1:

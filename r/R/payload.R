@@ -73,6 +73,7 @@ as_grownet_glv <- function(payload) {
                  cell_media = if (is.null(caveats$cell_media)) NULL else
                      vapply(caveats$cell_media, as.character, character(1)),
                  dropout_arcs = as_number(caveats$dropout_arcs),
+                 dropout_arcs_in_cells = as_number(caveats$dropout_arcs_in_cells),
                  without_a_rate = vapply(caveats$without_a_rate, as.character, character(1)),
                  abundance_units = vapply(caveats$abundance_units, as.character, character(1)),
                  coefficients = chr(caveats$coefficients),
@@ -103,7 +104,7 @@ as_matrices <- function(items) {
         list(organisms = organisms, interactions = values,
              abundance_unit = chr(item$abundance_unit), unit = chr(item$unit),
              media = vapply(item$media, as.character, character(1)), cells = as_number(item$cells),
-             cells_without_medium = as_number(item$cells_without_medium))
+             cells_with_unrecorded_medium = as_number(item$cells_with_unrecorded_medium))
     })
 }
 
@@ -308,12 +309,17 @@ print.grownet_glv <- function(x, ...) {
         cat("   * the cells are effect sizes (log2 means), not fitted gLV coefficients: scale them for\n")
         cat("     your model rather than using them unchanged.\n")
     }
+    # the drop-out arcs in the cells where the package counts them, since one in no cell is in no
+    # simulation (found in review); the network's in a package from before
     dropout <- x$caveats$dropout_arcs
-    if (!is.na(dropout) && dropout > 0) {
-        cat(sprintf(paste0("   * %d arc(s) come from drop-out designs, where the effect may run through a ",
+    in_cells <- x$caveats$dropout_arcs_in_cells
+    counted <- if (!is.null(in_cells) && !is.na(in_cells)) in_cells else dropout
+    if (!is.na(counted) && counted > 0) {
+        cat(sprintf(paste0("   * %d arc(s)%s come from drop-out designs, where the effect may run through a ",
                            "third\n       species; a gLV coefficient is meant to be the direct effect of ",
                            "one organism on\n       another. grownet's Include drop-out communities leaves ",
-                           "them out.\n"), dropout))
+                           "them out.\n"), counted,
+                    if (!is.null(in_cells) && !is.na(in_cells)) " in the cells" else ""))
     }
     print_media(x)
     steep <- stronger_than_self(x)
@@ -383,26 +389,32 @@ print_media <- function(x) {
         }
         return(invisible(NULL))
     }
-    unrecorded <- function(m) if (isTRUE(m$cells_without_medium > 0)) m$cells_without_medium else 0
-    kinds <- vapply(held, function(m) length(m$media) + (unrecorded(m) > 0), numeric(1))
-    if (all(kinds <= 1)) {
+    unrecorded <- function(m) if (isTRUE(m$cells_with_unrecorded_medium > 0)) m$cells_with_unrecorded_medium else 0
+    # a recorded medium beside cells recording none is not a second medium (found in review)
+    one <- function(m) {
+        if (length(m$media) && unrecorded(m)) {
+            sprintf("%s, and %d cell(s) with an arc recording no medium, so whether they share it is not recorded",
+                    m$media, unrecorded(m))
+        } else if (length(m$media)) m$media else "no medium recorded"
+    }
+    if (!any(vapply(held, function(m) length(m$media) > 1, logical(1)))) {
         if (length(held) == 1) {
             m <- held[[1]]
-            if (length(m$media)) {
+            if (length(m$media) && !unrecorded(m)) {
                 cat(sprintf("   * every effect between organisms was measured in one medium: %s\n", m$media))
+            } else if (length(m$media)) {
+                cat(sprintf("   * the effects between organisms were measured in %s\n", one(m)))
             } else {
                 cat("   * the effects between organisms in the matrices record no medium\n")
             }
         } else {
-            cat("   * each matrix's effects between organisms were measured in one medium, and a simulation takes one matrix:\n")
-            for (m in held) {
-                cat("       ", m$abundance_unit, ": ", if (length(m$media)) m$media else "no medium recorded", "\n", sep = "")
-            }
+            cat("   * each matrix's effects between organisms come from at most one recorded medium, and a simulation takes one matrix:\n")
+            for (m in held) cat("       ", m$abundance_unit, ": ", one(m), "\n", sep = "")
         }
     } else {
         cat("   * a matrix's effects come from more than one medium, and a simulation is of one environment:\n")
         for (m in held) {
-            parts <- c(m$media, if (unrecorded(m)) sprintf("%d cell(s) recording no medium", unrecorded(m)))
+            parts <- c(m$media, if (unrecorded(m)) sprintf("%d cell(s) with an arc recording no medium", unrecorded(m)))
             cat("       ", m$abundance_unit, " matrix: ", paste(parts, collapse = ", "), "\n", sep = "")
         }
         cat("       grownet's second box (media, experiments or studies) keeps one.\n")

@@ -589,12 +589,7 @@ def _emit(a, net, skipped, extra, label, result):
         else:
             found = steady.find(result["client"], net) if result.get("client") is not None else []
             checked = steady.check(got, organism_rates, found)
-            scored = sum(1 for one in checked if one["used"])
-            if not checked and getattr(checked, "why_not", ""):
-                print(f"steady-state check: not checked, because {checked.why_not}", file=sys.stderr)
-            else:
-                print(f"steady-state check: {scored} chemostat(s) scored, {len(checked) - scored} not "
-                      "(the report says why each)", file=sys.stderr)
+            print(steady.summary_line(checked), file=sys.stderr)
             result["steady"] = checked
             if a.report:
                 from .report import report_text

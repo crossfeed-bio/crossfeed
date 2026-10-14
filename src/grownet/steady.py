@@ -198,11 +198,12 @@ class Found(list):
     as mGrowthDB holding none (found in review: a genus package and a failed search both read as "holds no
     continuous culture of these organisms")."""
     why_not = ""
+    unread: tuple = ()
 
 
-def _found(items=(), why_not: str = "") -> Found:
+def _found(items=(), why_not: str = "", unread=()) -> Found:
     out = Found(items)
-    out.why_not = why_not
+    out.why_not, out.unread = why_not, tuple(unread)
     return out
 
 
@@ -224,18 +225,24 @@ def find(client, net, progress=None) -> list:
     except Exception as e:       # noqa: BLE001 - a check that cannot look studies up says so
         return _found(why_not=f"the search for chemostats of these organisms failed ({e})")
     studies = list(found.get("studies", []))
-    out = []
+    out, unread = [], []
     for i, sid in enumerate(studies):
         if progress:
             progress(i, len(studies), f"Reading the chemostats of {sid}")
         try:
             exps = client.study_experiments(sid)
-        except Exception:        # noqa: BLE001 - same reason, one unreadable study at a time
+        except Exception as e:   # noqa: BLE001 - same reason, one unreadable study at a time, named
+            unread.append(f"{sid} ({e})")
             continue
         for entry in observed(client, exps):
             entry["study_id"] = entry["study_id"] or sid
             out.append(entry)
-    return _found(out)
+    # a study that could not be read is named; with none read, nothing was looked at, which is not
+    # mGrowthDB holding no chemostat (found in review)
+    if unread and len(unread) == len(studies):
+        return _found(why_not=f"none of the {len(studies)} studies the search named could be read: "
+                              + "; ".join(unread), unread=unread)
+    return _found(out, unread=unread)
 
 
 # How ill-conditioned a matrix may be and still have an equilibrium printed. A condition number of 1e8
@@ -437,22 +444,42 @@ def check(coefficients: dict, rates: dict, seen: list) -> list:
                     else "the arcs between this matrix's organisms record")
             result["note"] = (f"{what} no medium, so this comparison does not know whether the two were "
                               "measured in the same environment")
+        elif block.get("cells") and block.get("unrecorded"):
+            # scored by the medium its other cells record, which these do not (found in review)
+            result["note"] = (f"{block['unrecorded']} cell(s) of this matrix have an arc recording no medium, "
+                              "so whether they were measured in this run's environment is not recorded")
         out.append(result)
     # why nothing could be looked up travels with the result, to the report and the package
-    return _found(out, getattr(seen, "why_not", ""))
+    return _found(out, getattr(seen, "why_not", ""), getattr(seen, "unread", ()))
 
 
 def _number(value: float) -> str:
     return f"{value:.4g}"
 
 
+def summary_line(checks: list) -> str:
+    """The one line the command line prints for the check (found in review: a check that did not run read as
+    "0 chemostat(s) scored, 0 not")."""
+    if not checks and getattr(checks, "why_not", ""):
+        return f"steady-state check: not checked, because {checks.why_not}"
+    scored = sum(1 for one in checks if one["used"])
+    return (f"steady-state check: {scored} chemostat(s) scored, {len(checks) - scored} not (the report says "
+            "why each)")
+
+
 def as_text(checks: list) -> str:
     """The check as the report and the package print it: one block per chemostat."""
     if not checks and getattr(checks, "why_not", ""):
         return f"steady-state check: not checked, because {checks.why_not}.\n"
+    unread = list(getattr(checks, "unread", ()))
+    # a study the search named and that could not be read is said, so "holds none" is not claimed of it
+    # (found in review)
+    skipped = (f"{len(unread)} study(ies) the search named could not be read, so any chemostat of theirs is "
+               f"not here: {'; '.join(unread)}.\n" if unread else "")
     if not checks:
-        return ("steady-state check: mGrowthDB holds no continuous culture of these organisms, so there "
-                "is nothing to score this package against.\n")
+        return ("steady-state check: mGrowthDB holds no continuous culture of these organisms"
+                + (" in the studies that could be read" if unread else "")
+                + ", so there is nothing to score this package against.\n" + skipped)
     lines = ["steady-state check: what this package predicts for a chemostat, against what the chemostat",
              "held. A continuous culture satisfies A x = -(r - D) at steady state, so these numbers come",
              "from the package alone and the observations were never used to make it.", ""]
@@ -482,4 +509,4 @@ def as_text(checks: list) -> str:
         for name in check_one.get("left_out", []):
             lines.append(f"      {name}: in the chemostat and not in the package, so not scored")
     lines.append("")
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n" + skipped

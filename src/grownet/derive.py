@@ -2053,7 +2053,9 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
             # URL. For a format its own schema calls "the neutral, openly citable interaction-network
             # format", the artifact carried no pointer to itself (#218 item 1).
             "project": _project_meta(),
-            "settings_not_used": sorted(getattr(deriver, "ignores", ()) or ()),
+            # alpha 0 switches the no-growth check off, and the factor is not read with it (found in review)
+            "settings_not_used": sorted(set(getattr(deriver, "ignores", ()) or ())
+                                        | ({"no_growth_factor"} if no_growth_alpha == 0 else set())),
             "filters": {"include_low_quality": include_low_quality, "include_absent": include_absent},
             "hidden": hidden, "merge": merge,
             "genus": genus}

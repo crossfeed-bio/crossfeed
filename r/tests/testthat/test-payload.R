@@ -233,7 +233,7 @@ test_that("cells whose arcs record no medium are not said to be no cell", {
     payload$caveats$media <- list("LB")
     payload$caveats$cell_media <- list()
     payload$matrices[[1]]$media <- list()
-    payload$matrices[[1]]$cells_without_medium <- 1
+    payload$matrices[[1]]$cells_with_unrecorded_medium <- 1
     glv <- grownet:::as_grownet_glv(payload)
     expect_true(any(vapply(glv$matrices, function(m) isTRUE(m$cells > 0), logical(1))))
     text <- paste(capture.output(print(glv)), collapse = "\n")
@@ -249,7 +249,7 @@ test_that("two matrices of one medium each are not a mix of environments", {
     payload$caveats$media <- list("WC", "MWF")
     payload$caveats$cell_media <- list("WC", "MWF")
     text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
-    expect_match(text, "each matrix's effects between organisms were measured in one medium", fixed = TRUE)
+    expect_match(text, "each matrix's effects between organisms come from at most one recorded medium", fixed = TRUE)
     expect_match(text, "CFUs/mL: MWF", fixed = TRUE)
     expect_false(grepl("more than one medium", text, fixed = TRUE))
     payload$matrices[[1]]$media <- list("WC", "LB")
@@ -261,17 +261,45 @@ test_that("two matrices of one medium each are not a mix of environments", {
     # a matrix whose cells record no medium is named as such, beside one of a medium (round 22)
     payload$matrices[[1]]$media <- list("WC")
     payload$matrices[[2]]$media <- list()
-    payload$matrices[[2]]$cells_without_medium <- 1
+    payload$matrices[[2]]$cells_with_unrecorded_medium <- 1
     payload$caveats$cell_media <- list("WC")
     text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
     expect_match(text, "CFUs/mL: no medium recorded", fixed = TRUE)
+    # a matrix of WC with a cell recording none, beside one of MWF (round 23)
+    payload$matrices[[2]]$media <- list("MWF")
+    payload$matrices[[2]]$cells_with_unrecorded_medium <- 0
+    payload$matrices[[1]]$cells_with_unrecorded_medium <- 1
+    payload$caveats$cell_media <- list("WC", "MWF")
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
+    expect_match(text, "Cells/mL: WC, and 1 cell(s) with an arc recording no medium, so whether they share it",
+                 fixed = TRUE)
+    payload$matrices[[1]]$cells_with_unrecorded_medium <- 0
     expect_false(grepl("every effect between organisms was measured in one medium", text, fixed = TRUE))
     # and one matrix of WC and of cells recording none is warned about, naming both
     payload <- example_payload()
     payload$matrices[[1]]$media <- list("WC")
-    payload$matrices[[1]]$cells_without_medium <- 1
+    payload$matrices[[1]]$cells_with_unrecorded_medium <- 1
     payload$caveats$media <- list("WC")
     payload$caveats$cell_media <- list("WC")
     text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
-    expect_match(text, "Cells/mL matrix: WC, 1 cell(s) recording no medium", fixed = TRUE)
+    expect_match(text, "the effects between organisms were measured in WC, and 1 cell(s) with an arc recording no medium",
+                 fixed = TRUE)
+    expect_false(grepl("more than one medium", text, fixed = TRUE))
+    payload$matrices[[1]]$media <- list("WC", "LB")
+    payload$caveats$cell_media <- list("WC", "LB")
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
+    expect_match(text, "Cells/mL matrix: WC, LB, 1 cell(s) with an arc recording no medium", fixed = TRUE)
+})
+
+test_that("the drop-out line counts the arcs in the cells where the package does", {
+    # round 23: the network's drop-out arcs were counted, those in no cell too
+    payload <- example_payload()
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
+    expect_match(text, "2 arc(s) come from drop-out designs", fixed = TRUE)
+    payload$caveats$dropout_arcs_in_cells <- 1
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
+    expect_match(text, "1 arc(s) in the cells come from drop-out designs", fixed = TRUE)
+    payload$caveats$dropout_arcs_in_cells <- 0
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
+    expect_false(grepl("drop-out designs", text, fixed = TRUE))
 })

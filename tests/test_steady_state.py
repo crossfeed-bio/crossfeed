@@ -428,3 +428,73 @@ def test_a_check_that_could_not_look_chemostats_up_says_so():
         steady.check({"matrices": []}, {}, failed))
     # control: a search that ran and found none still says mGrowthDB holds none
     assert "holds no continuous culture" in steady.as_text(steady.check({"matrices": []}, {}, []))
+
+
+def test_studies_that_could_not_be_read_are_named_not_taken_for_no_chemostat():
+    """Round 23 of the review: when the search named studies and none could be read, the check said
+    mGrowthDB holds no continuous culture of these organisms. With every study unread it now did not run;
+    with some read, it says none is in those, and names the others. The command line's one line says the
+    check did not run, where it said "0 chemostat(s) scored, 0 not"."""
+    strains = records_to_network([{"source": "ncbi:1", "target": "ncbi:2", "source_name": B, "target_name": A,
+                                   "source_taxon_id": "1", "target_taxon_id": "2", "effect": "facilitation",
+                                   "strength": 1.0, "status": "present", "study_id": "S1"}])
+
+    class Unreadable:
+        def search(self, **_):
+            return {"studies": ["SMGDB00000001", "SMGDB00000005"]}
+
+        def study_experiments(self, sid):
+            if sid == "SMGDB00000001" and getattr(self, "one_reads", False):
+                return []
+            raise OSError("HTTP 503")
+    found = steady.find(Unreadable(), strains)
+    checked = steady.check({"matrices": []}, {}, found)
+    assert steady.as_text(checked).startswith("steady-state check: not checked, because none of the 2 studies "
+                                              "the search named could be read: SMGDB00000001 (HTTP 503)")
+    assert steady.summary_line(checked).startswith("steady-state check: not checked, because none of the 2")
+    partly = Unreadable()
+    partly.one_reads = True
+    text = steady.as_text(steady.check({"matrices": []}, {}, steady.find(partly, strains)))
+    assert "holds no continuous culture of these organisms in the studies that could be read" in text
+    assert "1 study(ies) the search named could not be read, so any chemostat of theirs is not here: " \
+           "SMGDB00000005 (HTTP 503)" in text
+    # a check that ran says how many it scored
+    assert steady.summary_line(steady.check({"matrices": []}, {}, [])) == (
+        "steady-state check: 0 chemostat(s) scored, 0 not (the report says why each)")
+
+
+def test_a_matrix_of_no_cell_whose_arcs_record_no_medium_says_so():
+    """Round 23 of the review: the note's second wording, for a matrix holding no cell whose arcs between
+    its organisms record no medium, had no test."""
+    def arc(effect, strength):
+        return {"source": _gs(B), "target": _gs(A), "source_name": B, "target_name": A,
+                "effect": effect, "strength": strength, "status": "present", "outcome": "quantified",
+                "study_id": "S1", "metric": "growth_rate:easylinear:5", "evidence": "biculture",
+                "medium": None, "partner_abundance": 2.0e8, "partner_abundance_unit": "Cells/mL",
+                "partner_abundance_n": 3}
+    got = matrix.coefficients(records_to_network([arc("facilitation", 1.0), arc("inhibition", -1.0)]), RATES)
+    (block,) = got["matrices"]
+    assert block["cells"] == 0 and block["arc_media"] == []
+    client = _client({(1, A): _flat(3.0e8)})
+    (result,) = steady.check(got, RATES, steady.observed(client, [_chemostat("E1", "x", [A], [(1, "V1")])]))
+    assert result["used"] and result["note"].startswith("the arcs between this matrix's organisms record no medium")
+
+
+def test_a_matrix_with_a_cell_recording_no_medium_is_scored_with_a_note():
+    """Round 23 of the review: a matrix of a WC cell and a cell recording no medium was scored against a WC
+    chemostat with no note, so the unrecorded cell was taken as measured in WC."""
+    WC = "Wilkins-Chalgren Anaerobe Broth (WC)"
+
+    def arc(src, tgt, medium):
+        return {"source": _gs(src), "target": _gs(tgt), "source_name": src, "target_name": tgt,
+                "effect": "facilitation", "strength": 0.5, "status": "present", "outcome": "quantified",
+                "study_id": "S1", "metric": "growth_rate:easylinear:5", "evidence": "biculture",
+                "medium": medium, "partner_abundance": 2.0e8, "metric_with": 0.6, "metric_without": 0.4,
+                "partner_abundance_unit": "Cells/mL", "partner_abundance_n": 3}
+    got = matrix.coefficients(records_to_network([arc(B, A, WC), arc(A, B, None)]), RATES)
+    (block,) = got["matrices"]
+    assert block["media"] == [WC] and block["unrecorded"] == 1
+    client = _client({(1, A): _flat(3.0e8), (1, B): _flat(2.0e8)})
+    seen = steady.observed(client, [_chemostat("E1", "x", [A, B], [(1, "V1")])])
+    (result,) = steady.check(got, RATES, seen)
+    assert result["used"] and result["note"].startswith("1 cell(s) of this matrix have an arc recording no medium")
