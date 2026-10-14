@@ -174,7 +174,8 @@ def media(net: InteractionNetwork) -> list:
 
 
 def dropout_arcs(net: InteractionNetwork) -> int:
-    """How many arcs of this matrix come from a drop-out design.
+    """How many arcs of this network come from a drop-out design (the gLV package counts those in its cells
+    apart, as `coefficients()["dropout_in_cells"]`).
 
     Such an arc compares a community with the same community without one member, so the effect may run
     through a third species, while a gLV coefficient is meant to be the direct effect of one organism on

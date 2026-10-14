@@ -141,8 +141,10 @@ content.
   it did not run when no organism has a taxon id to look chemostats up by (a genus package) or the
   search failed or no study it named could be read, where it said mGrowthDB holds no continuous culture
   of them, and names the studies it could not read; a matrix with a cell recording no medium is scored
-  with a note saying so. At alpha 0 the report no longer prints the no-growth factor, which is not read. The model assumption no
-  longer says every cell was measured between two organisms.
+  with a note saying so. At alpha 0 the report says the test is off and, while a comparison whose set's
+  metric was not positive is still censored, that its bound uses the factor; the factor is marked unread
+  only when none is, and the page and report say this run did not read it, not the derivation. The
+  command line names how many studies could not be read. The model assumption no longer says every cell was measured between two organisms.
   R reads `pairs_left_out`, `across_units` and `arcs_left_out` with their actors and prints them.
 - **A merged arc keeps no single comparison's bound, capacity, coefficient or fit**: every such field is kept
   only where all merged arcs agree, a merged arc's coefficient is the median of its members', and in a gLV

@@ -454,7 +454,10 @@ def test_studies_that_could_not_be_read_are_named_not_taken_for_no_chemostat():
     assert steady.summary_line(checked).startswith("steady-state check: not checked, because none of the 2")
     partly = Unreadable()
     partly.one_reads = True
-    text = steady.as_text(steady.check({"matrices": []}, {}, steady.find(partly, strains)))
+    partly_checked = steady.check({"matrices": []}, {}, steady.find(partly, strains))
+    text = steady.as_text(partly_checked)
+    # and the command line says so too (round 24)
+    assert steady.summary_line(partly_checked).endswith("; 1 study(ies) the search named could not be read")
     assert "holds no continuous culture of these organisms in the studies that could be read" in text
     assert "1 study(ies) the search named could not be read, so any chemostat of theirs is not here: " \
            "SMGDB00000005 (HTTP 503)" in text
@@ -498,3 +501,15 @@ def test_a_matrix_with_a_cell_recording_no_medium_is_scored_with_a_note():
     seen = steady.observed(client, [_chemostat("E1", "x", [A, B], [(1, "V1")])])
     (result,) = steady.check(got, RATES, seen)
     assert result["used"] and result["note"].startswith("1 cell(s) of this matrix have an arc recording no medium")
+
+
+def test_studies_not_read_are_named_beside_the_chemostats_that_were():
+    """Round 24 of the review: the line naming studies that could not be read was printed only when no
+    chemostat was found; beside one that was, a mutant dropping it passed every test."""
+    checked = steady._found([{"name": "A8 control", "study_id": "SMGDB00000005", "experiment": "E1",
+                              "used": False, "why_not": "this run measures OD"}],
+                            unread=["SMGDB00000009 (HTTP 503)"])
+    text = steady.as_text(checked)
+    assert "A8 control (SMGDB00000005): not scored, because this run measures OD." in text
+    assert "1 study(ies) the search named could not be read, so any chemostat of theirs is not here: " \
+           "SMGDB00000009 (HTTP 503)." in text

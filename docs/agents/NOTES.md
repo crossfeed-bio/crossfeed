@@ -1127,8 +1127,10 @@ and the README: that is the one mistake this style can make.
   report. Merged arcs join the media of their parts.
 - Selecting is not a method change: the medium is part of the conditions key, so comparisons never mixed
   media. Register item 8 carries this.
-- `matrix.dropout_arcs(net)` counts the arcs a gLV package holds that may act through a third species;
-  the README and the R printout say the count, or that there is none. Both gLV settings are ordinary
+- `matrix.dropout_arcs(net)` counts the network's drop-out arcs, which may act through a third species
+  (`caveats.dropout_arcs`); the gLV README and the R printout count those in the cells
+  (`coefficients()["dropout_in_cells"]`, `caveats.dropout_arcs_in_cells`), and the README names the
+  network's others as in no cell. Both gLV settings are ordinary
   advanced settings; the **gLV mode** button (`gui.glv_mode`, `gui.glv_mode_on`, `--glv-mode`) sets them
   together and says so, which is what Karoline asked for after two checkboxes in the bar read as "quite
   complex" (2026-10-04). It toggles: pressing it again restores both defaults, and it is drawn as a

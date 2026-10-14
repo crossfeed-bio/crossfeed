@@ -79,8 +79,10 @@ META_PROPERTIES = {
                                "`provisional` cites: a reader of this file alone had no URL for any of "
                                "them"},
     "settings_not_used": {"type": "array", "items": {"type": "string"},
-                          "description": "the settings this derivation does not read, so a recorded "
-                                         "value is not taken for one that was used"},
+                          "description": "the settings this run does not read (the derivation's, and the "
+                                         "no-growth factor when alpha 0 switched the test off and nothing "
+                                         "was censored), so a recorded value is not taken for one that was "
+                                         "used"},
     # `provenance` takes it from `datetime.now().astimezone()`, so it is the LOCAL date of whoever ran
     # the derivation; `derived_at` beside it carries the time with its offset, which is what says which
     # day that was anywhere else. The description said UTC, which it has never been (#155 item 14).

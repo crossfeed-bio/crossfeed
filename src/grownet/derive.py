@@ -2053,9 +2053,13 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
             # URL. For a format its own schema calls "the neutral, openly citable interaction-network
             # format", the artifact carried no pointer to itself (#218 item 1).
             "project": _project_meta(),
-            # alpha 0 switches the no-growth check off, and the factor is not read with it (found in review)
+            # alpha 0 switches the no-growth test off; the factor is still read for the bounds of comparisons
+            # censored because a set's metric was not positive, so it is marked unread only where none was
+            # (found in review, twice: it was marked unread while it moved those bounds)
             "settings_not_used": sorted(set(getattr(deriver, "ignores", ()) or ())
-                                        | ({"no_growth_factor"} if no_growth_alpha == 0 else set())),
+                                        | ({"no_growth_factor"} if no_growth_alpha == 0 and not any(
+                                            e.get("outcome") in (OBLIGATE, ABOLISHED) for e in edges)
+                                           else set())),
             "filters": {"include_low_quality": include_low_quality, "include_absent": include_absent},
             "hidden": hidden, "merge": merge,
             "genus": genus}

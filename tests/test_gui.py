@@ -1309,3 +1309,14 @@ def test_the_page_gives_a_known_reason_for_no_rate():
     # and so is the name, which can hold anything a study wrote
     net.meta["growth_rates"].update(without_a_rate=["B & <c>"], why_without_a_rate={"B & <c>": "why"})
     assert "No growth rate for B &amp; &lt;c&gt;: why" in gui._without_a_rate({"network": net})
+
+
+def test_the_factor_unread_at_alpha_0_is_not_blamed_on_the_derivation():
+    """Round 24 of the review: at alpha 0 with nothing censored, the page said the no-growth factor is NOT
+    read by the replicate derivation, which does read it at any other alpha. It now says this run did not
+    read it, and why."""
+    from grownet.gui import render_result
+    page = render_result("tok", _query(no_growth_alpha=0.0))
+    assert "NOT read by the replicate derivation" not in page
+    assert "No-growth factor is not read in this run: alpha 0 switches the no-growth test off" in page
+    assert "not read in this run" not in render_result("tok", _query(no_growth_alpha=0.05))

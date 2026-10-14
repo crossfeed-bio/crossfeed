@@ -657,9 +657,33 @@ def test_a_derivation_without_the_no_growth_rule_says_so_in_the_report():
     net.meta["no_growth"] = {**rule_meta(0.0, None), "obligate": 2, "abolished": 0}
     text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
                         "skipped": [], "entries": []})
-    assert "; alpha 0 switches the check off, and the factor with it; 2 obligate, 0 abolished" in text
-    assert "not applied" not in text and "factor 1.5" not in text
-    # and the factor is marked as not read (round 23)
+    # a comparison censored because a set's metric was not positive is still censored at alpha 0, and its
+    # bound uses the factor, so the factor is named (round 24: it was said not to be read while it moved
+    # the bounds)
+    assert ("; alpha 0 switches the test off; a comparison whose set's metric was not positive is still "
+            "censored, and its bound uses factor 1.5; 2 obligate, 0 abolished") in text
+    assert "not applied" not in text
+    net.meta["no_growth"] = {**rule_meta(0.0, None), "obligate": 0, "abolished": 0}
+    text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "; alpha 0 switches the test off, and the factor with it; 0 obligate, 0 abolished" in text
+    # and the factor is marked as not read only where no comparison was censored (rounds 23 and 24)
     from grownet.derive import output_meta
     assert "no_growth_factor" in output_meta([], no_growth_alpha=0.0)[1]["settings_not_used"]
+    obligate = {"source": "a", "target": "b", "source_name": "A", "target_name": "B", "effect": "facilitation",
+                "strength": None, "status": "present", "outcome": "obligate", "study_id": "S1", "metric": "auc"}
+    assert "no_growth_factor" not in output_meta([obligate], no_growth_alpha=0.0)[1]["settings_not_used"]
     assert "no_growth_factor" not in output_meta([], no_growth_alpha=0.05)[1]["settings_not_used"]
+
+
+def test_the_report_says_why_the_factor_is_unread_at_alpha_0():
+    """Round 24 of the review: the report marked the factor "not read by this derivation" at alpha 0, where
+    it is this run that does not read it."""
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    net = InteractionNetwork()
+    net.meta["settings_not_used"] = ["no_growth_factor"]
+    net.meta["settings"] = {"no_growth_alpha": 0.0, "no_growth_factor": 1.5}
+    text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "1.5   <- not read in this run: alpha 0 switches the test off and nothing was censored" in text

@@ -307,7 +307,11 @@ def report_text(result: dict) -> str:
     unused = set(meta.get("settings_not_used") or ())
     for key, (label, flag, _) in SETTINGS.items():
         if key in settings:
-            note = "   <- not read by this derivation" if key in unused else ""
+            # the factor at alpha 0 is unread in this run, not by the derivation (found in review)
+            note = ("" if key not in unused
+                    else "   <- not read in this run: alpha 0 switches the test off and nothing was censored"
+                    if key == "no_growth_factor" and settings.get("no_growth_alpha") == 0
+                    else "   <- not read by this derivation")
             lines.append(f"  {label} ({flag.split()[0]}): {_value(key, settings[key])}{note}")
     lines.append("")
 
@@ -345,10 +349,14 @@ def report_text(result: dict) -> str:
     elif rule:
         # alpha 0 is the documented way to switch the check off: it ran as configured, and says so (found
         # in review: it printed "not applied; " with nothing after it)
-        # the factor is not read when alpha 0 switches the check off, so it is not printed as if it were
-        # (found in review)
-        how = ("alpha 0 switches the check off, and the factor with it" if rule.get("applied") is False
-               else f"alpha {rule.get('alpha')}, factor {rule.get('factor')}")
+        # alpha 0 switches the test off; a comparison whose set had a metric that was not positive is still
+        # censored, and its bound uses the factor, so the factor is named while such a comparison exists
+        # (found in review, twice)
+        censored = rule.get("obligate", 0) + rule.get("abolished", 0)
+        how = (f"alpha {rule.get('alpha')}, factor {rule.get('factor')}" if rule.get("applied") is not False
+               else "alpha 0 switches the test off, and the factor with it" if not censored
+               else (f"alpha 0 switches the test off; a comparison whose set's metric was not positive is still "
+                     f"censored, and its bound uses factor {rule.get('factor')}"))
         lines.append(f"no-growth rule: {rule.get('test', '')}; {how}; {rule.get('obligate', 0)} obligate, "
                      f"{rule.get('abolished', 0)} abolished")
     merge = meta.get("merge", {})

@@ -473,3 +473,25 @@ def test_validate_says_why_an_artifact_with_no_network_fails(tmp_path, capsys):
     path.write_text(_json.dumps({"format": "grownet.all_result/v1", "network": None, "absent": None}))
     assert main(["validate", str(path)]) == 1
     assert "carries no network" in capsys.readouterr().out
+
+
+def test_the_command_line_says_when_the_steady_state_check_could_not_run(capsys):
+    """Round 24 of the review: the command line's steady-state line comes from `steady.summary_line`, which
+    says the check did not run and why; a mutant that put back the count alone ("0 chemostat(s) scored, 0
+    not") passed every test, since none ran `_emit` with --steady-check."""
+    from test_coculture_diagonal import _arc, _rate
+
+    from grownet.__main__ import _emit
+    from grownet.mgrowthdb import records_to_network
+
+    class Failing:
+        def search(self, **_):
+            raise OSError("HTTP 503")
+    net = records_to_network([{**_arc("b", "a", 0.6, 0.4), "source_taxon_id": "1", "target_taxon_id": "2"}])
+    rates = {"a": _rate("A", 0.4, 1e9), "b": _rate("B", 0.2, 5e8)}
+    result = {"rates": rates, "skipped": [], "errors": [], "settings": {}, "client": Failing()}
+    _emit(_parsed(["--steady-check", "--report-rates", "--out", os.devnull]), net, [], None, "S", result)
+    err = capsys.readouterr().err
+    assert ("steady-state check: not checked, because the search for chemostats of these organisms failed "
+            "(HTTP 503)") in err
+    assert "0 chemostat(s) scored" not in err

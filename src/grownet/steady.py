@@ -463,8 +463,9 @@ def summary_line(checks: list) -> str:
     if not checks and getattr(checks, "why_not", ""):
         return f"steady-state check: not checked, because {checks.why_not}"
     scored = sum(1 for one in checks if one["used"])
+    unread = len(getattr(checks, "unread", ()))
     return (f"steady-state check: {scored} chemostat(s) scored, {len(checks) - scored} not (the report says "
-            "why each)")
+            "why each)" + (f"; {unread} study(ies) the search named could not be read" if unread else ""))
 
 
 def as_text(checks: list) -> str:

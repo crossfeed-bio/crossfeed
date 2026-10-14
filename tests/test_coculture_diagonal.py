@@ -646,6 +646,12 @@ def test_a_cell_with_an_arc_recording_no_medium_is_counted():
     readme = matrix.readme_from(got, net, rates)
     assert "Every effect between two organisms" not in readme
     assert "were measured in WC, and\n      1 cell(s) have an arc recording no medium" in readme
+    # with an arc in no cell, in M3 (C has no rate), that medium is named apart (round 24)
+    net = records_to_network([_arc("b", "a", 0.6, 0.4),
+                              {**_arc("b", "a", 0.7, 0.4), "medium": None, "condition": "x"},
+                              _arc("c", "a", 0.6, 0.4, medium="M3")])
+    assert "The network's other arcs, in no cell, come from M3." in \
+        matrix.readme_from(matrix.coefficients(net, rates), net, rates)
     # beside a matrix that pools media, it is listed with that matrix's line (round 23)
     net = records_to_network([_arc("b", "a", 0.6, 0.4), {**_arc("b", "a", 0.7, 0.4), "medium": None, "condition": "x"},
                               _arc("a", "b", 0.3, 0.2, medium="LB"),
@@ -670,10 +676,21 @@ def test_the_drop_out_count_is_of_the_arcs_in_the_cells():
     assert "The network's other 1 drop-out arc(s) are in no cell." in readme
     caveats = matrix.glv_payload(net, rates)["caveats"]
     assert caveats["dropout_arcs"] == 1 and caveats["dropout_arcs_in_cells"] == 0
-    # control: a drop-out arc in a cell is counted and warned about
-    net = records_to_network([{**_arc("b", "a", 0.6, 0.4), "evidence": "dropout"}])
+    assert "  Every arc in the cells compares two organisms directly" in readme
+    # control: a drop-out arc in a cell is counted and warned about, and one in no cell named apart
+    net = records_to_network([{**_arc("b", "a", 0.6, 0.4), "evidence": "dropout"}, dropout])
     got = matrix.coefficients(net, rates)
-    assert "1 ARC(S) IN THE CELLS COME FROM DROP-OUT DESIGNS" in matrix.readme_from(got, net, rates)
+    readme = matrix.readme_from(got, net, rates)
+    assert "1 ARC(S) IN THE CELLS COME FROM DROP-OUT DESIGNS" in readme
+    assert "The network's other 1 drop-out arc(s) are in no cell." in readme
+    # a drop-out arc that records no medium, in another unit than the cell it sits beside, is in no cell:
+    # it neither counts as a drop-out arc in the cells nor marks the cell as recording no medium (round 24)
+    other_unit = {**_arc("b", "a", 0.9, 0.4, unit="CFUs/mL"), "evidence": "dropout", "medium": None,
+                  "condition": "z"}
+    net = records_to_network([{**_arc("b", "a", 0.6, 0.4), "condition": "x"},
+                              {**_arc("b", "a", 0.65, 0.4), "condition": "y"}, other_unit])
+    got = matrix.coefficients(net, rates)
+    assert got["dropout_in_cells"] == 0 and got["matrices"][0]["unrecorded"] == 0
 
 
 def test_a_package_of_no_cell_and_no_recorded_medium_says_only_that():

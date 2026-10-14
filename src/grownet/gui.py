@@ -887,11 +887,18 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
     # reader who sees "Include drop-out communities: on" beside a form that derives none has been told
     # something false about their own run (#215 item 3)
     unused = [k for k in (getattr(net, "meta", {}) or {}).get("settings_not_used") or () if k in s_here]
+    # the no-growth factor at alpha 0 is unread because this run switched the test off and censored
+    # nothing, not because the derivation never reads it (found in review)
+    switched = [k for k in unused if k == "no_growth_factor" and s_here.get("no_growth_alpha") == 0]
+    unused = [k for k in unused if k not in switched]
     if unused:
         told = ", ".join(_esc(help_settings[k][0] if k in help_settings else k) for k in sorted(unused))
         errors += (f"<p class=\"muted\">{len(unused)} setting(s) are recorded but NOT read by the "
                    f"{_esc(s_here.get('derivation', ''))} derivation, so changing them changes nothing "
                    f"here: {told}.</p>")
+    if switched:
+        errors += ("<p class=\"muted\">No-growth factor is not read in this run: alpha 0 switches the no-growth "
+                   "test off and no comparison was censored, so changing it changes nothing here.</p>")
     return (f"<section class=\"result\" id=\"result\">{note}{species_heading}<ul>{resolved}</ul>{unresolved}"
             f"<p class=\"muted\">Studies searched: {_esc(studies)}</p>{errors}{table}"
             f"{_absent_section(result, result.get('absence', {}))}{_sources(net)}{skipped}</section>")
