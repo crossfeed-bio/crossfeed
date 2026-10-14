@@ -35,6 +35,11 @@ content.
 
 ### Added
 
+- **A Technique setting** (page: Advanced settings; command line: `--technique`), Karoline's "In the
+  advanced options, we need to add a setting to optionally specify a technique" (2026-10-13, #292): it
+  keeps only curves measured by that mGrowthDB technique, in arcs and in monoculture rates and plateaus,
+  and names every other curve as left out. Culture-level counts stay plate counts and flow cytometry
+  (#140), so OD is never one.
 - **A study whose growth rates are slow as a block is named** (Karoline, 2026-10-12, #173: Craig's
   agent's study-level tripwire, as a flag, "Keep 5x"). When every rate from one study is more than 5 times
   slower than the median of the other studies' own medians in the run, the report says so, and
@@ -68,6 +73,17 @@ content.
 
 ### Changed
 
+- **Plateaus and arcs are compared only within one technique and unit, and where several are available
+  the one with more time points is used** (Karoline, 2026-10-13 and 2026-10-14, #292). A capacity no
+  longer pools plateaus of one unit string measured by different techniques (16S, qPCR and flow
+  cytometry all say Cells/mL), and the unit and technique with more time points is published, then the
+  one with more curves, where the first study read used to win; a tie left after that gives no capacity
+  and says so. A strain measured by two techniques in one replicate is measured by the one with more
+  time points, where both were left out. A genus takes its strains' capacities from one unit and
+  technique the same way, where strains in two units gave it none. A gLV cell is built from the arcs in
+  its matrix's own unit, where the unit with the most arcs was taken and a tie decided by arc order. The
+  technique travels as `capacity_technique` in `growth_rates.csv` and as `carrying_capacity_technique` in
+  the gLV payload.
 - **A curve with no rising window has no growth rate, and is still read as not grown** (Karoline,
   2026-10-14, #293: "No rate, still no growth"). It returned its steepest slope, <= 0, where R's
   `growthrates` fits nothing; it now gives no rate with the reason, as #229 (a) does for a refit that falls

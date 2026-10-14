@@ -450,7 +450,8 @@ def report_text(result: dict) -> str:
             if rate.get("capacity_source") and not (culture and rate["capacity_source"].startswith(CULTURE_NONE)):
                 extra.append(rate["capacity_source"])
             if rate.get("capacity_medium"):
-                extra.append(f"capacity measured in {rate['capacity_medium']}")
+                extra.append(f"capacity measured in {rate['capacity_medium']}"
+                             + (f" by {rate['capacity_technique']}" if rate.get("capacity_technique") else ""))
                 # more than one spelling means the alias table merged names that disagree, which is said
                 # nor any medium the capacity rests on: a genus whose strains plateaued in different media
                 # printed each of them as a spelling the alias table merged (found in review)
@@ -459,12 +460,18 @@ def report_text(result: dict) -> str:
                 if spellings:
                     extra.append("also recorded as " + ", ".join(spellings)
                                  + ", read as one medium by the alias table")
+            # plateaus in units or techniques that were not chosen, and a tie that chose none (#292)
+            if rate.get("capacity") is not None and rate.get("other_capacity_units") and not rate.get("merged_from"):
+                extra.append("plateaus also in " + ", ".join(rate["other_capacity_units"])
+                             + ", not compared with it; the one with more time points is used")
+            if rate.get("capacity_tie"):
+                extra.append(rate["capacity_tie"])
             # a genus whose strains plateaued in different units has no capacity, and says why: nothing is
             # converted between abundance units (found in review)
             units = rate.get("other_capacity_units") or []
             if rate.get("capacity") is None and len(units) > 1:
-                extra.append("no capacity: its strains' plateaus are in different units ("
-                             + ", ".join(units) + "), which are not converted")
+                extra.append("no capacity: its strains' plateaus are in different units or techniques ("
+                             + ", ".join(units) + "), which are not compared")
             # rates in another time unit are not converted, and said so: only the JSON carried them
             # (found in review)
             if rate.get("other_units"):

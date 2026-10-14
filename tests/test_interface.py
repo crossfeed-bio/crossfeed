@@ -262,7 +262,7 @@ def test_the_page_and_the_command_line_start_from_the_same_defaults():
            "exclude_studies": a.exclude_studies, "only_entered": not a.all_partners, "merge_arcs": a.merge_arcs,
            "min_studies": a.min_studies, "merge_genera": a.merge_genera, "no_growth_alpha": a.no_growth_alpha,
            "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p,
-           "report_rates": a.report_rates, "steady_check": a.steady_check,
+           "report_rates": a.report_rates, "steady_check": a.steady_check, "technique": a.technique,
            # `--derivation` parses to None, meaning "not given", so gLV mode can tell a reader's own
            # choice from one it filled in; what must match the page is the value a run resolves to
            # (2026-10-10). `_derive` does this resolution.
@@ -604,7 +604,7 @@ def test_the_growth_rates_are_their_own_download_and_bring_the_glv_control(serve
     # unaffected
     assert rows[0][5:] == ["method", "lag", "lag_method", "carrying_capacity", "capacity_unit",
                            "capacity_curves", "capacity_curves_left_out", "capacity_fall_from_peak",
-                           "capacity_medium", "capacity_source", "doubling_time"]
+                           "capacity_medium", "capacity_source", "doubling_time", "capacity_technique"]
     assert [row[0] for row in rows[1:]] == sorted([A, B])
     assert dict(zip([r[0] for r in rows[1:]], [r[1] for r in rows[1:]], strict=True))[A] == "0.4"
 
@@ -694,7 +694,7 @@ def test_the_command_line_writes_the_matrix_the_rates_and_the_glv_package(monkey
     assert rates_file.read_text(encoding="utf-8").splitlines()[0] == (
         "organism,growth_rate,unit,replicates,studies,method,lag,lag_method,carrying_capacity,"
         "capacity_unit,capacity_curves,capacity_curves_left_out,capacity_fall_from_peak,"
-        "capacity_medium,capacity_source,doubling_time")
+        "capacity_medium,capacity_source,doubling_time,capacity_technique")
     with zipfile.ZipFile(io.BytesIO(package.read_bytes())) as archive:
         assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv",
                                               "interaction_matrix.Cells_per_mL.csv"]
@@ -1072,6 +1072,7 @@ def test_every_derive_path_records_the_same_settings_and_follows_the_steady_chec
              "--report-rates": ("report_rates", None), "--include-absent": ("include_absent", None),
              "--steady-check": ("steady_check", None), "--all-partners": ("only_entered", None),
              "--exclude-studies": ("exclude_studies", "SMGDB00000002"),
+             "--technique": ("technique", "fc"),
              "--conditions": ("conditions", "WC")}
     for flag, (key, value) in flags.items():
         got = settings([*base, flag] + ([value] if value is not None else []))
@@ -1097,7 +1098,7 @@ def test_every_derive_path_records_the_same_settings_and_follows_the_steady_chec
     wired = {key for key, _ in flags.values()}
     unreachable = sorted(k for k in DEFAULTS if k not in wired)
     assert not unreachable, f"these page settings no command-line flag sets: {unreachable}"
-    assert len(wired) == len(DEFAULTS) == 23, (
+    assert len(wired) == len(DEFAULTS) == 24, (          # 24 with Technique (#292)
         f"the page has {len(DEFAULTS)} settings and this test wires {len(wired)}: a new one needs a case")
 
 

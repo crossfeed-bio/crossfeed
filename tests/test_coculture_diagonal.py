@@ -215,8 +215,9 @@ def test_an_effect_with_several_reasons_is_one_row_and_counted_once():
     got = matrix.coefficients(net, rates)
     ((affected, actor, why),) = got["across_units"]
     assert (affected, actor) == ("A", "C")
-    assert why == ("C is counted in CFUs/mL and A in Cells/mL, so this effect is in neither matrix; 1 arc(s) of "
-                   "this pair measure the actor in Cells/mL and the rest in CFUs/mL; abundances are never "
+    # the arcs in A's own unit, Cells/mL, are the effect's; the CFUs/mL ones are named (#292)
+    assert why == ("C is counted in CFUs/mL and A in Cells/mL, so this effect is in neither matrix; 2 arc(s) of "
+                   "this pair measure the actor in CFUs/mL and the rest in Cells/mL; abundances are never "
                    "converted, so they are left out")
     assert "1 effect(s) between organisms counted differently were measured" in \
         matrix.glv_payload(net, rates)["caveats"]["units"]
@@ -224,23 +225,26 @@ def test_an_effect_with_several_reasons_is_one_row_and_counted_once():
 
 def test_arcs_beside_a_cell_of_0_are_not_said_to_be_beside_a_median():
     """Round 18 of the review: "these arcs are not in their pair's cell, which is the median of the pair's
-    other arcs" was said of arcs whose pair's cell is 0. (a) B on A has two arcs with B counted in CFUs/mL
-    and one in Cells/mL, the matrix's unit; the CFUs/mL arcs are the majority, so the cell is left at 0 for
-    their unit and the Cells/mL arc is not beside any median. (b) B on A's Cells/mL arcs disagree in sign
-    (+0.58 and a washout inhibition) and a third is in CFUs/mL, so the cell is a conflict left at 0. Each
-    pair is one row of the effects left at 0, with all its reasons."""
+    other arcs" was said of arcs whose pair's cell is 0. (a) Since #292 a cell is built from the arcs in its
+    matrix's own unit: B on A has two arcs with B counted in CFUs/mL and one in Cells/mL, the matrix's unit,
+    so the cell is the Cells/mL arc's (0.8 - 0.4) / 2e8 = 2e-9 and the CFUs/mL arcs are named beside it,
+    where the majority unit used to leave the cell at 0; with no arc in Cells/mL at all the pair is left at
+    0, with the reason. (b) B on A's Cells/mL arcs disagree in sign (+0.58 and a washout inhibition) and a
+    third is in CFUs/mL, so the cell is a conflict left at 0. Each pair is one row, with all its reasons."""
     from grownet import matrix
     from grownet.mgrowthdb import records_to_network
     rates = {"a": _rate("A", 0.4, 1e9), "b": _rate("B", 0.2, 5e8)}
     net = records_to_network([dict(_arc("b", "a", 0.8, 0.4, unit=u), study_id=s)
                               for s, u in (("S1", "CFUs/mL"), ("S2", "CFUs/mL"), ("S3", "Cells/mL"))])
     got = matrix.coefficients(net, rates)
-    assert got["arcs_left_out"] == []
-    ((affected, actor, why),) = got["pairs_left_out"]
+    assert got["pairs_left_out"] == [] and _cell(got["matrices"][0], "A", "B") == pytest.approx(2e-9)
+    assert got["arcs_left_out"] == [("A", "B", "2 arc(s) of this pair measure the actor in CFUs/mL and the rest in "
+                                               "Cells/mL; abundances are never converted, so they are left out")]
+    net = records_to_network([dict(_arc("b", "a", 0.8, 0.4, unit="CFUs/mL"), study_id=s) for s in ("S1", "S2")])
+    ((affected, actor, why),) = matrix.coefficients(net, rates)["pairs_left_out"]
     assert (affected, actor) == ("A", "B")
-    assert why == ("B's abundance beside A is in CFUs/mL, not in Cells/mL, the unit of the matrix they were placed "
-                   "in; left out rather than converted; 1 arc(s) of this pair measure the actor in Cells/mL and "
-                   "the rest in CFUs/mL; abundances are never converted, so they are left out")
+    assert why == ("2 arc(s) of this pair measure the actor in CFUs/mL, while the affected organism is counted "
+                   "in Cells/mL, and abundances are never converted, so the per-capita effect cannot be fitted")
     net = records_to_network([dict(_arc("b", "a", 0.6, 0.4), study_id="S1"),
                               dict(_arc("b", "a", -0.1, 0.4), strength=None, effect="inhibition", study_id="S2"),
                               dict(_arc("b", "a", 0.7, 0.4, unit="CFUs/mL"), study_id="S3")])
@@ -356,8 +360,8 @@ def test_an_effect_of_an_organism_that_left_is_not_also_left_at_0():
     assert "A" in [name for name, _ in got["left_out"]]
     assert got["pairs_left_out"] == []
     assert dict(((a, b), w) for a, b, w in got["across_units"])[("A", "C")] == (
-        "A could not be fitted, so this effect is in no matrix; C's abundance beside A is in CFUs/mL, not in "
-        "Cells/mL, the unit of the matrix they were placed in; left out rather than converted")
+        "1 arc(s) of this pair measure the actor in CFUs/mL, while the affected organism is counted in "
+        "Cells/mL, and abundances are never converted; A is in no matrix")
 
 
 def test_a_cell_pools_only_the_media_of_the_arcs_in_it():
@@ -721,3 +725,20 @@ def test_a_merged_arc_with_a_member_recording_no_medium_is_counted():
     # members that all record their medium leave no such note
     assert not [n for n in _merged([members[0], {**members[0], "study_id": "S2"}])["notes"]
                 if "record no medium" in n]
+
+
+def test_a_cell_does_not_depend_on_the_order_of_its_arcs():
+    """Karoline, 2026-10-14 (#292): a cell is built from the arcs in its matrix's own unit. B on A has one arc
+    with B counted in Cells/mL, A's unit, giving (0.8 - 0.4) / 2e8 = 2e-9, and one in CFUs/mL: with the
+    majority unit and a tie decided by arc order, the cell was 2e-9 in one order and 0 in the other."""
+    from grownet import matrix
+    from grownet.mgrowthdb import records_to_network
+    rates = {"a": _rate("A", 0.4, 1e9), "b": _rate("B", 0.2, 5e8)}
+    cells = dict(_arc("b", "a", 0.8, 0.4), study_id="S1")
+    cfus = dict(_arc("b", "a", 0.6, 0.4, unit="CFUs/mL"), study_id="S2")
+    for arcs in ([cells, cfus], [cfus, cells]):
+        got = matrix.coefficients(records_to_network(arcs), rates)
+        assert _cell(got["matrices"][0], "A", "B") == pytest.approx(2e-9)
+        assert got["arcs_left_out"] == [("A", "B", "1 arc(s) of this pair measure the actor in CFUs/mL and the "
+                                                   "rest in Cells/mL; abundances are never converted, so they "
+                                                   "are left out")]

@@ -232,6 +232,7 @@ def _settings_of(a) -> dict:
             # than wrong, and `report.py` promises every setting with its value (found reviewing #242).
             "exclude_studies": getattr(a, "exclude_studies", "") or "",
             "only_entered": not getattr(a, "all_partners", False),
+            "technique": (getattr(a, "technique", "") or "").strip().lower(),
             # the page encodes the second box one selector per LINE, and `selection.parse` splits on
             # newlines, commas and semicolons: space is the one separator it does not split on. The
             # single-study path recorded `--conditions "WC" "mucin"` space-joined, so the record parsed
@@ -280,6 +281,13 @@ def _resolve(a, announce=True):
 
 
 def _derive(a):
+    """`grownet derive`, with the Technique setting in force for the whole run (#292)."""
+    from .adapter import only_technique
+    with only_technique((getattr(a, "technique", "") or "").strip().lower() or None):
+        return _derive_run(a)
+
+
+def _derive_run(a):
     _resolve(a)
     problem = _bad_settings(a) or _rate_flags(a) or _fixture_flags(a)
     if problem:
@@ -809,6 +817,10 @@ def build_parser() -> argparse.ArgumentParser:
                            "is matched as text against the medium name, the description and the experiment "
                            "name, an id picks that study (SMGDB...) or experiment (EMGDB...), and naming a "
                            "comparison keeps the monocultures it is made against. Empty looks at every medium")
+    what.add_argument("--technique", default="", metavar="NAME",
+                      help="keep only curves measured by this mGrowthDB technique (fc, 16s, qpcr, plates, ...), "
+                           "in arcs and in monoculture rates and plateaus, and name the others (default: every "
+                           "technique; Karoline, #292)")
     what.add_argument("--exclude-studies", default="", metavar="IDS",
                       help="with --species or --all, comma separated study ids never to search (default: none)")
     what.add_argument("--all-partners", action="store_true",

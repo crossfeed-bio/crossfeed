@@ -557,9 +557,10 @@ def test_a_fitted_rate_in_another_unit_is_named_not_converted():
     got = integrated.fitted_rates(rows)["a"]
     assert got["rate"] == pytest.approx(0.4) and got["unit"] == "1/h"
     assert got["other_units"] == ["S2 (1/day)"]
-    # S2's plateau stays: K = -r/A_ii has no time unit (round 10 of the review); S3's is in g/L
+    # S2's plateau stays: K = -r/A_ii has no time unit (round 10 of the review); S3's is in g/L, and the
+    # Cells/mL rows have more time points (16 against 8), so they win (#292)
     assert got["capacity_unit"] == "Cells/mL" and got["capacity_n"] == 2
-    assert got["other_capacity_units"] == ["S3 (g/L)"]
+    assert got["other_capacity_units"] == ["g/L by an unrecorded technique"]
 
 
 def test_replicates_that_measured_different_partners_are_not_pooled_into_one_design():
@@ -1225,8 +1226,13 @@ def test_a_left_out_row_is_named_by_its_experimental_condition_and_a_row_in_anot
     assert "S2: the row fitted with E in At_Ct_OD2" in left, left
     assert "S1: the row fitted with B in At_Ct_TBHQ" in left, left
     assert not any("96.5" in what for what in left)
-    assert "its plateau is in OD, and this organism's others in Cells/mL; left out rather than converted" == \
-        left["S2: the row fitted with C in At_Ct_OD"]
+    # the two Cells/mL rows and the two OD rows have as many time points and rows, so neither unit is chosen
+    # and both are named (#292: never chosen by the order they arrived in)
+    assert left["S2: the row fitted with C in At_Ct_OD"].startswith(
+        "its plateau is in OD by an unrecorded technique, and the plateaus in ")
+    listed = integrated.fitted_rates(rows)["ncbi:1"]["capacity_left_out"]
+    tied = [why for _row, why in listed if "so none is chosen" in why]
+    assert len(tied) == 4, listed     # both OD rows and both Cells/mL rows of the chosen medium
 
 
 def test_a_row_whose_rate_is_in_another_time_unit_keeps_its_plateau():
@@ -1306,3 +1312,19 @@ def test_one_study_can_hold_several_monoculture_sets():
     # the co-culture's own id is the first, whatever it sorts as (Z after M): it is not part of the set
     later = integrated.fitted_rates([rec("Z1", "M1"), rec("Z2", "M1")])["ncbi:1"]
     assert later["replicates"] == 3
+
+
+def test_fitted_plateaus_of_one_unit_by_two_techniques_are_not_pooled():
+    """Karoline, 2026-10-14 (#292): "Technique and unit", and the one with more time points wins. Two rows of
+    A in WC, Cells/mL, one plateau measured by 16S over 7 points (K = 0.4 / 4e-10 = 1e9) and one by flow
+    cytometry over 12 (K = 0.4 / 8e-10 = 5e8): the capacity is the flow cytometry one, 5e8, not the median
+    7.5e8 of the two, and the 16S row is named."""
+    sixteen = {**_rate_record("WC", 0.4, -4.0e-10), "fitted_self_technique": "16s"}
+    flow = {**_rate_record("WC", 0.4, -8.0e-10, study="S2"), "fitted_self_technique": "fc", "fit_points": 12}
+    for rows in ([sixteen, flow], [flow, sixteen]):
+        got = integrated.fitted_rates(rows)["ncbi:1"]
+        assert got["capacity"] == pytest.approx(5.0e8) and got["capacity_technique"] == "fc"
+        assert got["other_capacity_units"] == ["Cells/mL by 16s"]
+        ((row, why),) = got["capacity_left_out"]
+        assert why.startswith("its plateau is in Cells/mL by 16s, and this organism's capacity is taken from "
+                              "Cells/mL by fc, which has more time points (12 against 7)")

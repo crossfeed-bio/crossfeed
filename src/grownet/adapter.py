@@ -26,6 +26,9 @@ grownet. Nothing pulled here is written into the repository.
 """
 from __future__ import annotations
 
+import contextlib
+import contextvars
+
 from .growth import SPIKE_FACTOR, GrowthCurve, Replicate, spike
 
 AVERAGE = "average of the replicates, not an independent replicate"
@@ -86,6 +89,22 @@ def about_a_pair(label: str, reason: str) -> bool:
     organisms with one of `PAIR_SEPARATORS` between them; a note names an experiment or a study.
     """
     return AVERAGE not in reason and any(sep in label for sep in PAIR_SEPARATORS)
+
+
+# The Technique setting of the run under way (Karoline, 2026-10-14, #292: "Curves of it only"): set once
+# where a run starts (`only_technique`), read wherever curves are built, so the many readers of a study do
+# not each carry it. The prefetch's worker threads only read records and never build a curve.
+TECHNIQUE: contextvars.ContextVar = contextvars.ContextVar("grownet_technique", default=None)
+
+
+@contextlib.contextmanager
+def only_technique(technique):
+    """Within this block, keep only curves measured by `technique` (None or "" keeps every technique)."""
+    token = TECHNIQUE.set(technique or None)
+    try:
+        yield
+    finally:
+        TECHNIQUE.reset(token)
 
 MIN_POINTS = 2
 
@@ -153,7 +172,7 @@ def _abundance_unit(context: dict) -> str:
 CULTURE_TECHNIQUES = ("plates", "fc")
 
 
-def culture_trace_replicates(client, experiment: dict, species: str) -> tuple:
+def culture_trace_replicates(client, experiment: dict, species: str, technique: str | None = None) -> tuple:
     """(replicates, skipped) for a MONOCULTURE whose bioreplicates carry no per-strain series: the strain's
     curve taken from a culture-level trace, by `CULTURE_TECHNIQUES` order (#140).
 
@@ -161,7 +180,12 @@ def culture_trace_replicates(client, experiment: dict, species: str) -> tuple:
     "culture-level <technique>", so whatever reads it can tell. What it may supply is decided by the
     caller: a growth rate and a lag, never a carrying capacity, since a plateau is read exactly where a
     culture-level proxy is least likely to be proportional to cell number.
+
+    `technique`, the Technique setting, keeps only that technique among `CULTURE_TECHNIQUES`; #140 still
+    decides which culture-level counts exist, so OD is never one (Karoline, 2026-10-14, #292).
     """
+    technique = technique if technique is not None else TECHNIQUE.get()
+    allowed = tuple(t for t in CULTURE_TECHNIQUES if technique in (None, "", t))
     replicates, skipped = [], []
     label = experiment.get("name") or experiment.get("id") or "experiment"
     for stub in experiment.get("bioreplicates", []):
@@ -177,37 +201,47 @@ def culture_trace_replicates(client, experiment: dict, species: str) -> tuple:
         for context in bioreplicate.get("measurementContexts", []):
             if (context.get("subject") or {}).get("type") == "bioreplicate":
                 by_technique.setdefault(context.get("techniqueType") or "", []).append(context)
-        technique = next((t for t in CULTURE_TECHNIQUES if len(by_technique.get(t, ())) == 1), None)
-        if technique is None:
+        chosen = next((t for t in allowed if len(by_technique.get(t, ())) == 1), None)
+        if chosen is None:
             skipped.append((f"{label}: {name}", "no per-strain series and no single culture-level count (plates or "
-                                                 "flow cytometry) to take a growth rate from"))
+                                                 "flow cytometry) to take a growth rate from"
+                            + (f" measured by {technique}, the Technique setting" if technique else "")))
             continue
-        context = by_technique[technique][0]
+        context = by_technique[chosen][0]
+        technique_used = chosen
         try:
             points = client.get_measurement_series(context["id"])
         except Exception as e:  # noqa: BLE001 - report the context, keep the others
-            skipped.append((f"{label}: {name}", f"{UNREAD} its culture-level {technique} series: {e}"))
+            skipped.append((f"{label}: {name}", f"{UNREAD} its culture-level {technique_used} series: {e}"))
             continue
         if len(points) < MIN_POINTS:
             skipped.append((f"{label}: {name}", f"{len(points)} measured time point(s) in its culture-level "
-                                                 f"{technique} series; a curve needs {MIN_POINTS}"))
+                                                 f"{technique_used} series; a curve needs {MIN_POINTS}"))
             continue
         try:
             curve = GrowthCurve(species, [t for t, _, _ in points], [v for _, v, _ in points],
                                 bioreplicate.get("measurementTimeUnits") or "", _abundance_unit(context),
-                                f"culture-level {technique}")
+                                f"culture-level {technique_used}")
         except ValueError as e:
-            skipped.append((f"{label}: {name}", f"culture-level {technique}: {e}"))
+            skipped.append((f"{label}: {name}", f"culture-level {technique_used}: {e}"))
             continue
         replicates.append(Replicate([curve], name, {}))
     return replicates, skipped
 
 
-def replicates_for_experiment(client, experiment: dict, spike_factor: float = SPIKE_FACTOR) -> tuple:
+def replicates_for_experiment(client, experiment: dict, spike_factor: float = SPIKE_FACTOR,
+                              technique: str | None = None) -> tuple:
     """(replicates, skipped) for one mGrowthDB experiment.
 
     replicates: a `Replicate` per independent bioreplicate, holding one `GrowthCurve` per strain that
     reports a usable series. skipped: (label, reason) for the averages and for anything unusable.
+
+    A strain measured by several techniques in one replicate is measured by the one with more time points,
+    the others named; with the same number of points the tie is named and the strain left out, never
+    settled by order (Karoline, 2026-10-13 and 2026-10-14, #292: "priority should be given to the one with
+    more time points"). Two contexts of one technique (one per compartment, say) still leave it out, since
+    nothing tells them apart. `technique`, the Technique setting, keeps only curves of that technique and
+    names the others.
     """
     replicates, skipped = [], []
     label = experiment.get("name") or experiment.get("id") or "experiment"
@@ -223,18 +257,57 @@ def replicates_for_experiment(client, experiment: dict, spike_factor: float = SP
             continue
         time_unit = bioreplicate.get("measurementTimeUnits") or ""
         strain_contexts = list(_strain_contexts(bioreplicate))
-        counts = {}
-        for species, _ in strain_contexts:
-            counts[species] = counts.get(species, 0) + 1
-        for species, n in counts.items():
-            if n > 1:   # for example one context per compartment, which the API does not tell apart
-                skipped.append((f"{label}: {name}, {species}",
-                                f"{n} measurement contexts for this strain in one replicate (for example one per "
-                                "compartment), and nothing says which to use; left out"))
-        strain_contexts = [(species, context) for species, context in strain_contexts if counts[species] == 1]
-        single_strain = len(counts) == 1
-        curves, notes = [], {}
+        technique = technique if technique is not None else TECHNIQUE.get()
+        if technique:
+            for species, context in strain_contexts:
+                if (context.get("techniqueType") or "") != technique:
+                    skipped.append((f"{label}: {name}, {species}",
+                                    f"measured by {context.get('techniqueType') or 'an unrecorded technique'}; "
+                                    f"the Technique setting keeps {technique} only"))
+            strain_contexts = [(s_, c) for s_, c in strain_contexts if (c.get("techniqueType") or "") == technique]
+        by_species: dict = {}
         for species, context in strain_contexts:
+            by_species.setdefault(species, []).append(context)
+        single_strain = len(by_species) == 1
+        curves, notes = [], {}
+        read: dict = {}
+        for species, contexts in by_species.items():
+            per_technique: dict = {}
+            for context in contexts:
+                per_technique.setdefault(context.get("techniqueType") or "", []).append(context)
+            twice = [t for t, cs in per_technique.items() if len(cs) > 1]
+            if twice:   # for example one context per compartment, which the API does not tell apart
+                skipped.append((f"{label}: {name}, {species}",
+                                f"{len(contexts)} measurement contexts for this strain in one replicate, "
+                                f"{len(per_technique[twice[0]])} of them by {twice[0] or 'an unrecorded technique'} "
+                                "(for example one per compartment), and nothing says which to use; left out"))
+                continue
+            if len(contexts) == 1:
+                read[species] = contexts[0]
+                continue
+            # several techniques: the one with more time points (#292)
+            sized = []
+            for context in contexts:
+                try:
+                    sized.append((len(client.get_measurement_series(context["id"])), context))
+                except Exception:  # noqa: BLE001 - an unreadable series has no points to count
+                    sized.append((0, context))
+            sized.sort(key=lambda pc: -pc[0])
+            if sized[0][0] == sized[1][0]:
+                skipped.append((f"{label}: {name}, {species}",
+                                "measured by " + " and ".join(c.get("techniqueType") or "an unrecorded technique"
+                                                              for _p, c in sized)
+                                + f" with {sized[0][0]} time points each, so neither has more; left out rather "
+                                  "than chosen by order"))
+                continue
+            read[species] = sized[0][1]
+            for points, context in sized[1:]:
+                skipped.append((f"{label}: {name}, {species}",
+                                f"its {context.get('techniqueType') or 'unrecorded technique'} series "
+                                f"({points} time points) is not used: its "
+                                f"{sized[0][1].get('techniqueType') or 'unrecorded technique'} series has more "
+                                f"({sized[0][0]}), and one strain is measured by one technique"))
+        for species, context in read.items():
             try:
                 points = client.get_measurement_series(context["id"])
             except Exception as e:  # noqa: BLE001 - report the context, keep the others

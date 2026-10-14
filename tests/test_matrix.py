@@ -129,13 +129,13 @@ def test_the_rates_file_says_what_each_median_rests_on():
     assert table[0] == ["organism", "growth_rate", "unit", "replicates", "studies", "method", "lag",
                         "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves",
                         "capacity_curves_left_out", "capacity_fall_from_peak", "capacity_medium",
-                        "capacity_source", "doubling_time"]
+                        "capacity_source", "doubling_time", "capacity_technique"]
     # the lag names its own estimator, since it is Baranyi's whichever one produced the rate
     assert table[1] == ["A", "0.42", "1/h", "6", "S1 S2", "growth_rate:easylinear:5", "1.25", "baranyi",
-                        "2e+08", "Cells/mL", "4", "", "", "", "", "1.65"]
+                        "2e+08", "Cells/mL", "4", "", "", "", "", "1.65", ""]
     # a rate with none of the gLV quantities keeps its row and leaves them empty (#118)
     plain = list(csv.reader(io.StringIO(matrix.rates_csv({"a": {"rate": 0.42, "unit": "1/h"}}, net))))
-    assert plain[1] == ["A", "0.42", "1/h", "", "", "", "", "", "", "", "", "", "", "", "", "1.65"]
+    assert plain[1] == ["A", "0.42", "1/h", "", "", "", "", "", "", "", "", "", "", "", "", "1.65", ""]
 
     # and a capacity that rests on fewer curves than were read says how many gave none, so an empty or
     # thin capacity does not read as absence (found 2026-10-06)
@@ -532,7 +532,8 @@ def test_a_genus_whose_plateaus_are_in_two_units_has_no_capacity_and_names_no_me
     assert row["capacity_other_media"] == [] and row["capacity_medium_spellings"] == []
     text = _genus_report(row)
     assert "capacity measured in" not in text and "not pooled" not in text and "alias" not in text, text
-    assert "no capacity: its strains' plateaus are in different units (Cells/mL, OD)" in text, text
+    units = "(Cells/mL by an unrecorded technique, OD by an unrecorded technique)"
+    assert "no capacity: its strains' plateaus are in different units or techniques " + units in text, text
 
 
 def test_a_genus_of_one_strain_reads_as_that_strain():
@@ -573,7 +574,9 @@ def test_a_genus_whose_plateaus_are_in_two_units_leaves_every_plateau_out_and_sa
     assert not any("taken from" in why for _, why in row["capacity_left_out"])
     # a strain's plateaus in another medium keep their own names; their unit is their medium's (round 9)
     assert [what for what, _ in row["capacity_left_out"]].count("r") == 3
-    assert sum("plateaued in different units (Cells/mL, OD)" in why for _, why in row["capacity_left_out"]) == 10
+    units = "(Cells/mL by an unrecorded technique, OD by an unrecorded technique)"
+    assert sum("plateaued in different units or techniques " + units in why
+               for _, why in row["capacity_left_out"]) == 10
     table = matrix.rates_csv({"blautia": row}).splitlines()
     assert dict(zip(table[0].split(","), table[1].split(","), strict=True))["capacity_curves_left_out"] == "11"
     text = _genus_report(row)
@@ -614,7 +617,8 @@ def test_the_genus_guards_the_seventh_review_round_left_open():
     # the README and the payload give the true reason: the plateaus were reached, in two units
     got = matrix.coefficients(_GENUS_NET, split)
     reasons = dict(got["left_out"])
-    assert "its strains' plateaus are in different units (Cells/mL, OD), which are not converted" in \
+    units = "(Cells/mL by an unrecorded technique, OD by an unrecorded technique)"
+    assert "its strains' plateaus are in different units or techniques " + units + ", which are not compared" in \
         reasons["Blautia"], reasons
     assert "reached stationary phase" not in reasons["Blautia"]
     # and the rule says what the capacity is, as the rate's
@@ -777,3 +781,51 @@ def test_an_unfitted_effect_is_routed_by_where_its_organisms_are():
     plain_arc = _net([dict(_arc("a", "d", 0.5), partner_abundance=2e8, metric="growth_rate:easylinear:5")])
     ((_, _, why),) = matrix.coefficients(plain_arc, {"a": {**c_ml, "name": "A"}})["across_units"]
     assert "merged arc" not in why and why.startswith("the rates behind this arc were not recorded"), why
+
+
+def test_a_genus_whose_strains_plateau_in_two_units_takes_the_one_with_more_time_points():
+    """Karoline, 2026-10-14 (#292): where plateaus are in several units or techniques, the one with more time
+    points is used. Blautia a's plateau is in Cells/mL by fc over 20 points, Blautia b's in OD over 8: the
+    genus's capacity is a's, in Cells/mL, where it used to have none; with as many points it has none."""
+    a = {**_STRAIN, "name": "Blautia a", "capacity_technique": "fc", "capacity_points": 20}
+    b = {**_STRAIN, "name": "Blautia b", "capacity_unit": "OD", "capacity": 0.8, "capacity_technique": "od",
+         "capacity_points": 8}
+    row = matrix.for_nodes(_GENUS_NET, {"ncbi:1": a, "ncbi:2": b})["blautia"]
+    assert row["capacity"] == a["capacity"] and row["capacity_unit"] == "Cells/mL"
+    assert row["capacity_from"] == ["Blautia a"]
+    tied = matrix.for_nodes(_GENUS_NET, {"ncbi:1": a, "ncbi:2": {**b, "capacity_points": 20}})["blautia"]
+    assert tied["capacity"] is None
+
+
+
+def test_a_genus_does_not_pool_its_strains_plateaus_across_techniques():
+    """#292, "Technique and unit": Blautia a's plateau is in Cells/mL by fc over 20 points (1e8), Blautia b's
+    in Cells/mL by 16S over 8 (3e8). The genus's capacity is a's alone, not the median 2e8 of the two."""
+    a = {**_STRAIN, "name": "Blautia a", "capacity_technique": "fc", "capacity_points": 20}
+    b = {**_STRAIN, "name": "Blautia b", "capacity": 3e8, "capacity_technique": "16s", "capacity_points": 8}
+    row = matrix.for_nodes(_GENUS_NET, {"ncbi:1": a, "ncbi:2": b})["blautia"]
+    assert row["capacity"] == 1e8 and row["capacity_from"] == ["Blautia a"]
+
+
+def test_the_rates_file_names_the_technique_of_the_plateau():
+    """#292: growth_rates.csv names the technique a capacity was measured by, in its last column."""
+    rates = {"a": {**_STRAIN, "name": "A", "capacity_technique": "fc"}}
+    table = list(csv.reader(io.StringIO(matrix.rates_csv(rates))))
+    assert table[0][-1] == "capacity_technique" and table[1][-1] == "fc"
+
+
+def test_the_payload_and_the_report_name_the_technique_of_the_plateau():
+    """#292: the gLV payload carries the plateau's technique beside its unit, and the report says it."""
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    rate = {**_STRAIN, "name": "A", "capacity_technique": "fc"}
+    net = _net([dict(_arc("b", "a", 0.5), partner_abundance=2e8, metric="growth_rate:easylinear:5",
+                     metric_with=0.4, metric_without=0.2)])
+    (detail,) = [d for d in matrix.glv_payload(net, {"a": rate, "b": {**_STRAIN, "name": "B"}})["growth_rate_detail"]
+                 if d["organism"] == "A"]
+    assert detail["carrying_capacity_technique"] == "fc"
+    plain = InteractionNetwork()
+    plain.meta["growth_rates"] = {"rule": "r", "organisms": {"a": rate}}
+    text = report_text({"network": plain, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "capacity measured in WC by fc" in text, text
