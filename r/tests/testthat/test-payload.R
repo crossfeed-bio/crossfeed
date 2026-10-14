@@ -303,3 +303,17 @@ test_that("the drop-out line counts the arcs in the cells where the package does
     text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
     expect_false(grepl("drop-out designs", text, fixed = TRUE))
 })
+
+
+test_that("v2 is read, and the v1 and v0 of earlier versions still are, without a warning", {
+    # Karoline, 2026-10-14: the payload moved to grownet.glv/v2 for the fields 0.5.0 adds and the
+    # narrower matrices[].media; a payload this package does not know is read with a warning
+    payload <- example_payload()
+    expect_equal(payload$format, "grownet.glv/v2")
+    expect_silent(grownet:::as_grownet_glv(payload))
+    payload$format <- "grownet.glv/v1"
+    expect_silent(grownet:::as_grownet_glv(payload))
+    expect_silent(grownet:::as_grownet_glv(v0_payload()))
+    payload$format <- "grownet.glv/v3"
+    expect_warning(grownet:::as_grownet_glv(payload), "reading it anyway")
+})

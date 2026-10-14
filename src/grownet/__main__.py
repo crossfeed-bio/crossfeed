@@ -595,10 +595,12 @@ def _emit(a, net, skipped, extra, label, result):
                 from .report import report_text
                 with open(a.report, "w", encoding="utf-8") as f:
                     f.write(report_text(result))
+    # the files beside the numbers, the same for the zip and for R, as the page sends them (found in
+    # review: --to-r sent none)
+    from . import steady as steady_module
+    extra_files = {"steady_state_check.txt": steady_module.as_text(checked)} if a.steady_check else None
     if a.glv and organism_rates:
-        from . import steady as steady_module
         from .matrix import glv_package
-        extra_files = {"steady_state_check.txt": steady_module.as_text(checked)} if a.steady_check else None
         with open(a.glv, "wb") as f:
             f.write(glv_package(net, organism_rates, extra_files))
         print(f"wrote the gLV parameters to {a.glv}: the interaction matrix, the growth rates and a README",
@@ -608,7 +610,7 @@ def _emit(a, net, skipped, extra, label, result):
         from .matrix import glv_payload
         from .rbridge import DEFAULT_PORT, RError, send
         try:
-            answer = send(glv_payload(net, organism_rates), port=a.r_port or DEFAULT_PORT)
+            answer = send(glv_payload(net, organism_rates, extra_files), port=a.r_port or DEFAULT_PORT)
         except RError as e:
             print(f"grownet: {e}", file=sys.stderr)
             return 1

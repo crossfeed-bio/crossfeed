@@ -495,3 +495,25 @@ def test_the_command_line_says_when_the_steady_state_check_could_not_run(capsys)
     assert ("steady-state check: not checked, because the search for chemostats of these organisms failed "
             "(HTTP 503)") in err
     assert "0 chemostat(s) scored" not in err
+
+
+def test_to_r_carries_the_steady_state_check_as_the_zip_does(monkeypatch, capsys):
+    """Round 24 of the review: --to-r sent the payload without its steady_state_check.txt, which the page's
+    Send to R and the command line's own --glv zip both carry, against glv_payload's promise that neither
+    route loses what the other carries."""
+    from test_coculture_diagonal import _arc, _rate
+
+    from grownet import rbridge
+    from grownet.__main__ import _emit
+    from grownet.mgrowthdb import records_to_network
+
+    class Failing:
+        def search(self, **_):
+            raise OSError("HTTP 503")
+    sent = {}
+    monkeypatch.setattr(rbridge, "send", lambda payload, **_: sent.update(payload) or {"organisms": 2})
+    net = records_to_network([{**_arc("b", "a", 0.6, 0.4), "source_taxon_id": "1", "target_taxon_id": "2"}])
+    result = {"rates": {"a": _rate("A", 0.4, 1e9), "b": _rate("B", 0.2, 5e8)}, "skipped": [], "errors": [],
+              "settings": {}, "client": Failing()}
+    _emit(_parsed(["--steady-check", "--report-rates", "--to-r", "--out", os.devnull]), net, [], None, "S", result)
+    assert sent["files"]["steady_state_check.txt"].startswith("steady-state check: not checked, because")

@@ -742,7 +742,7 @@ def test_the_glv_menu_sends_to_r_and_the_page_says_what_arrived(server, with_rat
     monkeypatch.setattr(rbridge, "send", fake_send)
     _, page, _ = _open(f"{base}/glv?token={token}", b"to=r")
     assert "Sent to R: 2 organism(s), 2 growth rate(s)" in page
-    assert sent["payload"]["format"] == "grownet.glv/v1"
+    assert sent["payload"]["format"] == "grownet.glv/v2"
     assert sent["payload"]["matrices"][0]["organisms"] == sorted([A, B])
 
     # the same menu downloads the zip, so one control covers both
@@ -771,7 +771,7 @@ def test_r_can_fetch_the_same_parameters_from_the_page(server, with_rates, monke
     _, text, headers = _open(f"{base}/glv.json?token={token}")
     assert headers["Content-Type"].startswith("application/json")
     payload = json.loads(text)
-    assert payload["format"] == "grownet.glv/v1"
+    assert payload["format"] == "grownet.glv/v2"
     (block,) = payload["matrices"]
     assert block["organisms"] == sorted([A, B]) and block["unit"].startswith("1/(h x ")
     assert "readme" in payload and "caveats" in payload

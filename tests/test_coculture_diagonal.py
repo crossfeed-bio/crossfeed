@@ -703,3 +703,21 @@ def test_a_package_of_no_cell_and_no_recorded_medium_says_only_that():
     rates = {"a": _rate("A", 0.4, 1e9), "b": _rate("B", 0.2, 5e8)}
     readme = matrix.readme_from(matrix.coefficients(net, rates), net, rates)
     assert "  No effect between two organisms is in the matrices.\n" in readme
+
+
+def test_a_merged_arc_with_a_member_recording_no_medium_is_counted():
+    """Round 24 of the review: under --merge-arcs a merged arc named only its members' recorded media, so a
+    cell from a WC arc and one recording no medium, merged, read as of WC alone. The merged arc says how
+    many of its members record no medium, and the cell is counted as one with such an arc."""
+    from grownet import matrix
+    from grownet.derive import _merged
+    from grownet.mgrowthdb import records_to_network
+    members = [{**_arc("b", "a", 0.6, 0.4), "strength": 0.58},
+               {**_arc("b", "a", 0.7, 0.4), "strength": 0.81, "medium": None, "study_id": "S2"}]
+    merged = _merged(members)
+    assert merged["medium"] == "WC" and "1 of 2 of the merged arcs record no medium" in merged["notes"]
+    got = matrix.coefficients(records_to_network([merged]), {"a": _rate("A", 0.4, 1e9), "b": _rate("B", 0.2, 5e8)})
+    assert got["matrices"][0]["unrecorded"] == 1
+    # members that all record their medium leave no such note
+    assert not [n for n in _merged([members[0], {**members[0], "study_id": "S2"}])["notes"]
+                if "record no medium" in n]

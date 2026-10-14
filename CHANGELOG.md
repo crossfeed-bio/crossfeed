@@ -8,6 +8,12 @@ content.
 
 ### Upgrading
 
+- **The gLV payload moves to `grownet.glv/v2`** (Karoline, 2026-10-14: "follow your recommendation for
+  Q4"). It adds `caveats.arcs_left_out`, `caveats.cell_media`, `caveats.dropout_arcs_in_cells` and each
+  matrix's `cells_with_unrecorded_medium`, and `matrices[].media` now names the media of the cells a
+  matrix holds, where it named those of every arc between its organisms (or the network's), so a reader
+  of v1 would have read the new `media` as the old one. The R package of this version reads v2, v1 and
+  v0; an older one reads v2 with a warning that it does not know the format.
 - **The format id moves to `grownet.interaction_network/v4`** (Karoline, 2026-10-12, #266), for five
   optional fields a reader could not get from a `/v3` file. On an arc: `metric_unit`, the unit of
   `metric_with` and `metric_without` (#214); `window` and `window_unit`, the interval the metric was
@@ -144,7 +150,10 @@ content.
   with a note saying so. At alpha 0 the report says the test is off and, while a comparison whose set's
   metric was not positive is still censored, that its bound uses the factor; the factor is marked unread
   only when none is, and the page and report say this run did not read it, not the derivation. The
-  command line names how many studies could not be read. The model assumption no longer says every cell was measured between two organisms.
+  command line names how many studies could not be read, and `--to-r` carries the steady-state check
+  to R as the zip and the page do. An untouched page form leaves the no-growth rule at its default,
+  where every search said it was changed and recorded 0.05 and 1.5. A merged arc whose members do not
+  all record a medium says how many do not, and the gLV package counts its cell as such. The model assumption no longer says every cell was measured between two organisms.
   R reads `pairs_left_out`, `across_units` and `arcs_left_out` with their actors and prints them.
 - **A merged arc keeps no single comparison's bound, capacity, coefficient or fit**: every such field is kept
   only where all merged arcs agree, a merged arc's coefficient is the median of its members', and in a gLV

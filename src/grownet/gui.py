@@ -1026,7 +1026,9 @@ def parse_settings(form: dict) -> dict:
         settings["absence_threshold"] = absent
     for key in ("no_growth_alpha", "no_growth_factor"):
         value = _finite(form, key)
-        if value is not None:
+        # the form shows the rule's default, so an untouched form sends it back: that is the default, not
+        # a change from it (found in review: every search said these were not at their default)
+        if value is not None and value != getattr(interaction, key.upper()):
             settings[key] = value
     settings["max_adjusted_p"] = None
     if form.get("filter_adjusted_p"):

@@ -1137,6 +1137,9 @@ and the README: that is the one mistake this style can make.
   switch (`button.switch` with a track and a knob in `brand.CSS`), green when on and white when off, with
   `aria-pressed` for anyone who cannot see it. It stays a submit button, so the page keeps its no-JavaScript
   rule: the server re-renders the switch the other way.
+- **The gLV payload is `grownet.glv/v2`** since 0.5.0 (Karoline, 2026-10-14, Q4): new fields and a
+  narrower `matrices[].media` moved it; `PREVIOUS_GLV_FORMATS` and R's `GLV_FORMATS` keep v1 and v0
+  readable. A further field or change of meaning moves it again.
 - `matrix.media(net)` is every arc's media (the payload's `caveats.media`); the gLV README and the R printout
   describe the media matrix by matrix (`matrix._media_lines`, R `print_media`), from each matrix's `media`
   (its cells') and `cells_with_unrecorded_medium` (cells with an arc recording no medium), with

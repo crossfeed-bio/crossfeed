@@ -1100,7 +1100,8 @@ hands over a plain matrix and a plain vector, with a helper that shapes them for
 <a href="https://bioconductor.org/packages/release/bioc/html/miaSim.html">miaSim</a>, whose
 <code>simulateGLV</code> solves dx/dt = x(b + Ax), the order this matrix is written in.</p>
 <p><strong>This route carries the same numbers as the zip</strong> (the payload is
-<code>grownet.glv/v1</code>): fitted coefficients, one matrix per abundance unit, with the rates and what
+<code>grownet.glv/v2</code>, which grownet 0.5.0's R package reads, as it does the v1 and v0 of
+earlier versions): fitted coefficients, one matrix per abundance unit, with the rates and what
 each one is made of beside them, and every caveat as a field rather than as prose. So nothing there needs
 scaling, and <code>glv_scale()</code> warns when it is called on them and says why: their cells are
 already in the units of the diagonal they sit beside, and a fit whose cells outweigh the organisms' own

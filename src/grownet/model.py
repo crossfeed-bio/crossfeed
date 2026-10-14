@@ -54,6 +54,10 @@ OUTCOMES = ("quantified", "obligate", "abolished", "no_growth")
 # why an edge is low quality: hidden by default and never read as the absence of an interaction
 QUALITY_FLAGS = ("single_replicate", "strains_pooled", "non_batch", "removed_member_detected")
 # cautions a reader should see that do not make an edge low quality: it keeps its status and is shown
+# The note a merged arc carries when some of its members record no medium: its `medium` names only those
+# that do, and the gLV package counts the cell as one with an arc recording no medium (found in review).
+MERGED_MEDIUM_UNRECORDED = "of the merged arcs record no medium"
+
 CAUTIONS = ("two_replicates", "conditions_unverified", "stationary_phase_differs", "stationary_unchecked",
             "zero_at_start", "untested", "continuous_culture", "window_partial", "rate_unchecked")
 # what a node's id rests on: the NCBI taxon id of the strain, or genus and species of its name (#23)

@@ -32,7 +32,7 @@ import zipfile
 
 from . import brand
 from .interaction import ABOLISHED, OBLIGATE
-from .model import InteractionNetwork, genus_name
+from .model import MERGED_MEDIUM_UNRECORDED, InteractionNetwork, genus_name
 from .rates import doubling_time
 
 # The -1 a package used to carry on its diagonal by convention (Karoline, 2026-10-03). No output holds it
@@ -1042,7 +1042,8 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
             entry["dropout"][unit] += 1
         # an arc in the cell that records no medium: a cell of WC and such an arc read as of WC alone
         # (found in review)
-        if not any(name for name in (edge.medium or "").split("; ")):
+        if (not any(name for name in (edge.medium or "").split("; "))
+                or any(MERGED_MEDIUM_UNRECORDED in note for note in (getattr(edge, "notes", None) or ()))):
             entry.setdefault("unrecorded", set()).add(unit)
         # kept per unit, as the media are: an arc in another unit is not in the cell, and labeled it as one
         # from the ratio or from a comparison where one side did not grow (found in review)
@@ -1772,8 +1773,13 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
 # The payload moved to v1 with #120: `matrices` replaced `interactions`, one per abundance unit, and the
 # numbers became fitted coefficients rather than log2 means, so the fields changed meaning and a version
 # is a promise about content (Craig's rule, #71).
-GLV_FORMAT = "grownet.glv/v1"
-PREVIOUS_GLV_FORMATS = ("grownet.glv/v0",)
+# It moved to v2 for 0.5.0 (Karoline, 2026-10-14: "follow your recommendation for Q4"): four fields were
+# added (caveats.arcs_left_out, caveats.cell_media, caveats.dropout_arcs_in_cells and each matrix's
+# cells_with_unrecorded_medium) and `matrices[].media` narrowed from the media of every arc between the
+# matrix's organisms to those of the cells it holds, so a reader trusting v1 would read the new `media`
+# as the old quantity, which is the line the format id is drawn at.
+GLV_FORMAT = "grownet.glv/v2"
+PREVIOUS_GLV_FORMATS = ("grownet.glv/v1", "grownet.glv/v0")
 
 
 def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dict:
@@ -1827,9 +1833,9 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
              # the one gLV mode selects, the payload reported its FITTED ROW count as the replicate
              # count: 1 or 2 against the zip's 3 on a live corpus run, where `glv_payload` promises "the
              # same numbers as the zip" and the README allows a difference in the fifth significant
-             # digit (#259). The row count is deliberately not added beside it: `grownet.glv/v1` is a
-             # released format with `PREVIOUS_GLV_FORMATS` beside it, so a new field moves that id,
-             # which is a decision about the package rather than a fix to it. Anyone who wants the row
+             # digit (#259). The row count was deliberately not added beside it: a released payload format
+             # has `PREVIOUS_GLV_FORMATS` beside it, so a new field moves that id, which is a decision
+             # about the package rather than a fix to it. Anyone who wants the row
              # count has it in the network's own `meta.growth_rates`, as `n` with `n_label`.
              # as growth_rates.csv writes it: `n` where the count is missing OR empty (found in review)
              "replicates": rates[nid]["replicates"] if rates[nid].get("replicates") is not None

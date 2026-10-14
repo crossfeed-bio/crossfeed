@@ -5,12 +5,14 @@
 # beside the numbers, and this file is where they become part of the object rather than prose a reader
 # may never open: `print` shows them every time, and `glv_matrix` and `as_miasim` act on them.
 
-# The payload format this package reads. v1 (grownet 0.3.0) carries fitted coefficients, one matrix per
-# abundance unit; v0 carried one matrix of log2 effect sizes with -1 on the diagonal and +/-10 for a pair
-# with no ratio. Both are read, and the object says which one it holds (`fitted`), because what a cell
-# means differs.
-GLV_FORMAT <- "grownet.glv/v1"
-GLV_FORMATS <- c("grownet.glv/v1", "grownet.glv/v0")
+# The payload format this package reads. v2 (grownet 0.5.0) adds where each left-out effect is, the media
+# of the cells and the drop-out arcs in them, and narrows each matrix's `media` to its cells'; v1 (grownet
+# 0.3.0) carries fitted coefficients, one matrix per abundance unit; v0 carried one matrix of log2 effect
+# sizes with -1 on the diagonal and +/-10 for a pair with no ratio. All are read, a field a version lacks
+# reads as absent, and the object says whether it holds fitted coefficients (`fitted`), because what a
+# cell means differs.
+GLV_FORMAT <- "grownet.glv/v2"
+GLV_FORMATS <- c("grownet.glv/v2", "grownet.glv/v1", "grownet.glv/v0")
 
 #' @noRd
 stop_grownet <- function(...) stop(paste0(...), call. = FALSE)

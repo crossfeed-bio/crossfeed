@@ -1320,3 +1320,18 @@ def test_the_factor_unread_at_alpha_0_is_not_blamed_on_the_derivation():
     assert "NOT read by the replicate derivation" not in page
     assert "No-growth factor is not read in this run: alpha 0 switches the no-growth test off" in page
     assert "not read in this run" not in render_result("tok", _query(no_growth_alpha=0.05))
+
+
+def test_an_untouched_form_leaves_the_no_growth_rule_at_its_default():
+    """Round 24 of the review: the form shows the no-growth rule's defaults, 0.05 and 1.5, and an untouched
+    form sent them back as chosen values, so every search said they were not at their default, opened
+    Advanced settings, and recorded 0.05 and 1.5 where the command line records the default (None)."""
+    from grownet import interaction
+    from grownet.gui import parse_settings
+    form = {"no_growth_alpha": [str(interaction.NO_GROWTH_ALPHA)],
+            "no_growth_factor": [str(interaction.NO_GROWTH_FACTOR)]}
+    settings = parse_settings(form)
+    assert settings.get("no_growth_alpha") is None and settings.get("no_growth_factor") is None
+    # a value other than the default is kept
+    changed = parse_settings({"no_growth_alpha": ["0.01"], "no_growth_factor": ["2"]})
+    assert changed["no_growth_alpha"] == 0.01 and changed["no_growth_factor"] == 2.0

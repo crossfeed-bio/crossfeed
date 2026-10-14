@@ -51,7 +51,7 @@ from .interaction import (
 )
 from .interaction import DROPOUT as DROPOUT_EVIDENCE
 from .mgrowthdb import MGrowthDBClient, MGrowthDBError
-from .model import genus_name
+from .model import MERGED_MEDIUM_UNRECORDED, genus_name
 from .stats import CORRECTIONS, welch
 
 
@@ -1744,7 +1744,10 @@ def _merged(arcs: list) -> dict:
             "significance": None,
             "n_with": None, "n_without": None, "outcome": outcome,
             "status": PRESENT if any(a.get("status") == PRESENT for a in arcs) else None,
-            "quality": union("quality"), "cautions": union("cautions"), "notes": union("notes"),
+            "quality": union("quality"), "cautions": union("cautions"),
+            "notes": union("notes") + ([f"{unrecorded} of {len(arcs)} {MERGED_MEDIUM_UNRECORDED}"]
+                                       if 0 < (unrecorded := sum(1 for a in arcs if not a.get("medium")))
+                                       < len(arcs) else []),
             "experiments": union("experiments"), "community": sorted(set(union("community"))),
             "evidence": (DROPOUT_EVIDENCE if any(a.get("evidence") == DROPOUT_EVIDENCE for a in arcs)
                          else arcs[0].get("evidence")),
