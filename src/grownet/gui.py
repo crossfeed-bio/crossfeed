@@ -127,6 +127,7 @@ DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window":
             "derivation": "replicate",
             "include_dropout": True,
             "include_non_batch": False, "conditions": "", "exclude_studies": "", "only_entered": True,
+            "technique": "",
             "merge_arcs": False, "min_studies": 1, "merge_genera": False,
             # None: the no-growth rule's own defaults, read when used (grownet.interaction.grew)
             "no_growth_alpha": None, "no_growth_factor": None,
@@ -326,6 +327,11 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   <input name="min_studies" type="text" size="6" value="{_esc(s['min_studies'])}"></label>
   <span class="muted">keep arcs resting on at least this many studies; above 1 it needs merged arcs, since an
   unmerged arc rests on one study</span></div>
+<div class="row"><label>Technique
+  <input name="technique" type="text" size="12" value="{_esc(s['technique'])}"></label>
+  <span class="muted">keep only curves measured by this technique (fc, 16s, qpcr, plates, ...), in arcs and in
+  monoculture rates and plateaus; the others are named. Empty by default: every technique, each compared
+  only with itself</span></div>
 <div class="row"><label>Exclude these studies
   <input name="exclude_studies" type="text" size="40" value="{_esc(s['exclude_studies'])}"></label>
   <span class="muted">comma separated study ids never searched, for example a study you know to be
@@ -1042,6 +1048,7 @@ def parse_settings(form: dict) -> dict:
         settings["correction"] = correction
     settings["conditions"] = form.get("conditions", [""])[0].strip()
     settings["exclude_studies"] = form.get("exclude_studies", [""])[0].strip()
+    settings["technique"] = form.get("technique", [""])[0].strip().lower()
     settings["only_entered"] = bool(form.get("only_entered"))
     settings["report_rates"] = bool(form.get("report_rates"))
     settings["steady_check"] = bool(form.get("steady_check"))
@@ -1078,6 +1085,14 @@ def support_level(entries) -> str:
 
 def run_query(client, entries, settings: dict | None = None, index: dict | None = None, progress=None,
               narrow: bool = True, all_studies: bool = False, published: bool = True) -> dict:
+    """`_run_query` with the Technique setting in force for the whole search (Karoline, #292)."""
+    from .adapter import only_technique
+    with only_technique((settings or {}).get("technique") or None):
+        return _run_query(client, entries, settings, index, progress, narrow, all_studies, published)
+
+
+def _run_query(client, entries, settings: dict | None = None, index: dict | None = None, progress=None,
+               narrow: bool = True, all_studies: bool = False, published: bool = True) -> dict:
     """Species names or taxon ids to an interaction network, through mGrowthDB and the existing derivation.
 
     Returns {"resolved", "unresolved", "taxon_ids", "studies", "network", "skipped", "errors", "notes"}.

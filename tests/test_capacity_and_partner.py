@@ -131,8 +131,9 @@ def test_the_carrying_capacity_is_the_plateau_of_a_monoculture_that_reached_one(
     found, skipped = monoculture_rates(client, [_mono("E1", A, [(1, "r1"), (2, "r2")])])
     (entry,) = found.values()
     (here,) = entry["capacity_by_medium"].values()        # one medium: these fixtures name none
-    assert here["values"] == pytest.approx([1.0e8, 3.0e8])
-    assert here["unit"] == "Cells/mL"                 # the abundance unit, not the rate's 1/h
+    (group,) = here["groups"].values()                    # one unit and technique
+    assert group["values"] == pytest.approx([1.0e8, 3.0e8])
+    assert group["unit"] == "Cells/mL"                # the abundance unit, not the rate's 1/h
     assert entry["method"] == "growth_rate:easylinear:5"
     assert entry["capacity_left_out"] == [] and skipped == []
     merged = merge_rates([("S1", found)])[next(iter(found))]
@@ -176,18 +177,47 @@ def test_the_lag_always_comes_from_the_baranyi_fit_whichever_rate_was_asked_for(
         assert merged["method"] == named and merged["lag_method"] == "baranyi"
 
 
+def _one_capacity(value, unit, points, technique="fc", curve="r1"):
+    return {"ncbi:1": {"name": A, "unit": "1/h", "values": [0.4], "replicates": ["r1"], "lags": [],
+                       "capacity_left_out": [], "method": "growth_rate:easylinear:5",
+                       "capacity_by_medium": {"wc": {"label": "WC", "labels": ["WC"], "groups": {
+                           (unit, technique): {"unit": unit, "technique": technique, "values": [value],
+                                               "falls": [1.0], "curves": [curve], "points": points}}}}}}
+
+
 def test_capacities_in_another_abundance_unit_are_named_not_converted():
-    """The same rule the rates follow across time units, Karoline's "left out rather than converted"."""
-    def one(value, unit):
-        return {"ncbi:1": {"name": A, "unit": "1/h", "values": [0.4], "replicates": ["r1"], "lags": [],
-                           "capacity_left_out": [], "method": "growth_rate:easylinear:5",
-                           "capacity_by_medium": {"wc": {"label": "WC", "unit": unit, "values": [value],
-                                                         "falls": [1.0], "curves": ["r1"]}}}}
-    cells, grams = one(1.0e8, "Cells/mL"), one(0.9, "g/L")
-    merged = merge_rates([("S1", cells), ("S2", grams)])["ncbi:1"]
-    assert merged["capacity"] == pytest.approx(1.0e8) and merged["capacity_unit"] == "Cells/mL"
-    assert merged["other_capacity_units"] == ["S2 (g/L)"]
-    assert merged["n"] == 2                       # the rates themselves are in one unit, so both count
+    """Karoline's "left out rather than converted", and since 2026-10-14 (#292) the unit or technique with
+    more time points wins rather than the first study read: S2's plateau in g/L has 12 points against S1's 6
+    in Cells/mL, so the capacity is S2's, whichever study is read first, and S1's is named."""
+    cells, grams = _one_capacity(1.0e8, "Cells/mL", 6, curve="S1 r1"), _one_capacity(0.9, "g/L", 12, curve="S2 r1")
+    for order in ([("S1", cells), ("S2", grams)], [("S2", grams), ("S1", cells)]):
+        merged = merge_rates(order)["ncbi:1"]
+        assert merged["capacity"] == pytest.approx(0.9) and merged["capacity_unit"] == "g/L"
+        assert merged["capacity_points"] == 12 and merged["capacity_technique"] == "fc"
+        assert merged["other_capacity_units"] == ["Cells/mL by fc"]
+        assert merged["n"] == 2                   # the rates themselves are in one unit, so both count
+        assert merged["capacity_left_out"] == [
+            ("S1 r1", "its plateau is in Cells/mL by fc, and this organism's capacity is taken from g/L by fc, "
+                      "which has more time points (12 against 6); plateaus are compared only within one "
+                      "technique and unit")]
+
+
+def test_one_unit_by_two_techniques_is_two_groups_and_a_tie_chooses_none():
+    """Karoline, 2026-10-14 (#292): "Technique and unit". One strain's plateaus in Cells/mL by 16S and by
+    flow cytometry are not pooled; with as many time points (8) the one with more curves wins, and with as
+    many curves too nothing is chosen and the tie is named."""
+    sixteen = _one_capacity(2.0e8, "Cells/mL", 8, technique="16s", curve="S1 r1")
+    flow = _one_capacity(1.0e8, "Cells/mL", 8, technique="fc", curve="S2 r1")
+    merged = merge_rates([("S1", sixteen), ("S2", flow)])["ncbi:1"]
+    assert merged["capacity"] is None and merged["capacity_unit"] == ""
+    assert merged["capacity_tie"] == ("the plateaus in Cells/mL by 16s and in Cells/mL by fc have as many time "
+                                      "points (8) and curves (1), so none is chosen and this organism has no "
+                                      "capacity")
+    assert {curve for curve, _why in merged["capacity_left_out"]} == {"S1 r1", "S2 r1"}
+    # a second flow-cytometry curve with as many points in all breaks the tie by curves
+    two = _one_capacity(1.2e8, "Cells/mL", 0, technique="fc", curve="S3 r1")
+    merged = merge_rates([("S1", sixteen), ("S2", flow), ("S3", two)])["ncbi:1"]
+    assert merged["capacity_technique"] == "fc" and merged["capacity_n"] == 2 and merged["capacity_tie"] == ""
 
 
 # ---- a plateau the culture did not hold -----------------------------------------------------------
@@ -232,6 +262,7 @@ def test_a_curve_that_fell_too_far_from_its_peak_gives_no_capacity_and_is_named(
     found, skipped = monoculture_rates(client, [_mono("E1", A, [(1, "r1"), (2, "r2")])])
     (entry,) = found.values()
     (here,) = entry["capacity_by_medium"].values()
+    (here,) = here["groups"].values()
     assert here["values"] == pytest.approx([1.0e8])               # only the replicate within the limit
     assert here["falls"] == pytest.approx([10.0])
     assert skipped == []                                          # the rate itself was not left out
@@ -251,6 +282,7 @@ def test_the_limit_is_a_setting_and_zero_keeps_every_certified_plateau():
                                capacity_max_fall=0)
     entry = next(iter(off.values()))
     (here,) = entry["capacity_by_medium"].values()
+    (here,) = here["groups"].values()
     assert len(here["values"]) == 2 and entry["capacity_left_out"] == []
     assert merge_rates([("S1", off)])[next(iter(off))]["capacity_fall"] == pytest.approx(55.0)
 
@@ -566,14 +598,17 @@ def test_a_plateau_another_study_measured_in_another_unit_is_named_as_left_out()
     found1, _ = monoculture_rates(s1, [_mono_in("E1", A, [(1, "r1"), (2, "r2")], "mMCB")])
     nid = next(iter(found1))
     entry = found1[nid]
-    od = {key: {**block, "unit": "OD", "curves": ["S2 r3", "S2 r4"], "values": [0.8, 0.9]}
+    (group,) = next(iter(entry["capacity_by_medium"].values()))["groups"].values()
+    od = {key: {**block, "groups": {("OD", ""): {**group, "unit": "OD", "technique": "",
+                                                 "curves": ["S2 r3", "S2 r4"], "values": [0.8, 0.9],
+                                                 "points": group["points"] - 1}}}
           for key, block in entry["capacity_by_medium"].items()}
     found2 = {nid: {**entry, "capacity_by_medium": od, "capacity_left_out": []}}
     merged = merge_rates([("S1", found1), ("S2", found2)])[nid]
     left = dict(merged["capacity_left_out"])
-    # the unit is decided per medium, so the message says the medium's other plateaus (round 9)
-    assert left.get("S2 r3", "") == ("its plateau is in OD, and the other plateaus in mMCB are in Cells/mL; "
-                                     "left out rather than converted"), left
+    # S1's Cells/mL plateaus have one time point more, so they win (#292), and S2's are named
+    assert left.get("S2 r3", "").startswith("its plateau is in OD by an unrecorded technique, and this "
+                                            "organism's capacity is taken from Cells/mL by"), left
     assert "S2 r4" in left and merged["capacity_n"] == 2
 
 
@@ -625,9 +660,10 @@ def test_a_study_whose_rates_are_in_another_time_unit_keeps_its_plateaus_and_say
     assert "rates in another time unit left out: S2 (1/d)" in text, text
 
 
-def test_a_plateau_in_another_unit_within_one_study_names_its_medium():
-    """Round 9 of the review: the reason said "this organism's others in X" while X is the unit of that one
-    medium's plateaus, which the published capacity need not be in."""
+def test_plateaus_in_two_units_within_one_study_are_two_groups_of_one_medium():
+    """#292: within one medium, plateaus are kept per unit and technique, and which is published is decided
+    by time points once every study is read; the first plateau's unit used to claim the medium and the
+    others were left out on the spot."""
     from grownet.derive import _collect_capacity
     entry = {"capacity_by_medium": {}, "capacity_left_out": []}
     medium = {"key": "wc", "label": "WC"}
@@ -635,8 +671,16 @@ def test_a_plateau_in_another_unit_within_one_study_names_its_medium():
         points = _settles()
         curve = GrowthCurve(A, [t for t, _, _ in points], [v for _, v, _ in points], "h", unit)
         _collect_capacity(entry, curve, label, medium)
-    assert entry["capacity_left_out"] == [("r2", "the plateau is in OD, and the other plateaus in WC are in "
-                                                 "Cells/mL; left out rather than converted")]
+    groups = entry["capacity_by_medium"]["wc"]["groups"]
+    assert set(groups) == {("Cells/mL", ""), ("OD", "")} and entry["capacity_left_out"] == []
+    assert groups[("OD", "")]["curves"] == ["r2"] and groups[("OD", "")]["points"] == len(_settles())
+    # and one unit by two techniques is two groups too ("Technique and unit")
+    entry = {"capacity_by_medium": {}, "capacity_left_out": []}
+    for label, technique in (("r1", "16s"), ("r2", "fc")):
+        points = _settles()
+        curve = GrowthCurve(A, [t for t, _, _ in points], [v for _, v, _ in points], "h", "Cells/mL", technique)
+        _collect_capacity(entry, curve, label, medium)
+    assert set(entry["capacity_by_medium"]["wc"]["groups"]) == {("Cells/mL", "16s"), ("Cells/mL", "fc")}
 
 
 def test_a_derivation_without_the_no_growth_rule_says_so_in_the_report():

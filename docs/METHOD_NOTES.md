@@ -1674,7 +1674,14 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    optionally specify a technique." Measured on the corpus the same day: no strain has two per-strain
    techniques in one study, no replicate has both plate counts and flow cytometry at culture level, and
    different techniques share a unit string across studies (Blautia hydrogenotrophica is "Cells/mL" by 16S,
-   qPCR and flow cytometry), so how (b) is built is being settled with her.
+   qPCR and flow cytometry), so how (b) is built is being settled with her. SETTLED 2026-10-14 (#292), her
+   answers to three design points: what counts as the same units is "Technique and unit" (a plateau or an
+   arc is compared only with one measured by the same technique in the same unit); which one wins is "More
+   time points" (one strain's plateaus across studies, a strain measured by several techniques in one
+   replicate, a genus's strains, and a gLV cell, which is built from the arcs in its matrix's own unit; a
+   tie in time points goes to more curves, and a tie left after that chooses none and says so, never the
+   order things were read); and the Technique setting is "Curves of it only" (#140 still decides which
+   culture-level counts exist, so never OD).
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.

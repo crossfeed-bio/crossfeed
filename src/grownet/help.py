@@ -276,6 +276,13 @@ SETTINGS = {
                    "seventeen ways. Those are never pooled, they give separate arcs, and the report names "
                    "every medium a search read, so name an experiment id to read one of them alone. On the "
                    "command line a study id given this way replaces the study argument."),
+    "technique": ("Technique", "--technique NAME",
+                  "Keep only curves measured by this mGrowthDB technique (fc for flow cytometry, 16s, qpcr, "
+                  "plates, and so on), in arcs and in monoculture rates and plateaus, and name every other "
+                  "curve as left out. Empty by default. Without it, a plateau or an arc is still compared "
+                  "only with one of the same technique and unit, and where one strain is measured by several "
+                  "techniques the one with more time points is used (Karoline, #292). Culture-level counts "
+                  "stay plate counts and flow cytometry only (#140), so OD is never one."),
     "exclude_studies": ("Exclude these studies", "--exclude-studies IDS",
                         "Comma separated mGrowthDB study ids that are never searched, for example a study "
                         "you know to be unsuitable. Empty by default. It applies after the second box, "

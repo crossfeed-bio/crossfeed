@@ -259,3 +259,18 @@ def test_the_report_keeps_a_culture_level_reason_it_has_not_already_said():
     text = report.report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
                                "skipped": [], "entries": []})
     assert why in text, text
+
+
+def test_the_technique_setting_chooses_among_the_culture_level_counts_and_never_admits_od():
+    """Karoline, 2026-10-14 (#292): the Technique setting keeps curves of it only, and #140 still decides
+    which culture-level counts exist. r3 has plates and fc: with fc chosen it is fc (plates would win by
+    `CULTURE_TECHNIQUES` order otherwise); with od chosen nothing qualifies, OD being no count."""
+    from grownet.adapter import only_technique
+    client = CultureClient({"r1": ["od", "fc"], "r3": ["plates", "fc"]})
+    with only_technique("fc"):
+        reps, _ = culture_trace_replicates(client, _exp(["r1", "r3"]), STRAIN)
+    assert [(r.name, r.curve(STRAIN).technique) for r in reps] == [("r1", "culture-level fc"),
+                                                                    ("r3", "culture-level fc")]
+    with only_technique("od"):
+        reps, skipped = culture_trace_replicates(client, _exp(["r1", "r3"]), STRAIN)
+    assert reps == [] and all(why.endswith("measured by od, the Technique setting") for _, why in skipped)

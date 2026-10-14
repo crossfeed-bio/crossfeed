@@ -130,7 +130,7 @@ def test_every_field_a_search_returns_is_carried_or_deliberately_left_out():
 
     from grownet import gui, published
 
-    returned = set(re.findall(r'"([a-z_]+)":', inspect.getsource(gui.run_query).split("return {", 1)[1]))
+    returned = set(re.findall(r'"([a-z_]+)":', inspect.getsource(gui._run_query).split("return {", 1)[1]))
     carried = set(published.FIELDS) | {"network", "absent"}
     # Nothing is deliberately left out today, so this set is empty and the check is strict. A key that
     # genuinely should not travel goes here WITH its reason, and the next key added to `run_query`
