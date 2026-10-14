@@ -192,7 +192,7 @@ def test_arcs_from_an_organism_to_itself_are_counted_as_arcs():
     assert "3 arc(s) are from one organism to itself" in about and "DISAGREE IN SIGN" not in about
 
 
-def test_the_integrated_form_carries_a_refused_taxon_id_too(monkeypatch):
+def test_the_integrated_form_carries_a_refused_taxon_id_too():
     """Round 2 of the review: the refusal was tested through `derive._record` only, and the integrated form
     builds its own records, so blanking it there survived."""
     import json

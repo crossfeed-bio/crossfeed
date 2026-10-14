@@ -17,8 +17,10 @@ and on 2026-09-27 that the implementation is its own option:
   and the review): the 468 curves of the bioreplicates of SMGDB00000004 and SMGDB00000005 that are not
   averages, counted by subject kind as mGrowthDB records it (strain, metabolite, and `bioreplicate` for a
   culture-level count). Identical on all 339 curves both fit, to 5e-15 (97 strain, 157 metabolite, 85
-  culture-level); 55 neither fits (re-counted 2026-10-14 after #293: 16 with no rising window, which
-  neither fits, and 19 that R refuses for a value <= 0 and whose other points do not rise here). The other
+  culture-level); 55 neither fits (re-counted 2026-10-14 after #293): 20 too short for a window of 5, as
+  before #293 (16 with too few points once those <= 0 are dropped, which R refuses for a value <= 0, and 4
+  too short for R as well); 16 with no rising window, which neither fits; and 19 that R refuses for a value
+  <= 0 and whose other points do not rise here. The other
   74 are the TWO places grownet departs from the reference, one of them twice (3 curves are departures 2
   and 1 at once: R refuses a value <= 0, and grownet's refit over the rest falls <= 0, so neither gives a
   rate):

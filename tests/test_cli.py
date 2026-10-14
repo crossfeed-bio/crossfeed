@@ -311,7 +311,7 @@ def test_the_fixture_route_refuses_a_setting_it_cannot_apply(tmp_path, capsys):
         assert "already derived" in err
 
 
-def test_a_route_that_applied_no_threshold_does_not_print_an_empty_one(tmp_path):
+def test_a_route_that_applied_no_threshold_does_not_print_an_empty_one():
     """The report printed `(k = )` and an empty `settings:` heading on the fixture route, because it has
     no output stage: a count of arcs below a threshold that was never applied, and a heading that said
     the run had no settings rather than that it records none (#222 item 1)."""
@@ -450,7 +450,7 @@ def test_the_single_study_path_marks_a_rate_stage_failure_incomplete(monkeypatch
                for e in meta["errors"]), meta["errors"]
 
 
-def test_validate_reads_the_absent_network_of_an_artifact_too(tmp_path, capsys):
+def test_validate_reads_the_absent_network_of_an_artifact_too(tmp_path):
     """Round 2 of the review: leaving out `absent`, or keeping the first code instead of the worst, survived."""
     import json as _json
 
@@ -497,7 +497,7 @@ def test_the_command_line_says_when_the_steady_state_check_could_not_run(capsys)
     assert "0 chemostat(s) scored" not in err
 
 
-def test_to_r_carries_the_steady_state_check_as_the_zip_does(monkeypatch, capsys):
+def test_to_r_carries_the_steady_state_check_as_the_zip_does(monkeypatch):
     """Round 24 of the review: --to-r sent the payload without its steady_state_check.txt, which the page's
     Send to R and the command line's own --glv zip both carry, against glv_payload's promise that neither
     route loses what the other carries."""
