@@ -32,7 +32,7 @@ import zipfile
 
 from . import brand
 from .interaction import ABOLISHED, OBLIGATE
-from .model import InteractionNetwork, genus_name
+from .model import MERGED_MEDIUM_UNRECORDED, InteractionNetwork, genus_name
 from .rates import doubling_time
 
 # The -1 a package used to carry on its diagonal by convention (Karoline, 2026-10-03). No output holds it
@@ -174,7 +174,8 @@ def media(net: InteractionNetwork) -> list:
 
 
 def dropout_arcs(net: InteractionNetwork) -> int:
-    """How many arcs of this matrix come from a drop-out design.
+    """How many arcs of this network come from a drop-out design (the gLV package counts those in its cells
+    apart, as `coefficients()["dropout_in_cells"]`).
 
     Such an arc compares a community with the same community without one member, so the effect may run
     through a third species, while a gLV coefficient is meant to be the direct effect of one organism on
@@ -203,8 +204,12 @@ def counts(net: InteractionNetwork) -> dict:
     # reported printed as 0, which in that file means no interaction (#248). They are counted apart so
     # the two numbers agree and the page can say what has no cell.
     self_pairs = sum(1 for a, b in values if a == b)
+    # the ARCS from an organism to itself, counted directly: counting self pairs in `values` missed the
+    # ones a sign conflict dropped from it, so a sidecar said 1 where the file held 5 (found in review)
+    self_arcs = sum(1 for e in net.edges if e.source == e.target
+                    and ((e.status != "absent" and e.strength is not None) or _censored(e)))
     return {"arcs": in_a_cell, "cells": len(values) - self_pairs, "organisms": len(net.nodes),
-            "within_one_organism": self_pairs}
+            "within_one_organism": self_arcs}
 
 
 def bounded_cells(net: InteractionNetwork) -> list:
@@ -254,16 +259,43 @@ def rows(net: InteractionNetwork, diagonal: float | None = None) -> tuple:
     return names, matrix, [(net.nodes[a].name or a, net.nodes[b].name or b) for a, b in conflicts]
 
 
-def for_nodes(net: InteractionNetwork, rates: dict) -> dict:
+class NodeRates(dict):
+    """The rates `for_nodes` returns, by node id, with `no_rate`: {label: why} for a node with no rate where
+    the reason is known (a genus whose strains' rates are in time units that are not converted, or an
+    organism, or a genus of them, whose every study's rates were left out for their starting spread, #81),
+    which `rate_meta` records beside `without_a_rate`."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.no_rate: dict = {}
+
+
+def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None) -> dict:
     """The growth rates keyed by this network's own node ids.
 
     A rate belongs to a strain, as a monoculture does, while a network merged to the genus level
     (`derive.merge_genus`) has one node per genus. Such a node takes the median of the rates of the
     strains of its genus, with their replicates counted and their studies kept, so a genus network can be
     simulated too.
+
+    `current` maps a taxon id to its current name (#24), as `derive.merge_genus` takes it: a strain's rate
+    carries the name its study used, so it joined its genus, and was listed in `merged_from`, by that name
+    while the arcs used the current one, and a strain moved to another genus left that genus with no rate
+    (found in review).
     """
-    out = {}
+    current = current or {}
+    # why an organism whose monocultures were read has no rate, by node id (`derive.OrganismRates`)
+    refused = dict(getattr(rates, "no_rate", {}))
+
+    def current_name(key, rate):
+        taxon = key.removeprefix("ncbi:")
+        return current.get(int(taxon), rate.get("name", "")) if key.startswith("ncbi:") and taxon.isdigit() \
+            else rate.get("name", "")
+    rates = {key: {**rate, "name": current_name(key, rate)} for key, rate in rates.items()}
+    out = NodeRates()
     for nid, node in net.nodes.items():
+        if nid not in rates and nid in refused:
+            out.no_rate[_label(node)] = refused[nid][1]
         if nid in rates:
             # the node's own name, which is the strain's current one (#24), so the rates file, the report
             # and the network all call it the same thing
@@ -271,32 +303,140 @@ def for_nodes(net: InteractionNetwork, rates: dict) -> dict:
             continue
         label = _label(node)
         members = [r for r in rates.values() if genus_name(r.get("name", "")) == genus_name(label)]
+        if node.identity == "genus" and not members:
+            # a genus whose strains' rates were all refused says whose and why, as a strain does (found in
+            # review: keyed by strain id, the reason never reached the genus node)
+            whose = [f"{current_name(key, {'name': name})}: {why}" for key, (name, why) in sorted(refused.items())
+                     if genus_name(current_name(key, {"name": name})) == genus_name(label)]
+            if whose:
+                out.no_rate[label] = "; ".join(whose)
         if node.identity != "genus" or not members:
             continue
+        # a genus of one strain IS that strain: its row is the strain's, whole, which the merge below
+        # turned into fitted-row counts and dropped the capacity's provenance from (found in review)
+        if len(members) == 1:
+            out[nid] = {**members[0], "name": label, "merged_from": [members[0].get("name", "")]}
+            continue
+
+        capacity = _merged_capacity(members)
+        if capacity["capacity"] is None and capacity["other_capacity_units"]:
+            # the strains plateaued in units that are not converted, so every plateau they reached is left
+            # out, one entry per curve or row as everywhere else, and no strain's "taken from <medium>"
+            # stands beside a genus with no capacity (found in review)
+            units = ", ".join(capacity["other_capacity_units"])
+            why = f"this genus's strains plateaued in different units or techniques ({units}), which are not " \
+                  "compared, so it has no capacity"
+            # a strain's plateaus in other media keep their own names, with this reason in place of "taken
+            # from": their unit is their medium's, which the strain row does not carry (found in review)
+            kept = [(what, why if "capacity is taken from" in reason else reason)
+                    for r in members for what, reason in r.get("capacity_left_out") or []]
+            plateaus = []
+            for r in members:
+                if r.get("capacity") is None:
+                    continue
+                # `capacity_n` counts what the plateau rests on, curves or fitted rows, in the capacity's
+                # own unit; `capacity_curves` is monoculture replicates in gLV mode (found in review)
+                n = r.get("capacity_n", 0)
+                plateaus += [(f"{r.get('name', '')}: plateau {k + 1} of {n} ({r.get('capacity_unit', '')})", why)
+                             for k in range(n)]
+            capacity["capacity_left_out"] = kept + plateaus
+        # the strains whose plateau the merged capacity is the median of; with none, every strain says why
+        behind = capacity.pop("behind") or members if capacity["capacity"] is not None else members
+        capacity.pop("behind", None)
+
+        def total(rows, key):
+            values = [r.get(key) for r in rows]
+            return sum(values) if all(isinstance(v, int) for v in values) else None
+
+        def same(rows, key):
+            values = {r.get(key) or "" for r in rows}
+            return values.pop() if len(values) == 1 else "mixed: " + "; ".join(sorted(v for v in values if v))
+        falls = [r["capacity_fall"] for r in behind if r.get("capacity_fall") is not None]
+        media = sorted({m for r in behind for m in r.get("capacity_media") or ()}) \
+            if capacity["capacity"] is not None else []
         units = {r["unit"] for r in members}
+        if len(units) > 1:
+            # strains whose rates are in different time units have no median: it was taken across them,
+            # with the unit "", and the matrix read it in its own unit (found in review). Which unit should
+            # win is not decided here, so the genus has no rate and is listed among those without one, with
+            # the reason
+            out.no_rate[label] = ("its strains' growth rates are in different time units ("
+                                  + "; ".join(f"{r.get('name', '')} {r['unit']}" for r in members)
+                                  + "), which are not converted")
+            continue
         out[nid] = {"name": label, "rate": statistics.median(r["rate"] for r in members),
-                    "unit": members[0]["unit"] if len(units) == 1 else "",
+                    "unit": members[0]["unit"],
                     "n": sum(r.get("n", 0) for r in members),
                     "studies": sorted({s for r in members for s in r.get("studies", ())}),
-                    "per_study": {}, "other_units": [],
+                    # the strains' own rates left out in another time unit, which the report prints
+                    "per_study": {}, "other_units": [f"{r.get('name', '')}: {u}" for r in members
+                                                     for u in r.get("other_units") or ()],
                     "method": members[0].get("method", ""),
-                    **_merged_capacity(members),
+                    **capacity,
+                    # replicates and plateau curves are counted, and the capacity's provenance kept, as a
+                    # strain row has them, rather than the fitted-row counts `n` stands for
+                    # a measured strain row counts its replicates in `n` and has no `replicates`, which made
+                    # this None and the payload send null beside the csv's count (found in review)
+                    "replicates": total([{"replicates": r["replicates"] if r.get("replicates") is not None
+                                          else r.get("n")} for r in members], "replicates"),
+                    "capacity_curves": total(behind, "capacity_curves") if capacity["capacity"] is not None
+                    else None,
+                    "capacity_source": same(behind, "capacity_source"),
+                    # no capacity, no medium for it: plateaus in two units gave none, and the medium survived
+                    # beside an empty capacity in the report and the payload (found in review)
+                    "capacity_medium": same(behind, "capacity_medium") if capacity["capacity"] is not None else "",
+                    # the strains the capacity is the median of, so the report does not call one strain's
+                    # plateau "the median of the strains' capacities" (found in review)
+                    "capacity_from": sorted(r["name"] for r in behind) if capacity["capacity"] is not None else [],
+                    # what a strain row says beside its numbers, which a merged row dropped while a genus
+                    # of one strain kept it (found in review): the count's unit when the rows are fitted
+                    # ones, so the report does not call them monoculture replicates; the lag's method; the
+                    # plateau's fall (Karoline, 2026-10-07: it travels with the plateau) and its media
+                    **({"n_label": same(members, "n_label")} if any(r.get("n_label") for r in members) else {}),
+                    "lag_method": same([r for r in members if r.get("lag") is not None], "lag_method")
+                    if capacity["lag"] is not None else "",
+                    "capacity_fall": statistics.median(falls) if capacity["capacity"] is not None and falls
+                    else None,
+                    "capacity_media": media,
+                    # and every other medium a plateau of these strains is in, and the spellings the alias
+                    # table read as the medium, which the report names (found in review)
+                    "capacity_other_media": sorted({m for r in behind for m in r.get("capacity_other_media") or ()}
+                                                   - set(media)) if capacity["capacity"] is not None else [],
+                    "capacity_medium_spellings": sorted({m for r in behind
+                                                         for m in r.get("capacity_medium_spellings") or ()})
+                    if capacity["capacity"] is not None else [],
                     "merged_from": sorted(r["name"] for r in members)}
     return out
 
 
 def _merged_capacity(members: list) -> dict:
     """The capacity and the lag of a genus node, merged over the species behind it (#118): the median of
-    the ones that have a capacity, and only within one abundance unit."""
-    units = {r.get("capacity_unit") for r in members if r.get("capacity") is not None and r.get("capacity_unit")}
-    unit = units.pop() if len(units) == 1 else ""
-    sizes = [r["capacity"] for r in members
-             if r.get("capacity") is not None and r.get("capacity_unit") == unit] if unit else []
+    the ones that have a capacity, and only within one abundance unit and technique; where the strains'
+    plateaus are in several, the one with more time points is used, then the one with more strains, and
+    a tie left after that gives none (Karoline, 2026-10-14, #292)."""
+    from .derive import _technique, choose_capacity_group
+    groups: dict = {}
+    for r in members:
+        if r.get("capacity") is None or not r.get("capacity_unit"):
+            continue
+        key = (r["capacity_unit"], r.get("capacity_technique") or "")
+        group = groups.setdefault(key, {"unit": key[0], "technique": key[1], "values": [], "points": 0, "rows": []})
+        group["values"].append(r["capacity"])
+        group["points"] += r.get("capacity_points") or 0
+        group["rows"].append(r)
+    chosen, others, _tie = choose_capacity_group(list(groups.values()))
     lags = [r["lag"] for r in members if r.get("lag") is not None]
-    return {"capacity": statistics.median(sizes) if sizes else None,
-            "capacity_unit": unit if sizes else "",
-            "capacity_n": sum(r.get("capacity_n", 0) for r in members) if sizes else 0,
-            "capacity_per_study": {}, "other_capacity_units": sorted(units) if not unit else [],
+    return {"capacity": statistics.median(chosen["values"]) if chosen else None,
+            "capacity_unit": chosen["unit"] if chosen else "",
+            "capacity_technique": chosen["technique"] if chosen else "",
+            "capacity_points": chosen["points"] if chosen else 0,
+            # the strains whose plateaus the median is of
+            "behind": chosen["rows"] if chosen else [],
+            # the rows or curves of the strains the median is of, as `capacity_curves` counts them
+            "capacity_n": sum(r.get("capacity_n", 0) for r in chosen["rows"]) if chosen else 0,
+            "capacity_per_study": {},
+            "other_capacity_units": sorted(f"{g['unit']} by {_technique(g)}" for g in others)
+            if not chosen else [],
             "capacity_left_out": [x for r in members for x in r.get("capacity_left_out") or []],
             "lag": statistics.median(lags) if lags else None, "lag_n": len(lags)}
 
@@ -354,11 +494,25 @@ def slow_studies(rates: dict) -> list:
     return out
 
 
+def genus_rule(rates: dict) -> str:
+    """What the rule adds when a genus of several strains is among `rates`: its rate is the median of its
+    strains' rates, not of their pooled replicates or rows, which the rule alone said. One clause for the
+    network's rule and the package README, which said the old words after the rule was fixed (found in
+    review)."""
+    several = any(len(rate.get("merged_from") or ()) > 1 for rate in rates.values())
+    return ("; a genus of several strains: the median of its strains' rates, and its capacity the median of "
+            "the capacities of those of its strains that have one, in one unit" if several else "")
+
+
 def rate_meta(net: InteractionNetwork, rates: dict, method: str) -> str:
     """The `growth_rates` block of a network's meta: the rule, a rate per organism, and the organisms that
     have none, so a downloaded network carries the rates it was reported with and says what is missing."""
-    return {"rule": rate_rule(method), "organisms": {nid: dict(rate) for nid, rate in rates.items()},
+    return {"rule": rate_rule(method) + genus_rule(rates),
+            "organisms": {nid: dict(rate) for nid, rate in rates.items()},
             "without_a_rate": sorted(_label(node) for nid, node in net.nodes.items() if nid not in rates),
+            # why, where one is known: strains whose rates are in time units not converted, or rates all
+            # left out for their starting spread (#81)
+            "why_without_a_rate": dict(getattr(rates, "no_rate", {})),
             "slow_studies": slow_studies(rates)}
 
 
@@ -424,8 +578,20 @@ def matrix_about(net: InteractionNetwork, csv_name: str = "grownet_matrix.csv") 
              f"derived {meta.get('derived_at', '')} from {meta.get('source_db', 'mGrowthDB')}",
              f"describes {csv_name}, {len(names)} x {len(names)}. Keep this file beside it: the CSV alone "
              "does not say how it was made.",
-             "",
-             "READING IT"]
+             ""]
+    # an incomplete run's 0 cells include pairs from studies that were never read (#247; found in review)
+    if meta.get("complete") is False:
+        errors = meta.get("errors") or []
+        # a failure while the growth rates were read touches no cell of this matrix (found in review)
+        if errors and all("while reading growth rates" in e for e in errors):
+            lines.append("INCOMPLETE: some growth rates could not be read; the cells below are not affected:")
+        else:
+            lines.append("INCOMPLETE: this run could not read everything it asked for, so a 0 below can be a "
+                         "pair")
+            lines.append("  from a study or curve that was never read:")
+        lines += [f"  {error}" for error in errors]
+        lines.append("")
+    lines.append("READING IT")
     lines += para("Rows are the affected organism and columns the actor: the cell in row i, column j is the "
                   "effect of j on i. The diagonal is 0, since this is the plain adjacency matrix; the gLV "
                   "package is where a diagonal is fitted.")
@@ -438,11 +604,21 @@ def matrix_about(net: InteractionNetwork, csv_name: str = "grownet_matrix.csv") 
                   + ", it was hidden as low quality, or the pair's arcs disagree in sign (listed below).")
     lines += para("NA is a comparison where one side did not grow, so no ratio exists: those cells are "
                   "listed below with the bound the network's arcs carry.")
+    within = counts(net).get("within_one_organism")
+    if within:
+        # a within-genus arc has no cell of its own: the diagonal is written there, as the page says (#248)
+        lines += para(f"{within} arc(s) are from one organism to itself, which --merge-genera produces, and "
+                      "have no cell in this matrix: the diagonal is written there.")
+    lines += para("In R: read.csv(file, row.names = 1, check.names = FALSE). Without check.names = FALSE, R "
+                  "rewrites the organism names in the header and they no longer match the row names.")
     lines.append("")
     settings = meta.get("settings") or {}
     lines.append("SETTINGS" if settings else "SETTINGS: none recorded; these records were already derived")
     lines += [f"  {key}: {json.dumps(settings[key], default=str)}" for key in sorted(settings)]
     lines.append("")
+    # a pair of an organism with itself has no cell, so it is not "left at 0": the within-one-organism line
+    # covers it (found in review)
+    conflicts = [(affected, actor) for affected, actor in conflicts if affected != actor]
     if conflicts:
         # Which designs disagree, per pair: across a biculture and a drop-out is the pairwise effect and
         # the in-community effect pulling opposite ways, which the report names as a result (#207);
@@ -464,7 +640,11 @@ def matrix_about(net: InteractionNetwork, csv_name: str = "grownet_matrix.csv") 
     bounded = bounded_cells(net)
     if bounded:
         lines.append("NA CELLS (actor on affected, and the bound where the rule set one)")
-        lines += [f"  {actor} on {affected}" + ("" if bound is None else f": at least {bound:+.4g}")
+        # an obligate arc's bound is a lower one (at least this much facilitation), an abolished arc's an
+        # upper one (at most this much inhibition), as `derive.bounded_strength` says; this said "at
+        # least" for both (found in review)
+        lines += [f"  {actor} on {affected}" + ("" if bound is None else
+                                                f": {'at least' if bound > 0 else 'at most'} {bound:+.4g}")
                   for affected, actor, bound in bounded]
         lines.append("")
     found = media(net)
@@ -562,8 +742,10 @@ MODEL_ASSUMPTIONS = (
     "  INTERACTIONS ARE PAIRWISE AND ADD UP. The effect of j on i is the same whoever else is present,",
     "      and a community is the sum of its pairs. A higher-order interaction, where a third organism",
     "      changes how the first two affect each other, has no term in this model and cannot be fitted",
-    "      into one. Every cell here was measured between two organisms and is carried into a simulation",
-    "      of any community as though it still held there.",
+    "      into one. Every effect between organisms here was measured between two of them, unless it comes",
+    "      from a drop-out design (the arcs counted above), and is carried into a simulation of any",
+    "      community as though it still held there. The diagonal comes from each organism's own growth:",
+    "      its monoculture, or its co-culture plateau where the README says so.",
     "  So read a simulation against the measurement it came from rather than against itself, and treat",
     "      these numbers as a description of the organisms under the conditions that were fitted. The",
     "      medium travels with every arc and with every carrying capacity for that reason.",
@@ -610,7 +792,7 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
     writer.writerow(["organism", "growth_rate", "unit", "replicates", "studies", "method", "lag",
                      "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves",
                      "capacity_curves_left_out", "capacity_fall_from_peak", "capacity_medium",
-                     "capacity_source", "doubling_time"])
+                     "capacity_source", "doubling_time", "capacity_technique"])
     order = labels(net) if net is not None else sorted(rates)
     for nid in order:
         rate = rates.get(nid)
@@ -649,32 +831,89 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
                          # ln(2) / rate, in the time unit of the rate: the same number in the form a
                          # reader rejects at a glance (#173)
                          ("" if (double := doubling_time(rate["rate"], rate.get("unit", RATE_UNIT)))
-                          is None else f"{double:.4g}")])
+                          is None else f"{double:.4g}"),
+                         # the technique the plateau was measured by: plateaus are compared only within one
+                         # technique and unit (Karoline, 2026-10-14, #292)
+                         rate.get("capacity_technique", "") if capacity is not None else ""])
     return out.getvalue()
 
 
-def _dropout_lines(net: InteractionNetwork) -> list:
-    """What the README says about arcs that may act through a third species."""
+def _dropout_lines(net: InteractionNetwork, in_cells=None) -> list:
+    """What the README says about arcs that may act through a third species: those in the cells when
+    `in_cells` counts them, since an arc in no cell is in no simulation and deriving again to leave it out
+    changes no cell (found in review); the network's otherwise."""
     n = dropout_arcs(net)
-    if not n:
-        return ["  Every arc compares two organisms directly; none comes from a drop-out design."]
-    return [f"  {n} ARC(S) COME FROM DROP-OUT DESIGNS, a community against the same community without one",
-            "      member, so the effect may run through a third species, which a gLV coefficient is not",
-            "      meant to include. Press gLV mode on the page, or untick Include drop-out communities in",
-            "      Advanced settings, and derive again to leave them out."]
+    if in_cells is None:
+        in_cells, elsewhere = n, 0
+    else:
+        elsewhere = max(n - in_cells, 0)
+    rest = ([f"      The network's other {elsewhere} drop-out arc(s) are in no cell."] if elsewhere else [])
+    if not in_cells:
+        return ["  Every arc in the cells compares two organisms directly; none comes from a drop-out design."
+                if elsewhere else "  Every arc compares two organisms directly; none comes from a drop-out design.",
+                *rest]
+    return [f"  {in_cells} ARC(S) IN THE CELLS COME FROM DROP-OUT DESIGNS, a community against the same community",
+            "      without one member, so the effect may run through a third species, which a gLV coefficient is",
+            "      not meant to include. Press gLV mode on the page, or untick Include drop-out communities in",
+            "      Advanced settings, and derive again to leave them out.", *rest]
 
 
-def _media_lines(net: InteractionNetwork) -> list:
-    """What the README says about the environments behind the numbers."""
+def _media_lines(net: InteractionNetwork, cell_media=None, held=None) -> list:
+    """What the README says about the environments behind the numbers.
+
+    `held` is one (abundance unit, media, cells recording no medium) per matrix that holds a cell, and the
+    lines are about those cells: an arc in no cell is not in a simulation, which takes one matrix, so a
+    matrix whose effects come from several media is warned about and one of a single medium is not. The
+    diagonal's capacities have media of their own, in growth_rates.csv. Without `cell_media` (a package
+    described before it was written) the lines are about every arc, as they were. Found in review across
+    several rounds: warnings about arcs in no cell, about two matrices of one medium each, and cells that
+    record no medium left out of the lines."""
     names = media(net)
-    if not names:
-        return ["  The media these arcs were measured in are not recorded in this network."]
-    if len(names) == 1:
-        return [f"  Every arc was measured in one medium: {names[0]}."]
-    return [f"  THESE ARCS COME FROM {len(names)} MEDIA, and a gLV simulation is of one environment:",
-            *[f"      {name}" for name in names],
+    if cell_media is None:
+        if not names:
+            return ["  The media these arcs were measured in are not recorded in this network."]
+        if len(names) == 1:
+            return [f"  Every arc was measured in one medium: {names[0]}."]
+        return [f"  THESE ARCS COME FROM {len(names)} MEDIA, and a gLV simulation is of one environment:",
+                *[f"      {name}" for name in names],
+                "      Select one in grownet's second box (media, experiments or studies) and derive again to",
+                "      keep a single environment."]
+    held = list(held or [])
+    if not held:
+        return ["  No effect between two organisms is in the matrices"
+                + (f"; the network's arcs, in no cell, come from {', '.join(names)}." if names else ".")]
+    others = [name for name in names if name not in cell_media]
+    rest = [f"      The network's other arcs, in no cell, come from {', '.join(others)}."] if others else []
+
+    def described(found, unrecorded):
+        return ", ".join([*found, *([f"{unrecorded} cell(s) with an arc recording no medium"] if unrecorded else [])])
+
+    # a recorded medium beside cells recording none is not a second medium: whether they share it is
+    # not recorded, which is said rather than warned about as a mix (found in review)
+    def one(found, unrecorded):
+        if found and unrecorded:
+            return (f"{found[0]}, and {unrecorded} cell(s) with an arc recording no medium, so whether they "
+                    "share it is not recorded")
+        return found[0] if found else "no medium recorded"
+
+    if not any(len(found) > 1 for _, found, _ in held):
+        if len(held) == 1:
+            ((_, found, unrecorded),) = held
+            if found and not unrecorded:
+                return [f"  Every effect between two organisms in the matrices was measured in one medium: "
+                        f"{found[0]}.", *rest]
+            if found:
+                return [f"  The effects between organisms in the matrices were measured in {found[0]}, and",
+                        f"      {unrecorded} cell(s) have an arc recording no medium, so whether they share it is",
+                        "      not recorded.", *rest]
+            return ["  The effects between organisms in the matrices record no medium.", *rest]
+        return ["  Each matrix's effects between organisms come from at most one recorded medium, and a",
+                "      simulation takes one matrix:",
+                *[f"      {unit}: {one(found, unrecorded)}" for unit, found, unrecorded in held], *rest]
+    return ["  A MATRIX'S EFFECTS COME FROM MORE THAN ONE MEDIUM, and a gLV simulation is of one environment:",
+            *[f"      {unit} matrix: {described(found, unrecorded)}" for unit, found, unrecorded in held],
             "      Select one in grownet's second box (media, experiments or studies) and derive again to",
-            "      keep a single environment."]
+            "      keep a single environment.", *rest]
 
 
 # ---- fitted gLV coefficients (#119) ----------------------------------------------------------------
@@ -730,12 +969,22 @@ def _per_arc(edge, fallback_rate: float | None = None) -> tuple:
         return None, ""
     if edge.metric_with is not None and edge.metric_without is not None:
         return (edge.metric_with - edge.metric_without) / edge.partner_abundance, "rates"
+    # a merged arc is the median of several comparisons and carries no single one's two rates: its fitted
+    # coefficient is the median of its members' where it has one, and otherwise its cell is taken from its
+    # median log2 ratio, which the README says under its own heading, NOT as a network saved before the
+    # rates were recorded (found in review: the merge fix had sent merged arcs to that wrong label)
+    if edge.merged_arcs:
+        if edge.coefficient is not None:
+            return edge.coefficient, "rates"
+        if edge.strength is not None and fallback_rate:
+            return fallback_rate * (2 ** edge.strength - 1) / edge.partner_abundance, "merged"
+        return None, ""
     if edge.strength is not None and fallback_rate:
         return fallback_rate * (2 ** edge.strength - 1) / edge.partner_abundance, "ratio"
     return None, ""
 
 
-def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
+def _pair_values(net: InteractionNetwork, rates: dict = None, home: dict = None) -> tuple:
     """({pair: {"value", "unit", "censored", "arcs"}}, conflicts, unfitted).
 
     One entry per ordered pair: the median of the coefficients its arcs give, which is Karoline's merge
@@ -759,8 +1008,15 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
         pair = (edge.target, edge.source)
         unit = edge.partner_abundance_unit or ""
         value, how = _per_arc(edge, ((rates or {}).get(edge.target) or {}).get("rate"))
-        entry = per_pair.setdefault(pair, {"by_unit": {}, "reasons": [], "censored": False,
-                                           "how": set(), "media": []})
+        entry = per_pair.setdefault(pair, {"by_unit": {}, "reasons": [], "censored": {},
+                                           "how": {}, "media": {}, "directions": []})
+        # every arc's direction counts in the sign check, converted or not, as `cells` counts it: an
+        # obligate arc that could not be converted beside an inhibition left the inhibition's number in the
+        # cell, where main named the pair's sign conflict (found in review)
+        if edge.strength is not None:
+            entry["directions"].append(edge.strength)
+        elif _censored(edge):
+            entry["directions"].append(1.0 if edge.outcome == OBLIGATE else -1.0)
         # a bound without an outcome that produces one: the no-growth rule never ran on this comparison,
         # so the bound is not its own and nothing here can say what the cell should hold. Nothing derives
         # it and nothing refuses it either, so it is named rather than guessed at, which is the standard
@@ -772,26 +1028,68 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
                 f"{edge.outcome!r}, which the no-growth rule does not produce a bound for, so neither "
                 "the bound nor a cell can be read from it")
             continue
-        for name in (edge.medium or "").split("; "):
-            if name and name not in entry["media"]:
-                entry["media"].append(name)
         if value is None:
             actor, affected = _label(net.nodes[edge.source]), _label(net.nodes[edge.target])
+            own_rate = ((rates or {}).get(edge.target) or {}).get("rate")
             entry["reasons"].append(
                 f"no abundance for {actor} over {affected}'s growth window"
                 if edge.partner_abundance in (None, 0) else
+                # a merged arc is converted with the affected organism's own rate, and the arcs behind it did
+                # record theirs: "not recorded" was false of it (found in review)
+                f"a merged arc is converted with {affected}'s own growth rate, which it has none of"
+                if getattr(edge, "merged_arcs", None) and own_rate is None and edge.strength is not None else
+                # its members compared their rates; merged without a median ratio (some did not grow on
+                # one side) it has no number to convert (found in review)
+                "a merged arc whose members do not all have a ratio carries no median ratio and no "
+                "coefficient (derive without merging for one per comparison)"
+                if getattr(edge, "merged_arcs", None) and edge.strength is None else
                 f"the rates behind this arc were not recorded (metric {edge.metric or 'unknown'})")
             continue
         entry["by_unit"].setdefault(unit, []).append(value)
-        entry["censored"] = entry["censored"] or censored
-        entry["how"].add(how)
+        # the media behind the numbers of each unit: an arc that gives no number, or one in another unit,
+        # is not in the cell, and its medium was said to be pooled into it (found in review)
+        unit_media = entry["media"].setdefault(unit, [])
+        for name in (edge.medium or "").split("; "):
+            if name and name not in unit_media:
+                unit_media.append(name)
+        # the drop-out arcs in the cell, which the README counts rather than the network's (found in review)
+        if "dropout" in (edge.evidence or ""):
+            entry.setdefault("dropout", {}).setdefault(unit, 0)
+            entry["dropout"][unit] += 1
+        # an arc in the cell that records no medium: a cell of WC and such an arc read as of WC alone
+        # (found in review)
+        if (not any(name for name in (edge.medium or "").split("; "))
+                or any(MERGED_MEDIUM_UNRECORDED in note for note in (getattr(edge, "notes", None) or ()))):
+            entry.setdefault("unrecorded", set()).add(unit)
+        # kept per unit, as the media are: an arc in another unit is not in the cell, and labeled it as one
+        # from the ratio or from a comparison where one side did not grow (found in review)
+        entry["censored"][unit] = entry["censored"].get(unit, False) or censored
+        entry["how"].setdefault(unit, set()).add(how)
     values, conflicts, unfitted = {}, [], []
     for pair, entry in per_pair.items():
+        if any(v > 0 for v in entry["directions"]) and any(v < 0 for v in entry["directions"]):
+            conflicts.append(pair)
+            continue
         if not entry["by_unit"]:
             unfitted.append((pair, "; ".join(dict.fromkeys(entry["reasons"]))))
             continue
-        unit = max(entry["by_unit"], key=lambda u: len(entry["by_unit"][u]))
+        # the cell is built from the arcs in its matrix's own unit, the affected organism's (Karoline,
+        # 2026-10-14, #292); the unit with the most arcs, a tie decided by arc order, used to be taken, and a
+        # cell was left at 0 where its matrix's own arcs stood beside more arcs in another unit
+        want = (home or {}).get(pair[0])
+        if want is not None and want not in entry["by_unit"]:
+            for other, dropped in sorted(entry["by_unit"].items()):
+                unfitted.append((pair, f"{len(dropped)} arc(s) of this pair measure the actor in {other}, while "
+                                       f"the affected organism is counted in {want}, and abundances are never "
+                                       "converted"))
+            continue
+        unit = want if want is not None else sorted(entry["by_unit"], key=lambda u: (-len(entry["by_unit"][u]), u))[0]
         numbers = entry["by_unit"][unit]
+        # an arc that gave no number beside arcs that did was left out of the median without a word (found
+        # in review)
+        if entry["reasons"]:
+            unfitted.append((pair, f"{len(entry['reasons'])} arc(s) of this pair give no number ("
+                                   + "; ".join(dict.fromkeys(entry["reasons"])) + "), so they are left out"))
         # the arcs of this pair counted in another unit are not merged into it and are not converted, so
         # they are named here. They used to disappear, against the README's promise that a pair outside a
         # matrix's unit is named (found 2026-10-06)
@@ -799,17 +1097,20 @@ def _pair_values(net: InteractionNetwork, rates: dict = None) -> tuple:
             if other != unit:
                 unfitted.append((pair, f"{len(dropped)} arc(s) of this pair measure the actor in {other} "
                                        f"and the rest in {unit}; abundances are never converted, so they "
-                                       "are left out of this cell"))
+                                       "are left out"))
         if any(v > 0 for v in numbers) and any(v < 0 for v in numbers):
             conflicts.append(pair)
             continue
         values[pair] = {"value": statistics.median(numbers), "unit": unit,
-                        "censored": entry["censored"], "arcs": len(numbers),
+                        "censored": entry["censored"][unit], "arcs": len(numbers),
                         # the media behind this cell: arcs of a pair are merged by their median whatever
                         # medium each was measured in, and a cell that pools two environments is named
                         # rather than reading as one measurement (found 2026-10-06)
-                        "media": list(entry["media"]),
-                        "how": "ratio" if "ratio" in entry["how"] else "rates"}
+                        "media": list(entry["media"].get(unit, [])),
+                        "unrecorded_arc": unit in entry.get("unrecorded", ()),
+                        "dropout_arcs": entry.get("dropout", {}).get(unit, 0),
+                        "how": ("ratio" if "ratio" in entry["how"][unit] else
+                                "merged" if "merged" in entry["how"][unit] else "rates")}
     return values, conflicts, unfitted
 
 
@@ -903,12 +1204,42 @@ def unit_file(abundance_unit: str) -> str:
     return "".join(c if c.isalnum() or c in "_-." else "_" for c in safe)
 
 
+def _arc_media(net: InteractionNetwork, ids) -> list:
+    """The media of the arcs between the organisms of one matrix, or the network's when none joins them:
+    the environment the matrix stands for, which a steady state is matched against even where no cell is
+    held (found in review: a matrix of no cell matched a chemostat in any medium)."""
+    here, found, joined = set(ids), [], False
+    for edge in net.edges:
+        if edge.status == "absent" or edge.source not in here or edge.target not in here:
+            continue
+        joined = True
+        for name in (edge.medium or "").split("; "):
+            if name and name not in found:
+                found.append(name)
+    # the network's media only where no arc joins them: arcs that join them and record no medium say none,
+    # and the network's named another environment for them (found in review)
+    return found if joined else media(net)
+
+
+def _block_media(filled, values: dict) -> list:
+    """The media behind the cells one matrix holds, none when it holds none: an arc between its organisms
+    that is in no cell is not measured in it, and the network's media, the fallback this had, named those of
+    arcs that left the matrix with an organism (found in review)."""
+    found = []
+    for pair in filled:
+        for name in values[pair].get("media") or ():
+            if name not in found:
+                found.append(name)
+    return found
+
+
 def coefficients(net: InteractionNetwork, rates: dict) -> dict:
     """The network and its rates as fitted gLV coefficients, one matrix per abundance unit (#119).
 
     {"matrices": [{"abundance_unit", "unit", "organisms", "ids", "matrix", "cells", "conflicts"}],
      "left_out": [(organism, why)], "pairs_left_out": [(affected, actor, why)],
-     "across_units": [(affected, actor, why)], "obligate_rows": [(organism, partner)],
+     "across_units": [(affected, actor, why)], "arcs_left_out": [(affected, actor, why)],
+     "obligate_rows": [(organism, partner)],
      "censored_cells": [(affected, actor)], "rate_methods", "lag_methods", "metric"}
 
     **Every number is a measurement** (#123): a cell is `(r_with - r_without) / x_j_star` from one arc's
@@ -926,7 +1257,6 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             f"these arcs compare {', '.join(repr(m) for m in not_rates)}, and a gLV coefficient needs the "
             f"log2 ratio of a growth rate: derive with the {RATE_METRIC_PREFIX} growth property (gLV mode "
             "on the page, or --metric growth_rate) and build the package again")
-    values, conflicts, unfitted = _pair_values(net, rates)
     obligate = obligate_partners(net)
     plateau_of = plateaus(net)
     # the organisms an arc says grow only with a partner, whether or not a plateau was certified for them
@@ -974,17 +1304,40 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             rows_fitted.append((name, _label(net.nodes[obligate[nid][0][0]])))
             continue
         if nid in only_with:
+            # and why it has no rate of its own, where that is known: R reads only these reasons (found in
+            # review: Agrobacterium's #81 refusal reached the report and not the package)
+            known = (getattr(rates, "no_rate", {}) or {}).get(name) if rate.get("rate") is None else None
             left_out.append((name, "it grows only with a partner and reached no certified plateau beside "
                                    "one, in the same abundance unit as that partner, so its "
-                                   "self-limitation cannot be fitted"))
+                                   "self-limitation cannot be fitted" + (f"; it has no growth rate: {known}"
+                                                                         if known else "")))
+        elif rate.get("rate") is None and name in getattr(rates, "no_rate", {}):
+            # its strains have rates, in units that are not converted: the README said it had none at all
+            # (found in review)
+            left_out.append((name, rates.no_rate[name] + ", so it has no growth rate and nothing on it can be "
+                                   "fitted"))
         elif rate.get("rate") is None:
             left_out.append((name, "no growth rate, and no arc saying it grows only with a partner, so "
                                    "neither its own limitation nor the effect of anything on it can be "
                                    "fitted"))
+        elif len(rate.get("other_capacity_units") or []) > 1:
+            # a genus whose strains plateaued in different units: its curves DID reach a plateau, and the
+            # README and the payload said none had (found in review). Empty on every strain row without one.
+            left_out.append((name, "its strains' plateaus are in different units or techniques ("
+                                   + ", ".join(rate["other_capacity_units"]) + "), which are not compared, "
+                                   "so its self-limitation is not fitted"))
+        elif rate.get("capacity_tie"):
+            # plateaus in two units or techniques with as many time points and curves: none is chosen
+            # (Karoline, 2026-10-14, #292)
+            left_out.append((name, rate["capacity_tie"] + ", so its self-limitation is not fitted"))
         else:
             left_out.append((name, "no carrying capacity from a curve that reached stationary phase, so "
                                    "its self-limitation is not fitted"))
 
+    # each organism's matrix is known before its cells are built, so a cell takes the arcs in that matrix's
+    # unit (#292)
+    home = {nid: unit for unit, ids in blocks.items() for nid in ids}
+    values, conflicts, unfitted = _pair_values(net, rates, home)
     matrices = []
     for abundance_unit, ids in sorted(blocks.items()):
         times = {(rates[nid].get("unit") or RATE_UNIT) for nid in ids if nid in rates} or {RATE_UNIT}
@@ -999,7 +1352,7 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                 continue
             keep.append(nid)
         names = [_label(net.nodes[nid]) for nid in keep]
-        table, filled = [], 0
+        table, filled = [], []
         pooled: list = []
         for i, affected in enumerate(keep):
             rate = rates.get(affected) or {}
@@ -1013,15 +1366,10 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                     row.append(0.0)
                     continue
                 label_pair = (_label(net.nodes[affected]), _label(net.nodes[actor]))
-                if entry["unit"] != abundance_unit:
-                    pairs_left_out.append((*label_pair,
-                                           f"{label_pair[1]}'s abundance beside {label_pair[0]} is in "
-                                           f"{entry['unit']}, and this matrix is in {abundance_unit}; "
-                                           "left out rather than converted"))
-                    row.append(0.0)
-                    continue
+                # a cell's arcs are in its matrix's own unit, the affected organism's, by construction in
+                # `_pair_values` (#292): the arcs in another unit are named there
                 row.append(entry["value"])
-                filled += 1
+                filled.append((affected, actor))
                 if len(entry.get("media") or ()) > 1:
                     pooled.append((*label_pair, ", ".join(entry["media"])))
             if rate.get("rate") is not None and rate.get("capacity"):
@@ -1049,40 +1397,14 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                                      "plateau, where its partners' effect outweighs its own rate, so no "
                                      "limitation can be fitted for it"))
             table.append(row)
-        here = set(keep)
-        block_media = []
-        for edge in net.edges:
-            if edge.status == "absent" or edge.source not in here or edge.target not in here:
-                continue
-            for name in (edge.medium or "").split("; "):
-                if name and name not in block_media:
-                    block_media.append(name)
-        matrices.append({"abundance_unit": abundance_unit, "media": block_media or media(net),
+        matrices.append({"abundance_unit": abundance_unit, "media": _block_media(filled, values),
+                         "arc_media": _arc_media(net, keep),
                          "unit": coefficient_unit(rate_unit, abundance_unit),
                          "rate_unit": rate_unit, "organisms": names, "ids": keep, "matrix": table,
-                         "cells": filled, "pooled_media": pooled,
-                         "conflicts": [(_label(net.nodes[a]), _label(net.nodes[b]))
-                                       for a, b in conflicts if a in keep and b in keep],
+                         "cells": len(filled), "filled": filled, "pooled_media": pooled, "conflicts": [],
+                         "unrecorded": sum(1 for pair in filled if values[pair].get("unrecorded_arc")),
                          "file": f"interaction_matrix.{unit_file(abundance_unit)}.csv"})
 
-    # a pair whose two organisms sit in different matrices has no cell in either
-    where = {nid: block["abundance_unit"] for block in matrices for nid in block["ids"]}
-    for affected, actor in values:
-        if affected in where and actor in where and where[affected] != where[actor]:
-            across.append((_label(net.nodes[affected]), _label(net.nodes[actor]),
-                           f"{_label(net.nodes[actor])} is counted in {where[actor]} and "
-                           f"{_label(net.nodes[affected])} in {where[affected]}, so this effect is in "
-                           "neither matrix"))
-        elif affected not in where or actor not in where:
-            missing = [_label(net.nodes[nid]) for nid in (affected, actor)
-                       if nid not in where and nid in net.nodes]
-            if missing:
-                across.append((_label(net.nodes[affected]), _label(net.nodes[actor]),
-                               f"{' and '.join(missing)} could not be fitted, so this effect is in no "
-                               "matrix"))
-    for (affected, actor), why in unfitted:
-        pairs_left_out.append((_label(net.nodes[affected]), _label(net.nodes[actor]),
-                               f"{why}, so the per-capita effect cannot be fitted"))
     # an organism whose plateau balance gave no usable limitation leaves the matrix it was put in
     for name, why in unusable:
         left_out.append((name, why))
@@ -1094,6 +1416,84 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                 block["organisms"] = [block["organisms"][k] for k in keep_at]
                 block["ids"] = [block["ids"][k] for k in keep_at]
                 block["matrix"] = [[block["matrix"][i][j] for j in keep_at] for i in keep_at]
+                # and its cells and pooled media with it: the README counted cells the matrix no longer
+                # holds (found in review)
+                block["filled"] = [(a, b) for a, b in block["filled"] if a in block["ids"] and b in block["ids"]]
+                block["cells"] = len(block["filled"])
+                block["unrecorded"] = sum(1 for pair in block["filled"] if values[pair].get("unrecorded_arc"))
+                block["pooled_media"] = [row for row in block["pooled_media"]
+                                         if row[0] in block["organisms"] and row[1] in block["organisms"]]
+                block["media"] = _block_media(block["filled"], values)
+                block["arc_media"] = _arc_media(net, block["ids"])
+    # a pair whose two organisms sit in different matrices has no cell in either; worked out after the
+    # unusable organisms left theirs, whose effects are then named as in no matrix (found in review)
+    where = {nid: block["abundance_unit"] for block in matrices for nid in block["ids"]}
+    # a pair whose arcs disagree in sign is named in the matrix that holds both its organisms, worked out
+    # after the unusable organisms left theirs: before, one that left was still named there as left at 0
+    # (found in review)
+    for block in matrices:
+        here = set(block["ids"])
+        block["conflicts"] = [(_label(net.nodes[a]), _label(net.nodes[b]))
+                              for a, b in conflicts if a in here and b in here]
+    # one row per pair, so that a pair with several reasons is one effect, and is counted once as one
+    # (found in review: a cross-unit pair with arcs in two partner units read as two effects)
+    across_at: dict = {}
+    for (affected, actor), conflict in [(pair, False) for pair in values] + [(pair, True) for pair in conflicts]:
+        if affected in where and actor in where and where[affected] == where[actor]:
+            continue
+        sign = "its arcs disagree in sign, so they are not merged; " if conflict else ""
+        if affected in where and actor in where:
+            why = (f"{_label(net.nodes[actor])} is counted in {where[actor]} and "
+                   f"{_label(net.nodes[affected])} in {where[affected]}, so this effect is in neither matrix")
+        else:
+            missing = [_label(net.nodes[nid]) for nid in (affected, actor)
+                       if nid not in where and nid in net.nodes]
+            if not missing:
+                continue
+            why = f"{' and '.join(missing)} could not be fitted, so this effect is in no matrix"
+        # a conflict between organisms in no common matrix was named nowhere (found in review)
+        across_at[(affected, actor)] = len(across)
+        across.append((_label(net.nodes[affected]), _label(net.nodes[actor]), sign + why))
+    # an effect on or by an organism that is in no matrix is not "left at 0" in one: it is in none (found
+    # in review: the genus package listed such a pair as a 0); routed after the unusable organisms left
+    # their matrices, which are in none either. Arcs left out of a cell that still holds a value (the pair's
+    # other arcs, in another unit) are named apart: the effect is fitted, those arcs are not in it.
+    outside = {name for name, _ in left_out}
+    arcs_left_out = []
+    for (affected, actor), why in unfitted:
+        names = (_label(net.nodes[affected]), _label(net.nodes[actor]))
+        missing = [n for n in names if n in outside]
+        if (affected, actor) in across_at:
+            at = across_at[(affected, actor)]
+            across[at] = (*names, f"{across[at][2]}; {why}")
+        elif missing:
+            across_at[(affected, actor)] = len(across)
+            across.append((*names, f"{why}; {' and '.join(missing)} {'is' if len(missing) == 1 else 'are'} "
+                                   "in no matrix"))
+        elif affected in where and actor in where and where[affected] != where[actor]:
+            # two organisms in different matrices: no cell to leave at 0 (found in review)
+            across_at[(affected, actor)] = len(across)
+            across.append((*names, f"{why}; {names[1]} is counted in {where[actor]} and {names[0]} in "
+                                   f"{where[affected]}, so this effect is in neither matrix"))
+        elif ((affected, actor) in values and affected in where and actor in where
+              and values[(affected, actor)]["unit"] == where[affected]):
+            # the pair's cell holds the median of its other arcs, which is what this list says of it
+            at = next((k for k, row in enumerate(arcs_left_out) if row[:2] == names), None)
+            if at is None:
+                arcs_left_out.append((*names, why))
+            else:
+                arcs_left_out[at] = (*names, f"{arcs_left_out[at][2]}; {why}")
+        elif (affected, actor) in values or (affected, actor) in conflicts:
+            # its cell is 0, for its other arcs' unit or their signs, so these arcs are not beside a median
+            # either (found in review: they were said to be)
+            at = next((k for k, row in enumerate(pairs_left_out) if row[:2] == names), None)
+            if at is not None:
+                pairs_left_out[at] = (*names, f"{pairs_left_out[at][2]}; {why}")
+            else:
+                pairs_left_out.append((*names, f"{why}; its other arcs disagree in sign, so its cell is left "
+                                               "at 0"))
+        else:
+            pairs_left_out.append((*names, f"{why}, so the per-capita effect cannot be fitted"))
     matrices = [block for block in matrices if block["organisms"]]
     # the equilibrium each block implies, which the package defines as its own meaning and used to leave
     # the reader to compute. It is worked out here, after every organism that leaves a matrix has left it:
@@ -1127,19 +1527,26 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
         block["equilibrium"] = answer
         block["not_above_zero"] = [name for name, value
                                    in zip(block["organisms"], answer, strict=True) if value <= 0]
+    # the cells the matrices hold: a pair left at 0, or in no matrix, has no cell to describe, and was
+    # listed as one taken from the ratio, from merged arcs, or from a comparison where one side did not
+    # grow (found in review; #211 item 2 fixed the last for organisms in no matrix only)
+    held = {pair for block in matrices for pair in block["filled"]}
+    cells_held = {pair: entry for pair, entry in values.items() if pair in held}
     return {"matrices": matrices, "left_out": left_out, "pairs_left_out": pairs_left_out,
-            "across_units": across, "floors": [],
-            "from_absolute_rates": all(entry["how"] == "rates" for entry in values.values()),
+            "across_units": across, "arcs_left_out": arcs_left_out, "floors": [],
+            "from_absolute_rates": all(entry["how"] == "rates" for entry in cells_held.values()),
+            "cell_media": list(dict.fromkeys(name for entry in cells_held.values() for name in entry["media"])),
+            "dropout_in_cells": sum(entry.get("dropout_arcs", 0) for entry in cells_held.values()),
             "from_the_ratio": [(_label(net.nodes[a]), _label(net.nodes[b]))
-                               for (a, b), entry in values.items() if entry["how"] == "ratio"],
+                               for (a, b), entry in cells_held.items() if entry["how"] == "ratio"],
+            "from_merged_ratio": [(_label(net.nodes[a]), _label(net.nodes[b]))
+                                  for (a, b), entry in cells_held.items() if entry["how"] == "merged"],
             "obligate_rows": list(rows_fitted), "plateau_rows": list(plateau_rows),
             # only cells that are in a matrix: an organism left out of every block took its censored
             # cells with it, and the README named them as entering the median of their pair while
             # WHAT IS NOT IN HERE listed the same organisms as excluded (#211 item 2)
             "censored_cells": [(_label(net.nodes[a]), _label(net.nodes[b]))
-                               for (a, b), entry in values.items()
-                               if entry["censored"] and any(a in block["ids"] and b in block["ids"]
-                                                            for block in matrices)],
+                               for (a, b), entry in cells_held.items() if entry["censored"]],
             "metric": metrics[0] if metrics else "",
             # the integrated path's equivalent of `plateau_rows`: an organism whose fit implied no
             # plateau, so a measured one was put in its place. `plateau_rows` is populated from
@@ -1168,7 +1575,7 @@ def coefficient_csv(block: dict) -> str:
     return out.getvalue()
 
 
-def _rate_method_lines(got: dict, derivation: str = "replicate") -> list:
+def _rate_method_lines(got: dict, derivation: str = "replicate", rates: dict | None = None) -> list:
     """What the README says about the estimator behind r, and what choosing another one would move.
 
     Per derivation, as `DIAGONAL_PROSE` and `OFF_DIAGONAL` are: a package built in gLV mode said, nineteen
@@ -1180,7 +1587,7 @@ def _rate_method_lines(got: dict, derivation: str = "replicate") -> list:
     named = ", ".join(methods) if methods else "not recorded"
     merge = ("the median over the fitted rows, each row's rate the median over that organism's "
              "monoculture replicates" if any(str(m).startswith("integrated") for m in methods)
-             else "median over replicates and studies")
+             else "median over replicates and studies") + genus_rule(rates or {})
     if derivation == "integrated":
         lines = [f"  Growth rates: {named}, {merge}, batch monocultures only.",
                  "      r_i is fitted together with A[i][i] from the organism's monoculture time courses,",
@@ -1252,9 +1659,11 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "      the threshold judged it no interaction.",
         "  Arcs of one ordered pair are merged across conditions and studies by their median; a pair whose",
         "      arcs disagree in sign is left at 0 and named below.",
-        *_media_lines(net),
-        *_dropout_lines(net),
-        *_rate_method_lines(got, derivation_of(net)),
+        *_media_lines(net, got["cell_media"] if "cell_media" in got else None,
+                      [(block["abundance_unit"], block.get("media") or [], block.get("unrecorded", 0))
+                       for block in got["matrices"] if block.get("cells")]),
+        *_dropout_lines(net, got.get("dropout_in_cells")),
+        *_rate_method_lines(got, derivation_of(net), rates),
         "",
         "WHAT THIS MODEL ASSUMES",
         *MODEL_ASSUMPTIONS,
@@ -1327,6 +1736,14 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
                   "  again to have them from the measurements themselves (actor on affected):"]
         lines += [f"      {actor} on {affected}" for affected, actor in got["from_the_ratio"]]
         lines.append("")
+    if got.get("from_merged_ratio"):
+        lines += ["CELLS FROM MERGED ARCS, TAKEN FROM THEIR MEDIAN LOG2 RATIO",
+                  "  Each of these is a merged arc, the median of several comparisons, so it carries no one",
+                  "  comparison's two rates: its cell uses r_i (2^L - 1) / x_j with L the arcs' median log2",
+                  "  ratio and the organism's reported rate. Derive without merging to have a cell per",
+                  "  comparison (actor on affected):"]
+        lines += [f"      {actor} on {affected}" for affected, actor in got["from_merged_ratio"]]
+        lines.append("")
     if got.get("censored_cells"):
         lines += ["CELLS FROM A COMPARISON WHERE ONE SIDE DID NOT GROW",
                   "  One of the two rates behind these cells is 0, measured: the affected organism grew",
@@ -1343,7 +1760,9 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         lines.append("  are left at 0 rather than averaged (actor on affected):")
         lines += [f"      {actor} on {affected}" for affected, actor in dict.fromkeys(conflicts)]
     else:
-        lines.append("  No pair had arcs of opposite sign.")
+        # only the pairs inside a matrix: a pair outside every matrix whose arcs disagree is named with the
+        # effects in no matrix, below, and "no pair disagreed" was false beside it (found in review)
+        lines.append("  No pair in a matrix has arcs of opposite sign.")
     if got["left_out"]:
         lines.append("  These organisms are in no matrix, because a coefficient of theirs cannot be fitted:")
         lines += [f"      {name}: {why}" for name, why in got["left_out"]]
@@ -1353,6 +1772,10 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         lines.append("  These effects are left at 0 (actor on affected):")
         lines += [f"      {actor} on {affected}: {why}"
                   for affected, actor, why in dict.fromkeys(got["pairs_left_out"])]
+    if got.get("arcs_left_out"):
+        lines.append("  These pairs have arcs left out of their cell, which is the median of the pair's other"
+                     " arcs (actor on affected):")
+        lines += [f"      {actor} on {affected}: {why}" for affected, actor, why in dict.fromkeys(got["arcs_left_out"])]
     if got["across_units"]:
         lines.append("  These effects are in no matrix:")
         lines += [f"      {actor} on {affected}: {why}"
@@ -1369,15 +1792,20 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
 # The payload moved to v1 with #120: `matrices` replaced `interactions`, one per abundance unit, and the
 # numbers became fitted coefficients rather than log2 means, so the fields changed meaning and a version
 # is a promise about content (Craig's rule, #71).
-GLV_FORMAT = "grownet.glv/v1"
-PREVIOUS_GLV_FORMATS = ("grownet.glv/v0",)
+# It moved to v2 for 0.5.0 (Karoline, 2026-10-14: "follow your recommendation for Q4"): four fields were
+# added (caveats.arcs_left_out, caveats.cell_media, caveats.dropout_arcs_in_cells and each matrix's
+# cells_with_unrecorded_medium) and `matrices[].media` narrowed from the media of every arc between the
+# matrix's organisms to those of the cells it holds, so a reader trusting v1 would read the new `media`
+# as the old quantity, which is the line the format id is drawn at.
+GLV_FORMAT = "grownet.glv/v2"
+PREVIOUS_GLV_FORMATS = ("grownet.glv/v1", "grownet.glv/v0")
 
 
 def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dict:
     """The gLV parameters as one JSON-ready document (`GLV_FORMAT`), the same numbers as the zip (#120).
 
     `matrices` holds one matrix per abundance unit, each with its `organisms`, its `interactions` (rows
-    affected, columns the actor, the fitted diagonal), its unit and the media its arcs came from, because
+    affected, columns the actor, the fitted diagonal), its unit and the media of its effects between organisms, because
     nothing is converted between abundance units. `growth_rate_detail` carries each rate with what a
     coefficient is made of beside it: the estimator, the lag and the carrying capacity. `caveats` holds,
     as data, everything the README says in prose: the cells from a comparison where one side did not grow,
@@ -1404,6 +1832,8 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
         "matrices": [{"abundance_unit": block["abundance_unit"], "unit": block["unit"],
                       "organisms": list(block["organisms"]), "interactions": block["matrix"],
                       "media": list(block["media"]), "cells": block["cells"], "file": block["file"],
+                      # the cells whose arcs record no medium, which `media` cannot say (found in review)
+                      "cells_with_unrecorded_medium": block.get("unrecorded", 0),
                       # where this matrix settles, so a reader does not have to solve it to find out
                       # that it settles nowhere with every organism above zero
                       "equilibrium": (list(block["equilibrium"])
@@ -1422,18 +1852,28 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
              # the one gLV mode selects, the payload reported its FITTED ROW count as the replicate
              # count: 1 or 2 against the zip's 3 on a live corpus run, where `glv_payload` promises "the
              # same numbers as the zip" and the README allows a difference in the fifth significant
-             # digit (#259). The row count is deliberately not added beside it: `grownet.glv/v1` is a
-             # released format with `PREVIOUS_GLV_FORMATS` beside it, so a new field moves that id,
-             # which is a decision about the package rather than a fix to it. Anyone who wants the row
+             # digit (#259). The row count was deliberately not added beside it: a released payload format
+             # has `PREVIOUS_GLV_FORMATS` beside it, so a new field moves that id, which is a decision
+             # about the package rather than a fix to it. Anyone who wants the row
              # count has it in the network's own `meta.growth_rates`, as `n` with `n_label`.
-             "replicates": rates[nid].get("replicates", rates[nid].get("n")),
+             # as growth_rates.csv writes it: `n` where the count is missing OR empty (found in review)
+             "replicates": rates[nid]["replicates"] if rates[nid].get("replicates") is not None
+             else rates[nid].get("n"),
              "studies": list(rates[nid].get("studies", ())),
              "per_study": dict(rates[nid].get("per_study", {})),
              "method": rates[nid].get("method", ""), "lag": rates[nid].get("lag"),
              "lag_method": rates[nid].get("lag_method", ""),
              "carrying_capacity": rates[nid].get("capacity"),
              "carrying_capacity_unit": rates[nid].get("capacity_unit", ""),
-             "carrying_capacity_curves": rates[nid].get("capacity_n"),
+             "carrying_capacity_technique": rates[nid].get("capacity_technique", ""),
+             # the curves the plateau rests on, as growth_rates.csv writes it: under the integrated form
+             # `capacity_n` counts fitted ROWS, so the payload said 1 where the zip said 3, the same slip #259
+             # fixed for `replicates` (found loading the payload into R in review)
+             # and, as there, nothing where there is no capacity: the fallback sent 0 where the zip's
+             # csv is empty (found in review)
+             "carrying_capacity_curves": None if rates[nid].get("capacity") is None else (
+                 rates[nid].get("capacity_curves") if rates[nid].get("capacity_curves") is not None
+                 else rates[nid].get("capacity_n")),
              "carrying_capacity_left_out": [list(row) for row in
                                             (rates[nid].get("capacity_left_out") or [])],
              "carrying_capacity_media": list(rates[nid].get("capacity_media") or ()),
@@ -1459,12 +1899,18 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
                 "pairwise_only": (
                     "interactions are pairwise and add up: the effect of j on i is taken to be the same "
                     "whoever else is present. A higher-order interaction, where a third organism changes "
-                    "how the first two affect each other, has no term in this model, and every cell here "
-                    "was measured between two organisms"),
+                    "how the first two affect each other, has no term in this model, and every effect between "
+                    "organisms here was measured between two of them unless it comes from a drop-out design "
+                    "(dropout_arcs counts the network's drop-out arcs)"),
             },
+            # what was measured between organisms counted differently, from this package's own rows: it
+            # said none was whatever the rows held (found in review)
             "units": ("one matrix per abundance unit: abundances are never converted between units, since "
-                      "a cell mass conversion would have to be invented, and no effect between organisms "
-                      "counted differently was measured"),
+                      "a cell mass conversion would have to be invented, and "
+                      + (f"{between} effect(s) between organisms counted differently were measured and are "
+                         "in no matrix (across_units names them)" if (between := sum(
+                             "neither matrix" in row[2] for row in got["across_units"])) else
+                         "no effect between organisms counted differently was measured")),
             "abundance_units": sorted({block["abundance_unit"] for block in got["matrices"]}),
             "unbounded": ("a fit can have no bounded state: when two organisms are fitted as facilitating "
                           "each other more than each limits itself, a simulation grows without bound and "
@@ -1481,12 +1927,17 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
             "left_out": [list(row) for row in got["left_out"]],
             "pairs_left_out": [list(row) for row in got["pairs_left_out"]],
             "across_units": [list(row) for row in got["across_units"]],
+            "arcs_left_out": [list(row) for row in got.get("arcs_left_out", [])],
             "obligate_rows": [list(row) for row in got.get("obligate_rows", [])],
             "plateau_rows": [list(row) for row in got.get("plateau_rows", [])],
             "substituted_rows": [list(row) for row in got.get("substituted_rows", [])],
             "from_the_ratio": [list(row) for row in got.get("from_the_ratio", [])],
             "media": media(net),
+            # the media of the cells the matrices hold, which a simulation is of: `media` is every arc's
+            "cell_media": list(got.get("cell_media") or []),
             "dropout_arcs": dropout_arcs(net),
+            # the drop-out arcs in the cells, which a simulation holds: `dropout_arcs` is the network's
+            "dropout_arcs_in_cells": got.get("dropout_in_cells"),
             "absence_k": meta.get("absence", {}).get("k"),
             "without_a_rate": missing,
             "rate_methods": got["rate_methods"],

@@ -23,7 +23,8 @@ def test_a_study_slow_as_a_block_is_named():
 
 def test_one_fast_rate_in_the_study_keeps_it_unflagged():
     """As a BLOCK: a study with one rate in the ordinary range is not slow, however slow the rest."""
-    rates = _rates(S2=[0.25, 0.30], S4=[0.36, 0.68], S7=[0.38, 0.40], S18=[0.0147, 0.30])
+    # three slow and one ordinary: a median would call the study slow, its fastest rate does not
+    rates = _rates(S2=[0.25, 0.30], S4=[0.36, 0.68], S7=[0.38, 0.40], S18=[0.0147, 0.015, 0.016, 0.30])
     assert matrix.slow_studies(rates) == []
 
 

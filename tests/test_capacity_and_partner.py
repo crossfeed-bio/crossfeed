@@ -8,6 +8,7 @@ with them, since the integrated form starts there and the rate estimators disagr
 This task only adds fields: nothing an arc already said changes.
 """
 import math
+import statistics
 
 import pytest
 from test_growth_rates import A, _client, _mono  # the fake mGrowthDB API of the rate tests
@@ -48,9 +49,11 @@ def test_the_rate_fit_says_which_window_it_used():
 
 
 def test_a_flat_curve_has_no_window_to_report():
+    """A flat curve has no window that rises, so no rate and no window (#293: it returned a slope of 0
+    with no window before)."""
     times, values = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [1e6] * 7
-    fit = rates.easylinear_fit(times, values)
-    assert fit["rate"] <= 0 and fit["start"] is None and fit["end"] is None
+    with pytest.raises(rates.NoRise, match="steepest slope is 0 per time unit"):
+        rates.easylinear_fit(times, values)
 
 
 def _baranyi_curve(mu, lag, points=24, step=0.5, y0=START, d=RISE):
@@ -130,8 +133,9 @@ def test_the_carrying_capacity_is_the_plateau_of_a_monoculture_that_reached_one(
     found, skipped = monoculture_rates(client, [_mono("E1", A, [(1, "r1"), (2, "r2")])])
     (entry,) = found.values()
     (here,) = entry["capacity_by_medium"].values()        # one medium: these fixtures name none
-    assert here["values"] == pytest.approx([1.0e8, 3.0e8])
-    assert here["unit"] == "Cells/mL"                 # the abundance unit, not the rate's 1/h
+    (group,) = here["groups"].values()                    # one unit and technique
+    assert group["values"] == pytest.approx([1.0e8, 3.0e8])
+    assert group["unit"] == "Cells/mL"                # the abundance unit, not the rate's 1/h
     assert entry["method"] == "growth_rate:easylinear:5"
     assert entry["capacity_left_out"] == [] and skipped == []
     merged = merge_rates([("S1", found)])[next(iter(found))]
@@ -175,18 +179,47 @@ def test_the_lag_always_comes_from_the_baranyi_fit_whichever_rate_was_asked_for(
         assert merged["method"] == named and merged["lag_method"] == "baranyi"
 
 
+def _one_capacity(value, unit, points, technique="fc", curve="r1"):
+    return {"ncbi:1": {"name": A, "unit": "1/h", "values": [0.4], "replicates": ["r1"], "lags": [],
+                       "capacity_left_out": [], "method": "growth_rate:easylinear:5",
+                       "capacity_by_medium": {"wc": {"label": "WC", "labels": ["WC"], "groups": {
+                           (unit, technique): {"unit": unit, "technique": technique, "values": [value],
+                                               "falls": [1.0], "curves": [curve], "points": points}}}}}}
+
+
 def test_capacities_in_another_abundance_unit_are_named_not_converted():
-    """The same rule the rates follow across time units, Karoline's "left out rather than converted"."""
-    def one(value, unit):
-        return {"ncbi:1": {"name": A, "unit": "1/h", "values": [0.4], "replicates": ["r1"], "lags": [],
-                           "capacity_left_out": [], "method": "growth_rate:easylinear:5",
-                           "capacity_by_medium": {"wc": {"label": "WC", "unit": unit, "values": [value],
-                                                         "falls": [1.0], "curves": ["r1"]}}}}
-    cells, grams = one(1.0e8, "Cells/mL"), one(0.9, "g/L")
-    merged = merge_rates([("S1", cells), ("S2", grams)])["ncbi:1"]
-    assert merged["capacity"] == pytest.approx(1.0e8) and merged["capacity_unit"] == "Cells/mL"
-    assert merged["other_capacity_units"] == ["S2 (g/L)"]
-    assert merged["n"] == 2                       # the rates themselves are in one unit, so both count
+    """Karoline's "left out rather than converted", and since 2026-10-14 (#292) the unit or technique with
+    more time points wins rather than the first study read: S2's plateau in g/L has 12 points against S1's 6
+    in Cells/mL, so the capacity is S2's, whichever study is read first, and S1's is named."""
+    cells, grams = _one_capacity(1.0e8, "Cells/mL", 6, curve="S1 r1"), _one_capacity(0.9, "g/L", 12, curve="S2 r1")
+    for order in ([("S1", cells), ("S2", grams)], [("S2", grams), ("S1", cells)]):
+        merged = merge_rates(order)["ncbi:1"]
+        assert merged["capacity"] == pytest.approx(0.9) and merged["capacity_unit"] == "g/L"
+        assert merged["capacity_points"] == 12 and merged["capacity_technique"] == "fc"
+        assert merged["other_capacity_units"] == ["Cells/mL by fc"]
+        assert merged["n"] == 2                   # the rates themselves are in one unit, so both count
+        assert merged["capacity_left_out"] == [
+            ("S1 r1", "its plateau is in Cells/mL by fc, and this organism's capacity is taken from g/L by fc, "
+                      "which has more time points (12 against 6); plateaus are compared only within one "
+                      "technique and unit")]
+
+
+def test_one_unit_by_two_techniques_is_two_groups_and_a_tie_chooses_none():
+    """Karoline, 2026-10-14 (#292): "Technique and unit". One strain's plateaus in Cells/mL by 16S and by
+    flow cytometry are not pooled; with as many time points (8) the one with more curves wins, and with as
+    many curves too nothing is chosen and the tie is named."""
+    sixteen = _one_capacity(2.0e8, "Cells/mL", 8, technique="16s", curve="S1 r1")
+    flow = _one_capacity(1.0e8, "Cells/mL", 8, technique="fc", curve="S2 r1")
+    merged = merge_rates([("S1", sixteen), ("S2", flow)])["ncbi:1"]
+    assert merged["capacity"] is None and merged["capacity_unit"] == ""
+    assert merged["capacity_tie"] == ("the plateaus in Cells/mL by 16s and in Cells/mL by fc have as many time "
+                                      "points (8) and curves (1), so none is chosen and this organism has no "
+                                      "capacity")
+    assert {curve for curve, _why in merged["capacity_left_out"]} == {"S1 r1", "S2 r1"}
+    # a second flow-cytometry curve with as many points in all breaks the tie by curves
+    two = _one_capacity(1.2e8, "Cells/mL", 0, technique="fc", curve="S3 r1")
+    merged = merge_rates([("S1", sixteen), ("S2", flow), ("S3", two)])["ncbi:1"]
+    assert merged["capacity_technique"] == "fc" and merged["capacity_n"] == 2 and merged["capacity_tie"] == ""
 
 
 # ---- a plateau the culture did not hold -----------------------------------------------------------
@@ -231,6 +264,7 @@ def test_a_curve_that_fell_too_far_from_its_peak_gives_no_capacity_and_is_named(
     found, skipped = monoculture_rates(client, [_mono("E1", A, [(1, "r1"), (2, "r2")])])
     (entry,) = found.values()
     (here,) = entry["capacity_by_medium"].values()
+    (here,) = here["groups"].values()
     assert here["values"] == pytest.approx([1.0e8])               # only the replicate within the limit
     assert here["falls"] == pytest.approx([10.0])
     assert skipped == []                                          # the rate itself was not left out
@@ -250,6 +284,7 @@ def test_the_limit_is_a_setting_and_zero_keeps_every_certified_plateau():
                                capacity_max_fall=0)
     entry = next(iter(off.values()))
     (here,) = entry["capacity_by_medium"].values()
+    (here,) = here["groups"].values()
     assert len(here["values"]) == 2 and entry["capacity_left_out"] == []
     assert merge_rates([("S1", off)])[next(iter(off))]["capacity_fall"] == pytest.approx(55.0)
 
@@ -315,8 +350,11 @@ def test_a_capacity_is_taken_from_one_medium_and_the_others_are_named():
     assert merged["capacity_other_media"] == ["mMCB (+acetate)"]
     assert merged["capacity_n"] == 2
     (what, why) = merged["capacity_left_out"][-1]
-    assert what == "1 curve(s) in mMCB (+acetate)"
-    assert "not pooled across media" in why and "taken from mMCB" in why
+    # one entry per curve, named as every other left-out curve is (round 7 of the review: one entry per
+    # medium was counted as one curve however many it held)
+    assert what.endswith("replicate r3"), what
+    assert "its plateau is in mMCB (+acetate)" in why and "not pooled across media" in why
+    assert "taken from mMCB" in why
 
 
 def test_the_medium_with_the_most_curves_wins_whatever_order_the_studies_came_in():
@@ -524,3 +562,174 @@ def test_the_measured_plateau_names_every_curve_it_refuses():
     # that arm is defensive. Written down rather than left as an untested line a reader wonders about.
     # and with no list to report into it still works, since the caller may not pass one
     assert _measured_plateau(reps, "A", spike_factor=100) is not None
+
+
+def test_the_curves_another_medium_holds_are_counted_as_curves():
+    """Round 7 of the review: the other medium's curves were one left-out entry, so "N curve(s) gave no
+    capacity" and growth_rates.csv's capacity_curves_left_out counted media, saying 1 beside "no capacity
+    from 3 curve(s) in mGAM". Three curves plateau in the base medium and two with acetate: two are left
+    out, and each is named."""
+    import csv as csv_module
+    import io as io_module
+
+    from grownet import matrix
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    client = _client({(i, A): _settles(plateau=1.0e8) for i in (1, 2, 3)}
+                     | {(i, A): _settles(plateau=3.0e8) for i in (4, 5)})
+    exps = [_mono_in("E1", A, [(1, "r1"), (2, "r2"), (3, "r3")], "mMCB"),
+            _mono_in("E2", A, [(4, "r4"), (5, "r5")], "mMCB", "mMCB with initial acetate")]
+    found, _ = monoculture_rates(client, exps)
+    nid = next(iter(found))
+    merged = merge_rates([("S1", found)])[nid]
+    assert [what.rsplit(" ", 1)[-1] for what, _ in merged["capacity_left_out"]] == ["r4", "r5"]
+    table = list(csv_module.reader(io_module.StringIO(matrix.rates_csv({nid: merged}))))
+    assert dict(zip(table[0], table[1], strict=True))["capacity_curves_left_out"] == "2"
+    net = InteractionNetwork()
+    net.meta["growth_rates"] = {"rule": "r", "organisms": {nid: merged}}
+    text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "2 curve(s) gave no capacity" in text, text
+
+
+def test_a_plateau_another_study_measured_in_another_unit_is_named_as_left_out():
+    """Round 8 of the review: within one study a plateau in another unit is named ("left out rather than
+    converted"); across studies it was only listed in other_capacity_units, which nothing prints, and was in
+    no count. S2's two curves are in OD while S1's are in Cells/mL: both are named."""
+    s1 = _client({(1, A): _settles(plateau=1.0e8), (2, A): _settles(plateau=1.0e8)})
+    found1, _ = monoculture_rates(s1, [_mono_in("E1", A, [(1, "r1"), (2, "r2")], "mMCB")])
+    nid = next(iter(found1))
+    entry = found1[nid]
+    (group,) = next(iter(entry["capacity_by_medium"].values()))["groups"].values()
+    od = {key: {**block, "groups": {("OD", ""): {**group, "unit": "OD", "technique": "",
+                                                 "curves": ["S2 r3", "S2 r4"], "values": [0.8, 0.9],
+                                                 "points": group["points"] - 1}}}
+          for key, block in entry["capacity_by_medium"].items()}
+    found2 = {nid: {**entry, "capacity_by_medium": od, "capacity_left_out": []}}
+    merged = merge_rates([("S1", found1), ("S2", found2)])[nid]
+    left = dict(merged["capacity_left_out"])
+    # S1's Cells/mL plateaus have one time point more, so they win (#292), and S2's are named
+    assert left.get("S2 r3", "").startswith("its plateau is in OD by an unrecorded technique, and this "
+                                            "organism's capacity is taken from Cells/mL by"), left
+    assert "S2 r4" in left and merged["capacity_n"] == 2
+
+
+def test_a_study_with_plateaus_and_no_rate_does_not_drop_the_organism_whatever_the_order():
+    """Round 9 of the review: the organism's rate unit was taken from the first study READ, so a study whose
+    curves certify a plateau but are too short for the rate window set it to "", every later study's rates
+    were dropped as another unit, and the organism with them, rate and capacity, in that order only."""
+    client = _client({(1, A): _settles(plateau=1.0e8), (2, A): _settles(plateau=1.0e8)})
+    found, _ = monoculture_rates(client, [_mono_in("E1", A, [(1, "r1"), (2, "r2")], "mMCB")])
+    nid = next(iter(found))
+    rated = found[nid]
+    assert rated["values"], "the control: this study gives a rate"
+    plateaus_only = {nid: {**rated, "values": [], "unit": "", "sources": {}, "lags": []}}
+    for order in ([("S1", plateaus_only), ("S2", found)], [("S2", found), ("S1", plateaus_only)]):
+        merged = merge_rates(order)
+        assert nid in merged, [s for s, _ in order]
+        assert merged[nid]["rate"] == pytest.approx(statistics.median(rated["values"]))
+        assert merged[nid]["studies"] == ["S2"] and merged[nid]["capacity_n"] == 4
+    # a first study with no rate but a unit recorded does not decide the unit either
+    per_day = {nid: {**rated, "unit": "1/d"}}
+    unit_only = {nid: {**rated, "values": [], "unit": "1/h", "sources": {}, "lags": []}}
+    merged = merge_rates([("S1", unit_only), ("S2", per_day)])[nid]
+    assert merged["unit"] == "1/d" and merged["studies"] == ["S2"] and merged["other_units"] == []
+
+
+def test_a_study_whose_rates_are_in_another_time_unit_keeps_its_plateaus_and_says_so():
+    """Round 9 of the review: a rate in 1/d is not converted, and its study's plateaus, which have no time
+    unit, were dropped from every count with it; the left-out rates were in the JSON only."""
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    client = _client({(1, A): _settles(plateau=1.0e8), (2, A): _settles(plateau=1.0e8)})
+    found, _ = monoculture_rates(client, [_mono_in("E1", A, [(1, "r1"), (2, "r2")], "mMCB")])
+    nid = next(iter(found))
+    alone = merge_rates([("S1", found)])[nid]
+    # S2's lags are in days, its sources are its rates', and it named a curve of its own as left out
+    per_day = {nid: {**found[nid], "unit": "1/d", "lags": [x / 24 for x in found[nid].get("lags") or []] + [9.9],
+                     "capacity_left_out": [("S2 r5", "the curve never reached a plateau")]}}
+    merged = merge_rates([("S1", found), ("S2", per_day)])[nid]
+    assert merged["other_units"] == ["S2 (1/d)"] and merged["studies"] == ["S1"]
+    assert merged["capacity_n"] == 4, "S2's plateaus count: a plateau has no time unit"
+    # and nothing of S2's rate side: its lags and sources stay out, its own left-out curve stays named
+    assert (merged["lag"], merged["lag_n"], merged["rate_sources"]) == (alone["lag"], alone["lag_n"],
+                                                                         alone["rate_sources"])
+    assert ("S2 r5", "the curve never reached a plateau") in merged["capacity_left_out"]
+    net = InteractionNetwork()
+    net.meta["growth_rates"] = {"rule": "r", "organisms": {nid: merged}}
+    text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "rates in another time unit left out: S2 (1/d)" in text, text
+
+
+def test_plateaus_in_two_units_within_one_study_are_two_groups_of_one_medium():
+    """#292: within one medium, plateaus are kept per unit and technique, and which is published is decided
+    by time points once every study is read; the first plateau's unit used to claim the medium and the
+    others were left out on the spot."""
+    from grownet.derive import _collect_capacity
+    entry = {"capacity_by_medium": {}, "capacity_left_out": []}
+    medium = {"key": "wc", "label": "WC"}
+    for label, unit in (("r1", "Cells/mL"), ("r2", "OD")):
+        points = _settles()
+        curve = GrowthCurve(A, [t for t, _, _ in points], [v for _, v, _ in points], "h", unit)
+        _collect_capacity(entry, curve, label, medium)
+    groups = entry["capacity_by_medium"]["wc"]["groups"]
+    assert set(groups) == {("Cells/mL", ""), ("OD", "")} and entry["capacity_left_out"] == []
+    assert groups[("OD", "")]["curves"] == ["r2"] and groups[("OD", "")]["points"] == len(_settles())
+    # and one unit by two techniques is two groups too ("Technique and unit")
+    entry = {"capacity_by_medium": {}, "capacity_left_out": []}
+    for label, technique in (("r1", "16s"), ("r2", "fc")):
+        points = _settles()
+        curve = GrowthCurve(A, [t for t, _, _ in points], [v for _, v, _ in points], "h", "Cells/mL", technique)
+        _collect_capacity(entry, curve, label, medium)
+    assert set(entry["capacity_by_medium"]["wc"]["groups"]) == {("Cells/mL", "16s"), ("Cells/mL", "fc")}
+
+
+def test_a_derivation_without_the_no_growth_rule_says_so_in_the_report():
+    """Round 21 of the review: the integrated derivation has no no-growth rule, and its meta says so with
+    `applied: False`, but the report printed "no-growth rule: ; alpha None, factor None; 0 obligate, 0
+    abolished" as if the rule had run and found nothing."""
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    net = InteractionNetwork()
+    net.meta["no_growth"] = {"applied": False, "why": "the integrated derivation has no no-growth rule"}
+    text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "no-growth rule: not applied; the integrated derivation has no no-growth rule" in text
+    assert "alpha None" not in text
+    # alpha 0, the documented switch, is the rule as configured: its line keeps its numbers (round 22: it
+    # printed "not applied; " with nothing after it)
+    from grownet.interaction import rule_meta
+    net.meta["no_growth"] = {**rule_meta(0.0, None), "obligate": 2, "abolished": 0}
+    text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    # a comparison censored because a set's metric was not positive is still censored at alpha 0, and its
+    # bound uses the factor, so the factor is named (round 24: it was said not to be read while it moved
+    # the bounds)
+    assert ("; alpha 0 switches the test off; a comparison whose set's metric was not positive is still "
+            "censored, and its bound uses factor 1.5; 2 obligate, 0 abolished") in text
+    assert "not applied" not in text
+    net.meta["no_growth"] = {**rule_meta(0.0, None), "obligate": 0, "abolished": 0}
+    text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "; alpha 0 switches the test off, and the factor with it; 0 obligate, 0 abolished" in text
+    # and the factor is marked as not read only where no comparison was censored (rounds 23 and 24)
+    from grownet.derive import output_meta
+    assert "no_growth_factor" in output_meta([], no_growth_alpha=0.0)[1]["settings_not_used"]
+    obligate = {"source": "a", "target": "b", "source_name": "A", "target_name": "B", "effect": "facilitation",
+                "strength": None, "status": "present", "outcome": "obligate", "study_id": "S1", "metric": "auc"}
+    assert "no_growth_factor" not in output_meta([obligate], no_growth_alpha=0.0)[1]["settings_not_used"]
+    assert "no_growth_factor" not in output_meta([], no_growth_alpha=0.05)[1]["settings_not_used"]
+
+
+def test_the_report_says_why_the_factor_is_unread_at_alpha_0():
+    """Round 24 of the review: the report marked the factor "not read by this derivation" at alpha 0, where
+    it is this run that does not read it."""
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    net = InteractionNetwork()
+    net.meta["settings_not_used"] = ["no_growth_factor"]
+    net.meta["settings"] = {"no_growth_alpha": 0.0, "no_growth_factor": 1.5}
+    text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "1.5   <- not read in this run: alpha 0 switches the test off and nothing was censored" in text

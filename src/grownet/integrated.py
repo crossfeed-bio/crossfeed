@@ -778,6 +778,23 @@ def rate_unit_of(curve) -> str:
     return f"1/{curve.time_unit}" if curve is not None and curve.time_unit else "1/h"
 
 
+
+def _row_label(study: str, record: dict) -> str:
+    """How a fitted row is named where it gave no capacity: its study, its partner and its experimental
+    condition. `fit_condition` is the fit's condition NUMBER, which named the row "in 64.1" (found in
+    review)."""
+    partner = record.get("source_name") or record.get("source")
+    return (f"{study or 'a study'}: the row fitted" + (f" with {partner}" if partner else "")
+            + (f" in {record['condition']}" if record.get("condition") else ""))
+
+
+def _stage_set(study: str, record: dict):
+    """The monoculture set a row's rate stage was fitted from: the monoculture experiments it matched
+    (`experiments` after the co-culture's own), as one study can hold several, one per condition; the
+    study alone where a row does not say (found in review: keyed by study, three sets of 3 counted 3)."""
+    monocultures = tuple(sorted((record.get("experiments") or [])[1:]))
+    return (study, monocultures)
+
 def fitted_rates(records: list) -> dict:
     """{node id: the rate entry a package takes} from the arcs of an integrated run.
 
@@ -805,45 +822,49 @@ def fitted_rates(records: list) -> dict:
             "name": record.get("target_name", nid), "unit": record.get("fitted_rate_unit", "1/h"),
             "rates": [], "points": [], "studies": [], "per_study": {}, "other_units": [],
             "capacity_unit": "", "capacities": [], "capacity_points": [], "capacity_per_study": {},
-            "other_capacity_units": [], "r2": [], "conditions": [], "self_sources": [], "media": [],
-            "stage_n": [], "by_medium": {}})
+            "other_capacity_units": [], "unit_left_out": [], "r2": [], "conditions": [], "self_sources": [],
+            "media": [],
+            "stage_n": {}, "by_medium": {}})
         study = record.get("study_id", "")
         unit = record.get("fitted_rate_unit", "1/h")
         if unit != at["unit"]:
+            # a rate in another time unit is not converted, and its row's plateau stays: K = -r/A_ii has no
+            # time unit when r and A_ii come from one fit, as `derive.merge_rates` keeps such a study's
+            # plateaus (found in review: it was named as left out, and before that in no count)
             if f"{study} ({unit})" not in at["other_units"]:
                 at["other_units"].append(f"{study} ({unit})")
-            continue
-        at["rates"].append(rate)
-        at["points"].append(record.get("fit_points", 0))
-        # the monoculture replicates stage 1 fitted this organism's rate from. `n` below counts the
-        # fitted rows, which is what this path merges over, and the CSV's `replicates` column has meant
-        # monoculture replicates since 0.2.0, where it was right because the only derivation compared
-        # replicate sets. Writing the row count into that column made a rate from three monocultures
-        # read as resting on one culture, which is how the gLV example's thinness went unnoticed
-        # (#155 item 13).
-        if record.get("rate_stage_n"):
-            at["stage_n"].append(record["rate_stage_n"])
-        at["per_study"].setdefault(study, []).append(rate)
-        if study and study not in at["studies"]:
-            at["studies"].append(study)
-        if record.get("fit_r2") is not None:
-            at["r2"].append(record["fit_r2"])
-        if record.get("fit_condition") is not None:
-            at["conditions"].append(record["fit_condition"])
-        source = record.get("fitted_self_source", "")
-        if source and source not in at["self_sources"]:
-            at["self_sources"].append(source)
-        if record.get("medium") and record["medium"] not in at["media"]:
-            at["media"].append(record["medium"])
+        else:
+            at["rates"].append(rate)
+            at["points"].append(record.get("fit_points", 0))
+            # the monoculture replicates stage 1 fitted this organism's rate from. `n` below counts the
+            # fitted rows, which is what this path merges over, and the CSV's `replicates` column has meant
+            # monoculture replicates since 0.2.0, where it was right because the only derivation compared
+            # replicate sets. Writing the row count into that column made a rate from three monocultures
+            # read as resting on one culture, which is how the gLV example's thinness went unnoticed
+            # (#155 item 13).
+            # one entry per monoculture set: its rows agree on its size, and two sets are two sets, whether in
+            # two studies or in one (one per condition)
+            if record.get("rate_stage_n"):
+                key = _stage_set(study, record)
+                at["stage_n"][key] = max(at["stage_n"].get(key, 0), record["rate_stage_n"])
+            at["per_study"].setdefault(study, []).append(rate)
+            if study and study not in at["studies"]:
+                at["studies"].append(study)
+            if record.get("fit_r2") is not None:
+                at["r2"].append(record["fit_r2"])
+            if record.get("fit_condition") is not None:
+                at["conditions"].append(record["fit_condition"])
+            source = record.get("fitted_self_source", "")
+            if source and source not in at["self_sources"]:
+                at["self_sources"].append(source)
+            if record.get("medium") and record["medium"] not in at["media"]:
+                at["media"].append(record["medium"])
         if not (own and own < 0 and rate > 0):
             continue
         capacity_unit = record.get("fitted_self_unit", "")
-        if not at["capacity_unit"]:
-            at["capacity_unit"] = capacity_unit
-        if capacity_unit != at["capacity_unit"]:
-            if f"{study} ({capacity_unit})" not in at["other_capacity_units"]:
-                at["other_capacity_units"].append(f"{study} ({capacity_unit})")
-            continue
+        technique = record.get("fitted_self_technique", "")
+        # no unit claims the organism on the first row read any more: plateaus are grouped by unit and
+        # technique within a medium, and the group with more time points is published (#292)
         # A capacity comes from ONE medium (Karoline, 2026-10-07): the plateau a fit implies sits beside
         # off-diagonals measured in one medium, so plateaus are collected per medium and the medium with
         # the most rows is the one published, as `derive.merge_rates` does it for the specified
@@ -855,9 +876,20 @@ def fitted_rates(records: list) -> dict:
 
         label = record.get("medium") or ""
         key = key_from_label(label)
-        one = at["by_medium"].setdefault(key, {"label": label, "values": [], "unit": capacity_unit,
-                                               "points": [], "per_study": {}, "falls": []})
+        medium = at["by_medium"].setdefault(key, {"label": label, "groups": {}})
+        one = medium["groups"].setdefault((capacity_unit, technique), {
+            "label": label, "values": [], "unit": capacity_unit, "technique": technique, "points": [],
+            "per_study": {}, "falls": [], "rows": [], "stage_n": {}, "sources": []})
         one["values"].append(-rate / own)
+        one["rows"].append(_row_label(study, record))
+        # the provenance of THIS medium's plateaus, which the published capacity reports: taken from every
+        # row, a capacity from rows in another time unit (whose rate is left out) carried the other rows'
+        # stage size and source, and a substituted diagonal went unlisted (found in review)
+        if record.get("rate_stage_n"):
+            key = _stage_set(study, record)
+            one["stage_n"][key] = max(one["stage_n"].get(key, 0), record["rate_stage_n"])
+        if record.get("fitted_self_source") and record["fitted_self_source"] not in one["sources"]:
+            one["sources"].append(record["fitted_self_source"])
         one["points"].append(record.get("fit_points", 0))
         if record.get("fitted_capacity_fall") is not None:
             one["falls"].append(record["fitted_capacity_fall"])
@@ -872,13 +904,31 @@ def fitted_rates(records: list) -> dict:
             continue
         # the medium with the most rows is the one published; a tie goes to the first label, so the
         # choice does not depend on the order the rows arrived in. `merge_rates` chooses the same way.
-        order = sorted(at["by_medium"].items(), key=lambda kv: (-len(kv[1]["values"]), kv[1]["label"]))
-        chosen = order[0][1] if order else None
-        left_out = [(f"{len(other['values'])} fitted row(s) in {other['label']}",
-                     f"this organism's capacity is taken from {chosen['label']}, where more rows were "
-                     "fitted; plateaus are not pooled across media, since a capacity sits beside "
-                     "off-diagonals measured in one of them")
-                    for _key, other in order[1:]]
+        order = sorted(at["by_medium"].items(),
+                       key=lambda kv: (-sum(len(g["values"]) for g in kv[1]["groups"].values()), kv[1]["label"]))
+        medium_chosen = order[0][1] if order else None
+        # one entry per row, so the list's length is the count the report and the csv give (found in
+        # review: one entry per medium was counted as one)
+        left_out = list(at["unit_left_out"]) + [
+            (row, f"its plateau is in {other['label']}, and this organism's capacity is taken from "
+                  f"{medium_chosen['label']}, where more rows were fitted; plateaus are not pooled across "
+                  "media, since a capacity sits beside off-diagonals measured in one of them")
+            for _key, other in order[1:] for group in other["groups"].values() for row in group["rows"]]
+        # within the medium, the unit and technique with more time points, as `derive.merge_rates` (#292)
+        from .derive import _technique, choose_capacity_group
+        proxies = [{**g, "points": sum(g["points"]), "_group": g}
+                   for g in (medium_chosen["groups"].values() if medium_chosen else ())]
+        picked, others, tie = choose_capacity_group(proxies)
+        chosen = picked["_group"] if picked else None
+        for other in others:
+            left_out += [(row, f"its plateau is in {other['unit']} by {_technique(other)}, and "
+                               + (tie or f"this organism's capacity is taken from {picked['unit']} by "
+                                         f"{_technique(picked)}, which has "
+                                         + (f"more time points ({picked['points']} against {other['points']})"
+                                            if picked["points"] != other["points"] else
+                                            "as many time points and more rows"))
+                               + "; plateaus are compared only within one technique and unit")
+                         for row in other["rows"]]
         out[nid] = {
             "name": at["name"], "rate": statistics.median(at["rates"]), "unit": at["unit"],
             # what the median rests on: the fitted rows, which is what this derivation has instead of
@@ -886,14 +936,17 @@ def fitted_rates(records: list) -> dict:
             # count of replicates and this path never had any (it used to report time points under that
             # name, and merging rows would have added them up)
             "n": len(at["rates"]), "n_label": "fitted row(s)", "points": sum(at["points"]),
-            # one monoculture set per organism, so the rows agree on it; the largest is that set's size
-            "replicates": max(at["stage_n"]) if at["stage_n"] else None,
+            # the monoculture replicates behind the rate: one entry per monoculture set, summed (the largest
+            # alone counted one set where several stood behind it, found in review)
+            "replicates": sum(at["stage_n"].values()) if at["stage_n"] else None,
             # sorted, so the whole entry is a function of the rows and not of the order they arrived in
             "studies": sorted(at["studies"]),
             "per_study": {study: statistics.median(values) for study, values in at["per_study"].items()},
             "other_units": at["other_units"], "method": METRIC, "lag": None, "lag_method": "",
             "capacity": statistics.median(chosen["values"]) if chosen else None,
-            "capacity_unit": at["capacity_unit"] if chosen else "",
+            "capacity_unit": chosen["unit"] if chosen else "",
+            "capacity_technique": chosen["technique"] if chosen else "",
+            "capacity_tie": tie,
             "capacity_n": len(chosen["values"]) if chosen else 0,
             # one medium, never pooled (Karoline, 2026-10-07), and what else this organism has a
             # plateau in, so a reader who wants that medium can ask for it in the second search box
@@ -905,18 +958,20 @@ def fitted_rates(records: list) -> dict:
             "capacity_other_media": [other["label"] for _key, other in order[1:]],
             # the capacity is -r/A_ii from the same monoculture stage, so the curves behind it are that
             # stage's replicates, not the rows the median was taken over
-            "capacity_curves": (max(at["stage_n"]) if (at["stage_n"] and chosen) else None),
+            "capacity_curves": (sum(chosen["stage_n"].values()) if (chosen and chosen["stage_n"]) else None),
             "capacity_points": sum(chosen["points"]) if chosen else 0,
             "capacity_per_study": ({study: statistics.median(values)
                                     for study, values in chosen["per_study"].items()} if chosen else {}),
-            "other_capacity_units": at["other_capacity_units"], "capacity_left_out": left_out,
+            "other_capacity_units": [f"{g['unit']} by {_technique(g)}" for g in others],
+            "capacity_left_out": left_out,
             # the fit behind the published parameters: the median R2 of the rows merged into them and the
             # worst conditioning among them, so neither reads as the property of one row
             "fit_r2": statistics.median(at["r2"]) if at["r2"] else None,
             "fit_condition": max(at["conditions"]) if at["conditions"] else None,
             # where the self-limitation behind the diagonal came from, and the media the rows were
             # measured in, so a reader of the package can see both (#142 items 6 and 7)
-            "capacity_source": "; ".join(at["self_sources"]),
+            # from the medium the capacity is taken from; with no capacity, every row's says why
+            "capacity_source": "; ".join(chosen["sources"] if chosen else at["self_sources"]),
             "media": sorted(at["media"])}
     return out
 
@@ -1358,6 +1413,9 @@ class IntegratedDeriver:
                                              if (partner_unit or unit) else ""),
                         "fitted_rate": got["rate"], "fitted_rate_unit": rate_unit_of(curve),
                         "fitted_self": own, "fitted_self_unit": unit,
+                        # the technique the plateau was measured by: plateaus are compared only within one
+                        # technique and unit (Karoline, 2026-10-14, #292)
+                        "fitted_self_technique": (curve.technique if curve is not None else "") or "",
                         "fitted_self_source": got.get("self_limitation_source", ""),
                         "fitted_capacity_fall": got.get("capacity_fall"),
                         "metric_with": got["rate"] + coefficient * (abundance or 0.0),

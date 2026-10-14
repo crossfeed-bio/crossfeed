@@ -557,8 +557,10 @@ def test_a_fitted_rate_in_another_unit_is_named_not_converted():
     got = integrated.fitted_rates(rows)["a"]
     assert got["rate"] == pytest.approx(0.4) and got["unit"] == "1/h"
     assert got["other_units"] == ["S2 (1/day)"]
-    assert got["capacity_unit"] == "Cells/mL" and got["capacity_n"] == 1
-    assert got["other_capacity_units"] == ["S3 (g/L)"]
+    # S2's plateau stays: K = -r/A_ii has no time unit (round 10 of the review); S3's is in g/L, and the
+    # Cells/mL rows have more time points (16 against 8), so they win (#292)
+    assert got["capacity_unit"] == "Cells/mL" and got["capacity_n"] == 2
+    assert got["other_capacity_units"] == ["g/L by an unrecorded technique"]
 
 
 def test_replicates_that_measured_different_partners_are_not_pooled_into_one_design():
@@ -753,7 +755,8 @@ def test_the_rate_rule_does_not_claim_one_merge_where_there_are_two():
 
 
 def _rate_record(medium, rate, own, study="S1", fall=None):
-    return {"target": "ncbi:1", "target_name": "A", "fitted_rate": rate, "fitted_self": own,
+    # `source` as live records carry it beside `source_name`, so a row is named by its partner's name
+    return {"target": "ncbi:1", "target_name": "A", "source": "ncbi:2", "fitted_rate": rate, "fitted_self": own,
             "fitted_rate_unit": "1/h", "fitted_self_unit": "Cells/mL", "study_id": study,
             "rate_stage_n": 3, "fit_points": 7, "medium": medium, "fitted_capacity_fall": fall}
 
@@ -779,7 +782,8 @@ def test_a_fitted_capacity_comes_from_one_medium_as_the_decision_says():
     assert got["capacity_medium"] == acid
     assert got["capacity_media"] == [acid] and got["capacity_other_media"] == [both]
     left_out = got["capacity_left_out"]
-    assert len(left_out) == 1 and "1 fitted row(s)" in left_out[0][0] and both in left_out[0][0]
+    # one entry per row, so the count the report and the csv give is the rows' (round 7 of the review)
+    assert len(left_out) == 1 and "the row fitted" in left_out[0][0] and f"its plateau is in {both}" in left_out[0][1]
     assert "not pooled across media" in left_out[0][1]
     # the rate itself is still the median over every row, whatever the medium: a rate is a property of
     # the organism in each medium it was measured in, and only the plateau is the one the matrix sits on
@@ -1184,3 +1188,143 @@ def test_the_spike_limit_applies_under_the_integrated_form_too():
 
     # and at a limit nothing reaches, nothing is dropped
     assert _unspiked_for(reps, ["A", "B"], 1e9, {"name": "E1"}, lambda e: "E1")[0] == reps
+
+
+def test_the_rows_another_medium_holds_are_counted_as_rows():
+    """Round 7 of the review: one left-out entry per medium was counted as one, and the report called the
+    rows curves. Two rows in the antioxidant medium are two entries, and the report says rows."""
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    acid = "Minimal medium (MM) (+0.75% linoleic acid)"
+    both = "Minimal medium (MM) (+0.0015mm tbhq antioxidant, +0.75% linoleic acid)"
+    got = integrated.fitted_rates([_rate_record(acid, 0.4, -4.0e-10), _rate_record(acid, 0.4, -8.0e-10),
+                                   _rate_record(acid, 0.4, -6.0e-10), _rate_record(both, 0.4, -1.0e-10),
+                                   _rate_record(both, 0.4, -2.0e-10)])["ncbi:1"]
+    assert len(got["capacity_left_out"]) == 2
+    net = InteractionNetwork()
+    net.meta["growth_rates"] = {"rule": "r", "organisms": {"ncbi:1": got}}
+    text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "2 row(s) gave no capacity" in text and "curve(s) gave no capacity" not in text, text
+
+
+def test_a_left_out_row_is_named_by_its_experimental_condition_and_a_row_in_another_unit_is_counted():
+    """Round 8 of the review. A left-out row was named by `fit_condition`, the fit's condition NUMBER
+    ("in 64.12691137298039" live, for SMGDB00000014's At_Ct_ROS), and a row whose plateau is in another
+    abundance unit was in no count at all, so "every curve that gave no capacity is named" did not hold."""
+    acid = "Minimal medium (MM) (+0.75% linoleic acid)"
+    both = "Minimal medium (MM) (+0.0015mm tbhq antioxidant, +0.75% linoleic acid)"
+    rows = [_rate_record(acid, 0.4, -4.0e-10), _rate_record(acid, 0.4, -8.0e-10),
+            {**_rate_record(both, 0.4, -1.0e-10), "source_name": "B", "condition": "At_Ct_TBHQ",
+             "fit_condition": 96.5},
+            {**_rate_record(acid, 0.4, -0.2, study="S2"), "fitted_self_unit": "OD", "source_name": "C",
+             "condition": "At_Ct_OD"},
+            # a second row in that unit from the same study is named too (round 9)
+            {**_rate_record(acid, 0.4, -0.3, study="S2"), "fitted_self_unit": "OD", "source_name": "E",
+             "condition": "At_Ct_OD2"}]
+    left = dict(integrated.fitted_rates(rows)["ncbi:1"]["capacity_left_out"])
+    assert "S2: the row fitted with E in At_Ct_OD2" in left, left
+    assert "S1: the row fitted with B in At_Ct_TBHQ" in left, left
+    assert not any("96.5" in what for what in left)
+    # the two Cells/mL rows and the two OD rows have as many time points and rows, so neither unit is chosen
+    # and both are named (#292: never chosen by the order they arrived in)
+    assert left["S2: the row fitted with C in At_Ct_OD"].startswith(
+        "its plateau is in OD by an unrecorded technique, and the plateaus in ")
+    listed = integrated.fitted_rates(rows)["ncbi:1"]["capacity_left_out"]
+    tied = [why for _row, why in listed if "so none is chosen" in why]
+    assert len(tied) == 4, listed     # both OD rows and both Cells/mL rows of the chosen medium
+
+
+def test_a_row_whose_rate_is_in_another_time_unit_keeps_its_plateau():
+    """Rounds 9 and 10 of the review: such a row was skipped before its plateau was counted, then named as
+    left out; but K = -r/A_ii has no time unit when r and A_ii come from one fit, so the plateau stays,
+    as `derive.merge_rates` keeps such a study's, and only the rate is left out. Two 1/d rows in S2:
+    9.6/9.6e-9 and 4.8/4.8e-9 both imply 1e9, beside S1's 0.4/4e-10 = 1e9."""
+    acid = "Minimal medium (MM) (+0.75% linoleic acid)"
+    rows = [_rate_record(acid, 0.4, -4.0e-10),
+            {**_rate_record(acid, 9.6, -9.6e-9, study="S2"), "fitted_rate_unit": "1/d"},
+            {**_rate_record(acid, 4.8, -4.8e-9, study="S2"), "fitted_rate_unit": "1/d"}]
+    got = integrated.fitted_rates(rows)["ncbi:1"]
+    assert got["other_units"] == ["S2 (1/d)"]
+    assert got["rate"] == pytest.approx(0.4) and got["n"] == 1 and got["studies"] == ["S1"], "the rate is S1's"
+    assert got["capacity_n"] == 3 and got["capacity"] == pytest.approx(1.0e9)
+    assert got["capacity_left_out"] == []
+
+
+def test_a_capacity_from_rows_in_another_time_unit_reports_their_own_provenance():
+    """Round 11 of the review: once a row in another time unit kept its plateau, a capacity taken from such
+    rows (here YCFA, two rows, 1/d) still carried the 1/h row's stage size and its "fitted" source, so a
+    diagonal substituted at a measured plateau was not listed among the substituted rows."""
+    from grownet import matrix
+    from grownet.mgrowthdb import records_to_network
+    sub = "-r/K at the measured plateau 1e+08 Cells/mL of 3 monoculture curve(s): the fit implies none"
+
+    def rec(study, unit, medium, rate, own, n, source, condition):
+        return {"target": "ncbi:1", "target_name": "Blautia a", "source": "ncbi:2", "source_name": "Roseburia b",
+                "fitted_rate": rate, "fitted_self": own, "fitted_rate_unit": unit, "fitted_self_unit": "Cells/mL",
+                "study_id": study, "rate_stage_n": n, "fit_points": 7, "medium": medium, "condition": condition,
+                "fitted_self_source": source, "fitted_capacity_fall": 1.0 if source == sub else None}
+    rows = [rec("S1", "1/h", "WC", 0.4, -4e-10, 3, "fitted from the monoculture time courses", "c1"),
+            rec("S2", "1/d", "YCFA", 9.6, -9.6e-8, 8, sub, "c2"),
+            rec("S2", "1/d", "YCFA", 9.6, -9.6e-8, 8, sub, "c3")]
+    got = integrated.fitted_rates(rows)["ncbi:1"]
+    assert got["capacity_medium"] == "YCFA" and got["capacity"] == pytest.approx(1e8)
+    assert got["capacity_curves"] == 8 and got["capacity_source"] == sub
+    assert got["rate"] == pytest.approx(0.4) and got["replicates"] == 3, "the rate side stays the 1/h row's"
+    arc = {"source": "ncbi:2", "target": "ncbi:1", "source_name": "Roseburia b", "target_name": "Blautia a",
+           "effect": "inhibition", "strength": -1e-9, "weight": 1.0, "status": "present", "sd": 1e-10,
+           "study_id": "S1", "outcome": "quantified", "metric": integrated.METRIC}
+    net = records_to_network([arc])
+    assert matrix.coefficients(net, matrix.for_nodes(net, {"ncbi:1": got}))["substituted_rows"] == [("Blautia a", sub)]
+
+
+def test_the_counts_and_provenance_behind_a_fitted_capacity_and_rate():
+    """Round 12 of the review: the reason a capacity is missing (from every row when no medium has one)
+    was untested; so was a chosen medium with two sources (keeping the first hid a substituted diagonal);
+    and the monoculture replicates behind a capacity or rate from two studies were the larger study's set
+    alone, where both sets stand behind it (3 + 8 = 11)."""
+    sub = "-r/K at the measured plateau 1e+08 Cells/mL of 3 monoculture curve(s): the fit implies none"
+    fit = "fitted from the monoculture time courses"
+
+    def rec(study, own, n, source):
+        return {**_rate_record("WC", 0.4, own, study=study), "rate_stage_n": n, "fitted_self_source": source}
+    none = integrated.fitted_rates([rec("S1", 1e-10, 3, "the fit implies no plateau")])["ncbi:1"]
+    assert none["capacity"] is None and none["capacity_source"] == "the fit implies no plateau"
+    got = integrated.fitted_rates([rec("S1", -4e-10, 3, fit), rec("S2", -4e-10, 8, sub)])["ncbi:1"]
+    assert got["capacity_source"] == f"{fit}; {sub}"
+    assert got["capacity_curves"] == 11 and got["replicates"] == 11 and got["capacity_n"] == 2
+    # two rows of one study share its set: counted once
+    one_study = integrated.fitted_rates([rec("S1", -4e-10, 3, fit), rec("S1", -4e-10, 3, fit)])["ncbi:1"]
+    assert one_study["capacity_curves"] == 3 and one_study["replicates"] == 3
+
+
+def test_one_study_can_hold_several_monoculture_sets():
+    """Round 13 of the review: keyed by study, three rows of SMGDB00000014 fitted from three monoculture
+    sets of 3 (one per condition) reported 3 replicates behind Comamonas' rate where 9 stood behind it.
+    A set is the monoculture experiments a row matched, after the co-culture's own."""
+    def rec(coculture, monoculture):
+        return {**_rate_record("WC", 0.4, -4e-10, study="S14"), "rate_stage_n": 3,
+                "experiments": [coculture, monoculture]}
+    got = integrated.fitted_rates([rec("C1", "M1"), rec("C2", "M2"), rec("C3", "M3")])["ncbi:1"]
+    assert got["replicates"] == 9 and got["capacity_curves"] == 9
+    shared = integrated.fitted_rates([rec("C1", "M1"), rec("C2", "M1")])["ncbi:1"]
+    assert shared["replicates"] == 3, "two co-cultures matched to one monoculture set count it once"
+    # the co-culture's own id is the first, whatever it sorts as (Z after M): it is not part of the set
+    later = integrated.fitted_rates([rec("Z1", "M1"), rec("Z2", "M1")])["ncbi:1"]
+    assert later["replicates"] == 3
+
+
+def test_fitted_plateaus_of_one_unit_by_two_techniques_are_not_pooled():
+    """Karoline, 2026-10-14 (#292): "Technique and unit", and the one with more time points wins. Two rows of
+    A in WC, Cells/mL, one plateau measured by 16S over 7 points (K = 0.4 / 4e-10 = 1e9) and one by flow
+    cytometry over 12 (K = 0.4 / 8e-10 = 5e8): the capacity is the flow cytometry one, 5e8, not the median
+    7.5e8 of the two, and the 16S row is named."""
+    sixteen = {**_rate_record("WC", 0.4, -4.0e-10), "fitted_self_technique": "16s"}
+    flow = {**_rate_record("WC", 0.4, -8.0e-10, study="S2"), "fitted_self_technique": "fc", "fit_points": 12}
+    for rows in ([sixteen, flow], [flow, sixteen]):
+        got = integrated.fitted_rates(rows)["ncbi:1"]
+        assert got["capacity"] == pytest.approx(5.0e8) and got["capacity_technique"] == "fc"
+        assert got["other_capacity_units"] == ["Cells/mL by 16s"]
+        ((row, why),) = got["capacity_left_out"]
+        assert why.startswith("its plateau is in Cells/mL by 16s, and this organism's capacity is taken from "
+                              "Cells/mL by fc, which has more time points (12 against 7)")

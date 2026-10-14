@@ -130,7 +130,7 @@ def test_every_field_a_search_returns_is_carried_or_deliberately_left_out():
 
     from grownet import gui, published
 
-    returned = set(re.findall(r'"([a-z_]+)":', inspect.getsource(gui.run_query).split("return {", 1)[1]))
+    returned = set(re.findall(r'"([a-z_]+)":', inspect.getsource(gui._run_query).split("return {", 1)[1]))
     carried = set(published.FIELDS) | {"network", "absent"}
     # Nothing is deliberately left out today, so this set is empty and the check is strict. A key that
     # genuinely should not travel goes here WITH its reason, and the next key added to `run_query`
@@ -193,3 +193,24 @@ def test_the_artifact_carries_something_a_reader_can_quote(monkeypatch):
     local = published.to_payload(result)["identity"]
     assert (local["run"], local["commit"]) == ("", "")
     assert local["content_sha256"] == ident["content_sha256"], "the hash must not depend on the run"
+
+
+def test_the_published_network_is_fetched_against_the_systems_trust_store(monkeypatch):
+    """The same certificate file problem as mGrowthDB's (2026-10-14): the request to GitHub verifies
+    against the operating system's roots too."""
+    import urllib.request
+
+    import truststore
+
+    from grownet import published
+
+    monkeypatch.undo()             # conftest's stand-in for `fetch`, the function under test here
+    seen = {}
+
+    def urlopen(url, timeout=None, context=None):
+        seen["context"] = context
+        raise OSError("offline")
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    assert published.fetch() is None
+    assert isinstance(seen["context"], truststore.SSLContext)

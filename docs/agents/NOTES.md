@@ -1076,11 +1076,15 @@ simulator takes (register item 32, Karoline 2026-10-03). What a later agent need
   cannot see it, which is what `rbridge.INSTALL_TROUBLE` says. It points at `install_local` from a clone
   and **never at clearing the token**: "it alters their system settings in ways that can affect them
   negatively" (Karoline, same day). A test in `tests/test_help.py` keeps that advice off the help page.
-- Checking the R side: `R CMD build r && R CMD check --no-manual grownet_*.tar.gz`, or `make r-check`.
-  The tests live in `r/tests/testthat` and include a real POST into the listener. CI runs the same thing in
-  the `r-package` job (#112), with R, jsonlite and testthat from Ubuntu's own packages so that no
-  third-party action is added and nothing is compiled, and `_R_CHECK_FORCE_SUGGESTS_=false` because miaSim
-  is only named in examples that do not run.
+- Checking the R side: `make r-check`, or `R CMD build r && NOT_CRAN=true R CMD check --no-manual
+  grownet_*.tar.gz`. The tests live in `r/tests/testthat` and include a real POST into the listener, which
+  is a `skip_on_cran()` test: **without `NOT_CRAN=true` testthat skips it and the check still says OK**. It
+  was skipped that way from #120 to 2026-10-13 while it failed (it expected the old example's cell).
+  `make r-check` and CI's `r-package` job therefore fail unless `grownet.Rcheck/tests/testthat.Rout`
+  says `SKIP 0`; a bare `R CMD check` does not, so read that file yourself if you run one. CI runs the same thing in the `r-package` job (#112), with R,
+  jsonlite and testthat from Ubuntu's own packages so that no third-party action is added and nothing is
+  compiled, `NOT_CRAN=true`, and `_R_CHECK_FORCE_SUGGESTS_=false` because miaSim is only named in examples
+  that do not run.
 
 ## Releasing 0.2.0
 
@@ -1123,16 +1127,27 @@ and the README: that is the one mistake this style can make.
   report. Merged arcs join the media of their parts.
 - Selecting is not a method change: the medium is part of the conditions key, so comparisons never mixed
   media. Register item 8 carries this.
-- `matrix.dropout_arcs(net)` counts the arcs a gLV package holds that may act through a third species;
-  the README and the R printout say the count, or that there is none. Both gLV settings are ordinary
+- `matrix.dropout_arcs(net)` counts the network's drop-out arcs, which may act through a third species
+  (`caveats.dropout_arcs`); the gLV README and the R printout count those in the cells
+  (`coefficients()["dropout_in_cells"]`, `caveats.dropout_arcs_in_cells`), and the README names the
+  network's others as in no cell. Both gLV settings are ordinary
   advanced settings; the **gLV mode** button (`gui.glv_mode`, `gui.glv_mode_on`, `--glv-mode`) sets them
   together and says so, which is what Karoline asked for after two checkboxes in the bar read as "quite
   complex" (2026-10-04). It toggles: pressing it again restores both defaults, and it is drawn as a
   switch (`button.switch` with a track and a knob in `brand.CSS`), green when on and white when off, with
   `aria-pressed` for anyone who cannot see it. It stays a submit button, so the page keeps its no-JavaScript
   rule: the server re-renders the switch the other way.
-- `matrix.media(net)` feeds the gLV README, the payload's caveats and the R printout: a package built from
-  several media says so in capitals, because a simulation is of one environment. The All network spans six.
+- **The gLV payload is `grownet.glv/v2`** since 0.5.0 (Karoline, 2026-10-14, Q4): new fields and a
+  narrower `matrices[].media` moved it; `PREVIOUS_GLV_FORMATS` and R's `GLV_FORMATS` keep v1 and v0
+  readable. A further field or change of meaning moves it again.
+- `matrix.media(net)` is every arc's media (the payload's `caveats.media`); the gLV README and the R printout
+  describe the media matrix by matrix (`matrix._media_lines`, R `print_media`), from each matrix's `media`
+  (its cells') and `cells_with_unrecorded_medium` (cells with an arc recording no medium), with
+  `cell_media` naming the cells' media for the arcs in no cell (each diagonal's capacity media are in
+  growth_rates.csv), and name the media of arcs in no cell
+  apart, because a simulation is of one environment and an arc in no cell is not in it. A block's `media`
+  is its cells'; `steady._environment` matches a chemostat against it, or, for a matrix holding no cell,
+  against its `arc_media` (the arcs between its organisms, or the network's where no arc joins them).
 
 ## Gotchas
 

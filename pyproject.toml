@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grownet"
-version = "0.4.0"
+version = "0.5.0"
 description = "Build experimentally grounded microbial interaction networks from mGrowthDB data, in a neutral format that Syntropa, microbetag, and other tools can consume."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,7 +15,10 @@ authors = [
     { name = "KU Leuven, Lab of Molecular Bacteriology" },
 ]
 keywords = ["microbial-interactions", "cross-feeding", "mGrowthDB", "metabolic-modeling", "open-science"]
-dependencies = []
+dependencies = [
+    # verify HTTPS against the operating system's certificates (grownet/tls.py, 2026-10-14)
+    "truststore>=0.10",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]

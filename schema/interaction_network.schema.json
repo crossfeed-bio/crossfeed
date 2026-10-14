@@ -41,7 +41,7 @@
           "items": {
             "type": "string"
           },
-          "description": "the settings this derivation does not read, so a recorded value is not taken for one that was used"
+          "description": "the settings this run does not read (the derivation's, and the no-growth factor when alpha 0 switched the test off and nothing was censored), so a recorded value is not taken for one that was used"
         },
         "derived_on": {
           "type": "string",

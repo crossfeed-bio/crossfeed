@@ -12,8 +12,9 @@ grow**net** was called crossfeed until 2026-09-27 (#71). The package, the module
 `grownet`; the repository keeps the old name for now, so its address is still `crossfeed-bio/crossfeed`.
 
 It is a thin client: it pulls from mGrowthDB and emits a network. Nothing to host, nothing to pay for on a
-shared server, no runtime dependencies (the client is pure Python standard library). A well-run
-repository, one per contributor, is all it needs.
+shared server, and one runtime dependency (the client is pure Python standard library, with `truststore` so
+that HTTPS is verified against your operating system's certificates). A well-run repository, one per
+contributor, is all it needs.
 
 This README is the full guide: install and run it, read and validate the output format, and plug in your
 own derivation method. Nothing here needs another document to follow.
@@ -451,8 +452,10 @@ rests on, how many gave none, and how far those curves had fallen from their pea
 digits and `/glv.json` carries the raw float, so the two routes agree to four significant digits and no
 more: a reader who diffs them will find a difference in the fifth, and neither is wrong. And `README.txt`,
 which states every formula and unit, names the pairs left at 0 for disagreeing in sign, every organism and
-effect that could not be fitted and why, and the media the arcs were measured in. A simulation is of one
-environment, so a package built from several media says so and points at the second box. Every cell is a
+effect that could not be fitted and why, and the media its effects between organisms were measured in. A
+simulation is of one environment and takes one matrix, so a package with a matrix whose effects come from
+several media says so and points at the second box, and one whose matrices hold one medium each names
+each; each organism's capacity media are in `growth_rates.csv`. Every cell is a
 per-capita effect in 1/(time x abundance), so nothing in the package is a convention and nothing needs
 scaling; abundances are never converted between units, which is why each unit has its own matrix.
 
@@ -753,7 +756,7 @@ what it did is recorded in [docs/METHOD_NOTES.md](https://github.com/crossfeed-b
 each, are in the same file.
 
 **What the data cannot settle is listed on its own**, in
-[docs/LIMITATIONS.md](https://github.com/crossfeed-bio/crossfeed/blob/main/docs/LIMITATIONS.md): seven questions, what grow**net** publishes instead of a
+[docs/LIMITATIONS.md](https://github.com/crossfeed-bio/crossfeed/blob/main/docs/LIMITATIONS.md): eight questions, what grow**net** publishes instead of a
 number that would imply each was settled, what would settle it, and what it blocks (nothing, in every
 case). The most general of them is that the tool **never establishes a mechanism**: an arc says a partner
 changed a growth outcome, not the route by which it did, which is why the output says effect rather than
@@ -767,8 +770,8 @@ it rests on, and a gLV package states what the model assumes.
 
 Discipline is a feature here. Every commit and every CI run passes the same self-contained gate
 (`checks/gate.py`): no committed secrets, no raw or pulled data (only the synthetic fixtures under
-`tests/fixtures/`), no local-machine paths, imports that resolve to the standard library or the package
-itself, a documented house style, and a schema contract that keeps the shipped schema in step with the
+`tests/fixtures/`), no local-machine paths, imports that resolve to the standard library, the package
+itself or a dependency `pyproject.toml` declares, a documented house style, and a schema contract that keeps the shipped schema in step with the
 code. The tests run on Python 3.10 to 3.12 on Linux, and on Windows and macOS. Get the same checks locally
 with `make check`, or run them on every commit with `pre-commit install`. The R companion package has its
 own checks, `make r-check` where R is installed, and CI runs the same build and `R CMD check` on every

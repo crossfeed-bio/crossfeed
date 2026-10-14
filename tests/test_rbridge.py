@@ -87,7 +87,7 @@ def listener():
 
 def test_the_payload_carries_the_numbers_in_the_order_the_formula_reads():
     payload = matrix.glv_payload(_net(), RATES)
-    assert payload["format"] == "grownet.glv/v1"
+    assert payload["format"] == "grownet.glv/v2"
     (block,) = payload["matrices"]
     names = block["organisms"]
     assert names == ["A", "B", "C"]

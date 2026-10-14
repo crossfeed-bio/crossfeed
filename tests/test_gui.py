@@ -185,14 +185,14 @@ def test_form_hides_every_setting_behind_one_button():
       "conditions": [" S1 "], "only_entered": ["1"],
       "include_low_quality": ["1"], "include_dropout": ["1"], "no_growth_alpha": ["0.01"],
       "no_growth_factor": ["4"], "exclude_studies": [" SMGDB00000008 "], "merge_arcs": ["1"], "min_studies": ["2"],
-      "merge_genera": ["1"]},
+      "merge_genera": ["1"], "technique": [" FC "]},
      {"metric": "growth_rate", "rate_method": "baranyi", "rate_window": 7, "spike_factor": 50.0, "conditions": "S1",
       "only_entered": True, "include_low_quality": True, "include_absent": False,
       "correction": "bh", "absence_threshold": 1.0, "include_dropout": True, "include_non_batch": False,
       "no_growth_alpha": 0.01, "no_growth_factor": 4.0, "exclude_studies": "SMGDB00000008", "merge_arcs": True,
       "min_studies": 2, "merge_genera": True, "max_adjusted_p": None, "report_rates": False,
           "steady_check": False, "derivation": "replicate",
-          "capacity_max_fall": DEFAULTS["capacity_max_fall"]}),
+          "capacity_max_fall": DEFAULTS["capacity_max_fall"], "technique": "fc"}),
     ({"metric": ["nonsense"], "spike_factor": ["not a number"]},
      {**DEFAULTS, "only_entered": False, "include_dropout": False}),
 ])
@@ -562,6 +562,29 @@ def test_a_strain_is_named_by_its_current_name():
     assert (node.name, node.species) == ("Faecalibacterium duncaniae A2-165", "faecalibacterium duncaniae")
     assert r["resolved"][0] == ("Faecalibacterium prausnitzii", {853: "Faecalibacterium duncaniae A2-165"})
     assert len(r["network"].edges) == 2
+    # merged to the genus, the pairs behind each arc name it by that name too (round 3 of the review)
+    merged = run_query(FakeClient(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"],
+                       {"include_absent": True, "derivation": "replicate", "merge_genera": True}, index=index)
+    pairs = [p for e in merged["network"].edges for p in (e.merged_pairs or ())]
+    assert pairs and all("prausnitzii" not in p for p in pairs), pairs
+    assert any("Faecalibacterium duncaniae" in p for p in pairs), pairs
+
+
+def test_a_renamed_strain_s_rate_is_listed_by_its_current_name_on_its_genus(monkeypatch):
+    """Round 4 of the review (#24): the page passes the current names to the rates too, so a genus row's
+    `merged_from` names the strain as the arcs do. The double's monocultures are too short for a rate, so
+    the rate stage is served as it reads them: by taxon id, under the study's name."""
+    from grownet import gui
+    from grownet.taxonomy import SpeciesIndex
+    index = SpeciesIndex({"faecalibacterium prausnitzii": {853: A}, "blautia hydrogenotrophica": {53443: B}},
+                         current={853: "Faecalibacterium duncaniae A2-165"})
+    monkeypatch.setattr(gui, "growth_rates", lambda *a, **k: ({"ncbi:853": {
+        "name": A, "rate": 0.4, "unit": "1/h", "n": 2, "studies": ["S1"]}}, []))
+    r = run_query(FakeClient(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"],
+                  {"include_absent": True, "derivation": "replicate", "merge_genera": True, "report_rates": True},
+                  index=index)
+    organisms = r["network"].meta["growth_rates"]["organisms"]
+    assert organisms["Faecalibacterium"]["merged_from"] == ["Faecalibacterium duncaniae A2-165"], organisms
 
 
 
@@ -639,6 +662,12 @@ def test_all_narrowed_by_the_second_box_does_not_claim_the_whole_database(server
     # from "Studies searched:", and twice from the embedded report's settings block, so asserting the id
     # alone passed however the heading was worded
     assert "matching SMGDB00000002" in page and "Clear them to derive" in page
+    # two entries, one holding a comma, are joined with "; " (round 22)
+    data = b"all=1&species=&conditions=SMGDB00000002%0D%0AWilkins-Chalgren%2C+anaerobic"
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
+        page = r.read().decode("utf-8")
+    # in the page's own list, not only in the report embedded below it, which says the same
+    assert "<li>every study matching SMGDB00000002; Wilkins-Chalgren, anaerobic" in page
 
     # and the OTHER control that narrows All, which the first version of this test did not cover and the
     # fix therefore did not either: Exclude these studies, which the code comment named all along
@@ -1146,9 +1175,12 @@ def test_a_curve_that_could_not_be_read_marks_the_file_incomplete():
             return super().get_measurement_series(context_id)
     r = run_query(Flaky(), ["Faecalibacterium prausnitzii", "Blautia hydrogenotrophica"], {})
     assert r["network"].meta["complete"] is False and r["network"].meta["errors"] == r["errors"]
-    # the report reads them from the file, so the two cannot disagree
+    # the report reads them from the file, so the two cannot disagree: with the result's own list emptied,
+    # the file's errors still reach the report (the input had both equal, found in review)
     from grownet.report import report_text
-    assert all(f"error: {e}" in report_text(r) for e in r["errors"])
+    errors = list(r["errors"])
+    r["errors"] = []
+    assert errors and all(f"error: {e}" in report_text(r) for e in errors)
 
 
 def test_a_boolean_meta_key_is_checked_as_one():
@@ -1159,14 +1191,147 @@ def test_a_boolean_meta_key_is_checked_as_one():
     assert _meta_problems({"query": True}) == ["meta.query must be string, not bool"]
 
 
-def test_every_declared_meta_type_is_one_validate_can_check(monkeypatch):
-    """Craig's agent, on #276: `{"type": "integer"}` made validate raise KeyError. The import-time assertion
-    is what stops it; here the same rule is applied to a declaration that breaks it."""
+def test_every_declared_meta_type_is_one_validate_can_check():
+    """Craig's agent, on #276: `{"type": "integer"}` made validate raise KeyError. The module refuses to
+    import with such a declaration; shown by loading the module's own source with one planted (the first
+    version of this test only re-checked its own assertion, found in review)."""
+    import types
+    from pathlib import Path
+
     import pytest
 
-    from grownet import schema
-    assert {d["type"] for d in schema.META_PROPERTIES.values()} <= set(schema._META_TYPES)
-    bad = {**schema.META_PROPERTIES, "arcs": {"type": "integer"}}
-    with pytest.raises(AssertionError):
-        assert {d["type"] for d in bad.values()} <= set(schema._META_TYPES), "integer is not checked"
+    import grownet.schema as schema
+    source = Path(schema.__file__).read_text()
+    planted = source.replace("META_PROPERTIES = {",
+                             'META_PROPERTIES = {"arcs": {"type": "integer", "description": ""},', 1)
+    assert planted != source
+    def load(text):
+        module = types.ModuleType("grownet._schema_probe")
+        module.__package__, module.__file__ = "grownet", schema.__file__
+        exec(compile(text, schema.__file__, "exec"), module.__dict__)
+    with pytest.raises(AssertionError, match="integer"):
+        load(planted)
+    load(source)                       # the control: the module as shipped imports
 
+
+def test_a_read_that_fails_while_reading_growth_rates_marks_the_file_incomplete(monkeypatch):
+    """#247's gap, found in review: the file was marked complete before the rate stage ran, so a read that
+    failed there left `complete` true, exit 0, and organisms that looked as if they had no measurable rate."""
+    from grownet import gui
+    from grownet.adapter import UNREAD
+    monkeypatch.setattr(gui, "growth_rates",
+                        lambda *a, **k: ({}, [("mono B: rep 1", f"{UNREAD} its series: HTTP 500")]))
+    r = run_query(FakeClient(), [A, B], {"report_rates": True})
+    meta = r["network"].meta
+    assert meta["complete"] is False and any("while reading growth rates" in e for e in meta["errors"])
+    assert any("while reading growth rates" in e for e in r["errors"]), "the page and the exit code read these"
+    assert any(e.startswith("1 study(ies), replicate(s) or growth curve(s)") for e in meta["errors"]), \
+        "a failed study is counted with the replicates and curves (round 3 of the review)"
+    # and a rate stage that read everything leaves the run complete
+    monkeypatch.setattr(gui, "growth_rates", lambda *a, **k: ({}, []))
+    assert run_query(FakeClient(), [A, B], {"report_rates": True})["network"].meta["complete"] is True
+
+
+def test_a_study_unreadable_while_reading_rates_marks_the_run_incomplete(monkeypatch):
+    """Round 2 of the review: the rate stage worded a whole study it could not read as "could not be read",
+    which `adapter.unread` does not see, so the run stayed complete with exit 0."""
+    from grownet import derive
+    from grownet.mgrowthdb import MGrowthDBError
+
+    class Unreadable(FakeClient):
+        reading_rates = False
+
+        def get_study(self, study_id):
+            if self.reading_rates:
+                raise MGrowthDBError("mGrowthDB returned HTTP 503", status=503)
+            return super().get_study(study_id)
+    client = Unreadable()
+    real = derive.growth_rates
+
+    def rates_with_outage(*a, **k):
+        client.reading_rates = True
+        return real(*a, **k)
+    monkeypatch.setattr(gui_module(), "growth_rates", rates_with_outage)
+    r = run_query(client, [A, B], {"report_rates": True})
+    assert r["network"].meta["complete"] is False and r["errors"], r["errors"]
+
+
+def gui_module():
+    from grownet import gui
+    return gui
+
+
+def test_the_arcs_below_the_threshold_carry_the_current_names(monkeypatch):
+    """Round 2 of the review: the absent network was not renamed to the current names, so one organism had
+    two names in one report (#24); nothing tested it."""
+    from grownet import gui
+    real = gui._current_names
+
+    def marking(net, current):
+        real(net, current)
+        for nid, node in list(net.nodes.items()):
+            net.nodes[nid] = __import__("dataclasses").replace(node, name=f"{node.name} (current)")
+    monkeypatch.setattr(gui, "_current_names", marking)
+    r = run_query(FakeClient(), [A, B], {})
+    assert r["absent"] is not None and r["absent"].nodes
+    assert all(n.name.endswith("(current)") for n in r["absent"].nodes.values())
+
+
+def test_the_report_reads_errors_from_a_result_saved_before_247():
+    """A result from before #247 carries its errors only in the result; the report still prints them."""
+    from grownet.report import report_text
+    r = run_query(FakeClient(), [A, B], {})
+    r["network"].meta.pop("errors", None)
+    r["errors"] = ["S9: HTTP 404"]
+    assert "error: S9: HTTP 404" in report_text(r)
+
+
+def test_the_page_gives_a_known_reason_for_no_rate():
+    """Round 12 of the review: a genus left without a rate because its strains' rates are in different time
+    units was said to have no monoculture read and no rate from its curves, both false."""
+    from grownet import gui
+    from grownet.model import InteractionNetwork
+    net = InteractionNetwork()
+    net.meta["growth_rates"] = {"without_a_rate": ["Blautia", "Roseburia"],
+                                "why_without_a_rate": {"Blautia": "its strains' growth rates are in different "
+                                                                  "time units (Blautia a 1/h; Blautia b 1/d)"}}
+    import html as html_module
+    html = html_module.unescape(gui._without_a_rate({"network": net}))
+    assert "No growth rate for Blautia: its strains' growth rates are in different time units" in html
+    assert "No monoculture growth rate for Roseburia:" in html and "for Blautia, " not in html
+    # every organism with its reason known: the page still says it (round 13 of the review)
+    net.meta["growth_rates"]["without_a_rate"] = ["Blautia"]
+    alone = html_module.unescape(gui._without_a_rate({"network": net}))
+    assert alone.startswith("<p class=\"hint\">No growth rate for Blautia:") and "monoculture" not in alone
+    # and the reason is escaped as page text
+    net.meta["growth_rates"]["why_without_a_rate"] = {"Blautia": "rates in <1/h> and <1/d>"}
+    assert "&lt;1/h&gt;" in gui._without_a_rate({"network": net})
+    # and so is the name, which can hold anything a study wrote
+    net.meta["growth_rates"].update(without_a_rate=["B & <c>"], why_without_a_rate={"B & <c>": "why"})
+    assert "No growth rate for B &amp; &lt;c&gt;: why" in gui._without_a_rate({"network": net})
+
+
+def test_the_factor_unread_at_alpha_0_is_not_blamed_on_the_derivation():
+    """Round 24 of the review: at alpha 0 with nothing censored, the page said the no-growth factor is NOT
+    read by the replicate derivation, which does read it at any other alpha. It now says this run did not
+    read it, and why."""
+    from grownet.gui import render_result
+    page = render_result("tok", _query(no_growth_alpha=0.0))
+    assert "NOT read by the replicate derivation" not in page
+    assert "No-growth factor is not read in this run: alpha 0 switches the no-growth test off" in page
+    assert "not read in this run" not in render_result("tok", _query(no_growth_alpha=0.05))
+
+
+def test_an_untouched_form_leaves_the_no_growth_rule_at_its_default():
+    """Round 24 of the review: the form shows the no-growth rule's defaults, 0.05 and 1.5, and an untouched
+    form sent them back as chosen values, so every search said they were not at their default, opened
+    Advanced settings, and recorded 0.05 and 1.5 where the command line records the default (None)."""
+    from grownet import interaction
+    from grownet.gui import parse_settings
+    form = {"no_growth_alpha": [str(interaction.NO_GROWTH_ALPHA)],
+            "no_growth_factor": [str(interaction.NO_GROWTH_FACTOR)]}
+    settings = parse_settings(form)
+    assert settings.get("no_growth_alpha") is None and settings.get("no_growth_factor") is None
+    # a value other than the default is kept
+    changed = parse_settings({"no_growth_alpha": ["0.01"], "no_growth_factor": ["2"]})
+    assert changed["no_growth_alpha"] == 0.01 and changed["no_growth_factor"] == 2.0

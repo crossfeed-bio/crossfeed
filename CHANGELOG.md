@@ -6,8 +6,36 @@ content.
 
 ## [Unreleased]
 
+
+## [0.5.0] (2026-10-14)
+
+**Read this before upgrading: the formats move, the networks do not.** Measured on the whole of mGrowthDB
+against 0.4.0 on 2026-10-14: every arc, and every number on it, is the same by default (145 arcs), with
+`--metric growth_rate` (29) and in gLV mode (10), and one node's name now carries its strain
+(*Faecalibacterium duncaniae A2-165*). What changes is what the files say, and what a reader of them has to
+know. Three days of review, 48 entries below; the ones a reader acts on:
+
+- **the format id moves to `grownet.interaction_network/v4`** (first entries under Upgrading), for four
+  arc fields and one node field a `/v3` file could not give. Installed 0.3.x and 0.4.x copies keep being
+  served the daily All network as `/v3`.
+- **the gLV payload moves to `grownet.glv/v2`**, where `matrices[].media` now names the media of the cells
+  a matrix holds. The R package of this version reads v2, v1 and v0.
+- **grownet has one runtime dependency, `truststore`**, so that a copy installed with uv on a Mac can read
+  mGrowthDB, which no earlier release could (under Fixed).
+- **two method decisions that move no live arc**: a curve with no rising window has no growth rate and is
+  still read as not grown (#293), and plateaus and arcs are compared only within one technique and unit,
+  the one with more time points winning, with a **Technique** setting to keep one (#292).
+
+A minor version and not a patch: both formats move and there is a new setting.
+
 ### Upgrading
 
+- **The gLV payload moves to `grownet.glv/v2`** (Karoline, 2026-10-14: "follow your recommendation for
+  Q4"). It adds `caveats.arcs_left_out`, `caveats.cell_media`, `caveats.dropout_arcs_in_cells` and each
+  matrix's `cells_with_unrecorded_medium`, and `matrices[].media` now names the media of the cells a
+  matrix holds, where it named those of every arc between its organisms (or the network's), so a reader
+  of v1 would have read the new `media` as the old one. The R package of this version reads v2, v1 and
+  v0; an older one reads v2 with a warning that it does not know the format.
 - **The format id moves to `grownet.interaction_network/v4`** (Karoline, 2026-10-12, #266), for five
   optional fields a reader could not get from a `/v3` file. On an arc: `metric_unit`, the unit of
   `metric_with` and `metric_without` (#214); `window` and `window_unit`, the interval the metric was
@@ -22,9 +50,20 @@ content.
   move never strands an installed copy again; and `all_result.json` keeps being written for installed
   0.3.x and 0.4.x copies as the same network in `/v3`, the added fields removed. Checked with the released
   0.4.0 from PyPI: it serves the `/v3` file (145 arcs) and refuses the `/v4` one, as it should.
+  **Installed 0.3.x copies** also fetch `all_result.json`, and 0.3.0 checks neither the derivation nor
+  anything but the format, with `integrated` as its default: since 2026-10-10 such a copy has been served
+  the comparison's network as its All at that default. The file cannot tell 0.3.x from 0.4.x apart, so the
+  answer is to upgrade.
+- **grownet now has one runtime dependency, `truststore`**, which `pip`, `uv tool` and `pipx` install with
+  it; the Windows program carries it inside. See Fixed.
 
 ### Added
 
+- **A Technique setting** (page: Advanced settings; command line: `--technique`), Karoline's "In the
+  advanced options, we need to add a setting to optionally specify a technique" (2026-10-13, #292): it
+  keeps only curves measured by that mGrowthDB technique, in arcs and in monoculture rates and plateaus,
+  and names every other curve as left out. Culture-level counts stay plate counts and flow cytometry
+  (#140), so OD is never one.
 - **A study whose growth rates are slow as a block is named** (Karoline, 2026-10-12, #173: Craig's
   agent's study-level tripwire, as a flag, "Keep 5x"). When every rate from one study is more than 5 times
   slower than the median of the other studies' own medians in the run, the report says so, and
@@ -53,20 +92,41 @@ content.
   reference**, by target: part of each such arc is how the target fared in that community rather than what
   removing the member did. On the All network that is 118 arcs in 17 groups. The `provisional` sentence
   says the second limit, and `docs/LIMITATIONS.md` gains entry 8. Nothing is merged, re-centred or
-  withheld: options 2 and 3 of #209 remain a method decision.
+  withheld. Option 2 of #209, each drop-out arc against the other removals of its target, is published as
+  `vs_other_removals` (under Upgrading); option 3, making that the comparison, was not taken.
 
 ### Changed
 
+- **Plateaus and arcs are compared only within one technique and unit, and where several are available
+  the one with more time points is used** (Karoline, 2026-10-13 and 2026-10-14, #292). A capacity no
+  longer pools plateaus of one unit string measured by different techniques (16S, qPCR and flow
+  cytometry all say Cells/mL), and the unit and technique with more time points is published, then the
+  one with more curves, where the first study read used to win; a tie left after that gives no capacity
+  and says so. A strain measured by two techniques in one replicate is measured by the one with more
+  time points, where both were left out. A genus takes its strains' capacities from one unit and
+  technique the same way, where strains in two units gave it none. A gLV cell is built from the arcs in
+  its matrix's own unit, where the unit with the most arcs was taken and a tie decided by arc order. The
+  technique travels as `capacity_technique` in `growth_rates.csv` and as `carrying_capacity_technique` in
+  the gLV payload.
+- **A curve with no rising window has no growth rate, and is still read as not grown** (Karoline,
+  2026-10-14, #293: "No rate, still no growth"). It returned its steepest slope, <= 0, where R's
+  `growthrates` fits nothing; it now gives no rate with the reason, as #229 (a) does for a refit that falls
+  <= 0, and a comparison reads it as not grown, so no arc changes (measured live: SMGDB00000014 and All
+  with `--metric growth_rate`, All in gLV mode). Against `growthrates` on SMGDB00000004 and 5, 55 curves
+  now have no rate on either side, and the two remaining departures cover 74 curves.
 - **A monoculture measured only as a whole culture gives its growth rate and lag from a count** (Karoline,
   #140: option 1 on 2026-10-07, "Counts only" on 2026-10-12): a plate count or flow cytometry, never optical
   density, and never a carrying capacity. The rate says where it came from (`rate_sources`, and in the
-  report). Such monocultures were dropped replicate by replicate. Live, study 9 gives *E. coli* LF82 and
-  *B. fragilis* NCTC 9343 a rate.
+  report). Such monocultures were dropped replicate by replicate. Measured on SMGDB00000009 through
+  `derive.growth_rates`, *E. coli* LF82 and *B. fragilis* NCTC 9343 get a rate from flow cytometry. No
+  command shows those two today: a rate is reported for the organisms of a network, and study 9 holds
+  monocultures alone.
 - **A growth rate is not pooled across monocultures that started more than 10 times apart** (Karoline,
   2026-10-12, #81 b), measured at each curve's first time point. The study's rates for that organism are
   left out and named. Live: *A. tumefaciens* (24 times) and *C. testosteroni* (101 times) in
-  SMGDB00000014, and *S. putrefaciens* (85 times) in SMGDB00000018, so the All network's rates for the
-  first two now come from SMGDB00000013 alone.
+  SMGDB00000014, so the All network's rates for both now come from SMGDB00000013 alone, and the run's
+  notes say why. Measured through `derive.growth_rates` over every study, *S. putrefaciens* in
+  SMGDB00000018 (85 times) is refused too, which no command shows today, since study 18 derives no arcs.
 
 
 - **In gLV mode an organism's published growth rate and carrying capacity no longer move with a display
@@ -87,6 +147,132 @@ content.
 
 ### Fixed
 
+- **A copy installed with uv on a Mac can read mGrowthDB** (Karoline, 2026-10-14: "Add truststore"). The
+  Python uv installs reads macOS's certificate file, which does not hold the root behind mGrowthDB's
+  certificate since 23 July 2026, so every request failed with CERTIFICATE_VERIFY_FAILED in every release,
+  on the install route the README gives for a Mac. HTTPS is now verified against the operating system's
+  certificates (the keychain on macOS, the certificate store on Windows), with `truststore`, grownet's
+  first runtime dependency; the name is still checked and a certificate still required. Measured: the
+  same install fails without it and reads mGrowthDB and GitHub with it. A certificate the system does not
+  trust now says so, and is not retried, where it said "check your network".
+- **A read that fails while the growth rates are read now marks the run incomplete** (#247's gap): the file
+  was marked complete before that stage ran, so the run exited 0 and an organism whose monocultures could
+  not be read looked as if it had no measurable rate.
+- **A merged arc says nothing one member said alone.** `--merge-genera` and `--merge-arcs` gave a merged
+  arc its first member's `window`, `metric_unit`, `metric_with`, `metric_without` and `vs_other_removals`;
+  these are now kept only where every member agrees, and `vs_other_removals` is never set on a merged arc.
+- **The gLV payload's `carrying_capacity_curves` counts curves**, as `growth_rates.csv` does, not fitted rows
+  (the slip #259 fixed for `replicates`), and is empty where there is no capacity, where it sent 0.
+- **The matrix sidecar says "at most" for an abolished arc's bound**, which is an upper bound; it said "at
+  least". It also says when the run was incomplete, which within-genus arcs have no cell, and how to read
+  the CSV in R with its names intact; GraphML carries `complete`, `errors` and the build commit.
+- **One organism, one name**: the arcs below the threshold and gLV mode's fitted rates now carry the current
+  name, as the network does, and `--merge-genera` groups and lists a renamed strain, its arcs and its
+  growth rate, by it (#24). The report's
+  pairs the data did not support and its notes on the data read name organisms as their study does, and
+  say so.
+- **A merged obligate or abolished arc counts in the gLV package's sign check again.** Merged members
+  whose bounds differ kept their shared rule without its bound, which read as "the rule bounds nothing",
+  and the arc dropped out: beside an opposite arc the cell held that arc's number where it is a sign
+  conflict left at 0, and alone it wrote a 0 named nowhere. Every arc's direction now counts, converted or
+  not, as it does in the adjacency matrix; a merged arc with no median ratio says so.
+- **The gLV package says where each left-out effect is**: an effect on or by an organism in no matrix, or
+  between two organisms in different matrices, is listed as in no matrix, not as left at 0, once with all
+  its reasons; a pair whose arcs disagree in sign is named there too when its organisms share no matrix,
+  where it was named nowhere; arcs left out of a cell that still holds a value are listed apart, among
+  them an arc that gives no number beside arcs that do, which was dropped without a word, while arcs
+  beside a cell of 0 are listed with that cell; and the unit sentence counts the effects between
+  organisms counted differently that were measured, where it said none ever was. A matrix an organism
+  left for an unusable self-limitation counts only the cells, media and sign conflicts it still holds,
+  and that organism's effects are in no matrix, not also left at 0. A cell names only the media of the
+  arcs in it; the lists of cells from the ratio, from merged arcs or from a comparison where one side did
+  not grow hold only cells a matrix holds, each labeled only by the arcs in it; and the warning about
+  several media (README and R, from the payload's new `cell_media`) is about the media of the effects
+  between organisms, matrix by matrix since a simulation takes one matrix: a matrix whose effects come
+  from several media is warned about, matrices of one medium each are named so, cells with an arc that
+  records no medium are named and not taken for a second medium (each matrix's
+  `cells_with_unrecorded_medium` in the payload), a package whose matrices hold no effect says so, and
+  the media of arcs in no cell are named apart. The drop-out count is of the arcs in the cells
+  (`dropout_arcs_in_cells`), with the network's others named apart. The steady-state check matches a matrix by the media of its cells, or, holding none, of the arcs between
+  its organisms.
+  The report prints several entries of the second box on its one line, joined with "; " there, in its
+  query line and in the page heading since a medium's name can hold a comma, and says a derivation without
+  the no-growth rule did not apply it, where it printed a count of nothing. The steady-state check says
+  it did not run when no organism has a taxon id to look chemostats up by (a genus package) or the
+  search failed or no study it named could be read, where it said mGrowthDB holds no continuous culture
+  of them, and names the studies it could not read; a matrix with a cell recording no medium is scored
+  with a note saying so. At alpha 0 the report says the test is off and, while a comparison whose set's
+  metric was not positive is still censored, that its bound uses the factor; the factor is marked unread
+  only when none is, and the page and report say this run did not read it, not the derivation. The
+  command line names how many studies could not be read, and `--to-r` carries the steady-state check
+  to R as the zip and the page do. An untouched page form leaves the no-growth rule at its default,
+  where every search said it was changed and recorded 0.05 and 1.5. A merged arc whose members do not
+  all record a medium says how many do not, and the gLV package counts its cell as such. The model assumption no longer says every cell was measured between two organisms.
+  R reads `pairs_left_out`, `across_units` and `arcs_left_out` with their actors and prints them.
+- **A merged arc keeps no single comparison's bound, capacity, coefficient or fit**: every such field is kept
+  only where all merged arcs agree, a merged arc's coefficient is the median of its members', and in a gLV
+  package its cell is labeled as a merged arc's, not as one from a network saved before the rates were
+  recorded. gLV mode with `--merge-genera` reports the fitted rates on the genus nodes, where it said none
+  could be computed, and arcs from an organism to itself are counted as arcs. A genus row in
+  `growth_rates.csv` counts its strains' replicates and plateau curves and says where its capacity came
+  from; a genus of one strain is that strain's row. It counted fitted rows and left the provenance empty.
+  A genus row of several strains also keeps the lag's method, the plateau's fall, media and other media,
+  and sends its replicates in the gLV payload, where it sent null beside the zip's count. The report and
+  the rule and the gLV package README say its rate and capacity are the median of its strains' own, and
+  the report names those strains and the counts the medians rest on; "median of 7 monoculture replicate(s)" named a median
+  that was not taken. A genus with no capacity names no medium for one, and the report, the README and
+  the payload say when its strains' plateaus are in units that are not converted, with every such plateau
+  counted as left out. Every curve or fitted row another medium holds is counted as left out, where one
+  entry per medium was counted as one, and so is every plateau another study measured in another
+  abundance unit, which was in no count. A left-out fitted row is named by its experimental condition.
+  A study with plateaus and no rate no longer decides an organism's rate unit (the first study read did,
+  and every later study's rates and the organism were dropped in that order); a study or fitted row whose
+  rates are in another time unit keeps its plateaus, in both derivations, and the report names the rates
+  left out. A genus whose strains' rates are in different time units has no rate, where the median was
+  taken across them, and the report, the README and `meta.growth_rates.why_without_a_rate` say why; so
+  does an organism whose every study's rates were left out for their starting spread (#81), which the page
+  said had no monoculture read or no rate from its curves (SMGDB00000014's two organisms), and a genus of
+  such strains, naming them. The gLV package carries that reason beside "grows only with a partner", so
+  R reads it, and R's print says `as_miasim()` stops only for an organism inside a matrix.
+- **`derive <study>` says it names organisms as that study does** (its help): the current name of #24 needs
+  the whole corpus read, which a species search and `--all` do and a single study does not, so the same
+  taxon can read "F. prausnitzii A2-165" there and "F. duncaniae A2-165" in a search.
+- **`derive <study> --merge-genera --report-rates` computes the genus rates** (in the default derivation):
+  it asked for the monocultures of the genus nodes, which no monoculture is, and said no growth rate could
+  be computed for any organism. This predates 0.4.0. A
+  capacity in gLV mode reports the stage size and source of the rows it is taken from.
+- **A rate from a culture-level count says so** in `capacity_source`, so `growth_rates.csv`, the gLV payload
+  and the report name it, without a new field; a rate that also rests on per-strain curves does not blame
+  the count for its missing capacity.
+- **The daily artifact's `/v3` copy carries only meta keys 0.4.0 declares**, so an installed 0.4.0 does not
+  call it suspect; a copy is written for EVERY older format from `/v3` on, read from the manifest, so the
+  next format move strands no installed copy either.
+- **`grownet validate` reads a daily artifact** (`all_result.v4.json`) by validating the networks it carries,
+  where it said "INVALID: schema is None" about a good file, and says so when an artifact carries none.
+- **In gLV mode, `replicates` and `capacity_curves` count every monoculture set behind a rate or a
+  capacity**, one per study and condition matched, where the largest set alone was counted: SMGDB00000007's
+  organisms rest on 6 monoculture replicates, not 3, and Comamonas in SMGDB00000014 on 9.
+- **The live check's tolerance for `effect_over_sd` is the exact rounding bound** (Craig's agent on #281,
+  correcting the first-order one it had given): honest rounding reached past the old bound at every sd,
+  by 2x at sd 1e-4. It is applied to every arc with an sd above the rounding, and the check says on how
+  many arcs it was loose (the bound as large as k, the absence threshold the ratio is compared with:
+  Craig's agent on #281, "tie it to `k` rather than to a tenth") or could not run (none in today's All
+  network). The arcs below the threshold, whose published part carries no `absence`, are checked against
+  the network's k, where they were never checked against it (also #281). `packaging/compare_growthrates.py` makes the counts `grownet.rates` states against R's
+  `growthrates`, on a selection of curves it states.
+- **The live check reads every network in each older-format file**, the arcs below the threshold as well
+  as the network, which 0.4.0 reads too, and checks that each file would be served by the copies that read
+  it: its result format, its time and its derivation. An older-format file is written only in the result
+  format and with the derivation its readers accept (0.4.0's defaults ask for replicate).
+- **The live check tells "could not run" from "a property broke"**, by exit code (2 against 1) and in the
+  issue it opens; the build-failure issue opens only when the publish step did not complete, and says
+  some files may already have been replaced.
+- **The release check refuses an empty version section**, entries left under [Unreleased] at a tag, and a
+  help-page release date that differs from the changelog's; RELEASING.md's checklist, emergency procedure (pause the workflow first) and its
+  statements about which copies read which file for how long now match what is true.
+- **The R listener's test runs in CI.** It is a `skip_on_cran()` test and nothing set `NOT_CRAN`, so it was
+  skipped since #120 while failing on the example's changed matrix; CI and `make r-check` set it now, and
+  fail unless the R tests report `SKIP 0`.
 - **A Baranyi start that ran off to an enormous rate raised `OverflowError`** instead of being rejected
   like any other unconverged start. First met on optical densities while building the above.
 
@@ -111,9 +297,11 @@ content.
 - **A growth curve whose steepest window rises can no longer return a negative "maximum growth rate"**
   (Karoline, 2026-10-12, #229). The refit over growthrates' first-to-last span can fall below zero when two
   rises are separated by a deep fall, and a non-positive rate read downstream as no growth. Such a curve
-  now has no rate, with the reason, and its replicate is left out as any unreadable rate is. This is the
-  one place grownet departs from growthrates, which returns the negative number. On all of mGrowthDB it is
-  2 of 1090 strain curves, both in SMGDB00000005's chemostats, which the default leaves out.
+  now has no rate, with the reason, and its replicate is left out as any unreadable rate is, where
+  growthrates returns the negative number: one of the three places grownet departs from growthrates, which
+  `grownet.rates` names and `packaging/compare_growthrates.py` counts. On all of mGrowthDB it is 2 of 1090
+  strain curves (a hand count), both in SMGDB00000005's chemostats, which the default leaves out; one of
+  the two also holds a value <= 0, which growthrates refuses first.
 - **The growth-rate docstring says what `easylinear` does** (#229). It said the refit spans "every window
   whose slope reaches" the quota; it spans from the first such window to the end of the last, every
   window between included, which is what `growthrates`' `fit_easylinear` does. Kept as it is (Karoline,

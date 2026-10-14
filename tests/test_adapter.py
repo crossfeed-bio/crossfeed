@@ -182,3 +182,68 @@ def test_two_contexts_for_one_strain_in_a_replicate_are_reported_not_fatal():
     replicates, skipped = replicates_for_experiment(client, _experiment(stubs=((1, "r1"), (2, "r2"))))
     assert [r.species for r in replicates] == [(B,), (A, B)]      # r1 keeps B, r2 is untouched
     assert "2 measurement contexts for this strain" in dict(skipped)[f"co-culture: r1, {A}"]
+
+
+SHORT = [(0.0, 1.0e6, None), (2.0, 4.0e6, None)]
+LONG = [(0.0, 1.0e6, None), (1.0, 2.0e6, None), (2.0, 4.0e6, None), (3.0, 7.0e6, None), (4.0, 9.0e6, None)]
+
+
+def test_a_strain_measured_by_two_techniques_is_measured_by_the_one_with_more_time_points():
+    """Karoline, 2026-10-13 and 2026-10-14 (#292): "if different measurement techniques are available for the
+    same studies, then priority should be given to the one with more time points". A in r1 by qPCR with 2
+    points and by flow cytometry with 5: the flow cytometry curve is used and the qPCR one named; both used
+    to be left out as two contexts nothing told apart."""
+    client = FakeClient({1: _bioreplicate(1, "r1", [_context(11, A, technique="qpcr"),
+                                                    _context(12, A, technique="fc")])},
+                        {11: SHORT, 12: LONG})
+    replicates, skipped = replicates_for_experiment(client, _experiment(stubs=((1, "r1"),)))
+    curve = replicates[0].curve(A)
+    assert curve.technique == "fc" and len(curve.times) == 5
+    assert skipped == [("co-culture: r1, " + A, "its qpcr series (2 time points) is not used: its fc series has "
+                                                "more (5), and one strain is measured by one technique")]
+
+
+def test_two_techniques_with_as_many_time_points_leave_the_strain_out_rather_than_choose_by_order():
+    client = FakeClient({1: _bioreplicate(1, "r1", [_context(11, A, technique="qpcr"),
+                                                    _context(12, A, technique="fc")])},
+                        {11: LONG, 12: LONG})
+    replicates, skipped = replicates_for_experiment(client, _experiment(stubs=((1, "r1"),)))
+    assert replicates == []
+    assert skipped[0] == ("co-culture: r1, " + A, "measured by qpcr and fc with 5 time points each, so neither "
+                                                  "has more; left out rather than chosen by order")
+
+
+def test_two_contexts_of_one_technique_still_leave_the_strain_out():
+    client = FakeClient({1: _bioreplicate(1, "r1", [_context(11, A, technique="fc"), _context(12, A, technique="fc")])},
+                        {11: LONG, 12: SHORT})
+    replicates, skipped = replicates_for_experiment(client, _experiment(stubs=((1, "r1"),)))
+    assert replicates == [] and "2 of them by fc" in skipped[0][1]
+
+
+def test_the_technique_setting_keeps_only_that_technique_and_names_the_rest():
+    """Karoline, 2026-10-14 (#292): "Curves of it only". With fc chosen, B's qPCR curve is named and left
+    out, A's flow cytometry curve is kept; set through the run's context as the page and CLI set it."""
+    from grownet.adapter import only_technique
+    client = FakeClient({1: _bioreplicate(1, "r1", [_context(11, A, technique="fc"),
+                                                    _context(12, B, technique="qpcr")])},
+                        {11: LONG, 12: LONG})
+    with only_technique("fc"):
+        replicates, skipped = replicates_for_experiment(client, _experiment(stubs=((1, "r1"),)))
+    assert list(replicates[0].species) == [A]
+    assert skipped == [("co-culture: r1, " + B, "measured by qpcr; the Technique setting keeps fc only")]
+    # outside the block every technique is read again
+    replicates, skipped = replicates_for_experiment(client, _experiment(stubs=((1, "r1"),)))
+    assert set(replicates[0].species) == {A, B} and skipped == []
+
+
+def test_both_entry_points_put_the_technique_setting_in_force_for_the_whole_run(monkeypatch):
+    """#292: the page and the command line set the Technique once where a run starts, and every curve the
+    run builds reads it; this pins that both entry points set it, and that it is gone after."""
+    from grownet import __main__, adapter, gui
+    seen = []
+    monkeypatch.setattr(gui, "_run_query", lambda *a, **k: seen.append(adapter.TECHNIQUE.get()) or {})
+    gui.run_query(None, [], {"technique": "fc"})
+    monkeypatch.setattr(__main__, "_derive_run", lambda a: seen.append(adapter.TECHNIQUE.get()) or 0)
+    __main__._derive(__main__.build_parser().parse_args(["derive", "S", "--live", "--technique", " QPCR "]))
+    gui.run_query(None, [], {})
+    assert seen == ["fc", "qpcr", None] and adapter.TECHNIQUE.get() is None

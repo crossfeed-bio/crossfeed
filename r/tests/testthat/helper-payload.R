@@ -6,7 +6,7 @@
 # sign, and one organism with no growth rate.
 example_payload <- function() {
     list(
-        format = "grownet.glv/v1", tool = "grownet", tool_version = "0.3.0",
+        format = "grownet.glv/v2", tool = "grownet", tool_version = "0.5.0",
         derived_at = "2026-10-06T12:00:00+02:00", source_db = "mGrowthDB (live)",
         matrices = list(list(
             abundance_unit = "Cells/mL", unit = "1/(h x Cells/mL)",

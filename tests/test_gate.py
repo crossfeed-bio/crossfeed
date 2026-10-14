@@ -228,3 +228,20 @@ def test_a_definition_written_twice_is_caught_in_python_and_in_json(monkeypatch)
 
     monkeypatch.setattr(gate, "_text_of", clean.get)
     assert gate.check_shadowed_definitions(list(clean)) == []
+
+
+def test_an_import_passes_only_when_pyproject_declares_it(monkeypatch):
+    """truststore is grownet's one runtime dependency (2026-10-14); an import nobody declared is still a
+    requirement a user's install would not bring, and the optional dev extras are not runtime ones."""
+    project = ('[project]\ndependencies = [\n    "truststore>=0.10",\n]\n\n'
+               '[project.optional-dependencies]\ndev = ["pytest>=8"]\n')
+    files = {"pyproject.toml": project, "src/grownet/a.py": "import truststore\nimport requests\nimport pytest\n"}
+    monkeypatch.setattr(gate, "_read", files.get)
+    bad = gate.check_self_contained(["src/grownet/a.py"])
+    assert [b.split(":")[1].strip() for b in bad] == ["imports 'requests' (not stdlib, grownet or a dependency "
+                                                      "declared in pyproject.toml; declare it or drop it)",
+                                                      "imports 'pytest' (not stdlib, grownet or a dependency "
+                                                      "declared in pyproject.toml; declare it or drop it)"]
+    files["pyproject.toml"] = "[project]\ndependencies = []\n"
+    assert len(gate.check_self_contained(["src/grownet/a.py"])) == 3
+

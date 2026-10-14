@@ -262,7 +262,7 @@ def test_the_page_and_the_command_line_start_from_the_same_defaults():
            "exclude_studies": a.exclude_studies, "only_entered": not a.all_partners, "merge_arcs": a.merge_arcs,
            "min_studies": a.min_studies, "merge_genera": a.merge_genera, "no_growth_alpha": a.no_growth_alpha,
            "no_growth_factor": a.no_growth_factor, "max_adjusted_p": a.max_adjusted_p,
-           "report_rates": a.report_rates, "steady_check": a.steady_check,
+           "report_rates": a.report_rates, "steady_check": a.steady_check, "technique": a.technique,
            # `--derivation` parses to None, meaning "not given", so gLV mode can tell a reader's own
            # choice from one it filled in; what must match the page is the value a run resolves to
            # (2026-10-10). `_derive` does this resolution.
@@ -604,7 +604,7 @@ def test_the_growth_rates_are_their_own_download_and_bring_the_glv_control(serve
     # unaffected
     assert rows[0][5:] == ["method", "lag", "lag_method", "carrying_capacity", "capacity_unit",
                            "capacity_curves", "capacity_curves_left_out", "capacity_fall_from_peak",
-                           "capacity_medium", "capacity_source", "doubling_time"]
+                           "capacity_medium", "capacity_source", "doubling_time", "capacity_technique"]
     assert [row[0] for row in rows[1:]] == sorted([A, B])
     assert dict(zip([r[0] for r in rows[1:]], [r[1] for r in rows[1:]], strict=True))[A] == "0.4"
 
@@ -694,7 +694,7 @@ def test_the_command_line_writes_the_matrix_the_rates_and_the_glv_package(monkey
     assert rates_file.read_text(encoding="utf-8").splitlines()[0] == (
         "organism,growth_rate,unit,replicates,studies,method,lag,lag_method,carrying_capacity,"
         "capacity_unit,capacity_curves,capacity_curves_left_out,capacity_fall_from_peak,"
-        "capacity_medium,capacity_source,doubling_time")
+        "capacity_medium,capacity_source,doubling_time,capacity_technique")
     with zipfile.ZipFile(io.BytesIO(package.read_bytes())) as archive:
         assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv",
                                               "interaction_matrix.Cells_per_mL.csv"]
@@ -742,7 +742,7 @@ def test_the_glv_menu_sends_to_r_and_the_page_says_what_arrived(server, with_rat
     monkeypatch.setattr(rbridge, "send", fake_send)
     _, page, _ = _open(f"{base}/glv?token={token}", b"to=r")
     assert "Sent to R: 2 organism(s), 2 growth rate(s)" in page
-    assert sent["payload"]["format"] == "grownet.glv/v1"
+    assert sent["payload"]["format"] == "grownet.glv/v2"
     assert sent["payload"]["matrices"][0]["organisms"] == sorted([A, B])
 
     # the same menu downloads the zip, so one control covers both
@@ -771,7 +771,7 @@ def test_r_can_fetch_the_same_parameters_from_the_page(server, with_rates, monke
     _, text, headers = _open(f"{base}/glv.json?token={token}")
     assert headers["Content-Type"].startswith("application/json")
     payload = json.loads(text)
-    assert payload["format"] == "grownet.glv/v1"
+    assert payload["format"] == "grownet.glv/v2"
     (block,) = payload["matrices"]
     assert block["organisms"] == sorted([A, B]) and block["unit"].startswith("1/(h x ")
     assert "readme" in payload and "caveats" in payload
@@ -813,6 +813,15 @@ def test_what_is_typed_in_the_second_box_stays_there_and_in_the_report(server):
     assert ">SMGDB00000001</textarea>" in page
     _, report, _ = _open(f"{base}/report.txt?token={token}")
     assert "Media, experiments or studies (--conditions): SMGDB00000001" in report
+
+
+def test_several_entries_of_the_second_box_are_one_line_of_the_report():
+    """Round 20 of the review: `--conditions SMGDB00000007 SMGDB00000014` (one entry per line in the box)
+    printed the second study alone at the start of the next report line, with no label."""
+    from grownet.report import _value
+    assert _value("conditions", "SMGDB00000007\nSMGDB00000014\n") == "SMGDB00000007; SMGDB00000014"
+    assert _value("conditions", "SMGDB00000001") == "SMGDB00000001"
+    assert _value("conditions", "S7\r\n\r\nS14") == "S7; S14"       # blank lines are no entries
 
 
 def test_a_medium_that_matches_nothing_leaves_a_result_that_explains_itself(server):
@@ -1063,6 +1072,7 @@ def test_every_derive_path_records_the_same_settings_and_follows_the_steady_chec
              "--report-rates": ("report_rates", None), "--include-absent": ("include_absent", None),
              "--steady-check": ("steady_check", None), "--all-partners": ("only_entered", None),
              "--exclude-studies": ("exclude_studies", "SMGDB00000002"),
+             "--technique": ("technique", "fc"),
              "--conditions": ("conditions", "WC")}
     for flag, (key, value) in flags.items():
         got = settings([*base, flag] + ([value] if value is not None else []))
@@ -1088,5 +1098,16 @@ def test_every_derive_path_records_the_same_settings_and_follows_the_steady_chec
     wired = {key for key, _ in flags.values()}
     unreachable = sorted(k for k in DEFAULTS if k not in wired)
     assert not unreachable, f"these page settings no command-line flag sets: {unreachable}"
-    assert len(wired) == len(DEFAULTS) == 23, (
+    assert len(wired) == len(DEFAULTS) == 24, (          # 24 with Technique (#292)
         f"the page has {len(DEFAULTS)} settings and this test wires {len(wired)}: a new one needs a case")
+
+
+def test_the_report_query_line_and_the_page_heading_join_the_second_box_with_semicolons():
+    """Round 22 of the review: the report's query line and the page heading joined the second box's
+    entries with ", ", so "SMGDB00000014" and "Wilkins-Chalgren, anaerobic" read as three entries."""
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    text = report_text({"network": InteractionNetwork(), "resolved": [], "unresolved": [], "studies": [],
+                        "errors": [], "skipped": [], "entries": [], "all": True,
+                        "settings": {"conditions": "SMGDB00000014\nWilkins-Chalgren, anaerobic"}})
+    assert "matching SMGDB00000014; Wilkins-Chalgren, anaerobic" in text

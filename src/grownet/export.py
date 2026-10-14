@@ -64,6 +64,12 @@ _KEYS = [
     # thicker than every arc that has one. A reader styling on it needs to know that from the file
     # (#216, #218 item 1).
     ("g_display_columns", "graph", "display_columns", "string"),
+    # whether the run read everything it asked for, and what it could not (#247): a GraphML of an
+    # incomplete run said nothing, while the JSON beside it did (found in review)
+    ("g_complete", "graph", "complete", "boolean"),
+    ("g_errors", "graph", "errors", "string"),
+    # the commit that built a daily artifact, beside tool_version (#285)
+    ("g_build_commit", "graph", "build_commit", "string"),
     ("n_name", "node", "name", "string"),
     # Gephi takes a node's label from an attribute called label (Cytoscape uses name): the same strain name
     ("n_label", "node", "label", "string"),
@@ -147,7 +153,9 @@ def _data(parent, key, value):
         return
     d = ET.SubElement(parent, f"{{{_NS}}}data")
     d.set("key", key)
-    d.text = str(value)
+    # xsd:boolean is "true" or "false"; str(False) is "False", which the page wrote differently (found in
+    # review: the two writers disagreed on g_complete)
+    d.text = str(value).lower() if isinstance(value, bool) else str(value)
 
 
 # Kept SHORT and in one place, because `gui/index.html` writes the same GraphML and
@@ -183,6 +191,9 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
     _data(graph, "g_hidden", "; ".join(f"{name} {count}" for name, count in sorted(hidden.items()))
           if hidden else None)
     _data(graph, "g_statistics_test", (net.meta.get("statistics") or {}).get("test"))
+    _data(graph, "g_complete", net.meta.get("complete"))
+    _data(graph, "g_errors", "; ".join(net.meta.get("errors") or []) or None)
+    _data(graph, "g_build_commit", (net.meta.get("build") or {}).get("commit"))
     from .help import REPOSITORY
     from .schema import SCHEMA_DOC
     # `net.schema`, which `from_dict` preserves from the document it read, NOT the current constant: a

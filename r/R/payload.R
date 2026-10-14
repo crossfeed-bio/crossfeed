@@ -5,12 +5,14 @@
 # beside the numbers, and this file is where they become part of the object rather than prose a reader
 # may never open: `print` shows them every time, and `glv_matrix` and `as_miasim` act on them.
 
-# The payload format this package reads. v1 (grownet 0.3.0) carries fitted coefficients, one matrix per
-# abundance unit; v0 carried one matrix of log2 effect sizes with -1 on the diagonal and +/-10 for a pair
-# with no ratio. Both are read, and the object says which one it holds (`fitted`), because what a cell
-# means differs.
-GLV_FORMAT <- "grownet.glv/v1"
-GLV_FORMATS <- c("grownet.glv/v1", "grownet.glv/v0")
+# The payload format this package reads. v2 (grownet 0.5.0) adds where each left-out effect is, the media
+# of the cells and the drop-out arcs in them, and narrows each matrix's `media` to its cells'; v1 (grownet
+# 0.3.0) carries fitted coefficients, one matrix per abundance unit; v0 carried one matrix of log2 effect
+# sizes with -1 on the diagonal and +/-10 for a pair with no ratio. All are read, a field a version lacks
+# reads as absent, and the object says whether it holds fitted coefficients (`fitted`), because what a
+# cell means differs.
+GLV_FORMAT <- "grownet.glv/v2"
+GLV_FORMATS <- c("grownet.glv/v2", "grownet.glv/v1", "grownet.glv/v0")
 
 #' @noRd
 stop_grownet <- function(...) stop(paste0(...), call. = FALSE)
@@ -61,9 +63,19 @@ as_grownet_glv <- function(payload) {
                  censored_cells = pairs_frame(caveats$censored_cells, value = FALSE),
                  sign_conflicts = pairs_frame(caveats$sign_conflicts, value = FALSE),
                  left_out = reasons_frame(caveats$left_out),
-                 pairs_left_out = reasons_frame(caveats$pairs_left_out),
+                 # (affected, actor, why): read as reasons, the actor was dropped, so two pairs on one
+                 # organism could not be told apart, and the effects in no matrix were not read at all
+                 # (found in review)
+                 pairs_left_out = effects_frame(caveats$pairs_left_out),
+                 across_units = effects_frame(caveats$across_units),
+                 arcs_left_out = effects_frame(caveats$arcs_left_out),
                  media = vapply(caveats$media, as.character, character(1)),
+                 # NULL in a package from before it was written, which names only every arc's media; empty
+                 # in a package whose matrices hold no effect between organisms (found in review)
+                 cell_media = if (is.null(caveats$cell_media)) NULL else
+                     vapply(caveats$cell_media, as.character, character(1)),
                  dropout_arcs = as_number(caveats$dropout_arcs),
+                 dropout_arcs_in_cells = as_number(caveats$dropout_arcs_in_cells),
                  without_a_rate = vapply(caveats$without_a_rate, as.character, character(1)),
                  abundance_units = vapply(caveats$abundance_units, as.character, character(1)),
                  coefficients = chr(caveats$coefficients),
@@ -93,7 +105,8 @@ as_matrices <- function(items) {
                          nrow = n, ncol = n, byrow = TRUE, dimnames = list(organisms, organisms))
         list(organisms = organisms, interactions = values,
              abundance_unit = chr(item$abundance_unit), unit = chr(item$unit),
-             media = vapply(item$media, as.character, character(1)), cells = as_number(item$cells))
+             media = vapply(item$media, as.character, character(1)), cells = as_number(item$cells),
+             cells_with_unrecorded_medium = as_number(item$cells_with_unrecorded_medium))
     })
 }
 
@@ -138,6 +151,19 @@ reasons_frame <- function(items) {
     }
     data.frame(what = vapply(items, function(p) chr(p[[1]]), character(1)),
                why = vapply(items, function(p) chr(p[[length(p)]]), character(1)),
+               stringsAsFactors = FALSE)
+}
+
+# The (affected, actor, reason) effects a caveat names, as a data frame.
+#' @noRd
+effects_frame <- function(items) {
+    if (is.null(items) || !length(items)) {
+        return(data.frame(affected = character(0), actor = character(0), why = character(0),
+                          stringsAsFactors = FALSE))
+    }
+    data.frame(affected = vapply(items, function(p) chr(p[[1]]), character(1)),
+               actor = vapply(items, function(p) chr(p[[2]]), character(1)),
+               why = vapply(items, function(p) chr(p[[3]]), character(1)),
                stringsAsFactors = FALSE)
 }
 
@@ -191,10 +217,17 @@ print.grownet_glv <- function(x, ...) {
                     if (nzchar(block$unit)) paste0(", every cell in ", block$unit) else ""))
     }
     if (length(x$matrices) > 1) {
+        # what was measured between them comes from the package's own rows (found in review)
+        between <- sum(grepl("neither matrix", x$caveats$across_units$why, fixed = TRUE))
+        measured <- if (between) {
+            sprintf("%d effect(s) between organisms counted differently were measured and are in no matrix", between)
+        } else {
+            "no effect between organisms counted differently was measured"
+        }
         cat(sprintf(paste0("   * one matrix per abundance unit (%s): abundances are never converted ",
-                           "between units,\n       and no effect between organisms counted differently ",
-                           "was measured. glv_matrix(x, unit = )\n       takes one.\n"),
-                    paste(vapply(x$matrices, function(m) m$abundance_unit, character(1)), collapse = ", ")))
+                           "between units,\n       and %s. glv_matrix(x, unit = )\n       takes one.\n"),
+                    paste(vapply(x$matrices, function(m) m$abundance_unit, character(1)), collapse = ", "),
+                    measured))
     }
     # counted against the organisms in a matrix, and an organism without a rate is what is left out of
     # the matrices, so this read "8 of 8" for an 11-organism network while caveats$without_a_rate named
@@ -239,7 +272,18 @@ print.grownet_glv <- function(x, ...) {
     if (length(x$caveats$without_a_rate)) {
         cat(sprintf("   * %d organism(s) have no growth rate: %s\n",
                     length(x$caveats$without_a_rate), paste(x$caveats$without_a_rate, collapse = ", ")))
-        cat("       a simulation needs one from elsewhere; as_miasim() stops until you give it.\n")
+        # as_miasim() stops only for one inside a matrix; the others it simulates without (found in review)
+        missing <- unlist(x$caveats$without_a_rate)
+        inside <- intersect(missing, x$organisms)
+        if (length(inside)) {
+            cat("       a simulation needs one from elsewhere for ", paste(inside, collapse = ", "),
+                "; as_miasim() stops until you give it.\n", sep = "")
+        }
+        outside <- setdiff(missing, x$organisms)
+        if (length(outside)) {
+            cat("       ", paste(outside, collapse = ", "),
+                " are in no matrix; as_miasim() simulates without them.\n", sep = "")
+        }
     }
     left_out <- x$caveats$left_out
     if (nrow(left_out)) {
@@ -249,25 +293,37 @@ print.grownet_glv <- function(x, ...) {
             cat("       fitted: ", left_out$what[i], ": ", left_out$why[i], "\n", sep = "")
         }
     }
+    # the effects the matrices hold at 0 for want of a coefficient, and those in no matrix at all, as the
+    # package README lists them (found in review: R said neither)
+    for (part in list(list(x$caveats$pairs_left_out, "effect(s) are left at 0 (actor on affected)"),
+                      list(x$caveats$across_units, "effect(s) are in no matrix (actor on affected)"),
+                      list(x$caveats$arcs_left_out,
+                           "pair(s) have arcs left out of their cell, the median of the pair's other arcs (actor on affected)"))) {
+        effects <- part[[1]]
+        if (!is.null(effects) && nrow(effects)) {
+            cat(sprintf("   * %d %s:\n", nrow(effects), part[[2]]))
+            for (i in seq_len(nrow(effects))) {
+                cat("       ", effects$actor[i], " on ", effects$affected[i], ": ", effects$why[i], "\n", sep = "")
+            }
+        }
+    }
     if (!x$fitted) {
         cat("   * the cells are effect sizes (log2 means), not fitted gLV coefficients: scale them for\n")
         cat("     your model rather than using them unchanged.\n")
     }
+    # the drop-out arcs in the cells where the package counts them, since one in no cell is in no
+    # simulation (found in review); the network's in a package from before
     dropout <- x$caveats$dropout_arcs
-    if (!is.na(dropout) && dropout > 0) {
-        cat(sprintf(paste0("   * %d arc(s) come from drop-out designs, where the effect may run through a ",
+    in_cells <- x$caveats$dropout_arcs_in_cells
+    counted <- if (!is.null(in_cells) && !is.na(in_cells)) in_cells else dropout
+    if (!is.na(counted) && counted > 0) {
+        cat(sprintf(paste0("   * %d arc(s)%s come from drop-out designs, where the effect may run through a ",
                            "third\n       species; a gLV coefficient is meant to be the direct effect of ",
                            "one organism on\n       another. grownet's Include drop-out communities leaves ",
-                           "them out.\n"), dropout))
+                           "them out.\n"), counted,
+                    if (!is.null(in_cells) && !is.na(in_cells)) " in the cells" else ""))
     }
-    if (length(x$caveats$media) > 1) {
-        cat(sprintf(paste0("   * these arcs come from %d media, and a simulation is of one environment:\n",
-                           "       %s\n       grownet's second box (media, experiments or studies) keeps ",
-                           "one.\n"),
-                    length(x$caveats$media), paste(x$caveats$media, collapse = ", ")))
-    } else if (length(x$caveats$media) == 1) {
-        cat(sprintf("   * every arc was measured in one medium: %s\n", x$caveats$media))
-    }
+    print_media(x)
     steep <- stronger_than_self(x)
     if (steep && x$fitted) {
         cat(sprintf(paste0("   * %d cell(s) outweigh the organism's own limitation on the diagonal. A fit ",
@@ -303,4 +359,71 @@ summary.grownet_glv <- function(object, ...) {
                    sign_conflicts = nrow(object$caveats$sign_conflicts),
                    left_out = object$caveats$left_out$what,
                    without_a_rate = object$caveats$without_a_rate))
+}
+
+
+# The media line of the print, as the package README states it: about the cells each matrix holds, since
+# an arc in no cell is not in a simulation and a simulation takes one matrix. A matrix whose effects come
+# from several media is warned about, one of a single medium is not, and cells whose arcs record no medium
+# are named. A package written before `cell_media` names every arc's media, as it did. Found in review over
+# several rounds: warnings about arcs in no cell, about two matrices of one medium each, and cells that
+# record no medium left out.
+#' @noRd
+print_media <- function(x) {
+    media <- x$caveats$media
+    cells_in <- x$caveats$cell_media
+    if (is.null(cells_in)) {
+        if (length(media) > 1) {
+            cat(sprintf(paste0("   * these arcs come from %d media, and a simulation is of one environment:\n",
+                               "       %s\n       grownet's second box (media, experiments or studies) keeps ",
+                               "one.\n"),
+                        length(media), paste(media, collapse = ", ")))
+        } else if (length(media) == 1) {
+            cat(sprintf("   * every arc was measured in one medium: %s\n", media))
+        }
+        return(invisible(NULL))
+    }
+    held <- Filter(function(m) isTRUE(m$cells > 0), x$matrices)
+    if (!length(held)) {
+        if (length(media)) {
+            cat("   * no effect between organisms is in the matrices; the network's arcs, in no cell, come from ",
+                paste(media, collapse = ", "), "\n", sep = "")
+        }
+        return(invisible(NULL))
+    }
+    unrecorded <- function(m) if (isTRUE(m$cells_with_unrecorded_medium > 0)) m$cells_with_unrecorded_medium else 0
+    # a recorded medium beside cells recording none is not a second medium (found in review)
+    one <- function(m) {
+        if (length(m$media) && unrecorded(m)) {
+            sprintf("%s, and %d cell(s) with an arc recording no medium, so whether they share it is not recorded",
+                    m$media, unrecorded(m))
+        } else if (length(m$media)) m$media else "no medium recorded"
+    }
+    if (!any(vapply(held, function(m) length(m$media) > 1, logical(1)))) {
+        if (length(held) == 1) {
+            m <- held[[1]]
+            if (length(m$media) && !unrecorded(m)) {
+                cat(sprintf("   * every effect between organisms was measured in one medium: %s\n", m$media))
+            } else if (length(m$media)) {
+                cat(sprintf("   * the effects between organisms were measured in %s\n", one(m)))
+            } else {
+                cat("   * the effects between organisms in the matrices record no medium\n")
+            }
+        } else {
+            cat("   * each matrix's effects between organisms come from at most one recorded medium, and a simulation takes one matrix:\n")
+            for (m in held) cat("       ", m$abundance_unit, ": ", one(m), "\n", sep = "")
+        }
+    } else {
+        cat("   * a matrix's effects come from more than one medium, and a simulation is of one environment:\n")
+        for (m in held) {
+            parts <- c(m$media, if (unrecorded(m)) sprintf("%d cell(s) with an arc recording no medium", unrecorded(m)))
+            cat("       ", m$abundance_unit, " matrix: ", paste(parts, collapse = ", "), "\n", sep = "")
+        }
+        cat("       grownet's second box (media, experiments or studies) keeps one.\n")
+    }
+    others <- setdiff(media, cells_in)
+    if (length(others)) {
+        cat(sprintf("     the network's other arcs, in no cell, come from %s\n", paste(others, collapse = ", ")))
+    }
+    invisible(NULL)
 }

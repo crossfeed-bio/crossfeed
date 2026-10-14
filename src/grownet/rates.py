@@ -12,14 +12,30 @@ and on 2026-09-27 that the implementation is its own option:
   between them, and the rate it returns can lie below the quota. That is `growthrates`' own behavior,
   `tp <- seq(min(candidates), max(candidates) + h - 1)` in `fit_easylinear` 0.8.5, and it is kept so the
   rates agree with the reference and with mGrowthDB (Karoline, 2026-10-12, on #229: option 2). Checked
-  against `growthrates` 0.8.5 on every curve of SMGDB00000004 and SMGDB00000005: identical on all 342
-  curves both fit, to 5e-15. grownet departs from the reference in exactly TWO named places:
+  against `growthrates` 0.8.5 by `packaging/compare_growthrates.py`, which states the curves it takes and
+  is how these counts are made (2026-10-13; counted by hand they went stale twice, Craig's agent on #286
+  and the review): the 468 curves of the bioreplicates of SMGDB00000004 and SMGDB00000005 that are not
+  averages, counted by subject kind as mGrowthDB records it (strain, metabolite, and `bioreplicate` for a
+  culture-level count). Identical on all 339 curves both fit, to 5e-15 (97 strain, 157 metabolite, 85
+  culture-level); 55 neither fits (re-counted 2026-10-14 after #293): 20 too short for a window of 5, as
+  before #293 (16 with too few points once those <= 0 are dropped, which R refuses for a value <= 0, and 4
+  too short for R as well); 16 with no rising window, which neither fits; and 19 that R refuses for a value
+  <= 0 and whose other points do not rise here. The other
+  74 are the TWO places grownet departs from the reference, one of them twice (3 curves are departures 2
+  and 1 at once: R refuses a value <= 0, and grownet's refit over the rest falls <= 0, so neither gives a
+  rate):
     1. a refit that comes out <= 0 although the steepest window rose has NO rate here, with the reason,
-       where `growthrates` returns the negative number as the maximum growth rate (-0.01218 /h on a
-       chemostat of SMGDB00000005); a non-positive rate would read downstream as no growth (Karoline,
-       2026-10-12, on #229 (a)). 2 of 1090 strain curves, both chemostat;
+       where `growthrates` returns the negative number as the maximum growth rate; a non-positive rate
+       would read downstream as no growth (Karoline, 2026-10-12, on #229 (a)). 3 curves, all SMGDB00000005
+       chemostats: one strain (-0.01218 /h) and two metabolites, and 3 more together with departure 2 (one
+       strain and two metabolites); 2 of 1090 strain curves over the whole corpus, a hand count the
+       script does not make;
     2. `growthrates` refuses a curve holding any value <= 0, while this drops those points and fits the
-       rest (19 organism curves in studies 4 and 5, all chemostat; #229 (b), kept as it is).
+       rest (#229 (b), kept as it is). 68 curves: 18 strain, all SMGDB00000005 chemostats, and 50
+       metabolites.
+  A curve with no rising window, which `growthrates` fits nothing ("no positively growing segment"), has
+  no rate here either, with the reason, and a comparison reads it as not grown (Karoline, 2026-10-14,
+  #293: "No rate, still no growth"); it returned its steepest slope, <= 0, before, the third departure.
   This prose used to say "widen it to span every window whose slope reaches QUOTA", which neither
   implementation does (#229).
   With the default window of 5 it reproduces mGrowthDB's own reported rates
@@ -73,6 +89,11 @@ class RateUnavailable(ValueError):
     """A curve has no growth rate by this method, with the reason."""
 
 
+class NoRise(RateUnavailable):
+    """A curve with no rising window: no growth rate, and no growth. A comparison reads it as not grown, as
+    it read the slope <= 0 this used to return (Karoline, 2026-10-14, #293: "No rate, still no growth")."""
+
+
 def _positive_logs(times, values):
     pairs = [(t, math.log(v)) for t, v in zip(times, values, strict=True) if v > 0]
     return [t for t, _ in pairs], [y for _, y in pairs]
@@ -118,11 +139,14 @@ def easylinear_fit(times, values, window: int = DEFAULT_WINDOW, quota: float = Q
         raise RateUnavailable("no window with varying times")
     if best <= 0:
         # No window rises: the steepest slope is itself not positive, and the quota below would select no
-        # window at all (0.95 of a negative slope lies above it). The rate is returned as it is, so the
-        # caller treats it as any non-positive property (code review of 2026-09-28: it raised a bare
-        # ValueError that dropped the whole comparison, SMGDB00000014), and there is no stretch of growth
-        # for a partner to be averaged over.
-        return {"rate": best, "start": None, "end": None, "points": 0}
+        # window at all (0.95 of a negative slope lies above it). Such a curve has no maximum growth rate,
+        # as growthrates finds none ("no positively growing segment"), and it did not grow: `NoRise` says
+        # both, so a comparison still reads it as not grown, as it read the slope <= 0 returned here before
+        # (Karoline, 2026-10-14, #293). A plain RateUnavailable would leave the curve out (#41), which lost
+        # three obligate arcs of SMGDB00000014 whose Agrobacterium monocultures never rise; a bare ValueError
+        # once dropped the whole comparison (code review of 2026-09-28).
+        raise NoRise(f"no window rises: the steepest slope is {best:.4g} per time unit, so this curve has no "
+                     "maximum growth rate and did not grow")
     candidates = [i for i, s in enumerate(slopes) if s >= quota * best]
     first, last = min(candidates), max(candidates) + window
     fit = _line(xs[first:last], ys[first:last])

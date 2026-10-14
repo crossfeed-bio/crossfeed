@@ -16,7 +16,8 @@ count and no rate is asserted, only what must hold of any arc the tool writes.
 Usage: python packaging/live_check.py [OUT_DIR]
   Reads the file the all-network workflow just derived and published (published.FILE), so the
   default derivation is checked on the whole corpus without a second derivation, and derives one study in
-  gLV mode, which the daily file does not exercise. Exits 1 and names every violation.
+  gLV mode, which the daily file does not exercise. Exits 1 and names every violation, and exits 2
+  when the gLV-mode study could not be read from mGrowthDB, which says nothing about the properties.
 """
 import json
 import math
@@ -24,6 +25,8 @@ import sys
 from pathlib import Path
 
 from grownet.published import FILE, from_payload
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # publish_all, beside this file
 from grownet.schema import validate_document
 
 # strength, weight, sd and effect_over_sd are written rounded to 4 decimals; the coefficient is not rounded.
@@ -33,6 +36,66 @@ ROUNDED = 1e-4
 HALF_UNIT = 5e-5
 EXACT = 1e-9
 CENSORED = ("obligate", "abolished")
+
+
+# When a check of effect_over_sd is said to be loose: when the rounding bound reaches k, the absence
+# threshold the ratio exists to be compared with, so rounding alone could carry an arc across the boundary
+# it decides (Craig's agent on #281, 2026-10-13: "tie it to `k` rather than to a tenth"; a tenth of the
+# value did not refer to that decision, and does not tighten when k does). Such an arc is still checked,
+# since the exact bound never flags a correctly rounded arc and a gross error still shows, and the check
+# says on how many arcs it was loose (applying the floor as a skip lost errors it caught, found in review).
+# Without a k in the network's meta, the derivation's default is the boundary.
+from grownet.derive import ABSENCE_THRESHOLD  # noqa: E402
+
+
+def ratio_tolerance(strength: float, sd: float) -> float | None:
+    """How far |strength| / sd recomputed from the file may sit from its effect_over_sd, or None where there
+    is no ratio to recompute (sd at or below the rounding). The exact bound: rounding can push the true
+    ratio to the corner (|s| + U) / (sd - U), which exceeds the first-order U/sd + |s| U/sd^2 by
+    sd / (sd - U), and is short by half at sd 1e-4 (Craig's agent's correction on #281); plus the ratio's
+    own half unit."""
+    if sd is None or sd <= HALF_UNIT:
+        return None
+    return HALF_UNIT * (sd + abs(strength)) / (sd * (sd - HALF_UNIT)) + HALF_UNIT
+
+
+def _k_of(net, k=None):
+    """The absence threshold to judge a network's arcs by: the one given (a parent network's, for the part
+    below the threshold, whose meta carries none), else the network's own, else the default."""
+    if k is not None:
+        return k
+    own = ((net.meta or {}).get("absence") or {}).get("k")
+    return own if own is not None else ABSENCE_THRESHOLD
+
+
+def ratio_coverage(net, k=None) -> tuple:
+    """(loose, not checked): the arcs whose effect_over_sd check allows as much as k, the absence threshold,
+    and those carrying one with no sd above the rounding to recompute it from."""
+    k = _k_of(net, k)
+    loose = unchecked = 0
+    for e in net.edges:
+        if e.strength is None or e.effect_over_sd is None or e.sd is None:
+            continue
+        tolerance = ratio_tolerance(e.strength, e.sd)
+        if tolerance is None:
+            unchecked += 1
+        elif tolerance >= k:
+            loose += 1
+    return loose, unchecked
+
+
+def coverage_note(*nets, k=None) -> str:
+    """What the effect_over_sd check could not hold tightly, for the summary line; empty when nothing. `k`
+    is the threshold to judge them by when a network does not carry its own (the part below it)."""
+    loose = unchecked = 0
+    for net in nets:
+        if net is not None:
+            a, b = ratio_coverage(net, None if ((net.meta or {}).get("absence") or {}).get("k") is not None else k)
+            loose, unchecked = loose + a, unchecked + b
+    parts = ([f"effect_over_sd checked only loosely on {loose} arc(s), where rounding allows a change as large "
+              "as k, the absence threshold"] if loose else []) + \
+            ([f"effect_over_sd not checked on {unchecked} arc(s) with no sd above the rounding"] if unchecked else [])
+    return "".join(f"; {p}" for p in parts)
 
 
 def _have(e, *names):
@@ -71,12 +134,13 @@ def arc_problems(e, derivation: str, k: float | None = None, names: dict | None 
             out.append(f"{where}: effect {e.effect} disagrees with the sign of strength {s}")
         ratio = abs(s) / e.sd if e.sd else None
         # recomputed from two values the file already rounded, so the honest tolerance is what that
-        # rounding allows for THIS arc, U/sd + |strength| U/sd^2, plus the ratio's own rounding U. A fixed
-        # tolerance sat three times above today's worst residual (3.7e-3 at sd 0.21) and the residual grows
-        # as 1/sd^2, so a smaller sd would have made it cry wolf or be loosened past use (Craig's agent,
-        # on #281). This bound is tighter than the fixed one on almost every arc, and cannot go stale.
-        if ratio is not None and e.effect_over_sd is not None and \
-                abs(e.effect_over_sd - ratio) > HALF_UNIT / e.sd + abs(s) * HALF_UNIT / e.sd ** 2 + HALF_UNIT:
+        # rounding allows for THIS arc (`ratio_tolerance`). A fixed tolerance sat three times above today's
+        # worst residual (3.7e-3 at sd 0.21) and the residual grows as 1/sd^2, so a smaller sd would have
+        # made it cry wolf or be loosened past use (Craig's agent, on #281). Exact, so it is applied to every
+        # arc with a ratio, and the summary says where it was loose (`coverage_note`).
+        tolerance = ratio_tolerance(s, e.sd) if e.sd is not None else None
+        if ratio is not None and e.effect_over_sd is not None and tolerance is not None and \
+                abs(e.effect_over_sd - ratio) > tolerance:
             out.append(f"{where}: effect_over_sd {e.effect_over_sd} is not |strength| / sd {ratio:.6g}")
         if k is not None and e.sd and e.status in ("present", "absent"):
             below = abs(s) < k * e.sd
@@ -100,11 +164,14 @@ def arc_problems(e, derivation: str, k: float | None = None, names: dict | None 
     return out
 
 
-def network_problems(net, label: str) -> list:
-    """Properties 3 and 4, and every arc's, for one derived network."""
+def network_problems(net, label: str, k=None) -> list:
+    """Properties 3 and 4, and every arc's, for one derived network. `k` is the absence threshold to check
+    its arcs' status against when its meta carries none: the published part below the threshold has
+    `absence: null`, so its arcs, the ones the threshold defines, were never checked against it (Craig's
+    agent on #281, 2026-10-13)."""
     meta = net.meta
     derivation = (meta.get("settings") or {}).get("derivation", "")
-    k = (meta.get("absence") or {}).get("k")
+    k = (meta.get("absence") or {}).get("k") if k is None else k
     out = []
     if not net.edges:
         out.append(f"{label}: no arcs at all")
@@ -128,32 +195,91 @@ def network_problems(net, label: str) -> list:
 
 def check_published(out_dir: str) -> tuple:
     """(problems, what was checked) for the file the workflow just wrote."""
-    result = from_payload(json.loads((Path(out_dir) / FILE).read_text(encoding="utf-8")))
+    payload = json.loads((Path(out_dir) / FILE).read_text(encoding="utf-8"))
+    result = from_payload(payload)
     net = result["network"]
     problems = network_problems(net, "All")
+    # whether the copy that reads it would serve it: a file every copy refuses (another format, no time it
+    # was derived at, another derivation) passed every check here while every copy derived All live, the
+    # load the file exists to prevent (found in review)
+    from grownet.gui import DEFAULTS
+    from grownet.published import why_not_fresh
+    refused = why_not_fresh(payload, settings=DEFAULTS)
+    if refused:
+        problems.append(f"All: {FILE} would not be served at the defaults: {refused}")
     absent = result.get("absent")
     if absent is not None:
-        problems += network_problems(absent, "All, below the threshold") if absent.edges else []
+        parent_k = (net.meta.get("absence") or {}).get("k")
+        problems += network_problems(absent, "All, below the threshold", parent_k) if absent.edges else []
         problems += [f"All, below the threshold: {e.source} -> {e.target} has status {e.status}"
                      for e in absent.edges if e.status != "absent"]
-    # the same network in the older format, for installed copies (#289): every field one it declares, the
-    # arcs the same in number, and valid
-    legacy_path = Path(out_dir) / "all_result.json"
-    if legacy_path.exists():
-        from grownet.schema import validate_document
-        legacy = json.loads(legacy_path.read_text(encoding="utf-8"))
-        manifest = json.loads((Path(__file__).resolve().parents[1] / "schema" / "format_fields.json")
-                              .read_text(encoding="utf-8"))
-        fields = manifest["formats"].get(legacy["network"].get("schema"), {})
-        for kind, key in (("node", "nodes"), ("edge", "edges"), ("study", "studies")):
-            extra = {k for item in legacy["network"].get(key, []) for k in item} - set(fields.get(kind, ()))
-            if extra:
-                problems.append(f"legacy file: {key} carry fields {legacy['network'].get('schema')} does not "
-                                f"declare: {sorted(extra)}")
-        if len(legacy["network"].get("edges", [])) != len(net.edges):
-            problems.append("legacy file: a different number of arcs than the current one")
-        problems += [f"legacy file: invalid: {p}" for p in validate_document(legacy["network"])]
-    return problems, f"All: {len(net.edges)} arcs" + (f", {len(absent.edges)} below the threshold" if absent else "")
+    # the same network in every older format, for installed copies (#289): each file written for a format
+    # from /v3 on, every field one that format declares, the arcs the same in number, and valid. It looped
+    # over one hard-coded name, so at the next move the /v4 copy would have gone out unchecked (found in
+    # review).
+    import publish_all
+
+    manifest = json.loads((Path(__file__).resolve().parents[1] / "schema" / "format_fields.json")
+                          .read_text(encoding="utf-8"))
+    for schema in publish_all.older_formats(manifest):
+        legacy_path = Path(out_dir) / publish_all.file_for(schema)
+        if not legacy_path.exists():
+            problems.append(f"{legacy_path.name}: not written, so copies reading {schema} get nothing")
+            continue
+        try:
+            legacy = json.loads(legacy_path.read_text(encoding="utf-8"))
+            legacy["network"]["edges"]
+        except Exception as e:     # noqa: BLE001 - named as that file, not as the current one (found in review)
+            problems.append(f"{legacy_path.name}: could not be read: {type(e).__name__}: {e}")
+            continue
+        # the network AND the arcs below the threshold, which 0.4.0 reads too: a copy whose `absent` was
+        # dropped served no arc below the threshold, and one whose `absent.edges` was null made every 0.4.0
+        # copy derive All live, with nothing checked (found in review)
+        # what a reader of that format checks before serving it: the result format it reads and the
+        # derivation its defaults ask for, both from its own versions rather than from the current file,
+        # which moves with the current defaults (found in review); and the time, the current file's
+        readers = publish_all.READERS.get(schema) or {}
+        meta = (legacy.get("network") or {}).get("meta") if isinstance(legacy.get("network"), dict) else None
+        meta = meta if isinstance(meta, dict) else {}
+        derivation = (meta.get("settings") or {}).get("derivation") if isinstance(meta.get("settings"), dict) \
+            else None
+        for what, got in (("format", legacy.get("format")), ("derivation", derivation)):
+            # as the readers judge: they serve a file that records no derivation
+            if got != readers.get(what) and (what == "format" or got is not None):
+                problems.append(f"{legacy_path.name}: its {what} is {got!r}, and readers of {schema} accept "
+                                f"{readers.get(what)!r}")
+        if meta.get("derived_at") != payload["network"].get("meta", {}).get("derived_at"):
+            problems.append(f"{legacy_path.name}: its derived_at differs from the current file's")
+        parts = [("network", net)] + ([("absent", absent)] if absent is not None else [])
+        for part, current in parts:
+            problems += _older_part(legacy_path.name, schema, part, legacy.get(part), current, manifest)
+    return problems, (f"All: {len(net.edges)} arcs" + (f", {len(absent.edges)} below the threshold" if absent else "")
+                      + coverage_note(net, absent, k=(net.meta.get("absence") or {}).get("k")))
+
+
+def _older_part(name: str, schema: str, part: str, doc, current, manifest: dict) -> list:
+    """The problems of one network inside an older-format file: there, valid, in that format, every field
+    one the format declares, and the same arcs in number as the current file's."""
+    from grownet.schema import validate_document
+    label = name if part == "network" else f"{name}, below the threshold"
+    if not isinstance(doc, dict):
+        return [f"{label}: missing, while the current file has it"]
+    invalid = [f"{label}: invalid: {p}" for p in validate_document(doc)]
+    if invalid:
+        # its fields are not lists of objects to walk: `"nodes": null` raised here and was reported as the
+        # CURRENT file unreadable, losing its results (found in review)
+        return invalid
+    problems = []
+    if doc.get("schema") != schema:
+        problems.append(f"{label}: says {doc.get('schema')}, where the file is for {schema}")
+    fields = manifest["formats"].get(schema, {})
+    for kind, key in (("node", "nodes"), ("edge", "edges"), ("study", "studies")):
+        extra = {k for item in doc.get(key, []) for k in item} - set(fields.get(kind, ()))
+        if extra:
+            problems.append(f"{label}: {key} carry fields {schema} does not declare: {sorted(extra)}")
+    if len(doc.get("edges", [])) != len(current.edges):
+        problems.append(f"{label}: a different number of arcs than the current one")
+    return problems
 
 
 def check_glv_mode(study: str | None = None) -> tuple:
@@ -164,24 +290,56 @@ def check_glv_mode(study: str | None = None) -> tuple:
     result = run_query(MGrowthDBClient(cache_dir=None), [], {**glv_mode(dict(DEFAULTS)), "conditions": study},
                        all_studies=True, published=False)
     net = result["network"]
-    problems = [f"gLV mode, {study}: {e}" for e in result["errors"]]
-    problems += network_problems(net, f"gLV mode, {study}")
+    if result["errors"]:
+        # mGrowthDB could not be read: that is a run that could not check, not a property that broke
+        raise RuntimeError(f"gLV mode, {study}: mGrowthDB could not be read: {'; '.join(result['errors'])}")
+    problems = network_problems(net, f"gLV mode, {study}")
     if not any(e.coefficient is not None for e in net.edges):
         problems.append(f"gLV mode, {study}: no arc carries a coefficient, so the coefficient check ran on nothing")
-    return problems, f"gLV mode, {study}: {len(net.edges)} arcs"
+    return problems, f"gLV mode, {study}: {len(net.edges)} arcs" + coverage_note(net)
 
 
 def main(out_dir: str = "out") -> int:
-    problems, checked = [], []
-    for run in (lambda: check_published(out_dir), check_glv_mode):
-        found, what = run()
+    """0 when every property holds, 1 when one breaks, 2 when the check could not run at all.
+
+    A crash or an mGrowthDB outage used to exit 1 and open an issue saying arcs broke a property, naming
+    none (found in review). The outcome is also written to `$GITHUB_OUTPUT`, so the workflow words the
+    issue by what happened.
+    """
+    import os
+    problems, checked, could_not = [], [], []
+    # the published file is local and was just written: one grownet cannot read IS a broken property (every
+    # copy's fetch would refuse it), never "could not run" (found in review)
+    try:
+        found, what = check_published(out_dir)
         problems += found
         checked.append(what)
-    print("live check: " + "; ".join(checked))
+    except Exception as e:         # noqa: BLE001 - an unreadable published file is a violation
+        problems.append(f"All: the published file could not be read: {type(e).__name__}: {e}")
+    # the gLV-mode study is read from mGrowthDB, so a failure there is an outage or a crash: could not run
+    try:
+        found, what = check_glv_mode()
+        problems += found
+        checked.append(what)
+    except Exception as e:         # noqa: BLE001 - reported as could not run, never as a violation
+        could_not.append(f"{type(e).__name__}: {e}")
+    print("live check: " + ("; ".join(checked) or "nothing checked"))
     for p in problems:
         print(f"  {p}", file=sys.stderr)
-    print(f"live check: {len(problems)} violation(s)" if problems else "live check: every property holds")
-    return 1 if problems else 0
+    for c in could_not:
+        print(f"  could not run: {c}", file=sys.stderr)
+    outcome = "violation" if problems else "error" if could_not else "ok"
+    if os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+            f.write(f"outcome={outcome}\n")
+    if problems:
+        print(f"live check: {len(problems)} violation(s)")
+        return 1
+    if could_not:
+        print(f"live check: could not run ({len(could_not)} part(s)); this says nothing about the properties")
+        return 2
+    print("live check: every property holds")
+    return 0
 
 
 if __name__ == "__main__":

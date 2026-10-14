@@ -21,3 +21,6 @@ dist/
 # the R companion package, built by `make r-check`
 grownet_*.tar.gz
 grownet.Rcheck/
+
+# macOS Finder metadata, tracked by accident from #107 to 2026-10-13
+.DS_Store

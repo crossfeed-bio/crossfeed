@@ -31,6 +31,18 @@ ABOUT = (f"{NAME} was built by Karoline Faust (KU Leuven) and Craig Heilmann (Sy
 # user of the page wants, so each line says what they can now do rather than what moved in the code. A test
 # requires the newest entry to be this version, so a release cannot forget it.
 RELEASES = (
+    ("0.5.0", "2026-10-14", (
+        "No arc and no number of a derived network changes: measured on the whole of mGrowthDB against "
+        "0.4.0, by default, with growth rates and in gLV mode. What changes is what the files say.",
+        "The network format moves to /v4, for the unit of a metric and the interval it was computed over, "
+        "how a drop-out arc compares with the other removals, and why a taxon id is not a node's identity. The "
+        "gLV package moves to grownet.glv/v2, and says which media its cells hold.",
+        "A copy installed with uv on a Mac can read mGrowthDB: certificates are checked against the "
+        "computer's own, with truststore, grownet's one runtime dependency.",
+        "A curve with no rising window has no growth rate, and is still read as not grown. Plateaus and "
+        "arcs are compared only within one technique and unit, the one with more time points winning, "
+        "and a new Technique setting keeps the curves of one technique.",
+    )),
     ("0.4.0", "2026-10-11", (
         "The default derivation is the specified comparison again, and gLV mode selects the integrated "
         "form. Every network derived without gLV mode changes and almost all of them grow: on the whole "
@@ -254,7 +266,12 @@ SETTINGS = {
                      "genus to itself; absent arcs become one absent arc per genus pair, hidden as before. With "
                      "Merge parallel arcs on as well, the arcs of each pair are merged across studies first, so "
                      "a pair measured in several studies counts once. The genus is the first word of the name "
-                     "mGrowthDB records, not NCBI's lineage, so a reclassified genus follows its names."),
+                     "mGrowthDB records, not NCBI's lineage, so a reclassified genus follows its names. A genus "
+                     "network pools across media: a genus arc is the median of arcs measured in whatever media "
+                     "its strains were, and its medium lists them all; with growth rates reported, a genus's "
+                     "rate and carrying capacity are the medians of its strains' own, and its capacity's medium "
+                     "reads \"mixed: ...\" where the strains plateaued in different media. A strain's capacity "
+                     "keeps to one medium; a genus cannot, which is why the medium is named."),
     "min_studies": ("Minimum supporting studies", "--min-studies N",
                     "Keeps arcs resting on at least this many studies. Above 1 it needs merged arcs, since an "
                     "arc as derived rests on one study."),
@@ -271,6 +288,13 @@ SETTINGS = {
                    "seventeen ways. Those are never pooled, they give separate arcs, and the report names "
                    "every medium a search read, so name an experiment id to read one of them alone. On the "
                    "command line a study id given this way replaces the study argument."),
+    "technique": ("Technique", "--technique NAME",
+                  "Keep only curves measured by this mGrowthDB technique (fc for flow cytometry, 16s, qpcr, "
+                  "plates, and so on), in arcs and in monoculture rates and plateaus, and name every other "
+                  "curve as left out. Empty by default. Without it, a plateau or an arc is still compared "
+                  "only with one of the same technique and unit, and where one strain is measured by several "
+                  "techniques the one with more time points is used (Karoline, #292). Culture-level counts "
+                  "stay plate counts and flow cytometry only (#140), so OD is never one."),
     "exclude_studies": ("Exclude these studies", "--exclude-studies IDS",
                         "Comma separated mGrowthDB study ids that are never searched, for example a study "
                         "you know to be unsuitable. Empty by default. It applies after the second box, "
@@ -507,7 +531,9 @@ EDGE_ATTRIBUTES = {
     "vs_other_removals": "a drop-out arc's strength minus the median strength of the other drop-out arcs "
                          "measured against the same full community (same target, study, medium and metric), "
                          "where there are at least two: what this removal did beyond the level the group "
-                         "shares. Empty for every other arc",
+                         "shares. The others include arcs below the absence threshold, which a default file "
+                         "leaves out, so derive with --include-absent to recompute it from the file. Empty "
+                         "for every other arc",
     "rate_stage_method": "how the monoculture stage was resampled for that number: a bootstrap of its "
                          "replicates where the stage is the median of one fit per replicate, or a "
                          "delete-one jackknife where it is one regression over all of their rows",
@@ -605,7 +631,8 @@ DECISIONS = (
      "Errors in mGrowthDB records are fixed in mGrowthDB, so every user sees the same data."),
     ("Everything runs on your machine.",
      "The page is served from 127.0.0.1 with a token, has no JavaScript, and the tool needs nothing beyond "
-     "Python's standard library."),
+     "Python's standard library and truststore, which checks mGrowthDB's certificate against your "
+     "computer's own."),
 )
 
 # (question, answer as HTML)
@@ -1030,15 +1057,18 @@ rate. In gLV mode a rate is the median over every row the derivation fitted for 
 display setting moves it; a network derived with <code>--fixture</code> holds only the rows someone kept,
 so its rates follow the settings that made the fixture); and <code>README.txt</code>, which states
 every formula and unit, names any pair left at 0 for disagreeing in sign, names every organism and every
-effect that could not be fitted and why, and names the media the arcs were measured in: a simulation is of
-one environment, so a package built from several media says so in capitals and points at the second box
-(<a href="#where">choosing where to look</a>). Every cell is a per-capita effect in 1/(time x abundance),
-so nothing in the package is a convention and nothing needs scaling to match the rest. Abundances are
+effect that could not be fitted and why, and names the media its effects between organisms were measured in,
+matrix by matrix: a simulation is of one environment and takes one matrix, so a matrix whose effects come
+from several media is named in capitals with a pointer to the second box
+(<a href="#where">choosing where to look</a>), and matrices of one medium each are named with theirs.
+Every cell is a per-capita effect in 1/(time x abundance), so nothing in the package is a convention
+and nothing needs scaling to match the rest. Abundances are
 never converted between units, which is why each unit has its own matrix: a cell mass conversion would
 have to be invented, while the dynamics are the same in any unit. The result section says before the
 download when a search spans several units, and how many matrices that means. It is not a loss: organisms
-counted differently were never grown together in mGrowthDB, so no effect between them was measured, and
-the matrices are separate systems rather than one matrix with corners missing. If you do want them in one
+counted differently are seldom grown together in mGrowthDB, so an effect between them is seldom measured,
+and the matrices are separate systems rather than one matrix with corners missing; where one was measured,
+the package names it among the effects in no matrix. If you do want them in one
 matrix, the factor is yours to apply and to report, as a scaling factor is. A simulation of these numbers can still
 grow without bound and come back as NA, which now says something about the measurements, two organisms
 fitted as facilitating each other more than each limits itself, rather than about a convention; the
@@ -1090,7 +1120,8 @@ hands over a plain matrix and a plain vector, with a helper that shapes them for
 <a href="https://bioconductor.org/packages/release/bioc/html/miaSim.html">miaSim</a>, whose
 <code>simulateGLV</code> solves dx/dt = x(b + Ax), the order this matrix is written in.</p>
 <p><strong>This route carries the same numbers as the zip</strong> (the payload is
-<code>grownet.glv/v1</code>): fitted coefficients, one matrix per abundance unit, with the rates and what
+<code>grownet.glv/v2</code>, which grownet 0.5.0's R package reads, as it does the v1 and v0 of
+earlier versions): fitted coefficients, one matrix per abundance unit, with the rates and what
 each one is made of beside them, and every caveat as a field rather than as prose. So nothing there needs
 scaling, and <code>glv_scale()</code> warns when it is called on them and says why: their cells are
 already in the units of the diagonal they sit beside, and a fit whose cells outweigh the organisms' own
@@ -1253,7 +1284,9 @@ the whole database, so <code>meta.data</code> holds when it was read and each st
 publication dates, which change when a study is corrected. A search run with Report growth rates also
 carries <code>meta.growth_rates</code>: the rule the rates follow, a rate per organism with its unit, how
 many monoculture replicates it rests on, the studies behind it and each study's own median, and
-<code>without_a_rate</code>, the organisms that have none.</p>
+<code>without_a_rate</code>, the organisms that have none, with <code>why_without_a_rate</code> giving the
+reason where one is known: a genus whose strains' rates are in time units that are not converted, or an
+organism, or a genus of them, whose every study's rates were left out for their starting spread (#81).</p>
 {edges}
 {nodes}
 

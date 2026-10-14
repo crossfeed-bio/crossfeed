@@ -45,7 +45,7 @@ def test_the_payload_carries_the_coefficients_the_zip_holds():
     """The same numbers as the package: A_AB = (0.8 - 0.4) / 2e8 = +2e-9 and the fitted diagonal
     -0.4 / 1e9 = -4e-10, in 1/(h x Cells/mL)."""
     payload = matrix.glv_payload(_net(PAIR), RATES)
-    assert payload["format"] == "grownet.glv/v1"
+    assert payload["format"] == "grownet.glv/v2"
     (block,) = payload["matrices"]
     assert block["organisms"] == ["A", "B"]
     assert block["abundance_unit"] == "Cells/mL" and block["unit"] == "1/(h x Cells/mL)"
@@ -140,3 +140,18 @@ def test_the_readme_travels_so_neither_route_loses_what_the_other_carries():
     payload = matrix.glv_payload(_net(PAIR), RATES)
     assert "THE COEFFICIENTS" in payload["readme"]
     assert "(r_with - r_without) / x_j" in payload["readme"]
+
+
+def test_the_payload_moved_to_v2_for_the_fields_and_the_media_it_changed():
+    """Karoline, 2026-10-14, on the format id (Q4): "follow your recommendation for Q4", which was to move
+    the payload to grownet.glv/v2: 0.5.0 adds caveats.arcs_left_out, caveats.cell_media,
+    caveats.dropout_arcs_in_cells and each matrix's cells_with_unrecorded_medium, and narrows
+    matrices[].media to the media of the cells it holds, so a reader trusting v1 would read the new media
+    as the old quantity. v1 and v0 stay readable (PREVIOUS_GLV_FORMATS)."""
+    from grownet import matrix
+    assert matrix.GLV_FORMAT == "grownet.glv/v2"
+    assert matrix.PREVIOUS_GLV_FORMATS == ("grownet.glv/v1", "grownet.glv/v0")
+    payload = matrix.glv_payload(_net(PAIR), RATES)
+    assert payload["format"] == "grownet.glv/v2"
+    assert {"arcs_left_out", "cell_media", "dropout_arcs_in_cells"} <= set(payload["caveats"])
+    assert all("cells_with_unrecorded_medium" in block for block in payload["matrices"])

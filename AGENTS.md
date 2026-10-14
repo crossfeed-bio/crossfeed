@@ -125,7 +125,10 @@ derivation method). Labels are created by a maintainer; if one is missing, say s
   -log10 of it: there the number itself meant something else and no other field said so. So the test is
   whether a reader who trusts the id would read the new content as the old quantity, not whether the code
   path is new.
-- **No runtime dependencies.** Code under `src/` imports only the standard library and grownet.
+- **One runtime dependency, `truststore`.** Code under `src/` imports only the standard library, grownet, and
+  what `pyproject.toml` declares, which is `truststore` alone (Karoline, 2026-10-14: "Add truststore"): it
+  verifies HTTPS against the operating system's certificates, without which a copy installed with uv on a
+  Mac could not read mGrowthDB. Another dependency is a decision for the maintainers, not a pull request's.
 - **Nothing public bearing a collaborator's name or affiliation** without their sign-off.
 - **Security problems are reported privately** (see [SECURITY.md](SECURITY.md)), never in a public issue,
   pull request, or the notes file.

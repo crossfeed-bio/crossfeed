@@ -26,6 +26,7 @@ def test_a_fall_below_half_of_the_previous_artifact_needs_saying_so():
     assert refused and "70 arcs" in refused[0] and "145" in refused[0] and "allow_drop" in refused[0]
     assert floor(70, 145, allow_drop=True) == [], "a run by hand can say the drop is meant"
     assert floor(73, 145) == [], "half or more is a data update, not a collapse"
+    assert floor(73, 146) == [] and floor(72, 146), "exactly half publishes, one below refuses"
     # growth is never refused: the default went from 12 arcs to 145 on 2026-10-10
     assert floor(145, 12) == []
 
@@ -160,9 +161,14 @@ def test_the_older_format_is_published_beside_the_current_one(tmp_path, monkeypa
         for item in legacy["network"][key]:
             assert set(item) <= set(v3[kind]), (kind, set(item) - set(v3[kind]))
     assert len(legacy["network"]["edges"]) == len(current["network"]["edges"])
+    # no meta key an installed 0.4.0 does not declare, which its `validate` would note as suspect
+    assert set(legacy["network"]["meta"]) <= publish_all.LEGACY_META["grownet.interaction_network/v3"]
+    assert {"complete", "errors"} <= set(current["network"]["meta"]), "the current file keeps them"
     notes = []
     assert validate_document(legacy["network"], notes) == []
-    # and the identity is the legacy file's own, so a reader can recompute it
+    # and the identity is the legacy file's own, recomputable from it (it only differed from the current
+    # one before, which a constant hash also does; found in review)
+    assert legacy["identity"]["content_sha256"] == published._identity(legacy)["content_sha256"]
     assert legacy["identity"]["content_sha256"] != current["identity"]["content_sha256"]
     # read as an installed /v3 copy reads it: its own SCHEMA, and the derivation it asks for
     monkeypatch.setattr(published, "SCHEMA", "grownet.interaction_network/v3")
@@ -188,3 +194,197 @@ def test_the_first_run_of_a_new_format_compares_with_the_legacy_file():
         return Response(json.dumps({"network": {"edges": [{}] * 145}}).encode())
     assert previous_arcs(opener) == 145
 
+
+
+def test_every_older_format_from_v3_gets_its_own_file():
+    """Found in review: one hard-coded legacy entry meant that at /v5 nothing would write
+    `all_result.v4.json`, and every installed /v4 copy would derive All live. Every format id from /v3 to
+    the one before the current gets a file, read from the manifest."""
+    manifest = json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
+    assert publish_all.older_formats(manifest) == ["grownet.interaction_network/v3"]
+    assert publish_all.file_for("grownet.interaction_network/v3") == "all_result.json"
+    later = {**manifest, "formats": {**manifest["formats"], "grownet.interaction_network/v5":
+                                     manifest["formats"]["grownet.interaction_network/v4"]},
+             "current": "grownet.interaction_network/v5"}
+    assert publish_all.older_formats(later) == ["grownet.interaction_network/v3", "grownet.interaction_network/v4"]
+    assert publish_all.file_for("grownet.interaction_network/v4") == "all_result.v4.json"
+
+
+def test_the_arcs_below_the_threshold_are_written_in_the_older_format_too():
+    """The fake search has no absent network, so stripping it was never exercised (found in review)."""
+    payload = {"format": "grownet.all_result/v1",
+               "network": {"schema": "grownet.interaction_network/v4", "meta": {"tool": "grownet", "build": {}},
+                           "nodes": [{"id": "a", "taxon_id_refused": "x"}], "studies": [{"id": "S1"}],
+                           "edges": [{"source": "a", "target": "a", "effect": "facilitation", "window": 3.0}]}}
+    payload["absent"] = json.loads(json.dumps(payload["network"]))
+    legacy = publish_all.legacy_payload(payload)
+    for part in ("network", "absent"):
+        assert legacy[part]["schema"] == "grownet.interaction_network/v3"
+        assert "window" not in legacy[part]["edges"][0] and "taxon_id_refused" not in legacy[part]["nodes"][0]
+        assert "build" not in legacy[part]["meta"] and legacy[part]["meta"]["tool"] == "grownet"
+
+
+def test_with_both_result_files_gone_the_floor_reads_all_network_json():
+    """The emergency procedure deletes both result files and leaves all_network.json; the floor then
+    compares with it rather than treating the night as a first run. Nothing tested it (found in review)."""
+    import urllib.error
+
+    class Response(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def opener(url, timeout):
+        if url.endswith(publish_all.NETWORK):
+            return Response(json.dumps({"schema": "x", "edges": [{}] * 140}).encode())
+        raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+    assert previous_arcs(opener) == 140
+
+
+def test_an_older_format_that_lost_a_field_is_refused_and_every_real_one_writes():
+    """The subset refusal and the real manifest: every format from /v3 to the current can be written, so a
+    format move that drops a field fails here, in CI, not at 03:17 after a whole derivation (found in review)."""
+    import pytest
+    manifest = json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
+    payload = {"format": "grownet.all_result/v1",
+               "network": {"schema": manifest["current"], "meta": {}, "nodes": [], "edges": [], "studies": []}}
+    for schema in publish_all.older_formats(manifest):
+        assert publish_all.legacy_payload(payload, schema)["network"]["schema"] == schema
+        assert schema in publish_all.LEGACY_META, f"no meta snapshot for {schema}"
+    assert manifest["current"] in publish_all.LEGACY_META, "the snapshot for the format that will be older next"
+    # no released format ever lost a field, so the refusal is shown on a manifest where one did
+    fake_root = Path(__import__("tempfile").mkdtemp())
+    (fake_root / "schema").mkdir()
+    dropped = json.loads(json.dumps(manifest))
+    dropped["formats"]["grownet.interaction_network/v3"]["edge"].append("a_field_v4_removed")
+    (fake_root / "schema" / "format_fields.json").write_text(json.dumps(dropped))
+    original = publish_all.ROOT
+    try:
+        publish_all.ROOT = fake_root
+        with pytest.raises(ValueError, match="no longer has"):
+            publish_all.legacy_payload(payload, "grownet.interaction_network/v3")
+    finally:
+        publish_all.ROOT = original
+
+
+
+def test_the_legacy_meta_keys_are_0_4_0_s_own():
+    """Round 2 of the review: the test compared the legacy file with LEGACY_META itself, so a key added to
+    the constant survived. 0.4.0's META_PROPERTIES, pinned (git show v0.4.0:src/grownet/schema.py)."""
+    assert publish_all.LEGACY_META["grownet.interaction_network/v3"] == {
+        "absence", "data", "derived_at", "derived_on", "filters", "genus", "growth_rates", "hidden", "merge",
+        "no_growth", "provisional", "query", "selection", "settings", "source_db", "species", "statistics",
+        "studies", "study_id", "tool", "tool_version"}
+
+
+def test_the_current_format_s_meta_snapshot_is_the_schema_s_while_it_is_current():
+    """Round 3 of the review: nothing tied the snapshot to the schema, so a meta key added before the next
+    move would leave the snapshot short of what the format's files held, and a legacy copy would strip it."""
+    from grownet.schema import META_PROPERTIES
+    manifest = json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
+    assert publish_all.LEGACY_META[manifest["current"]] == set(META_PROPERTIES)
+
+
+def test_the_release_notes_name_the_commit_and_claim_nothing_more(monkeypatch):
+    # GitHub Actions sets GITHUB_REF_NAME on every job (the tag in release.yml, `<n>/merge` on a pull
+    # request), so the test sets it itself: reading the runner's made the tag job fail (found in review)
+    monkeypatch.delenv("GITHUB_REF_NAME", raising=False)
+    result = _result()
+    result["network"].meta["build"] = {"commit": "abc1234def", "run": "9"}
+    notes = release_notes(result)
+    assert "as of commit abc1234 of main" in notes and "unreleased" not in notes
+    monkeypatch.setenv("GITHUB_REF_NAME", "some-branch")
+    assert "as of commit abc1234 of some-branch" in release_notes(result), "a hand run from another branch"
+
+
+def test_the_release_notes_name_every_older_file(monkeypatch):
+    """Round 5 of the review: the description named the one LEGACY file, while a file is written for every
+    older format, so from /v5 on the /v4 file would go undescribed."""
+    monkeypatch.setattr(publish_all, "older_formats", lambda manifest=None: [
+        "grownet.interaction_network/v3", "grownet.interaction_network/v4"])
+    notes = release_notes(_result())
+    assert "`all_result.json` is the same network for copies that read the older `grownet.interaction_network/v3`" \
+        in notes
+    assert "`all_result.v4.json` is the same network for copies that read the older " \
+        "`grownet.interaction_network/v4`" in notes
+
+
+def test_an_older_file_is_written_only_in_the_result_format_its_readers_accept():
+    """Round 6 of the review: the strip kept the current result format, so the day `published.FORMAT`
+    moves every 0.3.x and 0.4.x copy would refuse its file and derive All live, with every check green."""
+    import pytest
+    payload = {"format": "grownet.all_result/v2",
+               "network": {"schema": "grownet.interaction_network/v4", "meta": {}, "nodes": [], "edges": [],
+                           "studies": []}}
+    with pytest.raises(ValueError, match="accept 'grownet.all_result/v1'"):
+        publish_all.legacy_payload(payload, "grownet.interaction_network/v3")
+    assert publish_all.legacy_payload({**payload, "format": "grownet.all_result/v1"},
+                                      "grownet.interaction_network/v3")["format"] == "grownet.all_result/v1"
+
+
+def test_an_older_file_is_written_only_with_the_derivation_its_readers_ask_for():
+    """Round 7 of the review: the first move of the default derivation would make every installed copy
+    refuse its older file (0.4.0's DEFAULTS ask for replicate), with every check green."""
+    import pytest
+    meta = {"settings": {"derivation": "integrated"}}
+    payload = {"format": "grownet.all_result/v1",
+               "network": {"schema": "grownet.interaction_network/v4", "meta": meta, "nodes": [], "edges": [],
+                           "studies": []}}
+    with pytest.raises(ValueError, match="derivation is 'integrated' and readers of grownet.interaction_network/v3"):
+        publish_all.legacy_payload(payload, "grownet.interaction_network/v3")
+    meta["settings"]["derivation"] = "replicate"
+    assert publish_all.legacy_payload(payload, "grownet.interaction_network/v3")["format"] == "grownet.all_result/v1"
+    meta.pop("settings")                                   # recording none, it is served
+    assert publish_all.legacy_payload(payload, "grownet.interaction_network/v3")["format"] == "grownet.all_result/v1"
+
+
+def test_the_readers_of_the_current_format_are_this_version_while_it_is_current():
+    """Round 8 of the review: nothing checked the /v4 entry, which is read only after the next move, so a
+    change of the result format or the default derivation before then would leave it describing readers
+    that never existed. While /v4 is current its readers are this version."""
+    from grownet import gui, published
+    manifest = json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
+    assert publish_all.READERS[manifest["current"]] == {"format": published.FORMAT,
+                                                        "derivation": gui.DEFAULTS["derivation"]}
+
+
+def test_an_older_file_without_a_result_format_is_not_written():
+    """Round 8 of the review: 0.4.0 refuses a file with no format, and the strip accepted one."""
+    import pytest
+    payload = {"network": {"schema": "grownet.interaction_network/v4", "meta": {}, "nodes": [], "edges": [],
+                           "studies": []}}
+    with pytest.raises(ValueError, match="format is None"):
+        publish_all.legacy_payload(payload, "grownet.interaction_network/v3")
+
+
+def test_the_strip_judges_by_the_readers_even_after_the_default_moves(monkeypatch):
+    """Round 8 of the review: with the default at replicate, judging the strip by today's DEFAULTS rather
+    than by the readers' table could not be told apart. Moved to integrated, an integrated payload is still
+    refused for the /v3 readers, whose defaults ask for replicate."""
+    import pytest
+
+    from grownet import gui
+    monkeypatch.setitem(gui.DEFAULTS, "derivation", "integrated")
+    payload = {"format": "grownet.all_result/v1",
+               "network": {"schema": "grownet.interaction_network/v4",
+                           "meta": {"settings": {"derivation": "integrated"}}, "nodes": [], "edges": [], "studies": []}}
+    with pytest.raises(ValueError, match="derivation is 'integrated' and readers"):
+        publish_all.legacy_payload(payload, "grownet.interaction_network/v3")
+
+
+def test_the_r_check_refuses_a_skipped_test_in_ci_and_in_make():
+    """Round 11 of the review: deleting either `SKIP 0` guard passed the suite, which is how the listener's
+    test stayed skipped and failing from #120 on. The R check says OK over a skipped test."""
+    import pytest
+    workflow, makefile = ROOT / ".github" / "workflows" / "ci.yml", ROOT / "Makefile"
+    if not workflow.exists() or not makefile.exists():
+        pytest.skip("no .github or Makefile in this tree (an unpacked sdist)")
+    ci = workflow.read_text(encoding="utf-8")
+    job = ci[ci.index("  r-package:"):]
+    job = job[:job.index("\n  windows-app:")] if "\n  windows-app:" in job else job
+    assert 'NOT_CRAN: "true"' in job and "grep -q 'SKIP 0 |' grownet.Rcheck/tests/testthat.Rout" in job
+    recipe = makefile.read_text(encoding="utf-8").split("r-check:", 1)[1].split("\n\n", 1)[0]
+    assert "NOT_CRAN=true R CMD check" in recipe
+    assert "grep -q 'SKIP 0 |' grownet.Rcheck/tests/testthat.Rout" in recipe

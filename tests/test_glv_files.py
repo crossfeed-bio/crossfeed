@@ -52,6 +52,7 @@ def test_a_nonzero_number_is_never_written_as_zero():
     """#211, the latent hazard: four decimal places print |v| < 5e-5 as `0` or `-0`, and `0` is documented
     as no interaction."""
     assert matrix._number(3e-5) not in ("0", "-0") and float(matrix._number(3e-5)) == 3e-5
+    assert matrix._number(1.2345e-5) == "1.234e-05", "four significant digits, not one"
     assert matrix._number(-3e-5) not in ("0", "-0") and float(matrix._number(-3e-5)) == -3e-5
     # nothing else moves
     assert matrix._number(-3.46441) == "-3.4644" and matrix._number(0.0412) == "0.0412"

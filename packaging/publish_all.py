@@ -27,6 +27,47 @@ ROOT = Path(__file__).resolve().parents[1]
 # written under the name those copies already fetch (Karoline, 2026-10-12: "Publish both").
 LEGACY = {"file": "all_result.json", "schema": "grownet.interaction_network/v3"}
 LEGACY_URL = f"https://github.com/crossfeed-bio/crossfeed/releases/download/{RELEASE_TAG}/{LEGACY['file']}"
+# The first format whose readers fetch a file of their own name; every one from it on is written below.
+FIRST_PUBLISHED = "grownet.interaction_network/v3"
+
+
+def file_for(schema: str) -> str:
+    """The file a reader of `schema` fetches: the bare name for the copies before /v4, which read it, and
+    `all_result.<format>.json` from /v4 on, as `published.FILE` names its own."""
+    return LEGACY["file"] if schema == LEGACY["schema"] else f"all_result.{schema.rsplit('/', 1)[-1]}.json"
+
+
+def older_formats(manifest: dict | None = None) -> list:
+    """Every format id from `FIRST_PUBLISHED` to the one before the current, in order (the manifest lists
+    them in order). A format move must not strand the copies that read the last one: at /v5 the /v4
+    readers still need `all_result.v4.json`, which a single hard-coded legacy entry would have stopped
+    writing (found in review)."""
+    declared = manifest or json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
+    ids = list(declared["formats"])
+    return ids[ids.index(FIRST_PUBLISHED):ids.index(declared["current"])]
+# The meta keys the /v3 readers declare, 0.4.0's `schema.META_PROPERTIES` (git show v0.4.0:src/grownet/
+# schema.py): a key outside it makes an installed 0.4.0's `validate` call the file suspect.
+LEGACY_META = {"grownet.interaction_network/v3": {
+    "tool", "tool_version", "derived_on", "derived_at", "source_db", "provisional", "absence", "statistics",
+    "query", "species", "studies", "study_id", "settings", "selection", "no_growth", "filters", "hidden",
+    "merge", "genus", "data", "growth_rates"},
+    # this version's, for the copies that will read /v4 once the format moves on (found in review: only /v3
+    # was listed, so the next move would have left /v4 copies noting the newer meta keys as suspect)
+    "grownet.interaction_network/v4": {
+    "tool", "tool_version", "project", "settings_not_used", "derived_on", "derived_at", "source_db",
+    "provisional", "absence", "statistics", "query", "species", "studies", "errors", "complete", "study_id",
+    "settings", "build", "slice", "selection", "no_growth", "filters", "hidden", "merge", "genus", "data",
+    "growth_rates"}}
+
+
+# What each older format's readers accept before they serve the file: the result format (`published.FORMAT`
+# of the versions that read it: 0.3.0 and 0.4.0 both read grownet.all_result/v1) and the derivation their
+# default settings ask for (0.4.0's DEFAULTS say replicate; 0.3.x checks none). A copy refuses any other
+# and derives All live, so an older file that followed a move of the current format or the current default
+# derivation would strand every installed copy while every check passed (found in review). The /v4 entry
+# is this version's, for when the format moves on.
+READERS = {"grownet.interaction_network/v3": {"format": "grownet.all_result/v1", "derivation": "replicate"},
+           "grownet.interaction_network/v4": {"format": "grownet.all_result/v1", "derivation": "replicate"}}
 
 
 def legacy_payload(payload: dict, legacy_schema: str = LEGACY["schema"]) -> dict:
@@ -38,6 +79,23 @@ def legacy_payload(payload: dict, legacy_schema: str = LEGACY["schema"]) -> dict
     """
     declared = json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
     fields = declared["formats"][legacy_schema]
+    current = declared["formats"][declared["current"]]
+    for kind in ("node", "edge", "study"):
+        removed = set(fields[kind]) - set(current[kind])
+        if removed:
+            raise ValueError(f"{legacy_schema} declares {kind} fields the current format no longer has "
+                             f"({sorted(removed)}): a reader of it cannot be served by removing fields, "
+                             "which is a decision about that format, not something to publish silently")
+    readers = READERS.get(legacy_schema) or {}
+    derivation = ((payload.get("network") or {}).get("meta") or {}).get("settings", {}) or {}
+    # as the readers judge: a format other than theirs, or a derivation recorded and not theirs (they serve
+    # a file that records none)
+    for what, got in (("format", payload.get("format")), ("derivation", derivation.get("derivation"))):
+        if got != readers.get(what) and (what == "format" or got is not None):
+            raise ValueError(f"the result's {what} is {got!r} and readers of {legacy_schema} accept "
+                             f"{readers.get(what)!r}: moving it is a decision about those readers, not "
+                             "something to publish silently, since they would refuse the file and derive "
+                             "All live")
     out = json.loads(json.dumps(payload))
 
     def strip(network):
@@ -49,6 +107,13 @@ def legacy_payload(payload: dict, legacy_schema: str = LEGACY["schema"]) -> dict
                             for item in network.get(key, [])]
     strip(out.get("network"))
     strip(out.get("absent"))
+    # and the meta keys that format does not declare, which an installed copy's `validate` would otherwise
+    # note as suspect, the very note #274 removed: read from that version's own schema module when it is
+    # known, else left as they are (an undeclared meta key is a note, never a problem)
+    legacy_meta = LEGACY_META.get(legacy_schema)
+    for network in (out.get("network"), out.get("absent")):
+        if isinstance(network, dict) and legacy_meta is not None:
+            network["meta"] = {k: v for k, v in (network.get("meta") or {}).items() if k in legacy_meta}
     out.pop("identity", None)
     out["identity"] = _identity(out)
     return out
@@ -71,11 +136,15 @@ def previous_arcs(opener=urllib.request.urlopen) -> int | str | None:
     not "no previous artifact" but "cannot tell whether this run collapsed", and it used to switch the
     half check off on exactly the night it might be needed.
     """
-    # the first run under a new format id has no file of its own yet, so it compares with the legacy file
-    for url in (URL, LEGACY_URL):
+    # the first run under a new format id has no file of its own yet, so it compares with the legacy file;
+    # and with both deleted, which is the emergency procedure, it compares with `all_network.json`, which
+    # that procedure leaves in place, rather than treating the night as a first run (found in review)
+    base = URL.rsplit("/", 1)[0]
+    for url in (URL, LEGACY_URL, f"{base}/{NETWORK}"):
         try:
             with opener(url, timeout=TIMEOUT) as response:
-                return len(json.loads(response.read().decode("utf-8"))["network"]["edges"])
+                doc = json.loads(response.read().decode("utf-8"))
+                return len((doc.get("network") or doc)["edges"])
         except urllib.error.HTTPError as e:
             if e.code == 404:
                 continue
@@ -119,19 +188,29 @@ def release_notes(result: dict) -> str:
     net = result["network"]
     meta = net.meta
     derivation = (meta.get("settings") or {}).get("derivation", "unknown")
+    # the daily file is built from main, ahead of the version it names: say which commit, so "by grownet
+    # 0.4.0" is not read as the released 0.4.0, which refuses the current file (found in review)
+    commit = (meta.get("build") or {}).get("commit", "")
+    # the branch the run built, which is main on a schedule and whatever was chosen on a hand run
+    branch = os.environ.get("GITHUB_REF_NAME") or "main"
+    built = f" as of commit {commit[:7]} of {branch}" if commit else ""
+    # one line per older format, as one file is written for each: naming LEGACY alone would leave the
+    # /v4 file out of the description from the move to /v5 on (found in review)
+    older = "\n".join(
+        f"- `{file_for(schema)}` is the same network for copies that read the older `{schema}`: the fields "
+        "added since are removed and nothing else differs, so an installed copy keeps reading the daily file "
+        "until it is upgraded." for schema in older_formats())
     return f"""The All network of mGrowthDB, derived with grownet's default settings by \
 `.github/workflows/all-network.yml` and replaced by each run. Every run rewrites this description, so it \
 describes the files below as they are now.
 
 **This run:** {len(result['studies'])} studies, {len(net.nodes)} organisms, {len(net.edges)} arcs, derived \
-at {meta.get('derived_at')} by grownet {meta.get('tool_version')}, derivation `{derivation}`.
+at {meta.get('derived_at')} by grownet {meta.get('tool_version')}{built}, derivation `{derivation}`.
 
 - `{FILE}` is the file grownet reads. A copy of grownet uses it only when it is {_age(MAX_AGE)}, written \
 in the format and schema that copy reads, and derived by the derivation the copy's settings ask for; \
 otherwise that copy derives All live from mGrowthDB.
-- `{LEGACY['file']}` is the same network for copies that read the older `{LEGACY['schema']}`: the fields \
-added since are removed and nothing else differs, so an installed copy keeps reading the daily file until \
-it is upgraded.
+{older}
 - `{NETWORK}` and `{REPORT}` are the same network and its report, for reading. **Nothing checks these two \
 against the grownet you have**: a file downloaded by hand is whatever the last run produced, so read \
 `meta.tool_version`, `meta.build` (the commit), `meta.derived_at` and `meta.settings.derivation` inside \
@@ -162,7 +241,9 @@ def main(out: str, notes: str | None = None, previous=previous_arcs) -> int:
     folder.mkdir(parents=True, exist_ok=True)
     payload = to_payload(result)
     (folder / FILE).write_text(json.dumps(payload) + "\n", encoding="utf-8")
-    (folder / LEGACY["file"]).write_text(json.dumps(legacy_payload(payload)) + "\n", encoding="utf-8")
+    for schema in older_formats():
+        (folder / file_for(schema)).write_text(json.dumps(legacy_payload(payload, schema)) + "\n",
+                                               encoding="utf-8")
     (folder / NETWORK).write_text(net.to_json() + "\n", encoding="utf-8")
     (folder / REPORT).write_text(report_text(result), encoding="utf-8")
     if notes:

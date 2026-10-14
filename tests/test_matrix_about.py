@@ -55,10 +55,14 @@ def test_a_conflict_across_designs_is_told_apart_from_one_within_a_design():
 
 
 def test_an_na_cell_is_listed_with_its_bound():
-    net = _net([_arc("a", "b", None, outcome="obligate", strength_bound=2.5)])
+    """An obligate arc's bound is a lower one and an abolished arc's an upper one; the sidecar said "at
+    least" for both, so an abolished arc read "at least -2.5" (found in review)."""
+    net = _net([_arc("a", "b", None, outcome="obligate", strength_bound=2.5),
+                _arc("c", "b", None, outcome="abolished", strength_bound=-2.5)])
     assert "NA" in matrix.matrix_csv(net)
     about = matrix.matrix_about(net)
     assert "NA CELLS" in about and "A on B: at least +2.5" in about
+    assert "C on B: at most -2.5" in about
 
 
 def test_the_command_line_writes_it_beside_the_csv(tmp_path):
@@ -70,3 +74,34 @@ def test_the_command_line_writes_it_beside_the_csv(tmp_path):
     assert "describes net.csv" in about and "SETTINGS: none recorded" in about
     assert matrix.about_name("a/b/grownet_matrix.csv") == "a/b/grownet_matrix.about.txt"
     assert matrix.about_name("matrix") == "matrix.about.txt"
+
+
+def test_an_incomplete_run_says_so_beside_the_grid_and_in_graphml():
+    """Round 2 of the review: neither the sidecar's INCOMPLETE block nor GraphML's completeness keys had a
+    test that failed without them; and a failure only in the rate stage touches no cell."""
+    import xml.etree.ElementTree as ET
+
+    from grownet.export import to_graphml
+    net = _net([_arc("a", "b", 1.5)])
+    net.meta.update({"complete": False, "errors": ["S9: HTTP 404"]})
+    about = matrix.matrix_about(net)
+    assert "INCOMPLETE" in about and "a 0 below can be a" in about and "S9: HTTP 404" in about
+    net.meta["errors"] = ["2 replicate(s) could not be read while reading growth rates"]
+    assert "the cells below are not affected" in matrix.matrix_about(net)
+    # one failure of each kind: the arcs' failure decides (round 3 of the review, `all` for `any`)
+    both = ["S9: HTTP 404", "2 replicate(s) could not be read while reading growth rates"]
+    net.meta["errors"] = list(both)
+    mixed = matrix.matrix_about(net)
+    assert "a 0 below can be a" in mixed and "the cells below are not affected" not in mixed
+    net.meta["errors"] = both[1:]
+    ns = "{http://graphml.graphdrawing.org/xmlns}"
+    graph = ET.fromstring(to_graphml(net)).find(f"{ns}graph")
+    data = {d.get("key"): d.text for d in graph.findall(f"{ns}data")}
+    assert data["g_complete"] == "false" and "growth rates" in data["g_errors"]
+    net.meta.update({"complete": True, "errors": []})
+    assert "INCOMPLETE" not in matrix.matrix_about(net)
+
+
+def test_the_sidecar_gives_the_r_line_that_keeps_the_names():
+    about = matrix.matrix_about(_net([_arc("a", "b", 1.5)]))
+    assert "read.csv(file, row.names = 1, check.names = FALSE)" in about

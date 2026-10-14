@@ -12,6 +12,7 @@ import textwrap
 
 from . import interaction
 from .adapter import about_a_pair, condensed
+from .derive import CULTURE_NONE
 from .help import SETTINGS
 from .mgrowthdb import MGROWTHDB_API, NO_DATABASE_VERSION
 from .rates import doubling_time, time_unit
@@ -26,6 +27,11 @@ def _value(key: str, value) -> str:
         return "on"
     if value is False:
         return "off"
+    if isinstance(value, str) and "\n" in value:
+        # a multi-line setting (the second box's one entry per line) on one report line: its second entry
+        # stood alone at the start of the next line (found in review)
+        # "; " as an arc's media are joined: a medium's name can hold a comma (found in review)
+        return "; ".join(line.strip() for line in value.splitlines() if line.strip()) or "none"
     return "none" if value == "" else str(value)
 
 
@@ -260,7 +266,8 @@ def report_text(result: dict) -> str:
         if narrowed or excluded:
             which = []
             if narrowed:
-                which.append("matching " + ", ".join(x.strip() for x in narrowed))
+                # "; " as the settings line joins them: a medium's name can hold a comma (found in review)
+                which.append("matching " + "; ".join(x.strip() for x in narrowed))
             if excluded:
                 which.append("excluding " + ", ".join(excluded))
             lines.append(f"query: All, narrowed: every study {' and '.join(which)}, with every partner")
@@ -300,7 +307,11 @@ def report_text(result: dict) -> str:
     unused = set(meta.get("settings_not_used") or ())
     for key, (label, flag, _) in SETTINGS.items():
         if key in settings:
-            note = "   <- not read by this derivation" if key in unused else ""
+            # the factor at alpha 0 is unread in this run, not by the derivation (found in review)
+            note = ("" if key not in unused
+                    else "   <- not read in this run: alpha 0 switches the test off and nothing was censored"
+                    if key == "no_growth_factor" and settings.get("no_growth_alpha") == 0
+                    else "   <- not read by this derivation")
             lines.append(f"  {label} ({flag.split()[0]}): {_value(key, settings[key])}{note}")
     lines.append("")
 
@@ -331,9 +342,23 @@ def report_text(result: dict) -> str:
         lines.append(f"q-value filter (q is the adjusted p-value): interactions above "
                      f"{applied['max_adjusted_p']:g} left out: "
                      f"{applied.get('left_out', 0)}; kept untested (no p-value): {applied.get('untested', 0)}")
-    if rule:
-        lines.append(f"no-growth rule: {rule.get('test', '')}; alpha {rule.get('alpha')}, factor "
-                     f"{rule.get('factor')}; {rule.get('obligate', 0)} obligate, {rule.get('abolished', 0)} abolished")
+    if rule and rule.get("applied") is False and rule.get("why"):
+        # a derivation without the rule says so, rather than a count of nothing (found in review: the
+        # integrated report printed "alpha None, factor None; 0 obligate, 0 abolished")
+        lines.append(f"no-growth rule: not applied; {rule['why']}")
+    elif rule:
+        # alpha 0 is the documented way to switch the check off: it ran as configured, and says so (found
+        # in review: it printed "not applied; " with nothing after it)
+        # alpha 0 switches the test off; a comparison whose set had a metric that was not positive is still
+        # censored, and its bound uses the factor, so the factor is named while such a comparison exists
+        # (found in review, twice)
+        censored = rule.get("obligate", 0) + rule.get("abolished", 0)
+        how = (f"alpha {rule.get('alpha')}, factor {rule.get('factor')}" if rule.get("applied") is not False
+               else "alpha 0 switches the test off, and the factor with it" if not censored
+               else (f"alpha 0 switches the test off; a comparison whose set's metric was not positive is still "
+                     f"censored, and its bound uses factor {rule.get('factor')}"))
+        lines.append(f"no-growth rule: {rule.get('test', '')}; {how}; {rule.get('obligate', 0)} obligate, "
+                     f"{rule.get('abolished', 0)} abolished")
     merge = meta.get("merge", {})
     if merge.get("merge_arcs") or merge.get("min_studies", 1) > 1:
         lines.append(f"merged arcs: {merge.get('rule', '')}; {merge.get('merged', 0)} merged, "
@@ -380,6 +405,10 @@ def report_text(result: dict) -> str:
         for nid, rate in sorted(organisms.items(), key=lambda kv: str(kv[1].get("name", kv[0])).lower()):
             per_study = "; ".join(f"{sid} {value:.4g}" for sid, value in sorted(rate.get("per_study", {}).items()))
             extra = []
+            # a genus of several strains is the median of the strains' own rates and capacities, which rest
+            # on these counts between them: "median of 7 replicate(s)" named a median that was not taken
+            # (found in review)
+            strains = rate.get("merged_from") or []
             # ln(2) / rate, so a rate no stage judges for plausibility is at least stated in the form a
             # reader judges (#173): 0.0147 /h says nothing, 47 h says it at a glance
             double = doubling_time(rate.get("rate"), rate.get("unit", "1/h"))
@@ -394,8 +423,13 @@ def report_text(result: dict) -> str:
                              + (" and per-strain series" if (rate.get("rate_sources") or {}).get("per-strain")
                                 else "") + "; no capacity is taken from a culture-level trace")
             if rate.get("capacity") is not None:
+                behind = rate.get("capacity_from") or []
                 extra.append(f"carrying capacity {rate['capacity']:.4g} {rate.get('capacity_unit', '')}"
-                             f" from {rate.get('capacity_n', 0)} "
+                             + (f", the median of the {len(behind)} strains' capacities ({', '.join(behind)}), "
+                                "resting on " if len(strains) > 1 and len(behind) > 1
+                                else f", {behind[0]}'s alone, from " if len(strains) > 1 and behind
+                                else " from ")
+                             + f"{rate.get('capacity_n', 0)} "
                              + ("row(s)" if rate.get("n_label") else "curve(s)"))
                 # a certified curve that grew, peaked and then declined has its peak recorded as the
                 # plateau, so what it held at the last measurement is published beside it (Karoline,
@@ -411,25 +445,48 @@ def report_text(result: dict) -> str:
             # can ask for.
             # where the self-limitation behind the diagonal came from: fitted with the partners, or
             # -r/K at a measured plateau because the fit implied none (#142 item 7)
-            if rate.get("capacity_source"):
+            # the culture-level clause above already says why there is no capacity, which this sentence
+            # repeated (found in review)
+            if rate.get("capacity_source") and not (culture and rate["capacity_source"].startswith(CULTURE_NONE)):
                 extra.append(rate["capacity_source"])
             if rate.get("capacity_medium"):
-                extra.append(f"capacity measured in {rate['capacity_medium']}")
+                extra.append(f"capacity measured in {rate['capacity_medium']}"
+                             + (f" by {rate['capacity_technique']}" if rate.get("capacity_technique") else ""))
                 # more than one spelling means the alias table merged names that disagree, which is said
+                # nor any medium the capacity rests on: a genus whose strains plateaued in different media
+                # printed each of them as a spelling the alias table merged (found in review)
                 spellings = [name for name in (rate.get("capacity_medium_spellings") or [])
-                             if name != rate["capacity_medium"]]
+                             if name != rate["capacity_medium"] and name not in (rate.get("capacity_media") or [])]
                 if spellings:
                     extra.append("also recorded as " + ", ".join(spellings)
                                  + ", read as one medium by the alias table")
+            # plateaus in units or techniques that were not chosen, and a tie that chose none (#292)
+            if rate.get("capacity") is not None and rate.get("other_capacity_units") and not rate.get("merged_from"):
+                extra.append("plateaus also in " + ", ".join(rate["other_capacity_units"])
+                             + ", not compared with it; the one with more time points is used")
+            if rate.get("capacity_tie"):
+                extra.append(rate["capacity_tie"])
+            # a genus whose strains plateaued in different units has no capacity, and says why: nothing is
+            # converted between abundance units (found in review)
+            units = rate.get("other_capacity_units") or []
+            if rate.get("capacity") is None and len(units) > 1:
+                extra.append("no capacity: its strains' plateaus are in different units or techniques ("
+                             + ", ".join(units) + "), which are not compared")
+            # rates in another time unit are not converted, and said so: only the JSON carried them
+            # (found in review)
+            if rate.get("other_units"):
+                extra.append("rates in another time unit left out: " + ", ".join(rate["other_units"]))
             others = rate.get("capacity_other_media") or []
             if others:
                 extra.append(f"{len(others)} other medium(s) hold a plateau of this organism, named below")
             left = rate.get("capacity_left_out") or []
             if left:
-                extra.append(f"{len(left)} curve(s) gave no capacity")
+                extra.append(f"{len(left)} {'row(s)' if rate.get('n_label') else 'curve(s)'} gave no capacity")
             # a derivation that fits each row has fitted rows rather than monoculture replicates, and
             # says so, so the count is not read as a number of cultures (#142 item 4)
-            lines.append(f"  - {rate.get('name', nid)}: {rate['rate']:.4g} {rate.get('unit', '')}, median of "
+            of = (f"median of the {len(strains)} strains' rates ({', '.join(strains)}), resting on "
+                  if len(strains) > 1 else "median of ")
+            lines.append(f"  - {rate.get('name', nid)}: {rate['rate']:.4g} {rate.get('unit', '')}, {of}"
                          f"{rate.get('n', 0)} {rate.get('n_label', 'monoculture replicate(s)')}"
                          + (f" ({per_study})" if per_study else "")
                          + ("; " + ", ".join(extra) if extra else ""))
@@ -440,6 +497,8 @@ def report_text(result: dict) -> str:
         missing = rates.get("without_a_rate") or []
         if missing:
             lines.append("  no growth rate (a gLV simulation needs one from elsewhere): " + ", ".join(missing))
+            why = rates.get("why_without_a_rate") or {}
+            lines += [f"      {name}: {why[name]}" for name in missing if name in why]
         # the study-level tripwire of #173: a flag, never a refusal, so it says what to check
         for slow in rates.get("slow_studies") or []:
             lines.append(f"  slow as a block: every rate from {slow['study']} ({slow['rates']}, the fastest "
@@ -457,14 +516,17 @@ def report_text(result: dict) -> str:
     skips = condensed(result["skipped"])
     pairs = [(label, reason) for label, reason in skips if about_a_pair(label, reason)]
     notes = [(label, reason) for label, reason in skips if not about_a_pair(label, reason)]
-    lines.append(f"pairs the data did not support ({len(pairs)}):" if pairs
+    # each line points at rows of one study, so it names the organisms as that study does, not by the
+    # current name the interactions above use (#24): said, so an old name here is not read as a slip
+    lines.append(f"pairs the data did not support ({len(pairs)}), named as their study names them:" if pairs
                  else "pairs the data did not support: none")
     lines += [f"  - {label}: {reason}" for label, reason in pairs]
     lines.append("")
     if notes:
         # these are notes about the INPUT, not pairs: counting them under the heading above said a
         # condition was a pair that gave no edge while an arc derived from it was reported above (#232)
-        lines.append(f"notes on the data read ({len(notes)}), which are not pairs:")
+        lines.append(f"notes on the data read ({len(notes)}), which are not pairs, named as their study names "
+                     "them:")
         lines += [f"  - {label}: {reason}" for label, reason in notes]
         lines.append("")
 

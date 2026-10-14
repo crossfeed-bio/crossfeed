@@ -129,13 +129,13 @@ def test_the_rates_file_says_what_each_median_rests_on():
     assert table[0] == ["organism", "growth_rate", "unit", "replicates", "studies", "method", "lag",
                         "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves",
                         "capacity_curves_left_out", "capacity_fall_from_peak", "capacity_medium",
-                        "capacity_source", "doubling_time"]
+                        "capacity_source", "doubling_time", "capacity_technique"]
     # the lag names its own estimator, since it is Baranyi's whichever one produced the rate
     assert table[1] == ["A", "0.42", "1/h", "6", "S1 S2", "growth_rate:easylinear:5", "1.25", "baranyi",
-                        "2e+08", "Cells/mL", "4", "", "", "", "", "1.65"]
+                        "2e+08", "Cells/mL", "4", "", "", "", "", "1.65", ""]
     # a rate with none of the gLV quantities keeps its row and leaves them empty (#118)
     plain = list(csv.reader(io.StringIO(matrix.rates_csv({"a": {"rate": 0.42, "unit": "1/h"}}, net))))
-    assert plain[1] == ["A", "0.42", "1/h", "", "", "", "", "", "", "", "", "", "", "", "", "1.65"]
+    assert plain[1] == ["A", "0.42", "1/h", "", "", "", "", "", "", "", "", "", "", "", "", "1.65", ""]
 
     # and a capacity that rests on fewer curves than were read says how many gave none, so an empty or
     # thin capacity does not read as absence (found 2026-10-06)
@@ -318,3 +318,514 @@ def test_a_diagonal_that_is_not_a_fit_is_named_in_the_readme():
     # and the section is absent when every diagonal is a fit, though the prose still names it
     plain = matrix.readme_from({**got, "substituted_rows": []}, net, {})
     assert heading not in plain and "DIAGONALS THAT ARE NOT A FIT below names" in plain
+
+
+def test_a_genus_row_counts_replicates_and_keeps_where_its_capacity_came_from():
+    """Round 3 of the review, on a live gLV package with --merge-genera: Agrobacterium has one strain, whose
+    row says 3 replicates, 3 capacity curves and a capacity fitted from the monoculture time courses, and
+    its genus row said 1, 1 and nothing. A genus of one strain is that strain; a genus of several sums the
+    replicates and the curves its capacity rests on, and says where the capacity came from, or that the
+    strains disagree."""
+    net = _net([dict(_arc("agro", "blautia", 1.0), source_name="Agrobacterium", target_name="Blautia",
+                     source_identity="genus", target_identity="genus")])
+    fitted = "fitted from the monoculture time courses"
+    agro = {"name": "Agrobacterium tumefaciens C58", "rate": 0.6, "unit": "1/h", "n": 1, "replicates": 3,
+            "studies": ["S1"], "capacity": 2e8, "capacity_unit": "Cells/mL", "capacity_n": 1,
+            "capacity_curves": 3, "capacity_source": fitted, "capacity_medium": "WC",
+            "per_study": {"S1": 0.6}, "capacity_left_out": [["S1 rep 4", "no plateau"]]}
+    b1 = {"name": "Blautia hydrogenotrophica", "rate": 0.3, "unit": "1/h", "n": 1, "replicates": 3,
+          "studies": ["S1"], "capacity": 1e8, "capacity_unit": "Cells/mL", "capacity_n": 1,
+          "capacity_curves": 3, "capacity_source": fitted, "capacity_medium": "WC"}
+    b2 = {**b1, "name": "Blautia wexlerae", "replicates": 2, "capacity": 3e8, "capacity_curves": 2}
+    aligned = matrix.for_nodes(net, {"ncbi:1": agro, "ncbi:2": b1, "ncbi:3": b2})
+
+    one = aligned["agro"]
+    assert {k: one[k] for k in ("replicates", "capacity_curves", "capacity_source", "capacity_medium")} == \
+        {"replicates": 3, "capacity_curves": 3, "capacity_source": fitted, "capacity_medium": "WC"}
+    assert one["name"] == "Agrobacterium" and one["merged_from"] == ["Agrobacterium tumefaciens C58"]
+    # whole: what a merge of several empties is the strain's here
+    assert one["per_study"] == {"S1": 0.6} and one["capacity_left_out"] == [["S1 rep 4", "no plateau"]]
+
+    two = aligned["blautia"]
+    assert two["capacity"] == 2e8                                   # median of 1e8 and 3e8
+    assert two["replicates"] == 5 and two["capacity_curves"] == 5   # 3 + 2, not the 2 fitted rows
+    assert two["capacity_source"] == fitted and two["capacity_medium"] == "WC"
+
+    # strains that disagree say so, rather than one of them speaking for the genus
+    b3 = {**b2, "capacity_source": "-r/K at the measured plateau", "capacity_medium": "mMCB"}
+    mixed = matrix.for_nodes(net, {"ncbi:2": b1, "ncbi:3": b3})["blautia"]
+    assert mixed["capacity_source"] == f"mixed: -r/K at the measured plateau; {fitted}"
+    assert mixed["capacity_medium"] == "mixed: WC; mMCB"
+    # and a strain with no plateau neither counts curves nor speaks for the capacity it is not in
+    b4 = {**b2, "capacity": None, "capacity_curves": None, "capacity_source": "none: no plateau"}
+    partial = matrix.for_nodes(net, {"ncbi:2": b1, "ncbi:3": b4})["blautia"]
+    assert partial["capacity"] == 1e8 and partial["capacity_curves"] == 3
+    assert partial["capacity_source"] == fitted and partial["replicates"] == 5
+    # with no capacity at all there are no curves to count, and every strain's reason is kept
+    b5 = {**b1, "capacity": None, "capacity_curves": 0, "capacity_source": "none: the fit implies none"}
+    none = matrix.for_nodes(net, {"ncbi:2": b5, "ncbi:3": b4})["blautia"]
+    assert none["capacity"] is None and none["capacity_curves"] is None
+    assert none["capacity_source"] == "mixed: none: no plateau; none: the fit implies none"
+
+
+def test_a_renamed_strain_s_rate_joins_its_genus_by_its_current_name():
+    """Round 4 of the review (#24): the genus merge of the arcs used the current name and the rates the
+    study's, so `merged_from` said F. prausnitzii beside arcs saying F. duncaniae, and a strain moved to
+    another genus left that genus with no rate, hence no diagonal."""
+    rate = {"name": "Faecalibacterium prausnitzii A2-165", "rate": 0.7, "unit": "1/h", "n": 3, "studies": ["S1"]}
+    genus = dict(source_identity="genus", target_identity="genus")
+    same = _net([dict(_arc("faecalibacterium", "blautia", 1.0), source_name="Faecalibacterium",
+                      target_name="Blautia", **genus)])
+    row = matrix.for_nodes(same, {"ncbi:411483": rate}, {411483: "Faecalibacterium duncaniae A2-165"})
+    assert row["faecalibacterium"]["merged_from"] == ["Faecalibacterium duncaniae A2-165"]
+    assert matrix.for_nodes(same, {"ncbi:411483": rate})["faecalibacterium"]["merged_from"] == [
+        "Faecalibacterium prausnitzii A2-165"], "without current names, the study's (the control)"
+    moved = _net([dict(_arc("ruminococcus", "blautia", 1.0), source_name="Ruminococcus", target_name="Blautia",
+                       **genus)])
+    assert "ruminococcus" not in matrix.for_nodes(moved, {"ncbi:411483": rate})
+    got = matrix.for_nodes(moved, {"ncbi:411483": rate}, {411483: "Ruminococcus duncaniae A2-165"})
+    assert got["ruminococcus"]["rate"] == 0.7
+    # a rate keyed otherwise is not renamed, as a name-keyed node is not, even when its key is the id's digits
+    kept = matrix.for_nodes(same, {"411483": rate}, {411483: "Faecalibacterium duncaniae A2-165"})
+    assert kept["faecalibacterium"]["merged_from"] == ["Faecalibacterium prausnitzii A2-165"]
+
+
+def test_a_genus_row_of_several_strains_says_what_a_strain_row_says_beside_its_numbers():
+    """Round 4 of the review. A genus of several strains dropped `n_label`, so the report called the summed
+    fitted rows "monoculture replicate(s)" and the capacity rows "curve(s)" where growth_rates.csv said 5;
+    and it dropped the lag's method, the plateau's fall and its media, which a genus of one strain kept."""
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    net = _net([dict(_arc("blautia", "roseburia", 1.0), source_name="Blautia", target_name="Roseburia",
+                     source_identity="genus", target_identity="genus")])
+    strain = {"rate": 0.3, "unit": "1/h", "n": 1, "n_label": "fitted row(s)", "studies": ["S1"],
+              "lag": 0.5, "lag_method": "baranyi", "capacity": 1e8, "capacity_unit": "Cells/mL", "capacity_n": 1,
+              "capacity_curves": 3, "replicates": 3, "capacity_fall": 2.0, "capacity_media": ["WC"],
+              "capacity_medium": "WC", "capacity_source": "fitted from the monoculture time courses"}
+    rates = {"ncbi:1": {**strain, "name": "Blautia hydrogenotrophica"},
+             "ncbi:2": {**strain, "name": "Blautia wexlerae", "capacity_curves": 2, "replicates": 2,
+                        "capacity_fall": 4.0}}
+    row = matrix.for_nodes(net, rates)["blautia"]
+    assert row["n_label"] == "fitted row(s)" and row["lag_method"] == "baranyi"
+    assert row["capacity_fall"] == 3.0 and row["capacity_media"] == ["WC"]       # median of 2 and 4
+    csv_row = dict(zip(*[line.split(",") for line in matrix.rates_csv({"blautia": row}).splitlines()[:2]],
+                       strict=True))
+    assert csv_row["lag_method"] == "baranyi" and csv_row["capacity_fall_from_peak"] == "3"
+    shown = InteractionNetwork()
+    shown.meta["growth_rates"] = {"rule": "r", "organisms": {"blautia": row}}
+    text = report_text({"network": shown, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    # the rate is the median of the strains' own rates, resting on their two fitted rows (round 5: "median
+    # of 2 fitted row(s)" named a median that was not taken)
+    assert ("median of the 2 strains' rates (Blautia hydrogenotrophica, Blautia wexlerae), resting on 2 "
+            "fitted row(s)") in text and "monoculture replicate(s)" not in text, text
+    assert ("the median of the 2 strains' capacities (Blautia hydrogenotrophica, Blautia wexlerae), resting on "
+            "2 row(s)") in text, text
+    assert "a genus of several strains: the median of its strains' rates" in matrix.rate_meta(
+        net, {"blautia": row}, "integrated:two_stage")["rule"]
+    # a genus of ONE strain carries merged_from too, and is that strain's rate (round 6: `> 1` was unpinned)
+    one = matrix.for_nodes(net, {"ncbi:1": rates["ncbi:1"]})
+    assert one["blautia"]["merged_from"] == ["Blautia hydrogenotrophica"]
+    assert "a genus" not in matrix.rate_meta(net, one, "integrated:two_stage")["rule"]
+    # and the package README states the same rule, which kept the old words (round 6)
+    pnet = _net([dict(_arc("blautia", "roseburia", 1.0), source_name="Blautia", target_name="Roseburia",
+                      source_identity="genus", target_identity="genus", metric="growth_rate:easylinear:5")])
+    got = matrix.coefficients(pnet, {"blautia": row})
+    assert "a genus of several strains: the median of its strains' rates" in matrix.readme_from(
+        got, pnet, {"blautia": row})
+    assert "a genus of several" not in matrix.readme_from(matrix.coefficients(pnet, one), pnet, one)
+    # a strain with no capacity neither makes the medium "mixed" nor adds a fall, a medium or a lag method
+    bare = {**strain, "name": "Blautia obeum", "capacity": None, "capacity_medium": "", "capacity_media": ["mGAM"],
+            "capacity_fall": 9.0, "capacity_curves": None,       # whatever it carries, it is not behind the capacity
+            "lag": None, "lag_method": "", "capacity_other_media": ["YCFA"]}
+    partial = matrix.for_nodes(net, {"ncbi:1": rates["ncbi:1"], "ncbi:3": bare})["blautia"]
+    assert partial["capacity_medium"] == "WC" and partial["capacity_fall"] == 2.0
+    # one strain's plateau is that strain's, not "the median of the strains' capacities" (round 6)
+    assert partial["capacity_from"] == ["Blautia hydrogenotrophica"]
+    shown.meta["growth_rates"]["organisms"] = {"blautia": partial}
+    alone = report_text({"network": shown, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                         "skipped": [], "entries": []})
+    assert "Blautia hydrogenotrophica's alone, from 1 row(s)" in alone and "capacities" not in alone, alone
+    assert partial["capacity_media"] == ["WC"] and partial["capacity_other_media"] == []
+    assert partial["lag_method"] == "baranyi"
+    # a median of three is the middle one, not the mean (5 here)
+    third = {**strain, "name": "Blautia luti", "capacity_fall": 9.0}
+    assert matrix.for_nodes(net, {**rates, "ncbi:4": third})["blautia"]["capacity_fall"] == 4.0
+    # no strain with a lag: no method, rather than "mixed: " (every row in gLV mode)
+    nolag = {k: {**v, "lag": None, "lag_method": ""} for k, v in rates.items()}
+    assert matrix.for_nodes(net, nolag)["blautia"]["lag_method"] == ""
+    # plateaus in two units give no capacity, and then no fall and no media either
+    other_unit = {**rates["ncbi:2"], "capacity_unit": "OD", "capacity_media": ["mGAM"]}
+    split = matrix.for_nodes(net, {"ncbi:1": rates["ncbi:1"], "ncbi:2": other_unit})["blautia"]
+    assert split["capacity"] is None and split["capacity_fall"] is None
+    assert split["capacity_media"] == [] and split["capacity_other_media"] == []
+    # strains whose plateau is in each other's medium leave no OTHER medium: both are the capacity's
+    swapped = {"ncbi:1": {**rates["ncbi:1"], "capacity_other_media": ["mGAM"]},
+               "ncbi:2": {**rates["ncbi:2"], "capacity_media": ["mGAM"], "capacity_other_media": ["WC"]}}
+    both = matrix.for_nodes(net, swapped)["blautia"]
+    assert both["capacity_media"] == ["WC", "mGAM"] and both["capacity_other_media"] == []
+    # strains that plateaued in different media are not an alias merge (round 6: each medium printed as a
+    # spelling "read as one medium by the alias table")
+    spelled = {k: {**v, "capacity_medium_spellings": v["capacity_media"]} for k, v in swapped.items()}
+    spelled["ncbi:2"]["capacity_medium"] = "mGAM"
+    shown.meta["growth_rates"]["organisms"] = {"blautia": matrix.for_nodes(net, spelled)["blautia"]}
+    mixed = report_text({"network": shown, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                         "skipped": [], "entries": []})
+    assert "capacity measured in mixed: WC; mGAM" in mixed and "alias table" not in mixed, mixed
+    # the other media a plateau is in travel, as on a strain row, and reach the report
+    elsewhere = {k: {**v, "capacity_other_media": ["mGAM"], "capacity_medium_spellings": ["WC", "Wilkins-Chalgren"]}
+                 for k, v in rates.items()}
+    row = matrix.for_nodes(net, elsewhere)["blautia"]
+    assert row["capacity_other_media"] == ["mGAM"]
+    # and so do the spellings the alias table read as one medium, which METHOD_NOTES says is never silent
+    assert row["capacity_medium_spellings"] == ["WC", "Wilkins-Chalgren"]
+    shown.meta["growth_rates"]["organisms"] = {"blautia": row}
+    text = report_text({"network": shown, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "a plateau in mGAM is not pooled into the capacity above" in text, text
+    assert "Wilkins-Chalgren" in text and "read as one medium by the alias table" in text, text
+
+
+def test_a_genus_of_measured_strains_counts_their_replicates_in_the_payload_as_the_csv_does():
+    """Round 5 of the review: a measured strain row counts its replicates in `n` and has no `replicates`,
+    so a genus row of two had `replicates` None, and the payload sent null where the zip's csv said 7."""
+    net = _net([dict(_arc("blautia", "roseburia", 1.0), source_name="Blautia", target_name="Roseburia",
+                     source_identity="genus", target_identity="genus", metric="growth_rate:easylinear:5")])
+    strain = {"rate": 0.3, "unit": "1/h", "studies": ["S1"], "capacity": 1e8, "capacity_unit": "Cells/mL",
+              "capacity_n": 3}
+    row = matrix.for_nodes(net, {"ncbi:1": {**strain, "name": "Blautia hydrogenotrophica", "n": 3},
+                                 "ncbi:2": {**strain, "name": "Blautia wexlerae", "n": 4}})["blautia"]
+    assert row["replicates"] == 7
+    detail = [d for d in matrix.glv_payload(net, {"blautia": row})["growth_rate_detail"]
+              if d["organism"] == "Blautia"]
+    assert [d["replicates"] for d in detail] == [7]
+    # and a row whose `replicates` is present but empty falls back to `n`, as the csv does
+    detail = matrix.glv_payload(net, {"blautia": {**row, "replicates": None}})["growth_rate_detail"]
+    assert [d["replicates"] for d in detail if d["organism"] == "Blautia"] == [row["n"]]
+
+
+# ---- a genus row, round 6 of the review: the guards and counts the tests above left open -------------
+
+_GENUS_NET = _net([dict(_arc("blautia", "roseburia", 1.0), source_name="Blautia", target_name="Roseburia",
+                         source_identity="genus", target_identity="genus", metric="growth_rate:easylinear:5")])
+_STRAIN = {"rate": 0.3, "unit": "1/h", "n": 1, "n_label": "fitted row(s)", "studies": ["S1"], "capacity": 1e8,
+           "capacity_unit": "Cells/mL", "capacity_n": 1, "replicates": 3, "capacity_media": ["WC"],
+           "capacity_medium": "WC", "capacity_medium_spellings": ["WC", "Wilkins-Chalgren"],
+           "capacity_other_media": ["YCFA"], "capacity_source": "fitted from the monoculture time courses"}
+
+
+def _genus_report(row):
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    shown = InteractionNetwork()
+    shown.meta["growth_rates"] = {"rule": "r", "organisms": {"blautia": row}}
+    return report_text({"network": shown, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+
+
+def test_a_genus_whose_plateaus_are_in_two_units_has_no_capacity_and_names_no_medium_for_it():
+    """Plateaus in Cells/mL and in OD are not converted, so the genus has no capacity, and the medium, the
+    other media and the alias spellings of one were still said beside it (report and payload)."""
+    row = matrix.for_nodes(_GENUS_NET, {"ncbi:1": {**_STRAIN, "name": "Blautia a"},
+                                        "ncbi:2": {**_STRAIN, "name": "Blautia b", "capacity_unit": "OD"}})["blautia"]
+    assert row["capacity"] is None and row["capacity_medium"] == ""
+    assert row["capacity_other_media"] == [] and row["capacity_medium_spellings"] == []
+    text = _genus_report(row)
+    assert "capacity measured in" not in text and "not pooled" not in text and "alias" not in text, text
+    units = "(Cells/mL by an unrecorded technique, OD by an unrecorded technique)"
+    assert "no capacity: its strains' plateaus are in different units or techniques " + units in text, text
+
+
+def test_a_genus_of_one_strain_reads_as_that_strain():
+    row = matrix.for_nodes(_GENUS_NET, {"ncbi:1": {**_STRAIN, "name": "Blautia a"}})["blautia"]
+    text = _genus_report(row)
+    assert "strains' rates" not in text and "strains' capacities" not in text, text
+    assert "a genus" not in matrix.rate_meta(_GENUS_NET, {"blautia": row}, "easylinear")["rule"]
+
+
+def test_the_rule_names_a_genus_of_several_beside_one_of_one():
+    rates = {"ncbi:1": {**_STRAIN, "name": "Blautia a"}, "ncbi:2": {**_STRAIN, "name": "Blautia b"},
+             "ncbi:3": {**_STRAIN, "name": "Roseburia c"}}
+    assert "a genus of several" in matrix.rate_meta(_GENUS_NET, matrix.for_nodes(_GENUS_NET, rates),
+                                                     "easylinear")["rule"]
+
+
+def test_a_strain_whose_replicates_are_empty_counts_its_rows():
+    """integrated.py writes rows whose `replicates` is present and None; the sum falls back to `n` there."""
+    rates = {"ncbi:1": {**_STRAIN, "name": "Blautia a", "n": 2, "replicates": None},
+             "ncbi:2": {**_STRAIN, "name": "Blautia b", "n": 3, "replicates": 4}}
+    assert matrix.for_nodes(_GENUS_NET, rates)["blautia"]["replicates"] == 6
+
+
+def test_a_genus_whose_plateaus_are_in_two_units_leaves_every_plateau_out_and_says_why():
+    """Round 7 of the review: such a genus has no capacity, while growth_rates.csv said 1 curve was left out
+    of 10 that plateaued, and the report kept a strain's "capacity is taken from WC" beside no capacity.
+    Strain a: 4 curves in WC and 3 in mGAM (named as left out by its own merge), Cells/mL; strain b: 3 in OD."""
+    taken = ("r", "its plateau is in mGAM, and this organism's capacity is taken from WC, where more curves "
+                  "reached a plateau")
+    # capacity_n counts what each plateau rests on (rows here, as `n_label` says); capacity_curves is the
+    # monoculture replicates in gLV mode and is not what the left-out entries count (round 8 of the review)
+    rates = {"ncbi:1": {**_STRAIN, "name": "Blautia a", "capacity_n": 4, "capacity_curves": 9,
+                        "capacity_left_out": [taken] * 3},
+             "ncbi:2": {**_STRAIN, "name": "Blautia b", "capacity_unit": "OD", "capacity_n": 3, "capacity_curves": 9,
+                        "capacity_left_out": [("q", "the curve never reached a plateau")]}}
+    row = matrix.for_nodes(_GENUS_NET, rates)["blautia"]
+    assert row["capacity"] is None and len(row["capacity_left_out"]) == 1 + 4 + 3 + 3
+    assert not any("taken from" in why for _, why in row["capacity_left_out"])
+    # a strain's plateaus in another medium keep their own names; their unit is their medium's (round 9)
+    assert [what for what, _ in row["capacity_left_out"]].count("r") == 3
+    units = "(Cells/mL by an unrecorded technique, OD by an unrecorded technique)"
+    assert sum("plateaued in different units or techniques " + units in why
+               for _, why in row["capacity_left_out"]) == 10
+    table = matrix.rates_csv({"blautia": row}).splitlines()
+    assert dict(zip(table[0].split(","), table[1].split(","), strict=True))["capacity_curves_left_out"] == "11"
+    text = _genus_report(row)
+    assert "11 row(s) gave no capacity" in text and "taken from" not in text, text
+
+
+def test_the_integrated_package_readme_states_the_genus_rule_too():
+    """Round 7 of the review: the clause was tested on the replicate README only, and the integrated one,
+    which gLV mode writes, has its own wording."""
+    net = _net([dict(_arc("blautia", "roseburia", 1.0), source_name="Blautia", target_name="Roseburia",
+                     source_identity="genus", target_identity="genus", metric="integrated:two_stage",
+                     coefficient=-1e-10)])
+    net.meta["settings"] = {"derivation": "integrated"}
+    rates = matrix.for_nodes(net, {"ncbi:1": {**_STRAIN, "name": "Blautia a", "method": "integrated:two_stage"},
+                                   "ncbi:2": {**_STRAIN, "name": "Blautia b", "method": "integrated:two_stage"}})
+    readme = matrix.readme_from(matrix.coefficients(net, rates), net, rates)
+    assert "the median over the fitted rows" in readme, "the integrated wording"
+    assert "a genus of several strains: the median of its strains' rates" in readme
+
+
+def test_the_genus_guards_the_seventh_review_round_left_open():
+    """Round 7 of the review, mutants that survived: the count of strains behind a capacity, a genus with
+    no capacity listing strains behind one, the units sentence on a row that has a capacity, a unitless
+    capacity counted into capacity_n; and the reason the README and the payload give for no capacity."""
+    rates = {"ncbi:1": {**_STRAIN, "name": "Blautia a"}, "ncbi:2": {**_STRAIN, "name": "Blautia b"},
+             "ncbi:3": {**_STRAIN, "name": "Blautia c", "capacity": None, "capacity_n": 0}}
+    three = matrix.for_nodes(_GENUS_NET, rates)["blautia"]
+    assert "the median of the 2 strains' capacities (Blautia a, Blautia b)" in _genus_report(three)
+    split = matrix.for_nodes(_GENUS_NET, {"ncbi:1": {**_STRAIN, "name": "Blautia a"},
+                                          "ncbi:2": {**_STRAIN, "name": "Blautia b", "capacity_unit": "OD"}})
+    assert split["blautia"]["capacity_from"] == []
+    # integrated.py writes a strain row with a capacity and plateaus in other units beside it
+    has_one = {**_STRAIN, "name": "Blautia a", "other_capacity_units": ["S1 (OD)", "S2 (CFU/mL)"]}
+    assert "no capacity" not in _genus_report(has_one)
+    unitless = {"ncbi:1": {**_STRAIN, "name": "Blautia a", "capacity_n": 2},
+                "ncbi:2": {**_STRAIN, "name": "Blautia b", "capacity_unit": "", "capacity_n": 3}}
+    assert matrix.for_nodes(_GENUS_NET, unitless)["blautia"]["capacity_n"] == 2
+    # the README and the payload give the true reason: the plateaus were reached, in two units
+    got = matrix.coefficients(_GENUS_NET, split)
+    reasons = dict(got["left_out"])
+    units = "(Cells/mL by an unrecorded technique, OD by an unrecorded technique)"
+    assert "its strains' plateaus are in different units or techniques " + units + ", which are not compared" in \
+        reasons["Blautia"], reasons
+    assert "reached stationary phase" not in reasons["Blautia"]
+    # and the rule says what the capacity is, as the rate's
+    assert "its capacity the median of the capacities of those of its strains that have one, in one unit" in \
+        matrix.rate_meta(_GENUS_NET, matrix.for_nodes(_GENUS_NET, rates), "easylinear")["rule"]
+
+
+def test_a_split_unit_genus_of_replicate_rows_counts_its_curves():
+    """Round 8 of the review: the default derivation's strain rows carry no capacity_curves, and the count
+    must come from capacity_n there too; each plateau is named with its unit."""
+    strain = {k: v for k, v in _STRAIN.items() if k not in ("n_label", "capacity_curves", "replicates")}
+    rates = {"ncbi:1": {**strain, "name": "Blautia a", "capacity_n": 3},
+             "ncbi:2": {**strain, "name": "Blautia b", "capacity_unit": "OD", "capacity_n": 2}}
+    row = matrix.for_nodes(_GENUS_NET, rates)["blautia"]
+    names = [what for what, _ in row["capacity_left_out"]]
+    assert names == ["Blautia a: plateau 1 of 3 (Cells/mL)", "Blautia a: plateau 2 of 3 (Cells/mL)",
+                     "Blautia a: plateau 3 of 3 (Cells/mL)", "Blautia b: plateau 1 of 2 (OD)",
+                     "Blautia b: plateau 2 of 2 (OD)"], names
+    assert "5 curve(s) gave no capacity" in _genus_report(row)
+
+
+def test_a_genus_whose_strains_rates_are_in_different_time_units_has_no_rate():
+    """Round 10 of the review: the median was taken across 1/h and 1/d with the unit "", the matrix read it
+    in its own unit, and the report printed a doubling time in hours. Which unit wins is not decided, so the
+    genus has none, and is listed without a rate. A strain's own rates in another unit are carried up."""
+    rates = {"ncbi:1": {**_STRAIN, "name": "Blautia a", "unit": "1/h", "other_units": ["S2 (1/d)"]},
+             "ncbi:2": {**_STRAIN, "name": "Blautia b", "rate": 7.2, "unit": "1/d", "other_units": ["S3 (1/min)"]}}
+    got = matrix.for_nodes(_GENUS_NET, rates)
+    assert "blautia" not in got
+    meta = matrix.rate_meta(_GENUS_NET, got, "m")
+    assert "Blautia" in meta["without_a_rate"]
+    # and says why, in the meta, the report and the README (round 11 of the review)
+    why = ("its strains' growth rates are in different time units (Blautia a 1/h; Blautia b 1/d), which are not "
+           "converted")
+    assert meta["why_without_a_rate"] == {"Blautia": why}
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    shown = InteractionNetwork()
+    shown.meta["growth_rates"] = meta
+    assert f"      Blautia: {why}" in report_text({"network": shown, "resolved": [], "unresolved": [], "studies": [],
+                                                    "errors": [], "skipped": [], "entries": []})
+    assert dict(matrix.coefficients(_GENUS_NET, got)["left_out"])["Blautia"].startswith(why)
+    same = {"ncbi:1": rates["ncbi:1"], "ncbi:2": {**rates["ncbi:2"], "rate": 0.3, "unit": "1/h"}}
+    row = matrix.for_nodes(_GENUS_NET, same)["blautia"]
+    assert row["unit"] == "1/h" and row["other_units"] == ["Blautia a: S2 (1/d)", "Blautia b: S3 (1/min)"]
+    assert "rates in another time unit left out: Blautia a: S2 (1/d)" in _genus_report(row)
+
+
+def test_an_organism_that_grows_only_with_a_partner_says_why_it_has_no_rate_too():
+    """Round 15 of the review: Agrobacterium in SMGDB00000014 grows only with a partner and had its rates
+    refused for their starting spread; the package said only the first, and R reads only the package."""
+    net = _net([dict(_arc("p", "o", 1.0), outcome="obligate", strength=None, weight=None, source_name="P",
+                     target_name="O", metric="growth_rate:easylinear:5", metric_with=0.4, metric_without=0.0)])
+    rates = matrix.NodeRates({"p": {**_STRAIN, "name": "P"}})
+    rates.no_rate["O"] = "its monocultures' growth rates were left out: S14: they started 24 times apart (#81)"
+    reasons = dict(matrix.coefficients(net, rates)["left_out"])
+    assert "O" in reasons, reasons
+    assert reasons["O"].endswith("; it has no growth rate: " + rates.no_rate["O"]), reasons["O"]
+    # with no reason known, nothing is added (round 16: "it has no growth rate: None" reached R)
+    bare = dict(matrix.coefficients(net, matrix.NodeRates({"p": {**_STRAIN, "name": "P"}}))["left_out"])
+    assert bare["O"].endswith("so its self-limitation cannot be fitted"), bare["O"]
+
+
+def test_a_merged_arc_on_a_genus_without_a_rate_says_so_and_is_in_no_matrix():
+    """Round 16 of the review: the genus package said "the rates behind this arc were not recorded" of a
+    merged arc whose members recorded theirs (it is converted with the affected genus's own rate, which it
+    lacked), and listed the pair as an effect "left at 0" though that genus is in no matrix."""
+    net = _net([dict(_arc("p", "o", -0.3266), source_name="Comamonas", target_name="Agrobacterium",
+                     merged_arcs=2, partner_abundance=2.78e8, partner_abundance_unit="Cells/mL",
+                     metric="growth_rate:easylinear:5")])
+    got = matrix.coefficients(net, {"p": {**_STRAIN, "name": "Comamonas"}})
+    assert not [row for row in got["pairs_left_out"] if row[0] == "Agrobacterium"], got["pairs_left_out"]
+    ((affected, actor, why),) = [row for row in got["across_units"] if row[0] == "Agrobacterium"]
+    assert why.startswith("a merged arc is converted with Agrobacterium's own growth rate, which it has none of")
+    assert why.endswith("; Agrobacterium is in no matrix"), why
+
+
+def test_the_package_routes_each_left_out_effect_where_it_is():
+    """Round 17 of the review. (1) A pair whose arcs split across units still has a cell from the rest; the
+    split-off arcs were listed under "left at 0 ... cannot be fitted" beside that value. (2) A merged arc with
+    no median ratio said the rates behind it were not recorded. (3) Two organisms in no matrix read "is"."""
+    split = _net([dict(_arc("b", "a", 1.0, study_id=s), partner_abundance=2e8, partner_abundance_unit=u,
+                       metric="growth_rate:easylinear:5", metric_with=0.4, metric_without=0.2)
+                  for s, u in (("S1", "Cells/mL"), ("S2", "Cells/mL"), ("S3", "CFUs/mL"))])
+    rates = {nid: {**_STRAIN, "name": nid.upper()} for nid in ("a", "b")}
+    got = matrix.coefficients(split, rates)
+    assert not got["pairs_left_out"], got["pairs_left_out"]
+    ((affected, actor, why),) = got["arcs_left_out"]
+    assert (affected, actor) == ("A", "B") and "1 arc(s) of this pair measure the actor in CFUs/mL" in why
+    assert "cannot be fitted" not in why
+    # and the payload carries it for R, which prints it (round 18: no test read the payload's list)
+    assert matrix.glv_payload(split, rates)["caveats"]["arcs_left_out"] == [["A", "B", why]]
+    readme = matrix.readme_from(got, split, rates)
+    assert "These pairs have arcs left out of their cell" in readme and "These effects are left at 0" not in readme
+    merged = _net([dict(_arc("b", "a", 1.0), strength=None, weight=None, outcome="obligate", merged_arcs=3,
+                        partner_abundance=2e8, metric="growth_rate:easylinear:5")])
+    reasons = {(a, b): w for a, b, w in matrix.coefficients(merged, rates)["pairs_left_out"]}
+    assert reasons[("A", "B")].startswith("a merged arc whose members do not all have a ratio"), reasons
+    both = _net([dict(_arc("b", "a", -0.3), merged_arcs=2, partner_abundance=2e8,
+                      metric="growth_rate:easylinear:5")])
+    ((_, _, why),) = matrix.coefficients(both, {})["across_units"]
+    assert why.endswith("; A and B are in no matrix"), why
+
+
+def test_a_merged_obligate_arc_still_counts_in_the_sign_check():
+    """Round 17 of the review (High, a regression from main): two obligate arcs with different bounds
+    merged into an arc with no bound but the same rule, read as "the rule bounds nothing", and dropped out
+    of the package without a word; beside an inhibition the cell then held the inhibition's number, where
+    main named the pair's sign conflict. Alone, the obligate pair wrote a 0 named nowhere."""
+    from grownet.derive import _merged
+    member = {"source": "a", "target": "c", "source_name": "A", "target_name": "C", "effect": "facilitation",
+              "strength": None, "outcome": "obligate", "status": "present", "study_id": "S1",
+              "bound_rule": "no growth: at most 1.5 times its start", "metric": "growth_rate:easylinear:5",
+              "metric_with": 0.4, "metric_without": 0.0, "partner_abundance": 2e8,
+              "partner_abundance_unit": "Cells/mL"}
+    merged = _merged([{**member, "strength_bound": 5.14}, {**member, "study_id": "S2", "strength_bound": 4.42,
+                                                           "metric_with": 0.5}])
+    assert merged["strength_bound"] is None and merged["bound_rule"] == "", "no rule without its bound"
+    inhibition = {**member, "effect": "inhibition", "strength": -0.3558, "outcome": "quantified",
+                  "bound_rule": "", "study_id": "S3", "metric_with": 0.3, "metric_without": 0.4}
+    rates = {nid: {**_STRAIN, "name": nid.upper()} for nid in ("a", "c")}
+    both = matrix.coefficients(_net([merged, inhibition]), rates)
+    assert ("C", "A") in [(a, b) for block in both["matrices"] for a, b in block["conflicts"]], both["matrices"]
+    alone = matrix.coefficients(_net([merged]), rates)
+    named = {(a, b): why for a, b, why in alone["pairs_left_out"]}
+    assert named[("C", "A")].startswith("a merged arc whose members do not all have a ratio"), named
+    # members that all bound nothing stay that way
+    nothing = _merged([{**member, "strength_bound": None}, {**member, "study_id": "S2", "strength_bound": None}])
+    assert nothing["bound_rule"] == member["bound_rule"]
+    # members whose bounds agree keep the bound and its rule; one bounded member beside one that bounds
+    # nothing keeps neither, as no single bound is the merged arc's (round 18: both survived as mutants)
+    agree = _merged([{**member, "strength_bound": 5.14}, {**member, "study_id": "S2", "strength_bound": 5.14}])
+    assert (agree["strength_bound"], agree["bound_rule"]) == (5.14, member["bound_rule"])
+    mixed = _merged([{**member, "strength_bound": 5.14}, {**member, "study_id": "S2", "strength_bound": None}])
+    assert (mixed["strength_bound"], mixed["bound_rule"]) == (None, "")
+
+
+def test_an_unfitted_effect_is_routed_by_where_its_organisms_are():
+    """Round 17 of the review: an unfitted pair whose organisms sit in different unit matrices was listed
+    as left at 0 though no cell exists; the actor, not only the affected, can be the one in no matrix; and a
+    plain arc with no recorded rates is not called a merged one."""
+    c_ml = dict(_STRAIN, capacity_unit="Cells/mL")
+    od = dict(_STRAIN, capacity_unit="OD")
+    rates = {"a": {**c_ml, "name": "A"}, "b": {**od, "name": "B"}, "c": {**c_ml, "name": "C"}}
+    net = _net([dict(_arc("b", "a", 0.5), partner_abundance=None, metric="growth_rate:easylinear:5"),
+                dict(_arc("c", "a", 0.5), partner_abundance=2e8, metric="growth_rate:easylinear:5")])
+    got = matrix.coefficients(net, rates)
+    across = {(a, b): why for a, b, why in got["across_units"]}
+    assert across[("A", "B")].endswith("B is counted in OD and A in Cells/mL, so this effect is in neither matrix")
+    plain = {(a, b): why for a, b, why in got["pairs_left_out"]}
+    assert ("A", "B") not in plain
+    # and the package then says an effect between organisms counted differently was measured (round 17)
+    assert "1 effect(s) between organisms counted differently were measured" in \
+        matrix.glv_payload(net, rates)["caveats"]["units"]
+    # the actor in no matrix: D acts on A, and A is in one
+    actor_out = _net([dict(_arc("d", "a", 0.5), partner_abundance=None, metric="growth_rate:easylinear:5")])
+    ((affected, actor, why),) = matrix.coefficients(actor_out, {"a": {**c_ml, "name": "A"}})["across_units"]
+    assert (affected, actor) == ("A", "D") and why.endswith("; D is in no matrix"), why
+    # a plain arc on an organism with no rate: not called a merged arc
+    plain_arc = _net([dict(_arc("a", "d", 0.5), partner_abundance=2e8, metric="growth_rate:easylinear:5")])
+    ((_, _, why),) = matrix.coefficients(plain_arc, {"a": {**c_ml, "name": "A"}})["across_units"]
+    assert "merged arc" not in why and why.startswith("the rates behind this arc were not recorded"), why
+
+
+def test_a_genus_whose_strains_plateau_in_two_units_takes_the_one_with_more_time_points():
+    """Karoline, 2026-10-14 (#292): where plateaus are in several units or techniques, the one with more time
+    points is used. Blautia a's plateau is in Cells/mL by fc over 20 points, Blautia b's in OD over 8: the
+    genus's capacity is a's, in Cells/mL, where it used to have none; with as many points it has none."""
+    a = {**_STRAIN, "name": "Blautia a", "capacity_technique": "fc", "capacity_points": 20}
+    b = {**_STRAIN, "name": "Blautia b", "capacity_unit": "OD", "capacity": 0.8, "capacity_technique": "od",
+         "capacity_points": 8}
+    row = matrix.for_nodes(_GENUS_NET, {"ncbi:1": a, "ncbi:2": b})["blautia"]
+    assert row["capacity"] == a["capacity"] and row["capacity_unit"] == "Cells/mL"
+    assert row["capacity_from"] == ["Blautia a"]
+    tied = matrix.for_nodes(_GENUS_NET, {"ncbi:1": a, "ncbi:2": {**b, "capacity_points": 20}})["blautia"]
+    assert tied["capacity"] is None
+
+
+
+def test_a_genus_does_not_pool_its_strains_plateaus_across_techniques():
+    """#292, "Technique and unit": Blautia a's plateau is in Cells/mL by fc over 20 points (1e8), Blautia b's
+    in Cells/mL by 16S over 8 (3e8). The genus's capacity is a's alone, not the median 2e8 of the two."""
+    a = {**_STRAIN, "name": "Blautia a", "capacity_technique": "fc", "capacity_points": 20}
+    b = {**_STRAIN, "name": "Blautia b", "capacity": 3e8, "capacity_technique": "16s", "capacity_points": 8}
+    row = matrix.for_nodes(_GENUS_NET, {"ncbi:1": a, "ncbi:2": b})["blautia"]
+    assert row["capacity"] == 1e8 and row["capacity_from"] == ["Blautia a"]
+
+
+def test_the_rates_file_names_the_technique_of_the_plateau():
+    """#292: growth_rates.csv names the technique a capacity was measured by, in its last column."""
+    rates = {"a": {**_STRAIN, "name": "A", "capacity_technique": "fc"}}
+    table = list(csv.reader(io.StringIO(matrix.rates_csv(rates))))
+    assert table[0][-1] == "capacity_technique" and table[1][-1] == "fc"
+
+
+def test_the_payload_and_the_report_name_the_technique_of_the_plateau():
+    """#292: the gLV payload carries the plateau's technique beside its unit, and the report says it."""
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    rate = {**_STRAIN, "name": "A", "capacity_technique": "fc"}
+    net = _net([dict(_arc("b", "a", 0.5), partner_abundance=2e8, metric="growth_rate:easylinear:5",
+                     metric_with=0.4, metric_without=0.2)])
+    (detail,) = [d for d in matrix.glv_payload(net, {"a": rate, "b": {**_STRAIN, "name": "B"}})["growth_rate_detail"]
+                 if d["organism"] == "A"]
+    assert detail["carrying_capacity_technique"] == "fc"
+    plain = InteractionNetwork()
+    plain.meta["growth_rates"] = {"rule": "r", "organisms": {"a": rate}}
+    text = report_text({"network": plain, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "capacity measured in WC by fc" in text, text

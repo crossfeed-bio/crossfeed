@@ -22,6 +22,7 @@ import json
 import os
 import urllib.request
 
+from . import tls
 from .model import SCHEMA, InteractionNetwork
 
 FORMAT = "grownet.all_result/v1"
@@ -33,7 +34,8 @@ FILE = f"all_result.{SCHEMA.rsplit('/', 1)[-1]}.json"
 URL = f"https://github.com/crossfeed-bio/crossfeed/releases/download/{RELEASE_TAG}/{FILE}"
 # 36 hours, not one day (Karoline, 2026-10-12, on #196: "Extend to 36 hours"). The workflow runs once a
 # day and GitHub starts scheduled runs late by a varying amount: the gap between two published artifacts
-# reached 27h20m, and 7 of 12 consecutive gaps exceeded 24 hours (measured 2026-10-12), so with a one-day
+# reached 27h20m (first hand run to first scheduled one), and 7 of 12 consecutive scheduled runs ended more
+# than 24 hours after the one before (measured 2026-10-12; 6 of 12 by start time), so with a one-day
 # window the file went stale most nights before its replacement landed, and every copy of grownet derived
 # All live from mGrowthDB at once, which is the load the workflow exists to prevent. The format id and the
 # derivation check are what keep a reader from a WRONG artifact; the age only bounds how old the data is,
@@ -164,7 +166,9 @@ def fetch(settings: dict | None = None, why: list | None = None) -> dict | None:
     """The published All result, or None when there is none, it is `MAX_AGE` old or more, it was derived
     by another derivation than `settings` asks for, or GitHub cannot be reached: the caller then derives
     live."""
-    return fetch_from(urllib.request.urlopen, settings=settings, why=why)
+    def opener(url, timeout=None):
+        return urllib.request.urlopen(url, timeout=timeout, context=tls.context())   # noqa: S310 - https
+    return fetch_from(opener, settings=settings, why=why)
 
 
 def fetch_from(opener, now: datetime.datetime | None = None, settings: dict | None = None,

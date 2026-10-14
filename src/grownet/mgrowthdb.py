@@ -24,6 +24,7 @@ import io
 import json
 import os
 import socket
+import ssl
 import sys
 import threading
 import time
@@ -32,7 +33,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Iterable
 
-from . import __version__
+from . import __version__, tls
 from .brand import NAME
 from .model import Edge, InteractionNetwork, Node, Study
 
@@ -376,8 +377,11 @@ class MGrowthDBClient:
         if fresh or conn is None:
             if conn is not None:
                 conn.close()
-            kind = _HTTPSConnection if self._scheme == "https" else _HTTPConnection
-            conn = self._local.conn = kind(self._host, timeout=self.timeout)
+            if self._scheme == "https":
+                conn = _HTTPSConnection(self._host, timeout=self.timeout, context=tls.context())
+            else:
+                conn = _HTTPConnection(self._host, timeout=self.timeout)
+            self._local.conn = conn
         return conn
 
     def _send(self, url: str, accept: str) -> bytes:
@@ -423,6 +427,12 @@ class MGrowthDBClient:
                         f"mGrowthDB returned HTTP {e.code} for {url} (check the id; API docs: {API_DOCS})",
                         status=e.code) from None
                 last = MGrowthDBError(f"mGrowthDB returned HTTP {e.code} for {url} (server error)", status=e.code)
+            except ssl.SSLCertVerificationError as e:
+                # not the network and not the server being down, so it says what it is: a retry cannot fix it
+                why = getattr(e, "verify_message", None) or e
+                raise MGrowthDBError(
+                    f"could not verify mGrowthDB's certificate at {url}: {why} (the operating system does "
+                    "not trust it; check the computer's date and its certificates)") from None
             except _NETWORK as e:
                 last = MGrowthDBError(
                     f"could not reach mGrowthDB at {url}: {getattr(e, 'reason', e) or type(e).__name__} "

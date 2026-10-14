@@ -232,6 +232,7 @@ def _settings_of(a) -> dict:
             # than wrong, and `report.py` promises every setting with its value (found reviewing #242).
             "exclude_studies": getattr(a, "exclude_studies", "") or "",
             "only_entered": not getattr(a, "all_partners", False),
+            "technique": (getattr(a, "technique", "") or "").strip().lower(),
             # the page encodes the second box one selector per LINE, and `selection.parse` splits on
             # newlines, commas and semicolons: space is the one separator it does not split on. The
             # single-study path recorded `--conditions "WC" "mucin"` space-joined, so the record parsed
@@ -280,6 +281,13 @@ def _resolve(a, announce=True):
 
 
 def _derive(a):
+    """`grownet derive`, with the Technique setting in force for the whole run (#292)."""
+    from .adapter import only_technique
+    with only_technique((getattr(a, "technique", "") or "").strip().lower() or None):
+        return _derive_run(a)
+
+
+def _derive_run(a):
     _resolve(a)
     problem = _bad_settings(a) or _rate_flags(a) or _fixture_flags(a)
     if problem:
@@ -364,8 +372,19 @@ def _derive(a):
     net.meta["complete"] = not errors
     organism_rates = {}
     if a.report_rates:
+        before = len(skipped)
         organism_rates, skipped = _rates_of(a, client, [a.study], net, skipped,
                                             fitted_rows if a.live else records)
+        # a read that failed during the rates leaves the run as incomplete as one during the arcs, and the
+        # file was marked complete before this stage ran (#247)
+        failed_rates = unread(skipped[before:])
+        if failed_rates:
+            errors.append(f"{len(failed_rates)} study(ies), replicate(s) or growth curve(s) could not be read from "
+                          f"mGrowthDB while reading growth rates (for example {failed_rates[0][0]}: "
+                          f"{failed_rates[0][1]}); the rates are incomplete, so run it again")
+            print(f"warning: {errors[-1]}", file=sys.stderr)
+            net.meta["errors"] = list(errors)
+            net.meta["complete"] = False
     result = {"study": a.study, "entries": [], "resolved": [], "unresolved": [], "studies": [a.study],
               "rates": organism_rates, "client": client if a.live else None,
               "skipped": skipped, "errors": errors, "network": net}
@@ -480,9 +499,15 @@ def _rates_of(a, client, study_ids, net, skipped, records=None):
             if entry.get("capacity") is None:
                 print(f"{entry.get('name', nid)}: {entry.get('capacity_source') or 'no plateau'}, so it "
                       "has no self-limitation and no row in a matrix", file=sys.stderr)
+        # keyed by the network's own nodes and named as it names them, as on the page (found in review)
+        fitted = matrix.for_nodes(net, fitted)
         net.meta["growth_rates"] = matrix.rate_meta(net, fitted, INTEGRATED)
         return fitted, skipped
-    found, rate_skips = growth_rates(client, study_ids, wanted=set(net.nodes),
+    # the organisms of the arcs before any merge to the genus, as the page asks for them: with
+    # --merge-genera the nodes are genera, no monoculture is of a genus, and no rate was computed (found in
+    # review; this predates 0.4.0)
+    wanted = set(net.nodes) | {r[side] for r in records or () for side in ("source", "target") if r.get(side)}
+    found, rate_skips = growth_rates(client, study_ids, wanted=wanted,
                                      rate_method=a.rate_method, window=a.rate_window,
                                      spike_factor=a.spike_factor,
                                      capacity_max_fall=a.capacity_max_fall)
@@ -572,18 +597,18 @@ def _emit(a, net, skipped, extra, label, result):
         else:
             found = steady.find(result["client"], net) if result.get("client") is not None else []
             checked = steady.check(got, organism_rates, found)
-            scored = sum(1 for one in checked if one["used"])
-            print(f"steady-state check: {scored} chemostat(s) scored, {len(checked) - scored} not "
-                  "(the report says why each)", file=sys.stderr)
+            print(steady.summary_line(checked), file=sys.stderr)
             result["steady"] = checked
             if a.report:
                 from .report import report_text
                 with open(a.report, "w", encoding="utf-8") as f:
                     f.write(report_text(result))
+    # the files beside the numbers, the same for the zip and for R, as the page sends them (found in
+    # review: --to-r sent none)
+    from . import steady as steady_module
+    extra_files = {"steady_state_check.txt": steady_module.as_text(checked)} if a.steady_check else None
     if a.glv and organism_rates:
-        from . import steady as steady_module
         from .matrix import glv_package
-        extra_files = {"steady_state_check.txt": steady_module.as_text(checked)} if a.steady_check else None
         with open(a.glv, "wb") as f:
             f.write(glv_package(net, organism_rates, extra_files))
         print(f"wrote the gLV parameters to {a.glv}: the interaction matrix, the growth rates and a README",
@@ -593,7 +618,7 @@ def _emit(a, net, skipped, extra, label, result):
         from .matrix import glv_payload
         from .rbridge import DEFAULT_PORT, RError, send
         try:
-            answer = send(glv_payload(net, organism_rates), port=a.r_port or DEFAULT_PORT)
+            answer = send(glv_payload(net, organism_rates, extra_files), port=a.r_port or DEFAULT_PORT)
         except RError as e:
             print(f"grownet: {e}", file=sys.stderr)
             return 1
@@ -691,6 +716,25 @@ def _style(a):
 def _validate(a):
     with open(a.file, encoding="utf-8") as f:
         doc = json.load(f)
+    # the daily artifact is a search result that CARRIES networks, not a network: it said "INVALID: schema
+    # is None" about a good file (found in review). Each network inside it is validated instead.
+    if isinstance(doc, dict) and str(doc.get("format", "")).startswith("grownet.all_result/"):
+        parts = [(name, doc[name]) for name in ("network", "absent") if isinstance(doc.get(name), dict)]
+        print(f"{a.file} is a {doc['format']} artifact; validating the network(s) it carries")
+        if not parts:
+            # it exited 1 after the header alone (found in review)
+            print(f"INVALID: {a.file} carries no network (both `network` and `absent` are empty)")
+            return 1
+        codes = []
+        for name, network in parts:
+            inner = argparse.Namespace(file=f"{a.file} [{name}]", _doc=network)
+            codes.append(_validate_doc(inner))
+        return max(codes)
+    return _validate_doc(argparse.Namespace(file=a.file, _doc=doc))
+
+
+def _validate_doc(a):
+    doc = a._doc
     notes = []
     problems = validate_document(doc, notes)
     if problems:
@@ -748,9 +792,11 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=DERIVE_EXAMPLES, formatter_class=argparse.RawDescriptionHelpFormatter)
     what = d.add_argument_group("what to derive")
     what.add_argument("study", nargs="?", default="",
-                      help="an mGrowthDB study id (e.g. SMGDB00000004) to derive every species in it; with "
-                           "--species, comma separated study ids to search instead of every study holding "
-                           "them, the same as naming them in --conditions (the page's second box)")
+                      help="an mGrowthDB study id (e.g. SMGDB00000004) to derive every species in it, named as "
+                           "that study names them (a species search and --all use each strain's current name, "
+                           "which needs the whole corpus read); with --species, comma separated study ids to "
+                           "search instead of every study holding them, the same as naming them in --conditions "
+                           "(the page's second box)")
     what.add_argument("--species", nargs="+", metavar="NAME",
                       help="species or strain names, NCBI taxon ids, or a genus (all its species): every study "
                            "holding them is searched and one network returned, as on the local page (needs "
@@ -771,6 +817,10 @@ def build_parser() -> argparse.ArgumentParser:
                            "is matched as text against the medium name, the description and the experiment "
                            "name, an id picks that study (SMGDB...) or experiment (EMGDB...), and naming a "
                            "comparison keeps the monocultures it is made against. Empty looks at every medium")
+    what.add_argument("--technique", default="", metavar="NAME",
+                      help="keep only curves measured by this mGrowthDB technique (fc, 16s, qpcr, plates, ...), "
+                           "in arcs and in monoculture rates and plateaus, and name the others (default: every "
+                           "technique; Karoline, #292)")
     what.add_argument("--exclude-studies", default="", metavar="IDS",
                       help="with --species or --all, comma separated study ids never to search (default: none)")
     what.add_argument("--all-partners", action="store_true",

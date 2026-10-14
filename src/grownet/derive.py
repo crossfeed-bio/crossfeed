@@ -28,7 +28,7 @@ from statistics import mean, median
 from . import media as media_rules
 from . import rates
 from . import selection as selecting
-from .adapter import culture_trace_replicates, replicates_for_experiment
+from .adapter import UNREAD, culture_trace_replicates, replicates_for_experiment
 from .growth import (
     SPIKE_FACTOR,
     GrowthCurve,
@@ -51,7 +51,7 @@ from .interaction import (
 )
 from .interaction import DROPOUT as DROPOUT_EVIDENCE
 from .mgrowthdb import MGrowthDBClient, MGrowthDBError
-from .model import genus_name
+from .model import MERGED_MEDIUM_UNRECORDED, genus_name
 from .stats import CORRECTIONS, welch
 
 
@@ -615,21 +615,23 @@ def _collect_capacity(entry: dict, curve, label: str, medium: dict | None = None
                     "allowed: the peak is not a level this culture held"))
         return
     medium = medium or {"key": "unnamed medium", "label": "unnamed medium"}
-    at = entry["capacity_by_medium"].setdefault(
-        medium["key"], {"label": medium["label"], "unit": curve.abundance_unit,
-                        "values": [], "falls": [], "curves": [], "labels": []})
+    at = entry["capacity_by_medium"].setdefault(medium["key"], {"label": medium["label"], "labels": [],
+                                                                "groups": {}})
     # the alias table can make two spellings one medium, so every spelling behind a capacity is kept and
     # reported: a merge grownet made by hand is never silent (Karoline, 2026-10-07)
     if medium["label"] not in at["labels"]:
         at["labels"].append(medium["label"])
-    if curve.abundance_unit != at["unit"]:
-        entry["capacity_left_out"].append(
-            (label, f"the plateau is in {curve.abundance_unit}, and this organism's others in "
-                    f"{at['unit']}; left out rather than converted"))
-        return
-    at["values"].append(curve_features(curve)["max"])
-    at["falls"].append(fall)
-    at["curves"].append(label)
+    # within a medium, one group per unit AND technique: plateaus are compared only within one technique
+    # and unit, and which group is published is decided once every study is read, by time points, in
+    # `merge_rates` (Karoline, 2026-10-14, #292). The first plateau's unit used to claim the medium.
+    technique = curve.technique or ""
+    group = at["groups"].setdefault((curve.abundance_unit, technique), {
+        "unit": curve.abundance_unit, "technique": technique, "values": [], "falls": [], "curves": [],
+        "points": 0})
+    group["values"].append(curve_features(curve)["max"])
+    group["falls"].append(fall)
+    group["curves"].append(label)
+    group["points"] += len(curve.times)
 
 
 def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window: int = None,
@@ -722,8 +724,10 @@ def monoculture_rates(client, exps, wanted=None, rate_method: str = None, window
         _refuse_pooling_across_starts(entry, skipped)
     # an organism is kept when it has a rate or a certified plateau: a study where the estimator fitted
     # no rate still measured the plateau, and dropping it there made the capacity estimator-dependent
-    # across studies as well (found 2026-10-06)
-    return {nid: e for nid, e in found.items() if e["values"] or e["capacity_by_medium"]}, skipped
+    # across studies as well (found 2026-10-06); and one whose rates were refused for their starting
+    # spread, so the reason reaches the organism (found in review)
+    return {nid: e for nid, e in found.items() if e["values"] or e["capacity_by_medium"] or e.get("refused")}, \
+        skipped
 
 
 # How far apart, as a ratio, the measured starting densities of one organism's monocultures in one study
@@ -749,10 +753,12 @@ def _refuse_pooling_across_starts(entry: dict, skipped: list) -> None:
     low, high = min(s for s, _ in starts), max(s for s, _ in starts)
     if high <= MAX_START_SPREAD * low:
         return
-    skipped.append((f"{entry['name']} monocultures, growth rate",
-                    f"they started from {low:.3g} to {high:.3g} {units.pop()}, {high / low:.0f} times apart, and "
-                    f"a rate is not pooled across starting densities more than {MAX_START_SPREAD:g} times apart "
-                    "(#81): left out for this study"))
+    why = (f"they started from {low:.3g} to {high:.3g} {units.pop()}, {high / low:.0f} times apart, and a rate "
+           f"is not pooled across starting densities more than {MAX_START_SPREAD:g} times apart (#81)")
+    skipped.append((f"{entry['name']} monocultures, growth rate", why + ": left out for this study"))
+    # kept with the organism, so an organism left with no rate at all says why where its rate would be
+    # (found in review: the page named two causes, both false, for SMGDB00000014's two organisms)
+    entry["refused"] = why
     entry["values"], entry["replicates"], entry["lags"] = [], [], []
     entry["sources"] = {}
 
@@ -780,13 +786,56 @@ def growth_rates(client, study_ids, wanted=None, rate_method: str = None, window
             study = client.get_study(study_id)
             exps = [client.get_experiment(e["id"]) for e in study.get("experiments", [])]
         except MGrowthDBError as e:
-            skipped.append((f"growth rates of {study_id}", f"could not be read: {e}"))
+            # worded with UNREAD, so `adapter.unread` sees it and the run is marked incomplete: "could not be
+            # read" is not "could not read", and a study unreadable during the rates left the run complete
+            # with exit 0 (found in review)
+            skipped.append((f"growth rates of {study_id}", f"{UNREAD} it: {e}"))
             continue
         found, skips = monoculture_rates(client, exps, wanted, rate_method, window, spike_factor,
                                          capacity_max_fall=capacity_max_fall)
         per_study.append((study_id, found))
         skipped += skips
     return merge_rates(per_study), skipped
+
+
+# how a rate from culture-level counts alone begins its capacity_source, which the report reads (#140)
+CULTURE_NONE = "none: the rate is from a culture-level"
+
+
+class OrganismRates(dict):
+    """The rates `merge_rates` returns, by node id, with `no_rate`: {node id: (name, why)} for an organism
+    whose monocultures were read and gave no rate, where that is known (every study's rates refused for
+    their starting spread, #81), so `matrix.for_nodes` can carry it to the page, the report and the
+    package, for a strain and for its genus (found in review)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.no_rate: dict = {}
+
+def _technique(group: dict) -> str:
+    """A capacity group's technique as a reader reads it."""
+    return group.get("technique") or "an unrecorded technique"
+
+
+def choose_capacity_group(groups: list) -> tuple:
+    """(chosen, others, tie) among one organism's plateau groups in one medium, each one unit and technique.
+
+    Plateaus are compared only within one technique and unit; where several are available the one with
+    more time points is used, a tie in time points goes to the one with more curves, and a tie left after
+    that is named and nothing chosen, never decided by the order things were read (Karoline, 2026-10-13
+    and 2026-10-14, #292). `tie` is the sentence saying so, "" when one was chosen.
+    """
+    if not groups:
+        return None, [], ""
+    ranked = sorted(groups, key=lambda g: (-g["points"], -len(g["values"])))
+    best = ranked[0]
+    if len(ranked) > 1 and (ranked[1]["points"], len(ranked[1]["values"])) == (best["points"], len(best["values"])):
+        tied = [g for g in ranked if (g["points"], len(g["values"])) == (best["points"], len(best["values"]))]
+        tie = ("the plateaus in " + " and in ".join(f"{g['unit']} by {_technique(g)}" for g in tied)
+               + f" have as many time points ({best['points']}) and curves ({len(best['values'])}), so none is "
+                 "chosen and this organism has no capacity")
+        return None, ranked, tie
+    return best, ranked[1:], ""
 
 
 def merge_rates(per_study) -> dict:
@@ -818,51 +867,83 @@ def merge_rates(per_study) -> dict:
     merged: dict = {}
     for study_id, found in per_study:
         for nid, entry in found.items():
-            at = merged.setdefault(nid, {"name": entry["name"], "unit": entry["unit"], "values": [],
+            # the rate's unit is set by the first study that GAVE a rate: a study with plateaus and no rate
+            # (curves too short for the window) set it to "", and every later study's rates were then
+            # dropped as another unit, the organism with them (found in review)
+            at = merged.setdefault(nid, {"name": entry["name"], "unit": "", "values": [],
                                          "studies": [], "per_study": {}, "other_units": [],
                                          "method": entry.get("method", ""), "lags": [],
                                          "lag_method": entry.get("lag_method", ""),
                                          "by_medium": {}, "capacity_left_out": []})
+            if entry.get("refused"):
+                at.setdefault("refused", []).append(f"{study_id}: {entry['refused']}")
+            if entry["values"] and not at["unit"]:
+                at["unit"] = entry["unit"]
             if entry["values"] and entry["unit"] != at["unit"]:
+                # a rate in another time unit is not converted; its study's plateaus have no time unit and
+                # are kept below, where this `continue` used to drop them from every count (found in review)
                 at["other_units"].append(f"{study_id} ({entry['unit']})")
-                continue
-            if entry["values"]:
-                at["values"] += list(entry["values"])
-                at["studies"].append(study_id)
-                at["per_study"][study_id] = median(entry["values"])
-            at["lags"] += list(entry.get("lags") or [])
-            for source, n in (entry.get("sources") or {}).items():
-                at.setdefault("sources", {})[source] = at.setdefault("sources", {}).get(source, 0) + n
+            else:
+                if entry["values"]:
+                    at["values"] += list(entry["values"])
+                    at["studies"].append(study_id)
+                    at["per_study"][study_id] = median(entry["values"])
+                at["lags"] += list(entry.get("lags") or [])
+                for source, n in (entry.get("sources") or {}).items():
+                    at.setdefault("sources", {})[source] = at.setdefault("sources", {}).get(source, 0) + n
             at["capacity_left_out"] += list(entry.get("capacity_left_out") or [])
             for key, found_here in (entry.get("capacity_by_medium") or {}).items():
-                one = at["by_medium"].setdefault(key, {"label": found_here["label"],
-                                                       "unit": found_here["unit"], "values": [],
-                                                       "falls": [], "curves": [], "per_study": {},
-                                                       "other_units": [], "labels": []})
-                if found_here["unit"] != one["unit"]:
-                    one["other_units"].append(f"{study_id} ({found_here['unit']})")
-                    continue
+                one = at["by_medium"].setdefault(key, {"label": found_here["label"], "labels": [], "groups": {}})
                 for spelling in found_here.get("labels") or ():
                     if spelling not in one["labels"]:
                         one["labels"].append(spelling)
-                one["values"] += list(found_here["values"])
-                one["falls"] += list(found_here["falls"])
-                one["curves"] += list(found_here["curves"])
-                one["per_study"][study_id] = median(found_here["values"])
-    out = {}
+                # merged per unit and technique across studies; the group is chosen below (#292)
+                for group_key, group in found_here["groups"].items():
+                    mine = one["groups"].setdefault(group_key, {
+                        "unit": group["unit"], "technique": group["technique"], "values": [], "falls": [],
+                        "curves": [], "points": 0, "per_study": {}})
+                    mine["values"] += list(group["values"])
+                    mine["falls"] += list(group["falls"])
+                    mine["curves"] += list(group["curves"])
+                    mine["points"] += group["points"]
+                    mine["per_study"][study_id] = median(group["values"])
+    out = OrganismRates()
     for nid, at in merged.items():
         if not at["values"]:
+            if at.get("refused"):
+                # with the name the study gave, so a genus of such strains can say whose they were
+                out.no_rate[nid] = (at["name"],
+                                    "its monocultures' growth rates were left out: " + "; ".join(at["refused"]))
             continue
         # the medium with the most certified curves is the one published; a tie goes to the first label,
         # so the choice does not depend on the order the studies were read in
-        order = sorted(at["by_medium"].items(), key=lambda kv: (-len(kv[1]["values"]), kv[1]["label"]))
-        chosen = order[0][1] if order else None
+        order = sorted(at["by_medium"].items(),
+                       key=lambda kv: (-sum(len(g["values"]) for g in kv[1]["groups"].values()), kv[1]["label"]))
+        medium_chosen = order[0][1] if order else None
         left_out = list(at["capacity_left_out"])
+        # one entry per curve, as every other entry here is: one entry per medium was counted as one curve
+        # in "N curve(s) gave no capacity" and in capacity_curves_left_out (found in review)
         for _key, other in order[1:]:
-            left_out.append((f"{len(other['values'])} curve(s) in {other['label']}",
-                             f"this organism's capacity is taken from {chosen['label']}, where more "
-                             "curves reached a plateau; plateaus are not pooled across media, since a "
-                             "capacity sits beside off-diagonals measured in one of them"))
+            left_out += [(curve, f"its plateau is in {other['label']}, and this organism's capacity is taken "
+                                 f"from {medium_chosen['label']}, where more curves reached a plateau; plateaus are "
+                                 "not pooled across media, since a capacity sits beside off-diagonals "
+                                 "measured in one of them")
+                         for group in other["groups"].values() for curve in group["curves"]]
+        chosen, others, tie = choose_capacity_group(list(medium_chosen["groups"].values()) if medium_chosen else [])
+        for group in others:
+            left_out += [(curve, f"its plateau is in {group['unit']} by {_technique(group)}, and "
+                                 + (tie if tie else
+                                    f"this organism's capacity is taken from {chosen['unit']} by "
+                                    f"{_technique(chosen)}, which has more time points ({chosen['points']} "
+                                    f"against {group['points']})"
+                                    if chosen["points"] != group["points"] else
+                                    f"this organism's capacity is taken from {chosen['unit']} by "
+                                    f"{_technique(chosen)}, with as many time points and more curves")
+                                 + "; plateaus are compared only within one technique and unit")
+                         for curve in group["curves"]]
+        if medium_chosen is not None:
+            chosen = dict(chosen or {}, label=medium_chosen["label"], labels=medium_chosen["labels"]) \
+                if chosen else None
         out[nid] = {"name": at["name"], "rate": median(at["values"]), "unit": at["unit"],
                     "n": len(at["values"]), "studies": at["studies"], "per_study": at["per_study"],
                     "other_units": at["other_units"], "method": at["method"],
@@ -873,12 +954,16 @@ def merge_rates(per_study) -> dict:
                     "rate_sources": dict(at.get("sources") or {}),
                     "capacity": median(chosen["values"]) if chosen else None,
                     "capacity_unit": chosen["unit"] if chosen else "",
+                    # the technique the plateau was measured by, and the time points behind it (#292)
+                    "capacity_technique": chosen["technique"] if chosen else "",
+                    "capacity_points": chosen["points"] if chosen else 0,
+                    "capacity_tie": tie,
                     "capacity_n": len(chosen["values"]) if chosen else 0,
                     # how far the curves behind this plateau had fallen from their peak, merged the same
                     # way as the plateau itself: 1 is a curve that ended at its peak (Karoline, 2026-10-07)
                     "capacity_fall": median(chosen["falls"]) if chosen and chosen["falls"] else None,
                     "capacity_per_study": dict(chosen["per_study"]) if chosen else {},
-                    "other_capacity_units": list(chosen["other_units"]) if chosen else [],
+                    "other_capacity_units": [f"{g['unit']} by {_technique(g)}" for g in others],
                     "capacity_left_out": left_out,
                     # one medium, never pooled (Karoline, 2026-10-07): the label of the medium the
                     # plateau was measured in, and what else this organism has a plateau in
@@ -888,6 +973,19 @@ def merge_rates(per_study) -> dict:
                     "capacity_medium_spellings": list(chosen["labels"]) if chosen else [],
                     "capacity_media": [chosen["label"]] if chosen else [],
                     "capacity_other_media": [other["label"] for _key, other in order[1:]]}
+        if medium_chosen is not None and chosen is None:
+            # the medium had plateaus and none could be chosen: its name is still what a reader asks for
+            out[nid]["capacity_other_media"] = [label for _key, m in order for label in [m["label"]]]
+        # a rate from a culture-level count says so where every consumer already reads the capacity's
+        # provenance: growth_rates.csv's capacity_source, the gLV payload's carrying_capacity_source and
+        # the report, without a new field in the released grownet.glv/v1 (found in review)
+        # only when the rate rests on culture-level counts alone: beside per-strain curves the capacity is
+        # missing because those never plateaued, not because of the count (found in review)
+        sources = at.get("sources") or {}
+        if sources and "per-strain" not in sources and out[nid]["capacity"] is None:
+            out[nid]["capacity_source"] = (CULTURE_NONE + " " + ", ".join(
+                f"{k.removeprefix('culture-level ')} count ({n} replicate(s))" for k, n in sorted(sources.items()))
+                + ", which never gives a capacity")
     return out
 
 
@@ -1617,6 +1715,16 @@ def select_edges(records, include_low_quality: bool = False, include_absent: boo
     return edges, hidden
 
 
+# The fields that describe one comparison rather than a pair: a merged arc keeps them only where all its arcs
+# agree (`_merged`). Window, metric values and vs_other_removals are handled beside them.
+COMPARISON_FIELDS = (
+    "strength_bound", "bound_rule", "target_capacity", "target_capacity_unit", "target_capacity_n",
+    "coefficient", "coefficient_unit", "coefficient_sd", "coefficient_n", "coefficient_sd_from_rate_stage",
+    "fit_r2", "fit_condition", "fit_null_r2", "fit_window_share", "rate_mismatch_to_zero",
+    "se_replicates", "se_rate_stage", "se_rate_selection", "rate_selection_spread", "rate_stage_method",
+    "rate_stage_n")
+
+
 def _merged(arcs: list) -> dict:
     """One arc for several arcs of one source, target and sign (register item 14, Karoline 2026-09-27).
 
@@ -1646,12 +1754,45 @@ def _merged(arcs: list) -> dict:
         if st["id"] not in {s["id"] for s in studies}:
             studies.append(st)
     conditions = list(dict.fromkeys(a.get("condition", "") for a in arcs))
-    return {**arcs[0], "strength": strength, "weight": None if strength is None else round(abs(strength), 4),
+
+    def agreed(key, empty):
+        """The members' value when they all carry the same one, else empty: a merged arc spread `arcs[0]`
+        and so said one member's window and metric values about a median of several (found in review)."""
+        values = {repr(a.get(key)) for a in arcs}
+        return arcs[0].get(key, empty) if len(values) == 1 else empty
+
+    # Every field that describes ONE comparison keeps its value only where all merged arcs agree: a merged
+    # arc spread `arcs[0]`, so a genus arc that was the median of five carried one obligate member's bound
+    # and rule beside a quantified median strength, and one member's coefficient and fit (found in review).
+    one_comparison = {key: agreed(key, "" if isinstance(arcs[0].get(key), str) else None)
+                      for key in COMPARISON_FIELDS if key in arcs[0]}
+    # the rule stays only beside the bound it produced: members whose bounds differ keep the same rule
+    # text, and a rule with no bound reads as "the rule bounds nothing" (shape 2 of
+    # `matrix._reports_an_extreme`), which dropped a merged obligate arc from the gLV package without a
+    # word, where main named the pair's sign conflict (found in review). Members that all bound nothing
+    # stay that.
+    if one_comparison.get("strength_bound") is None and any(a.get("strength_bound") is not None for a in arcs):
+        one_comparison["bound_rule"] = ""
+    # the coefficient of a merged arc is the median of its members', as its strength is the median of
+    # theirs, where every member has one in one unit; the gLV package's cell for the arc is that median
+    coefficients = [a.get("coefficient") for a in arcs]
+    if all(c is not None for c in coefficients) and len({a.get("coefficient_unit") for a in arcs}) == 1:
+        one_comparison["coefficient"] = median(coefficients)
+    return {**arcs[0], **one_comparison,
+            # what was measured and over how long, only where every merged arc agrees; and never one
+            # removal's difference from its group, which a merged arc is not
+            "window": agreed("window", None), "window_unit": agreed("window_unit", ""),
+            "metric_unit": agreed("metric_unit", ""), "vs_other_removals": None,
+            "metric_with": agreed("metric_with", None), "metric_without": agreed("metric_without", None),
+            "strength": strength, "weight": None if strength is None else round(abs(strength), 4),
             "sd": None, "se": None, "effect_over_sd": None, "p_value": None, "q_value": None,
             "significance": None,
             "n_with": None, "n_without": None, "outcome": outcome,
             "status": PRESENT if any(a.get("status") == PRESENT for a in arcs) else None,
-            "quality": union("quality"), "cautions": union("cautions"), "notes": union("notes"),
+            "quality": union("quality"), "cautions": union("cautions"),
+            "notes": union("notes") + ([f"{unrecorded} of {len(arcs)} {MERGED_MEDIUM_UNRECORDED}"]
+                                       if 0 < (unrecorded := sum(1 for a in arcs if not a.get("medium")))
+                                       < len(arcs) else []),
             "experiments": union("experiments"), "community": sorted(set(union("community"))),
             "evidence": (DROPOUT_EVIDENCE if any(a.get("evidence") == DROPOUT_EVIDENCE for a in arcs)
                          else arcs[0].get("evidence")),
@@ -1735,7 +1876,7 @@ def _pair(arc: dict, level: str, name_of: dict) -> str:
     return " -> ".join(genus_species(n).capitalize() for n in names)
 
 
-def merge_genus(edges: list, merge: bool = False, level: str = "species") -> tuple:
+def merge_genus(edges: list, merge: bool = False, level: str = "species", current: dict | None = None) -> tuple:
     """(edges, meta) with every node merged into its genus and the arcs between two genera merged by sign.
 
     Karoline's choices (2026-09-28): an advanced setting, off by default; nodes merge at the genus level
@@ -1745,7 +1886,20 @@ def merge_genus(edges: list, merge: bool = False, level: str = "species") -> tup
     itself; absent arcs are recorded as before, one per genus pair, and hidden like any absent arc. It runs
     after `merge_parallel`, so with both settings on a pair measured in several studies counts once.
     The genus is the first word of the name mGrowthDB gives (`model.genus_name`), not NCBI's lineage.
+
+    `current` maps a taxon id to its current name, the one its most recent study uses (#24). A strain node
+    is shown by that name, so its genus and its `merged_pairs` are taken from it too, rather than from the
+    name the study behind each arc used: 411483 was merged and listed as F. prausnitzii while its node read
+    F. duncaniae (found in review). As for the nodes, only a side whose identity is its taxon id is renamed.
     """
+    current = current or {}
+
+    def organism(e, side):
+        taxon = str(e.get(f"{side}_taxon_id") or "")
+        if e.get(f"{side}_identity") == "ncbi" and taxon.isdigit() and int(taxon) in current:
+            return current[int(taxon)]
+        return _organism(e, side)
+
     info = {"merge_genus": merge, "level": level, "genus_arcs": 0,
             "rule": "nodes by genus; arcs by source genus, target genus and sign; median of the log2 means"}
     if not merge:
@@ -1753,10 +1907,10 @@ def merge_genus(edges: list, merge: bool = False, level: str = "species") -> tup
     groups, name_of = {}, {}
     for e in edges:
         for side in ("source", "target"):
-            name_of.setdefault(e[side], _organism(e, side))
+            name_of.setdefault(e[side], organism(e, side))
     for e in edges:
         kind = ABSENT if e.get("status") == ABSENT else e.get("effect")
-        key = (genus_name(_organism(e, "source")), genus_name(_organism(e, "target")), kind)
+        key = (genus_name(organism(e, "source")), genus_name(organism(e, "target")), kind)
         groups.setdefault(key, []).append(e)
     out = []
     for (source, target, kind), arcs in groups.items():
@@ -1787,7 +1941,7 @@ PROVISIONAL = ("Each interaction compares a species' growth with and without its
                "deviations (the absence threshold, default 1: the mean plus or minus its standard deviation "
                "stays on one side of zero). Welch's t-test, corrected for multiple testing, is shown "
                "as supporting evidence and does not decide; with few replicates, more experiments may change "
-               "any of these results. Two limits of this derivation travel with every network it makes. "
+               "any of these results. Three limits of this derivation travel with every network it makes. "
                "An arc from a community compared with the same community without one member (evidence "
                "dropout) says the removed member affects the target, DIRECTLY OR THROUGH THE OTHERS, so it "
                "is not on its own evidence of an interaction between those two; each such arc is marked. "
@@ -1897,7 +2051,7 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
                 no_growth_factor: float = None, merge_arcs: bool = False, min_studies: int = 1,
                 merge_genera: bool = False, support_level: str = "species",
                 max_adjusted_p: float | None = None, include_absent: bool = False,
-                deriver=None) -> tuple:
+                deriver=None, current: dict | None = None) -> tuple:
     """(edges, meta) for writing a network.
 
     Sets each record's `status` from the absence threshold k (None, undetermined, for a low-quality
@@ -1911,6 +2065,8 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
     come from it: a derivation states what it tests and what is provisional about it, as it already
     states its `name` and `method`. Without it the specified comparison's words are used, which is what
     every network said before 2026-10-07 whatever had derived it (#142 item 5).
+
+    `current` (taxon id to current name, #24) names the strains that the genus merge groups and lists.
     """
     for record in records:
         # a low-quality edge is never read as the absence of an interaction (Karoline, on #40; #50)
@@ -1923,7 +2079,7 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
     if max_adjusted_p is not None:
         hidden["not_significant"] = significance_filter["left_out"]
     edges, merge = merge_parallel(edges, merge_arcs, min_studies)
-    edges, genus = merge_genus(edges, merge_genera, support_level)
+    edges, genus = merge_genus(edges, merge_genera, support_level, current)
     said = dict(getattr(deriver, "statistics", None) or STATISTICS)
     statistics = {**said, "correction": said["correction"].format(name=CORRECTIONS[correction][0]),
                   "tests": tests, "filter": significance_filter}
@@ -1945,7 +2101,13 @@ def output_meta(records, include_low_quality: bool = False, correction: str = "b
             # URL. For a format its own schema calls "the neutral, openly citable interaction-network
             # format", the artifact carried no pointer to itself (#218 item 1).
             "project": _project_meta(),
-            "settings_not_used": sorted(getattr(deriver, "ignores", ()) or ()),
+            # alpha 0 switches the no-growth test off; the factor is still read for the bounds of comparisons
+            # censored because a set's metric was not positive, so it is marked unread only where none was
+            # (found in review, twice: it was marked unread while it moved those bounds)
+            "settings_not_used": sorted(set(getattr(deriver, "ignores", ()) or ())
+                                        | ({"no_growth_factor"} if no_growth_alpha == 0 and not any(
+                                            e.get("outcome") in (OBLIGATE, ABOLISHED) for e in edges)
+                                           else set())),
             "filters": {"include_low_quality": include_low_quality, "include_absent": include_absent},
             "hidden": hidden, "merge": merge,
             "genus": genus}

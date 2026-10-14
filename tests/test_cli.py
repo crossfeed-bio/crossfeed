@@ -311,7 +311,7 @@ def test_the_fixture_route_refuses_a_setting_it_cannot_apply(tmp_path, capsys):
         assert "already derived" in err
 
 
-def test_a_route_that_applied_no_threshold_does_not_print_an_empty_one(tmp_path):
+def test_a_route_that_applied_no_threshold_does_not_print_an_empty_one():
     """The report printed `(k = )` and an empty `settings:` heading on the fixture route, because it has
     no output stage: a count of arcs below a threshold that was never applied, and a heading that said
     the run had no settings rather than that it records none (#222 item 1)."""
@@ -403,3 +403,117 @@ def test_the_single_study_path_exits_one_on_an_incomplete_run_as_the_others_do(m
         meta = _json.loads(out.read_text(encoding="utf-8"))["meta"]
         assert meta["complete"] is (wanted == 0) and bool(meta["errors"]) is (wanted == 1), meta
     assert "INCOMPLETE" in capsys.readouterr().err
+
+
+def test_validate_reads_the_networks_inside_a_daily_artifact(tmp_path, capsys):
+    """Found in review: `grownet validate all_result.v4.json` said "INVALID: schema is None" about a good
+    file, because it is a search result carrying networks rather than a network."""
+    import json as _json
+
+    from test_gui import FakeClient
+
+    from grownet.gui import run_query
+    from grownet.published import to_payload
+    payload = to_payload(run_query(FakeClient(), [], {}, all_studies=True, published=False))
+    path = tmp_path / "all_result.v4.json"
+    path.write_text(_json.dumps(payload))
+    assert main(["validate", str(path)]) == 0
+    out = capsys.readouterr().out
+    assert "artifact" in out and "valid:" in out and "[network]" in out
+    payload["network"]["edges"] = "not a list"
+    path.write_text(_json.dumps(payload))
+    assert main(["validate", str(path)]) == 1, "a broken network inside is still refused"
+
+
+
+def test_the_single_study_path_marks_a_rate_stage_failure_incomplete(monkeypatch, tmp_path):
+    """Round 2 of the review: the CLI's own rate-stage block had no test that failed without it."""
+    import json as _json
+
+    from test_gui import FakeClient
+
+    import grownet.__main__ as cli
+    import grownet.mgrowthdb as mgrowthdb
+    from grownet.adapter import UNREAD
+    monkeypatch.setattr(mgrowthdb, "MGrowthDBClient", lambda *a, **k: FakeClient())
+    real = cli._rates_of
+
+    def failing(a, client, study_ids, net, skipped, records=None):
+        rates, skips = real(a, client, study_ids, net, skipped, records)
+        return rates, skips + [("mono B: rep 1", f"{UNREAD} its series: HTTP 500")]
+    monkeypatch.setattr(cli, "_rates_of", failing)
+    out = tmp_path / "n.json"
+    code = main(["derive", "SMGDB00000001", "--live", "--report-rates", "--out", str(out)])
+    meta = _json.loads(out.read_text(encoding="utf-8"))["meta"]
+    assert code == 1 and meta["complete"] is False
+    assert any(e.startswith("1 study(ies), replicate(s) or growth curve(s)") and "growth rates" in e
+               for e in meta["errors"]), meta["errors"]
+
+
+def test_validate_reads_the_absent_network_of_an_artifact_too(tmp_path):
+    """Round 2 of the review: leaving out `absent`, or keeping the first code instead of the worst, survived."""
+    import json as _json
+
+    from test_gui import FakeClient
+
+    from grownet.gui import run_query
+    from grownet.published import to_payload
+    payload = to_payload(run_query(FakeClient(), [], {}, all_studies=True, published=False))
+    payload["absent"] = {**payload["network"], "edges": "not a list"}
+    path = tmp_path / "all_result.v4.json"
+    path.write_text(_json.dumps(payload))
+    assert main(["validate", str(path)]) == 1, "a broken absent network is refused even after a good one"
+
+
+def test_validate_says_why_an_artifact_with_no_network_fails(tmp_path, capsys):
+    """Round 3 of the review: an artifact whose `network` and `absent` were both null exited 1 after its
+    header line alone."""
+    import json as _json
+    path = tmp_path / "all_result.v4.json"
+    path.write_text(_json.dumps({"format": "grownet.all_result/v1", "network": None, "absent": None}))
+    assert main(["validate", str(path)]) == 1
+    assert "carries no network" in capsys.readouterr().out
+
+
+def test_the_command_line_says_when_the_steady_state_check_could_not_run(capsys):
+    """Round 24 of the review: the command line's steady-state line comes from `steady.summary_line`, which
+    says the check did not run and why; a mutant that put back the count alone ("0 chemostat(s) scored, 0
+    not") passed every test, since none ran `_emit` with --steady-check."""
+    from test_coculture_diagonal import _arc, _rate
+
+    from grownet.__main__ import _emit
+    from grownet.mgrowthdb import records_to_network
+
+    class Failing:
+        def search(self, **_):
+            raise OSError("HTTP 503")
+    net = records_to_network([{**_arc("b", "a", 0.6, 0.4), "source_taxon_id": "1", "target_taxon_id": "2"}])
+    rates = {"a": _rate("A", 0.4, 1e9), "b": _rate("B", 0.2, 5e8)}
+    result = {"rates": rates, "skipped": [], "errors": [], "settings": {}, "client": Failing()}
+    _emit(_parsed(["--steady-check", "--report-rates", "--out", os.devnull]), net, [], None, "S", result)
+    err = capsys.readouterr().err
+    assert ("steady-state check: not checked, because the search for chemostats of these organisms failed "
+            "(HTTP 503)") in err
+    assert "0 chemostat(s) scored" not in err
+
+
+def test_to_r_carries_the_steady_state_check_as_the_zip_does(monkeypatch):
+    """Round 24 of the review: --to-r sent the payload without its steady_state_check.txt, which the page's
+    Send to R and the command line's own --glv zip both carry, against glv_payload's promise that neither
+    route loses what the other carries."""
+    from test_coculture_diagonal import _arc, _rate
+
+    from grownet import rbridge
+    from grownet.__main__ import _emit
+    from grownet.mgrowthdb import records_to_network
+
+    class Failing:
+        def search(self, **_):
+            raise OSError("HTTP 503")
+    sent = {}
+    monkeypatch.setattr(rbridge, "send", lambda payload, **_: sent.update(payload) or {"organisms": 2})
+    net = records_to_network([{**_arc("b", "a", 0.6, 0.4), "source_taxon_id": "1", "target_taxon_id": "2"}])
+    result = {"rates": {"a": _rate("A", 0.4, 1e9), "b": _rate("B", 0.2, 5e8)}, "skipped": [], "errors": [],
+              "settings": {}, "client": Failing()}
+    _emit(_parsed(["--steady-check", "--report-rates", "--to-r", "--out", os.devnull]), net, [], None, "S", result)
+    assert sent["files"]["steady_state_check.txt"].startswith("steady-state check: not checked, because")

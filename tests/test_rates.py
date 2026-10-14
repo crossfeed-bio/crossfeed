@@ -103,12 +103,17 @@ def test_the_fit_keeps_the_plateau_and_stops_where_the_decline_begins():
 
 
 
-def test_a_curve_that_only_declines_has_a_non_positive_rate_not_a_crash():
-    # code review of 2026-09-28: every window slope is -0.3, so 0.95 of the steepest (-0.285) lies above all
-    # of them, no window qualified, and min() of nothing raised a bare ValueError that dropped the whole
-    # comparison (SMGDB00000014's 0.75% linoleic acid co-cultures). The steepest slope is returned instead
+def test_a_curve_that_only_declines_has_no_rate_and_did_not_grow():
+    """Karoline, 2026-10-14, #293: "No rate, still no growth". Every window slope is -0.3, so no window rises:
+    the curve has no maximum growth rate, as growthrates finds none, and the error says it did not grow,
+    so a comparison reads it as not grown (`NoRise`). It returned the slope, -0.3, before; earlier still,
+    min() of no qualifying window raised a bare ValueError that dropped the whole comparison (code review
+    of 2026-09-28, SMGDB00000014's 0.75% linoleic acid co-cultures)."""
+    from grownet.rates import NoRise, RateUnavailable
     declining = [math.exp(-0.3 * t) for t in T]
-    assert easylinear(T, declining) == pytest.approx(-0.3)
+    with pytest.raises(NoRise, match="no window rises: the steepest slope is -0.3") as caught:
+        easylinear(T, declining)
+    assert isinstance(caught.value, RateUnavailable)
 
 
 def test_a_refit_that_turns_negative_under_a_rising_window_is_no_rate():
@@ -124,9 +129,11 @@ def test_a_refit_that_turns_negative_under_a_rising_window_is_no_rate():
     logs = [5, 6, 7, 8, 9, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 1, 2, 3, 4, 5, 6]
     with pytest.raises(RateUnavailable, match="falls to"):
         easylinear_fit(list(range(len(logs))), [math.exp(y) for y in logs], window=5)
-    # nothing else moves: a curve whose steepest window does not rise still returns its rate as it is
+    # a curve whose steepest window does not rise has no rate either, and is read as not grown (#293)
+    from grownet.rates import NoRise
     falling = [5, 4, 3, 2, 1, 0, -1]
-    assert easylinear_fit(list(range(7)), [math.exp(y) for y in falling], window=5)["rate"] < 0
+    with pytest.raises(NoRise):
+        easylinear_fit(list(range(7)), [math.exp(y) for y in falling], window=5)
 
 
 def test_easylinear_refits_from_the_first_marked_window_to_the_last_as_growthrates_does():

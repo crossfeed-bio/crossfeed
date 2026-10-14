@@ -516,6 +516,8 @@ def _meta_keys(sources):
         return ((isinstance(node, ast.Attribute) and node.attr == "meta")
                 or (isinstance(node, ast.Name) and node.id == "meta"))
 
+    spread_names = set()
+
     def from_dict(d, form):
         for k, v in zip(d.keys, d.values, strict=True):
             if k is not None:
@@ -523,6 +525,13 @@ def _meta_keys(sources):
             elif isinstance(v, ast.Call) and isinstance(v.func, ast.Name):
                 for r in returns.get(v.func.id, []):
                     from_dict(r, "spread")
+            else:
+                # `**extra` or `**(extra or {})`: the keys set on that name elsewhere reach meta too, which
+                # is how `settings` arrives on the command line (found in review: a key planted that way
+                # passed the walk)
+                inner = v.values[0] if isinstance(v, ast.BoolOp) else v
+                if isinstance(inner, ast.Name):
+                    spread_names.add(inner.id)
 
     for tree in trees:
         for node in ast.walk(tree):
@@ -548,6 +557,13 @@ def _meta_keys(sources):
                                 add(ast.Constant(kw.arg), "update")
                     elif f.attr == "setdefault" and node.args:
                         add(node.args[0], "update")
+    # the second pass: subscript assignments on a name spread into meta, anywhere in the sources
+    for tree in trees:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for t in node.targets:
+                    if isinstance(t, ast.Subscript) and isinstance(t.value, ast.Name) and t.value.id in spread_names:
+                        add(t.slice, "spread-name")
     return found
 
 
@@ -567,6 +583,9 @@ def run(net, meta):
     net.meta["k_sub"] = 1
     meta["k_sub_name"] = 1
     build(records, meta={"k_kw": 1, **made()})
+    extra = {}
+    extra["k_spread_name"] = 1
+    other(meta={"x": 1, **(extra or {})})
     meta = {"k_bound": 1}
     net.meta = {"k_bound_attr": 1}
     net.meta.update({"k_upd": 1}, k_upd_kw=1)
@@ -577,6 +596,7 @@ def run(net, meta):
     found = _meta_keys([planted])
     expected = {"k_spread": "spread", "k_sub": "subscript", "k_sub_name": "subscript", "k_kw": "keyword",
                 "k_bound": "bound", "k_bound_attr": "bound", "k_upd": "update", "k_upd_kw": "update",
+                "k_spread_name": "spread-name",
                 "k_setdef": "update"}
     for key, form in expected.items():
         assert form in found.get(key, set()), f"the walk missed {key!r} ({form}): {found}"

@@ -127,6 +127,7 @@ DEFAULTS = {"metric": "auc", "rate_method": rates.DEFAULT_METHOD, "rate_window":
             "derivation": "replicate",
             "include_dropout": True,
             "include_non_batch": False, "conditions": "", "exclude_studies": "", "only_entered": True,
+            "technique": "",
             "merge_arcs": False, "min_studies": 1, "merge_genera": False,
             # None: the no-growth rule's own defaults, read when used (grownet.interaction.grew)
             "no_growth_alpha": None, "no_growth_factor": None,
@@ -326,6 +327,11 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   <input name="min_studies" type="text" size="6" value="{_esc(s['min_studies'])}"></label>
   <span class="muted">keep arcs resting on at least this many studies; above 1 it needs merged arcs, since an
   unmerged arc rests on one study</span></div>
+<div class="row"><label>Technique
+  <input name="technique" type="text" size="12" value="{_esc(s['technique'])}"></label>
+  <span class="muted">keep only curves measured by this technique (fc, 16s, qpcr, plates, ...), in arcs and in
+  monoculture rates and plateaus; the others are named. Empty by default: every technique, each compared
+  only with itself</span></div>
 <div class="row"><label>Exclude these studies
   <input name="exclude_studies" type="text" size="40" value="{_esc(s['exclude_studies'])}"></label>
   <span class="muted">comma separated study ids never searched, for example a study you know to be
@@ -590,9 +596,9 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
     unit_hint = (f"<p class=\"hint\">These organisms are counted in {len(units)} abundance units "
                  f"({_esc(', '.join(units))}), so the package will hold {len(units)} matrices, one per "
                  "unit: a cell is per-capita, in 1/(time x abundance), and nothing is converted between "
-                 "units because a cell mass conversion would have to be invented. No effect between them "
-                 "was measured either, since organisms counted differently were never grown together, so "
-                 "they are separate systems rather than one matrix with corners missing.</p>"
+                 "units because a cell mass conversion would have to be invented. An effect between "
+                 "organisms counted differently is in no matrix, and the package names any that was "
+                 "measured; most are separate systems rather than one matrix with corners missing.</p>"
                  if len(units) > 1 else "")
     r_hint = (f"<p class=\"hint\">Send to R needs an R session waiting for it: install the companion package "
               f"once with <code>{_esc(rbridge.INSTALL_R)}</code> (if that answers 404, see the help), then run "
@@ -620,14 +626,20 @@ def _glv_url(token: str, result: dict) -> str:
 def _without_a_rate(result: dict) -> str:
     """The organisms of the network that have no growth rate, said on the page, since a gLV simulation
     needs a rate for each of them from elsewhere."""
-    missing = (result["network"].meta.get("growth_rates") or {}).get("without_a_rate") or []
+    rates = result["network"].meta.get("growth_rates") or {}
+    why = rates.get("why_without_a_rate") or {}
+    # an organism whose reason is known says it, rather than the general one, which named two causes that
+    # were both false for a genus whose strains had rates in different time units (found in review)
+    known = "".join(f"<p class=\"hint\">No growth rate for {_esc(name)}: {_esc(why[name])}.</p>"
+                    for name in rates.get("without_a_rate") or [] if name in why)
+    missing = [name for name in rates.get("without_a_rate") or [] if name not in why]
     if not missing:
-        return ""
+        return known
     shown = ", ".join(_esc(name) for name in missing[:6])
     more = f" and {len(missing) - 6} more" if len(missing) > 6 else ""
-    return (f"<p class=\"hint\">No monoculture growth rate for {shown}{more}: no batch monoculture of it was "
-            "read, or its curves gave no rate. A gLV simulation needs a rate for each of them from elsewhere; "
-            "the report says why each one has none.</p>")
+    return known + (f"<p class=\"hint\">No monoculture growth rate for {shown}{more}: no batch monoculture of it "
+                    "was read, or its curves gave no rate. A gLV simulation needs a rate for each of them from "
+                    "elsewhere; the report says why each one has none.</p>")
 
 
 def _unresolved_list(result: dict) -> str:
@@ -802,7 +814,8 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
             species_heading = f"<h2>All, narrowed by {which}</h2>"
             parts = []
             if narrowed:
-                shown_filter = ", ".join(_esc(x.strip()) for x in narrowed[:3])
+                # "; " as the report joins them: a medium's name can hold a comma (found in review)
+                shown_filter = "; ".join(_esc(x.strip()) for x in narrowed[:3])
                 more = f" and {len(narrowed) - 3} more" if len(narrowed) > 3 else ""
                 parts.append(f"matching {shown_filter}{more}")
             if excluded_ids:
@@ -880,11 +893,18 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
     # reader who sees "Include drop-out communities: on" beside a form that derives none has been told
     # something false about their own run (#215 item 3)
     unused = [k for k in (getattr(net, "meta", {}) or {}).get("settings_not_used") or () if k in s_here]
+    # the no-growth factor at alpha 0 is unread because this run switched the test off and censored
+    # nothing, not because the derivation never reads it (found in review)
+    switched = [k for k in unused if k == "no_growth_factor" and s_here.get("no_growth_alpha") == 0]
+    unused = [k for k in unused if k not in switched]
     if unused:
         told = ", ".join(_esc(help_settings[k][0] if k in help_settings else k) for k in sorted(unused))
         errors += (f"<p class=\"muted\">{len(unused)} setting(s) are recorded but NOT read by the "
                    f"{_esc(s_here.get('derivation', ''))} derivation, so changing them changes nothing "
                    f"here: {told}.</p>")
+    if switched:
+        errors += ("<p class=\"muted\">No-growth factor is not read in this run: alpha 0 switches the no-growth "
+                   "test off and no comparison was censored, so changing it changes nothing here.</p>")
     return (f"<section class=\"result\" id=\"result\">{note}{species_heading}<ul>{resolved}</ul>{unresolved}"
             f"<p class=\"muted\">Studies searched: {_esc(studies)}</p>{errors}{table}"
             f"{_absent_section(result, result.get('absence', {}))}{_sources(net)}{skipped}</section>")
@@ -1012,7 +1032,9 @@ def parse_settings(form: dict) -> dict:
         settings["absence_threshold"] = absent
     for key in ("no_growth_alpha", "no_growth_factor"):
         value = _finite(form, key)
-        if value is not None:
+        # the form shows the rule's default, so an untouched form sends it back: that is the default, not
+        # a change from it (found in review: every search said these were not at their default)
+        if value is not None and value != getattr(interaction, key.upper()):
             settings[key] = value
     settings["max_adjusted_p"] = None
     if form.get("filter_adjusted_p"):
@@ -1026,6 +1048,7 @@ def parse_settings(form: dict) -> dict:
         settings["correction"] = correction
     settings["conditions"] = form.get("conditions", [""])[0].strip()
     settings["exclude_studies"] = form.get("exclude_studies", [""])[0].strip()
+    settings["technique"] = form.get("technique", [""])[0].strip().lower()
     settings["only_entered"] = bool(form.get("only_entered"))
     settings["report_rates"] = bool(form.get("report_rates"))
     settings["steady_check"] = bool(form.get("steady_check"))
@@ -1062,6 +1085,14 @@ def support_level(entries) -> str:
 
 def run_query(client, entries, settings: dict | None = None, index: dict | None = None, progress=None,
               narrow: bool = True, all_studies: bool = False, published: bool = True) -> dict:
+    """`_run_query` with the Technique setting in force for the whole search (Karoline, #292)."""
+    from .adapter import only_technique
+    with only_technique((settings or {}).get("technique") or None):
+        return _run_query(client, entries, settings, index, progress, narrow, all_studies, published)
+
+
+def _run_query(client, entries, settings: dict | None = None, index: dict | None = None, progress=None,
+               narrow: bool = True, all_studies: bool = False, published: bool = True) -> dict:
     """Species names or taxon ids to an interaction network, through mGrowthDB and the existing derivation.
 
     Returns {"resolved", "unresolved", "taxon_ids", "studies", "network", "skipped", "errors", "notes"}.
@@ -1207,7 +1238,7 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     kept, extra = output_meta(records, s["include_low_quality"], s["correction"], s["absence_threshold"],
                               s["no_growth_alpha"], s["no_growth_factor"], s["merge_arcs"], s["min_studies"],
                               s["merge_genera"], support_level(names), s["max_adjusted_p"],
-                              s["include_absent"], deriver=deriver)
+                              s["include_absent"], deriver=deriver, current=current)
     # output_meta sets each record's status in place, so the arcs it left out below the threshold are still
     # here to show in their own section: the page reports them, the file holds what the page counts
     absent_records = [] if s["include_absent"] else [r for r in records if r.get("status") == ABSENT]
@@ -1238,7 +1269,11 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
     if fitted:
         # the derivation fitted a rate and a self-limitation per organism, and those are the parameters
         # that go with its coefficients (#127)
-        organism_rates = {nid: entry for nid, entry in fitted.items() if nid in net.nodes}
+        # keyed by the network's own nodes and named as it names them, as the measured rates are: with
+        # --merge-genera the nodes are genera and the fitted rates strains, so a filter on `nid in
+        # net.nodes` kept none and the report said no rate could be computed (found in review); and the
+        # fitted rows carried the name of the study they came from rather than the current one (#24)
+        organism_rates = matrix.for_nodes(net, fitted, current)
         # An organism whose fit implies no plateau is given the measured one inside `two_stage`, before
         # its partners are fitted against it, from the monocultures of its own condition (#142 item 7).
         # So there is no second pass here: it used to read every study's monocultures again to substitute
@@ -1251,8 +1286,18 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
                                          rate_method=s["rate_method"], window=s["rate_window"],
                                          spike_factor=s["spike_factor"], progress=say,
                                          capacity_max_fall=s["capacity_max_fall"])
-        organism_rates = matrix.for_nodes(net, found)
+        organism_rates = matrix.for_nodes(net, found, current)
         skipped += rate_skips
+        # a read that failed while the rates were read leaves the run incomplete as surely as one that
+        # failed while the arcs were: the file was marked complete before this stage ran, so an organism
+        # whose monocultures could not be read looked as if it had no measurable rate (#247)
+        failed_rates = unread(rate_skips)
+        if failed_rates:
+            errors.append(f"{len(failed_rates)} study(ies), replicate(s) or growth curve(s) could not be read from "
+                          f"mGrowthDB while reading growth rates (for example {failed_rates[0][0]}: "
+                          f"{failed_rates[0][1]}); the rates are incomplete, so run the search again")
+            net.meta["errors"] = list(errors)
+            net.meta["complete"] = False
         net.meta["growth_rates"] = matrix.rate_meta(
             net, organism_rates, rates.method_name(s["rate_method"], s["rate_window"]))
     # the steady-state check (#125): a chemostat satisfies A x = -(r - D) there, and those numbers were
@@ -1281,12 +1326,17 @@ def run_query(client, entries, settings: dict | None = None, index: dict | None 
         notes.append("no steady-state check: no growth rate could be computed for this network, and the "
                       "check scores the rates and the coefficients the run produced.")
     say(len(studies), len(studies), "Preparing the result")
+    # the arcs below the threshold, named as the network names them: the network's nodes are renamed to
+    # their current names and these were not, so one organism appeared under two names in one report (#24)
+    absent_net = records_to_network(absent_records) if absent_records else None
+    if absent_net is not None:
+        _current_names(absent_net, current)
     return {"entries": names, "settings": dict(s), "resolved": resolved["resolved"],
             "reasons": resolved["reasons"], "suggestions": resolved["suggestions"], "excluded": left_out,
             "all": all_studies, "genera": resolved["genera"],
             "partners_only": partners_only,
             "unresolved": resolved["unresolved"], "taxon_ids": resolved["taxon_ids"], "studies": studies,
-            "network": net, "absent": records_to_network(absent_records) if absent_records else None,
+            "network": net, "absent": absent_net,
             "rates": organism_rates, "steady": checked,
             "skipped": skipped, "errors": errors, "notes": notes,
             "hidden": extra["hidden"], "absence": extra["absence"]}

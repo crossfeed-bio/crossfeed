@@ -858,7 +858,7 @@ parameter they had. No R2 comparison is quoted above for that reason.
     to `/v1` was `significance` going from the corrected p-value to -log10 of it, same name, same type.
     So the convention survives, narrowed to that case, and is in AGENTS.md as a hard rule rather than a
     note here.
-  - The emergency procedure is in RELEASING.md: delete the `all_result.json` asset and every copy derives
+  - The emergency procedure is in RELEASING.md: pause the workflow and delete the `all_result` assets (both formats since #289), and every copy derives
     live. Written down because it was found under pressure, and because the obvious alternative, landing a
     fix before the next scheduled run, is not available: the cron declares 03:17 UTC and has fired at
     09:12 to 10:31 on five consecutive days.
@@ -1387,10 +1387,14 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    daily Actions run and on the one-day freshness. SETTLED 2026-09-28 (Craig, through his agent on #96):
    "Yes to all three: publish, daily, and a network up to 24 hours old." WIDENED to 36 hours
    (Karoline, 2026-10-12, on #196: "Extend to 36 hours"), because GitHub starts the daily run late: the
-   gap between two artifacts reached 27h20m. The reason is structural, as Craig's agent put it on #279:
-   the gap between runs of a daily cron IS one day plus a small positive scheduling delay, so the gaps
-   center on 24 hours (ten of twelve within forty minutes of it) and a window equal to the cron period is
-   a coin flip every night, whatever the count (7 of 12 over on `created_at`, 6 on `run_started_at`).
+   gap between two published artifacts reached 27h20m (from the first hand-run artifact, 2026-09-29, to
+   the first scheduled one). The reason is structural, as Craig's agent put it on #279: the gap between
+   runs of a daily cron IS one day plus a small positive scheduling delay, so the gaps center on 24 hours
+   (9 of the 12 scheduled gaps to 2026-10-12 within forty minutes of it) and a window equal to the cron
+   period is a coin flip every night, whatever the count: 7 of 12 over 24 hours between run ENDS, when
+   the files land (`updated_at`), 6 between run starts (`created_at` and `run_started_at`, which are
+   identical). Corrected 2026-10-13 after Craig's agent measured the run fields on #279 and found the two
+   counts this note gave to equal fields.
    Still one run a day, so the load on mGrowthDB is unchanged. A bound fitted to twelve nights is safe
    here only because both sides fail visibly: past it, every copy derives live; inside it, the file says
    when it was derived and from which data. On whether mGrowthDB's terms
@@ -1656,6 +1660,37 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    time series are better served by the tools that specialize in them. What would help a reader who wants
    that route is an **export of mGrowthDB's community time series** in the shape those tools read, which
    is complementary rather than duplicative, and would be a small task of its own.
+
+40. **A genus's carrying capacity, and techniques measured in different units** (Karoline, 2026-10-13,
+   answering two questions the review of the 0.5.0 candidate raised). (a) A strain's capacity keeps to one
+   medium (2026-10-07), and a genus of several strains took the median of its strains' capacities whatever
+   their media, labeled "mixed: ...". Her words: "genus networks can't help but pool across media. If that's
+   properly documented, then alright". So it stays, and the Merge to genus help says it: a genus arc is the
+   median of arcs from its strains' media, and its rate and capacity are the medians of its strains'. (b)
+   Where one organism's plateaus are in different units, the unit of the first study read won. Her words:
+   "we cannot compare plateaus in different units, so the arc should only be computed if the same units can
+   be compared. if different measurement techniques are available for the same studies, then priority
+   should be given to the one with more time points. In the advanced options, we need to add a setting to
+   optionally specify a technique." Measured on the corpus the same day: no strain has two per-strain
+   techniques in one study, no replicate has both plate counts and flow cytometry at culture level, and
+   different techniques share a unit string across studies (Blautia hydrogenotrophica is "Cells/mL" by 16S,
+   qPCR and flow cytometry), so how (b) is built is being settled with her. SETTLED 2026-10-14 (#292), her
+   answers to three design points: what counts as the same units is "Technique and unit" (a plateau or an
+   arc is compared only with one measured by the same technique in the same unit); which one wins is "More
+   time points" (one strain's plateaus across studies, a strain measured by several techniques in one
+   replicate, a genus's strains, and a gLV cell, which is built from the arcs in its matrix's own unit; a
+   tie in time points goes to more curves, and a tie left after that chooses none and says so, never the
+   order things were read); and the Technique setting is "Curves of it only" (#140 still decides which
+   culture-level counts exist, so never OD).
+41. **A curve with no rising window** (SETTLED, Karoline, 2026-10-14, #293). `easylinear` returned the
+   steepest window's slope, <= 0, where `growthrates` fits nothing ("no positively growing segment"): 16 of
+   the 468 curves of SMGDB00000004 and 5 (#286's re-count). Asked whether such a curve should get no rate,
+   as #229 (a) does for a refit that falls <= 0, her answer was "No rate". Shown that a curve without a rate
+   is left out of a comparison (#41), so that three obligate arcs of SMGDB00000014 (Comamonas on
+   Agrobacterium, whose Agrobacterium monocultures never rise) would disappear, her answer was "No rate,
+   still no growth". So `rates.NoRise` gives no rate, with the reason, and a comparison reads the curve as
+   not grown, as it read the slope; every live arc was measured unchanged (SMGDB00000014 and All with
+   `--metric growth_rate`, All in gLV mode).
 
 Once a default lands as a `Deriver`, the FP/BH slice reruns against it unchanged, so settling these does
 not cost rework.
