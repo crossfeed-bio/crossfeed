@@ -434,10 +434,19 @@ def test_a_cell_is_labeled_only_by_the_arcs_in_it():
                 "condition": "o"}
     old = {**_arc("b", "a", 0.8, 0.4, unit="CFUs/mL"), "metric_with": None, "metric_without": None,
            "condition": "r"}
-    for other in (obligate, old):
+    merged = {**_arc("b", "a", 0.8, 0.4, unit="CFUs/mL"), "merged_arcs": 2, "metric_with": None,
+              "metric_without": None, "strength": 1.0, "condition": "m"}
+    for other in (obligate, old, merged):
         got = matrix.coefficients(records_to_network([_arc("a", "b", 0.3, 0.2), *two, other]), rates)
         assert _cell(got["matrices"][0], "A", "B") == pytest.approx(1.125e-9)
-        assert got["censored_cells"] == [] and got["from_the_ratio"] == []
+        assert got["censored_cells"] == [] and got["from_the_ratio"] == [] and got["from_merged_ratio"] == []
+        assert got["from_absolute_rates"] is True
+    # whichever comes first: an obligate or old arc before a rate arc of the same unit still labels the
+    # cell (round 21: a last-arc-wins label passed every test)
+    for first, listed in ((dict(obligate, partner_abundance_unit="Cells/mL"), "censored_cells"),
+                          (dict(old, partner_abundance_unit="Cells/mL"), "from_the_ratio")):
+        got = matrix.coefficients(records_to_network([_arc("a", "b", 0.3, 0.2), first, *two]), rates)
+        assert got[listed] == [("A", "B")], (listed, got[listed])
     # control: in the cell's own unit each is in it, and labels it
     got = matrix.coefficients(records_to_network([_arc("a", "b", 0.3, 0.2),
                                                   {**obligate, "partner_abundance_unit": "Cells/mL"}]), rates)
@@ -494,3 +503,57 @@ def test_a_matrix_left_with_no_cell_names_no_media():
     assert ("No effect between two organisms is in the matrices; the network's arcs, in no cell, come from "
             "WC, M2.") in readme and "THESE ARCS COME FROM" not in readme
     assert block["arc_media"] == ["WC", "M2"]
+
+
+def test_cells_whose_arcs_record_no_medium_are_not_said_to_be_no_cell():
+    """Round 21 of the review: A and B hold two cells from arcs that record no medium, and C on A is in LB
+    with C counted in CFUs/mL. The README said no effect between two organisms is in the matrices."""
+    from grownet import matrix
+    from grownet.mgrowthdb import records_to_network
+    rates = {"a": _rate("A", 0.4, 1e9), "b": _rate("B", 0.2, 5e8), "c": _rate("C", 0.2, 5e8)}
+    net = records_to_network([{**_arc("a", "b", 0.3, 0.2), "medium": None},
+                              {**_arc("b", "a", 0.6, 0.4), "medium": None},
+                              _arc("c", "a", 0.6, 0.4, medium="LB", unit="CFUs/mL")])
+    got = matrix.coefficients(net, rates)
+    assert sum(block["cells"] for block in got["matrices"]) == 2 and got["cell_media"] == []
+    readme = matrix.readme_from(got, net, rates)
+    assert "No effect between two organisms is in the matrices" not in readme
+    assert "The effects between organisms in the matrices record no medium." in readme
+    assert "The network's other arcs, in no cell, come from LB." in readme
+
+
+def test_two_matrices_of_one_medium_each_are_not_a_mix_of_environments():
+    """Round 21 of the review: the live genus package held a Cells/mL matrix measured in WC and a CFUs/mL
+    one measured in MM, and warned that its effects come from 2 media and to select one, while each
+    matrix, which is what a simulation takes, is of one medium. Here A and B are in WC (Cells/mL) and C and
+    D in LB (CFUs/mL)."""
+    from grownet import matrix
+    from grownet.mgrowthdb import records_to_network
+    rates = {"a": _rate("A", 0.4, 1e9), "b": _rate("B", 0.2, 5e8),
+             "c": _rate("C", 0.5, 1e8, "CFUs/mL"), "d": _rate("D", 0.5, 2e8, "CFUs/mL")}
+    net = records_to_network([_arc("b", "a", 0.6, 0.4), _arc("d", "c", 0.8, 0.4, medium="LB", unit="CFUs/mL")])
+    got = matrix.coefficients(net, rates)
+    assert got["cell_media"] == ["WC", "LB"]
+    readme = matrix.readme_from(got, net, rates)
+    assert "Each matrix's effects between organisms were measured in one medium" in readme
+    assert "      Cells/mL: WC\n" in readme and "      CFUs/mL: LB\n" in readme
+    assert "THESE EFFECTS COME FROM" not in readme
+    # control: a second WC arc on C in CFUs/mL makes that matrix pool two media, which is warned about
+    net = records_to_network([_arc("b", "a", 0.6, 0.4), _arc("d", "c", 0.8, 0.4, medium="LB", unit="CFUs/mL"),
+                              {**_arc("d", "c", 0.7, 0.4, unit="CFUs/mL"), "condition": "x"}])
+    readme = matrix.readme_from(matrix.coefficients(net, rates), net, rates)
+    assert "THESE EFFECTS COME FROM 2 MEDIA" in readme and "      CFUs/mL matrix: LB, WC\n" in readme
+
+
+def test_the_model_assumption_does_not_say_every_cell_is_from_two_organisms():
+    """Round 21 of the review: "Every cell here was measured between two organisms" was said of a package
+    whose diagonal comes from monocultures and whose cells can come from drop-out designs."""
+    from grownet import matrix
+    from grownet.mgrowthdb import records_to_network
+    net = records_to_network([_arc("a", "b", 0.3, 0.2), _arc("b", "a", 0.6, 0.4)])
+    rates = {"a": _rate("A", 0.4, 6e8), "b": _rate("B", 0.2, 5.0e8)}
+    readme = matrix.readme_from(matrix.coefficients(net, rates), net, rates)
+    assert "Every cell here was measured between two organisms" not in readme
+    assert "the diagonal comes from monocultures" in readme
+    assert "unless it is from a drop-out design" in \
+        matrix.glv_payload(net, rates)["caveats"]["model_assumptions"]["pairwise_only"]

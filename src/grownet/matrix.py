@@ -728,8 +728,9 @@ MODEL_ASSUMPTIONS = (
     "  INTERACTIONS ARE PAIRWISE AND ADD UP. The effect of j on i is the same whoever else is present,",
     "      and a community is the sum of its pairs. A higher-order interaction, where a third organism",
     "      changes how the first two affect each other, has no term in this model and cannot be fitted",
-    "      into one. Every cell here was measured between two organisms and is carried into a simulation",
-    "      of any community as though it still held there.",
+    "      into one. Every effect between organisms here was measured between two of them, unless the",
+    "      README names it as from a drop-out design, and is carried into a simulation of any community as",
+    "      though it still held there; the diagonal comes from monocultures.",
     "  So read a simulation against the measurement it came from rather than against itself, and treat",
     "      these numbers as a description of the organisms under the conditions that were fitted. The",
     "      medium travels with every arc and with every carrying capacity for that reason.",
@@ -830,7 +831,7 @@ def _dropout_lines(net: InteractionNetwork) -> list:
             "      Advanced settings, and derive again to leave them out."]
 
 
-def _media_lines(net: InteractionNetwork, cell_media=None) -> list:
+def _media_lines(net: InteractionNetwork, cell_media=None, cells_held: bool = True, held=None) -> list:
     """What the README says about the environments behind the numbers: those of the cells the matrices
     hold when `cell_media` names them, since an arc in no cell is not in the simulation (found in review:
     a matrix of one medium was warned about the media of arcs in no matrix)."""
@@ -838,10 +839,15 @@ def _media_lines(net: InteractionNetwork, cell_media=None) -> list:
     if not names:
         return ["  The media these arcs were measured in are not recorded in this network."]
     if cell_media is not None and not cell_media:
-        # a package whose matrices hold no effect between organisms: its arcs are in no cell, and warning
-        # about their media read as if the simulation spanned them (found in review)
-        return [f"  No effect between two organisms is in the matrices; the network's arcs, in no cell, come "
-                f"from {', '.join(names)}."]
+        if not cells_held:
+            # a package whose matrices hold no effect between organisms: its arcs are in no cell, and
+            # warning about their media read as if the simulation spanned them (found in review)
+            return [f"  No effect between two organisms is in the matrices; the network's arcs, in no cell, "
+                    f"come from {', '.join(names)}."]
+        # cells whose arcs record no medium: there are effects, and nothing says where they were measured
+        # (found in review: this said there were none)
+        return ["  The effects between organisms in the matrices record no medium.",
+                f"      The network's other arcs, in no cell, come from {', '.join(names)}."]
     if cell_media:
         others = [name for name in names if name not in cell_media]
         # the diagonal's plateaus have media of their own, which growth_rates.csv names; this is about the
@@ -850,8 +856,16 @@ def _media_lines(net: InteractionNetwork, cell_media=None) -> list:
         if len(cell_media) == 1:
             return [f"  Every effect between two organisms in the matrices was measured in one medium: "
                     f"{cell_media[0]}.", *rest]
+        # `held`: (abundance unit, media) of each matrix holding a cell. A simulation takes one matrix, so
+        # two matrices of one medium each are not a mix of environments, and the warning said they were
+        # while the MATRICES section beside it named one medium each (found in review)
+        if held and all(len(found) <= 1 for _, found in held):
+            return ["  Each matrix's effects between organisms were measured in one medium, and a simulation takes",
+                    "      one matrix:",
+                    *[f"      {unit}: {found[0]}" for unit, found in held if found], *rest]
         return [f"  THESE EFFECTS COME FROM {len(cell_media)} MEDIA, and a gLV simulation is of one environment:",
-                *[f"      {name}" for name in cell_media],
+                *([f"      {unit} matrix: {', '.join(found)}" for unit, found in held if len(found) > 1] if held
+                  else [f"      {name}" for name in cell_media]),
                 "      Select one in grownet's second box (media, experiments or studies) and derive again to",
                 "      keep a single environment.", *rest]
     if len(names) == 1:
@@ -1133,14 +1147,17 @@ def _arc_media(net: InteractionNetwork, ids) -> list:
     """The media of the arcs between the organisms of one matrix, or the network's when none joins them:
     the environment the matrix stands for, which a steady state is matched against even where no cell is
     held (found in review: a matrix of no cell matched a chemostat in any medium)."""
-    here, found = set(ids), []
+    here, found, joined = set(ids), [], False
     for edge in net.edges:
         if edge.status == "absent" or edge.source not in here or edge.target not in here:
             continue
+        joined = True
         for name in (edge.medium or "").split("; "):
             if name and name not in found:
                 found.append(name)
-    return found or media(net)
+    # the network's media only where no arc joins them: arcs that join them and record no medium say none,
+    # and the network's named another environment for them (found in review)
+    return found if joined else media(net)
 
 
 def _block_media(filled, values: dict) -> list:
@@ -1585,7 +1602,10 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "      the threshold judged it no interaction.",
         "  Arcs of one ordered pair are merged across conditions and studies by their median; a pair whose",
         "      arcs disagree in sign is left at 0 and named below.",
-        *_media_lines(net, got["cell_media"] if "cell_media" in got else None),
+        *_media_lines(net, got["cell_media"] if "cell_media" in got else None,
+                      any(block.get("cells") for block in got["matrices"]),
+                      [(block["abundance_unit"], block.get("media") or []) for block in got["matrices"]
+                       if block.get("cells")]),
         *_dropout_lines(net),
         *_rate_method_lines(got, derivation_of(net), rates),
         "",
@@ -1724,7 +1744,7 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
     """The gLV parameters as one JSON-ready document (`GLV_FORMAT`), the same numbers as the zip (#120).
 
     `matrices` holds one matrix per abundance unit, each with its `organisms`, its `interactions` (rows
-    affected, columns the actor, the fitted diagonal), its unit and the media of its cells, because
+    affected, columns the actor, the fitted diagonal), its unit and the media of its effects between organisms, because
     nothing is converted between abundance units. `growth_rate_detail` carries each rate with what a
     coefficient is made of beside it: the estimator, the lag and the carrying capacity. `caveats` holds,
     as data, everything the README says in prose: the cells from a comparison where one side did not grow,
@@ -1815,8 +1835,9 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
                 "pairwise_only": (
                     "interactions are pairwise and add up: the effect of j on i is taken to be the same "
                     "whoever else is present. A higher-order interaction, where a third organism changes "
-                    "how the first two affect each other, has no term in this model, and every cell here "
-                    "was measured between two organisms"),
+                    "how the first two affect each other, has no term in this model, and every effect between "
+                    "organisms here was measured between two of them unless it is from a drop-out design "
+                    "(dropout_arcs counts those)"),
             },
             # what was measured between organisms counted differently, from this package's own rows: it
             # said none was whatever the rows held (found in review)

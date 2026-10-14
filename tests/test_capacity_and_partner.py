@@ -637,3 +637,17 @@ def test_a_plateau_in_another_unit_within_one_study_names_its_medium():
         _collect_capacity(entry, curve, label, medium)
     assert entry["capacity_left_out"] == [("r2", "the plateau is in OD, and the other plateaus in WC are in "
                                                  "Cells/mL; left out rather than converted")]
+
+
+def test_a_derivation_without_the_no_growth_rule_says_so_in_the_report():
+    """Round 21 of the review: the integrated derivation has no no-growth rule, and its meta says so with
+    `applied: False`, but the report printed "no-growth rule: ; alpha None, factor None; 0 obligate, 0
+    abolished" as if the rule had run and found nothing."""
+    from grownet.model import InteractionNetwork
+    from grownet.report import report_text
+    net = InteractionNetwork()
+    net.meta["no_growth"] = {"applied": False, "why": "the integrated derivation has no no-growth rule"}
+    text = report_text({"network": net, "resolved": [], "unresolved": [], "studies": [], "errors": [],
+                        "skipped": [], "entries": []})
+    assert "no-growth rule: not applied; the integrated derivation has no no-growth rule" in text
+    assert "alpha None" not in text

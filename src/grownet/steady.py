@@ -309,10 +309,12 @@ def predicted(block: dict, rates: dict, dilution: float, organisms: list = None)
 
 
 def _environment(block: dict) -> list:
-    """The media a matrix stands for: those of the arcs between its organisms (`arc_media`), which a matrix
-    holding no cell has too, where `media` names only the cells' (found in review); `media` for a block
-    built before `arc_media` existed."""
-    return [name for name in (block.get("arc_media") or block.get("media") or []) if name]
+    """The media a matrix stands for: its cells' (`media`) when it holds a cell, which are the effects a
+    chemostat is scored with; the arcs' between its organisms (`arc_media`) when it holds none, so that it
+    still has an environment (found in review, both ways: a matrix of no cell matched a chemostat in any
+    medium, and then arcs in no cell matched one in a medium no cell was measured in)."""
+    named = block.get("media") if block.get("cells") or "arc_media" not in block else block["arc_media"]
+    return [name for name in (named or []) if name]
 
 
 def _fits(block: dict, unit: str, medium: str, organisms: set) -> bool:

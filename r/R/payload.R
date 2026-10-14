@@ -318,11 +318,21 @@ print.grownet_glv <- function(x, ...) {
     # the simulation, and a matrix of one medium was warned about the media of arcs in no matrix (found in
     # review). A package from before names only every arc's media.
     cells_in <- x$caveats$cell_media
+    held <- any(vapply(x$matrices, function(m) isTRUE(m$cells > 0), logical(1)))
     if (!is.null(cells_in) && !length(cells_in) && length(x$caveats$media)) {
-        cat(sprintf("   * no effect between organisms is in the matrices; the network's arcs, in no cell, come from %s\n",
-                    paste(x$caveats$media, collapse = ", ")))
+        # no cell, or cells whose arcs record no medium (found in review: both read as no cell)
+        cat(if (held) "   * the effects between organisms in the matrices record no medium; the network's other arcs, in no cell, come from "
+            else "   * no effect between organisms is in the matrices; the network's arcs, in no cell, come from ",
+            paste(x$caveats$media, collapse = ", "), "\n", sep = "")
     } else if (length(cells_in)) {
-        if (length(cells_in) > 1) {
+        # each matrix holding a cell, with its own media: a simulation takes one matrix, so two matrices of
+        # one medium each are not a mix of environments (found in review)
+        with_cells <- Filter(function(m) isTRUE(m$cells > 0), x$matrices)
+        one_each <- length(with_cells) > 1 && all(vapply(with_cells, function(m) length(m$media) <= 1, logical(1)))
+        if (length(cells_in) > 1 && one_each) {
+            cat("   * each matrix's effects between organisms were measured in one medium, and a simulation takes one matrix:\n")
+            for (m in with_cells) if (length(m$media)) cat("       ", m$abundance_unit, ": ", m$media, "\n", sep = "")
+        } else if (length(cells_in) > 1) {
             cat(sprintf(paste0("   * these effects come from %d media, and a simulation is of one environment:\n",
                                "       %s\n       grownet's second box (media, experiments or studies) keeps ",
                                "one.\n"),

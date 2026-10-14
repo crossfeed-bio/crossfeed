@@ -334,3 +334,68 @@ def test_a_matrix_holding_no_cell_still_stands_for_its_arcs_medium():
     seen = steady.observed(client, [_chemostat("E1", "x", [A], [(1, "V1")], medium="mMCB")])
     (result,) = steady.check(got, RATES, seen)
     assert not result["used"] and "the package in Wilkins-Chalgren Anaerobe Broth (WC)" in result["why_not"]
+
+
+def test_a_matrix_holding_cells_stands_for_their_medium_only():
+    """Round 21 of the review: a matrix whose one cell, B on A, is in WC, beside an arc A on B in LB that is
+    in no cell (its partner counted in CFUs/mL), was matched by an LB chemostat through that arc and scored
+    with the WC cell. A matrix holding a cell stands for its cells' media."""
+    WC = "Wilkins-Chalgren Anaerobe Broth (WC)"
+
+    def arc(src, tgt, medium, unit="Cells/mL"):
+        return {"source": _gs(src), "target": _gs(tgt), "source_name": src, "target_name": tgt,
+                "effect": "facilitation", "strength": 0.5, "status": "present", "outcome": "quantified",
+                "study_id": "S1", "metric": "growth_rate:easylinear:5", "evidence": "biculture",
+                "medium": medium, "partner_abundance": 2.0e8, "metric_with": 0.6, "metric_without": 0.4,
+                "partner_abundance_unit": unit, "partner_abundance_n": 3}
+    got = matrix.coefficients(records_to_network([arc(B, A, WC), arc(A, B, "LB", unit="CFUs/mL")]), RATES)
+    (block,) = got["matrices"]
+    assert block["cells"] == 1 and block["media"] == [WC] and "LB" in block["arc_media"]
+    client = _client({(1, A): _flat(3.0e8), (1, B): _flat(2.0e8)})
+    seen = steady.observed(client, [_chemostat("E1", "x", [A, B], [(1, "V1")], medium="LB")])
+    (result,) = steady.check(got, RATES, seen)
+    assert not result["used"] and f"the package in {WC}" in result["why_not"]
+
+
+def test_arcs_that_join_a_matrix_and_record_no_medium_are_not_given_the_network_s():
+    """Round 21 of the review: B on A records no medium and is the matrix's one cell; another organism's arc
+    on A is in LB. The matrix's arcs were given the network's media (LB), so a chemostat in another medium
+    was refused as LB; the arcs joining the matrix say none, so it is scored with the note that the package
+    records no medium."""
+    def arc(src, tgt, medium, unit="Cells/mL"):
+        return {"source": _gs(src), "target": _gs(tgt), "source_name": src, "target_name": tgt,
+                "effect": "facilitation", "strength": 0.5, "status": "present", "outcome": "quantified",
+                "study_id": "S1", "metric": "growth_rate:easylinear:5", "evidence": "biculture",
+                "medium": medium, "partner_abundance": 2.0e8, "metric_with": 0.6, "metric_without": 0.4,
+                "partner_abundance_unit": unit, "partner_abundance_n": 3}
+    other = "Some other organism"
+    got = matrix.coefficients(records_to_network([arc(B, A, None), arc(other, A, "LB", unit="CFUs/mL")]), RATES)
+    block = got["matrices"][0]
+    assert block["media"] == [] and block["arc_media"] == []
+    client = _client({(1, A): _flat(3.0e8), (1, B): _flat(2.0e8)})
+    seen = steady.observed(client, [_chemostat("E1", "x", [A, B], [(1, "V1")])])
+    (result,) = steady.check(got, RATES, seen)
+    assert result["used"] and "records no medium" in result["note"]
+
+
+def test_a_matrix_holding_no_cell_is_scored_by_its_arcs_medium_with_its_aliases():
+    """Round 21 of the review: a matrix whose one pair is a sign conflict in "Wilkins-Chalgren" holds no
+    cell, so it stands for its arcs' medium. A chemostat in the full name is scored across the alias, with
+    the alias named and no note that the package records no medium; an absent arc between the two, in LB,
+    is not part of that environment."""
+    def arc(effect, strength, medium="Wilkins-Chalgren", status="present"):
+        return {"source": _gs(B), "target": _gs(A), "source_name": B, "target_name": A,
+                "effect": effect, "strength": strength, "status": status, "outcome": "quantified",
+                "study_id": "S1", "metric": "growth_rate:easylinear:5", "evidence": "biculture",
+                "medium": medium, "partner_abundance": 2.0e8, "partner_abundance_unit": "Cells/mL",
+                "partner_abundance_n": 3}
+    absent = {**arc("facilitation", 0.1, medium="LB", status="absent"), "condition": "x"}
+    got = matrix.coefficients(records_to_network([arc("facilitation", 1.0), arc("inhibition", -1.0), absent]),
+                              RATES)
+    (block,) = got["matrices"]
+    assert block["cells"] == 0 and block["arc_media"] == ["Wilkins-Chalgren"]
+    client = _client({(1, A): _flat(3.0e8)})
+    seen = steady.observed(client, [_chemostat("E1", "x", [A], [(1, "V1")])])
+    (result,) = steady.check(got, RATES, seen)
+    assert result["used"] and result.get("note") is None
+    assert result["medium_aliases"] == [["wilkins chalgren", "wilkins chalgren anaerobe broth"]]

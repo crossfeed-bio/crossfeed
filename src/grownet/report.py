@@ -30,7 +30,8 @@ def _value(key: str, value) -> str:
     if isinstance(value, str) and "\n" in value:
         # a multi-line setting (the second box's one entry per line) on one report line: its second entry
         # stood alone at the start of the next line (found in review)
-        return ", ".join(line.strip() for line in value.splitlines() if line.strip()) or "none"
+        # "; " as an arc's media are joined: a medium's name can hold a comma (found in review)
+        return "; ".join(line.strip() for line in value.splitlines() if line.strip()) or "none"
     return "none" if value == "" else str(value)
 
 
@@ -336,7 +337,11 @@ def report_text(result: dict) -> str:
         lines.append(f"q-value filter (q is the adjusted p-value): interactions above "
                      f"{applied['max_adjusted_p']:g} left out: "
                      f"{applied.get('left_out', 0)}; kept untested (no p-value): {applied.get('untested', 0)}")
-    if rule:
+    if rule and rule.get("applied") is False:
+        # a derivation without the rule says so, rather than a count of nothing (found in review: the
+        # integrated report printed "alpha None, factor None; 0 obligate, 0 abolished")
+        lines.append(f"no-growth rule: not applied; {rule.get('why', '')}")
+    elif rule:
         lines.append(f"no-growth rule: {rule.get('test', '')}; alpha {rule.get('alpha')}, factor "
                      f"{rule.get('factor')}; {rule.get('obligate', 0)} obligate, {rule.get('abolished', 0)} abolished")
     merge = meta.get("merge", {})

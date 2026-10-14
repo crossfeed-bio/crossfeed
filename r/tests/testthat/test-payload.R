@@ -206,14 +206,48 @@ test_that("the media line is about the cells the matrices hold where the package
     expect_false(grepl("in no cell", text, fixed = TRUE))
     # a package whose matrices hold no effect says so; one from before cell_media keeps the arcs' line
     payload$caveats$cell_media <- list()
+    payload$matrices[[1]]$cells <- 0
     glv <- grownet:::as_grownet_glv(payload)
     expect_false(is.null(glv$caveats$cell_media))
     text <- paste(capture.output(print(glv)), collapse = "\n")
     expect_match(text, "no effect between organisms is in the matrices; the network's arcs, in no cell, come from WC, LB",
                  fixed = TRUE)
+    # and with no media at all, nothing (round 21: a mutant printed "come from" followed by nothing)
+    payload$caveats$media <- list()
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
+    expect_false(grepl("in no cell", text, fixed = TRUE))
+    payload$caveats$media <- list("WC", "LB")
     payload$caveats$cell_media <- NULL
     glv <- grownet:::as_grownet_glv(payload)
     expect_null(glv$caveats$cell_media)
     text <- paste(capture.output(print(glv)), collapse = "\n")
     expect_match(text, "these arcs come from 2 media", fixed = TRUE)
+})
+
+test_that("cells whose arcs record no medium are not said to be no cell", {
+    # round 21: an empty cell_media beside matrices that hold cells read as "no effect is in the matrices"
+    payload <- example_payload()
+    payload$caveats$media <- list("LB")
+    payload$caveats$cell_media <- list()
+    glv <- grownet:::as_grownet_glv(payload)
+    expect_true(any(vapply(glv$matrices, function(m) isTRUE(m$cells > 0), logical(1))))
+    text <- paste(capture.output(print(glv)), collapse = "\n")
+    expect_match(text, "the effects between organisms in the matrices record no medium", fixed = TRUE)
+    expect_false(grepl("no effect between organisms is in the matrices", text, fixed = TRUE))
+})
+
+test_that("two matrices of one medium each are not a mix of environments", {
+    # round 21: each matrix is what a simulation takes, so one medium each needs no warning
+    payload <- two_unit_payload()
+    payload$matrices[[1]]$media <- list("WC")
+    payload$caveats$media <- list("WC", "MWF")
+    payload$caveats$cell_media <- list("WC", "MWF")
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
+    expect_match(text, "each matrix's effects between organisms were measured in one medium", fixed = TRUE)
+    expect_match(text, "CFUs/mL: MWF", fixed = TRUE)
+    expect_false(grepl("these effects come from", text, fixed = TRUE))
+    payload$matrices[[1]]$media <- list("WC", "LB")
+    payload$caveats$cell_media <- list("WC", "LB", "MWF")
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
+    expect_match(text, "these effects come from 3 media", fixed = TRUE)
 })

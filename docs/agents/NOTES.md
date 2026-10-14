@@ -1136,10 +1136,11 @@ and the README: that is the one mistake this style can make.
   `aria-pressed` for anyone who cannot see it. It stays a submit button, so the page keeps its no-JavaScript
   rule: the server re-renders the switch the other way.
 - `matrix.media(net)` is every arc's media (the payload's `caveats.media`); the gLV README and the R printout
-  warn from `cell_media`, the media of the cells the matrices hold, and name the media of arcs in no cell
+  warn from `cell_media`, the media of the effects between organisms the matrices hold (each diagonal's
+  capacity media are in growth_rates.csv), and name the media of arcs in no cell
   apart, because a simulation is of one environment and an arc in no cell is not in it. A block's `media`
-  is its cells'; its `arc_media` (the arcs between its organisms, or the network's) is what
-  `steady._fits` matches a chemostat against, so a matrix holding no cell still has an environment.
+  is its cells'; `steady._environment` matches a chemostat against it, or, for a matrix holding no cell,
+  against its `arc_media` (the arcs between its organisms, or the network's where no arc joins them).
 
 ## Gotchas
 

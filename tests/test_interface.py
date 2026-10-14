@@ -819,8 +819,9 @@ def test_several_entries_of_the_second_box_are_one_line_of_the_report():
     """Round 20 of the review: `--conditions SMGDB00000007 SMGDB00000014` (one entry per line in the box)
     printed the second study alone at the start of the next report line, with no label."""
     from grownet.report import _value
-    assert _value("conditions", "SMGDB00000007\nSMGDB00000014\n") == "SMGDB00000007, SMGDB00000014"
+    assert _value("conditions", "SMGDB00000007\nSMGDB00000014\n") == "SMGDB00000007; SMGDB00000014"
     assert _value("conditions", "SMGDB00000001") == "SMGDB00000001"
+    assert _value("conditions", "S7\r\n\r\nS14") == "S7; S14"       # blank lines are no entries
 
 
 def test_a_medium_that_matches_nothing_leaves_a_result_that_explains_itself(server):
