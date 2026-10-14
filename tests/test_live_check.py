@@ -537,6 +537,32 @@ def test_the_published_check_says_where_its_ratio_check_was_loose(tmp_path, monk
     assert "effect_over_sd not checked on 1 arc(s)" in live_check.check_published(str(out))[1]
 
 
+def test_the_arcs_below_the_threshold_are_checked_against_the_networks_k(tmp_path, monkeypatch):
+    """Craig's agent on #281, 2026-10-13: the published part below the threshold carries `absence: null`,
+    so its arcs, the ones the threshold defines, were never checked against it: one labeled absent whose
+    |strength| 1.0 is above k * sd = 1 * 0.5 passed. It is checked against the network's k now."""
+    import json
+
+    import live_check
+    import publish_all
+    from test_gui import FakeClient
+
+    from grownet.gui import run_query
+    monkeypatch.setattr(publish_all, "run_query", lambda *a, **k: run_query(
+        FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
+    out = tmp_path / "out"
+    assert publish_all.main(str(out), None, previous=lambda: None) == 0
+    doc = json.loads((out / "all_result.v4.json").read_text())
+    edge = {**doc["network"]["edges"][0], "strength": 1.0, "weight": 1.0, "effect": "facilitation", "sd": 0.5,
+            "effect_over_sd": 2.0, "status": "absent"}
+    doc["absent"] = {**doc["network"], "edges": [edge], "meta": {**doc["network"]["meta"], "absence": None}}
+    (out / "all_result.v4.json").write_text(json.dumps(doc))
+    problems = live_check.check_published(str(out))[0]
+    assert any(p.startswith("All, below the threshold:") and "status absent with |strength| 1.0" in p
+               for p in problems), problems
+
+
+
 def test_an_honest_corner_arc_passes_the_arc_check_itself_and_gl_v_mode_says_where_it_was_loose(monkeypatch):
     """Round 12 of the review: the corner test called `ratio_tolerance` only, so putting the first-order
     bound back inline in `arc_problems` survived; and the gLV-mode summary's coverage note was untested."""
@@ -565,12 +591,16 @@ def test_the_ratio_floor_and_the_smallest_sd():
     honest = records_to_network([{"source": "a", "target": "b", "effect": "facilitation", "strength": 1.0,
                                   "sd": 0.0001, "effect_over_sd": 16667.3333, "study_id": "S1"}])
     assert not [p for p in network_problems(honest, "x") if "effect_over_sd" in p]
-    # strength 0.0005, sd 0.01: the bound is 0.1065 of the ratio of 0.05, just past a tenth
-    edge = {"source": "a", "target": "b", "effect": "facilitation", "sd": 0.01, "study_id": "S1"}
-    just_past = records_to_network([{**edge, "strength": 0.0005, "effect_over_sd": 0.05}])
-    within = records_to_network([{**edge, "strength": 0.05, "effect_over_sd": 5.0}])
-    assert live_check.ratio_coverage(just_past) == (1, 0) and live_check.ratio_coverage(within) == (0, 0)
-    assert live_check.MAX_RATIO_TOLERANCE == 0.1
+    # the check is loose where the rounding bound reaches k, the absence threshold (Craig's agent on #281,
+    # 2026-10-13: "tie it to `k` rather than to a tenth"). |s| 0.1: at sd 0.002 the bound is
+    # 5e-5 * 0.102 / (0.002 * 0.00195) + 5e-5 = 1.308, past k = 1; at sd 0.003 it is 0.582, within it
+    edge = {"source": "a", "target": "b", "effect": "facilitation", "strength": 0.1, "study_id": "S1"}
+    past = records_to_network([{**edge, "sd": 0.002, "effect_over_sd": 50.0}])
+    within = records_to_network([{**edge, "sd": 0.003, "effect_over_sd": 33.3333}])
+    assert live_check.ratio_coverage(past) == (1, 0) and live_check.ratio_coverage(within) == (0, 0)
+    # and it tightens with k: at k = 0.5 the 0.582 is past it
+    assert live_check.ratio_coverage(within, 0.5) == (1, 0)
+    assert live_check.ratio_tolerance(0.1, 0.002) == pytest.approx(1.308, abs=1e-3)
 
 
 def test_make_r_check_fails_on_a_skipped_r_test(tmp_path):

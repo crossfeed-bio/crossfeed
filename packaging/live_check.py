@@ -38,12 +38,14 @@ EXACT = 1e-9
 CENSORED = ("obligate", "abolished")
 
 
-# The share of the value past which a check of effect_over_sd is said to be loose: the rounding bound
-# has then grown to more than a tenth of what it checks, so an error smaller than that cannot be told from
-# none. Such an arc is still checked, since the exact bound never flags a correctly rounded arc and a gross
-# error still shows, and the check says on how many arcs it was loose (Craig's agent on #281, by the 0
-# versus NA convention of #129; applying the floor as a skip lost errors it caught, found in review).
-MAX_RATIO_TOLERANCE = 0.1
+# When a check of effect_over_sd is said to be loose: when the rounding bound reaches k, the absence
+# threshold the ratio exists to be compared with, so rounding alone could carry an arc across the boundary
+# it decides (Craig's agent on #281, 2026-10-13: "tie it to `k` rather than to a tenth"; a tenth of the
+# value did not refer to that decision, and does not tighten when k does). Such an arc is still checked,
+# since the exact bound never flags a correctly rounded arc and a gross error still shows, and the check
+# says on how many arcs it was loose (applying the floor as a skip lost errors it caught, found in review).
+# Without a k in the network's meta, the derivation's default is the boundary.
+from grownet.derive import ABSENCE_THRESHOLD  # noqa: E402
 
 
 def ratio_tolerance(strength: float, sd: float) -> float | None:
@@ -57,9 +59,19 @@ def ratio_tolerance(strength: float, sd: float) -> float | None:
     return HALF_UNIT * (sd + abs(strength)) / (sd * (sd - HALF_UNIT)) + HALF_UNIT
 
 
-def ratio_coverage(net) -> tuple:
-    """(loose, not checked): the arcs whose effect_over_sd check allows more than a tenth of the value, and
-    those carrying one with no sd above the rounding to recompute it from, said with what was checked."""
+def _k_of(net, k=None):
+    """The absence threshold to judge a network's arcs by: the one given (a parent network's, for the part
+    below the threshold, whose meta carries none), else the network's own, else the default."""
+    if k is not None:
+        return k
+    own = ((net.meta or {}).get("absence") or {}).get("k")
+    return own if own is not None else ABSENCE_THRESHOLD
+
+
+def ratio_coverage(net, k=None) -> tuple:
+    """(loose, not checked): the arcs whose effect_over_sd check allows as much as k, the absence threshold,
+    and those carrying one with no sd above the rounding to recompute it from."""
+    k = _k_of(net, k)
     loose = unchecked = 0
     for e in net.edges:
         if e.strength is None or e.effect_over_sd is None or e.sd is None:
@@ -67,20 +79,21 @@ def ratio_coverage(net) -> tuple:
         tolerance = ratio_tolerance(e.strength, e.sd)
         if tolerance is None:
             unchecked += 1
-        elif tolerance > MAX_RATIO_TOLERANCE * max(abs(e.strength) / e.sd, abs(e.effect_over_sd)):
+        elif tolerance >= k:
             loose += 1
     return loose, unchecked
 
 
-def coverage_note(*nets) -> str:
-    """What the effect_over_sd check could not hold tightly, for the summary line; empty when nothing."""
+def coverage_note(*nets, k=None) -> str:
+    """What the effect_over_sd check could not hold tightly, for the summary line; empty when nothing. `k`
+    is the threshold to judge them by when a network does not carry its own (the part below it)."""
     loose = unchecked = 0
     for net in nets:
         if net is not None:
-            a, b = ratio_coverage(net)
+            a, b = ratio_coverage(net, None if ((net.meta or {}).get("absence") or {}).get("k") is not None else k)
             loose, unchecked = loose + a, unchecked + b
-    parts = ([f"effect_over_sd checked only loosely on {loose} arc(s), where rounding allows more than a "
-              "tenth of the value"] if loose else []) + \
+    parts = ([f"effect_over_sd checked only loosely on {loose} arc(s), where rounding allows a change as large "
+              "as k, the absence threshold"] if loose else []) + \
             ([f"effect_over_sd not checked on {unchecked} arc(s) with no sd above the rounding"] if unchecked else [])
     return "".join(f"; {p}" for p in parts)
 
@@ -151,11 +164,14 @@ def arc_problems(e, derivation: str, k: float | None = None, names: dict | None 
     return out
 
 
-def network_problems(net, label: str) -> list:
-    """Properties 3 and 4, and every arc's, for one derived network."""
+def network_problems(net, label: str, k=None) -> list:
+    """Properties 3 and 4, and every arc's, for one derived network. `k` is the absence threshold to check
+    its arcs' status against when its meta carries none: the published part below the threshold has
+    `absence: null`, so its arcs, the ones the threshold defines, were never checked against it (Craig's
+    agent on #281, 2026-10-13)."""
     meta = net.meta
     derivation = (meta.get("settings") or {}).get("derivation", "")
-    k = (meta.get("absence") or {}).get("k")
+    k = (meta.get("absence") or {}).get("k") if k is None else k
     out = []
     if not net.edges:
         out.append(f"{label}: no arcs at all")
@@ -193,7 +209,8 @@ def check_published(out_dir: str) -> tuple:
         problems.append(f"All: {FILE} would not be served at the defaults: {refused}")
     absent = result.get("absent")
     if absent is not None:
-        problems += network_problems(absent, "All, below the threshold") if absent.edges else []
+        parent_k = (net.meta.get("absence") or {}).get("k")
+        problems += network_problems(absent, "All, below the threshold", parent_k) if absent.edges else []
         problems += [f"All, below the threshold: {e.source} -> {e.target} has status {e.status}"
                      for e in absent.edges if e.status != "absent"]
     # the same network in every older format, for installed copies (#289): each file written for a format
@@ -237,7 +254,7 @@ def check_published(out_dir: str) -> tuple:
         for part, current in parts:
             problems += _older_part(legacy_path.name, schema, part, legacy.get(part), current, manifest)
     return problems, (f"All: {len(net.edges)} arcs" + (f", {len(absent.edges)} below the threshold" if absent else "")
-                      + coverage_note(net, absent))
+                      + coverage_note(net, absent, k=(net.meta.get("absence") or {}).get("k")))
 
 
 def _older_part(name: str, schema: str, part: str, doc, current, manifest: dict) -> list:

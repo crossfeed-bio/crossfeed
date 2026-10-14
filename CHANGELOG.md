@@ -201,8 +201,10 @@ content.
 - **The live check's tolerance for `effect_over_sd` is the exact rounding bound** (Craig's agent on #281,
   correcting the first-order one it had given): honest rounding reached past the old bound at every sd,
   by 2x at sd 1e-4. It is applied to every arc with an sd above the rounding, and the check says on how
-  many arcs it was loose (the bound above a tenth of the value) or could not run (none in today's All
-  network). `packaging/compare_growthrates.py` makes the counts `grownet.rates` states against R's
+  many arcs it was loose (the bound as large as k, the absence threshold the ratio is compared with:
+  Craig's agent on #281, "tie it to `k` rather than to a tenth") or could not run (none in today's All
+  network). The arcs below the threshold, whose published part carries no `absence`, are checked against
+  the network's k, where they were never checked against it (also #281). `packaging/compare_growthrates.py` makes the counts `grownet.rates` states against R's
   `growthrates`, on a selection of curves it states.
 - **The live check reads every network in each older-format file**, the arcs below the threshold as well
   as the network, which 0.4.0 reads too, and checks that each file would be served by the copies that read
