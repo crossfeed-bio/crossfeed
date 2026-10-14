@@ -6,6 +6,28 @@ content.
 
 ## [Unreleased]
 
+
+## [0.5.0] (2026-10-14)
+
+**Read this before upgrading: the formats move, the networks do not.** Measured on the whole of mGrowthDB
+against 0.4.0 on 2026-10-14: every arc, and every number on it, is the same by default (145 arcs), with
+`--metric growth_rate` (29) and in gLV mode (10), and one node's name now carries its strain
+(*Faecalibacterium duncaniae A2-165*). What changes is what the files say, and what a reader of them has to
+know. Three days of review, 48 entries below; the ones a reader acts on:
+
+- **the format id moves to `grownet.interaction_network/v4`** (first entries under Upgrading), for four
+  arc fields and one node field a `/v3` file could not give. Installed 0.3.x and 0.4.x copies keep being
+  served the daily All network as `/v3`.
+- **the gLV payload moves to `grownet.glv/v2`**, where `matrices[].media` now names the media of the cells
+  a matrix holds. The R package of this version reads v2, v1 and v0.
+- **grownet has one runtime dependency, `truststore`**, so that a copy installed with uv on a Mac can read
+  mGrowthDB, which no earlier release could (under Fixed).
+- **two method decisions that move no live arc**: a curve with no rising window has no growth rate and is
+  still read as not grown (#293), and plateaus and arcs are compared only within one technique and unit,
+  the one with more time points winning, with a **Technique** setting to keep one (#292).
+
+A minor version and not a patch: both formats move and there is a new setting.
+
 ### Upgrading
 
 - **The gLV payload moves to `grownet.glv/v2`** (Karoline, 2026-10-14: "follow your recommendation for

@@ -31,6 +31,18 @@ ABOUT = (f"{NAME} was built by Karoline Faust (KU Leuven) and Craig Heilmann (Sy
 # user of the page wants, so each line says what they can now do rather than what moved in the code. A test
 # requires the newest entry to be this version, so a release cannot forget it.
 RELEASES = (
+    ("0.5.0", "2026-10-14", (
+        "No arc and no number of a derived network changes: measured on the whole of mGrowthDB against "
+        "0.4.0, by default, with growth rates and in gLV mode. What changes is what the files say.",
+        "The network format moves to /v4, for the unit of a metric and the interval it was computed over, "
+        "how a drop-out arc compares with the other removals, and why a taxon id is not a node's identity. The "
+        "gLV package moves to grownet.glv/v2, and says which media its cells hold.",
+        "A copy installed with uv on a Mac can read mGrowthDB: certificates are checked against the "
+        "computer's own, with truststore, grownet's one runtime dependency.",
+        "A curve with no rising window has no growth rate, and is still read as not grown. Plateaus and "
+        "arcs are compared only within one technique and unit, the one with more time points winning, "
+        "and a new Technique setting keeps the curves of one technique.",
+    )),
     ("0.4.0", "2026-10-11", (
         "The default derivation is the specified comparison again, and gLV mode selects the integrated "
         "form. Every network derived without gLV mode changes and almost all of them grow: on the whole "
