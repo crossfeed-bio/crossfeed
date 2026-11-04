@@ -38,6 +38,22 @@ def test_baranyi_recovers_the_rate_of_a_baranyi_curve():
     assert baranyi(T, [math.exp(y) for y in logs]) == pytest.approx(0.6, rel=0.02)
 
 
+@pytest.mark.parametrize("step, mu", [(2.0, 1.0), (3.0, 0.6)])
+def test_baranyi_recovers_the_rate_of_a_curve_with_no_lag(step, mu):
+    # #298: y0 = 0, d = 3 (the curve rises e^3, about 20 times), lag 1e-9 h (h0 = 1e-9 * mu), sampled every
+    # `step` hours at 10 points. The curve IS the model, so the exact optimum is mu itself with a residual
+    # of 0. The starts estimate a lag from the steepest slope, and the fit then drives h0 toward 0, where
+    # its Jacobian column vanishes: damped by that column's own diagonal, the system stayed singular and
+    # the fit stopped short, at 0.802 for mu 1.0 and 0.555 for mu 0.6. Damped by the largest diagonal seen
+    # (MINPACK's choice, as in R's nls.lm), it reaches mu.
+    times = [step * i for i in range(10)]
+    logs = [rates._baranyi(t, 0.0, mu, 3.0, 1e-9 * mu) for t in times]
+    fit = rates.baranyi_fit(times, [math.exp(y) for y in logs])
+    assert fit["rate"] == pytest.approx(mu, rel=1e-6)
+    assert fit["r2"] == pytest.approx(1.0, abs=1e-9)
+    assert fit["lag"] < 1e-6
+
+
 def test_baranyi_fits_the_rise_of_a_curve_that_falls_after_its_peak():
     # Karoline (2026-09-28, "Fit up to the maximum", then "End of the plateau"): a sigmoid rise to 4 (log) by
     # 7 h, then a fall back to

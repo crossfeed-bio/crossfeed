@@ -224,6 +224,10 @@ def _fit_once(times, logs, params, max_iter=200):
 
     params, lam = params[:], 1e-3
     current = rss(params)
+    # damping scaled by the largest diagonal of J'J seen so far (MINPACK's choice, as in R's nls.lm): when the lag
+    # collapses (h0 -> 0) its column of J goes to zero, and damping by the current diagonal left the system
+    # singular however large lam grew, so the fit stopped short of the optimum (#298, found by foodnet)
+    scale = [0.0] * 4
     for _ in range(max_iter):
         residuals = [m - o for m, o in zip(_predict(times, params), logs, strict=True)]
         jac = [[0.0] * 4 for _ in times]
@@ -240,8 +244,9 @@ def _fit_once(times, logs, params, max_iter=200):
                 jac[i][j] = (f_up[i] - f_down[i]) / (2 * step)
         jtj = [[sum(r[a] * r[b] for r in jac) for b in range(4)] for a in range(4)]
         jtr = [sum(jac[i][a] * residuals[i] for i in range(len(times))) for a in range(4)]
+        scale = [max(scale[a], jtj[a][a]) or 1.0 for a in range(4)]
         for _ in range(30):
-            damped = [[jtj[a][b] + (lam * jtj[a][a] if a == b else 0.0) for b in range(4)] for a in range(4)]
+            damped = [[jtj[a][b] + (lam * scale[a] if a == b else 0.0) for b in range(4)] for a in range(4)]
             delta = _solve(damped, [-v for v in jtr])
             if delta is None:
                 lam *= 10

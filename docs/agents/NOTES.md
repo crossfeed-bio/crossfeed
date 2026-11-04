@@ -853,6 +853,20 @@ as no growth. Metric names carry the rule: "growth_rate:easylinear:5", "growth_r
 asked for the implementation as its own option (2026-09-27); easylinear is the default because it
 reproduces mGrowthDB's numbers.
 
+2026-11-04 (#298): `_fit_once` damps by the largest diagonal of J'J seen so far (MINPACK's scaling, as in
+R's `nls.lm`), not the current diagonal. When a fit drives h0 toward 0, the `log_h0` column of J vanishes,
+damping a zero diagonal adds nothing, and `_solve` returned None thirty times, so the fit ended short of
+the optimum with nothing to show for it. foodnet, whose `_fit_once` was the same code, found it against R
+`growthrates` with the same objective, starts and guards; `baranyi` is checked against R only through
+those curves, not by a script in this repository. Every lag the replicate form reports with
+`--report-rates` comes from `baranyi_fit`, whichever estimator gives the rate. The fix changed no default
+arc on the live corpus; only Baranyi rates, their arcs and one lag moved (CHANGELOG, #298). Test it on a
+synthetic curve that IS the model with no lag (`test_baranyi_recovers_the_rate_of_a_curve_with_no_lag`):
+the exact answer is known, and real curves cannot enter the repository. Open, for a human (#298): foodnet's
+decision 35 (no rate when the best fit lies past the guard, a `guard_limited` flag at 90% of it, r2 and
+rss reported) is not adopted here. After this fix, the two study 2 curves whose best fit lies past the
+guard are refused, one of them with the misleading reason "R2 0.61".
+
 ## Speed: parallel prefetch (2026-09-27)
 
 Nearly all of a search's time was waiting on requests made one after another (about 100 ms each; 839 for
