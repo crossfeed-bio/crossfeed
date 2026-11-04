@@ -293,6 +293,11 @@ def _derive_run(a):
     if problem:
         print(problem, file=sys.stderr)
         return 2
+    if a.live and a.conditions and not (a.species or a.study or a.all_studies):
+        # the page's species box left empty with the second box filled (#300, Karoline 2026-11-04): every
+        # species in those media or studies, which is All under --conditions. Only with --live, so that
+        # --fixture keeps its own message rather than one about a flag nobody typed
+        a.all_studies = True
     if a.species or a.all_studies:
         return _derive_species(a)
     # Flags that only the search path can act on. The help says they apply "with --species or --all" and
@@ -787,7 +792,7 @@ def build_parser() -> argparse.ArgumentParser:
         "derive", help="derive an interaction network for species, or for one study",
         description="Derive an interaction network from mGrowthDB growth curves: for species, strains,\n"
                     "genera or NCBI taxon ids (as the local page does), for all of mGrowthDB (--all, the\n"
-                    "page's All button), or for every species in one study. The settings are the local\n"
+                    "page with both boxes empty), or for every species in one study. The settings are the local\n"
                     "page's Advanced settings, with the same defaults.",
         epilog=DERIVE_EXAMPLES, formatter_class=argparse.RawDescriptionHelpFormatter)
     what = d.add_argument_group("what to derive")
@@ -802,7 +807,7 @@ def build_parser() -> argparse.ArgumentParser:
                            "holding them is searched and one network returned, as on the local page (needs "
                            "--live)")
     what.add_argument("--all", action="store_true", dest="all_studies",
-                      help="every study in mGrowthDB, with every partner, as the page's All button (needs "
+                      help="every study in mGrowthDB, with every partner, as the page with both boxes empty (needs "
                            "--live; the study argument then limits it to those studies)")
     what.add_argument("--no-published", action="store_true",
                       help="with --all, derive live even when the network derived once a day in the grownet "
@@ -816,7 +821,9 @@ def build_parser() -> argparse.ArgumentParser:
                       help="media, experiment ids or study ids to look at (the page's second box): a medium "
                            "is matched as text against the medium name, the description and the experiment "
                            "name, an id picks that study (SMGDB...) or experiment (EMGDB...), and naming a "
-                           "comparison keeps the monocultures it is made against. Empty looks at every medium")
+                           "comparison keeps the monocultures it is made against. Empty looks at every medium. "
+                           "Without --species or a study, every species in what it names, with every partner, "
+                           "as the page does with the species box empty (with --live)")
     what.add_argument("--technique", default="", metavar="NAME",
                       help="keep only curves measured by this mGrowthDB technique (fc, 16s, qpcr, plates, ...), "
                            "in arcs and in monoculture rates and plateaus, and name the others (default: every "

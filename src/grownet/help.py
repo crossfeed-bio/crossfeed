@@ -334,7 +334,7 @@ CLI_ONLY = {
     "--r-port": "the port that R session listens on (default 8793, what grownet_listen() uses)",
     "--species": "species, strain or genus names, or NCBI taxon ids: search every study holding them, as the page "
                  "does",
-    "--all": "every study in mGrowthDB, with every partner, as the page's All button (with --live)",
+    "--all": "every study in mGrowthDB, with every partner, as the page with both boxes empty (with --live)",
     "--no-published": "with --all, derive live instead of reading the network derived once a day",
     "--no-cache": "read everything from mGrowthDB again, instead of reusing what an earlier run read for "
                   "a study whose uploadedAt has not changed. Responses are kept in the user cache "
@@ -749,8 +749,9 @@ def render_help(token: str, defaults: dict, example: tuple, job: str = "") -> st
 <h2 id="what">What grownet does</h2>
 <p>Type species names, one per line, strain names, a genus (it stands for every species of it in
 mGrowthDB), or NCBI taxon ids. grownet looks them up in mGrowthDB, reads the growth curves of every study
-that holds them, and derives the interactions between them on this machine. The All button ignores the
-box and derives every study in mGrowthDB, with every partner. With the default settings, All reads the
+that holds them, and derives the interactions between them on this machine. Leave the species box empty
+and grownet derives every species in the media or studies of the second box, with every partner, or, with
+that box empty too, every study in mGrowthDB: All. With the default settings, All reads the
 network the grownet repository derives from mGrowthDB once a day, when it is less than 36 hours old and
 was derived by the same derivation your settings ask for, which
 spares mGrowthDB the 1,926 requests a cold corpus run sends, or
@@ -1312,7 +1313,8 @@ command. Other uses:</p>
 <p>The first derives one whole study; the second searches a genus in one medium (the second box, from
 the command line); the third writes a study as the adjacency matrix; the fourth adds the growth rates and
 the gLV parameters (<a href="#glv">the matrix, the growth rates and gLV</a>); the fifth a genus, every
-species of it with every partner, one node per genus; the sixth all of mGrowthDB, as the All button does,
+species of it with every partner, one node per genus; the sixth all of mGrowthDB, as the page does with
+both boxes empty,
 merged across studies and then to genus; the seventh opens this page, and the last checks a file against
 the format. Every advanced setting has its flag (see the list above), and
 <code>{COMMAND} derive --help</code> lists them all. Besides those:</p>

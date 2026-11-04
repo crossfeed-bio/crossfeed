@@ -302,11 +302,15 @@ def test_server_refuses_a_request_without_the_token(server):
         assert e.value.code == 403
 
 
-def test_server_asks_for_a_species_when_none_given(server):
+def test_server_runs_all_when_both_boxes_are_empty(server):
+    # it used to answer "Type at least one species"; since #300 both boxes empty is All (Karoline,
+    # 2026-11-04: "perhaps the All network could be delivered when both input fields are empty")
     base, token = server
-    data = urllib.parse.urlencode({"species": "  "}).encode()
+    data = urllib.parse.urlencode({"species": "  ", "derivation": "replicate"}).encode()
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
-        assert "Type at least one species" in r.read().decode("utf-8")
+        page = r.read().decode("utf-8")
+    assert "Type at least one species" not in page
+    assert "All of mGrowthDB" in page or "Searching" in page             # a quick fake search, or its progress
 
 
 def test_a_port_in_use_gives_a_plain_message_not_a_traceback():
@@ -620,32 +624,30 @@ def test_all_still_leaves_out_the_excluded_studies_and_says_so():
     assert r["studies"] == [] and "Exclude these studies" in render_result("tok", r)
 
 
-def test_the_all_button_sits_next_to_example_with_its_explainer(server):
+def test_the_species_box_says_what_leaving_it_empty_does_and_there_is_no_all_button(server):
+    # the All button and its caption are gone since #300 (Karoline, 2026-11-04: "Remove it"): the species
+    # box left empty runs All, under the second box, so the second box's warning "All reads this box"
+    # (#193) has nothing left to warn about
     base, token = server
     form = _get(f"{base}/?token={token}")
-    assert '<button type="submit" name="example" value="1">Example</button>\n<button type="submit" name="all"' in form
-    # the caption said "All derives every study, ignoring the boxes", and All reads the second box by
-    # design (run_query's docstring, Karoline 2026-09-28), so the caption was the false half (#193)
-    assert "All derives every study, ignoring the species box" in form
-    assert "ignoring the boxes" not in form
-    # the bar has a length limit Karoline set, so the second box's own hint carries the rest
-    assert "All reads this box" in form and "clear it to derive the whole of mGrowthDB" in form
-    # and the gLV example button beside them, which fills the boxes and the settings for a package that
-    # simulates and runs the search (Karoline, 2026-10-07)
-    assert 'name="glv_example" value="1">gLV example</button>' in form
+    assert 'name="all"' not in form and "All derives every study" not in form and "All reads this box" not in form
+    assert "Leave it empty" in form
+    # Example and the gLV example button beside it, which fills the boxes and the settings for a package
+    # that simulates and runs the search (Karoline, 2026-10-07)
+    assert ('<button type="submit" name="example" value="1">Example</button>\n'
+            '<button type="submit" name="glv_example"') in form
     assert "gLV example fills" in form
-    with urllib.request.urlopen(f"{base}/run?token={token}", data=b"all=1&species=", timeout=10) as r:
-        page = r.read().decode("utf-8")
-    assert "All of mGrowthDB" in page or "Searching" in page             # a quick fake search, or its progress
 
 
 def test_all_narrowed_by_the_second_box_does_not_claim_the_whole_database(server):
     """Pressing All with a study id left in the second box narrowed the search and still headed the result
     "All of mGrowthDB". The gLV example button fills that box and leaves it filled, so gLV example then
     All reported a network of one study as the whole database (#193). The narrowing is deliberate; the
-    heading was the defect."""
+    heading was the defect.
+    Since #300 there is no All button: the species box left empty with a study in the second box is
+    exactly this search, and it is what Karoline asked for."""
     base, token = server
-    data = b"all=1&species=&conditions=SMGDB00000002"
+    data = b"species=&conditions=SMGDB00000002"
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
         page = r.read().decode("utf-8")
     assert "Searching" not in page, "this needs the result page, not the progress page, or it proves nothing"
@@ -663,7 +665,7 @@ def test_all_narrowed_by_the_second_box_does_not_claim_the_whole_database(server
     # alone passed however the heading was worded
     assert "matching SMGDB00000002" in page and "Clear them to derive" in page
     # two entries, one holding a comma, are joined with "; " (round 22)
-    data = b"all=1&species=&conditions=SMGDB00000002%0D%0AWilkins-Chalgren%2C+anaerobic"
+    data = b"species=&conditions=SMGDB00000002%0D%0AWilkins-Chalgren%2C+anaerobic"
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
         page = r.read().decode("utf-8")
     # in the page's own list, not only in the report embedded below it, which says the same
@@ -671,7 +673,7 @@ def test_all_narrowed_by_the_second_box_does_not_claim_the_whole_database(server
 
     # and the OTHER control that narrows All, which the first version of this test did not cover and the
     # fix therefore did not either: Exclude these studies, which the code comment named all along
-    data = b"all=1&species=&exclude_studies=SMGDB00000002"
+    data = b"species=&exclude_studies=SMGDB00000002"
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
         page = r.read().decode("utf-8")
     assert "Searching" not in page, "this needs the result page, or it proves nothing"

@@ -6,6 +6,16 @@ content.
 
 ## [Unreleased]
 
+### Changed
+
+- **Find interactions with the species box empty searches every species in the media, experiments or
+  studies of the second box, with every partner, and with both boxes empty it is the whole of mGrowthDB;
+  the All button is gone** (Karoline, 2026-11-04, #300: "allow the species field to be empty when the
+  second field (media/studies) has content", and on the button, "Remove it"). This is the search the All
+  button ran, so nothing about its result changes: at the default settings it is the network derived once
+  a day, and any changed setting derives it live. The page no longer answers an empty box with "Type at
+  least one species". On the command line, `derive --live --conditions NAME ...` without `--species` or
+  a study does the same; `--all` is unchanged.
 
 ## [0.5.0] (2026-10-14)
 

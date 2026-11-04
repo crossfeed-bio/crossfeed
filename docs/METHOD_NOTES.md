@@ -1313,6 +1313,13 @@ issue it came from) instead of deciding it; a settled item moves to "Decisions" 
    fetched from mGrowthDB (there can be a short explainer next to the button)." Every study the species
    list is read from is derived, with every partner kept; the second box (media, experiments or studies,
    item 8) and Exclude these studies still apply. `derive --live --all` does the same from the command line.
+   **Since #300 it is no longer a button** (Karoline, 2026-11-04): "allow the species field to be empty
+   when the second field (media/studies) has content, so the query is automatically carried out for all
+   species in these media/studies ... perhaps the All network could be delivered when both input fields
+   are empty, unless changed advanced options necessitate a re-search", and, asked whether to remove the
+   button, "Remove it". Find interactions with the species box empty runs this search; with the second
+   box empty too it is the whole of mGrowthDB, read from the network derived once a day at the default
+   settings (item 30). `derive --live --conditions NAME` without `--species` does the same.
 
 26. **The time window of a bi-culture arc** (open; found by the audit of 2026-09-28). Curves are compared
    over the window they share, so none is extrapolated. For a drop-out arc that window is the target's own

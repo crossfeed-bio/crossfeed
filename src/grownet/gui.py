@@ -357,16 +357,18 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
 <label class="field" for="species">Species, strains, genera or NCBI taxon ids</label>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in INPUT_EXAMPLES)}</p>
 <textarea id="species" name="species" rows="5">{_esc(entries)}</textarea>
-<p class="hint">One per line (a genus alone stands for all its species), or press Example. Interactions are
-derived from mGrowthDB growth data on this machine; nothing is uploaded.</p>
+<p class="hint">One per line (a genus alone stands for all its species), or press Example. Leave it empty
+to derive every species in the media or studies of the second box, with every partner, or the whole of
+mGrowthDB when that box is empty too (the network derived once a day at the default settings, otherwise derived live
+in about half a minute). Interactions are derived from mGrowthDB growth data on this machine; nothing is
+uploaded.</p>
 </div>
 <div class="box">
 <label class="field" for="conditions">Media, experiments or studies (optional)</label>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in selecting.EXAMPLES)}</p>
 <textarea id="conditions" name="conditions" rows="5">{_esc(conditions)}</textarea>
-<p class="hint"><strong>All reads this box.</strong> A study or medium left here narrows All to it, which
-is deliberate, so clear it to derive the whole of mGrowthDB; the gLV example button fills it and leaves it
-filled (#193).
+<p class="hint">With the species box empty, every species in what this box names is searched; the gLV
+example button fills it and leaves it filled, so clear it to derive the whole of mGrowthDB (#193).
 One per line. A medium is matched as text, so "wilkins" finds every spelling of
 Wilkins-Chalgren <em>and</em> every variant of it: a medium with a sugar added or a carbon source left out
 is another environment, so those stay apart and the report names every medium the search read. An id
@@ -376,11 +378,10 @@ every medium.</p>
 </div>
 <div class="bar"><button class="primary" type="submit">Find interactions</button>
 <button type="submit" name="example" value="1">Example</button>
-<button type="submit" name="all" value="1">All</button>
 <button type="submit" name="glv_example" value="1">gLV example</button>
 <button type="submit" name="glv_mode" value="1" class="switch{glv_on}" aria-pressed="{glv_pressed}"
 ><span class="track"><span class="knob"></span></span>gLV mode</button>
-<span class="muted">All derives every study, ignoring the species box (half a minute). gLV example fills
+<span class="muted">gLV example fills
 the boxes and settings for a package that simulates, and runs it. gLV mode sets the four settings a
 package needs, the derivation among them; press it again to switch back.</span></div>
 {_settings_block(settings or {}, token, job)}
@@ -823,8 +824,7 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
                              + (f" and {len(excluded_ids) - 3} more" if len(excluded_ids) > 3 else ""))
             resolved = (f"<li>every study {' and '.join(parts)}, with every partner: "
                         f"{len(result['studies'])} studies{daily_note}</li>"
-                        "<li class=\"muted\">All ignores the species box, not these. Clear them to derive "
-                        "the whole of mGrowthDB.</li>")
+                        "<li class=\"muted\">Clear them to derive the whole of mGrowthDB.</li>")
         else:
             species_heading, resolved = "<h2>All of mGrowthDB</h2>", (
                 f"<li>every study, with every partner: {len(result['studies'])} studies{daily_note}</li>")
@@ -1101,7 +1101,8 @@ def _run_query(client, entries, settings: dict | None = None, index: dict | None
     lose the rest. `progress(done, total, message)`, when given, is told where the search is: `total` is
     None until the studies are known (#75).
 
-    `all_studies` is the page's All button (Karoline, 2026-09-28): the entries are ignored and every study
+    `all_studies` is All (Karoline, 2026-09-28), which the page runs when the species box is empty (#300,
+    Karoline 2026-11-04; it was a button until then): the entries are ignored and every study
     mGrowthDB holds is derived, with every partner kept, still under the second box (media, experiments or
     studies) and Exclude these studies. With the default settings it is read from the network derived once a
     day in the grownet repository when that is less than 36 hours old and was derived by the same derivation
@@ -1741,16 +1742,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             job["thread"].join(self.wait)
             self._redirect(f"/?token={self.token}&job={job['id']}#result")
             return
-        if form.get("all"):
-            job = self._start([], settings, all_studies=True)
-            job["thread"].join(self.wait)
-            self._redirect(f"/?token={self.token}&job={job['id']}#result")
-            return
-        if not [e for e in entries if e.strip()]:
-            self._send(render_form(self.token, settings=settings, message="Type at least one species.",
-                                   conditions=settings.get("conditions", "")))
-            return
-        job = self._start(entries, settings)
+        # the species box left empty is All, under the second box and Exclude these studies as All always
+        # was (Karoline, 2026-11-04, #300: "allow the species field to be empty when the second field
+        # (media/studies) has content, so the query is automatically carried out for all species in these
+        # media/studies", and with both empty "the All network could be delivered ... unless changed
+        # advanced options necessitate a re-search", which `run_query` decides by `published.usable`).
+        # It replaces the All button ("Remove it") and the "Type at least one species" refusal.
+        everything = not [e for e in entries if e.strip()]
+        job = self._start([] if everything else entries, settings, all_studies=everything)
         job["thread"].join(self.wait)
         self._redirect(f"/?token={self.token}&job={job['id']}#result")
 

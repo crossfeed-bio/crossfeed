@@ -126,7 +126,7 @@ def test_the_command_line_species_search_gives_the_pages_network(monkeypatch, ca
 
 
 def test_the_command_line_all_gives_the_pages_all_network(monkeypatch, capsys, tmp_path):
-    # `derive --live --all` and the page's All button: the same edges, and the report says what was asked
+    # `derive --live --all` and the page with both boxes empty: the same edges, and the report says what was asked
     monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", FakeClient)
     out, report = tmp_path / "all.json", tmp_path / "all.txt"
     assert main(["derive", "--live", "--all", "--merge-genera", "--derivation", "replicate",
@@ -137,6 +137,36 @@ def test_the_command_line_all_gives_the_pages_all_network(monkeypatch, capsys, t
     assert cli["edges"] == page["edges"] and cli["edges"] and cli["meta"]["query"] == "all"
     assert {n["identity"] for n in cli["nodes"]} == {"genus"}
     assert "query: all of mGrowthDB" in report.read_text(encoding="utf-8")
+
+
+def test_the_command_line_with_conditions_and_no_species_gives_the_pages_empty_species_box(monkeypatch, capsys,
+                                                                                          tmp_path):
+    # #300 (Karoline, 2026-11-04): the page's species box left empty with media or studies in the second
+    # box searches every species in them. `--conditions` without `--species` or a study does the same, and
+    # the report says what was asked, not "all of mGrowthDB"
+    class InStudy(FakeClient):
+        """The fake study's experiments, carrying the study id mGrowthDB gives them, which the second box
+        matches a study id against."""
+
+        def study_experiments(self, study_id):
+            return [{**e, "studyId": study_id} for e in super().study_experiments(study_id)]
+
+        def get_experiment(self, experiment_id):
+            return {**super().get_experiment(experiment_id), "studyId": self.study_id}
+
+    monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", InStudy)
+    out, report = tmp_path / "wc.json", tmp_path / "wc.txt"
+    assert main(["derive", "--live", "--conditions", "SMGDB00000001", "--derivation", "replicate",
+                 "--out", str(out), "--report", str(report)]) == 0
+    cli = json.loads(out.read_text(encoding="utf-8"))
+    page = json.loads(gui.run_query(InStudy(), [], {"conditions": "SMGDB00000001", "derivation": "replicate"},
+                                    all_studies=True)["network"].to_json())
+    assert cli["edges"] == page["edges"] and cli["edges"] and cli["meta"]["query"] == "all"
+    text = report.read_text(encoding="utf-8")
+    assert "all of mgrowthdb" not in text.lower() and "SMGDB00000001" in text
+    # a study argument keeps its own meaning (derive that one study), and nothing at all still asks for one
+    assert main(["derive", "--live"]) == 2
+    assert "needs a study id" in capsys.readouterr().err
 
 
 def test_species_search_needs_live_and_rejects_a_deriver(capsys, tmp_path):
