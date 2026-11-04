@@ -1,6 +1,7 @@
 """grownet command line: derive interaction networks from mGrowthDB.
 
   python -m grownet derive SMGDB00000004 --live                 # every species in one study
+  python -m grownet derive --live --all                         # the All network: every study in mGrowthDB
   python -m grownet derive --live --species "Faecalibacterium duncaniae" \
       "Blautia hydrogenotrophica" "Roseburia intestinalis"
   python -m grownet derive SMGDB00000004 --fixture records.json  # offline, from interaction records
@@ -24,6 +25,13 @@ from .mgrowthdb import MGrowthDBError, records_to_network
 from .schema import schema_json, validate_document
 
 DERIVE_EXAMPLES = """examples:
+  the All network, every study in mGrowthDB with every partner (the page with both boxes empty; at the
+  default settings it is the network derived once a day, read in seconds):
+    grownet derive --live --all --out all.json
+
+  every species in one medium, with every partner (the page with only the second box filled):
+    grownet derive --live --conditions "Wilkins-Chalgren" --out wc_all.json
+
   the local page's Example, written to a file, with its report, and sent to Cytoscape:
     grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica" "Roseburia intestinalis" \\
         --out example.json --report example_report.txt --to-cytoscape
@@ -35,7 +43,7 @@ DERIVE_EXAMPLES = """examples:
   a genus (all its species in mGrowthDB) with every partner, one node per genus:
     grownet derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
 
-  all of mGrowthDB (the page's All), arcs merged across studies and then to genus:
+  the All network, arcs merged across studies and then to genus:
     grownet derive --live --all --merge-arcs --merge-genera --out all_genera.json
 
   every species in one study, stricter about what counts as an interaction:
@@ -789,11 +797,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     d = sub.add_parser(
-        "derive", help="derive an interaction network for species, or for one study",
+        "derive", help="derive an interaction network for species, media or studies, or the All network "
+                  "of every study in mGrowthDB (derive --live --all)",
         description="Derive an interaction network from mGrowthDB growth curves: for species, strains,\n"
-                    "genera or NCBI taxon ids (as the local page does), for all of mGrowthDB (--all, the\n"
-                    "page with both boxes empty), or for every species in one study. The settings are the local\n"
-                    "page's Advanced settings, with the same defaults.",
+                    "genera or NCBI taxon ids (as the local page does), for every species in some media or\n"
+                    "studies (--conditions alone), for every species in one study, or for all of mGrowthDB.\n"
+                    "For the All network, every study in mGrowthDB: grownet derive --live --all.\n"
+                    "The settings are the local page's Advanced settings, with the same defaults.",
         epilog=DERIVE_EXAMPLES, formatter_class=argparse.RawDescriptionHelpFormatter)
     what = d.add_argument_group("what to derive")
     what.add_argument("study", nargs="?", default="",

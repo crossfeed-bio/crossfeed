@@ -15,7 +15,10 @@ content.
   button ran, so nothing about its result changes: at the default settings it is the network derived once
   a day, and any changed setting derives it live. The page no longer answers an empty box with "Type at
   least one species". On the command line, `derive --live --conditions NAME ...` without `--species` or
-  a study does the same; `--all` is unchanged.
+  a study does the same; `--all` is unchanged. The species box is marked optional, and one sentence under
+  the buttons, the help page, `grownet --help` and `grownet derive --help` say how to get the All network.
+  An empty result of such a search speaks of "the studies searched", not "the studies holding these
+  species".
 
 ## [0.5.0] (2026-10-14)
 

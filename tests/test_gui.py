@@ -631,7 +631,7 @@ def test_the_species_box_says_what_leaving_it_empty_does_and_there_is_no_all_but
     base, token = server
     form = _get(f"{base}/?token={token}")
     assert 'name="all"' not in form and "All derives every study" not in form and "All reads this box" not in form
-    assert "Leave it empty" in form
+    assert "Left empty,\nevery species in the media or studies of the second box is searched" in form
     # Example and the gLV example button beside it, which fills the boxes and the settings for a package
     # that simulates and runs the search (Karoline, 2026-10-07)
     assert ('<button type="submit" name="example" value="1">Example</button>\n'
@@ -912,6 +912,35 @@ def test_an_empty_result_says_what_the_second_box_left_out():
     # with the box empty, nothing is said about it
     result["settings"] = {**DEFAULTS}
     assert "second box" not in _empty_reason(result)
+
+
+def test_an_empty_all_result_speaks_of_the_studies_searched_not_of_species_typed():
+    """Since #300 an empty species box runs All, so an empty network there came back as "The studies
+    holding these species gave no usable comparison" with no species typed (Karoline, 2026-11-04: "please
+    update the wording"). Each reason that named "these species" is checked on both kinds of search."""
+    from grownet.gui import _empty_reason
+    unmatched = "no experiment of this study matches the media, experiments or studies entered"
+
+    def reason(all_search, skipped, conditions=""):
+        return _empty_reason({"settings": {**DEFAULTS, "conditions": conditions}, "studies": ["S1", "S2"],
+                              "resolved": [] if all_search else [("x", {1: "x"})], "all": all_search,
+                              "errors": [], "network": None, "hidden": {}, "skipped": skipped})
+
+    cases = [  # (skipped, conditions, the start of the sentence for a species search, and for All)
+        ([("study S1", unmatched), ("study S2", unmatched)], "mucin",
+         "No experiment of the studies holding these species matches the second box",
+         "No experiment of the studies searched matches the second box"),
+        ([("study S1", "only monocultures here"), ("study S2", "only monocultures here")], "",
+         "The studies holding these species grew them only alone",
+         "The studies searched grew their species only alone"),
+        ([("a pair", "no usable per-strain series")], "",
+         "The studies holding these species gave no usable comparison",
+         "The studies searched gave no usable comparison"),
+    ]
+    for skipped, conditions, species_search, all_search in cases:
+        assert species_search in reason(False, skipped, conditions)        # a species search: as before
+        said = reason(True, skipped, conditions)
+        assert all_search in said and "these species" not in said, said
 
 
 def test_opening_the_page_without_the_token_explains_itself(server):

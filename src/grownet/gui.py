@@ -354,14 +354,12 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
     return _page(f"""{note}<form method="post" action="/run?token={_esc(token)}">
 <div class="boxes">
 <div class="box">
-<label class="field" for="species">Species, strains, genera or NCBI taxon ids</label>
+<label class="field" for="species">Species, strains, genera or NCBI taxon ids (optional)</label>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in INPUT_EXAMPLES)}</p>
 <textarea id="species" name="species" rows="5">{_esc(entries)}</textarea>
-<p class="hint">One per line (a genus alone stands for all its species), or press Example. Leave it empty
-to derive every species in the media or studies of the second box, with every partner, or the whole of
-mGrowthDB when that box is empty too (the network derived once a day at the default settings, otherwise derived live
-in about half a minute). Interactions are derived from mGrowthDB growth data on this machine; nothing is
-uploaded.</p>
+<p class="hint">One per line (a genus alone stands for all its species), or press Example. Left empty,
+every species in the media or studies of the second box is searched, with every partner. Interactions are
+derived from mGrowthDB growth data on this machine; nothing is uploaded.</p>
 </div>
 <div class="box">
 <label class="field" for="conditions">Media, experiments or studies (optional)</label>
@@ -381,7 +379,8 @@ every medium.</p>
 <button type="submit" name="glv_example" value="1">gLV example</button>
 <button type="submit" name="glv_mode" value="1" class="switch{glv_on}" aria-pressed="{glv_pressed}"
 ><span class="track"><span class="knob"></span></span>gLV mode</button>
-<span class="muted">gLV example fills
+<span class="muted">For the All network, every study in mGrowthDB, press Find interactions with both
+boxes empty. gLV example fills
 the boxes and settings for a package that simulates, and runs it. gLV mode sets the four settings a
 package needs, the derivation among them; press it again to switch back.</span></div>
 {_settings_block(settings or {}, token, job)}
@@ -759,16 +758,19 @@ def _empty_reason_core(result: dict) -> str:
                 f"(k = {k:g}): the species do not affect each other by that rule. They are listed below, "
                 "and a lower k or Include arcs below the absence threshold keeps them in the file.")
     reasons = [reason for _, reason in result["skipped"]]
+    # All has no species typed: since #300 it is the species box left empty, so "these species" named
+    # nothing the reader had entered (Karoline, 2026-11-04: "please update the wording")
+    studies = "the studies searched" if result.get("all") else "the studies holding these species"
     unmatched = [r for r in reasons if "no experiment of this study matches" in r]
     if unmatched and len(unmatched) == len(result["studies"]):
         # the second box named a medium or an id that nothing in these studies carries (#113)
-        return ("No experiment of the studies holding these species matches the second box ("
+        return (f"No experiment of {studies} matches the second box ("
                 + _esc(s.get("conditions", "")) + "). A medium is matched as text, so a shorter word finds "
                 "more spellings; the report lists every study it looked at.")
     only_monocultures = [r for r in reasons if r.startswith("only monocultures")]
     if only_monocultures and len(only_monocultures) == len(result["studies"]):
-        return ("The studies holding these species grew them only alone, in monocultures, so there is no "
-                "co-culture or community to compare with.")
+        return (f"{studies.capitalize()} grew {'their species' if result.get('all') else 'them'} only alone, "
+                "in monocultures, so there is no co-culture or community to compare with.")
     non_batch = [r for r in reasons if "excluded by default with the growth measure" in r]
     if non_batch and len(non_batch) == len(reasons) and not s.get("include_non_batch"):
         return ("These studies are chemostat or serial dilution experiments. Their area under the curve and "
@@ -777,7 +779,7 @@ def _empty_reason_core(result: dict) -> str:
                 "experiments.")
     top = Counter(r.split(";")[0].strip() for r in reasons).most_common(1)
     why = f" The most common reason: {_esc(top[0][0])}." if top else ""
-    return (f"The studies holding these species gave no usable comparison.{why} {EMPTY_HELP} The report lists "
+    return (f"{studies.capitalize()} gave no usable comparison.{why} {EMPTY_HELP} The report lists "
             "the reason for every pair.")
 
 

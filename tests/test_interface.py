@@ -180,7 +180,10 @@ def test_the_input_field_starts_empty_under_a_header_naming_the_options_and_a_ro
     assert "placeholder" not in page
     # Karoline (2026-09-28): "Genus to be mentioned in the title above the input box and a genus example
     # query in the sentence below"
-    header = page.index('<label class="field" for="species">Species, strains, genera or NCBI taxon ids</label>')
+    # "(optional)" since #300 (Karoline, 2026-11-04: "the GUI text still implies that the first input field
+    # is not optional")
+    header = page.index('<label class="field" for="species">Species, strains, genera or NCBI taxon ids '
+                        '(optional)</label>')
     examples = page.index('<p class="examples">For example: ')
     assert header < examples < page.index("<textarea")            # a row below the header, above the box
     for example in gui.INPUT_EXAMPLES:                    # one species, one strain, one genus, one taxon id
@@ -290,7 +293,8 @@ def test_the_page_the_command_line_and_the_help_all_know_genera_and_all():
     page = help_page.render_help("tok", gui.DEFAULTS, gui.EXAMPLE)
     assert "Merge to genus" in page                                     # the advanced option
     assert help_page._name("supporting_pairs") in page and help_page._name("merged_pairs") in page  # the arc fields
-    assert "a genus (it stands for every species of it" in page and "Leave the species box empty" in page
+    assert "a genus (it stands for every species of it" in page and "The species box is optional" in page
+    assert "<strong>For the All network</strong>, every study in mGrowthDB with every partner, leave both boxes" in page
     form = gui.render_form("tok")
     # All is the species box left empty since #300 (Karoline, 2026-11-04: "Remove it"), not a button
     assert 'name="merge_genera"' in form and 'name="all"' not in form
@@ -1204,8 +1208,27 @@ def test_an_empty_species_box_searches_the_second_box_and_both_empty_give_all(se
     # ... "unless changed advanced options necessitate a re-search": any changed setting derives it live
     assert find("", "", absence_threshold="2")["published"] is False
 
-    # and there is no All button any more; the species box says what leaving it empty does
+    # and there is no All button any more: the species box reads as optional and says what leaving it
+    # empty does, and the bar says in one sentence how to get the All network (Karoline, 2026-11-04: "we'll
+    # also need a brief sentence in the GUI (and CLI help) so people know how to get the All network. also,
+    # the GUI text still implies that the first input field is not optional")
     assert 'name="all"' not in page and ">All</button>" not in page
+    assert "Species, strains, genera or NCBI taxon ids (optional)</label>" in page
     hint = page[page.index('id="species"'):page.index('for="conditions"')]
-    assert "Leave it empty" in hint and "every species in the media or studies of the second box" in hint
-    assert "the whole of\nmGrowthDB when that box is empty too" in hint
+    assert "Left empty,\nevery species in the media or studies of the second box is searched" in hint
+    bar = page[page.index('<div class="bar">'):]
+    bar = bar[:bar.index("</div>")]
+    assert "For the All network, every study in mGrowthDB, press Find interactions with both\nboxes empty." in bar
+
+
+def test_the_command_line_help_says_how_to_get_the_all_network():
+    # Karoline, 2026-11-04: "we'll also need a brief sentence in the GUI (and CLI help) so people know how to
+    # get the All network". In the list of commands and in derive's own help, with the command to type
+    from grownet.__main__ import DERIVE_EXAMPLES, build_parser
+    parser = build_parser()
+    top = parser.format_help()
+    derive = next(a for a in parser._subparsers._actions if a.choices).choices["derive"].format_help()
+    assert "the All network of every study in" in top and "(derive --live --all)" in top
+    assert "For the All network, every study in mGrowthDB: grownet derive --live --all." in derive
+    assert DERIVE_EXAMPLES.startswith("examples:\n  the All network, every study in mGrowthDB")
+    assert "grownet derive --live --conditions \"Wilkins-Chalgren\" --out wc_all.json" in DERIVE_EXAMPLES
