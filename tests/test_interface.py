@@ -1204,6 +1204,10 @@ def _viewer_text(page: str) -> str:
     """What the viewer (gui/index.html) can show: its visible HTML, and its script with the comments taken
     out, since the messages, labels and tooltips it writes are string literals there."""
     shown = _visible(page)
+    # and the attribute values a reader meets on hovering or in an empty field, which stripping the tags
+    # threw away with them (found in review: "(#12)" in a placeholder passed)
+    shown += "\n" + "\n".join(m.group(2) for m in re.finditer(
+        r"\b(title|placeholder|aria-label|alt)\s*=\s*\"([^\"]*)\"", page, flags=re.I))
     for script in re.findall(r"<script\b[^>]*>(.*?)</script\s*>", page, flags=re.S | re.I):
         script = re.sub(r"/\*.*?\*/", "", script, flags=re.S)
         shown += "\n" + "\n".join(re.sub(r"(^|\s)//.*$", "", line) for line in script.splitlines())
@@ -1225,6 +1229,8 @@ def test_no_issue_number_in_the_viewer_or_an_r_message():
     # and the scans see what they are for: a planted number in a viewer string and in an R message
     assert ISSUE_NUMBER.findall(_viewer_text('<script>\nshow("see (#245)"); // (#1) a comment\n</script>')) \
         == ["#245"]
+    assert ISSUE_NUMBER.findall(_viewer_text('<input placeholder="a study id (#12)"><b title="since #7">x</b>')) \
+        == ["#12", "#7"]
     assert _r_strings('cat("in no matrix (#142)\\n") # (#9) a comment\nx <- \'a\'') == \
         ["in no matrix (#142)\\n", "a"]
 
