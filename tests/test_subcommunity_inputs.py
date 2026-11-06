@@ -75,19 +75,49 @@ def test_an_unstated_start_leaves_the_row_scaled_and_says_why():
     assert got["scale"] is None and "does not say when the dilution started" in got["how"]
 
 
-def test_a_batch_period_too_short_to_fit_or_a_washing_out_rate_gives_no_scale():
+def test_a_batch_period_too_short_to_fit_is_read_after_the_pump_and_a_washing_out_rate_gives_no_scale():
+    """A 1 h batch period holds two points, too few for a rate; the rise after the pump started is r - D = 0.46
+    itself, which is the other reading of the scale."""
     short = row_scale(_curve(_startup(0.5, 0.04, 1.0, 1.0e9)), 0.04, {"kind": "batch", "hours": 1.0, "said": "x"})
-    assert short["scale"] is None and "points" in short["how"]
+    # (easylinear refits over every window within its quota of the steepest, one of which reaches the plateau,
+    # so 0.4592 rather than 0.46: growthrates' rule, kept so rates agree with mGrowthDB's)
+    assert short["scale"] == pytest.approx(0.46, abs=2e-3) and "after the pump started" in short["how"]
+    # and with no point after the pump either, no scale
+    cut = [p for p in _startup(0.5, 0.04, 1.0, 1.0e9) if p[0] <= 1.0]
+    none = row_scale(_curve(cut), 0.04, {"kind": "batch", "hours": 1.0, "said": "x"})
+    assert none["scale"] is None and "points" in none["how"]
     # r 0.03 below D 0.04: no positive scale, so the organism could not hold a steady state at all
     slow = row_scale(_curve(_startup(0.03, 0.04, 6.0, 1.0e9)), 0.04, {"kind": "batch", "hours": 6.0, "said": "x"})
     assert slow["scale"] is None and "not above the dilution rate" in slow["how"]
 
 
-def test_a_batch_period_in_minutes_is_read_against_a_curve_in_hours():
-    got = row_scale(_curve(_startup(0.5, 0.04, 4.0, 1.0e9)), 0.04, {"kind": "batch", "hours": 4.0, "said": "x"})
-    in_minutes = [(t * 60, v, None) for t, v, _ in _startup(0.5, 0.04, 4.0, 1.0e9)]
-    minutes = row_scale(_curve(in_minutes, unit="min"), 0.04 / 60, {"kind": "batch", "hours": 4.0, "said": "x"})
-    assert minutes["scale"] == pytest.approx(got["scale"] / 60, rel=1e-9)     # per minute
+def test_a_curve_in_minutes_or_days_gives_the_scale_per_hour_as_the_dilution_rate_is():
+    """The dilution rate is recorded per hour (the chemostat check's /h), so the curve's rate is converted
+    before D is taken off: a curve timed in days gave 11.7 per day less 0.1 per hour, labelled 1/h (found in
+    review). The same run timed in minutes or in days gives the same 0.46 per hour."""
+    hours = _startup(0.5, 0.04, 4.0, 1.0e9, step=0.5)
+    period = {"kind": "batch", "hours": 4.0, "said": "x"}
+    got = row_scale(_curve(hours), 0.04, period)
+    minutes = row_scale(_curve([(t * 60, v, None) for t, v, _ in hours], unit="min"), 0.04, period)
+    days = row_scale(_curve([(t / 24, v, None) for t, v, _ in hours], unit="d"), 0.04, period)
+    assert got["scale"] == pytest.approx(0.46, abs=1e-9)
+    assert minutes["scale"] == pytest.approx(0.46, rel=1e-9) and days["scale"] == pytest.approx(0.46, rel=1e-9)
+
+
+def test_a_lag_inside_the_batch_period_is_overcome_by_the_rise_after_the_pump():
+    """Flat for 3 h of a 4 h batch period, then 0.5 /h: the batch period alone gives no rate, or one far too
+    low. After the pump starts the culture rises at r - D = 0.46 until it nears its plateau, and that reading is
+    kept: on a noiseless curve each reading is at most the truth, and the larger is the closer."""
+    lagged = []
+    for t in [i * 1.0 for i in range(49)]:
+        x = 1.0e6 if t <= 3 else 1.0e6 * math.exp(0.5 * (min(t, 4) - 3)) * math.exp(0.46 * max(t - 4, 0))
+        lagged.append((t, min(x, 1.0e9), None))
+    got = row_scale(_curve(lagged), 0.04, {"kind": "batch", "hours": 4.0, "said": "x"})
+    assert got["scale"] == pytest.approx(0.46, abs=2e-3) and "after the pump started" in got["how"]
+    # the batch period alone, the same run cut where the pump started: its one window easylinear tries (0 to
+    # 3 h, as growthrates tries them) is flat, so it gives no scale at all
+    alone = row_scale(_curve([p for p in lagged if p[0] <= 4]), 0.04, {"kind": "batch", "hours": 4.0, "said": "x"})
+    assert alone["scale"] is None and "no window rises" in alone["how"]
 
 
 # ---- whole runs into communities ------------------------------------------------------------------------
@@ -149,5 +179,135 @@ def test_a_perturbed_or_unknown_run_and_another_dilution_rate_are_kept_apart():
     slow = next(g for g in groups if g["dilution"] == 0.04)
     names = {c["name"] for c in slow["communities"]}
     assert "a with b" in names and "a with b again" not in names
+    # the perturbed run is in no community, by its own reason: "unperturbed" alone is in the unknown run's
+    # reason too, so a perturbed run let through passed the old check (found in review)
+    assert not any(c.get("experiment") == "E5" for c in slow["communities"])
     left = " ".join(why for _, why in slow["left_out"])
-    assert "perturbations" in left and "unperturbed" in left
+    assert "the run carries perturbations" in left and "does not say it is unperturbed" in left
+
+
+def _retag(client, species, technique, bioreplicates=None):
+    for bid, rep in client.bioreplicates.items():
+        if bioreplicates is not None and bid not in bioreplicates:
+            continue
+        for c in rep["measurementContexts"]:
+            if c["subject"]["name"] == species:
+                c["techniqueType"] = technique
+
+
+def test_each_organism_keeps_its_own_technique_and_the_design_stays_one_group():
+    """a read by qPCR in every run and b by flow cytometry in every run: each organism is one quantity
+    throughout, so the design is one group and determines both rows. Grouping by the run's set of techniques
+    made three groups ("qpcr", "fc", "fc; qpcr") that determined nothing (found in a second review)."""
+    client, exps = _runs()
+    _retag(client, "b", "fc")
+    (group,) = chemostat_groups(client, exps)
+    assert group["techniques"] == {"a": "qpcr", "b": "fc"}
+    assert fit(group["communities"], draws=0)["rows"]["a"]["status"] == "identified"
+
+
+def test_an_organism_read_by_two_techniques_keeps_the_runs_of_one_and_names_the_others():
+    """b by flow cytometry in its monoculture and by qPCR in the pair: b's abundance is not one quantity
+    across them, so one technique is kept for b in this fit (most runs, then most vessels, then the first by
+    name: a tie here, so fc) and the run reading it otherwise is left out and named. Fitting each technique
+    apart and putting the parts back together downstream mixed them in the package (found in a sixth
+    review)."""
+    client, exps = _runs()
+    _retag(client, "b", "fc", bioreplicates={3, 4})
+    (group,) = chemostat_groups(client, exps)
+    assert group["techniques"] == {"a": "qpcr", "b": "fc"}
+    assert sorted(c["name"] for c in group["communities"]) == ["a alone", "b alone"]
+    said = " ".join(why for _, why in group["left_out"])
+    assert "reads b by qpcr, where the other runs of this medium and dilution rate read it by fc" in said
+
+def test_runs_reading_the_same_organisms_by_swapped_techniques_are_fitted_apart():
+    """One run of a with b reads a by fc and b by qPCR, a second the other way round: splitting by the run's
+    set of techniques put both in one fit, where a and b were each read two ways (found in a third review).
+    Within every fit each organism has one technique."""
+    second = _chemostat("E4", "a with b again", ["a", "b"], [(7, "V1"), (8, "V2")], description=RUN)
+    client, exps = _runs([second], {(i, s): _startup(0.5 if s == "a" else 0.3, 0.04, 4.0,
+                                                      PAIR_A if s == "a" else PAIR_B)
+                                    for i in (7, 8) for s in ("a", "b")})
+    _retag(client, "a", "fc", bioreplicates={5, 6})
+    _retag(client, "b", "fc", bioreplicates={7, 8})
+    for group in chemostat_groups(client, exps):
+        for m in group["techniques"]:
+            read = {c["techniques"][m] for c in group["communities"] if m in c["techniques"]}
+            assert len(read) == 1, (group["technique"], m, read)
+
+
+def test_a_lag_that_leaves_the_batch_period_a_low_rate_is_read_from_the_rise_after_the_pump():
+    """Flat for 2 h of a 4 h batch period: the batch period's one window (0 to 3 h) rises for one hour of
+    three, about 0.15 per h, so 0.11 less D; the rise after the pump is 0.46. The larger is kept, so a lag no
+    longer shrinks the row's coefficients fourfold."""
+    lagged = []
+    for t in [i * 1.0 for i in range(49)]:
+        x = 1.0e6 if t <= 2 else 1.0e6 * math.exp(0.5 * (min(t, 4) - 2)) * math.exp(0.46 * max(t - 4, 0))
+        lagged.append((t, min(x, 1.0e9), None))
+    period = {"kind": "batch", "hours": 4.0, "said": "x"}
+    alone = row_scale(_curve([p for p in lagged if p[0] <= 4]), 0.04, period)
+    assert alone["scale"] is not None and alone["scale"] < 0.2
+    # (0.458: easylinear refits over every window within its quota of the steepest, one reaching the plateau)
+    assert row_scale(_curve(lagged), 0.04, period)["scale"] == pytest.approx(0.46, abs=3e-3)
+
+
+def test_the_technique_kept_does_not_depend_on_the_names_of_the_runs():
+    """b read by qPCR in two runs and by fc in one: qPCR is kept for b whatever the runs are called, and the
+    fc run is left out (a first-fit by name once moved a pair from one fit to another, found in a fourth
+    review)."""
+    def kept(name):
+        second = _chemostat("E4", "a with b again", ["a", "b"], [(7, "V1"), (8, "V2")], description=RUN)
+        client, exps = _runs([second], {(i, s): _startup(0.5 if s == "a" else 0.3, 0.04, 4.0,
+                                                          PAIR_A if s == "a" else 2 * PAIR_B)
+                                        for i in (7, 8) for s in ("a", "b")})
+        exps[2]["name"] = name
+        _retag(client, "b", "fc", bioreplicates={7, 8})
+        (group,) = chemostat_groups(client, exps)
+        return group["techniques"]["b"], sorted(c["name"] for c in group["communities"])
+    assert kept("a with b") == ("qpcr", ["a alone", "a with b", "b alone"])
+    assert kept("z: a with b") == ("qpcr", ["a alone", "b alone", "z: a with b"])
+
+
+def test_a_run_whose_vessels_read_one_organism_two_ways_is_left_out():
+    """V1 reads b by qPCR and V2 by flow cytometry: the run's mean would average two quantities, so it is left
+    out and named (found in a sixth review)."""
+    client, exps = _runs()
+    _retag(client, "b", "fc", bioreplicates={6})
+    (group,) = chemostat_groups(client, exps)
+    assert "a with b" not in [c["name"] for c in group["communities"]]
+    assert any("its vessels read b by fc; qpcr" in why for _, why in group["left_out"])
+
+
+@pytest.mark.parametrize("first, second, moving", [
+    (10.0, 11.5, True),        # rising 15% between the halves: still changing
+    (11.5, 10.0, True),        # falling 15%: still changing
+    (10.0, 10.8, False),       # 7.4% (0.8 / 10.8): settled within a tenth
+    (11.05, 10.0, True),       # falling 10.5%: just past the tenth
+])
+def test_a_run_is_settled_when_its_window_s_two_halves_agree_within_a_tenth(first, second, moving):
+    """The second half's mean against the first's, relative to the second, over the window the steady state
+    is averaged in (the last quarter of a 0 to 40 h run: 30 to 40 h, six points here); a washed-out member is
+    not judged."""
+    from grownet.growth import GrowthCurve, Replicate
+    from grownet.subcommunity import _still_changing
+    times = tuple(float(t) for t in range(0, 42, 2))
+    values = tuple(5.0 if t < 30 else (first if t < 36 else second) for t in times)
+    rep = Replicate((GrowthCurve("a", times, values, "h", "Cells/mL", "qpcr"),), "V1")
+    assert bool(_still_changing([rep], set())) is moving
+    assert _still_changing([rep], {"a"}) == []
+
+
+def test_dilution_rates_that_differ_past_six_digits_are_one_group():
+    """0.04 and 0.0400000001 are one dilution rate as a condition writes it: two groups, each too small to
+    determine anything, would say nothing about why (raised in review of the inputs)."""
+    client, exps = _runs()
+    exps[2]["compartments"][0]["dilutionRate"] = "0.0400000001"
+    (group,) = chemostat_groups(client, exps)
+    assert len(group["communities"]) == 3
+
+
+def test_a_spread_says_how_many_draws_it_rests_on():
+    client, exps = _runs()
+    (group,) = chemostat_groups(client, exps)
+    rows = fit(group["communities"], draws=50)["rows"]
+    assert rows["a"]["draws"] == 50 and rows["a"]["sd"] is not None

@@ -181,6 +181,8 @@ SCHEMA_DOC = {
                 "identity": {"enum": [*IDENTITIES, ""]},
                 # why taxon_id is not this node's identity; empty where it is (v4, #217)
                 "taxon_id_refused": {"type": "string"},
+                # v5: the strain node ids a genus node stands for
+                "merged_nodes": {"type": "array", "items": {"type": "string"}},
             },
         },
         "edge": {
@@ -255,6 +257,8 @@ SCHEMA_DOC = {
                 "window": {"type": ["number", "null"]},
                 "window_unit": {"type": "string"},
                 "vs_other_removals": {"type": ["number", "null"]},
+                # v5: the technique the target was measured by (#305)
+                "technique": {"type": "string"},
                 "rate_stage_method": {"type": "string"},
                 "rate_stage_n": {"type": ["integer", "null"]},
             },

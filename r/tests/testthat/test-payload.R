@@ -133,7 +133,16 @@ test_that("the coverage line counts the organisms outside every matrix too", {
     only_outside$caveats$without_a_rate <- list("D")
     text <- paste(capture.output(print(grownet:::as_grownet_glv(only_outside))), collapse = "\n")
     expect_false(grepl("as_miasim() stops", text, fixed = TRUE))
-    expect_match(text, "D are in no matrix", fixed = TRUE)
+    # the one organism without a rate was just named, so the line refers to it (#296), in the singular
+    # throughout (found in review: "it is in no matrix; as_miasim() simulates without them")
+    expect_match(text, "it is in no matrix; as_miasim() simulates without it.", fixed = TRUE)
+    expect_match(text, "; 1 more in the network has none and is in no matrix", fixed = TRUE)
+    expect_false(grepl("1 more in the network have", text, fixed = TRUE))
+    # one outside among several without a rate: named, in the singular
+    one_of_two <- example_payload()
+    one_of_two$caveats$without_a_rate <- list("C", "D")
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(one_of_two))), collapse = "\n")
+    expect_match(text, "D is in no matrix; as_miasim() simulates without it.", fixed = TRUE)
     only_inside <- example_payload()
     only_inside$caveats$without_a_rate <- list("C")
     text <- paste(capture.output(print(grownet:::as_grownet_glv(only_inside))), collapse = "\n")
@@ -316,4 +325,28 @@ test_that("v2 is read, and the v1 and v0 of earlier versions still are, without 
     expect_silent(grownet:::as_grownet_glv(v0_payload()))
     payload$format <- "grownet.glv/v3"
     expect_warning(grownet:::as_grownet_glv(payload), "reading it anyway")
+})
+
+test_that("the summary reads cleanly: one 'fitted:', no names twice, a singular count (#296)", {
+    # Three things seen on the whole of mGrowthDB in gLV mode: "fitted:" started every line of the
+    # organisms left out, the names without a rate were listed twice in a row, and a one-organism matrix
+    # read "1 organisms". Here: a matrix of A alone, and D and E without a rate, both in no matrix.
+    payload <- example_payload()
+    payload$matrices[[1]]$organisms <- list("A")
+    payload$matrices[[1]]$interactions <- list(list(-4e-10))
+    payload$caveats$without_a_rate <- list("D", "E")
+    payload$caveats$left_out <- list(list("D", "no growth rate, so nothing on it can be fitted"),
+                                     list("E", "no growth rate, so nothing on it can be fitted"))
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
+    # 3: singular
+    expect_match(text, "1 organism; matrix 1 x 1", fixed = TRUE)
+    expect_false(grepl("1 organisms", text, fixed = TRUE))
+    # 1: the heading once, with the organisms under it, and no "fitted:" starting a line
+    expect_equal(lengths(regmatches(text, gregexpr("in no matrix, each for the reason beside it:", text,
+                                                   fixed = TRUE))), 1L)
+    expect_false(grepl("fitted: ", text, fixed = TRUE))
+    expect_match(text, "each for the reason beside it:\n       D: no growth rate", fixed = TRUE)
+    # 2: the names once; the next line refers to them rather than listing them again
+    expect_match(text, "2 organism(s) have no growth rate: D, E\n       these are in no matrix;", fixed = TRUE)
+    expect_false(grepl("D, E are in no matrix", text, fixed = TRUE))
 })

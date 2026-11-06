@@ -380,6 +380,14 @@ def _units(replicates, species) -> tuple:
     return "", ""
 
 
+def techniques_of(replicates, species) -> str:
+    """Every distinct technique `species` was measured by in these replicates, sorted and joined by "; "
+    (#305), "unrecorded" for a curve whose technique mGrowthDB does not name, "" for none."""
+    found = {(curve.technique or "unrecorded") for rep in replicates
+             if (curve := rep.curve(species)) is not None}
+    return "; ".join(sorted(found))
+
+
 def _mono_index(client, exps, skipped, spike_factor: float = SPIKE_FACTOR, identities=None) -> dict:
     """(node id, conditions, medium key) -> {run group: (monoculture replicates, the distinct strain names
     pooled under it, the ids of the experiments they come from, their descriptions, their names)}.
@@ -754,7 +762,7 @@ def _refuse_pooling_across_starts(entry: dict, skipped: list) -> None:
     if high <= MAX_START_SPREAD * low:
         return
     why = (f"they started from {low:.3g} to {high:.3g} {units.pop()}, {high / low:.0f} times apart, and a rate "
-           f"is not pooled across starting densities more than {MAX_START_SPREAD:g} times apart (#81)")
+           f"is not pooled across starting densities more than {MAX_START_SPREAD:g} times apart")    # #81
     skipped.append((f"{entry['name']} monocultures, growth rate", why + ": left out for this study"))
     # kept with the organism, so an organism left with no rate at all says why where its rate would be
     # (found in review: the page named two causes, both false, for SMGDB00000014's two organisms)
@@ -1253,6 +1261,7 @@ def _record(source: str, target: str, c: dict, method: str, quality: list, cauti
         # co-culture, which together fit a row that a ratio cannot (#123)
         "metric_with": _absolute[0], "metric_without": _absolute[1],
         "metric_unit": metric_unit(method, *(c.get("units") or ("", ""))),
+        "technique": c.get("technique", ""),
         # the interval both sides were measured over, which an area depends on (#213)
         "window": (None if not c.get("window") else round(c["window"][1] - c["window"][0], 6)),
         "window_unit": (c.get("units") or ("", ""))[1] if c.get("window") else "",
@@ -1329,7 +1338,8 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
         c = {"mean": side["mean"], "sd": side["sd"], "se": side["se"], "outcome": side["outcome"],
              "n_with": side["n_co"], "n_without": side["n_mono"],
              "with_log2": side["co_log2"], "without_log2": side["mono_log2"],
-             "bound": side.get("bound"), "window": side.get("window"), "units": _units(co_reps, target)}
+             "bound": side.get("bound"), "window": side.get("window"), "units": _units(co_reps, target),
+             "technique": techniques_of([*co_reps, *sets[target]], target)}
         quality, cautions = _replicate_flags(c["n_with"], c["n_without"])
         cautions += stationary_cautions(side.get("stationary"), method, c["outcome"])
         cautions += zero_start_cautions(side.get("zero_start"), c["outcome"])
@@ -1350,11 +1360,30 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
         kind, window = rates.fit_parts(method)
         # `_pairwise` already has the setting; both numbers were taking the raw co-culture replicates
         partner = partner_abundances(co_reps, target, source, kind, window, spike_factor)
+        notes = _spike_notes(result["flagged"], target) + start_note(
+            co_reps, sets[target], target, "in the co-culture", "in the monocultures")
         records.append(_record(source, target, c, method, quality, cautions,
-                               _spike_notes(result["flagged"], target), cond, "biculture", (a, b),
+                               notes, cond, "biculture", (a, b),
                                [_exp_id(exp), *origin[target]], study_id, study_meta, identities, mode,
                                media_identity(exp)["label"], partner,
                                target_capacity(co_reps, target, capacity_max_fall, spike_factor)))
+
+
+def start_note(with_reps, without_reps, target: str, with_side: str, without_side: str) -> list:
+    """The note saying what `target` was inoculated at on each side of a comparison, or that it could not be
+    read. Reported, never matched on (Karoline, 2026-10-08, #172); the integrated form wrote it and the
+    replicate form did not, so the default derivation's arcs, drop-out ones included, never said that their
+    two sides began far apart (#297). The wording is the integrated form's. Where a side has no positive
+    first value, or the sides are in different units, the arc says so: silence read as "the densities
+    matched" (Craig's agent)."""
+    from .integrated import starting_densities
+    got = starting_densities(with_reps, without_reps, target)
+    if not got:
+        return [f"the starting density of {target} could not be compared {with_side} and {without_side}: a "
+                "side has no positive first value, or the two are in different units"]
+    return [f"started at {got['co']:.3g} {got['unit']} {with_side} and {got['mono']:.3g} {without_side}, a "
+            f"factor of {got['ratio']:.2f}" + (", so the two sides of this comparison did not begin at the "
+                                                "same density" if got["ratio"] > 3 else "")]
 
 
 def run_group(exp: dict) -> str:
@@ -1507,7 +1536,8 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
     skipped += result["skipped"]
     for arc in result["arcs"]:
         removed, target = arc["source"], arc["target"]
-        arc = {**arc, "units": _units(full, target)}
+        arc = {**arc, "units": _units(full, target),
+               "technique": techniques_of([*full, *dropouts.get(removed, ())], target)}
         quality, cautions = _replicate_flags(arc["n_with"], arc["n_without"])
         cautions += stationary_cautions(arc.get("stationary"), method, arc["outcome"])
         cautions += zero_start_cautions(arc.get("zero_start"), arc["outcome"])
@@ -1531,6 +1561,7 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
         if (variants or {}).get((frozenset(members), *key), 1) > 1 or \
                 (variants or {}).get((frozenset(members - {removed}), *key), 1) > 1:
             cautions.append(CONDITIONS_UNVERIFIED)
+        notes += start_note(full, dropouts.get(removed, ()), target, "in the full community", f"without {removed}")
         cond = ", ".join(e.get("name", "") for e in drops[removed])
         experiments = [_exp_id(e) for e in [*full_exps, *drops[removed]]]
         records.append(_record(removed, target, arc, method, quality, cautions, notes, cond, arc["evidence"],
@@ -1737,6 +1768,9 @@ def _merged(arcs: list) -> dict:
     numeric = [a["strength"] for a in arcs if a.get("strength") is not None]
     strength = round(median(numeric), 4) if numeric else None
     outcomes = {a.get("outcome") for a in arcs}
+    # the arcs[0] fallback cannot fire today: obligate is a facilitation and abolished an inhibition (`_effect`),
+    # and only arcs of one sign are merged, so arcs without a log2 mean share one outcome; it stays as a guard
+    # against a future sign rule (Craig's agent)
     outcome = QUANTIFIED if numeric else (outcomes.pop() if len(outcomes) == 1 else arcs[0].get("outcome"))
 
     def union(key):
@@ -1778,6 +1812,13 @@ def _merged(arcs: list) -> dict:
     coefficients = [a.get("coefficient") for a in arcs]
     if all(c is not None for c in coefficients) and len({a.get("coefficient_unit") for a in arcs}) == 1:
         one_comparison["coefficient"] = median(coefficients)
+    # a member in units of its own r_i - D (a steady-state row without a scale) keeps the merged arc out of a
+    # matrix of 1/(time x abundance): merged with scaled members, its unit was "" and its cell came from the
+    # median log2 ratio times another study's rate (found in a sixth review)
+    unscaled = next((a.get("coefficient_unit") for a in arcs
+                     if "in units of r_i - D" in (a.get("coefficient_unit") or "")), None)
+    if unscaled:
+        one_comparison["coefficient_unit"], one_comparison["coefficient"] = unscaled, None
     return {**arcs[0], **one_comparison,
             # what was measured and over how long, only where every merged arc agrees; and never one
             # removal's difference from its group, which a merged arc is not
@@ -1799,6 +1840,12 @@ def _merged(arcs: list) -> dict:
             "condition": "; ".join(c for c in conditions if c),
             "cultivation_mode": "; ".join(dict.fromkeys(a.get("cultivation_mode", "") for a in arcs)),
             "medium": "; ".join(dict.fromkeys(a.get("medium", "") for a in arcs if a.get("medium"))),
+            # every technique the merged arcs rest on, as for the media: merging does not ask that they
+            # agree (Karoline, 2026-11-06, #305: "Yes, allow it"), so this is where a reader sees it did.
+            # Sorted, as `techniques_of` sorts a single arc's, so one set of techniques is one string: in
+            # first-seen order "qpcr; fc" and "fc; qpcr" were two categories to a filter (found in review)
+            "technique": "; ".join(sorted({t for a in arcs
+                                           for t in (a.get("technique") or "").split("; ") if t})),
             **_merged_partner(arcs),
             "method": f"{arcs[0].get('method', '')}; merged: the median of {len(arcs)} arcs",
             "merged_arcs": len(arcs),
@@ -1904,10 +1951,12 @@ def merge_genus(edges: list, merge: bool = False, level: str = "species", curren
             "rule": "nodes by genus; arcs by source genus, target genus and sign; median of the log2 means"}
     if not merge:
         return edges, info
-    groups, name_of = {}, {}
+    groups, name_of, members = {}, {}, {}
     for e in edges:
         for side in ("source", "target"):
             name_of.setdefault(e[side], organism(e, side))
+            # the strains each genus node stands for, which the node keeps (merged_nodes, 2026-11-06)
+            members.setdefault(genus_name(organism(e, side)), set()).add(e[side])
     for e in edges:
         kind = ABSENT if e.get("status") == ABSENT else e.get("effect")
         key = (genus_name(organism(e, "source")), genus_name(organism(e, "target")), kind)
@@ -1920,8 +1969,11 @@ def merge_genus(edges: list, merge: bool = False, level: str = "species", curren
         pairs = sorted({_pair(a, level, name_of) for a in arcs})
         arc.update({side: genus for side, genus in (("source", source), ("target", target))})
         for side, genus in (("source", source), ("target", target)):
+            # and no strain's refused taxon id, which the genus node does not carry: the live
+            # Lachnoclostridium node said 1506553 was refused, from its first strain (2026-11-06)
             arc.update({f"{side}_name": genus, f"{side}_taxon_id": "", f"{side}_species": "",
-                        f"{side}_identity": "genus"})
+                        f"{side}_identity": "genus", f"{side}_taxon_id_refused": "",
+                        f"{side}_merged_nodes": sorted(members[genus])})
         arc.update(supporting_pairs=len(pairs), merged_pairs=pairs,
                    method=f"{arc.get('method', '')}; merged to genus: {len(arcs)} arcs over {len(pairs)} "
                           f"{level} pairs")

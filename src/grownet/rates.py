@@ -224,6 +224,10 @@ def _fit_once(times, logs, params, max_iter=200):
 
     params, lam = params[:], 1e-3
     current = rss(params)
+    # damping scaled by the largest diagonal of J'J seen so far (MINPACK's choice, as in R's nls.lm): when the lag
+    # collapses (h0 -> 0) its column of J goes to zero, and damping by the current diagonal left the system
+    # singular however large lam grew, so the fit stopped short of the optimum (#298, found by foodnet)
+    scale = [0.0] * 4
     for _ in range(max_iter):
         residuals = [m - o for m, o in zip(_predict(times, params), logs, strict=True)]
         jac = [[0.0] * 4 for _ in times]
@@ -240,8 +244,11 @@ def _fit_once(times, logs, params, max_iter=200):
                 jac[i][j] = (f_up[i] - f_down[i]) / (2 * step)
         jtj = [[sum(r[a] * r[b] for r in jac) for b in range(4)] for a in range(4)]
         jtr = [sum(jac[i][a] * residuals[i] for i in range(len(times))) for a in range(4)]
+        # `or 1.0` is MINPACK's mode 1 for a zero column; the current starts estimate a nonzero lag, so h0's
+        # column is nonzero at the first iteration and this fallback is not reached by them (Craig's agent)
+        scale = [max(scale[a], jtj[a][a]) or 1.0 for a in range(4)]
         for _ in range(30):
-            damped = [[jtj[a][b] + (lam * jtj[a][a] if a == b else 0.0) for b in range(4)] for a in range(4)]
+            damped = [[jtj[a][b] + (lam * scale[a] if a == b else 0.0) for b in range(4)] for a in range(4)]
             delta = _solve(damped, [-v for v in jtr])
             if delta is None:
                 lam *= 10
@@ -295,6 +302,7 @@ def baranyi_fit(times, values) -> dict:
             start[3] = math.log(max(math.exp(base[3]) * lag_factor, 1e-3))
             starts.append(start)
     best = None
+    past_guard = None           # the best fit the guard refused, so a refusal can name the guard (#298)
     for start in starts:
         result = _fit_once(xs, ys, start)
         if result is None:
@@ -307,15 +315,26 @@ def baranyi_fit(times, values) -> dict:
             continue
         mu = math.exp(params[1])
         if not 1e-3 < mu < 5 * max(slope, 1e-3):
+            if mu >= 5 * max(slope, 1e-3) and (past_guard is None or residual < past_guard[1]):
+                past_guard = (mu, residual)
             continue                        # an optimum far from the steepest observed slope is not credible
         if best is None or residual < best[1]:
             best = (params, residual)
     if best is None:
-        raise RateUnavailable("Baranyi fit rejected: no start converged to a rate near the observed slope")
+        beyond = (f" (the best fit puts the rate at {past_guard[0]:.3g}, more than 5 times the steepest observed "
+                  f"slope {slope:.3g}, which the guard refuses)" if past_guard else "")
+        raise RateUnavailable("Baranyi fit rejected: no start converged to a rate near the observed slope" + beyond)
     mean = sum(ys) / len(ys)
     total = sum((y - mean) ** 2 for y in ys)
     r2 = 1 - best[1] / total if total > 0 else float("nan")
     if not r2 >= BARANYI_MIN_R2:
+        if past_guard is not None and past_guard[1] < best[1]:
+            # the better fit lies past the guard: reporting the R2 of the best fit inside it was true and sent
+            # the reader to the data instead of to the guard (Craig's agent, on #299; decision 35 stays open)
+            raise RateUnavailable(
+                f"Baranyi fit rejected: the best fit puts the rate at {past_guard[0]:.3g}, more than 5 times the "
+                f"steepest observed slope {slope:.3g}, which the guard refuses; the best fit within the guard "
+                f"explains R2 {r2:.2f}, below {BARANYI_MIN_R2}")
         raise RateUnavailable(f"Baranyi fit rejected: R2 {r2:.2f} below {BARANYI_MIN_R2}; the model does not "
                               "describe this curve up to the end of its plateau (for example two growth phases)")
     rate = math.exp(best[0][1])
