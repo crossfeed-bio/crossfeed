@@ -6,6 +6,13 @@ content.
 
 ## [Unreleased]
 
+### Changed
+
+- **gLV example fills the page and waits, as Example does** (Karoline, 2026-11-06: "The Example button fills
+  the input fields, but gLV example fills the fields and launches the search. Please change the gLV example
+  behavior to be in line with 'Example'."). It fills both boxes and switches gLV mode on, and Find
+  interactions runs it.
+
 
 ## [0.5.0] (2026-10-14)
 

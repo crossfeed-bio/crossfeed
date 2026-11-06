@@ -77,6 +77,10 @@ EXAMPLE_MESSAGE = ("Example: three species that are grown together, with every s
 # the co-culture it was fitted from by about 90 times (2026-10-07, #155 item 13).
 GLV_EXAMPLE = ("Bacteroides thetaiotaomicron", "Roseburia intestinalis")
 GLV_EXAMPLE_STUDY = "SMGDB00000002"
+# what the button says once it has filled the page, as Example does: it fills and waits (Karoline,
+# 2026-11-06: "Please change the gLV example behavior to be in line with 'Example'")
+GLV_EXAMPLE_MESSAGE = ("gLV example: two species of one study, with gLV mode on and every other setting at its "
+                       "default, for a package that simulates. Press Find interactions.")
 METRICS = ("auc", "max", "growth_rate")
 DERIVATIONS = ("replicate", "integrated")
 
@@ -381,7 +385,7 @@ every medium.</p>
 <button type="submit" name="glv_mode" value="1" class="switch{glv_on}" aria-pressed="{glv_pressed}"
 ><span class="track"><span class="knob"></span></span>gLV mode</button>
 <span class="muted">All derives every study, ignoring the species box (half a minute). gLV example fills
-the boxes and settings for a package that simulates, and runs it. gLV mode sets the four settings a
+the boxes and settings for a package that simulates. gLV mode sets the four settings a
 package needs, the derivation among them; press it again to switch back.</span></div>
 {_settings_block(settings or {}, token, job)}
 </form>{below}""", token, refresh, job)
@@ -1724,8 +1728,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                                    message=EXAMPLE_MESSAGE, conditions=""))
             return
         if form.get("glv_example"):
-            # everything a working simulation needs, and then the search itself: the two organisms, the
-            # study they are in so nothing else is read, and the whole of gLV mode. It used to add only
+            # everything a working simulation needs: the two organisms, the study they are in so nothing
+            # else is read, and the whole of gLV mode. It fills the page and waits for Find interactions,
+            # as Example does; it ran the search itself until 2026-11-06 (Karoline: "Please change the gLV
+            # example behavior to be in line with 'Example'"). It used to add only
             # the growth rates and rely on the shipped derivation being the integrated form; with the
             # comparison back as the default it inherited that instead and the button produced a run no
             # package can be built from, on a study chosen for the other form (found reviewing #199,
@@ -1737,9 +1743,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             # pressing it with an absence threshold of 9 still in the form filled the boxes, ran, and
             # produced no network and no package, against a caption promising a package that simulates
             settings = {**glv_mode(dict(DEFAULTS)), "conditions": GLV_EXAMPLE_STUDY}
-            job = self._start(list(GLV_EXAMPLE), settings)
-            job["thread"].join(self.wait)
-            self._redirect(f"/?token={self.token}&job={job['id']}#result")
+            self._send(render_form(self.token, "\n".join(GLV_EXAMPLE), settings,
+                                   message=GLV_EXAMPLE_MESSAGE, conditions=GLV_EXAMPLE_STUDY))
             return
         if form.get("all"):
             job = self._start([], settings, all_studies=True)
