@@ -660,17 +660,19 @@ def matrix_about(net: InteractionNetwork, csv_name: str = "grownet_matrix.csv") 
 
 
 def derivation_of(net: InteractionNetwork | None) -> str:
-    """"integrated" or "replicate": whose formula this network's cells follow.
+    """"integrated", "replicate" or "steady": whose formula this network's cells follow.
 
     The prose a package carries has to match the derivation that made it, and a reader meets that prose
     in README.txt, in the payload's caveats and in the R package (#142 item 6). The settings say it;
     where they do not, the arcs do, since an integrated arc records its own metric.
     """
     said = ((net.meta.get("settings") if net is not None else None) or {}).get("derivation")
-    if said in ("integrated", "replicate"):
+    if said in ("integrated", "replicate", "steady"):
         return said
     if net is not None and any(str(e.metric or "").startswith("integrated") for e in net.edges):
         return "integrated"
+    if net is not None and any(str(e.metric or "").startswith("steady_state") for e in net.edges):
+        return "steady"
     return "replicate"
 
 
@@ -695,6 +697,13 @@ DIAGONAL_PROSE = {
         "      A fit whose A[i][i] is not negative implies no plateau at all. Then the measured plateau of",
         "      the monocultures is put in its place where they certified one, which capacity_source also",
         "      states and which the section DIAGONALS THAT ARE NOT A FIT below names.",
+    ],
+    "steady": [
+        "  The diagonal is FITTED from chemostat steady states, with the rest of the row: at a steady",
+        "      state every organism present satisfies 1 + sum_j B[i][j] N_j = 0, with B = A / (r_i - D),",
+        "      and the row is the least squares over every community it was present in. A[i][i] is",
+        "      (r_i - D) B[i][i], and the carrying capacity K_i = -1 / B[i][i] is the steady state the row",
+        "      implies for the organism alone in the chemostat.",
     ],
 }
 
@@ -722,6 +731,19 @@ OFF_DIAGONAL = {
         "      the condition number of its fit, its R2 and the R2 of the same row with every interaction set",
         "      to zero. Those are on the arcs in the network file, not in this package: a cell here is traced",
         "      to its fit through the network the package was built from.",
+    ],
+    "steady": [
+        "  An off-diagonal cell is A[i][j] = (r_i - D) B[i][j], fitted from chemostat steady states, not",
+        "      from a growth curve: at a steady state every organism present satisfies",
+        "      1 + sum_j B[i][j] N_j = 0, with B = A / (r_i - D) and D the dilution rate, so every",
+        "      unperturbed community of one medium, abundance unit and dilution rate gives one equation per",
+        "      organism in it, and each row is their least squares. The coefficients are EFFECTIVE: an",
+        "      effect that needs a third organism is folded into the pairs that carry it. The row scale",
+        "      r_i - D is read from the organism's own monoculture chemostat start-up; a row whose start-up",
+        "      did not give it is in units of r_i - D, cannot share a matrix of 1/(time x abundance), and is",
+        "      named among the cells not filled. The DILUTION IS FOLDED INTO r: the rates here are r_i - D,",
+        "      so this package simulates the chemostat, and a batch culture of these organisms grows at",
+        "      r_i, faster by D.",
     ],
 }
 
@@ -751,6 +773,29 @@ MODEL_ASSUMPTIONS = (
     "      medium travels with every arc and with every carrying capacity for that reason.",
 )
 
+# Under the steady-state derivation the second assumption reads differently: its effects are fitted from
+# communities of every size, not measured between two organisms, so they are EFFECTIVE by construction
+# (#317). The first, about a batch medium changing, does not apply to a chemostat at steady state.
+STEADY_ASSUMPTIONS = (
+    "  EVERY COEFFICIENT IS CONSTANT. One number stands for the effect of j on i at every steady state the",
+    "      row was fitted from. A chemostat holds its medium, so the drift of a batch culture does not",
+    "      enter, but a different dilution rate or medium is another environment and another fit.",
+    "  INTERACTIONS ARE EFFECTIVE AND ADD UP. The cells are fitted from communities of every size, so an",
+    "      effect that needs a third organism is folded into the pairs that carry it, and a cell",
+    "      describes the communities it was fitted from rather than the pair alone. The network's arcs",
+    "      note how each community is predicted by a fit made without it: one its siblings predict",
+    "      badly is where such effects show. Carried into a community that was not measured, a cell",
+    "      holds only as far as those effects stay as they were.",
+    "  So read a simulation against the chemostats it came from, and treat these numbers as a",
+    "      description of the organisms at that medium and dilution rate.",
+)
+
+
+def model_assumptions(derivation: str) -> tuple:
+    """The README's lines on what the gLV form assumes, in the words of the derivation that made it."""
+    return STEADY_ASSUMPTIONS if derivation == "steady" else MODEL_ASSUMPTIONS
+
+
 # One line each, for the `caveats` block that travels into the R object and any other consumer. This
 # was a single unbranched string saying "fitted: -r_i / K_i, with K_i the organism's own plateau", which
 # is the comparison's direction: under the integrated form A[i][i] IS the fitted parameter and K_i is
@@ -760,6 +805,8 @@ DIAGONAL_CAVEAT = {
     "integrated": ("fitted directly: A[i][i] is a parameter of the same least squares that gave r_i, and "
                    "K_i = -r_i / A[i][i] is the plateau that fit implies, which is the opposite "
                    "direction; carrying_capacity_source says so per organism"),
+    "steady": ("fitted from chemostat steady states with the rest of the row: A[i][i] = (r_i - D) B[i][i], "
+               "and K_i = -1 / B[i][i] is the steady state the row implies for the organism alone"),
 }
 
 CAVEAT_COEFFICIENTS = {
@@ -771,6 +818,9 @@ CAVEAT_COEFFICIENTS = {
                    "off-diagonal cell is fitted from the whole time course, as a parameter of "
                    "ln(x_i(T) / x_i(0)) = r_i T + sum_j A[i][j] integral(x_j dt), so nothing here is a "
                    "convention and nothing needs scaling to match the rest"),
+    "steady": ("every cell is an effective per-capita coefficient fitted from chemostat steady states, "
+               "A[i][j] = (r_i - D) B[i][j] with 1 + sum_j B[i][j] N_j = 0 at every steady state; the rates "
+               "are r_i - D, the dilution folded in, so the package simulates the chemostat"),
 }
 
 
@@ -938,7 +988,8 @@ class CannotConvert(ValueError):
 RATE_METRIC_PREFIX = "growth_rate"
 # a derivation that fits the coefficient itself rather than a ratio of a growth property (#127): its arcs
 # already carry the quantity the package holds, so they need no ratio of rates
-FITTED_METRIC_PREFIX = "integrated"
+# the steady-state derivation's arcs are fitted too, from chemostat steady states (#317)
+FITTED_METRIC_PREFIX = ("integrated", "steady_state")
 
 
 def _metrics(net: InteractionNetwork) -> list:
@@ -1036,6 +1087,9 @@ def _pair_values(net: InteractionNetwork, rates: dict = None, home: dict = None)
                 if edge.partner_abundance in (None, 0) else
                 # a merged arc is converted with the affected organism's own rate, and the arcs behind it did
                 # record theirs: "not recorded" was false of it (found in review)
+                f"its row is in units of {affected}'s r_i - D, which its chemostat start-up did not give, so "
+                "it cannot share a matrix of 1/(time x abundance)"
+                if "in units of r_i - D" in (edge.coefficient_unit or "") else
                 f"a merged arc is converted with {affected}'s own growth rate, which it has none of"
                 if getattr(edge, "merged_arcs", None) and own_rate is None and edge.strength is not None else
                 # its members compared their rates; merged without a median ratio (some did not grow on
@@ -1251,7 +1305,7 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
     """
     metrics = _metrics(net)
     not_rates = [m for m in metrics
-                 if not (m or "").startswith((RATE_METRIC_PREFIX, FITTED_METRIC_PREFIX))]
+                 if not (m or "").startswith((RATE_METRIC_PREFIX, *FITTED_METRIC_PREFIX))]
     if not_rates:
         raise CannotConvert(
             f"these arcs compare {', '.join(repr(m) for m in not_rates)}, and a gLV coefficient needs the "
@@ -1588,6 +1642,13 @@ def _rate_method_lines(got: dict, derivation: str = "replicate", rates: dict | N
     merge = ("the median over the fitted rows, each row's rate the median over that organism's "
              "monoculture replicates" if any(str(m).startswith("integrated") for m in methods)
              else "median over replicates and studies") + genus_rule(rates or {})
+    if derivation == "steady":
+        return ["  Growth rates: r_i - D, each organism's row scale, read from its own monoculture chemostat's",
+                "      start-up: the rise inside a batch period the experiment's description states, less the",
+                "      dilution rate, or the rise itself where the pump ran from inoculation. No batch growth",
+                "      rate is used, since a rate changes in a chemostat. An organism whose start-up gave none",
+                "      has no rate here, and its row is not in the matrix.",
+                ]
     if derivation == "integrated":
         lines = [f"  Growth rates: {named}, {merge}, batch monocultures only.",
                  "      r_i is fitted together with A[i][i] from the organism's monoculture time courses,",
@@ -1666,7 +1727,7 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         *_rate_method_lines(got, derivation_of(net), rates),
         "",
         "WHAT THIS MODEL ASSUMES",
-        *MODEL_ASSUMPTIONS,
+        *model_assumptions(derivation_of(net)),
         "",
         "MATRICES",
     ]

@@ -1200,3 +1200,40 @@ and the README: that is the one mistake this style can make.
   connection would have verified the certificate against the proxy (Craig's agent on #184; unreachable
   here, since nothing calls `set_tunnel`). Read the installed source of what you override, copy the rest
   of it, and state in the docstring which single thing differs.
+
+## gLV from the steady states of sub-communities (#310, 2026-11-06)
+
+`grownet.subcommunity` is the estimator of the third derivation Karoline asked for (EPICS, generalized to
+every sub-community; her decisions are on #310). It reads no data: `fit(communities)` takes
+`{"name", "abundance": {species: N}, "vessels": [...]}` and solves each row of B = A / s by
+`integrated._least_squares`, gated by `integrated.MAX_CONDITION`, so "identified" means what it means in the
+integrated form. A member at 0 washed out and gives no equation. `leave_one_out_predictions` predicts each
+community from a fit without it. Measured locally on Venturelli et al. 2018's fitted 12-species gLV (Code
+EV1, T4; nothing of theirs in git): strict leave-one-out identifies 0 of the 132 off-diagonal coefficients,
+because only 6 of the 12 coexist; adding the 66 pairs identifies 128 of 132, exact to 2e-12; the six that
+coexist, alone, 30 of 30. The chemostat inputs (#312) and the wiring (#313) are separate tasks.
+
+`subcommunity.chemostat_groups` (#312) turns continuous cultures into that input, one group per medium, unit
+and dilution rate. It takes the chemostat check's steady states (`steady.observed`, which now also keeps each
+vessel's value as `per_vessel`), uses only runs KNOWN to be unperturbed (the check's `_perturbed` returning
+None is not enough here), and leaves out a run with an inoculated member it could not read. `batch_period`
+reads when the pump started from the description (live: SMGDB00000011, "Chemostat mode started 4 hours after
+inoculation"); `row_scale` fits easylinear over that start-up. Live on 2026-11-06: SMGDB00000005's control and
+SMGDB00000011's run each give one community, so every row is underdetermined, and no study has a monoculture
+chemostat, so no scale. Grouping is by the medium string as recorded, so "Wilkins-Chalgren" (study 5) and
+"Wilkins-Chalgren Anaerobe Broth (WC)" (study 11) are apart; the wiring (#313) should key on
+`derive.media_identity` instead, as the rest of the tool does. (Done in #313: groups key on it.)
+
+`subcommunity.SteadyStateDeriver` (#313) is the third choice of `chosen_deriver` ("steady"). Its records
+mimic the integrated form's where a package will need them (`coefficient`, `fitted_rate` = the row scale
+or None, `fitted_self`, units), with metric `steady_state:subcommunities`; `glv_mode` keeps "steady" when
+chosen and `glv_mode_on` accepts it. The gLV package (#317): its records carry `metric_with` =
+`s_i (1 + B_ij x_j)` and `metric_without` = `s_i`, as the integrated form's do, so `matrix._per_arc` takes
+the coefficient from their difference over x like any fitted arc; `FITTED_METRIC_PREFIX` is a tuple now;
+`derivation_of` knows "steady", and each per-derivation text table has a "steady" entry, plus
+`model_assumptions(derivation)`. A row with no scale has no `metric_with`, gives no cell, and is named
+(`its row is in units of ... r_i - D`). `gui.STEADY_CHECK_CIRCULAR` replaces the steady-state check under
+this derivation. Checked in the R package: the payload loads, `solve(A, -r)` is the observed pair.
+chosen and `glv_mode_on` accepts it. The gLV package from it (matrix.py, which branches on
+"integrated"/"replicate" in many places) is a separate task.
+`derive.media_identity` instead, as the rest of the tool does.
