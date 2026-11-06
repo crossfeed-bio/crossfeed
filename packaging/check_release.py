@@ -119,6 +119,12 @@ def check(tag: str, root: Path = ROOT, releasing: bool = True, today=None) -> tu
                 if help_text.exists() else None
             if help_text.exists() and not listed:
                 problems.append(f"src/grownet/help.py RELEASES has no entry for {version}")
+            # what the About page lists as in development belongs under the version once it is released
+            # (2026-11-06)
+            if help_text.exists() and re.search(r"^NEXT = \((?!\s*\))", help_text.read_text(encoding="utf-8"),
+                                                re.M):
+                problems.append(f"src/grownet/help.py NEXT still lists the next release's changes: move them "
+                                f"into RELEASES under {version} and leave NEXT = ()")
             elif listed and listed.group(1) != heading.group(1):
                 problems.append(f"src/grownet/help.py RELEASES dates {version} {listed.group(1)}, CHANGELOG.md "
                                 f"says {heading.group(1)}")

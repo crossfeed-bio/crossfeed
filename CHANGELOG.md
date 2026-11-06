@@ -6,6 +6,12 @@ content.
 
 ## [Unreleased]
 
+### Changed
+
+- **The About page says what the next release brings while it is in development** (Karoline, 2026-11-06: "is
+  the About section updated?"), under "Next release", above the log of released versions. The release check
+  refuses a tag while that list is not empty, so it moves under the version at release.
+
 
 ## [0.5.0] (2026-10-14)
 

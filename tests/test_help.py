@@ -325,6 +325,27 @@ def test_the_about_page_logs_what_each_release_brought():
         assert lines[0][:40] in page
 
 
+def test_the_about_page_says_what_the_next_release_brings_while_it_is_in_development():
+    """Karoline, 2026-11-06: "is the About section updated?" It logged 0.5.0 and nothing since. `NEXT` holds
+    what is merged and not yet released, shown above the log under its own heading; the release check refuses
+    a tag while it is not empty, so its lines move under the version at release."""
+    from grownet.help import NEXT, RELEASES, render_about
+    page = render_about()
+    if NEXT:
+        assert "Next release" in page and "in development" in page
+        assert page.index("Next release") < page.index(f">{RELEASES[0][0]} <")       # above the released log
+        assert all(len(line) < 400 for line in NEXT)
+        for line in NEXT:
+            assert _e_text(line)[:40] in page
+    else:
+        assert "Next release" not in page
+
+
+def _e_text(line: str) -> str:
+    import html as _html
+    return _html.escape(line)
+
+
 def test_the_glv_example_section_gives_every_step_of_running_it_in_miasim():
     """Karoline, 2026-10-07: "The help, while being generic, should provide all the steps to run this
     example with miaSim." Generic means the route above it, which holds for any package; this section is

@@ -506,3 +506,16 @@ def test_entries_left_under_unreleased_are_refused_at_a_tag(tmp_path):
     changelog.write_text(text.replace("## [0.1.0]", "## [Unreleased]\n\n### Added\n- **Left behind**\n\n## [0.1.0]",
                                       1))
     assert any("still has entries under [Unreleased]" in p for p in check("v0.1.0", repo, today=FIXTURE_DAY)[0])
+
+
+def test_a_release_cannot_ship_with_the_next_release_still_listed(tmp_path):
+    """The About page lists what the next release brings while it is in development (Karoline, 2026-11-06:
+    "is the About section updated?"). At a release those lines belong under the version, with its date, so a
+    tag with `NEXT` still holding them is refused, as one with no RELEASES entry is."""
+    repo = _repo(tmp_path)
+    help_file = repo / "src" / "grownet" / "help.py"
+    help_file.write_text('NEXT = (\n    "a thing that changed",\n)\nRELEASES = [\n    ("0.1.0", "2026-10-01", '
+                         '("first",)),\n]\n')
+    assert any("NEXT still lists" in p for p in check("v0.1.0", repo, today=FIXTURE_DAY)[0])
+    help_file.write_text('NEXT = ()\nRELEASES = [\n    ("0.1.0", "2026-10-01", ("first",)),\n]\n')
+    assert check("v0.1.0", repo, today=FIXTURE_DAY)[0] == []
