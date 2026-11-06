@@ -71,7 +71,10 @@ content.
   coefficients, fitted from communities of every size). A row whose scale was not read stays out of the
   matrix, named, rather than mixing units. The steady-state check is not run under it, since it would score
   the package against the chemostats it was fitted to and subtract D twice.
-  on it. The gLV package from it follows separately.
+- **A local validation of it** (#314): `packaging/validate_steady_state.py` runs it on the fitted 12-species
+  gLV of Venturelli et al. 2018 (download their Code EV1; nothing of theirs is in the repository). From
+  monocultures and pairs it recovers 126 of the 132 coefficients exactly; with 5% noise over three vessels
+  the bootstrap spread covers the truth for 93% of them. The numbers are in METHOD_NOTES.
 
 
 ## [0.5.0] (2026-10-14)

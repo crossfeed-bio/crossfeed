@@ -662,6 +662,36 @@ EV3) has the leave-one-out design but is relative abundance only, from serial ba
 monocultures, and its CA- and CH- blocks are identical; it cannot be a test case. mGrowthDB holds no such
 design today: SMGDB00000005's control and SMGDB00000011's run each give one community.
 
+**Validated on that model, through grownet's own code (2026-11-06, #314).** `packaging/validate_steady_state.py`
+simulates chemostat steady states of Venturelli et al.'s T4 model at D = 0.05 per hour (washed out under 1% of
+the run's largest), reads each row's scale from a simulated monoculture start-up with a stated 4 h batch
+period, and fits with `grownet.subcommunity`. Download Code EV1 yourself and run
+
+    uv run --no-project --with numpy --with scipy python packaging/validate_steady_state.py twelveSpeciesT4.xml
+
+Errors are on the scale of each row's own `|B_ii|`, since the published fit sets many coefficients to exactly
+0 (it was L1-regularized), where an error relative to the true value means nothing.
+
+| design | off-diagonal identified | error | signs (true not 0) |
+|---|---|---|---|
+| EPICS: monocultures, 12 leave-one-out, full (2 never settle) | 0 of 132 | | |
+| bottom-up: monocultures and 66 pairs | 126 of 132 | max 7e-14 | 96 of 96 |
+| all of the above (2 never settle) | 128 of 132 | max 0.0018 | 98 of 98 |
+| all, 3 vessels with 5% noise | 128 of 132 | median 0.022, max 3.4 | 96% |
+
+- The row scales read from the start-up are within 1.6% of the true `u - D` (median 0.7%), slightly low,
+  since self-limitation already slows the batch period; that is most of the package's error, `A = scale x B`
+  within 2% of the true `a_ij` on the `|a_ii|` scale (median 0.18%).
+- The full community, predicted by a fit made without it, is within 0.22% (18% with the noise).
+- With the noise, the bootstrap over vessels puts the true coefficient within 2 sd for 93% of them, close to
+  the nominal 95%. The worst coefficients are those whose partner is scarce in every community beside the
+  organism: PC on BT, off by 3.4 times BT's `|B_ii|`, has PC at no more than 0.007 OD beside BT (the median
+  over all coefficients is 0.23), and its spread is 1.8 times `|B_ii|`, so the arc says it is uncertain; the
+  next five worst all have their partner at 0.06 or less.
+- Only 7 of the 12 coexist in the full community at this D, so the strict leave-one-out design determines
+  nothing; the pairs are what make the model identifiable, which is Karoline's decision 2.
+- Switching the 1% wash-out rule off changes nothing here.
+
 ## Open decisions
 
 - **OPEN, 2026-10-11 (#266): one format bump to `/v4`, or none.** Three things a reader who did not run
