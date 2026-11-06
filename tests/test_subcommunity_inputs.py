@@ -107,7 +107,7 @@ def test_a_curve_in_minutes_or_days_gives_the_scale_per_hour_as_the_dilution_rat
 def test_a_lag_inside_the_batch_period_is_overcome_by_the_rise_after_the_pump():
     """Flat for 3 h of a 4 h batch period, then 0.5 /h: the batch period alone gives no rate, or one far too
     low. After the pump starts the culture rises at r - D = 0.46 until it nears its plateau, and that reading is
-    kept: each is a lower bound, and the larger is the closer."""
+    kept: on a noiseless curve each reading is at most the truth, and the larger is the closer."""
     lagged = []
     for t in [i * 1.0 for i in range(49)]:
         x = 1.0e6 if t <= 3 else 1.0e6 * math.exp(0.5 * (min(t, 4) - 3)) * math.exp(0.46 * max(t - 4, 0))
@@ -231,3 +231,18 @@ def test_runs_reading_the_same_organisms_by_swapped_techniques_are_fitted_apart(
         for m in group["techniques"]:
             read = {c["techniques"][m] for c in group["communities"] if m in c["techniques"]}
             assert len(read) == 1, (group["technique"], m, read)
+
+
+def test_a_lag_that_leaves_the_batch_period_a_low_rate_is_read_from_the_rise_after_the_pump():
+    """Flat for 2 h of a 4 h batch period: the batch period's one window (0 to 3 h) rises for one hour of
+    three, about 0.15 per h, so 0.11 less D; the rise after the pump is 0.46. The larger is kept, so a lag no
+    longer shrinks the row's coefficients fourfold."""
+    lagged = []
+    for t in [i * 1.0 for i in range(49)]:
+        x = 1.0e6 if t <= 2 else 1.0e6 * math.exp(0.5 * (min(t, 4) - 2)) * math.exp(0.46 * max(t - 4, 0))
+        lagged.append((t, min(x, 1.0e9), None))
+    period = {"kind": "batch", "hours": 4.0, "said": "x"}
+    alone = row_scale(_curve([p for p in lagged if p[0] <= 4]), 0.04, period)
+    assert alone["scale"] is not None and alone["scale"] < 0.2
+    # (0.458: easylinear refits over every window within its quota of the steepest, one reaching the plateau)
+    assert row_scale(_curve(lagged), 0.04, period)["scale"] == pytest.approx(0.46, abs=3e-3)

@@ -238,3 +238,28 @@ def test_a_left_out_run_takes_its_twin_runs_with_it():
             {"name": "a+b again", "abundance": dict(pair)}]
     (twins,) = [p for p in leave_one_out_predictions(runs) if p["community"].startswith("a+b")]
     assert twins["community"] == "a+b (2 runs)" and twins["status"].startswith("not predicted")
+
+
+def test_pooled_runs_are_drawn_whole_not_vessel_by_vessel():
+    """Two runs of a+b, three vessels each, a at 1 in every vessel of one and 3 in every vessel of the other:
+    the runs differ and their vessels do not. Drawing runs gives draw means of 1, 2 or 3 (p 1/4, 1/2, 1/4), sd
+    sqrt(1/2) = 0.707, widened by sqrt(2): 1.0. Drawing the six vessels as independent gives about 0.44, a
+    spread that called arcs present far too readily (found in a third review)."""
+    import random
+    import statistics
+    one = {"name": "a+b", "abundance": {"a": 1.0, "b": 1.0}, "vessels": [{"a": 1.0, "b": 1.0}] * 3}
+    two = {"name": "a+b again", "abundance": {"a": 3.0, "b": 1.0}, "vessels": [{"a": 3.0, "b": 1.0}] * 3}
+    (pooled,) = pool([one, two])
+    assert pooled["abundance"]["a"] == pytest.approx(2.0)
+    rng = random.Random(0)
+    draws = [_resample([pooled], rng)[0]["abundance"]["a"] for _ in range(4000)]
+    assert statistics.pstdev(draws) == pytest.approx(1.0, rel=0.06)
+
+
+def test_a_pool_is_the_mean_of_its_runs_not_of_its_vessels():
+    """One run with one vessel at 1, one with three at 3: the runs' means are 1 and 3, so the pool is 2; over
+    the four vessels it would be 2.5."""
+    one = {"name": "a+b", "abundance": {"a": 1.0, "b": 1.0}, "vessels": [{"a": 1.0, "b": 1.0}]}
+    two = {"name": "a+b again", "abundance": {"a": 3.0, "b": 1.0}, "vessels": [{"a": 3.0, "b": 1.0}] * 3}
+    (pooled,) = pool([one, two])
+    assert pooled["abundance"]["a"] == pytest.approx(2.0)

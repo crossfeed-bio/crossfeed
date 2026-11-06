@@ -287,7 +287,8 @@ def test_the_rates_say_they_are_r_less_d_from_a_chemostat_start_up_not_batch_rat
 
 
 def _at_dilution(d: float, study: str, three_runs=False):
-    """The invented two-species design run at dilution rate d (the same steady states, so the same B), as
+    """The invented two-species design run at dilution rate d (the same steady states; the start-ups differ, so
+    the scales and the fitted values do), as
     study `study`; with `three_runs`, a second run of the pair too."""
     from test_growth_rates import _client
     ids = {"a": (21, 22), "b": (23, 24), "ab": (25, 26)}
@@ -321,8 +322,9 @@ def test_rates_at_two_dilution_rates_are_not_merged_into_one():
         assert by_name["b"]["rate"] == pytest.approx(0.26, abs=1e-6)
         assert by_name["a"]["dilution"] == by_name["b"]["dilution"] == 0.04
         assert any("another dilution rate, 0.2 per h" in u for u in by_name["a"]["other_units"])
-        # K = -1/B_aa = 1e8 at D 0.04; the D 0.2 rows are not merged into it
+        # K = -1/B_ii at D 0.04, 1e8 and 2e8; the D 0.2 rows are not merged into them
         assert by_name["a"]["capacity"] == pytest.approx(1.0 * UNIT, rel=1e-6)
+        assert by_name["b"]["capacity"] == pytest.approx(2.0 * UNIT, rel=1e-6)
     # more rows at D 0.2: that D is the package's, for every organism
     more = fast + [{**r, "study_id": "S3"} for r in fast]
     by_name = {r["name"]: r for r in integrated.fitted_rates(slow + more, METRIC).values()}
@@ -523,8 +525,10 @@ def test_a_run_s_wash_out_is_reported_by_the_derivation():
     curves = {(i, "a"): _startup(0.5, 0.04, 4.0, PAIR_A) for i in (7, 8)}
     curves.update({(i, "b"): _startup(0.3, 0.04, 4.0, PAIR_B) for i in (7, 8)})
     curves.update({(i, "c"): _startup(0.3, 0.04, 4.0, 0.001 * UNIT) for i in (7, 8)})
-    _, skipped = _derive([lost], curves)
+    records, skipped = _derive([lost], curves)
     assert any(what.startswith("c in a with b, c lost") and "washed out" in why for what, why in skipped)
+    # and the arcs' community is the members present: c is in none
+    assert records and all(len(r["community"]) == 2 for r in records)
 
 
 def test_the_package_is_at_one_dilution_rate_in_its_cells_too():
