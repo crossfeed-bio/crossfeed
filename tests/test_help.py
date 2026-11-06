@@ -459,9 +459,11 @@ def _visible_help(page: str = PAGE) -> str:
 
 # a note of who decided what and when, in any shape: "(Karoline, 2026-10-07)", "(decided 2026-10-07)",
 # "(#42, amended 2026-10-03)". A date the reader needs, when something was measured, is not one
-DECISION_NOTE = re.compile(r"\([^()]*\b(?:decided|agreed|amended|settled|ruled|asked|said|proposed|chosen)\b"
-                           r"[^()]*\b20\d\d-\d\d-\d\d\b[^()]*\)|\([^()]*\b20\d\d-\d\d-\d\d\b[^()]*\b(?:decided|"
-                           r"agreed|amended|settled|ruled)\b[^()]*\)")
+# Either order, any case, the same verbs both ways (found in review: "(Settled on 2026-10-07.)" and
+# "(2026-10-07: chosen by both)" passed)
+_DECIDED = r"(?:decided|agreed|amended|settled|ruled|asked|said|proposed|chosen)"
+DECISION_NOTE = re.compile(rf"\([^()]*\b{_DECIDED}\b[^()]*\b20\d\d-\d\d-\d\d\b[^()]*\)"
+                           rf"|\([^()]*\b20\d\d-\d\d-\d\d\b[^()]*\b{_DECIDED}\b[^()]*\)", re.I)
 
 
 def test_the_help_names_no_collaborator_and_date_beside_its_text():
@@ -469,7 +471,8 @@ def test_the_help_names_no_collaborator_and_date_beside_its_text():
     assert not re.findall(r"[^.]{0,40}\b(?:Karoline|Craig)\b[^.]{0,40}", text)
     # nor any other note of when something was decided (found in review: "(decided 2026-10-07)" passed)
     assert DECISION_NOTE.findall(text) == []
-    for planted in ("(decided 2026-10-07)", "(#42, amended 2026-10-03)", "(agreed on 2026-10-11 with both)"):
+    for planted in ("(decided 2026-10-07)", "(#42, amended 2026-10-03)", "(agreed on 2026-10-11 with both)",
+                    "(Settled on 2026-10-07.)", "(2026-10-07: chosen by both)"):
         assert DECISION_NOTE.findall(f"a rule {planted}."), planted
     assert not DECISION_NOTE.findall("(measured live on 2026-10-11 it matches them)")
 
