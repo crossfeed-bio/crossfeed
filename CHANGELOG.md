@@ -33,6 +33,7 @@ content.
   coefficients, fitted from communities of every size). A row whose scale was not read stays out of the
   matrix, named, rather than mixing units. The steady-state check is not run under it, since it would score
   the package against the chemostats it was fitted to and subtract D twice.
+  on it. The gLV package from it follows separately.
 
 
 ## [0.5.0] (2026-10-14)
