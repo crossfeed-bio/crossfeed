@@ -110,7 +110,9 @@ def test_replicate_comparison_carries_uncertainty_onto_every_edge():
     assert ba["se"] == pytest.approx(SPREAD / math.sqrt(2), abs=1e-4)
     assert (ba["n_with"], ba["n_without"]) == (2, 2)
     assert ba["outcome"] == "quantified" and ba["metric"] == "auc"
-    assert ba["evidence"] == "biculture" and ba["quality"] == [] and ba["notes"] == []
+    assert ba["evidence"] == "biculture" and ba["quality"] == []
+    # no spike note: the one note is what each side started at, which every replicate-form arc says (#297)
+    assert len(ba["notes"]) == 1 and ba["notes"][0].startswith("started at ")
     assert ba["cautions"] == ["two_replicates"]                   # two replicates per side (#47)
     assert ba["experiments"] == ["E_co", "E_mono A"]              # the co-culture, then the target's monocultures
     assert ba["weight"] == pytest.approx(1.0, abs=1e-4)
@@ -1175,3 +1177,30 @@ def test_a_renamed_strain_is_merged_and_listed_by_its_current_name():
     by_name = {**old, "target_identity": "name"}
     (kept,), _ = merge_genus([by_name], merge=True, current=current)
     assert kept["merged_pairs"] == ["Blautia hydrogenotrophica -> Faecalibacterium prausnitzii"]
+
+
+def test_a_replicate_form_arc_says_what_each_side_started_at():
+    """#297: `starting_densities` (Karoline, 2026-10-08: report the starting density, never match on it) was
+    called only by the integrated form, so the default derivation's arcs, drop-out ones included, never said
+    that the two sides began at different densities; in SMGDB00000008 59 of 182 drop-out arcs start more than
+    3 times apart, up to 117. The first values of the fixture above, as medians over each side's replicates:
+    A in the full community 1 and 3 (median 2), without C 1 and 1 (median 1): a factor of 2; C in the full
+    community 1 and 1 (1), without B 3 and 7 (5): a factor of 5, over the 3 at which the note warns."""
+    client, study, exps = _dropout_study()
+    records, _ = interactions_from_replicates(client, study, exps)
+    arcs = _by_arc(records)
+    on_a = " ".join(arcs[(C, A)]["notes"])
+    assert "started at 2" in on_a and "in the full community and 1 without " + C in on_a
+    assert "a factor of 2.00" in on_a and "did not begin at the same density" not in on_a
+    on_c = " ".join(arcs[(B, C)]["notes"])
+    assert "in the full community and 5 without " + B in on_c and "a factor of 5.00" in on_c
+    assert "so the two sides of this comparison did not begin at the same density" in on_c
+
+
+def test_a_biculture_arc_says_what_each_side_started_at():
+    """The fake study of tests/test_gui.py: A starts at 1 in both co-culture replicates and in both
+    monocultures, so the note says a factor of 1.00, with no warning."""
+    from test_gui import _query
+    arc = next(e for e in _query()["network"].edges if e.effect == "facilitation")
+    note = " ".join(arc.notes)
+    assert "started at 1 Cells/mL in the co-culture and 1 in the monocultures, a factor of 1.00" in note

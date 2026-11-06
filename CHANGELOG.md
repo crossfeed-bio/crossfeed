@@ -6,6 +6,15 @@ content.
 
 ## [Unreleased]
 
+### Changed
+
+- **Every arc of the default derivation says what each side started at** (#297), as the integrated form's
+  arcs did: "started at X in the co-culture and Y in the monocultures" (or "in the full community and Y
+  without R" for a drop-out arc), with the factor between them, and a warning above 3 times. Reported, never
+  matched on (Karoline, 2026-10-08). It matters most for drop-out arcs, where each deletion was a separate
+  vessel: live on 2026-11-06, 61 of the 190 drop-out arcs of All (with absences) start more than 3 times
+  apart, 24 more than 10 times, up to 117. No arc, strength or status changes; only the notes.
+
 
 ## [0.5.0] (2026-10-14)
 
