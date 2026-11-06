@@ -15,6 +15,12 @@ content.
   equation per member present, names every row and coefficient the design leaves undetermined, and
   predicts each community from a fit made without it. It is not selectable yet; the chemostat inputs and
   the setting follow.
+- **The chemostat inputs for it** (#312): `subcommunity.chemostat_groups` turns continuous cultures into
+  communities, one fit per medium, unit and dilution rate, from runs known to be unperturbed, and reads each
+  row's scale `r_i - D` from a monoculture chemostat's own start-up. When the pump started is read from the
+  experiment's description (Karoline: "chemostat is not always switched on directly, so it would mean
+  checking experiment description for a batch period"); where it does not say, the row stays in units of
+  `r_i - D`. Live today: two studies each give one community, so nothing is derived.
 
 
 ## [0.5.0] (2026-10-14)
