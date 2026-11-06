@@ -7,7 +7,7 @@ networkx, and Gephi read, so a grownet network drops straight into an existing n
 Dependency-free (standard library xml only). The graph is directed, and every edge keeps its effect,
 strength, significance (-log10 of the q-value), the q-value, condition, method, the space-joined
 study_ids (the edge-level attribution), and
-when known the evidence (biculture or dropout), the community, the space-joined cautions,
+when known the evidence (biculture, dropout or steady_state), the community, the space-joined cautions,
 and the space-joined ids of the experiments the edge compares.
 
 **A list whose members can contain a space is joined with "; ", not " ".** `community` holds NODE IDS and
@@ -77,6 +77,7 @@ _KEYS = [
     ("n_model_ref", "node", "model_ref", "string"),
     ("n_taxon_id", "node", "taxon_id", "string"),
     ("n_taxon_id_refused", "node", "taxon_id_refused", "string"),
+    ("n_merged_nodes", "node", "merged_nodes", "string"),
     ("n_species", "node", "species", "string"),
     ("n_identity", "node", "identity", "string"),
     ("n_genus", "node", "genus", "string"),
@@ -137,6 +138,7 @@ _KEYS = [
     ("e_window", "edge", "window", "double"),
     ("e_window_unit", "edge", "window_unit", "string"),
     ("e_vs_other_removals", "edge", "vs_other_removals", "double"),
+    ("e_technique", "edge", "technique", "string"),
     ("e_rate_stage_method", "edge", "rate_stage_method", "string"),
     ("e_rate_stage_n", "edge", "rate_stage_n", "int"),
     ("e_merged_arcs", "edge", "merged_arcs", "int"),
@@ -222,6 +224,7 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(n, "n_model_ref", node.model_ref)
         _data(n, "n_taxon_id", node.taxon_id)
         _data(n, "n_taxon_id_refused", node.taxon_id_refused)
+        _data(n, "n_merged_nodes", "; ".join(node.merged_nodes))
         _data(n, "n_species", node.species)
         _data(n, "n_identity", node.identity)
         _data(n, "n_genus", genus(node))
@@ -291,7 +294,7 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         for name in ("fit_null_r2", "coefficient_sd", "coefficient_n",
                      "coefficient_sd_from_rate_stage", "se_replicates", "se_rate_stage",
                      "se_rate_selection", "rate_selection_spread",
-                     "metric_unit", "window", "window_unit", "vs_other_removals",
+                     "metric_unit", "window", "window_unit", "vs_other_removals", "technique",
                      "rate_stage_method", "rate_stage_n", "fit_window_share",
                      "rate_mismatch_to_zero"):
             _data(ed, f"e_{name}", getattr(e, name, None))

@@ -169,7 +169,7 @@ python -m grownet schema [--out FILE]
   species box empty and the second box filled: every species in those media, experiments or studies,
   with every partner.
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
-- `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of either built-in one (see below).
+- `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the three built-in ones (see below).
 - The command line does everything the local page does: every advanced setting has its option, and the
   page's outputs are `--out FILE` (with `--format`), `--to-cytoscape`, `--report FILE` (the same report the
   page shows), and, with `--report-rates`, `--rates FILE` and `--glv FILE`. `grownet derive --help` lists
@@ -317,7 +317,7 @@ When Cytoscape is not running, the command says so and names the port instead of
 ## The output format
 
 `derive` emits one JSON document: the neutral interaction network. Its `schema` field names the format,
-`grownet.interaction_network/v4`, after `/v3` in 0.3.0 and 0.4.0. It moved to `/v1` in 0.2.0 because `significance` changed
+`grownet.interaction_network/v5`, after `/v4` in 0.5.0 and `/v3` in 0.3.0 and 0.4.0. It moved to `/v1` in 0.2.0 because `significance` changed
 meaning, from the corrected p-value to -log10 of it, and a reader that branches on the id would otherwise
 misread those numbers; it moved to `/v2` and then `/v3` because optional edge fields were added and an
 installed 0.2.0 builds its edges from every field a document carries, so it has to read the daily network
@@ -325,7 +325,9 @@ as a format it does not know and derive live instead. A field addition moves the
 it moves from was released, which is why 0.3.0 ships `/v3` and no release carries `/v2`. It moved to `/v4`
 for five optional fields a reader could not otherwise get: on an arc, the unit of `metric_with` and
 `metric_without`, the interval the metric was computed over and its unit, and a drop-out arc's difference
-from the other removals of its target; on a node, why its `taxon_id` is not its identity. Files from 0.1.x
+from the other removals of its target; on a node, why its `taxon_id` is not its identity. It moved to `/v5`
+for one arc field, `technique`, how the target was measured, and one node field, `merged_nodes`, the
+strains a genus node stands for with Merge to genus. Files from 0.1.x
 (`/v0`) and 0.2.x (`/v1`) are still valid, and `grownet validate` names the version it read. It is the contract downstream tools
 read, and it is pinned by a JSON Schema at
 [`schema/interaction_network.schema.json`](https://github.com/crossfeed-bio/crossfeed/blob/main/schema/interaction_network.schema.json). Its `meta` records
@@ -340,7 +342,7 @@ studies and each study's own median, and `without_a_rate`, the organisms that ha
 
 ```json
 {
-  "schema": "grownet.interaction_network/v4",
+  "schema": "grownet.interaction_network/v5",
   "meta": {"tool": "grownet", "tool_version": "0.1.0", "derived_on": "2026-09-27",
            "derived_at": "2026-09-27T14:15:53+02:00", "source_db": "mGrowthDB (live)",
            "settings": {"metric": "auc", "...": "..."}, "data": {"...": "..."}},
@@ -478,6 +480,22 @@ model has no lag term and no death term, so the rows start where growth starts a
 Every arc carries the coefficient, the condition number of its fit, its R2 and the R2 of the same row
 with every interaction set to zero; a row the design
 cannot identify, and a community of three or more members, are reported rather than derived.
+
+**The derivation from chemostat steady states.** `--derivation steady`, off by default and meant for gLV
+mode, fits the rows from steady states instead of growth curves. At a chemostat steady state every organism
+present satisfies `1 + sum_j B_ij N_j = 0` with `B = A / (r_i - D)`, so every unperturbed community of one
+study, medium, abundance unit and dilution rate (each organism read by one technique there) gives one equation per
+organism in it, and each row is their least squares: the idea of EPICS (Ansari et al. 2021), which reads only the monocultures and the communities
+missing one member, with every measured sub-community counted here. The row scale `r_i - D` is read from the
+organism's own monoculture chemostat start-up (the larger of the rise inside a batch period the description
+states, less D, and the rise after the pump started; or the rise from inoculation), never from a batch growth
+rate, so the package's rates are `r_i - D` and it simulates the
+chemostat. What a design cannot determine is said once per chemostat group and once per organism: a row has
+one unknown for its own limitation and one per partner, and needs at least that many communities holding the
+organism. No study in mGrowthDB holds such a design yet; on the fitted 12-species gLV of Venturelli et al.
+2018, monocultures and pairs recover 126 of its 132 coefficients of B exactly, and `A = (r_i - D) B`, formed
+from them and the start-up scales, within 2% of each organism's self-limitation without measurement noise
+(`packaging/validate_steady_state.py`).
 
 **Scoring the package against a chemostat.** `--steady-check` (with `--report-rates --live`) scores the
 gLV parameters against the steady states mGrowthDB holds for these organisms in continuous culture: a
@@ -660,10 +678,12 @@ before you implement one.
 
 ## How the derivation works
 
-**Two derivations, and which one runs when.** `ReplicateDeriver` (`src/grownet/derive.py`) is the default,
-and is what produces a network. `IntegratedDeriver` (`src/grownet/integrated.py`) is what gLV mode
-selects, and is the only form that gives a gLV coefficient. Neither is the stricter version of the
-other; each answers a different question, and each has a weakness the other does not.
+**Three derivations, and which one runs when.** `ReplicateDeriver` (`src/grownet/derive.py`) is the
+default, and is what produces a network. `IntegratedDeriver` (`src/grownet/integrated.py`) is what gLV mode
+selects, and fits a gLV coefficient from growth curves. `SteadyStateDeriver` (`src/grownet/subcommunity.py`)
+is the third, chosen only when asked for, which fits the coefficients from chemostat steady states instead. Neither of
+the first two is the stricter version of the other; each answers a different question, and each has a
+weakness the other does not.
 
 **What the comparison cannot do** is give a coefficient that is free of the organism's own density: a
 coefficient from it is a difference of two separately fitted growth rates divided by one partner mean,
@@ -674,6 +694,13 @@ arc from a community of three or more, so no **drop-out** arc exists under it; a
 rule, so there are no **censored** arcs, no measured bounds and no `NA` cells. On the whole of mGrowthDB
 the comparison gives 145 arcs, 122 of them drop-out, with 12 censored bounds; the integrated form gives
 12 arcs and no bounds (measured 2026-10-09). That is why it is not the default.
+
+**What the steady-state form needs** is a design mGrowthDB does not hold yet: several unperturbed
+chemostat communities of one medium and dilution rate per organism, at least as many as the organism has
+unknowns (its own limitation and one per partner it met). Its coefficients are effective, an effect that
+needs a third organism being folded into the pairs that carry it, and each community is predicted by a fit
+made without it so a reader can see where that matters. Today it derives nothing, and says what each
+organism lacks.
 
 It was the default for one release, 0.3.0. The comparison that chose it was run in gLV mode, where
 drop-out communities are off on both sides, so it measured the two forms on the question gLV mode asks

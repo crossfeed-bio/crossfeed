@@ -252,6 +252,26 @@ the neutral band, the sign itself can move. Direction is not fully dependable fo
 band.** Options to build: restrict a published network to matched-technique comparisons, calibrate an
 offset between techniques, or widen the neutral band for mismatched edges.
 
+**What the tool does (2026-11-06, #305).** The first option is the rule: a species is never compared across
+techniques (`growth.check_comparable`, Karoline 2026-09-27), and a strain measured by several in one
+replicate is read by the one with more time points (#292). Every arc now records the technique its target
+was measured by, `technique` (format `/v5`). Measured on the live All network the same day: 145 arcs, qpcr
+117, plates 15, fc 13; with the arcs below the threshold, 223; in gLV mode, 10; no arc names two techniques,
+including in the integrated form, whose row spans the co-culture and the monocultures. Each study uses one
+technique, fc in SMGDB00000002, 6 and 7, qpcr in 4 and 8, plates in 13 and 14.
+
+**Decided (#305): Merge parallel arcs merges arcs of different techniques.** Karoline, 2026-11-06: "I think
+that measurement techniques should agree to the point that arcs with different measurement techniques can
+be merged. What do you think?" Each arc is a log2 ratio of one species measured one way on both sides, so
+the unit cancels as it does across studies, and merging already crosses studies, media and evidence. A
+technique's bias cancels only where it scales both sides alike: plates count living cells and qPCR counts
+genomes, so an effect that kills without lysing reads differently by the two. Asked whether merging should
+be allowed across techniques, Karoline answered "Yes, allow it" the same day. So the merge does not ask, as
+before the field existed, and a merged arc names every technique it rests on, which is how a reader sees
+that it crossed them. The choice moved no arc: of the five pairs with parallel arcs in All, none mixes techniques; the one pair
+measured by two (B. hydrogenotrophica on R. intestinalis, qpcr in SMGDB00000004 and fc in 7) has arcs of
+both signs and arcs below the threshold, so nothing of it merges either way.
+
 ## 7. Taxonomic identity and aggregation
 
 Two questions: at what rank is a node defined, and what stable identifier does it carry.
@@ -611,8 +631,123 @@ honest note on method: the first comparison of R2 between the two variants was i
 predictor that scores a fit omitted the fitted constant, so the intercept's fits were scored without the
 parameter they had. No R2 comparison is quoted above for that reason.
 
+### A third derivation, from chemostat steady states of sub-communities (2026-11-06, #310)
+
+Karoline: "can we have a third inference method just for gLV mode and chemostat, off by default ... The
+idea here is to parameterize the gLV from steady-state abundances of sub-communities" (EPICS, Ansari et al.
+2021, Nature Computational Science 1:619). Her decisions, on #310:
+
+1. **Chemostat steady states only** ("Yes on 1"): unperturbed runs, at the chemostat check's tail mean, one
+   fit per medium (by `media_identity`), abundance unit and dilution rate, within one study (every derivation
+   reads one study at a time; pooling runs across studies would be a further choice, not taken).
+2. **Every sub-community, not only leave-one-out** ("EPICS is a strict scheme on leave-one-out [...] could we
+   have something more flexible that would try parameterisation on all available sub-communities?"). Each
+   community gives `1 + sum_j B_ij N_j = 0` per member present, `B = A / (r_i - D)`; each row is a least
+   squares over all of its equations, its diagonal with the rest, gated by the integrated form's condition
+   limit. Each community is also predicted by a fit made without it.
+3. **The row scale `r_i - D` from the chemostat itself** ("Mono-culture growth rates from batch are tricky,
+   because they change in chemostat"; "chemostat is not always switched on directly, so it would mean
+   checking experiment description for a batch period"): from a monoculture chemostat's start-up, inside a
+   stated batch period (r_i, less D) or with the pump on from inoculation (`r_i - D` directly); otherwise the
+   row stays scaled.
+4. Only identified coefficients; washed-out organisms and undetermined coefficients named.
+5. Strength `log2(1 + B_ij x_j*)` at the partner's abundance in the largest community holding both; spread
+   a bootstrap over vessels, none (undetermined) for a row resting on a single vessel.
+6. Synthetic fixtures in the repository; validation on published data local only.
+
+Measured before building, locally on Venturelli et al. 2018's fitted 12-species gLV (Mol Syst Biol, Code
+EV1 model T4, CC BY 4.0; nothing of theirs in git): simulated to steady state, 7 of the 12 coexist, so
+the strict leave-one-out design identifies 0 of the 132 off-diagonal coefficients; with the 66 pairs added,
+128 (re-derived after review, below). Their measured data (Dataset
+EV3) has the leave-one-out design but is relative abundance only, from serial batch transfers, with no
+monocultures, and its CA- and CH- blocks are identical; it cannot be a test case. mGrowthDB holds no such
+design today: SMGDB00000005's control and SMGDB00000011's run each give one community.
+
+**Validated on that model, through grownet's own code (2026-11-06, #314).** `packaging/validate_steady_state.py`
+simulates chemostat steady states of Venturelli et al.'s T4 model at D = 0.05 per hour (washed out under 1% of
+the run's largest), reads each row's scale from a simulated monoculture start-up with a stated 4 h batch
+period, and fits with `grownet.subcommunity`. Download Code EV1 yourself and run
+
+    uv run --no-project --with numpy --with scipy python packaging/validate_steady_state.py twelveSpeciesT4.xml
+
+Errors are on the scale of each row's own `|B_ii|`, since the published fit sets many coefficients to exactly
+0 (it was L1-regularized), where an error relative to the true value means nothing.
+
+Re-derived on 2026-11-06 after a pre-release review found that the script let organisms that were never
+inoculated invade from solver noise over 20,000 h (the "leave out BU" community ended with BU at 0.309): the
+first numbers here came from that. With non-members held at 0, and with runs that end with the same organisms
+pooled into one equation (`subcommunity.pool`), numpy 2.2.6 and scipy 1.13.0:
+
+| design | off-diagonal identified | error | signs (true not 0) |
+|---|---|---|---|
+| EPICS: monocultures, 12 leave-one-out, full | 0 of 132 | | |
+| bottom-up: monocultures and 66 pairs | 126 of 132 | max 7e-14 | 96 of 96 |
+| all of the above | 128 of 132 | max 0.0018 | 98 of 98 |
+| all, 3 vessels with 5% noise, six draws | 128 of 132 | median 0.016 to 0.025, max 0.66 to 3.2 | 98% to 99% |
+
+- Every community settles (every member present grows at under 1e-6 per h after 20,000 h); none is left out.
+- The same start-ups timed in minutes and in days give the hours' scales to 2e-16.
+- The row scales read from the noiseless simulated start-ups are within 1.6% of the true `u - D` (median
+  0.7%), slightly low, since self-limitation already slows the batch period; that is most of the package's
+  error, `A = scale x B` (formed in the script from the fitted rows and the start-up scales, as the package
+  forms it) within 2% of the true `a_ij` on the `|a_ii|` scale (median 0.18%).
+- The scale is an estimate that misses both ways, and the script measures the noisy side: with lognormal
+  noise on each point of those start-ups (20 draws per organism), it is above the true `u - D` in 66% of
+  readings at 2% noise (median ratio 1.01), 88% at 5% (1.11, max 1.88) and 96% at 10% (1.27), since the
+  steepest window is kept and the larger of the two readings taken. It errs low where the start-up is
+  lagged or the inoculum is near the plateau. On a simulated logistic start-up (r 0.5 per h, D 0.1 per h, a
+  4 h batch period, hourly points, inoculum 1% of the plateau, a Baranyi-type adjustment for a lag), an
+  inoculum a tenth of the plateau reads 25% low, and a 2 h lag 57% low from the batch period alone and 19%
+  low from the larger of the two readings; that simulation is not in the script. Either way an error in
+  the scale scales a row's coefficients in proportion and changes no sign.
+- The full community holds the same 7 organisms as five of the leave-one-out communities, so they are one
+  equation; predicted by a fit made without them, it is within 0.8% without noise and between 2.8% and 110%
+  with it, over the six draws.
+- With the noise, the bootstrap over runs and vessels puts the true coefficient within 2 sd for 85% to 94%
+  of them over the six draws (94, 87, 90, 85, 85, 91), against the nominal 95%: the spread is somewhat
+  narrow. It draws the mean, the statistic the fit uses, widens each draw by `sqrt(n / (n - 1))` for n
+  replicates, since a bootstrap of the mean of n spreads only `sqrt((n - 1) / n)` as far as the mean itself
+  does (18% too narrow for three), and draws whole runs where runs were pooled, since vessels of one run are
+  not independent of each other. A community read in one run has only its own vessels to draw, which share
+  that run's inoculum and history, so its spread is within-run and narrower than run-to-run differences
+  would make it; the simulation draws vessels independently, so its coverage does not measure that. The
+  worst coefficients are those whose partner is scarce in every
+  community beside the organism.
+- Only 7 of the 12 coexist in the full community at this D, so the strict leave-one-out design determines
+  nothing; the pairs are what make the model identifiable, which is Karoline's decision 2.
+- Switching the 1% wash-out rule off changes nothing for monocultures and pairs. On the design with every
+  community it is the rule's own cost that is measured: off, the largest B error falls from 0.0018 to 2e-14
+  and the full community is predicted exactly, since an organism under 1% of its run's largest is still
+  there.
+
 ## Open decisions
 
+    uv run --no-project --with numpy --with scipy python packaging/validate_steady_state.py twelveSpeciesT4.xml
+
+Errors are on the scale of each row's own `|B_ii|`, since the published fit sets many coefficients to exactly
+0 (it was L1-regularized), where an error relative to the true value means nothing.
+
+| design | off-diagonal identified | error | signs (true not 0) |
+|---|---|---|---|
+| EPICS: monocultures, 12 leave-one-out, full (2 never settle) | 0 of 132 | | |
+| bottom-up: monocultures and 66 pairs | 126 of 132 | max 7e-14 | 96 of 96 |
+| all of the above (2 never settle) | 128 of 132 | max 0.0018 | 98 of 98 |
+| all, 3 vessels with 5% noise | 128 of 132 | median 0.022, max 3.4 | 96% |
+
+- The row scales read from the start-up are within 1.6% of the true `u - D` (median 0.7%), slightly low,
+  since self-limitation already slows the batch period; that is most of the package's error, `A = scale x B`
+  within 2% of the true `a_ij` on the `|a_ii|` scale (median 0.18%).
+- The full community, predicted by a fit made without it, is within 0.22% (18% with the noise).
+- With the noise, the bootstrap over vessels puts the true coefficient within 2 sd for 93% of them, close to
+  the nominal 95%. The worst coefficients are those whose partner is scarce in every community beside the
+  organism: PC on BT, off by 3.4 times BT's `|B_ii|`, has PC at no more than 0.007 OD beside BT (the median
+  over all coefficients is 0.23), and its spread is 1.8 times `|B_ii|`, so the arc says it is uncertain; the
+  next five worst all have their partner at 0.06 or less.
+- Only 7 of the 12 coexist in the full community at this D, so the strict leave-one-out design determines
+  nothing; the pairs are what make the model identifiable, which is Karoline's decision 2.
+- Switching the 1% wash-out rule off changes nothing here.
+
+## Open decisions
 
 - **OPEN, 2026-10-11 (#266): one format bump to `/v4`, or none.** Three things a reader who did not run
   the tool cannot establish from the file need a field the format does not have: `metric_unit`, because
