@@ -252,6 +252,26 @@ the neutral band, the sign itself can move. Direction is not fully dependable fo
 band.** Options to build: restrict a published network to matched-technique comparisons, calibrate an
 offset between techniques, or widen the neutral band for mismatched edges.
 
+**What the tool does (2026-11-06, #305).** The first option is the rule: a species is never compared across
+techniques (`growth.check_comparable`, Karoline 2026-09-27), and a strain measured by several in one
+replicate is read by the one with more time points (#292). Every arc now records the technique its target
+was measured by, `technique` (format `/v5`). Measured on the live All network the same day: 145 arcs, qpcr
+117, plates 15, fc 13; with the arcs below the threshold, 223; in gLV mode, 10; no arc names two techniques,
+including in the integrated form, whose row spans the co-culture and the monocultures. Each study uses one
+technique, fc in SMGDB00000002, 6 and 7, qpcr in 4 and 8, plates in 13 and 14.
+
+**Decided (#305): Merge parallel arcs merges arcs of different techniques.** Karoline, 2026-11-06: "I think
+that measurement techniques should agree to the point that arcs with different measurement techniques can
+be merged. What do you think?" Each arc is a log2 ratio of one species measured one way on both sides, so
+the unit cancels as it does across studies, and merging already crosses studies, media and evidence. A
+technique's bias cancels only where it scales both sides alike: plates count living cells and qPCR counts
+genomes, so an effect that kills without lysing reads differently by the two. Asked whether merging should
+be allowed across techniques, Karoline answered "Yes, allow it" the same day. So the merge does not ask, as
+before the field existed, and a merged arc names every technique it rests on, which is how a reader sees
+that it crossed them. The choice moved no arc: of the five pairs with parallel arcs in All, none mixes techniques; the one pair
+measured by two (B. hydrogenotrophica on R. intestinalis, qpcr in SMGDB00000004 and fc in 7) has arcs of
+both signs and arcs below the threshold, so nothing of it merges either way.
+
 ## 7. Taxonomic identity and aggregation
 
 Two questions: at what rank is a node defined, and what stable identifier does it carry.
@@ -673,7 +693,6 @@ Errors are on the scale of each row's own `|B_ii|`, since the published fit sets
 - Switching the 1% wash-out rule off changes nothing here.
 
 ## Open decisions
-
 
 - **OPEN, 2026-10-11 (#266): one format bump to `/v4`, or none.** Three things a reader who did not run
   the tool cannot establish from the file need a field the format does not have: `metric_unit`, because
