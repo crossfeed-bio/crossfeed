@@ -853,9 +853,6 @@ an arc (`members` in `merge_genus`), sorted. A drop-out member on no arc is name
 `community`, and the help's "What a merged node carries" says so. `live_check` flags a genus node with an
 empty `merged_nodes` and an arc with an empty `technique`. A merged arc's `technique` is sorted, as
 `techniques_of` sorts a single arc's.
-2026-11-06) taxon_id_refused onto the arc, and `records_to_network` builds the genus node from those; a
-side field it does not reset reaches the genus node from the first strain's arc. Strain ids survive only on
-arcs (`merged_pairs` by name, `community` by id), which the help's "What a merged node carries" says.
 
 ## Reading only what a search needs (2026-09-27)
 
@@ -1294,6 +1291,3 @@ the coefficient from their difference over x like any fitted arc; `FITTED_METRIC
 `model_assumptions(derivation)`. A row with no scale has no `metric_with`, gives no cell, and is named
 (`its row is in units of ... r_i - D`). `gui.STEADY_CHECK_CIRCULAR` replaces the steady-state check under
 this derivation. Checked in the R package: the payload loads, `solve(A, -r)` is the observed pair.
-chosen and `glv_mode_on` accepts it. The gLV package from it (matrix.py, which branches on
-"integrated"/"replicate" in many places) is a separate task.
-`derive.media_identity` instead, as the rest of the tool does.
