@@ -5,9 +5,9 @@ there if less than a day old", and "let's serve the All network from the grownet
 grownet cannot write to GitHub (it would need a credential anyone could take), and the repository holds
 no data from mGrowthDB (AGENTS.md). So a scheduled workflow (.github/workflows/all-network.yml) derives
 All with the default settings and replaces one file on a fixed release, outside git history; the page's
-All button and `grownet derive --all` read that file when it is less than `MAX_AGE` (36 hours) old and
-the settings are the defaults, and otherwise derive live, as before. Nothing is ever uploaded by a user's
-copy.
+All network (Find interactions with both boxes empty) and `grownet derive --all` read that file when it is
+less than `MAX_AGE` (36 hours) old and the settings are the defaults, and otherwise derive live, as before.
+Nothing is ever uploaded by a user's copy.
 
 The file holds the whole result of the search, not only the network, so the page shows it as a live
 result: the arcs, the arcs the absence threshold left out, the studies, the pairs the data did not

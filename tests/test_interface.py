@@ -1232,3 +1232,49 @@ def test_the_command_line_help_says_how_to_get_the_all_network():
     assert "For the All network, every study in mGrowthDB: grownet derive --live --all." in derive
     assert DERIVE_EXAMPLES.startswith("examples:\n  the All network, every study in mGrowthDB")
     assert "grownet derive --live --conditions \"Wilkins-Chalgren\" --out wc_all.json" in DERIVE_EXAMPLES
+
+
+def test_a_search_with_no_species_says_every_partner_was_kept_and_counts_its_studies():
+    """With the species box empty, under the second box or for All, every partner is kept, and the report
+    said "Only interactions between the species entered (--all-partners): on" beside "with every partner";
+    the page said "1 studies" (found in review)."""
+    from test_gui import FakeClient, _query
+
+    from grownet.report import report_text
+    note = "<- not read in this run: no species was entered, so every partner is kept"
+    for conditions in ("WC", ""):
+        result = gui.run_query(FakeClient(), [], {"derivation": "replicate", "conditions": conditions},
+                               all_studies=True, published=False)
+        line = next(x for x in report_text(result).splitlines() if "(--all-partners)" in x)
+        assert line.strip().endswith(note), line
+        assert len(result["studies"]) == 1
+        page = gui.render_result("tok", result)
+        assert "1 study" in page and "1 studies" not in page
+    # a species search reads the setting, and says nothing beside it
+    line = next(x for x in report_text(_query()).splitlines() if "(--all-partners)" in x)
+    assert "not read" not in line
+
+
+def test_derive_with_nothing_to_search_names_every_route(capsys):
+    """`derive --live` alone named a study id and --species only, while --conditions alone and --all derive
+    too (found in review)."""
+    from grownet.__main__ import main
+    assert main(["derive", "--live"]) == 2
+    said = capsys.readouterr().err
+    assert all(route in said for route in ("study id", "--species", "--conditions", "--all")), said
+
+
+def test_the_glv_mode_option_lists_every_setting_it_changes():
+    """`--glv-mode`'s help named three of the four settings the mode sets: the derivation was missing, the
+    error the help page had and lost (found in review). The same four are what the page's message names."""
+    from pathlib import Path
+
+    from grownet.__main__ import build_parser
+    parser = build_parser()
+    derive = next(a for a in parser._subparsers._actions if a.choices).choices["derive"]
+    text = " ".join(next(a for a in derive._actions if "--glv-mode" in a.option_strings).help.split())
+    for setting in ("growth rates", "drop-out communities", "compare the growth rate", "integrated form"):
+        assert setting in text, setting
+    readme = " ".join((Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8").split())
+    assert ("(growth rates on, drop-out communities off, the comparison on the growth rate, the integrated "
+            "form)") in readme

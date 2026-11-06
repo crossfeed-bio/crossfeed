@@ -321,7 +321,9 @@ def _derive_run(a):
               f"{cannot_act[0]}.", file=sys.stderr)
         return 2
     if not a.study:
-        print("derive needs a study id, or --species with names (see grownet derive --help)", file=sys.stderr)
+        # every route a derive can take, the two that need no species included (found in review)
+        print("derive needs a study id, --species with names, --conditions alone (every species in those "
+              "media, experiments or studies) or --all (see grownet derive --help)", file=sys.stderr)
         return 2
     if a.deriver and not a.live:
         print("--deriver applies to --live (it derives from raw growth data); "
@@ -921,8 +923,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     settings.add_argument("--glv-mode", action="store_true",
                           help="the page's gLV mode button: report growth rates, leave out drop-out "
-                               "communities, and compare the growth rate, which is what a fitted "
-                               "generalized Lotka-Volterra coefficient is made of")
+                               "communities, compare the growth rate, and derive on the integrated form "
+                               "unless --derivation names another, which is what a fitted generalized "
+                               "Lotka-Volterra coefficient is made of")
     settings.add_argument("--report-rates", action="store_true",
                           help="also report each organism's maximum specific growth rate in monoculture, "
                                "the median over replicates and studies, with the lag and the monoculture "

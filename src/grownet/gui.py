@@ -825,11 +825,12 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
                 parts.append("excluding " + ", ".join(_esc(x) for x in excluded_ids[:3])
                              + (f" and {len(excluded_ids) - 3} more" if len(excluded_ids) > 3 else ""))
             resolved = (f"<li>every study {' and '.join(parts)}, with every partner: "
-                        f"{len(result['studies'])} studies{daily_note}</li>"
+                        f"{_count(len(result['studies']), 'study', 'studies')}{daily_note}</li>"
                         "<li class=\"muted\">Clear them to derive the whole of mGrowthDB.</li>")
         else:
             species_heading, resolved = "<h2>All of mGrowthDB</h2>", (
-                f"<li>every study, with every partner: {len(result['studies'])} studies{daily_note}</li>")
+                f"<li>every study, with every partner: {_count(len(result['studies']), 'study', 'studies')}"
+                f"{daily_note}</li>")
     unresolved = _unresolved_list(result)
     net = result["network"]
     mismatch = any("MISMATCH" in (e.method or "") for e in net.edges)
@@ -911,6 +912,11 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
             f"<p class=\"muted\">Studies searched: {_esc(studies)}</p>{errors}{table}"
             f"{_absent_section(result, result.get('absence', {}))}{_sources(net)}{skipped}</section>")
 
+
+
+def _count(n: int, one: str, many: str) -> str:
+    """"1 study", "2 studies": the page read "1 studies" (found in review)."""
+    return f"{n} {one if n == 1 else many}"
 
 def render_result(token: str, result: dict, message: str = "") -> str:
     """The page with the result under the settings that produced it (#74)."""

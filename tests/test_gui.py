@@ -616,7 +616,7 @@ def test_all_ignores_the_box_and_derives_every_study_with_every_partner():
     assert r["all"] and r["studies"] == ["SMGDB00000001"] and r["resolved"] == [] and r["unresolved"] == []
     assert r["network"].meta["query"] == "all" and r["network"].edges        # the study's arcs, every partner
     page = render_result("tok", r)
-    assert "<h2>All of mGrowthDB</h2>" in page and "1 studies" in page
+    assert "<h2>All of mGrowthDB</h2>" in page and "1 study" in page
 
 
 def test_all_still_leaves_out_the_excluded_studies_and_says_so():

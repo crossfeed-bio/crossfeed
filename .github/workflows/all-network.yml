@@ -1,9 +1,9 @@
 name: all-network
 
 # Derives the All network of mGrowthDB once a day with the default settings and publishes it as the assets of
-# one fixed release, `all-network`, replacing the previous day's (#96). The page's All button and
-# `grownet derive --all` read it when it is less than 36 hours old and the settings are the defaults, and derive
-# live otherwise. Release assets are not in git, so no data enters the repository. Scheduled runs use the
+# one fixed release, `all-network`, replacing the previous day's (#96). The page (Find interactions with both
+# boxes empty) and `grownet derive --all` read it when it is less than 36 hours old and the settings are the
+# defaults, and derive live otherwise. Release assets are not in git, so no data enters the repository. Scheduled runs use the
 # default branch only; "Run workflow" on the Actions tab starts one by hand.
 
 on:
