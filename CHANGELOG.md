@@ -8,6 +8,16 @@ content.
 
 ### Changed
 
+- **The help reads more easily** (Karoline, 2026-11-06). It no longer prints who decided what and when
+  beside its text ("they are not useful for readers"), names study SMGDB00000026 in full in the alias
+  table, sets genus and species names in italics, and its gLV sections are split into shorter parts and
+  lists with every formula kept. Three passages were also wrong or unclear and are corrected: gLV mode sets
+  four settings, not three (the derivation was missing); an undefined "ratio L" and "x_j_star" are now
+  r_with, r_without and x_j; and the R package's handling of +10 and -10 cells is said to concern parameters
+  from grownet 0.2.0 and earlier only.
+
+### Changed
+
 - **No GitHub issue numbers in what a user sees** (Karoline, 2026-11-06: "in general: users don't need to see
   github issue numbers anywhere"). They are gone from the page, the help, the command line's help and
   messages, the R package's help and the README, and a test keeps new ones out.

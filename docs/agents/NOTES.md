@@ -974,6 +974,11 @@ Example. Its test submits the filled form the way a browser does (`tests/test_gu
 
 ## Help page
 
+`render_help` sets every genus and species name in italics on the way out (`_italicize_taxa`, from
+`TAXA` and `EPITHETS`), skipping code, commands and text already in italics, because much of the help's
+text sits in tables that escape it and so cannot carry markup (2026-11-06). The test names every genus the
+page offers as an example, so a new organism in the help needs its genus or epithet added there.
+
 `src/crossfeed/help.py` holds the help page as data keyed by the code's own names (#78):
 `SETTINGS` by `gui.DEFAULTS` key, `EDGE_ATTRIBUTES` and `NODE_ATTRIBUTES` by model field, `CLI_ONLY` for
 `derive` options that are not page settings. `tests/test_help.py` requires an entry for every setting,
