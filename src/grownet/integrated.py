@@ -813,6 +813,17 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
     were all "whichever arc the loop reached first" (#142 item 4).
     """
     gathered: dict = {}
+    # One dilution rate for the whole package: the steady-state derivation's rate is r_i - D, a different
+    # number at each D, and a package simulates ONE chemostat. Keeping each organism's first D read mixed
+    # dilution rates across organisms and changed with the order of the records (found in review). The D
+    # with the most scaled rows is the package's, the lowest on a tie; the others are named. The other
+    # derivations record none, so this never fires for them.
+    by_dilution: dict = {}
+    for record in records:
+        if record.get("fitted_rate") is not None and record.get("fitted_rate_dilution") is not None:
+            d = record["fitted_rate_dilution"]
+            by_dilution[d] = by_dilution.get(d, 0) + 1
+    package_dilution = (min(by_dilution, key=lambda d: (-by_dilution[d], d)) if by_dilution else None)
     for record in records:
         nid, rate = record.get("target"), record.get("fitted_rate")
         own = record.get("fitted_self")
@@ -824,15 +835,14 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
             "capacity_unit": "", "capacities": [], "capacity_points": [], "capacity_per_study": {},
             "other_capacity_units": [], "unit_left_out": [], "r2": [], "conditions": [], "self_sources": [],
             "media": [],
-            "stage_n": {}, "by_medium": {}, "dilution": record.get("fitted_rate_dilution")})
+            "stage_n": {}, "by_medium": {}})
         study = record.get("study_id", "")
         unit = record.get("fitted_rate_unit", "1/h")
         dilution = record.get("fitted_rate_dilution")
-        if dilution != at["dilution"]:
-            # the steady-state derivation's rate is r_i - D, which is a different number at each dilution
-            # rate: the median of 0.46 at D 0.04 and 0.30 at D 0.2 was 0.38, r_i - D at neither (found in
-            # review). The first dilution rate read is the package's, and the others are named, as a rate in
-            # another time unit is. The other derivations record none, so this never fires for them.
+        if dilution != package_dilution:
+            # r_i - D at another dilution rate: the median of 0.46 at D 0.04 and 0.30 at D 0.2 was 0.38, r_i -
+            # D at neither (found in review). Named, as a rate in another time unit is; its capacity is left
+            # too, since K = -1/B_ii = -(r_i - D)/A_ii depends on D as well.
             named = f"{study} (r_i - D at another dilution rate, {dilution:g} per h)"
             if named not in at["other_units"]:
                 at["other_units"].append(named)
@@ -953,6 +963,8 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
             "studies": sorted(at["studies"]),
             "per_study": {study: statistics.median(values) for study, values in at["per_study"].items()},
             "other_units": at["other_units"], "method": method, "lag": None, "lag_method": "",
+            # the dilution rate the rate is r_i - D at, under the steady-state derivation; None otherwise
+            "dilution": package_dilution,
             "capacity": statistics.median(chosen["values"]) if chosen else None,
             "capacity_unit": chosen["unit"] if chosen else "",
             "capacity_technique": chosen["technique"] if chosen else "",

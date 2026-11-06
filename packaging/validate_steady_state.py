@@ -101,6 +101,25 @@ def communities(u, A, groups, vessels=1, noise=0.0, seed=0, washed_out=WASHED_OU
     return out, unsettled
 
 
+def startup_noise(u, A, sigma, draws=20, seed=1):
+    """How the row scale read from a start-up with lognormal noise `sigma` on each point compares with the
+    true u - D: the share above it, and the median ratio. The steepest window is kept, so noise pulls it up."""
+    import statistics
+    rng = random.Random(seed)
+    ratios = []
+    for i in range(len(NAMES)):
+        curve = startup(u, A, i)
+        for _ in range(draws):
+            noisy = GrowthCurve(NAMES[i], curve.times, tuple(v * math.exp(rng.gauss(0, sigma)) for v in curve.values),
+                                "h", "OD600", "od")
+            got = row_scale(noisy, D, {"kind": "batch", "hours": BATCH_HOURS, "said": "a 4 h batch period"})
+            if got["scale"] is not None:
+                ratios.append(got["scale"] / (u[i] - D))
+    high = sum(r > 1 for r in ratios) / len(ratios)
+    print(f"row scales from start-ups with {sigma:.0%} noise on each point: {len(ratios)} read, above u - D in "
+          f"{high:.0%}, median ratio {statistics.median(ratios):.2f}, max {max(ratios):.2f}")
+
+
 def report(label, u, A, design, scales, draws=0):
     comms, unsettled = design
     n = len(NAMES)
@@ -172,10 +191,15 @@ def main(path):
     report("bottom-up: monocultures and pairs", u, A, communities(u, A, monos + pairs), scales)
     report("all: monocultures, pairs, leave-one-out, full", u, A, communities(u, A, monos + pairs + loo + full),
            scales)
-    report("all, 3 vessels with 5% noise", u, A, communities(u, A, monos + pairs + loo + full, 3, 0.05),
-           scales, draws=200)
+    # the coverage of one noise draw is itself noisy, so six draws (found in a second review: one seed said 94%)
+    for seed in range(6):
+        report(f"all, 3 vessels with 5% noise, draw {seed}", u, A,
+               communities(u, A, monos + pairs + loo + full, 3, 0.05, seed=seed), scales, draws=200)
     # what the 1% wash-out rule costs: an organism below it is read as gone though it is still there
     report("bottom-up, wash-out rule off", u, A, communities(u, A, monos + pairs, washed_out=0.0), scales)
+    report("all, wash-out rule off", u, A, communities(u, A, monos + pairs + loo + full, washed_out=0.0), scales)
+    for sigma in (0.02, 0.05, 0.10):
+        startup_noise(u, A, sigma)
 
 
 if __name__ == "__main__":

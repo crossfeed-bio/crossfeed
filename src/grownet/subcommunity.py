@@ -87,22 +87,25 @@ def _fit_row(i: str, equations: list) -> dict:
 
 
 def _resample(communities: list, rng: random.Random) -> list:
-    """The communities with each one's vessels drawn with replacement, where it has two or more.
+    """The communities with each one's replicates drawn with replacement, where it has two or more.
 
-    The abundance is the mean over vessels, as `pool` and `chemostat_groups` make it, so the draw is the
-    mean over the drawn vessels, of the vessels that hold a value. The bootstrap of a mean of n draws
+    A community's replicates are its vessels, or, for runs pooled by `pool`, its runs: vessels of one run
+    share that run's inoculum and history, so drawing them as independent made the spread of a pooled
+    community too narrow (found in a second review). The draw is the mean over the drawn replicates, of
+    those that hold a value, the statistic the point estimate is. The bootstrap of a mean of n draws
     spreads sqrt((n - 1) / n) as far as the mean does, which with three vessels made the spread 18% too
     narrow and called arcs present too readily (found in review), so each draw's departure from the mean is
     widened by sqrt(n / (n - 1)). A member that washed out stays washed out."""
     import math
     out = []
     for c in communities:
-        vessels = c.get("vessels") or []
-        n = len(vessels)
+        runs = c.get("run_means")
+        units = runs if runs and len(runs) >= 2 else (c.get("vessels") or [])
+        n = len(units)
         if n < 2:
             out.append(c)
             continue
-        drawn = [rng.choice(vessels) for _ in vessels]
+        drawn = [rng.choice(units) for _ in units]
         widen = math.sqrt(n / (n - 1))
         abundance = {}
         for k, centre in c["abundance"].items():
@@ -117,30 +120,34 @@ def _resample(communities: list, rng: random.Random) -> list:
 
 
 def pool(communities: list) -> list:
-    """Communities with the same members present, as one community whose vessels are all of theirs.
+    """Communities with the same members present, as one community whose replicates are its runs.
 
     Under a gLV one set of members has one interior steady state, so two runs of it are replicates of one
     equation, not two equations. Kept apart, their noise alone told a row's unknowns apart: two runs of one
     pair, with no monoculture, were "identified" in 136 of 300 trials at 5% noise and more often the
     noisier the runs (found in review). And a leave-one-out prediction left one run out and kept its twin.
-    The pooled abundance is the mean over every vessel of every run; the name is the first run's, with the
-    count."""
+    The pooled abundance is the mean over runs of each run's mean, its replicates for the bootstrap are the
+    runs (`run_means`), and it holds the members present only: a member one run inoculated and lost is that
+    run's wash-out, which `fit` reports under the run's own name. Its name is the first run's, with the count,
+    and `runs` names them all."""
     groups: dict = {}
     for c in communities:
         groups.setdefault(frozenset(_present(c)), []).append(c)
     out = []
-    for runs in groups.values():
+    for present, runs in groups.items():
         if len(runs) == 1:
             out.append(runs[0])
             continue
-        vessels = [v for c in runs for v in (c.get("vessels") or [c["abundance"]])]
-        keys = sorted({k for c in runs for k in c["abundance"]})
-        present = set(_present(runs[0]))
-        abundance = {k: (statistics.fmean(v[k] for v in vessels if (v.get(k) or 0) > 0) if k in present
-                         else 0.0) for k in keys}
+        means = []
+        for c in runs:
+            vessels = c.get("vessels") or [c["abundance"]]
+            means.append({k: statistics.fmean(v[k] for v in vessels if (v.get(k) or 0) > 0) for k in present
+                          if any((v.get(k) or 0) > 0 for v in vessels)})
+        abundance = {k: statistics.fmean(m[k] for m in means if k in m) for k in sorted(present)}
         experiments = sorted({e for c in runs for e in (c.get("experiments") or [c.get("experiment", "")]) if e})
         out.append({"name": f"{runs[0]['name']} ({len(runs)} runs)", "abundance": abundance,
-                    "vessels": vessels, "experiments": experiments, "runs": [c["name"] for c in runs]})
+                    "vessels": [v for c in runs for v in (c.get("vessels") or [c["abundance"]])],
+                    "run_means": means, "experiments": experiments, "runs": [c["name"] for c in runs]})
     return out
 
 
@@ -151,10 +158,11 @@ def fit(communities: list, draws: int = DRAWS, seed: int = 0) -> dict:
                         "columns"}},
      "washed_out": [(community, species)], "unidentified": [(i, j)], "why": {(i, j): reason}}
     """
-    communities = pool(communities)
+    # a wash-out is a run's own, reported under its name before the runs are pooled
     species = sorted({k for c in communities for k in (c.get("abundance") or {})})
     washed_out = [(c["name"], k) for c in communities for k, v in (c.get("abundance") or {}).items()
                   if v is None or v <= 0]
+    communities = pool(communities)
     by_species = _equations(communities)
     rows, unidentified, why = {}, [], {}
     for i in species:
@@ -279,9 +287,11 @@ def row_scale(curve, dilution: float, period: dict) -> dict:
     Inside a stated batch period the steepest rise is at most r_i, so that rate less D is one reading; after
     the pump starts the steepest rise is at most r_i - D, which is another; the larger is kept. With the
     pump on from inoculation the steepest rise is r_i - D already. Each rate is easylinear's, per hour, its
-    window shortened to the points there. Each reading is a LOWER bound: a lag, or an inoculum near the
-    plateau, keeps the culture from its maximum rate within a short start-up, and the scale then comes out
-    low (with an inoculum a tenth of the plateau, by a quarter or more). Where the description does not say
+    window shortened to the points there. Neither reading is a bound once the curve is noisy: a lag, or an
+    inoculum near the plateau, keeps a short start-up from its maximum rate and pulls a reading low, while
+    noise pulls it high, since the steepest window is kept, and keeping the larger of two pulls it higher
+    (METHOD_NOTES has the measured sizes). An error in the scale scales the row's coefficients in proportion
+    and changes no sign. Where the description does not say
     when the dilution started, there is no scale and the row stays in units of r_i - D (decision 3 of
     #310)."""
     from .rates import DEFAULT_WINDOW, RateUnavailable, easylinear_fit
@@ -315,10 +325,12 @@ def row_scale(curve, dilution: float, period: dict) -> dict:
         how = f"pump on from inoculation ({period['said']}): the steepest rise is r_i - D, {rate:.4g} per h"
     else:
         # Two readings of the same scale, and the larger is kept. Inside the batch period the steepest rise
-        # is at most r_i; after the pump starts, while the organism is still far from its steady state, it
-        # is at most r_i - D. A lag or an inoculum near the plateau pulls each below the truth (a 2 h lag in
-        # a 4 h batch period took 57% off r_i - D read from the batch alone, found in review), so each is a
-        # lower bound, and the larger one is the closer.
+        # is r_i at most, on a noiseless curve; after the pump starts, while the organism is still far from
+        # its steady state, it is r_i - D at most. A lag or an inoculum near the plateau pulls each below the
+        # truth (a 2 h lag in a 4 h batch period took 57% off r_i - D read from the batch alone, found in
+        # review), which the larger of the two mostly recovers. Noise pushes the other way: with 5% noise on
+        # each point the kept scale is high more often than not (found in a second review), so neither is
+        # called a bound.
         batch_rate, batch_why = steepest([(t, v) for t, v in points if t <= end + 1e-9])
         pumped, pumped_why = steepest([(t, v) for t, v in points if t >= end - 1e-9])
         readings = []
@@ -335,8 +347,8 @@ def row_scale(curve, dilution: float, period: dict) -> dict:
         for value, words in readings[1:]:
             if value > scale + 1e-9 * abs(scale):
                 scale, said = value, words
-        how = (f"batch period ({period['said']}): {said}, the larger of the two lower bounds on r_i - D"
-               if len(readings) == 2 else f"batch period ({period['said']}): {said}, a lower bound on r_i - D")
+        how = (f"batch period ({period['said']}): {said}, the larger of the two readings of r_i - D"
+               if len(readings) == 2 else f"batch period ({period['said']}): {said}, the one reading of r_i - D")
     if not scale > 0:
         return {"scale": None, "how": how + f"; {scale:.4g} is not above the dilution rate, so the organism "
                                             "could not hold a steady state at it"}
@@ -365,15 +377,18 @@ def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
         exp = by_id.get(entry["experiment"]) or {}
         # the medium by the tool's one rule, so "Wilkins-Chalgren" and "Wilkins-Chalgren Anaerobe Broth (WC)"
         # are one medium here as everywhere else (Karoline, 2026-10-07)
-        # and by technique, as every comparison of the tool is: one organism's abundance read by qPCR in one
-        # community and by flow cytometry in another is not one quantity (found in review)
+        # how each organism of the run was measured: one organism's abundance read by qPCR in one community
+        # and by flow cytometry in another is not one quantity (found in review), checked per group below
         reps, _ = replicates_for_experiment(client, exp, spike) if exp else ([], None)
-        technique = "; ".join(sorted({(c.technique or "unrecorded") for rep in reps for c in rep.curves}))
+        techniques = {}
+        for rep in reps:
+            for c in rep.curves:
+                techniques.setdefault(c.species, set()).add(c.technique or "unrecorded")
         key = (media_identity(exp)["key"] if exp else (entry["medium"] or "").lower(), entry["unit"],
-               entry["dilution"], technique)
+               entry["dilution"])
         group = groups.setdefault(key, {"medium": entry["medium"], "unit": entry["unit"],
-                                        "dilution": entry["dilution"], "technique": technique,
-                                        "communities": [], "scales": {}, "left_out": []})
+                                        "dilution": entry["dilution"], "communities": [], "scales": {},
+                                        "left_out": []})
         group["left_out"] += entry["left_out"]
         if entry["why_not"]:
             group["left_out"].append((name, entry["why_not"]))
@@ -401,7 +416,8 @@ def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
         taken = {c["name"] for c in group["communities"]}
         group["communities"].append({"name": name if name not in taken else f"{name} ({entry['experiment']})",
                                      "abundance": abundance, "vessels": vessels,
-                                     "experiment": entry["experiment"]})
+                                     "experiment": entry["experiment"],
+                                     "techniques": {m: "; ".join(sorted(t)) for m, t in techniques.items()}})
         if len(members) == 1:
             period = batch_period(exp)
             got = [row_scale(c, entry["dilution"], period) for rep in reps
@@ -412,12 +428,48 @@ def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
                                             "gave none)", "vessels": len(scales)} if scales else
                                            {"scale": None, "how": got[0]["how"] if got else "no curve read",
                                             "vessels": 0})
-    for group in groups.values():
+    settled = _by_technique(groups.values())
+    for group in settled:
         for species in sorted({k for c in group["communities"] for k in c["abundance"]}):
             group["scales"].setdefault(species, {"scale": None, "vessels": 0,
                                                  "how": "no monoculture chemostat of it in this group, so its "
                                                         "row stays in units of r_i - D"})
-    return sorted((g for g in groups.values() if g["communities"]), key=lambda g: (g["dilution"], g["medium"]))
+    return sorted((g for g in settled if g["communities"]),
+                  key=lambda g: (g["dilution"], g["medium"], g["technique"]))
+
+
+def _by_technique(groups) -> list:
+    """Each group as it is where every organism was read by one technique throughout it, with `techniques`
+    {organism: technique} and `technique` the set; otherwise split into one group per run-level technique,
+    named. Grouping every run by its run-level technique split a design where each organism keeps its own
+    technique (a by qPCR, b by flow cytometry) into three groups that determined nothing (found in a second
+    review)."""
+    out = []
+    for g in groups:
+        per: dict = {}
+        for c in g["communities"]:
+            for m, t in c.get("techniques", {}).items():
+                per.setdefault(m, set()).add(t)
+        mixed = {m: ts for m, ts in per.items() if len(ts) > 1}
+        if not mixed:
+            g["techniques"] = {m: next(iter(ts)) for m, ts in per.items()}
+            g["technique"] = "; ".join(sorted({t for ts in per.values() for t in ts}))
+            out.append(g)
+            continue
+        said = "; ".join(f"{m} by {' and '.join(sorted(ts))}" for m, ts in sorted(mixed.items()))
+        split: dict = {}
+        for c in g["communities"]:
+            t = "; ".join(sorted(set(c.get("techniques", {}).values())))
+            split.setdefault(t, []).append(c)
+        for k, (t, communities) in enumerate(sorted(split.items())):
+            techniques = {m: tech for c in communities for m, tech in c.get("techniques", {}).items()}
+            out.append({**g, "communities": communities, "technique": t, "techniques": techniques,
+                        "scales": dict(g["scales"]),
+                        "left_out": (list(g["left_out"]) if k == 0 else []) + [
+                            (f"runs measured by {t}", f"fitted apart from the runs measured otherwise, since in "
+                                                      f"this medium and dilution rate {said}, and one organism's "
+                                                      "abundance by two techniques is not one quantity")]})
+    return out
 
 
 # ---- what a design determines, in words (#310) ---------------------------------------------------------
@@ -479,9 +531,15 @@ def empty_reason(skipped: list, command_line: bool = False) -> str:
     groups = [(what[len("chemostat group at "):], why) for what, why in skipped
               if what.startswith("chemostat group at ")]
     if not groups:
-        return ("No chemostat design here determines a row: these studies hold no continuous culture at an "
-                "unperturbed steady state with its dilution rate recorded, which is all this derivation reads. "
-                f"The reasons say what each study held. {switch}")
+        # "these studies hold no continuous culture" was false where the second box or the Technique setting
+        # had removed the one a study holds (found in a second review): say what was read, not what is held
+        box = any("matches the media, experiments or studies entered" in str(why) for _, why in skipped)
+        return ("No chemostat design here determines a row: of the experiments read"
+                + (", after the second box left some out," if box else
+                   " (the second box and the Technique setting narrow them)")
+                + " none is a continuous culture at an unperturbed steady state with its dilution rate recorded, "
+                "which is all this derivation reads. "
+                + ("The reasons say what each study held. " if skipped else "") + switch)
     said = " ".join(f"At {setting}: {why}" for setting, why in groups[:3])
     more = f" ({len(groups) - 3} more groups among the reasons.)" if len(groups) > 3 else ""
     return f"No chemostat design here determines a row. {said}{more} The reasons say what each organism lacks. {switch}"
@@ -491,7 +549,8 @@ def empty_reason(skipped: list, command_line: bool = False) -> str:
 
 METHOD = ("steady state v1: at a chemostat steady state every member present satisfies 1 + sum_j B_ij N_j = 0 "
           "with B = A / (r_i - D); each row solved by least squares over every unperturbed sub-community of "
-          "one medium, abundance unit and dilution rate (EPICS, Ansari et al. 2021, generalized)")
+          "one medium, abundance unit and dilution rate, each organism read by one technique (EPICS, Ansari "
+          "et al. 2021, generalized)")
 METRIC = "steady_state:subcommunities"
 
 
@@ -531,7 +590,8 @@ class SteadyStateDeriver:
         "Each interaction is an effective generalized Lotka-Volterra coefficient fitted from chemostat steady "
         "states: at a steady state every organism present satisfies 1 + sum_j B_ij N_j = 0 with B = A / (r_i "
         "- D), and each organism's row is the least-squares solution over every unperturbed community of one "
-        "medium, abundance unit and dilution rate it was present in. Effective means that an effect needing "
+        "medium, abundance unit and dilution rate it was present in, each organism read by one technique "
+        "there. Effective means that an effect needing "
         "a third organism is folded into the pairs that carry it, so a coefficient describes the communities "
         "it was fitted from. The strength beside it is log2(1 + B_ij x_j) at the partner's abundance in the "
         "largest community holding both. An interaction is reported when |strength| is at least k standard "
@@ -626,7 +686,8 @@ class SteadyStateDeriver:
                         "metric": METRIC, "method": METHOD, "evidence": "steady_state",
                         "quality": [], "cautions": [], "notes": notes,
                         "cultivation_mode": "chemostat", "medium": group["medium"], "condition": label,
-                        "community": sorted(_identity(identities, m)["id"] for m in largest["abundance"]),
+                        # the members present: one inoculated and washed out is not in the community
+                        "community": sorted(_identity(identities, m)["id"] for m in _present(largest)),
                         "experiments": sorted({e for c in holding
                                                for e in (c.get("experiments") or [c.get("experiment", "")])} - {""}),
                         "n_with": len(largest.get("vessels") or []) or None, "n_without": None,

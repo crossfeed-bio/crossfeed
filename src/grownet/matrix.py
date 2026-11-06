@@ -450,8 +450,8 @@ def rate_rule(method: str) -> str:
     """
     if str(method).startswith("steady_state"):
         return (f"{method}: r_i - D, each organism's growth rate less the dilution rate, read from its own "
-                "monoculture chemostat's start-up (a lower bound); the first dilution rate read where there "
-                "are several; continuous cultures only")
+                "monoculture chemostat's start-up; one dilution rate for the package, the one most rows were "
+                "fitted at, the others named; continuous cultures only")
     if str(method).startswith("integrated"):
         return (f"{method} in monoculture, the median over the fitted rows, each row's own rate the "
                 "median over that organism's monoculture replicates; batch experiments only")
@@ -511,7 +511,9 @@ def genus_rule(rates: dict) -> str:
 def rate_meta(net: InteractionNetwork, rates: dict, method: str) -> str:
     """The `growth_rates` block of a network's meta: the rule, a rate per organism, and the organisms that
     have none, so a downloaded network carries the rates it was reported with and says what is missing."""
-    return {"rule": rate_rule(method) + genus_rule(rates),
+    dilutions = sorted({r["dilution"] for r in rates.values() if r.get("dilution") is not None})
+    at = f"; r_i - D at the dilution rate {', '.join(f'{d:g}' for d in dilutions)} per h" if dilutions else ""
+    return {"rule": rate_rule(method) + genus_rule(rates) + at,
             "organisms": {nid: dict(rate) for nid, rate in rates.items()},
             "without_a_rate": sorted(_label(node) for nid, node in net.nodes.items() if nid not in rates),
             # why, where one is known: strains whose rates are in time units not converted, or rates all
@@ -740,9 +742,11 @@ OFF_DIAGONAL = {
         "  An off-diagonal cell is A[i][j] = (r_i - D) B[i][j], fitted from chemostat steady states, not",
         "      from a growth curve: at a steady state every organism present satisfies",
         "      1 + sum_j B[i][j] N_j = 0, with B = A / (r_i - D) and D the dilution rate, so every",
-        "      unperturbed community of one medium, abundance unit and dilution rate gives one equation per",
-        "      organism in it, and each row is their least squares. The coefficients are EFFECTIVE: an",
-        "      effect that needs a third organism is folded into the pairs that carry it. The row scale",
+        "      unperturbed community of one medium, abundance unit and dilution rate (each organism read",
+        "      by one technique there) gives one equation per organism in it, and each row is their least",
+        "      squares; runs that end with the same organisms are one community. The coefficients are",
+        "      EFFECTIVE: an effect that needs a third organism is folded into the pairs that carry it.",
+        "      The row scale",
         "      r_i - D is read from the organism's own monoculture chemostat start-up; a row whose start-up",
         "      did not give it is in units of r_i - D, cannot share a matrix of 1/(time x abundance), and is",
         "      named among the cells not filled. The DILUTION IS FOLDED INTO r: the rates here are r_i - D,",
@@ -896,6 +900,12 @@ def _dropout_lines(net: InteractionNetwork, in_cells=None) -> list:
     """What the README says about arcs that may act through a third species: those in the cells when
     `in_cells` counts them, since an arc in no cell is in no simulation and deriving again to leave it out
     changes no cell (found in review); the network's otherwise."""
+    if derivation_of(net) == "steady":
+        # its coefficients are fitted from communities of every size, and "every arc compares two organisms
+        # directly" contradicted the assumptions a few lines below (found in a second review)
+        return ["  No arc comes from a drop-out design. Each cell is an effective coefficient fitted to the",
+                "      steady states of sub-communities of every size, so an effect that needs a third organism",
+                "      is folded into the pairs that carry it (evidence steady_state)."]
     n = dropout_arcs(net)
     if in_cells is None:
         in_cells, elsewhere = n, 0
@@ -1516,7 +1526,11 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                        if nid not in where and nid in net.nodes]
             if not missing:
                 continue
-            why = f"{' and '.join(missing)} could not be fitted, so this effect is in no matrix"
+            # "could not be fitted" was false of a row the steady-state derivation fitted, in units of r_i - D
+            # no start-up gave (found in a second review): say "is in no matrix", and the organism's own line
+            # above says why
+            verb = "is" if len(missing) == 1 else "are"
+            why = f"{' and '.join(missing)} {verb} in no matrix, so this effect is in none"
         # a conflict between organisms in no common matrix was named nowhere (found in review)
         across_at[(affected, actor)] = len(across)
         across.append((_label(net.nodes[affected]), _label(net.nodes[actor]), sign + why))
@@ -1655,11 +1669,16 @@ def _rate_method_lines(got: dict, derivation: str = "replicate", rates: dict | N
              "monoculture replicates" if any(str(m).startswith("integrated") for m in methods)
              else "median over replicates and studies") + genus_rule(rates or {})
     if derivation == "steady":
+        dilutions = sorted({r["dilution"] for r in (rates or {}).values() if r.get("dilution") is not None})
         return ["  Growth rates: r_i - D, each organism's row scale, read from its own monoculture chemostat's",
-                "      start-up: the rise inside a batch period the experiment's description states, less the",
-                "      dilution rate, or the rise itself where the pump ran from inoculation. No batch growth",
-                "      rate is used, since a rate changes in a chemostat. An organism whose start-up gave none",
-                "      has no rate here, and its row is not in the matrix.",
+                "      start-up: where the experiment's description states a batch period, the larger of the",
+                "      steepest rise inside it less the dilution rate and the steepest rise after the pump",
+                "      started; where the pump ran from inoculation, the steepest rise itself. An estimate:",
+                "      a lag pulls it low and noise pulls it high. No batch growth rate is used, since a rate",
+                "      changes in a chemostat. An organism whose start-up gave none has no rate here, and its",
+                "      row is not in the matrix."
+                + (f" One dilution rate for the package: {', '.join(f'{d:g}' for d in dilutions)} per h."
+                   if dilutions else ""),
                 ]
     if derivation == "integrated":
         lines = [f"  Growth rates: {named}, {merge}, batch monocultures only.",
@@ -1837,7 +1856,7 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         # effects in no matrix, below, and "no pair disagreed" was false beside it (found in review)
         lines.append("  No pair in a matrix has arcs of opposite sign.")
     if got["left_out"]:
-        lines.append("  These organisms are in no matrix, because a coefficient of theirs cannot be fitted:")
+        lines.append("  These organisms are in no matrix, each for the reason beside it:")
         lines += [f"      {name}: {why}" for name, why in got["left_out"]]
     else:
         lines.append("  Every organism of the network is in a matrix.")

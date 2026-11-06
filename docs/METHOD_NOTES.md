@@ -662,26 +662,37 @@ pooled into one equation (`subcommunity.pool`), numpy 2.2.6 and scipy 1.13.0:
 | EPICS: monocultures, 12 leave-one-out, full | 0 of 132 | | |
 | bottom-up: monocultures and 66 pairs | 126 of 132 | max 7e-14 | 96 of 96 |
 | all of the above | 128 of 132 | max 0.0018 | 98 of 98 |
-| all, 3 vessels with 5% noise | 128 of 132 | median 0.02, max 3.2 | 98% |
+| all, 3 vessels with 5% noise, six draws | 128 of 132 | median 0.016 to 0.025, max 0.66 to 3.2 | 98% to 99% |
 
 - Every community settles; none is left out.
-- The row scales read from the start-up are within 1.6% of the true `u - D` (median 0.7%), slightly low,
-  since self-limitation already slows the batch period; that is most of the package's error, `A = scale x B`
-  within 2% of the true `a_ij` on the `|a_ii|` scale (median 0.18%). The simulated start-up has no lag and a
-  small inoculum. Each reading is a lower bound: on a simulated start-up with an inoculum a tenth of the
-  plateau the scale is 25% low, and a lag lowers it further, which is why the rise after the pump started
-  is read too and the larger kept (a 2 h lag in a 4 h batch period took 57% off the batch reading alone and
-  19% off the larger of the two). A low scale shrinks a row's coefficients in proportion and changes no
-  sign.
+- The row scales read from the noiseless simulated start-ups are within 1.6% of the true `u - D` (median
+  0.7%), slightly low, since self-limitation already slows the batch period; that is most of the package's
+  error, `A = scale x B` within 2% of the true `a_ij` on the `|a_ii|` scale (median 0.18%).
+- The scale is an estimate that misses both ways, and the script measures the noisy side: with lognormal
+  noise on each point of those start-ups (20 draws per organism), it is above the true `u - D` in 66% of
+  readings at 2% noise (median ratio 1.01), 88% at 5% (1.11, max 1.88) and 96% at 10% (1.27), since the
+  steepest window is kept and the larger of the two readings taken. It errs low where the start-up is
+  lagged or the inoculum is near the plateau. On a simulated logistic start-up (r 0.5 per h, D 0.1 per h, a
+  4 h batch period, hourly points, inoculum 1% of the plateau, a Baranyi-type adjustment for a lag), an
+  inoculum a tenth of the plateau reads 25% low, and a 2 h lag 57% low from the batch period alone and 19%
+  low from the larger of the two readings; that simulation is not in the script. Either way an error in
+  the scale scales a row's coefficients in proportion and changes no sign.
 - The full community holds the same 7 organisms as five of the leave-one-out communities, so they are one
-  equation; predicted by a fit made without them, it is within 0.8% (49% with the noise).
-- With the noise, the bootstrap over vessels puts the true coefficient within 2 sd for 94% of them, against
-  the nominal 95%. The bootstrap draws the mean over vessels, the statistic the fit uses, and widens each
-  draw by `sqrt(n / (n - 1))` for n vessels, since a bootstrap of the mean of n vessels spreads only
-  `sqrt((n - 1) / n)` as far as the mean itself does (18% too narrow for three). The worst coefficients are those whose partner is scarce in every community beside the organism.
+  equation; predicted by a fit made without them, it is within 0.8% without noise and between 2.8% and 110%
+  with it, over the six draws.
+- With the noise, the bootstrap over runs and vessels puts the true coefficient within 2 sd for 85% to 94%
+  of them over the six draws (94, 88, 91, 85, 86, 91), against the nominal 95%: the spread is somewhat
+  narrow. It draws the mean, the statistic the fit uses, widens each draw by `sqrt(n / (n - 1))` for n
+  replicates, since a bootstrap of the mean of n spreads only `sqrt((n - 1) / n)` as far as the mean itself
+  does (18% too narrow for three), and draws whole runs where runs were pooled, since vessels of one run are
+  not independent of each other. The worst coefficients are those whose partner is scarce in every
+  community beside the organism.
 - Only 7 of the 12 coexist in the full community at this D, so the strict leave-one-out design determines
   nothing; the pairs are what make the model identifiable, which is Karoline's decision 2.
-- Switching the 1% wash-out rule off changes nothing here.
+- Switching the 1% wash-out rule off changes nothing for monocultures and pairs. On the design with every
+  community it is the rule's own cost that is measured: off, the largest B error falls from 0.0018 to 2e-14
+  and the full community is predicted exactly, since an organism under 1% of its run's largest is still
+  there.
 
 ## Open decisions
 

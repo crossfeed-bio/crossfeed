@@ -286,19 +286,47 @@ def test_the_rates_say_they_are_r_less_d_from_a_chemostat_start_up_not_batch_rat
     assert "r_i - D" in rule and "start-up" in rule and "batch experiments only" not in rule
 
 
+def _at_dilution(d: float, study: str, three_runs=False):
+    """The invented two-species design run at dilution rate d (the same steady states, so the same B), as
+    study `study`; with `three_runs`, a second run of the pair too."""
+    from test_growth_rates import _client
+    ids = {"a": (21, 22), "b": (23, 24), "ab": (25, 26)}
+    curves = {(ids["a"][0], "a"): _startup(0.5, d, 4.0, UNIT), (ids["a"][1], "a"): _startup(0.5, d, 4.0, UNIT),
+              (ids["b"][0], "b"): _startup(0.3, d, 4.0, 2 * UNIT), (ids["b"][1], "b"): _startup(0.3, d, 4.0, 2 * UNIT),
+              **{(i, "a"): _startup(0.5, d, 4.0, PAIR_A) for i in ids["ab"]},
+              **{(i, "b"): _startup(0.3, d, 4.0, PAIR_B) for i in ids["ab"]}}
+    text = f"{d:.3f}"
+    exps = [_chemostat("F1", "a alone", ["a"], [(ids["a"][0], "V1"), (ids["a"][1], "V2")], dilution=text,
+                       description=RUN),
+            _chemostat("F2", "b alone", ["b"], [(ids["b"][0], "V1"), (ids["b"][1], "V2")], dilution=text,
+                       description=RUN),
+            _chemostat("F3", "a with b", ["a", "b"], [(ids["ab"][0], "V1"), (ids["ab"][1], "V2")], dilution=text,
+                       description=RUN)]
+    records, _ = SteadyStateDeriver(client=_client(curves)).derive({"id": study, "name": study}, exps)
+    return records
+
+
 def test_rates_at_two_dilution_rates_are_not_merged_into_one():
     """r_i - D is a different number at each dilution rate: the median of 0.46 at D 0.04 and 0.30 at D 0.2 was
-    0.38, r_i - D at neither (found in review). The first dilution rate read is the package's, and the other
-    is named."""
+    0.38, r_i - D at neither, and keeping each organism's first D read mixed dilution rates across organisms
+    and changed with the order of the records (found in review). One D for the package, the one most rows were
+    fitted at, the lowest on a tie; the other is named, and its capacity is not taken either."""
     from grownet import integrated
     from grownet.subcommunity import METRIC
-    records, _ = _derive()
-    other = [{**r, "fitted_rate": r["fitted_rate"] - 0.16 if r["fitted_rate"] else None,
-              "fitted_rate_dilution": 0.2, "study_id": "S2"} for r in records]
-    rates = integrated.fitted_rates(records + other, METRIC)
-    by_name = {r["name"]: r for r in rates.values()}
-    assert by_name["a"]["rate"] == pytest.approx(0.46, abs=1e-6)
-    assert any("another dilution rate, 0.2 per h" in u for u in by_name["a"]["other_units"])
+    slow, fast = _at_dilution(0.04, "S1"), _at_dilution(0.2, "S2")
+    assert {r["fitted_rate_dilution"] for r in slow} == {0.04} and {r["fitted_rate_dilution"] for r in fast} == {0.2}
+    for records in (slow + fast, fast + slow):                       # either order: the same package
+        by_name = {r["name"]: r for r in integrated.fitted_rates(records, METRIC).values()}
+        assert by_name["a"]["rate"] == pytest.approx(0.46, abs=1e-6)
+        assert by_name["b"]["rate"] == pytest.approx(0.26, abs=1e-6)
+        assert by_name["a"]["dilution"] == by_name["b"]["dilution"] == 0.04
+        assert any("another dilution rate, 0.2 per h" in u for u in by_name["a"]["other_units"])
+        # K = -1/B_aa = 1e8 at D 0.04; the D 0.2 rows are not merged into it
+        assert by_name["a"]["capacity"] == pytest.approx(1.0 * UNIT, rel=1e-6)
+    # more rows at D 0.2: that D is the package's, for every organism
+    more = fast + [{**r, "study_id": "S3"} for r in fast]
+    by_name = {r["name"]: r for r in integrated.fitted_rates(slow + more, METRIC).values()}
+    assert by_name["a"]["rate"] == pytest.approx(0.30, abs=1e-6) and by_name["b"]["dilution"] == 0.2
 
 
 def test_with_no_row_scaled_the_command_line_reads_no_batch_rate_in_its_place(monkeypatch, capsys):
@@ -363,5 +391,83 @@ def test_a_fitted_row_without_a_scale_is_left_out_of_the_package_for_that_reason
     exps[1]["description"] = "No perturbations."                          # b alone: no batch period stated
     records, _ = SteadyStateDeriver(client=client).derive({"id": "S1", "name": "x"}, exps)
     net, rates, _payload, _readme = _package(records)
-    left = dict(matrix.coefficients(net, rates)["left_out"])
+    got = matrix.coefficients(net, rates)
+    left = dict(got["left_out"])
     assert "fitted in units of its own r_i - D" in left["b"] and "nothing on it" not in left["b"]
+    # and nothing else in the package says b could not be fitted (found in a second review)
+    readme = matrix.readme_from(got, net, rates)
+    assert "could not be fitted" not in readme and "cannot be fitted" not in readme.replace(
+        "has no term in this model and cannot be fitted", "")
+    assert not any("could not be fitted" in why for _, _, why in got["across_units"])
+    # nor that every arc compares two organisms directly
+    assert "compares two organisms directly" not in readme and "evidence steady_state" in readme
+
+
+def test_the_command_line_report_carries_the_notes_it_points_to():
+    """With no row scaled, the command line said the report says why each organism has no rate, and the
+    report did not; nor did it carry the steady-state check's refusal, which the page's report does (found in
+    a second review). The report prints every note it is given."""
+    from grownet import __main__ as cli
+    from grownet.report import report_text
+    a = cli.build_parser().parse_args(["derive", "S1", "--live", "--derivation", "steady", "--report-rates",
+                                       "--steady-check"])
+    notes = cli._report_notes(a, {})
+    assert notes == [gui.STEADY_NO_RATE, gui.STEADY_CHECK_CIRCULAR]
+    assert cli._report_notes(a, {"a": {"rate": 0.46}}) == [gui.STEADY_CHECK_CIRCULAR]
+    records, _ = _derive()
+    result = {"study": "S1", "entries": [], "resolved": [], "unresolved": [], "studies": ["S1"], "rates": {},
+              "skipped": [], "errors": [], "network": records_to_network(records), "notes": notes}
+    text = report_text(result)
+    assert "no batch growth rate is read" in text and "no steady-state check" in text
+
+
+def test_an_empty_result_after_a_filter_does_not_say_the_study_holds_no_chemostat():
+    """The second box or Technique removed the study's chemostat run: "these studies hold no continuous
+    culture" was false, and "the reasons say" pointed at no reasons (found in a second review)."""
+    from grownet.subcommunity import empty_reason
+    boxed = empty_reason([("study S1", "no experiment of this study matches the media, experiments or studies "
+                                        "entered")], command_line=True)
+    assert "hold no" not in boxed and "after the second box left some out" in boxed
+    bare = empty_reason([], command_line=True)
+    assert "hold no" not in bare and "Technique" in bare and "The reasons say" not in bare
+
+
+def test_two_runs_of_the_pair_are_one_community_on_the_arcs():
+    """A second run of a with b (E4) is pooled with the first: the arcs list both experiments, and with the
+    pair being the only community holding both, the leave-one-out note says it cannot be predicted without
+    it, rather than predicting it exactly from its own twin."""
+    twin = _chemostat("E4", "a with b again", ["a", "b"], [(7, "V1"), (8, "V2")], description=RUN)
+    curves = {(i, "a"): _startup(0.5, 0.04, 4.0, PAIR_A) for i in (7, 8)}
+    curves.update({(i, "b"): _startup(0.3, 0.04, 4.0, PAIR_B) for i in (7, 8)})
+    records, _ = _derive([twin], curves)
+    on_a = _arc(records, "b", "a")
+    assert {"E3", "E4"} <= set(on_a["experiments"])
+    assert any("(2 runs) not predicted" in n for n in on_a["notes"])
+
+
+def test_a_community_is_the_mean_over_its_vessels():
+    """Three vessels at 0.9, 1.0 and 1.4 (x 1e8) of a alone: the community's abundance is their mean, 1.1e8,
+    the statistic the bootstrap draws; the median, 1.0e8, or the check's own value, would not be."""
+    from test_growth_rates import _client
+
+    from grownet.subcommunity import chemostat_groups
+    curves = {(i, "a"): _startup(0.5, 0.04, 4.0, k * UNIT) for i, k in ((1, 0.9), (2, 1.0), (3, 1.4))}
+    exps = [_chemostat("E1", "a alone", ["a"], [(1, "V1"), (2, "V2"), (3, "V3")], description=RUN)]
+    (group,) = chemostat_groups(_client(curves), exps)
+    assert group["communities"][0]["abundance"]["a"] == pytest.approx(1.1 * UNIT, rel=1e-9)
+
+
+def test_the_command_line_names_the_rates_as_this_derivation_s():
+    """Where the rates are used, not only where they are made: the network's growth-rate rule names r_i - D
+    from a chemostat start-up (found in a second review: the label was tested in the function only)."""
+    import types
+
+    from grownet import __main__ as cli
+    records, _ = _derive()
+    net = records_to_network(records)
+    a = types.SimpleNamespace(derivation="steady", rate_method="easylinear", rate_window=5, spike_factor=None,
+                              capacity_max_fall=None)
+    found, _ = cli._rates_of(a, None, ["S1"], net, [], records=records)
+    rule = net.meta["growth_rates"]["rule"]
+    assert found and rule.startswith("steady_state:subcommunities") and "batch experiments only" not in rule
+    assert "at the dilution rate 0.04 per h" in rule

@@ -474,15 +474,17 @@ cannot identify, and a community of three or more members, are reported rather t
 **The derivation from chemostat steady states.** `--derivation steady`, off by default and meant for gLV
 mode, fits the rows from steady states instead of growth curves. At a chemostat steady state every organism
 present satisfies `1 + sum_j B_ij N_j = 0` with `B = A / (r_i - D)`, so every unperturbed community of one
-medium, abundance unit and dilution rate gives one equation per organism in it, and each row is their least
-squares: the idea of EPICS (Ansari et al. 2021), which reads only the monocultures and the communities
+medium, abundance unit and dilution rate (each organism read by one technique there) gives one equation per
+organism in it, and each row is their least squares: the idea of EPICS (Ansari et al. 2021), which reads only the monocultures and the communities
 missing one member, with every measured sub-community counted here. The row scale `r_i - D` is read from the
-organism's own monoculture chemostat start-up (inside a batch period the description states, or from
-inoculation), never from a batch growth rate, so the package's rates are `r_i - D` and it simulates the
+organism's own monoculture chemostat start-up (the larger of the rise inside a batch period the description
+states, less D, and the rise after the pump started; or the rise from inoculation), never from a batch growth
+rate, so the package's rates are `r_i - D` and it simulates the
 chemostat. What a design cannot determine is said once per chemostat group and once per organism: a row has
 one unknown for its own limitation and one per partner, and needs at least that many communities holding the
 organism. No study in mGrowthDB holds such a design yet; on the fitted 12-species gLV of Venturelli et al.
-2018, monocultures and pairs recover 126 of its 132 coefficients exactly (`packaging/validate_steady_state.py`).
+2018, monocultures and pairs recover 126 of its 132 coefficients of B exactly, and the package's
+`A = (r_i - D) B` within 2% (`packaging/validate_steady_state.py`).
 
 **Scoring the package against a chemostat.** `--steady-check` (with `--report-rates --live`) scores the
 gLV parameters against the steady states mGrowthDB holds for these organisms in continuous culture: a

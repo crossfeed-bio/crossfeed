@@ -184,3 +184,34 @@ def test_a_perturbed_or_unknown_run_and_another_dilution_rate_are_kept_apart():
     assert not any(c.get("experiment") == "E5" for c in slow["communities"])
     left = " ".join(why for _, why in slow["left_out"])
     assert "the run carries perturbations" in left and "does not say it is unperturbed" in left
+
+
+def _retag(client, species, technique, bioreplicates=None):
+    for bid, rep in client.bioreplicates.items():
+        if bioreplicates is not None and bid not in bioreplicates:
+            continue
+        for c in rep["measurementContexts"]:
+            if c["subject"]["name"] == species:
+                c["techniqueType"] = technique
+
+
+def test_each_organism_keeps_its_own_technique_and_the_design_stays_one_group():
+    """a read by qPCR in every run and b by flow cytometry in every run: each organism is one quantity
+    throughout, so the design is one group and determines both rows. Grouping by the run's set of techniques
+    made three groups ("qpcr", "fc", "fc; qpcr") that determined nothing (found in a second review)."""
+    client, exps = _runs()
+    _retag(client, "b", "fc")
+    (group,) = chemostat_groups(client, exps)
+    assert group["techniques"] == {"a": "qpcr", "b": "fc"}
+    assert fit(group["communities"], draws=0)["rows"]["a"]["status"] == "identified"
+
+
+def test_an_organism_read_by_two_techniques_splits_the_runs_and_says_why():
+    """b by flow cytometry in its monoculture and by qPCR in the pair: b's abundance is not one quantity
+    across them, so the runs are fitted apart by technique, and the reason names b and both techniques."""
+    client, exps = _runs()
+    _retag(client, "b", "fc", bioreplicates={3, 4})
+    groups = chemostat_groups(client, exps)
+    assert len(groups) == 2
+    said = " ".join(why for g in groups for _, why in g["left_out"])
+    assert "b by fc and qpcr" in said

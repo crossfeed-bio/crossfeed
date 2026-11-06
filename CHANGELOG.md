@@ -35,8 +35,9 @@ content.
   the package against the chemostats it was fitted to and subtract D twice.
 - **A local validation of it** (#314): `packaging/validate_steady_state.py` runs it on the fitted 12-species
   gLV of Venturelli et al. 2018 (download their Code EV1; nothing of theirs is in the repository). From
-  monocultures and pairs it recovers 126 of the 132 coefficients exactly; with 5% noise over three vessels
-  the bootstrap spread covers the truth for 94% of them. The numbers are in METHOD_NOTES.
+  monocultures and pairs it recovers 126 of the 132 coefficients of B exactly; with 5% noise over three
+  vessels the bootstrap spread covers the truth for 85% to 94% of them over six noise draws. The numbers
+  are in METHOD_NOTES.
 - **When the design is insufficient, it says what is missing** (Karoline, 2026-11-06: "There will be cases
   when the available sub-communities are insufficient to make the derivation (the current state of
   mGrowthDB). Is the error message in this case informative?"). One line per chemostat group (how many
@@ -46,17 +47,21 @@ content.
   the command-line examples and the README describe the third derivation.
 
 - **The steady-state derivation, hardened before release.** Runs that end with the same organisms present
-  are one community, their vessels pooled, since they reach one steady state: kept apart, two noisy runs of
-  one pair made rows look determined from noise alone. A row whose own term is not negative is named, not
-  reported, since its sign depends on whether the organism's growth rate is below the dilution rate (an
-  obligate cross-feeder's feeders were called inhibitors). Its arcs carry evidence `steady_state` (a new
-  value of `evidence`), not `biculture`. The row scale is per hour whatever the curve's time unit, and is
-  the larger of two lower bounds, the batch period's rise less D and the rise after the pump started, so a
-  lag in a short batch period no longer halves it. The bootstrap draws the statistic the fit uses (the mean
-  over vessels) and is widened for few vessels. Runs are grouped by measurement technique too. The rates
-  say they are `r_i - D` from a chemostat start-up rather than batch rates; with no row scaled, no batch
-  rate is read in their place; and an organism at several dilution rates gives the package one `r_i - D`,
-  not their median. The validation script no longer lets absent organisms invade from solver noise, and
+  are one community, since they reach one steady state, and its bootstrap draws whole runs: kept apart, two
+  noisy runs of one pair made rows look determined from noise alone. A row whose own term is not negative
+  is named, not reported, since its sign depends on whether the organism's growth rate is below the
+  dilution rate (an obligate cross-feeder's feeders were called inhibitors). Its arcs carry evidence
+  `steady_state` (a new value of `evidence`), not `biculture`, and the gLV package no longer says every arc
+  compares two organisms directly. The row scale is per hour whatever the curve's time unit, and is the
+  larger of two readings, the batch period's rise less D and the rise after the pump started, so a lag in
+  a short batch period no longer halves it; it is an estimate, which noise pulls high, and the help says
+  so. The bootstrap draws the statistic the fit uses (the mean) and is widened for few replicates. Each
+  organism must be read by one technique within a fit. The rates say they are `r_i - D` from a chemostat
+  start-up rather than batch rates; with no row scaled, no batch rate is read in their place, and the
+  command line's report says so; the package takes one dilution rate for every organism, the one most rows
+  were fitted at, whatever the order the studies were read in. An empty result after the second box or the
+  Technique setting no longer says the studies hold no chemostat. The validation script no longer lets
+  absent organisms invade from solver noise, reports six noise draws and the start-up's noise bias, and
   its numbers in METHOD_NOTES were re-derived.
 
 ### Fixed

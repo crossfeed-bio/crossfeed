@@ -397,7 +397,7 @@ def _derive_run(a):
             net.meta["complete"] = False
     result = {"study": a.study, "entries": [], "resolved": [], "unresolved": [], "studies": [a.study],
               "rates": organism_rates, "client": client if a.live else None,
-              "skipped": skipped, "errors": errors, "network": net}
+              "skipped": skipped, "errors": errors, "network": net, "notes": _report_notes(a, organism_rates)}
     code = _emit(a, net, skipped, extra, a.study, result)
     # the species and All paths exit 1 on an incomplete run since #243; this path exited 0 when curves
     # could not be read, so the two paths still disagreed about the same failure (#247)
@@ -484,6 +484,16 @@ def _incomplete(result) -> int:
           "mGrowthDB (the messages are above). The network holds what was readable, and its meta records "
           "the errors; run it again when mGrowthDB is reachable if you need all of it.", file=sys.stderr)
     return 1
+
+
+def _report_notes(a, organism_rates) -> list:
+    """The notes the page's report carries for the same run, for a study's report: the command line printed
+    them and pointed at the report for the reason, and the report did not hold it (found in a second review).
+    The species and All paths take theirs from the page's own search."""
+    from .gui import STEADY_CHECK_CIRCULAR, STEADY_NO_RATE
+    steady_run = getattr(a, "derivation", None) == "steady"
+    return (([STEADY_NO_RATE] if getattr(a, "report_rates", False) and steady_run and not organism_rates else [])
+            + ([STEADY_CHECK_CIRCULAR] if getattr(a, "steady_check", False) and steady_run else []))
 
 
 def _rates_of(a, client, study_ids, net, skipped, records=None):
@@ -975,7 +985,8 @@ def build_parser() -> argparse.ArgumentParser:
                               "of one matrix of fitted coefficients per abundance unit, the matching growth "
                               "rates and a README (needs --report-rates; under the default derivation it "
                               "also needs --metric growth_rate, which the integrated form does not, and "
-                              "--glv-mode sets all of them, the integrated form included)")
+                              "--glv-mode sets all of them and selects the integrated form, unless "
+                              "--derivation names another)")
     outputs.add_argument("--steady-check", action="store_true",
                          help="score the gLV parameters against the chemostat steady states mGrowthDB "
                               "holds for these organisms: the report gets the comparison and the zip a "

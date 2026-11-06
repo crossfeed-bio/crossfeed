@@ -11,7 +11,7 @@ scale (r_i - D in a chemostat). Every coefficient here is invented: nothing of a
 import pytest
 
 from grownet.integrated import _solve
-from grownet.subcommunity import UNIT_ROW, _row_reasons, fit, leave_one_out_predictions, pool
+from grownet.subcommunity import UNIT_ROW, _resample, _row_reasons, fit, leave_one_out_predictions, pool
 
 # Two species, by hand. B = [[-1, -0.25], [-0.1, -0.5]]: a alone settles at 1 (1 - 1*1 = 0), b alone at 2
 # (1 - 0.5*2 = 0). Together: -x_a - 0.25 x_b = -1 and -0.1 x_a - 0.5 x_b = -1. The first gives
@@ -198,3 +198,43 @@ def test_partners_in_the_same_proportions_everywhere_leave_the_row_undetermined(
     from grownet.integrated import MAX_CONDITION
     design[0] = {"name": "abc", "abundance": {"a": 1.0, "b": 1.0, "c": 3.0}}
     assert fit(design, draws=0)["rows"]["a"]["condition"] <= MAX_CONDITION
+
+
+def test_runs_are_pooled_by_the_members_present_not_by_what_was_inoculated():
+    """a+b, and a+b+c where c washed out, end with the same members: one steady state, one community. a+b
+    run twice where one run lost b ends with different members: two. The wash-out is reported under the run
+    that lost it, not under the pool's name (found in a second review)."""
+    pair = _steady(["a", "b"])
+    lost_c = {"name": "a+b+c", "abundance": {**pair, "c": 0.0}}
+    assert len(pool([{"name": "a+b", "abundance": dict(pair)}, lost_c])) == 1
+    lost_b = {"name": "a+b, b lost", "abundance": {"a": 1.0, "b": 0.0}}
+    assert len(pool([{"name": "a+b", "abundance": dict(pair)}, lost_b])) == 2
+    got = fit([{"name": "a+b", "abundance": dict(pair)}, lost_c, _community("a"), _community("b")], draws=0)
+    assert got["washed_out"] == [("a+b+c", "c")]
+    (pooled,) = [c for c in pool([{"name": "a+b", "abundance": dict(pair)}, lost_c]) if "runs" in c]
+    assert "c" not in pooled["abundance"]
+
+
+def test_the_bootstrap_spreads_as_far_as_the_mean_and_keeps_a_member_present():
+    """Three vessels at 1, 2 and 6: the mean 3 has a standard error s / sqrt(3) = 2.646 / 1.732 = 1.528. A
+    plain bootstrap of the mean spreads sqrt(2 / 3) of that, 1.247; widened by sqrt(3 / 2) it spreads 1.528
+    (found in review). And two vessels at 1 and 100: a draw of the 1 twice, widened, would fall below 0,
+    which would read the member as washed out; it stays present."""
+    import random
+    import statistics
+    rng = random.Random(0)
+    c = {"name": "x", "abundance": {"a": 3.0}, "vessels": [{"a": 1.0}, {"a": 2.0}, {"a": 6.0}]}
+    draws = [_resample([c], rng)[0]["abundance"]["a"] for _ in range(4000)]
+    assert statistics.pstdev(draws) == pytest.approx(statistics.stdev([1.0, 2.0, 6.0]) / 3 ** 0.5, rel=0.05)
+    wide = {"name": "y", "abundance": {"a": 50.5}, "vessels": [{"a": 1.0}, {"a": 100.0}]}
+    assert all(_resample([wide], rng)[0]["abundance"]["a"] > 0 for _ in range(200))
+
+
+def test_a_left_out_run_takes_its_twin_runs_with_it():
+    """Called on runs as they come, two runs of a+b are one community: leaving it out leaves both out, so a
+    never meets b and the pair is not predicted, instead of being predicted exactly by its own twin."""
+    pair = _steady(["a", "b"])
+    runs = [_community("a"), _community("b"), {"name": "a+b", "abundance": dict(pair)},
+            {"name": "a+b again", "abundance": dict(pair)}]
+    (twins,) = [p for p in leave_one_out_predictions(runs) if p["community"].startswith("a+b")]
+    assert twins["community"] == "a+b (2 runs)" and twins["status"].startswith("not predicted")

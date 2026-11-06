@@ -1236,13 +1236,15 @@ changes in a chemostat. If the experiment's description states a batch period be
 switched on ("Chemostat mode started 4 hours after inoculation"), there are two readings: the steepest rise
 inside the batch period, which is at most r_i, less D; and the steepest rise after the pump started, which
 is at most r_i - D. The larger is kept. If it says the dilution ran from inoculation, the steepest rise is
-r_i - D itself. Rates are per hour, as the dilution rate is. Each reading is a lower bound: a lag, or an
-inoculum near the plateau, keeps a short start-up from its maximum rate, and the scale then comes out low
-(with an inoculum a tenth of the plateau, by a quarter or more). A low scale shrinks a row's coefficients in
-proportion and changes no sign. Where the description says neither, the row stays in units of
-<code>r_i - D</code>, its coefficient unit says so, and the arc's notes say why. An organism measured at
-several dilution rates has a different <code>r_i - D</code> at each, so the package takes the first and
-names the others.</li>
+r_i - D itself. Rates are per hour, as the dilution rate is. The scale is an estimate and can miss both
+ways: a lag, or an inoculum near the plateau, keeps a short start-up from its maximum rate and pulls it low,
+and noise on the measurements pulls it high, since the steepest stretch is kept (on simulated start-ups,
+5% noise on each point put it a tenth high at the median). An error in the scale scales a row's
+coefficients in proportion and changes no sign. Where the description says neither, the row stays in units
+of <code>r_i - D</code>, its coefficient unit says so, and the arc's notes say why. An organism measured at
+several dilution rates has a different <code>r_i - D</code> at each, and a package simulates one chemostat,
+so it takes one dilution rate for every organism, the one most rows were fitted at, and names the
+others.</li>
 <li><strong>Each arc.</strong> Its strength is <code>log2(1 + B_ij x_j)</code> at the partner's abundance
 in the largest community holding both, its coefficient is <code>(r_i - D) B_ij</code> in 1/(h x
 abundance) where the scale is known, and its spread is a bootstrap over the vessels of every community its
