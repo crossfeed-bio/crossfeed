@@ -15,6 +15,21 @@ Rules for this file:
 
 ## Current state
 
+- 2026-11-06: **a union merge can put back text a branch had correctly deleted, and the squash hides
+  it.** `docs/METHOD_NOTES.md` carried the pre-re-derivation validation section under a second
+  `## Open decisions` heading for two merges, with the superseded coverage of 93% standing against the
+  live 85% to 94% in the same file. The branch of #321 was clean: one heading, and only the re-derived
+  table. `main` still held the original from #320. A merge of `main` into that branch resolved the hunk
+  as a union, so the result had both tables and both headings, and the squash's diff against `main`
+  could not show the deletion, because `main` still held the copy being deleted. Two paragraphs in this
+  file were finished twice by the same mechanism, one of them saying strain ids survive only on arcs six
+  lines under the text saying a genus node lists them in `merged_nodes`. **If you re-derive numbers in a
+  branch while `main` holds the old ones, read the merge rather than the squash: counting a section's
+  headings is the cheapest test, and no check in this repository catches a duplicated heading or a
+  stranded block.** One thing went with the stale block and is not replaced: the worked example under
+  the coverage bullet, naming which coefficient was worst. Its numbers came from the run the #321
+  review repudiated, so they could not be kept, and the surviving sentence states the generalization
+  with no instance behind it.
 - 2026-10-11 (#255 item 2): **a derived quantity is collected where it is measured, not rebuilt from what
   survived.** `_widen_by_rate_selection` rebuilt its rate table from `pending`, the arcs that became
   records, keyed by `id(got)`. Both are wrong for the quantity: the spread is how much stage 1 moves when
