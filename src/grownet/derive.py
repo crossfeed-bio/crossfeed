@@ -1360,11 +1360,30 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
         kind, window = rates.fit_parts(method)
         # `_pairwise` already has the setting; both numbers were taking the raw co-culture replicates
         partner = partner_abundances(co_reps, target, source, kind, window, spike_factor)
+        notes = _spike_notes(result["flagged"], target) + start_note(
+            co_reps, sets[target], target, "in the co-culture", "in the monocultures")
         records.append(_record(source, target, c, method, quality, cautions,
-                               _spike_notes(result["flagged"], target), cond, "biculture", (a, b),
+                               notes, cond, "biculture", (a, b),
                                [_exp_id(exp), *origin[target]], study_id, study_meta, identities, mode,
                                media_identity(exp)["label"], partner,
                                target_capacity(co_reps, target, capacity_max_fall, spike_factor)))
+
+
+def start_note(with_reps, without_reps, target: str, with_side: str, without_side: str) -> list:
+    """The note saying what `target` was inoculated at on each side of a comparison, or that it could not be
+    read. Reported, never matched on (Karoline, 2026-10-08, #172); the integrated form wrote it and the
+    replicate form did not, so the default derivation's arcs, drop-out ones included, never said that their
+    two sides began far apart (#297). The wording is the integrated form's. Where a side has no positive
+    first value, or the sides are in different units, the arc says so: silence read as "the densities
+    matched" (Craig's agent)."""
+    from .integrated import starting_densities
+    got = starting_densities(with_reps, without_reps, target)
+    if not got:
+        return [f"the starting density of {target} could not be compared {with_side} and {without_side}: a "
+                "side has no positive first value, or the two are in different units"]
+    return [f"started at {got['co']:.3g} {got['unit']} {with_side} and {got['mono']:.3g} {without_side}, a "
+            f"factor of {got['ratio']:.2f}" + (", so the two sides of this comparison did not begin at the "
+                                                "same density" if got["ratio"] > 3 else "")]
 
 
 def run_group(exp: dict) -> str:
@@ -1542,6 +1561,7 @@ def _dropout(client, design, method, spike_factor, study_id, study_meta, records
         if (variants or {}).get((frozenset(members), *key), 1) > 1 or \
                 (variants or {}).get((frozenset(members - {removed}), *key), 1) > 1:
             cautions.append(CONDITIONS_UNVERIFIED)
+        notes += start_note(full, dropouts.get(removed, ()), target, "in the full community", f"without {removed}")
         cond = ", ".join(e.get("name", "") for e in drops[removed])
         experiments = [_exp_id(e) for e in [*full_exps, *drops[removed]]]
         records.append(_record(removed, target, arc, method, quality, cautions, notes, cond, arc["evidence"],

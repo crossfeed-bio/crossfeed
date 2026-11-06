@@ -1250,6 +1250,15 @@ and the README: that is the one mistake this style can make.
   here, since nothing calls `set_tunnel`). Read the installed source of what you override, copy the rest
   of it, and state in the docstring which single thing differs.
 
+## Starting densities on every arc (#297, 2026-11-06)
+
+`derive.start_note` wraps `integrated.starting_densities` (the median first value of each side, never
+matched on, #172) and the replicate form now writes it on biculture arcs (co-culture against the target's
+monocultures) and drop-out arcs (full community against the community without R), in the integrated form's
+wording. A side with no positive first value gives no note. Live: every one of the 190 drop-out arcs of All
+(with absences) carries it; 32 of 33 bicultures.
+
+
 ## gLV from the steady states of sub-communities (#310, 2026-11-06)
 
 `grownet.subcommunity` is the estimator of the third derivation Karoline asked for (EPICS, generalized to
