@@ -551,7 +551,11 @@ def empty_reason(skipped: list, command_line: bool = False) -> str:
                    " (the second box and the Technique setting narrow them)")
                 + " none is a continuous culture at an unperturbed steady state with its dilution rate recorded, "
                 "which is all this derivation reads. "
-                + ("The reasons say what each study held. " if skipped else "") + switch)
+                # only where a reason says what a study held, not where every one is the second box's (found
+                # in a third review)
+                + ("The reasons say what each study held. "
+                   if any("matches the media, experiments or studies entered" not in str(why) for _, why in skipped)
+                   else "") + switch)
     said = " ".join(f"At {setting}: {why}" for setting, why in groups[:3])
     more = f" ({len(groups) - 3} more groups among the reasons.)" if len(groups) > 3 else ""
     return f"No chemostat design here determines a row. {said}{more} The reasons say what each organism lacks. {switch}"
@@ -694,6 +698,9 @@ class SteadyStateDeriver:
                         "source_identity": source["identity"], "target_identity": target["identity"],
                         "effect": "facilitation" if b > 0 else "inhibition",
                         "strength": None if strength is None else round(strength, 4),
+                        # |strength|, as every derivation's arcs carry it for widths and layouts (it was null
+                        # on every steady arc, found in a third review)
+                        "weight": None if strength is None else round(abs(strength), 4),
                         "outcome": "abolished" if strength is None else "quantified",
                         "strength_bound": None,
                         "bound_rule": ("no ratio: at this partner level the fitted row puts the organism's "

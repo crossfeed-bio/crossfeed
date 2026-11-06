@@ -428,6 +428,7 @@ def test_an_empty_result_after_a_filter_does_not_say_the_study_holds_no_chemosta
     boxed = empty_reason([("study S1", "no experiment of this study matches the media, experiments or studies "
                                         "entered")], command_line=True)
     assert "hold no" not in boxed and "after the second box left some out" in boxed
+    assert "The reasons say" not in boxed            # every reason is the box's, none says what a study held
     bare = empty_reason([], command_line=True)
     assert "hold no" not in bare and "Technique" in bare and "The reasons say" not in bare
 
@@ -524,3 +525,28 @@ def test_a_run_s_wash_out_is_reported_by_the_derivation():
     curves.update({(i, "c"): _startup(0.3, 0.04, 4.0, 0.001 * UNIT) for i in (7, 8)})
     _, skipped = _derive([lost], curves)
     assert any(what.startswith("c in a with b, c lost") and "washed out" in why for what, why in skipped)
+
+
+def test_the_package_is_at_one_dilution_rate_in_its_cells_too():
+    """a and b fitted at D 0.04 (S1) and D 0.2 (S2): the package is at 0.04, and its cells hold the D 0.04
+    coefficients alone, the D 0.2 arcs named as left out; a cell was the median of both while the README
+    said one dilution rate (found in a third review). Here the D 0.2 coefficients are (0.5 - 0.2) B, unlike
+    the D 0.04 ones, 0.46 B."""
+    from grownet import integrated, matrix
+    from grownet.subcommunity import METRIC
+    records = _at_dilution(0.04, "S1") + _at_dilution(0.2, "S2")
+    net = records_to_network(records, meta={"settings": {**gui.DEFAULTS, "derivation": "steady"}})
+    rates = matrix.for_nodes(net, integrated.fitted_rates(records, METRIC), {})
+    got = matrix.coefficients(net, rates)
+    (block,) = got["matrices"]
+    order = block["organisms"]
+    A = {(order[i], order[j]): block["matrix"][i][j] for i in range(2) for j in range(2)}
+    assert A[("a", "b")] == pytest.approx(0.46 * -0.25 / UNIT, rel=1e-6)
+    assert A[("b", "a")] == pytest.approx(0.26 * -0.1 / UNIT, rel=1e-6)
+    named = " ".join(why for _, _, why in got["arcs_left_out"])
+    assert "fitted at the dilution rate 0.2 per h" in named
+
+
+def test_a_steady_arc_carries_its_weight():
+    records, _ = _derive()
+    assert all(r["weight"] == round(abs(r["strength"]), 4) for r in records if r["strength"] is not None)

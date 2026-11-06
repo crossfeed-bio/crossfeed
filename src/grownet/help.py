@@ -1210,11 +1210,11 @@ the monocultures and the communities missing one member; here every measured sub
 monocultures, pairs, larger communities and the full one all contribute.</p>
 <ul>
 <li><strong>What it reads.</strong> Continuous cultures known to be unperturbed, at the steady state the
-chemostat check reads (the mean over the last quarter of each vessel), one fit per medium, abundance unit,
-dilution rate and measurement technique. A run whose description does not say it is unperturbed is left out
-and named, and so is a run with a member that could not be read. Runs that end with the same organisms
-present are one community, their vessels pooled: they reach one steady state, so they give one equation,
-not several.</li>
+chemostat check reads (the mean over the last quarter of each vessel), one fit per medium, abundance unit
+and dilution rate, each organism read by one technique within it (runs that read an organism two ways are
+fitted apart). A run whose description does not say it is unperturbed is left out and named, and so is a
+run with a member that could not be read. Runs that end with the same organisms present are one community,
+their runs pooled: they reach one steady state, so they give one equation, not several.</li>
 <li><strong>Effective coefficients.</strong> An effect that needs a third organism is folded into the
 pairs that carry it, so a coefficient describes the communities it was fitted from, and its arcs carry
 evidence <code>steady_state</code>. Each community is also predicted by a fit made without it, and the

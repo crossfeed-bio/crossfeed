@@ -787,10 +787,9 @@ MODEL_ASSUMPTIONS = (
 STEADY_ASSUMPTIONS = (
     "  EVERY COEFFICIENT IS CONSTANT. One number stands for the effect of j on i at every steady state the",
     "      row was fitted from. A chemostat holds its medium, so the drift of a batch culture does not",
-    "      enter, but a different medium is another environment and another fit. The rates and the",
-    "      diagonal are at one dilution rate, the package's; an off-diagonal cell takes the arcs of every",
-    "      dilution rate, since A_ij = (r_i - D) B_ij does not depend on D in a gLV, which holds for",
-    "      these effective coefficients only as far as the communities behave as one.",
+    "      enter, but a different dilution rate or medium is another environment and another fit: the",
+    "      package is at one dilution rate, its rates, diagonal and cells alike, and the arcs fitted at",
+    "      another are named among the effects left out.",
     "  INTERACTIONS ARE EFFECTIVE AND ADD UP. The cells are fitted from communities of every size, so an",
     "      effect that needs a third organism is folded into the pairs that carry it, and a cell",
     "      describes the communities it was fitted from rather than the pair alone. The network's arcs",
@@ -1052,6 +1051,18 @@ def _per_arc(edge, fallback_rate: float | None = None) -> tuple:
     return None, ""
 
 
+_STEADY_DILUTION = r"chemostat, D ([0-9.eE+-]+) per h"
+
+
+def _steady_dilutions(edge) -> set:
+    """The dilution rates a steady-state arc was fitted at, from its condition (`SteadyStateDeriver` writes
+    "chemostat, D <d> per h, ..."; a merged arc joins several); empty for any other derivation's arc."""
+    import re
+    if not str(getattr(edge, "metric", "") or "").startswith("steady_state"):
+        return set()
+    return {float(d) for d in re.findall(_STEADY_DILUTION, getattr(edge, "condition", "") or "")}
+
+
 def _pair_values(net: InteractionNetwork, rates: dict = None, home: dict = None) -> tuple:
     """({pair: {"value", "unit", "censored", "arcs"}}, conflicts, unfitted).
 
@@ -1063,6 +1074,18 @@ def _pair_values(net: InteractionNetwork, rates: dict = None, home: dict = None)
     per_pair: dict = {}
     for edge in net.edges:
         if edge.status == "absent":
+            continue
+        # a package simulates one chemostat: a steady-state arc fitted at another dilution rate than the
+        # rates' stays out of the cell, named, rather than entering a median with the package's own (the
+        # cells mixed two dilution rates while the README said one, found in a third review)
+        package_d = ((rates or {}).get(edge.target) or {}).get("dilution")
+        fitted_at = _steady_dilutions(edge)
+        if package_d is not None and fitted_at and fitted_at != {package_d}:
+            entry = per_pair.setdefault((edge.target, edge.source), {"by_unit": {}, "reasons": [], "censored": {},
+                                                                      "how": {}, "media": {}, "directions": []})
+            entry["reasons"].append(f"this arc was fitted at the dilution rate "
+                                    f"{', '.join(f'{d:g}' for d in sorted(fitted_at))} per h, and the package is "
+                                    f"at {package_d:g} per h, one chemostat")
             continue
         quantified = edge.strength is not None
         censored = _reports_an_extreme(edge)

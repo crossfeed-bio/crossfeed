@@ -586,9 +586,15 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
                "--merge-genera produces, and have no cell in this matrix: the diagonal is written there."
                if count.get("within_one_organism") else "")
             + f"{na_hint}</p>")
-    rate_hint = ("<p class=\"hint\">The growth rates are each organism's maximum specific growth rate in "
-                 "monoculture, the median over the replicates and studies that have one, with the lag and the "
-                 "carrying capacity beside each. The gLV package holds fitted per-capita coefficients, one "
+    # under the steady-state derivation the rates are r_i - D from a chemostat start-up, with no lag (the
+    # batch sentence was shown for them, found in a third review)
+    rates_are = ("r_i - D, each organism's growth rate less the dilution rate, read from its own monoculture "
+                 "chemostat's start-up at the package's one dilution rate, with the carrying capacity its row "
+                 "implies beside each" if result.get("settings", {}).get("derivation") == "steady" else
+                 "each organism's maximum specific growth rate in monoculture, the median over the replicates "
+                 "and studies that have one, with the lag and the carrying capacity beside each")
+    rate_hint = (f"<p class=\"hint\">The growth rates are {rates_are}. "
+                 "The gLV package holds fitted per-capita coefficients, one "
                  "matrix per abundance unit, the matching growth rates and a README stating every formula "
                  "and naming whatever could not be fitted.</p>") if organism_rates else ""
     units = matrix.abundance_units(result["network"], organism_rates)
