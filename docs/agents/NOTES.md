@@ -1226,3 +1226,6 @@ the coefficient from their difference over x like any fitted arc; `FITTED_METRIC
 `model_assumptions(derivation)`. A row with no scale has no `metric_with`, gives no cell, and is named
 (`its row is in units of ... r_i - D`). `gui.STEADY_CHECK_CIRCULAR` replaces the steady-state check under
 this derivation. Checked in the R package: the payload loads, `solve(A, -r)` is the observed pair.
+chosen and `glv_mode_on` accepts it. The gLV package from it (matrix.py, which branches on
+"integrated"/"replicate" in many places) is a separate task.
+`derive.media_identity` instead, as the rest of the tool does.
