@@ -1124,7 +1124,9 @@ ISSUE_NUMBER = re.compile(r"(?<![\w&#])#\d{1,4}(?![0-9A-Fa-f])")
 
 
 def _visible(page: str) -> str:
-    page = re.sub(r"<style.*?</style>|<script.*?</script>", "", page, flags=re.S)
+    # any case and any space before the closing bracket, so no style or script text is read as visible
+    # (CodeQL, on this pull request: the first version missed <SCRIPT>)
+    page = re.sub(r"<(style|script)\b.*?</\1\s*>", "", page, flags=re.S | re.I)
     return " ".join(re.sub(r"<[^>]+>", " ", page).split())
 
 
