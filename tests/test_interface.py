@@ -1119,7 +1119,11 @@ def test_the_report_query_line_and_the_page_heading_join_the_second_box_with_sem
 # page's second box. An issue number is a developer's cross-reference; it belongs in a code comment beside
 # the text, not in the text.
 
-# "#193", "(#40, #54)", "since #119"; not a color ("#222222", six hex digits) and not an HTML entity
+# "#193", "(#40, #54)", "since #119"; not a color ("#222222", six hex digits) and not an HTML entity.
+# The {1,4} cap IS the color defence, together with the trailing hex guard: with \d+ the match takes all six
+# digits of #123456, the guard sees the closing character, and every #RRGGBB color reads as an issue number.
+# So an issue number of five digits or more is not matched; widen it only with another defense for colors
+# (Craig's agent)
 ISSUE_NUMBER = re.compile(r"(?<![\w&#])#\d{1,4}(?![0-9A-Fa-f])")
 
 
@@ -1246,3 +1250,10 @@ def test_no_issue_number_in_the_readme_or_the_r_package_help():
                                                        if line.lstrip().startswith("#'"))
     found = {name: ISSUE_NUMBER.findall(text) for name, text in texts.items()}
     assert not any(found.values()), {name: refs for name, refs in found.items() if refs}
+
+
+def test_the_issue_number_pattern_takes_issue_numbers_and_never_a_color():
+    """The cap and the hex guard together: #193 and #1234 are issue numbers; #222222 and #1a7f5a, colors,
+    are not (a pattern without the cap would read every color as an issue number)."""
+    assert ISSUE_NUMBER.findall("see #193 and #1234") == ["#193", "#1234"]
+    assert ISSUE_NUMBER.findall("color: #222222; fill: #1a7f5a; #123456") == []
