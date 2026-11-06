@@ -788,6 +788,8 @@ class SteadyStateDeriver:
                         "metric": METRIC, "method": METHOD, "evidence": "steady_state",
                         "quality": [], "cautions": [], "notes": notes,
                         "cultivation_mode": "chemostat", "medium": group["medium"], "condition": label,
+                        # how the target was measured: one technique per organism within a fit (`_by_technique`)
+                        "technique": group.get("techniques", {}).get(i) or "unrecorded",
                         # the members present: one inoculated and washed out is not in the community
                         "community": sorted(_identity(identities, m)["id"] for m in _present(largest)),
                         "experiments": sorted({e for c in holding
