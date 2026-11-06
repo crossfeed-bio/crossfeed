@@ -128,7 +128,7 @@ def pool(communities: list) -> list:
     noisier the runs (found in review). And a leave-one-out prediction left one run out and kept its twin.
     The pooled abundance is the mean over runs of each run's mean, its replicates for the bootstrap are the
     runs (`run_means`), and it holds the members present only: a member one run inoculated and lost is that
-    run's wash-out, which `fit` reports under the run's own name. Its name is the first run's, with the count,
+    run's wash-out, which `fit` reports under the run's own name. Its name is its members', with the count,
     and `runs` names them all."""
     groups: dict = {}
     for c in communities:
@@ -442,7 +442,7 @@ def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
 
 def _by_technique(groups) -> list:
     """Each group as it is where every organism was read by one technique throughout it, with `techniques`
-    {organism: technique} and `technique` the set; otherwise split into one group per run-level technique,
+    {organism: technique} and `technique` the set; otherwise split by how the organisms read two ways are read,
     named. Grouping every run by its run-level technique split a design where each organism keeps its own
     technique (a by qPCR, b by flow cytometry) into three groups that determined nothing (found in a second
     review)."""

@@ -635,3 +635,31 @@ def test_an_empty_result_after_a_filter_keeps_the_filter_s_reason():
               "studies": ["S1"], "resolved": [("x", {})], "errors": [], "network": None, "hidden": {},
               "skipped": skipped}
     assert "No chemostat design here determines a row" not in _empty_reason(result)
+
+
+def test_a_row_without_a_scale_at_the_package_rate_keeps_its_own_reason():
+    """b's row at D 0.04 has no scale, and b also has a scaled row at D 0.2: the package is at 0.04 (a, c and
+    d have rows there), and b's reason is that its row there is in units of r_b - D, not that its rows were
+    fitted at 0.2, which hid the row at the package's rate (found in a fourth review)."""
+    import copy
+
+    from grownet import integrated, matrix
+    from grownet.subcommunity import METRIC
+    client, exps = _runs()
+    exps = copy.deepcopy(exps)
+    exps[1]["description"] = "No perturbations."                          # b alone: no batch period stated
+    unscaled, _ = SteadyStateDeriver(client=client).derive({"id": "S1", "name": "x"}, exps)
+    records = (unscaled + _at_dilution(0.2, "S2")
+               + _renamed(_at_dilution(0.04, "S3"), {"a": "c", "b": "d"}))
+    net = records_to_network(records, meta={"settings": {**gui.DEFAULTS, "derivation": "steady"}})
+    rates = matrix.for_nodes(net, integrated.fitted_rates(records, METRIC), {})
+    left = dict(matrix.coefficients(net, rates)["left_out"])
+    assert "fitted in units of its own r_i - D" in left["b"], left["b"]
+
+
+def test_report_notes_are_only_the_steady_derivation_s():
+    from grownet import __main__ as cli
+    plain = cli.build_parser().parse_args(["derive", "S1", "--live", "--report-rates", "--steady-check"])
+    assert cli._report_notes(plain, {}) == []
+    bare = cli.build_parser().parse_args(["derive", "S1", "--live", "--derivation", "steady"])
+    assert cli._report_notes(bare, {}) == []

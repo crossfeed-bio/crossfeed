@@ -945,7 +945,11 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
         if not at["rates"]:
             elsewhere = sorted({u.split("another dilution rate, ")[1].split(" per h")[0] for u in at["other_units"]
                                 if "another dilution rate, " in u})
-            if elsewhere:
+            # only where it has no row at the package's dilution rate at all: a row there without a scale has
+            # its own reason, which this one hid (found in a fourth review)
+            at_package = any(r.get("target") == nid and r.get("fitted_rate_dilution") == package_dilution
+                             for r in records)
+            if elsewhere and not at_package:
                 # its rows were all fitted at another dilution rate: it is not in this package, and the README
                 # said it had "no growth rate ... nothing on it can be fitted" (found in a third review)
                 out.no_rate[nid] = (at["name"], f"its rows were fitted at the dilution rate {', '.join(elsewhere)} "
