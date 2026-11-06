@@ -10,8 +10,10 @@ content.
 
 - **The format id moves to `grownet.interaction_network/v5`** (Karoline, 2026-11-06, #305: "Is the
   measurement technique recorded as an arc attribute? If not, please add."), for one arc field,
-  `technique`, and one node field, `merged_nodes`. Nothing a `/v4` field means changes; `/v4` and older files still read and validate. The
-  daily All network is also published as `all_result.v4.json` for installed 0.5.x copies, beside
+  `technique`, and one node field, `merged_nodes`, and one value of `evidence`, `steady_state`, for the arcs
+  of the steady-state derivation (0.5.0's validator refuses it, as it refuses a `/v5` file). Nothing a `/v4`
+  field means changes for the values it had; `/v4` and older files still read and validate. The daily All
+  network is also published as `all_result.v4.json` for installed 0.5.x copies, beside
   `all_result.json` for 0.3.x and 0.4.x.
 
 ### Added
@@ -109,8 +111,6 @@ content.
 - **An empty network from the command line is announced under the study's name again.** `derive STUDY`
   printed "NO interactions were derived for" the last reason it had listed, since the loop printing the
   reasons reused the name of the study's label; on every derivation.
-  monocultures and pairs it recovers 126 of the 132 coefficients exactly; with 5% noise over three vessels
-  the bootstrap spread covers the truth for 93% of them. The numbers are in METHOD_NOTES.
 
 
 ## [0.5.0] (2026-10-14)

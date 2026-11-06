@@ -1401,8 +1401,8 @@ give others; the report beside the download says what was read and when.</p>
 <h2 id="attributes">Arc and node attributes</h2>
 <p>Every downloaded network, JSON or GraphML, carries these for each arc (edge) and node. A network
 names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v5</code>,
-after <code>/v4</code> in 0.5.0, which a <code>/v5</code> file only adds <code>technique</code> and
-<code>merged_nodes</code> to, and
+after <code>/v4</code> in 0.5.0, to which a <code>/v5</code> file adds <code>technique</code> and
+<code>merged_nodes</code>, and the <code>evidence</code> value <code>steady_state</code>, and
 <code>/v3</code> in 0.3.0 and 0.4.0. It moved to <code>/v1</code> in 0.2.0 because
 <code>significance</code> changed meaning, from the corrected p-value to -log10 of it, and to
 <code>/v2</code>, <code>/v3</code> and then <code>/v4</code> because optional arc and node fields were
