@@ -1214,9 +1214,9 @@ monocultures, pairs, larger communities and the full one all contribute.</p>
 <li><strong>What it reads.</strong> Continuous cultures known to be unperturbed, at the steady state the
 chemostat check reads (the mean over the last quarter of each vessel; a run in which an organism still
 changes by more than a tenth between the two halves of that quarter is not at a steady state, and is left
-out and named), one fit per study, medium, abundance
-unit and dilution rate (runs of two studies are never fitted together, as every derivation reads one study
-at a time), each organism read by one technique within it: where an organism is read one way in some
+out and named), one fit per medium composition, abundance unit and dilution rate, across every study the
+search reads (runs of different studies in the same medium are fitted together, and an arc names every study
+it rests on), each organism read by one technique within it: where an organism is read one way in some
 runs and another way in others, the runs using its more common technique are kept and the others left out
 and named, and so is a run whose vessels read one organism two ways. A run whose description does not say
 it is unperturbed is left out and named, and so is a run with a member that could not be read. Runs that

@@ -556,8 +556,8 @@ def _communities(k: int) -> str:
 
 NEEDS = ("An organism's row has one unknown for its own limitation and one per partner it met at a steady "
          "state, so it needs at least that many communities holding it: its monoculture and a pair with each "
-         "partner, or the monocultures and every community missing one member, at one medium and dilution rate "
-         "in one study.")
+         "partner, or the monocultures and every community missing one member, at one medium and dilution rate, "
+         "in any of the studies searched.")
 
 
 def _group_summary(communities: list, got: dict) -> str:
@@ -639,7 +639,8 @@ def empty_reason(skipped: list, command_line: bool = False) -> str:
 
 METHOD = ("steady state v1: at a chemostat steady state every member present satisfies 1 + sum_j B_ij N_j = 0 "
           "with B = A / (r_i - D); each row solved by least squares over every unperturbed sub-community of "
-          "one study, medium, abundance unit and dilution rate, each organism read by one technique (EPICS, Ansari "
+          "one medium composition, abundance unit and dilution rate across the studies searched, each organism "
+          "read by one technique (EPICS, Ansari "
           "et al. 2021, generalized)")
 METRIC = "steady_state:subcommunities"
 
@@ -680,8 +681,8 @@ class SteadyStateDeriver:
         "Each interaction is an effective generalized Lotka-Volterra coefficient fitted from chemostat steady "
         "states: at a steady state every organism present satisfies 1 + sum_j B_ij N_j = 0 with B = A / (r_i "
         "- D), and each organism's row is the least-squares solution over every unperturbed community of one "
-        "study, medium, abundance unit and dilution rate it was present in, each organism read by one technique "
-        "there. Effective means that an effect needing "
+        "medium composition, abundance unit and dilution rate it was present in, across the studies "
+        "searched, each organism read by one technique there. Effective means that an effect needing "
         "a third organism is folded into the pairs that carry it, so a coefficient describes the communities "
         "it was fitted from. The strength beside it is log2(1 + B_ij x_j) at the partner's abundance in the "
         "largest community holding both. An interaction is reported when |strength| is at least k standard "
@@ -704,21 +705,37 @@ class SteadyStateDeriver:
         self.draws = draws
         self.selection = selection
 
+    # A search hands every study to `derive_many` at once, so runs of several studies in one medium are fitted
+    # together (Karoline, 2026-11-06: "for the new chemostat inference mode, the medium composition has to
+    # match but other than that, I don't see why not"); `derive` is one study, for the command line's study
+    # path and `derive_interactions`.
+    pools_studies = True
+
     def derive(self, study: dict, exps: list):
+        return self.derive_many([(study, exps)])
+
+    def derive_many(self, studies: list):
+        """(records, skipped) from the chemostat runs of every study given, [(study, experiments)], fitted
+        together where the medium composition (`media_identity`), the abundance unit and the dilution rate
+        match. An arc names every study its communities come from."""
         import math
 
         from .derive import _identity, select_experiments, strain_identities
         from .integrated import _log2_effect
         if self.client is None:
             raise ValueError("SteadyStateDeriver needs a client: it reads each vessel's measured series")
-        study_id = study.get("id", "")
-        study_meta = {"study_citation": study.get("name") or study_id, "study_license": "",
-                      "study_url": study.get("url", "")}
-        # identities over the whole study, as the other derivations judge an ambiguous taxon id, then the
-        # experiments the second box asks for, with the monocultures under the same conditions
-        identities = strain_identities(exps, [])
-        records, skipped = [], []
-        exps = select_experiments(exps, self.selection, skipped, study_id=study_id)
+        metas, of_exp, every, records, skipped = {}, {}, [], [], []
+        for study, exps in studies:
+            study_id = study.get("id", "")
+            metas[study_id] = {"id": study_id, "citation": study.get("name") or study_id, "license": "",
+                               "url": study.get("url", "")}
+            # identities over the whole of each study, as the other derivations judge an ambiguous taxon id,
+            # then the experiments the second box asks for, with the monocultures under the same conditions
+            every.append(exps)
+            for exp in select_experiments(exps, self.selection, skipped, study_id=study_id):
+                of_exp[exp.get("id")] = (study_id, exp)
+        identities = strain_identities([e for exps in every for e in exps], [])
+        exps = [exp for _, exp in of_exp.values()]
         for group in chemostat_groups(self.client, exps, self.spike_factor):
             label = (f"chemostat, D {group['dilution']:g} per h, {group['medium']}, {group['unit']}"
                      + (f", {group['technique']}" if group.get("technique") else ""))
@@ -735,9 +752,11 @@ class SteadyStateDeriver:
             # than once per coefficient, which was n^2 lines of the same sentence (Karoline, 2026-11-06: "Is
             # the error message in this case informative?")
             setting = label[len("chemostat, "):]
-            # fitted within one study, as every derivation reads one study at a time: named, so two groups of the
-            # same setting in two studies are not read as one contradicting itself (found in a fifth review)
-            skipped += [(f"chemostat group at {setting} in {study_id}", _group_summary(communities, got))]
+            # the studies the group's runs come from, named, since one fit may span several
+            in_studies = sorted({of_exp[e][0] for c in group["communities"]
+                                 for e in (c.get("experiments") or [c.get("experiment", "")]) if e in of_exp})
+            skipped += [(f"chemostat group at {setting} in {', '.join(in_studies)}",
+                         _group_summary(communities, got))]
             skipped += [(f"{what} [{label}]", why) for what, why in group["left_out"]]
             skipped += [(f"{species} in {community} [{label}]", "washed out: no steady-state equation")
                         for community, species in got["washed_out"]]
@@ -763,6 +782,13 @@ class SteadyStateDeriver:
                     sd_b = (row["sd"] or {}).get(j) if row["sd"] is not None else None
                     sd = (None if sd_b is None or strength is None
                           else abs(x / ((1 + b * x) * math.log(2))) * sd_b)
+                    arc_experiments = sorted({e for c in holding
+                                              for e in (c.get("experiments") or [c.get("experiment", "")])} - {""})
+                    # every study the row was fitted from: the coefficient rests on all of the row's equations,
+                    # not only on the communities holding the pair
+                    row_experiments = {e for c in communities if (c["abundance"].get(i) or 0) > 0
+                                       for e in (c.get("experiments") or [c.get("experiment", "")])}
+                    arc_studies = sorted({of_exp[e][0] for e in row_experiments if e in of_exp}) or sorted(metas)[:1]
                     check = predictions.get(largest["name"], {})
                     notes = [f"row scale: {scale['how']}"]
                     if check.get("status") == "predicted" and i in check["predicted"]:
@@ -790,8 +816,7 @@ class SteadyStateDeriver:
                         "cultivation_mode": "chemostat", "medium": group["medium"], "condition": label,
                         # the members present: one inoculated and washed out is not in the community
                         "community": sorted(_identity(identities, m)["id"] for m in _present(largest)),
-                        "experiments": sorted({e for c in holding
-                                               for e in (c.get("experiments") or [c.get("experiment", "")])} - {""}),
+                        "experiments": arc_experiments,
                         "n_with": len(largest.get("vessels") or []) or None, "n_without": None,
                         "sd": None if sd is None else round(sd, 4), "se": None,
                         "p_value": None, "q_value": None, "significance": None,
@@ -813,6 +838,11 @@ class SteadyStateDeriver:
                         "fitted_self_technique": group["techniques"].get(i, ""),
                         "partner_abundance": x, "partner_abundance_unit": group["unit"],
                         "partner_abundance_n": len(largest.get("vessels") or []),
-                        "study_id": study_id, **study_meta,
+                        # every study the communities behind the arc come from, as a merged arc names them
+                        # the fit the row comes from, which may span studies: a row counts once in the rates
+                        "fitted_group": f"{label} in {', '.join(in_studies)}",
+                        "study_id": arc_studies[0], "study_citation": metas[arc_studies[0]]["citation"],
+                        "study_license": "", "study_url": metas[arc_studies[0]]["url"],
+                        "studies": [metas[s] for s in arc_studies],
                     })
         return records, skipped

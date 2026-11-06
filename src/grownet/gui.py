@@ -1242,21 +1242,38 @@ def _run_query(client, entries, settings: dict | None = None, index: dict | None
                      keep=narrowed,
                      dropout=s["include_dropout"] and s["derivation"] != "integrated")
     unread_studies = []
-    for i, study_id in enumerate(studies):
-        say(i, len(studies), f"Reading {study_id} ({i + 1} of {len(studies)})")
-        try:
-            recs, skips = derive_interactions(client, study_id, deriver=deriver,
-                                              metric=metric_name(s),
-                                              spike_factor=s["spike_factor"], dropout=s["include_dropout"],
-                                              include_non_batch=s["include_non_batch"],
-                                              no_growth_alpha=s["no_growth_alpha"],
-                                              no_growth_factor=s["no_growth_factor"], keep=narrowed,
-                                              capacity_max_fall=s["capacity_max_fall"],
-                                              selection=selection)
-        except MGrowthDBError as e:
-            errors.append(f"{study_id}: {e}")
-            unread_studies.append(study_id)
-            continue
+    results = []
+    if getattr(deriver, "pools_studies", False):
+        # the steady-state derivation fits the chemostat runs of every study together, where the medium
+        # composition matches (Karoline, 2026-11-06), so it is given them all at once
+        read = []
+        for i, study_id in enumerate(studies):
+            say(i, len(studies), f"Reading {study_id} ({i + 1} of {len(studies)})")
+            try:
+                study = dict(client.get_study(study_id))
+                study.setdefault("id", study_id)
+                read.append((study, [client.get_experiment(e["id"]) for e in study.get("experiments", [])]))
+            except MGrowthDBError as e:
+                errors.append(f"{study_id}: {e}")
+                unread_studies.append(study_id)
+        deriver.selection = selection
+        results.append(deriver.derive_many(read))
+    else:
+        for i, study_id in enumerate(studies):
+            say(i, len(studies), f"Reading {study_id} ({i + 1} of {len(studies)})")
+            try:
+                results.append(derive_interactions(client, study_id, deriver=deriver,
+                                                   metric=metric_name(s),
+                                                   spike_factor=s["spike_factor"], dropout=s["include_dropout"],
+                                                   include_non_batch=s["include_non_batch"],
+                                                   no_growth_alpha=s["no_growth_alpha"],
+                                                   no_growth_factor=s["no_growth_factor"], keep=narrowed,
+                                                   capacity_max_fall=s["capacity_max_fall"],
+                                                   selection=selection))
+            except MGrowthDBError as e:
+                errors.append(f"{study_id}: {e}")
+                unread_studies.append(study_id)
+    for recs, skips in results:
         if only_entered:
             def entered(record, side):
                 return (record.get(f"{side}_taxon_id") in wanted_ids
