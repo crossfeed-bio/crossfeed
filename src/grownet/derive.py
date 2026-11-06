@@ -1737,6 +1737,9 @@ def _merged(arcs: list) -> dict:
     numeric = [a["strength"] for a in arcs if a.get("strength") is not None]
     strength = round(median(numeric), 4) if numeric else None
     outcomes = {a.get("outcome") for a in arcs}
+    # the arcs[0] fallback cannot fire today: obligate is a facilitation and abolished an inhibition (`_effect`),
+    # and only arcs of one sign are merged, so arcs without a log2 mean share one outcome; it stays as a guard
+    # against a future sign rule (Craig's agent)
     outcome = QUANTIFIED if numeric else (outcomes.pop() if len(outcomes) == 1 else arcs[0].get("outcome"))
 
     def union(key):

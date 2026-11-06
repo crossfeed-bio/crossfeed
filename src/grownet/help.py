@@ -559,7 +559,7 @@ EDGE_ATTRIBUTES = {
 # the arc attributes"). tests/test_help.py merges two arcs that differ in every field and checks that each
 # field the merge rewrites is named here, so a new field cannot reach a merged arc undocumented.
 MERGED_ATTRIBUTES = (
-    (("strength",), "the median of the merged arcs' log2 means, each arc counting once"),
+    (("strength",), "the median of the merged arcs' log2 means, each arc that has one counting once"),
     (("strength_range",), "the lowest and highest of those log2 means"),
     (("weight",), "the absolute value of that median"),
     (("merged_arcs",), "how many arcs were merged, obligate and abolished ones included"),
@@ -1340,7 +1340,8 @@ become one arc, across conditions, media, studies and evidence, when there are a
 the same sign. An arc below the absence threshold has no sign and is never merged; by default it has
 already been left out, as have the q-value filter's and the hidden low-quality ones, before the merge
 begins. A pair whose arcs have both signs is not merged at all: every arc stays as derived, and the
-network's meta counts such pairs (<code>left_apart_for_disagreeing_signs</code>). <strong>Merge to
+network's meta counts such pairs (<code>left_apart_for_disagreeing_signs</code>, a count in the network's
+meta rather than an arc attribute, so it is not in the table below). <strong>Merge to
 genus</strong> runs after it and merges the arcs between two genera by sign the same way, so with both on a
 genus arc is the median of merged arcs' medians; it also merges their absent arcs, one per genus pair. On a
 merged arc:</p>

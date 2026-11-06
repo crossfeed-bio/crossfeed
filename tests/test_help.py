@@ -99,6 +99,24 @@ def test_the_help_says_what_every_attribute_becomes_on_a_merged_arc():
         assert f"<code>{field}</code>" in section, field
 
 
+def test_two_obligate_arcs_that_agree_keep_their_outcome_and_every_field_they_share():
+    """The other half of the table's rules, which arcs differing in every field cannot reach: two arcs with no
+    log2 mean keep the outcome they share, and a one-comparison field all merged arcs agree on is kept, not
+    emptied (Craig's agent: the ratchet above covers the fields, not both sides of each rule)."""
+    from grownet.derive import COMPARISON_FIELDS, _merged
+    arcs = _two_arcs_that_differ_in_every_field()
+    for arc in arcs:
+        arc.update(strength=None, outcome="obligate", effect="facilitation")
+        for field in COMPARISON_FIELDS:
+            arc[field] = arcs[0][field]
+    merged = _merged(arcs)
+    assert (merged["outcome"], merged["strength"], merged["merged_arcs"]) == ("obligate", None, 2)
+    for field in COMPARISON_FIELDS:
+        assert merged[field] == arcs[0][field], field
+    assert "otherwise the outcome they all share" in dict(
+        (fields, text) for fields, text in help.MERGED_ATTRIBUTES)[("outcome",)]
+
+
 def test_the_consequences_the_help_states_for_a_merged_arc_hold():
     """Each claim of the help's "Reading a merged arc", checked on arcs whose answer is computed by hand."""
     from grownet.derive import merge_genus, merge_parallel, output_meta
