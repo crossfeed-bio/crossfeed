@@ -825,11 +825,20 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
               if r.get("fitted_rate") is not None and r.get("fitted_rate_dilution") is not None}:
         by_dilution[d[2]] = by_dilution.get(d[2], 0) + 1
     package_dilution = (min(by_dilution, key=lambda d: (-by_dilution[d], d)) if by_dilution else None)
+    seen_rows: set = set()
     for record in records:
         nid, rate = record.get("target"), record.get("fitted_rate")
         own = record.get("fitted_self")
         if nid is None or rate is None:
             continue
+        if record.get("fitted_rate_dilution") is not None:
+            # the steady-state derivation repeats a row's scale and own term on every arc of the row, so a row
+            # with more partners weighed more in the median: one value per row, an organism's in one study and
+            # chemostat group (found in a fourth review: 0.39 from three rows of 0.46, 0.32 and 0.30)
+            row = (nid, record.get("study_id", ""), record.get("condition", ""))
+            if row in seen_rows:
+                continue
+            seen_rows.add(row)
         at = gathered.setdefault(nid, {
             "name": record.get("target_name", nid), "unit": record.get("fitted_rate_unit", "1/h"),
             "rates": [], "points": [], "studies": [], "per_study": {}, "other_units": [],
@@ -856,6 +865,8 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
                 at["other_units"].append(f"{study} ({unit})")
         else:
             at["rates"].append(rate)
+            from .media import key_from_label as medium_key
+            at.setdefault("rates_by_medium", {}).setdefault(medium_key(record.get("medium") or ""), []).append(rate)
             at["points"].append(record.get("fit_points", 0))
             # the monoculture replicates stage 1 fitted this organism's rate from. `n` below counts the
             # fitted rows, which is what this path merges over, and the CSV's `replicates` column has meant
@@ -920,6 +931,15 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
         at["capacity_per_study"].setdefault(study, []).append(-rate / own)
 
     from .derive import OrganismRates
+
+    def rate_of(at, order):
+        """The median rate; under the steady-state derivation, of the medium the capacity comes from: its
+        rate r_i - D and its capacity -1/B_ii are one fit's, and a median rate over two media beside one
+        medium's capacity gave a diagonal that belonged to no fit (found in a fourth review)."""
+        by_medium = at.get("rates_by_medium") or {}
+        if str(method).startswith("steady_state") and order and by_medium.get(order[0][0]):
+            return statistics.median(by_medium[order[0][0]])
+        return statistics.median(at["rates"])
     out = OrganismRates()
     for nid, at in gathered.items():
         if not at["rates"]:
@@ -960,7 +980,8 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
                                + "; plateaus are compared only within one technique and unit")
                          for row in other["rows"]]
         out[nid] = {
-            "name": at["name"], "rate": statistics.median(at["rates"]), "unit": at["unit"],
+            "name": at["name"], "rate": rate_of(at, order),
+            "unit": at["unit"],
             # what the median rests on: the fitted rows, which is what this derivation has instead of
             # monoculture replicates. `n_label` says so, because the report and the CSV read `n` as a
             # count of replicates and this path never had any (it used to report time points under that

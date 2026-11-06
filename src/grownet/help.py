@@ -317,7 +317,9 @@ SETTINGS = {
                      "network also gets its maximum specific growth rate in monoculture, the median over the "
                      "replicates and studies that have one, downloadable as its own CSV and used by the gLV "
                      "parameters. Batch monocultures only: in a chemostat the rate a curve shows is the "
-                     "dilution rate. The gLV mode button turns it on."),
+                     "dilution rate. Under the steady-state derivation the rate is instead r_i - D, read from "
+                     "each organism's own monoculture chemostat start-up, with the capacity its row implies. "
+                     "The gLV mode button turns it on."),
 }
 
 # command line options of `derive` that are not advanced settings -> what they do

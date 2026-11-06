@@ -667,7 +667,8 @@ pooled into one equation (`subcommunity.pool`), numpy 2.2.6 and scipy 1.13.0:
 - Every community settles; none is left out.
 - The row scales read from the noiseless simulated start-ups are within 1.6% of the true `u - D` (median
   0.7%), slightly low, since self-limitation already slows the batch period; that is most of the package's
-  error, `A = scale x B` within 2% of the true `a_ij` on the `|a_ii|` scale (median 0.18%).
+  error, `A = scale x B` (formed in the script from the fitted rows and the start-up scales, as the package
+  forms it) within 2% of the true `a_ij` on the `|a_ii|` scale (median 0.18%).
 - The scale is an estimate that misses both ways, and the script measures the noisy side: with lognormal
   noise on each point of those start-ups (20 draws per organism), it is above the true `u - D` in 66% of
   readings at 2% noise (median ratio 1.01), 88% at 5% (1.11, max 1.88) and 96% at 10% (1.27), since the

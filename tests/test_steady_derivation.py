@@ -554,3 +554,84 @@ def test_the_package_is_at_one_dilution_rate_in_its_cells_too():
 def test_a_steady_arc_carries_its_weight():
     records, _ = _derive()
     assert all(r["weight"] == round(abs(r["strength"]), 4) for r in records if r["strength"] is not None)
+
+
+def test_a_dilution_rate_of_many_digits_still_fills_the_cells():
+    """D = 1/24 per h: the condition writes it as 0.0416667, and read back it never equalled the package's
+    0.041666..., so every cell was left out with a reason naming the same D twice (found in a fourth review)."""
+    from grownet import integrated, matrix
+    from grownet.subcommunity import METRIC
+    records = _at_dilution(1 / 24, "S1")
+    net = records_to_network(records, meta={"settings": {**gui.DEFAULTS, "derivation": "steady"}})
+    rates = matrix.for_nodes(net, integrated.fitted_rates(records, METRIC), {})
+    got = matrix.coefficients(net, rates)
+    (block,) = got["matrices"]
+    assert all(v != 0 for row in block["matrix"] for v in row) and not got["pairs_left_out"]
+
+
+def test_a_genus_keeps_the_package_dilution_rate():
+    """Merged to genus, a node's rate entry is the median of its strains', and it lost the package's dilution
+    rate, so a genus's cells took arcs at every dilution rate (found in a fourth review). Two Bacteroides
+    strains with Prevotella at D 0.04, one also at D 0.2, other organisms at 0.04 so the package is there."""
+    from grownet import integrated, matrix
+    from grownet.derive import output_meta
+    from grownet.subcommunity import METRIC
+    raw = (_renamed(_at_dilution(0.04, "S1"), {"a": "Bacteroides alpha", "b": "Prevotella copri"})
+           + _renamed(_at_dilution(0.04, "S2"), {"a": "Bacteroides beta", "b": "Prevotella copri"})
+           + _renamed(_at_dilution(0.2, "S3"), {"a": "Bacteroides alpha", "b": "Prevotella copri"})
+           + _renamed(_at_dilution(0.04, "F1"), {"a": "Clostridium c", "b": "Dorea d"}))
+    edges, meta = output_meta([dict(r) for r in raw], merge_genera=True)
+    net = records_to_network(edges, meta={"settings": {**gui.DEFAULTS, "derivation": "steady"}, **meta})
+    rates = matrix.for_nodes(net, integrated.fitted_rates(raw, METRIC), {})
+    bacteroides = next(r for r in rates.values() if r["name"] == "Bacteroides")
+    assert bacteroides["dilution"] == 0.04
+    got = matrix.coefficients(net, rates)
+    named = " ".join(w for *_, w in got["pairs_left_out"] + got["arcs_left_out"])
+    assert "0.2" in named and "Merge to genus" in named
+
+
+def test_the_rate_comes_from_the_medium_the_capacity_comes_from():
+    """a fitted in Wilkins-Chalgren (r - D 0.46, one study) and in Gifu (0.86, two studies): the capacity is
+    Gifu's, where more rows were fitted, and so is the rate. The median over both media beside Gifu's capacity
+    gave a diagonal that belonged to no fit (found in a fourth review)."""
+    from grownet import integrated
+    from grownet.subcommunity import METRIC
+    wc, _ = _derive()
+    gifu = [{**r, "medium": "Gifu Anaerobic Medium", "study_id": study,
+             "fitted_rate": r["fitted_rate"] + 0.4,
+             "fitted_self": r["fitted_self"] / r["fitted_rate"] * (r["fitted_rate"] + 0.4)}
+            for study in ("S2", "S3") for r in wc]
+    by_name = {r["name"]: r for r in integrated.fitted_rates(wc + gifu, METRIC).values()}
+    assert by_name["a"]["capacity_medium"] == "Gifu Anaerobic Medium"
+    assert by_name["a"]["rate"] == pytest.approx(0.86, abs=1e-6)
+
+
+def test_a_row_counts_once_in_the_rate_however_many_partners_it_has():
+    """The steady-state derivation writes a row's scale on every arc of the row: a row with three partners
+    at 0.46 and two rows at 0.32 and 0.30 gave 0.46 (or 0.39 with two partners), where the three rows' median
+    is 0.32 (found in a fourth review)."""
+    from grownet import integrated
+    from grownet.subcommunity import METRIC
+
+    def arc(partner, study, scale):
+        return {"target": "a", "target_name": "a", "source": partner, "fitted_rate": scale,
+                "fitted_rate_unit": "1/h", "fitted_rate_dilution": 0.04, "fitted_self": -scale * 1e-8,
+                "study_id": study, "condition": "chemostat, D 0.04 per h, M, Cells/mL", "medium": "M"}
+    records = [arc(p, "S1", 0.46) for p in ("x", "y", "z")] + [arc("x", "S2", 0.32), arc("x", "S3", 0.30)]
+    got = integrated.fitted_rates(records, METRIC)["a"]
+    assert got["rate"] == pytest.approx(0.32) and got["n"] == 3
+
+
+def test_an_empty_result_after_a_filter_keeps_the_filter_s_reason():
+    """Rows were determined and arcs derived, then a filter removed them: the steady lead said no chemostat
+    design determines a row beside "2 of 2 rows determined" and sent the user to batch cultures (found in a
+    fourth review). The general reasons speak then."""
+    from grownet.gui import _empty_reason
+    from grownet.subcommunity import determined_any
+    skipped = [("chemostat group at D 0.04 per h, M, Cells/mL", "3 communities at an unperturbed steady state "
+                "(a alone, b alone, a with b), 2 organism(s) present; 2 of 2 rows determined.")]
+    assert determined_any(skipped)
+    result = {"settings": {**gui.DEFAULTS, "derivation": "steady", "absence_threshold": 100.0},
+              "studies": ["S1"], "resolved": [("x", {})], "errors": [], "network": None, "hidden": {},
+              "skipped": skipped}
+    assert "No chemostat design here determines a row" not in _empty_reason(result)

@@ -459,19 +459,32 @@ def _by_technique(groups) -> list:
             out.append(g)
             continue
         said = "; ".join(f"{m} by {' and '.join(sorted(ts))}" for m, ts in sorted(mixed.items()))
-        # each run joins the first part whose organisms it reads the same way, so within a part every organism
-        # has one technique: splitting by the run's set of techniques put a run reading a by fc and b by qpcr
-        # beside one reading them the other way round (found in a third review)
-        parts: list = []
-        for c in sorted(g["communities"], key=lambda c: c["name"]):
-            own = c.get("techniques", {})
-            for part in parts:
-                if all(part["techniques"].get(m, t) == t for m, t in own.items()):
-                    part["techniques"].update(own)
-                    part["communities"].append(c)
+        # The parts are the ways the organisms read two ways are read, and each run joins EVERY part it reads
+        # the same way, so the split does not depend on the order or the names of the runs (a first-fit by name
+        # moved a pair's arcs from one part to the other when the run was renamed, found in a fourth review),
+        # and a run that agrees with several parts, a monoculture of an organism read one way, serves each.
+        # Splitting by the run's set of techniques put a run reading a by fc and b by qpcr beside one reading
+        # them the other way round (found in a third review).
+        def agree(x: dict, y: dict) -> bool:
+            return all(y.get(m, t) == t for m, t in x.items())
+        keys = {tuple(sorted((m, t) for m, t in c.get("techniques", {}).items() if m in mixed))
+                for c in g["communities"]}
+        assignments: list = []
+        for key in sorted(keys, key=lambda k: (-len(k), k)):
+            for part in assignments:
+                if agree(dict(key), part):
+                    part.update(dict(key))
                     break
             else:
-                parts.append({"techniques": dict(own), "communities": [c]})
+                assignments.append(dict(key))
+        parts = []
+        for assignment in assignments:
+            communities = [c for c in sorted(g["communities"], key=lambda c: c["name"])
+                           if agree({m: t for m, t in c.get("techniques", {}).items() if m in mixed}, assignment)]
+            techniques = {m: next(iter(ts)) for m, ts in per.items() if m not in mixed} | assignment
+            parts.append({"techniques": {m: t for m, t in techniques.items()
+                                         if any(m in c.get("techniques", {}) for c in communities)},
+                          "communities": communities})
         for k, part in enumerate(parts):
             techniques, communities = part["techniques"], part["communities"]
             t = ", ".join(f"{m} by {tech}" for m, tech in sorted(techniques.items()))
@@ -532,6 +545,15 @@ def _row_reasons(got: dict) -> list:
             out.append((i, f"no community holds it at a steady state with {', '.join(never)}, so their effects "
                            "on it are not derived"))
     return out
+
+
+def determined_any(skipped: list) -> bool:
+    """Whether some chemostat group determined a row with a partner: then arcs were derived, and an empty
+    result is a filter's doing (the partner filter, the absence threshold), which the general reasons name.
+    The steady lead said "no chemostat design here determines a row" beside "3 of 3 rows determined"
+    (found in a fourth review)."""
+    return any(what.startswith("chemostat group at ") and "rows determined" in str(why)
+               and "no row is determined" not in str(why) for what, why in skipped)
 
 
 def empty_reason(skipped: list, command_line: bool = False) -> str:

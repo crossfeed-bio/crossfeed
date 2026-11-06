@@ -637,7 +637,13 @@ def _emit(a, net, skipped, extra, label, result):
     # the files beside the numbers, the same for the zip and for R, as the page sends them (found in
     # review: --to-r sent none)
     from . import steady as steady_module
-    extra_files = {"steady_state_check.txt": steady_module.as_text(checked)} if a.steady_check else None
+    from .gui import STEADY_CHECK_CIRCULAR
+    # under the steady-state derivation the check is refused, and the file said "mGrowthDB holds no
+    # continuous culture of these organisms" (found in a fourth review): it says why there is no check
+    if a.steady_check and a.derivation == "steady":
+        extra_files = {"steady_state_check.txt": STEADY_CHECK_CIRCULAR + "\n"}
+    else:
+        extra_files = {"steady_state_check.txt": steady_module.as_text(checked)} if a.steady_check else None
     if a.glv and organism_rates:
         from .matrix import glv_package
         with open(a.glv, "wb") as f:
@@ -715,7 +721,8 @@ def _emit(a, net, skipped, extra, label, result):
         for tag in ("<strong>", "</strong>"):
             try_these = try_these.replace(tag, "")
         why += try_these
-        if a.derivation == "steady":
+        from .subcommunity import determined_any
+        if a.derivation == "steady" and not determined_any(skipped):
             from .subcommunity import empty_reason as steady_reason
             print(f"\nNO interactions were derived for {label}: the network is empty. "
                   f"{steady_reason(skipped, command_line=True)}", file=sys.stderr)
@@ -950,8 +957,8 @@ def build_parser() -> argparse.ArgumentParser:
     settings.add_argument("--report-rates", action="store_true",
                           help="also report each organism's maximum specific growth rate in monoculture, "
                                "the median over replicates and studies, with the lag and the monoculture "
-                               "carrying capacity beside it (the page's Report growth rates); needed for "
-                               "--glv")
+                               "carrying capacity beside it (the page's Report growth rates; under "
+                               "--derivation steady, r_i - D from a chemostat start-up); needed for --glv")
     settings.add_argument("--merge-arcs", action="store_true",
                           help="merge the arcs of each source and target, across conditions and studies, into "
                                "one with the median log2 mean and its range; arcs whose signs disagree are not "

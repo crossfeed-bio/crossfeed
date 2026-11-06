@@ -246,3 +246,22 @@ def test_a_lag_that_leaves_the_batch_period_a_low_rate_is_read_from_the_rise_aft
     assert alone["scale"] is not None and alone["scale"] < 0.2
     # (0.458: easylinear refits over every window within its quota of the steepest, one reaching the plateau)
     assert row_scale(_curve(lagged), 0.04, period)["scale"] == pytest.approx(0.46, abs=3e-3)
+
+
+def test_the_split_by_technique_does_not_depend_on_the_names_of_the_runs():
+    """b read by qPCR in one pair and by fc in another: the qPCR part holds the qPCR pair whatever it is
+    called, and the monocultures read the same way serve every part they agree with. A first-fit by name
+    moved the pair to the other part when it was renamed (found in a fourth review)."""
+    def parts(name):
+        second = _chemostat("E4", "a with b again", ["a", "b"], [(7, "V1"), (8, "V2")], description=RUN)
+        client, exps = _runs([second], {(i, s): _startup(0.5 if s == "a" else 0.3, 0.04, 4.0,
+                                                          PAIR_A if s == "a" else 2 * PAIR_B)
+                                        for i in (7, 8) for s in ("a", "b")})
+        exps[2]["name"] = name
+        _retag(client, "b", "fc", bioreplicates={7, 8})
+        return {g["techniques"]["b"]: sorted(c["name"] for c in g["communities"])
+                for g in chemostat_groups(client, exps)}
+    plain, renamed = parts("a with b"), parts("z: a with b")
+    assert plain["qpcr"] == ["a alone", "a with b", "b alone"]
+    assert renamed["qpcr"] == ["a alone", "b alone", "z: a with b"]
+    assert "a alone" in plain["fc"] and "a alone" in renamed["fc"]

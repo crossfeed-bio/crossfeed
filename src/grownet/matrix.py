@@ -372,6 +372,10 @@ def for_nodes(net: InteractionNetwork, rates: dict, current: dict | None = None)
                     "per_study": {}, "other_units": [f"{r.get('name', '')}: {u}" for r in members
                                                      for u in r.get("other_units") or ()],
                     "method": members[0].get("method", ""),
+                    # the package's dilution rate, which every strain's steady-state rate shares: without it
+                    # a genus's cells took arcs at every dilution rate (found in a fourth review)
+                    "dilution": next(iter({r["dilution"] for r in members if r.get("dilution") is not None}),
+                                     None),
                     **capacity,
                     # replicates and plateau curves are counted, and the capacity's provenance kept, as a
                     # strain row has them, rather than the fitted-row counts `n` stands for
@@ -1055,12 +1059,14 @@ _STEADY_DILUTION = r"chemostat, D ([0-9.eE+-]+) per h"
 
 
 def _steady_dilutions(edge) -> set:
-    """The dilution rates a steady-state arc was fitted at, from its condition (`SteadyStateDeriver` writes
-    "chemostat, D <d> per h, ..."; a merged arc joins several); empty for any other derivation's arc."""
+    """The dilution rates a steady-state arc was fitted at, as its condition writes them (`SteadyStateDeriver`
+    writes "chemostat, D <d:g> per h, ..."; a merged arc joins several); empty for any other derivation's arc.
+    Compared as written, with the package's D written the same way: a D of 1/24 read back from the label as
+    0.0416667 never equalled 0.041666666..., and every cell was left out (found in a fourth review)."""
     import re
     if not str(getattr(edge, "metric", "") or "").startswith("steady_state"):
         return set()
-    return {float(d) for d in re.findall(_STEADY_DILUTION, getattr(edge, "condition", "") or "")}
+    return set(re.findall(_STEADY_DILUTION, getattr(edge, "condition", "") or ""))
 
 
 def _pair_values(net: InteractionNetwork, rates: dict = None, home: dict = None) -> tuple:
@@ -1080,12 +1086,14 @@ def _pair_values(net: InteractionNetwork, rates: dict = None, home: dict = None)
         # cells mixed two dilution rates while the README said one, found in a third review)
         package_d = ((rates or {}).get(edge.target) or {}).get("dilution")
         fitted_at = _steady_dilutions(edge)
-        if package_d is not None and fitted_at and fitted_at != {package_d}:
+        if package_d is not None and fitted_at and fitted_at != {f"{package_d:g}"}:
             entry = per_pair.setdefault((edge.target, edge.source), {"by_unit": {}, "reasons": [], "censored": {},
                                                                       "how": {}, "media": {}, "directions": []})
+            merged = (" (a merge, Merge parallel arcs or Merge to genus, joined arcs at several dilution rates: "
+                      f"derive without it to keep those at {package_d:g} per h)" if len(fitted_at) > 1 else "")
             entry["reasons"].append(f"this arc was fitted at the dilution rate "
-                                    f"{', '.join(f'{d:g}' for d in sorted(fitted_at))} per h, and the package is "
-                                    f"at {package_d:g} per h, one chemostat")
+                                    f"{', '.join(sorted(fitted_at, key=float))} per h, and the package is "
+                                    f"at {package_d:g} per h, one chemostat{merged}")
             continue
         quantified = edge.strength is not None
         censored = _reports_an_extreme(edge)
@@ -1423,6 +1431,12 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             left_out.append((name, "its row was fitted in units of its own r_i - D, which its chemostat "
                                    "start-up did not give, so neither its own limitation nor the effects on it "
                                    "can be put in 1/(time x abundance)"))
+        elif rate.get("rate") is None and derivation_of(net) == "steady":
+            # its row was not determined at the package's dilution rate; the batch sentence about arcs that
+            # say an organism grows only with a partner was false of it (found in a fourth review)
+            left_out.append((name, "no row of it with a scale was determined at the package's dilution rate, "
+                                   "so it has no rate r_i - D here; the derivation's reasons say what the "
+                                   "design lacked"))
         elif rate.get("rate") is None:
             left_out.append((name, "no growth rate, and no arc saying it grows only with a partner, so "
                                    "neither its own limitation nor the effect of anything on it can be "
@@ -1749,8 +1763,9 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "  interaction_matrix.<unit>.csv  one matrix per abundance unit, named after it; the header row",
         "                          and the first column are the organisms",
         "  growth_rates.csv        one growth rate per organism, with the estimator, the lag and the",
-        "                          monoculture carrying capacity behind it, and the doubling time the",
-        "                          rate implies, ln(2) / r, in the time unit of the rate",
+        "                          monoculture carrying capacity behind it (under the steady-state",
+        "                          derivation: r_i - D, no lag, and the capacity its row implies), and",
+        "                          ln(2) / r, in the time unit of the rate",
         "  MATCH THE TWO BY THE ORGANISM COLUMN, NEVER BY POSITION. growth_rates.csv holds every",
         "      organism with a rate, in one order; each matrix holds only its own unit's organisms, in",
         "      its own order. Rows 1 to n of the rates file are not the rates of an n x n matrix, and a",

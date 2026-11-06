@@ -669,7 +669,9 @@ def _empty_reason(result: dict, command_line: bool = False) -> str:
     s = result.get("settings", {})
     # the steady-state derivation's own lead, in place of the replicate comparison's sentences about pairwise
     # co-cultures and drop-out designs, which say nothing about chemostat steady states (2026-11-06)
-    if s.get("derivation") == "steady" and not result.get("errors") and result.get("studies"):
+    from .subcommunity import determined_any
+    if (s.get("derivation") == "steady" and not result.get("errors") and result.get("studies")
+            and not determined_any(result.get("skipped", ()))):
         from .subcommunity import empty_reason as steady_reason
         reason = _esc(steady_reason(result.get("skipped", ()), command_line=command_line))
     # the integrated form fits a row from a time course, so a sparsely sampled study gives it nothing
