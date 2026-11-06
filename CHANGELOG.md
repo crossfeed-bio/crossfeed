@@ -6,6 +6,12 @@ content.
 
 ## [Unreleased]
 
+### Changed
+
+- **No GitHub issue numbers in what a user sees** (Karoline, 2026-11-06: "in general: users don't need to see
+  github issue numbers anywhere"). They are gone from the page, the help, the command line's help and
+  messages, the R package's help and the README, and a test keeps new ones out.
+
 
 ## [0.5.0] (2026-10-14)
 
