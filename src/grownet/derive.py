@@ -1778,6 +1778,13 @@ def _merged(arcs: list) -> dict:
     coefficients = [a.get("coefficient") for a in arcs]
     if all(c is not None for c in coefficients) and len({a.get("coefficient_unit") for a in arcs}) == 1:
         one_comparison["coefficient"] = median(coefficients)
+    # a member in units of its own r_i - D (a steady-state row without a scale) keeps the merged arc out of a
+    # matrix of 1/(time x abundance): merged with scaled members, its unit was "" and its cell came from the
+    # median log2 ratio times another study's rate (found in a sixth review)
+    unscaled = next((a.get("coefficient_unit") for a in arcs
+                     if "in units of r_i - D" in (a.get("coefficient_unit") or "")), None)
+    if unscaled:
+        one_comparison["coefficient_unit"], one_comparison["coefficient"] = unscaled, None
     return {**arcs[0], **one_comparison,
             # what was measured and over how long, only where every merged arc agrees; and never one
             # removal's difference from its group, which a merged arc is not

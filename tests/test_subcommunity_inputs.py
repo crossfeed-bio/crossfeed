@@ -206,16 +206,19 @@ def test_each_organism_keeps_its_own_technique_and_the_design_stays_one_group():
     assert fit(group["communities"], draws=0)["rows"]["a"]["status"] == "identified"
 
 
-def test_an_organism_read_by_two_techniques_splits_the_runs_and_says_why():
+def test_an_organism_read_by_two_techniques_keeps_the_runs_of_one_and_names_the_others():
     """b by flow cytometry in its monoculture and by qPCR in the pair: b's abundance is not one quantity
-    across them, so the runs are fitted apart by technique, and the reason names b and both techniques."""
+    across them, so one technique is kept for b in this fit (most runs, then most vessels, then the first by
+    name: a tie here, so fc) and the run reading it otherwise is left out and named. Fitting each technique
+    apart and putting the parts back together downstream mixed them in the package (found in a sixth
+    review)."""
     client, exps = _runs()
     _retag(client, "b", "fc", bioreplicates={3, 4})
-    groups = chemostat_groups(client, exps)
-    assert len(groups) == 2
-    said = " ".join(why for g in groups for _, why in g["left_out"])
-    assert "b by fc and qpcr" in said
-
+    (group,) = chemostat_groups(client, exps)
+    assert group["techniques"] == {"a": "qpcr", "b": "fc"}
+    assert sorted(c["name"] for c in group["communities"]) == ["a alone", "b alone"]
+    said = " ".join(why for _, why in group["left_out"])
+    assert "reads b by qpcr, where the other runs of this medium and dilution rate read it by fc" in said
 
 def test_runs_reading_the_same_organisms_by_swapped_techniques_are_fitted_apart():
     """One run of a with b reads a by fc and b by qPCR, a second the other way round: splitting by the run's
@@ -248,20 +251,28 @@ def test_a_lag_that_leaves_the_batch_period_a_low_rate_is_read_from_the_rise_aft
     assert row_scale(_curve(lagged), 0.04, period)["scale"] == pytest.approx(0.46, abs=3e-3)
 
 
-def test_the_split_by_technique_does_not_depend_on_the_names_of_the_runs():
-    """b read by qPCR in one pair and by fc in another: the qPCR part holds the qPCR pair whatever it is
-    called, and the monocultures read the same way serve every part they agree with. A first-fit by name
-    moved the pair to the other part when it was renamed (found in a fourth review)."""
-    def parts(name):
+def test_the_technique_kept_does_not_depend_on_the_names_of_the_runs():
+    """b read by qPCR in two runs and by fc in one: qPCR is kept for b whatever the runs are called, and the
+    fc run is left out (a first-fit by name once moved a pair from one fit to another, found in a fourth
+    review)."""
+    def kept(name):
         second = _chemostat("E4", "a with b again", ["a", "b"], [(7, "V1"), (8, "V2")], description=RUN)
         client, exps = _runs([second], {(i, s): _startup(0.5 if s == "a" else 0.3, 0.04, 4.0,
                                                           PAIR_A if s == "a" else 2 * PAIR_B)
                                         for i in (7, 8) for s in ("a", "b")})
         exps[2]["name"] = name
         _retag(client, "b", "fc", bioreplicates={7, 8})
-        return {g["techniques"]["b"]: sorted(c["name"] for c in g["communities"])
-                for g in chemostat_groups(client, exps)}
-    plain, renamed = parts("a with b"), parts("z: a with b")
-    assert plain["qpcr"] == ["a alone", "a with b", "b alone"]
-    assert renamed["qpcr"] == ["a alone", "b alone", "z: a with b"]
-    assert "a alone" in plain["fc"] and "a alone" in renamed["fc"]
+        (group,) = chemostat_groups(client, exps)
+        return group["techniques"]["b"], sorted(c["name"] for c in group["communities"])
+    assert kept("a with b") == ("qpcr", ["a alone", "a with b", "b alone"])
+    assert kept("z: a with b") == ("qpcr", ["a alone", "b alone", "z: a with b"])
+
+
+def test_a_run_whose_vessels_read_one_organism_two_ways_is_left_out():
+    """V1 reads b by qPCR and V2 by flow cytometry: the run's mean would average two quantities, so it is left
+    out and named (found in a sixth review)."""
+    client, exps = _runs()
+    _retag(client, "b", "fc", bioreplicates={6})
+    (group,) = chemostat_groups(client, exps)
+    assert "a with b" not in [c["name"] for c in group["communities"]]
+    assert any("its vessels read b by fc; qpcr" in why for _, why in group["left_out"])

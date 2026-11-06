@@ -835,9 +835,11 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
             # the steady-state derivation repeats a row's scale and own term on every arc of the row, so a row
             # with more partners weighed more in the median: one value per row, an organism's in one study and
             # chemostat group (found in a fourth review: 0.39 from three rows of 0.46, 0.32 and 0.30)
-            # one per study, dilution rate and medium: a split by technique gives the same organism's row in
-            # each part, under conditions that differ only in the techniques named (found in a fifth review)
-            row = (nid, record.get("study_id", ""), record.get("fitted_rate_dilution"), record.get("medium", ""))
+            # keyed by study, dilution rate, medium, and the unit and technique of its own term: two fits that
+            # differ in those are two rows, and the capacity rule chooses between them (dropping the unit kept
+            # the first one read, found in a sixth review)
+            row = (nid, record.get("study_id", ""), record.get("fitted_rate_dilution"), record.get("medium", ""),
+                   record.get("fitted_self_unit", ""), record.get("fitted_self_technique", ""))
             if row in seen_rows:
                 continue
             seen_rows.add(row)

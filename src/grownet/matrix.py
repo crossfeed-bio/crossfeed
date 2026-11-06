@@ -1038,6 +1038,11 @@ def _per_arc(edge, fallback_rate: float | None = None) -> tuple:
     """
     if edge.partner_abundance in (None, 0):
         return None, ""
+    # a steady-state row without its own scale has no number in 1/(time x abundance): it borrowed another
+    # study's rate through the log2 fallback, and the README filed it as a network saved before rates were
+    # recorded (found in a sixth review); it is named among the cells not filled instead
+    if "in units of r_i - D" in (edge.coefficient_unit or ""):
+        return None, ""
     if edge.metric_with is not None and edge.metric_without is not None:
         return (edge.metric_with - edge.metric_without) / edge.partner_abundance, "rates"
     # a merged arc is the median of several comparisons and carries no single one's two rates: its fitted

@@ -56,7 +56,8 @@ content.
   larger of two readings, the batch period's rise less D and the rise after the pump started, so a lag in
   a short batch period no longer halves it; it is an estimate, which noise pulls high, and the help says
   so. The bootstrap draws the statistic the fit uses (the mean) and is widened for few replicates. Each
-  organism must be read by one technique within a fit. The rates say they are `r_i - D` from a chemostat
+  organism is read by one technique within a fit: the runs using its more common technique are kept and
+  the others named. The rates say they are `r_i - D` from a chemostat
   start-up rather than batch rates; with no row scaled, no batch rate is read in their place, and the
   command line's report says so; the package takes one dilution rate for every organism, the one most rows
   were fitted at, whatever the order the studies were read in. An empty result after the second box or the

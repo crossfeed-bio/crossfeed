@@ -486,60 +486,48 @@ def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
 
 
 def _by_technique(groups) -> list:
-    """Each group as it is where every organism was read by one technique throughout it, with `techniques`
-    {organism: technique} and `technique` the set; otherwise split by how the organisms read two ways are read,
-    named. Grouping every run by its run-level technique split a design where each organism keeps its own
-    technique (a by qPCR, b by flow cytometry) into three groups that determined nothing (found in a second
-    review)."""
+    """Each group with every organism read by ONE technique throughout it: `techniques` {organism: technique}
+    and `technique` the set. A run whose vessels read one organism by two techniques is left out and named;
+    where an organism is read by one technique in some runs and another in others, the runs reading it by
+    its more common technique (most runs, then most vessels, then the first by name) are kept and the others
+    left out and named.
+
+    One technique per organism per fit, never parts: splitting the runs into parts by technique and fitting
+    each was put back together downstream, where only the abundance unit is known, so a cell took the median
+    of a qPCR and a flow-cytometry coefficient and the package settled where nothing was observed (found in a
+    sixth review, after the split had been rebuilt in the third, fourth and fifth)."""
     out = []
     for g in groups:
-        per: dict = {}
+        left = list(g["left_out"])
+        kept = []
         for c in g["communities"]:
-            for m, t in c.get("techniques", {}).items():
-                per.setdefault(m, set()).add(t)
-        mixed = {m: ts for m, ts in per.items() if len(ts) > 1}
-        if not mixed:
-            g["techniques"] = {m: next(iter(ts)) for m, ts in per.items()}
-            g["technique"] = "; ".join(sorted({t for ts in per.values() for t in ts}))
-            out.append(g)
-            continue
-        said = "; ".join(f"{m} by {' and '.join(sorted(ts))}" for m, ts in sorted(mixed.items()))
-        # The parts are the ways the organisms read two ways are read, and each run joins EVERY part it reads
-        # the same way, so the split does not depend on the order or the names of the runs (a first-fit by name
-        # moved a pair's arcs from one part to the other when the run was renamed, found in a fourth review),
-        # and a run that agrees with several parts, a monoculture of an organism read one way, serves each.
-        # Splitting by the run's set of techniques put a run reading a by fc and b by qpcr beside one reading
-        # them the other way round (found in a third review).
-        def agree(x: dict, y: dict) -> bool:
-            return all(y.get(m, t) == t for m, t in x.items())
-        keys = {tuple(sorted((m, t) for m, t in c.get("techniques", {}).items() if m in mixed))
-                for c in g["communities"]}
-        assignments: list = []
-        for key in sorted(keys, key=lambda k: (-len(k), k)):
-            for part in assignments:
-                if agree(dict(key), part):
-                    part.update(dict(key))
-                    break
+            two = sorted(m for m, t in c.get("techniques", {}).items() if "; " in t)
+            if two:
+                left.append((c["name"], "left out: its vessels read " + ", ".join(
+                    f"{m} by {c['techniques'][m]}" for m in two) + ", and one organism's abundance by two "
+                    "techniques is not one quantity"))
             else:
-                assignments.append(dict(key))
-        parts = []
-        for assignment in assignments:
-            communities = [c for c in sorted(g["communities"], key=lambda c: c["name"])
-                           if agree({m: t for m, t in c.get("techniques", {}).items() if m in mixed}, assignment)]
-            techniques = {m: next(iter(ts)) for m, ts in per.items() if m not in mixed} | assignment
-            parts.append({"techniques": {m: t for m, t in techniques.items()
-                                         if any(m in c.get("techniques", {}) for c in communities)},
-                          "communities": communities})
-        for k, part in enumerate(parts):
-            techniques, communities = part["techniques"], part["communities"]
-            t = ", ".join(f"{m} by {tech}" for m, tech in sorted(techniques.items()))
-            out.append({**g, "communities": communities, "technique": t, "techniques": techniques,
-                        "split_on": sorted(mixed),
-                        "scales": dict(g["scales"]),
-                        "left_out": (list(g["left_out"]) if k == 0 else []) + [
-                            (f"runs measured by {t}", f"fitted apart from the runs measured otherwise, since in "
-                                                      f"this medium and dilution rate {said}, and one organism's "
-                                                      "abundance by two techniques is not one quantity")]})
+                kept.append(c)
+        runs: dict = {}
+        for c in kept:
+            for m, t in c.get("techniques", {}).items():
+                tally = runs.setdefault(m, {}).setdefault(t, [0, 0])
+                tally[0] += 1
+                tally[1] += len(c.get("vessels") or [None])
+        chosen = {m: min(ts, key=lambda t: (-ts[t][0], -ts[t][1], t)) for m, ts in runs.items()}
+        final = []
+        for c in kept:
+            other = sorted(m for m, t in c.get("techniques", {}).items() if t != chosen[m])
+            if other:
+                left.append((c["name"], "left out: it reads " + ", ".join(
+                    f"{m} by {c['techniques'][m]}, where the other runs of this medium and dilution rate read it "
+                    f"by {chosen[m]}" for m in other) + "; one technique per organism in a fit, the one most runs "
+                    "use"))
+            else:
+                final.append(c)
+        techniques = {m: chosen[m] for m in sorted({m for c in final for m in c.get("techniques", {})})}
+        out.append({**g, "communities": final, "left_out": left, "techniques": techniques,
+                    "technique": "; ".join(sorted(set(techniques.values())))})
     return out
 
 
@@ -714,11 +702,6 @@ class SteadyStateDeriver:
         identities = strain_identities(exps, [])
         records, skipped = [], []
         exps = select_experiments(exps, self.selection, skipped, study_id=study_id)
-        # the arcs already given by an earlier part of a split by technique, by medium, unit and dilution rate:
-        # an arc between two organisms each read one way is the same measurement in every part, and given once
-        # per part it was counted twice in the cells, the rates and the capacities, so reading one organism
-        # by flow cytometry in one run changed another's numbers (found in a fifth review)
-        given: set = set()
         for group in chemostat_groups(self.client, exps, self.spike_factor):
             label = (f"chemostat, D {group['dilution']:g} per h, {group['medium']}, {group['unit']}"
                      + (f", {group['technique']}" if group.get("technique") else ""))
@@ -750,12 +733,6 @@ class SteadyStateDeriver:
                 for j, b in row["values"].items():
                     if j == i:
                         continue
-                    family = (group["dilution"], group["medium"], group["unit"], i, j)
-                    split_on = group.get("split_on") or ()
-                    if i not in split_on and j not in split_on:
-                        if family in given:
-                            continue
-                        given.add(family)
                     holding = [c for c in communities if (c["abundance"].get(i) or 0) > 0
                                and (c["abundance"].get(j) or 0) > 0]
                     largest = max(holding, key=lambda c: (len([v for v in c["abundance"].values() if v > 0]),
@@ -810,6 +787,9 @@ class SteadyStateDeriver:
                         "fitted_rate_dilution": group["dilution"],
                         "fitted_self": (s_i * row["values"][i]) if s_i is not None else row["values"][i],
                         "fitted_self_unit": group["unit"],
+                        # the technique the organism's own abundance was read by, which the capacity rule keys on
+                        # (it was never set, so plateaus by two techniques were pooled, found in a sixth review)
+                        "fitted_self_technique": group["techniques"].get(i, ""),
                         "partner_abundance": x, "partner_abundance_unit": group["unit"],
                         "partner_abundance_n": len(largest.get("vessels") or []),
                         "study_id": study_id, **study_meta,

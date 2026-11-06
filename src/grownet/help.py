@@ -1216,10 +1216,12 @@ chemostat check reads (the mean over the last quarter of each vessel; a run in w
 changes by more than a tenth between the two halves of that quarter is not at a steady state, and is left
 out and named), one fit per study, medium, abundance
 unit and dilution rate (runs of two studies are never fitted together, as every derivation reads one study
-at a time), each organism read by one technique within it (runs that read an organism two ways are
-fitted apart). A run whose description does not say it is unperturbed is left out and named, and so is a
-run with a member that could not be read. Runs that end with the same organisms present are one community,
-their runs pooled: they reach one steady state, so they give one equation, not several.</li>
+at a time), each organism read by one technique within it: where an organism is read one way in some
+runs and another way in others, the runs using its more common technique are kept and the others left out
+and named, and so is a run whose vessels read one organism two ways. A run whose description does not say
+it is unperturbed is left out and named, and so is a run with a member that could not be read. Runs that
+end with the same organisms present are one community, their runs pooled: they reach one steady state, so
+they give one equation, not several.</li>
 <li><strong>Effective coefficients.</strong> An effect that needs a third organism is folded into the
 pairs that carry it, so a coefficient describes the communities it was fitted from, and its arcs carry
 evidence <code>steady_state</code>. Each community is also predicted by a fit made without it, and the

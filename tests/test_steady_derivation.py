@@ -758,3 +758,42 @@ def test_an_arc_merged_across_dilution_rates_still_counts_in_the_pair_s_sign():
     order = block["organisms"]
     assert block["matrix"][order.index("Bacteroides")][order.index("Prevotella")] == 0
     assert ("Bacteroides", "Prevotella") in [tuple(p) for p in block["conflicts"]]
+
+
+def test_rows_record_their_own_technique_and_two_units_are_two_rows():
+    """The capacity rule keys on the technique and unit of an organism's own term: steady rows never set the
+    technique, so plateaus by two techniques were pooled, and the row key dropped the unit, so of two fits in
+    two units the first read was kept and nothing named (found in a sixth review)."""
+    from grownet import integrated
+    from grownet.subcommunity import METRIC
+    records, _ = _derive()
+    assert {r["fitted_self_technique"] for r in records} == {"qpcr"}
+    od = [{**r, "fitted_self_unit": "OD", "partner_abundance_unit": "OD", "condition": r["condition"] + " (OD)"}
+          for r in records]
+    a = next(r for r in integrated.fitted_rates(records + od, METRIC).values() if r["name"] == "a")
+    assert a["n"] == 2
+
+
+def test_a_row_without_a_scale_does_not_borrow_another_study_s():
+    """b's row in S1 has no scale; S2 (same medium and dilution rate) gives b one. S1's arc on b is in units
+    of r_b - D and stays out of the cell, named; it entered it through the log2 fallback multiplied by S2's
+    rate, filed as a network saved before rates were recorded (found in a sixth review)."""
+    import copy
+
+    from grownet import integrated, matrix
+    from grownet.subcommunity import METRIC
+    client, exps = _runs()
+    exps = copy.deepcopy(exps)
+    exps[1]["description"] = "No perturbations."
+    unscaled, _ = SteadyStateDeriver(client=client).derive({"id": "S1", "name": "x"}, exps)
+    records = unscaled + _at_dilution(0.04, "S2")
+    net = records_to_network(records, meta={"settings": {**gui.DEFAULTS, "derivation": "steady"}})
+    rates = matrix.for_nodes(net, integrated.fitted_rates(records, METRIC), {})
+    got = matrix.coefficients(net, rates)
+    (block,) = got["matrices"]
+    order = block["organisms"]
+    assert block["matrix"][order.index("b")][order.index("a")] == pytest.approx(0.26 * -0.1 / UNIT, rel=1e-6)
+    named = " ".join(why for *_, why in got["arcs_left_out"])
+    assert "in units of b's r_i - D" in named or "units of r_i - D" in named
+    readme = matrix.readme_from(got, net, rates)
+    assert "network derived before the two absolute rates" not in readme
