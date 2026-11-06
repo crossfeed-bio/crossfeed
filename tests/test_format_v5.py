@@ -191,3 +191,16 @@ def test_a_steady_state_arc_records_how_its_runs_were_measured():
     from test_steady_derivation import _derive
     records, _ = _derive()
     assert records and {r["technique"] for r in records} == {"qpcr"}
+
+
+def test_a_steady_state_arc_records_its_own_target_s_technique():
+    """a read by qPCR and b by flow cytometry throughout: one fit, and each arc records how its TARGET was
+    measured, as every arc of /v5 does, not the group's set of techniques."""
+    from test_subcommunity_inputs import _retag, _runs
+
+    from grownet.subcommunity import SteadyStateDeriver
+    client, exps = _runs()
+    _retag(client, "b", "fc")
+    records, _ = SteadyStateDeriver(client=client).derive({"id": "S1", "name": "x"}, exps)
+    by_target = {r["target_name"]: r["technique"] for r in records}
+    assert by_target == {"a": "qpcr", "b": "fc"}
