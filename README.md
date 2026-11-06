@@ -167,7 +167,7 @@ python -m grownet schema [--out FILE]
   live run can carry the same format and entirely different networks.
 - `derive --live --conditions NAME ...` without `--species` or a study does what the page does with the
   species box empty and the second box filled: every species in those media, experiments or studies,
-  with every partner (#300).
+  with every partner.
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of either built-in one (see below).
 - The command line does everything the local page does: every advanced setting has its option, and the
@@ -224,7 +224,7 @@ python -m grownet gui
 resolves them to taxon ids from mGrowthDB's own strain records, finds the studies holding them, derives
 the interactions, and shows them as a table. Leave the first box empty and every species in what the
 second box names is derived, with every partner; leave both empty for the whole of mGrowthDB, All, which
-with the default settings is the network derived once a day and otherwise is derived live (#300). The
+with the default settings is the network derived once a day and otherwise is derived live. The
 second box is optional and says **where** to look: a medium,
 matched as text against the medium name mGrowthDB records, the experiment description and its name (so
 `wilkins` finds every spelling of Wilkins-Chalgren), an experiment id or a study id. Naming a comparison

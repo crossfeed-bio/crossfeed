@@ -366,7 +366,7 @@ derived from mGrowthDB growth data on this machine; nothing is uploaded.</p>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in selecting.EXAMPLES)}</p>
 <textarea id="conditions" name="conditions" rows="5">{_esc(conditions)}</textarea>
 <p class="hint">With the species box empty, every species in what this box names is searched; the gLV
-example button fills it and leaves it filled, so clear it to derive the whole of mGrowthDB (#193).
+example button fills it and leaves it filled, so clear it to derive the whole of mGrowthDB.
 One per line. A medium is matched as text, so "wilkins" finds every spelling of
 Wilkins-Chalgren <em>and</em> every variant of it: a medium with a sugar added or a carbon source left out
 is another environment, so those stay apart and the report names every medium the search read. An id
