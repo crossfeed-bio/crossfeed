@@ -6,6 +6,15 @@ content.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The second box now applies under the integrated derivation too.** Media, experiments and studies named
+  there reached the default derivation alone, so in gLV mode naming a medium changed nothing, although the
+  mode's own message says it keeps a simulation to one environment. Measured live: Bacteroides and
+  Roseburia with every partner, `--conditions EMGDB000000024 --derivation integrated` gave 7 arcs from 12
+  experiments, now the 2 arcs of that co-culture and its 2 monocultures, which is what the default
+  derivation gives; with `--conditions mucin`, 7 arcs became 0, as with the default derivation. A
+  derivation plugged in with `--deriver` is now given the selected experiments only.
 
 ## [0.5.0] (2026-10-14)
 
