@@ -183,3 +183,11 @@ def test_a_genus_node_lists_its_strains_from_every_arc_of_the_genus():
     assert len(net.edges) == 2
     assert net.nodes["Alpha"].merged_nodes == ("ncbi:1", "ncbi:3")
     assert (net.nodes["Beta"].merged_nodes, net.nodes["Gamma"].merged_nodes) == (("ncbi:2",), ("ncbi:4",))
+
+
+def test_a_steady_state_arc_records_how_its_runs_were_measured():
+    """The steady-state derivation's arcs carry the technique of their chemostat group, as every arc of
+    /v5 does: they had an empty one (found in review). The invented runs are all qPCR."""
+    from test_steady_derivation import _derive
+    records, _ = _derive()
+    assert records and {r["technique"] for r in records} == {"qpcr"}
