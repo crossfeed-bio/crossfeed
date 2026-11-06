@@ -631,6 +631,37 @@ honest note on method: the first comparison of R2 between the two variants was i
 predictor that scores a fit omitted the fitted constant, so the intercept's fits were scored without the
 parameter they had. No R2 comparison is quoted above for that reason.
 
+### A third derivation, from chemostat steady states of sub-communities (2026-11-06, #310)
+
+Karoline: "can we have a third inference method just for gLV mode and chemostat, off by default ... The
+idea here is to parameterize the gLV from steady-state abundances of sub-communities" (EPICS, Ansari et al.
+2021, Nature Computational Science 1:619). Her decisions, on #310:
+
+1. **Chemostat steady states only** ("Yes on 1"): unperturbed runs, at the chemostat check's tail mean, one
+   fit per medium (by `media_identity`), abundance unit and dilution rate.
+2. **Every sub-community, not only leave-one-out** ("EPICS is a strict scheme on leave-one-out [...] could we
+   have something more flexible that would try parameterisation on all available sub-communities?"). Each
+   community gives `1 + sum_j B_ij N_j = 0` per member present, `B = A / (r_i - D)`; each row is a least
+   squares over all of its equations, its diagonal with the rest, gated by the integrated form's condition
+   limit. Each community is also predicted by a fit made without it.
+3. **The row scale `r_i - D` from the chemostat itself** ("Mono-culture growth rates from batch are tricky,
+   because they change in chemostat"; "chemostat is not always switched on directly, so it would mean
+   checking experiment description for a batch period"): from a monoculture chemostat's start-up, inside a
+   stated batch period (r_i, less D) or with the pump on from inoculation (`r_i - D` directly); otherwise the
+   row stays scaled.
+4. Only identified coefficients; washed-out organisms and undetermined coefficients named.
+5. Strength `log2(1 + B_ij x_j*)` at the partner's abundance in the largest community holding both; spread
+   a bootstrap over vessels, none (undetermined) for a row resting on a single vessel.
+6. Synthetic fixtures in the repository; validation on published data local only.
+
+Measured before building, locally on Venturelli et al. 2018's fitted 12-species gLV (Mol Syst Biol, Code
+EV1 model T4, CC BY 4.0; nothing of theirs in git): simulated to steady state, only 6 of the 12 coexist, so
+the strict leave-one-out design identifies 0 of the 132 off-diagonal coefficients; with the 66 pairs added,
+128, exact to 2e-12; the six that coexist, as their own community, 30 of 30. Their measured data (Dataset
+EV3) has the leave-one-out design but is relative abundance only, from serial batch transfers, with no
+monocultures, and its CA- and CH- blocks are identical; it cannot be a test case. mGrowthDB holds no such
+design today: SMGDB00000005's control and SMGDB00000011's run each give one community.
+
 ## Open decisions
 
 - **OPEN, 2026-10-11 (#266): one format bump to `/v4`, or none.** Three things a reader who did not run
