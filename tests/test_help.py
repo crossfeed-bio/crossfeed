@@ -203,6 +203,8 @@ def test_a_genus_node_keeps_no_strain_id_and_says_so():
     node = net.nodes["Lachnoclostridium"]
     assert (node.name, node.identity, node.taxon_id, node.species, node.taxon_id_refused) == \
         ("Lachnoclostridium", "genus", "", "", "")
+    # the strains it stands for are kept since #306 (Karoline: "Yes, add it"), by node id
+    assert node.merged_nodes == ("lachnoclostridium clostridioforme", "lachnoclostridium symbiosum")
     (arc,) = net.edges
     # what the arc keeps instead: the pairs behind it by name, and the community members' strain ids
     assert tuple(arc.merged_pairs) == ("Lachnoclostridium clostridioforme -> Bacteroides ovatus",
@@ -212,7 +214,7 @@ def test_a_genus_node_keeps_no_strain_id_and_says_so():
     section = visible(PAGE[PAGE.index('id="merged-nodes"'):PAGE.index('id="decisions"')])
     for field in (f.name for f in dataclasses.fields(model.Node)):
         assert field in section, field
-    assert "strain ids are not kept on the node" in " ".join(section.split())
+    assert "merged_nodes lists the strains it stands for" in " ".join(section.split())
     for where in ("merged_pairs", "supporting_pairs", "community"):
         assert where in section, where
 

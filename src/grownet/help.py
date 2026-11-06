@@ -1383,14 +1383,15 @@ its genus, and a genus node is the genus itself:</p>
 <ul>
 <li>{_name("id")} and {_name("name")} are the genus, the first word of the name mGrowthDB gives
 (<em>[Clostridium]</em> apart from <em>Clostridium</em>), and {_name("identity")} is <code>genus</code>.</li>
+<li>{_name("merged_nodes")} lists the strains it stands for, by their node ids, sorted: every strain of
+the genus among the network's arcs.</li>
 <li>{_name("taxon_id")}, {_name("species")} and {_name("taxon_id_refused")} are empty, since they
 describe one strain, and {_name("taxonomy")} and {_name("model_ref")} are empty as on every node.</li>
 </ul>
-<p>So <strong>strain ids are not kept on the node</strong>. What the merge keeps of the strains is on the
-arcs: {_name("merged_pairs")} names the pairs behind a genus arc, as species pairs or, when only taxon ids
-were entered, as strain pairs, and {_name("supporting_pairs")} counts them; a drop-out arc's
-{_name("community")} still lists the members by their strain ids, which are not nodes of a genus network.
-To see which strains a genus stands for, derive the same search with Merge to genus off.</p>
+<p>The arcs say which of those strains each one rests on: {_name("merged_pairs")} names the pairs behind
+a genus arc, as species pairs or, when only taxon ids were entered, as strain pairs, and
+{_name("supporting_pairs")} counts them; a drop-out arc's {_name("community")} lists the members by their
+strain ids, which are not nodes of a genus network but are in their genus node's merged_nodes.</p>
 
 <h2 id="decisions">Why it works this way</h2>
 <p>The main choices behind the method, each settled on the issue named (in the
