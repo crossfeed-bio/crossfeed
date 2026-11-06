@@ -23,7 +23,8 @@ content.
 
 - **A genus node no longer carries one of its strains' `taxon_id_refused`.** With Merge to genus on, the
   live Lachnoclostridium node said taxon id 1506553 was refused, a statement about one strain on a node that
-  carries no taxon id.
+  carries no taxon id. A network saved with Merge to genus on by an earlier version carries that wrong
+  field; derive it again to correct it.
 
 
 ## [0.5.0] (2026-10-14)
