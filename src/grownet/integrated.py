@@ -795,7 +795,7 @@ def _stage_set(study: str, record: dict):
     monocultures = tuple(sorted((record.get("experiments") or [])[1:]))
     return (study, monocultures)
 
-def fitted_rates(records: list) -> dict:
+def fitted_rates(records: list, method: str = METRIC) -> dict:
     """{node id: the rate entry a package takes} from the arcs of an integrated run.
 
     The fit gives `r_i` and `A_ii`, so the plateau it implies is `K_i = -r_i / A_ii`: an organism on its
@@ -824,9 +824,19 @@ def fitted_rates(records: list) -> dict:
             "capacity_unit": "", "capacities": [], "capacity_points": [], "capacity_per_study": {},
             "other_capacity_units": [], "unit_left_out": [], "r2": [], "conditions": [], "self_sources": [],
             "media": [],
-            "stage_n": {}, "by_medium": {}})
+            "stage_n": {}, "by_medium": {}, "dilution": record.get("fitted_rate_dilution")})
         study = record.get("study_id", "")
         unit = record.get("fitted_rate_unit", "1/h")
+        dilution = record.get("fitted_rate_dilution")
+        if dilution != at["dilution"]:
+            # the steady-state derivation's rate is r_i - D, which is a different number at each dilution
+            # rate: the median of 0.46 at D 0.04 and 0.30 at D 0.2 was 0.38, r_i - D at neither (found in
+            # review). The first dilution rate read is the package's, and the others are named, as a rate in
+            # another time unit is. The other derivations record none, so this never fires for them.
+            named = f"{study} (r_i - D at another dilution rate, {dilution:g} per h)"
+            if named not in at["other_units"]:
+                at["other_units"].append(named)
+            continue
         if unit != at["unit"]:
             # a rate in another time unit is not converted, and its row's plateau stays: K = -r/A_ii has no
             # time unit when r and A_ii come from one fit, as `derive.merge_rates` keeps such a study's
@@ -942,7 +952,7 @@ def fitted_rates(records: list) -> dict:
             # sorted, so the whole entry is a function of the rows and not of the order they arrived in
             "studies": sorted(at["studies"]),
             "per_study": {study: statistics.median(values) for study, values in at["per_study"].items()},
-            "other_units": at["other_units"], "method": METRIC, "lag": None, "lag_method": "",
+            "other_units": at["other_units"], "method": method, "lag": None, "lag_method": "",
             "capacity": statistics.median(chosen["values"]) if chosen else None,
             "capacity_unit": chosen["unit"] if chosen else "",
             "capacity_technique": chosen["technique"] if chosen else "",

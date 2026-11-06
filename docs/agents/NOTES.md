@@ -1200,8 +1200,10 @@ every sub-community; her decisions are on #310). It reads no data: `fit(communit
 integrated form. A member at 0 washed out and gives no equation. `leave_one_out_predictions` predicts each
 community from a fit without it. Measured locally on Venturelli et al. 2018's fitted 12-species gLV (Code
 EV1, T4; nothing of theirs in git): strict leave-one-out identifies 0 of the 132 off-diagonal coefficients,
-because only 6 of the 12 coexist; adding the 66 pairs identifies 128 of 132, exact to 2e-12; the six that
-coexist, alone, 30 of 30. The chemostat inputs (#312) and the wiring (#313) are separate tasks.
+because 7 of the 12 coexist and five of the leave-one-out communities end with those same 7 (one equation
+under `pool`); adding the 66 pairs identifies 128 of 132 (`packaging/validate_steady_state.py`, numbers in
+METHOD_NOTES). `fit` pools communities with the same members present (`pool`) and refuses a row whose own
+term is not negative (status "no self-limitation"): both came from the pre-release review. The chemostat inputs (#312) and the wiring (#313) are separate tasks.
 
 `subcommunity.chemostat_groups` (#312) turns continuous cultures into that input, one group per medium, unit
 and dilution rate. It takes the chemostat check's steady states (`steady.observed`, which now also keeps each

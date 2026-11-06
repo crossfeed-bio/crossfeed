@@ -482,6 +482,7 @@ const isIndirect=e=>String(e.evidence||"")==="dropout";
 function evidenceTag(e){const v=String(e.evidence||"");
   if(v==="dropout")return "indirect (drop-out)";
   if(v==="biculture")return "direct (mono vs bi-culture)";
+  if(v==="steady_state")return "effective (sub-community steady states)";
   return "";}
 function evidenceNote(e){return isIndirect(e)
   ? "from a drop-out community, so the source may act through a third species; strictly a hyper-arc"

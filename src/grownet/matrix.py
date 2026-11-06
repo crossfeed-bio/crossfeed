@@ -448,6 +448,10 @@ def rate_rule(method: str) -> str:
     took as the median over that organism's monoculture replicates, and the published rate is the median
     over the rows. Saying "median over replicates" of it put one merge where there are two (#155 item 13).
     """
+    if str(method).startswith("steady_state"):
+        return (f"{method}: r_i - D, each organism's growth rate less the dilution rate, read from its own "
+                "monoculture chemostat's start-up (a lower bound); the first dilution rate read where there "
+                "are several; continuous cultures only")
     if str(method).startswith("integrated"):
         return (f"{method} in monoculture, the median over the fitted rows, each row's own rate the "
                 "median over that organism's monoculture replicates; batch experiments only")
@@ -1370,6 +1374,14 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             # (found in review)
             left_out.append((name, rates.no_rate[name] + ", so it has no growth rate and nothing on it can be "
                                    "fitted"))
+        elif rate.get("rate") is None and any(e.target == nid and "in units of r_i - D" in (e.coefficient_unit or "")
+                                              for e in net.edges):
+            # the steady-state derivation fitted its row, in units of its r_i - D, which its chemostat start-up
+            # did not give: "no growth rate ... nothing on it can be fitted" contradicted the line naming its
+            # row's unit just below (found in review)
+            left_out.append((name, "its row was fitted in units of its own r_i - D, which its chemostat "
+                                   "start-up did not give, so neither its own limitation nor the effects on it "
+                                   "can be put in 1/(time x abundance)"))
         elif rate.get("rate") is None:
             left_out.append((name, "no growth rate, and no arc saying it grows only with a partner, so "
                                    "neither its own limitation nor the effect of anything on it can be "

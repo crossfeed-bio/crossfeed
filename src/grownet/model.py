@@ -47,8 +47,10 @@ PREVIOUS_SCHEMAS = ("grownet.interaction_network/v3", "grownet.interaction_netwo
 KNOWN_SCHEMAS = (SCHEMA, *PREVIOUS_SCHEMAS)
 EFFECTS = ("facilitation", "inhibition", "neutral")
 # what an edge was derived from: a mono versus bi-culture comparison (a direct interaction), or a full
-# versus drop-out community comparison (not necessarily direct: strictly a hyper-arc, kept as an arc)
-EVIDENCE = ("biculture", "dropout")
+# versus drop-out community comparison (not necessarily direct: strictly a hyper-arc, kept as an arc), or a
+# gLV row fitted to the chemostat steady states of sub-communities (an effective coefficient: an effect
+# that needs a third organism is folded into the pairs; the steady-state derivation)
+EVIDENCE = ("biculture", "dropout", "steady_state")
 # what the comparison could say about the target's growth (grownet.interaction)
 OUTCOMES = ("quantified", "obligate", "abolished", "no_growth")
 # why an edge is low quality: hidden by default and never read as the absence of an interaction

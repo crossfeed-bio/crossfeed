@@ -126,8 +126,8 @@ RELEASES = (
 # key in gui.DEFAULTS -> (label on the page, command line flag, what it does and when to change it)
 SETTINGS = {
     "derivation": ("Derivation", "--derivation replicate|integrated|steady",
-                   "How an interaction is derived. The two answer different questions and neither is the "
-                   "stricter version of the other, so each is the default for its own job. "
+                   "How an interaction is derived. The first two answer different questions and neither is "
+                   "the stricter version of the other, so each is the default for its own job. "
                    "replicate (the default) is the comparison the collaboration specified, a growth "
                    "property of the replicates with the partner against the replicates without it. It "
                    "needs only two measurements per set, so a sparsely sampled study still gives it "
@@ -362,8 +362,11 @@ EDGE_ATTRIBUTES = {
                 "replicates; empty for obligate and abolished. Under the specified comparison this is "
                 "exactly log2(metric_with / metric_without). Under the integrated form it is the mean of "
                 "the per-replicate log2 effects while that pair comes from the median coefficient, so "
-                "the two are near and not equal, and it is this field the absence threshold acts on",
-    "sd": "standard deviation of the strength, the spread of the comparison",
+                "the two are near and not equal, and it is this field the absence threshold acts on. Under "
+                "the steady-state derivation it is log2(1 + B_ij x_j), the fitted row's net growth with the "
+                "partner at its abundance in the largest community holding both over without it",
+    "sd": "standard deviation of the strength, the spread of the comparison (under the steady-state "
+          "derivation, from the bootstrap over vessels)",
     "se": "standard error of the strength",
     "n_with": "replicates with the source present",
     "n_without": "replicates with the source absent",
@@ -428,7 +431,9 @@ EDGE_ATTRIBUTES = {
              "comparison are not meant to begin at the same density, so refusing a comparison for that "
              "would discard measurements rather than confounds",
     "evidence": "biculture (monoculture against a two-member co-culture: a direct interaction) or dropout "
-                "(a community against the same community without the source: direct or indirect)",
+                "(a community against the same community without the source: direct or indirect) or steady_state (a "
+                "coefficient fitted to the chemostat steady states of sub-communities, under the steady-state "
+                "derivation: effective, so an effect needing a third organism is folded into the pairs)",
     "community": "the members of the culture the arc comes from: the pair for a co-culture, the full "
                  "community for a drop-out arc",
     "condition": "the experiment the edge comes from; interactions are condition-specific",
@@ -1205,30 +1210,44 @@ the monocultures and the communities missing one member; here every measured sub
 monocultures, pairs, larger communities and the full one all contribute.</p>
 <ul>
 <li><strong>What it reads.</strong> Continuous cultures known to be unperturbed, at the steady state the
-chemostat check reads (the mean over the last quarter of each vessel), one fit per medium, abundance unit
-and dilution rate. A run whose description does not say it is unperturbed is left out and named, and so is
-a run with a member that could not be read.</li>
+chemostat check reads (the mean over the last quarter of each vessel), one fit per medium, abundance unit,
+dilution rate and measurement technique. A run whose description does not say it is unperturbed is left out
+and named, and so is a run with a member that could not be read. Runs that end with the same organisms
+present are one community, their vessels pooled: they reach one steady state, so they give one equation,
+not several.</li>
 <li><strong>Effective coefficients.</strong> An effect that needs a third organism is folded into the
-pairs that carry it, so a coefficient describes the communities it was fitted from. Each community is
-also predicted by a fit made without it, and the arcs' notes give predicted against observed: a community
-its siblings predict badly is where such effects show.</li>
+pairs that carry it, so a coefficient describes the communities it was fitted from, and its arcs carry
+evidence <code>steady_state</code>. Each community is also predicted by a fit made without it, and the
+arcs' notes give predicted against observed where that fit can predict it: a community its siblings predict
+badly is where such effects show. In a design of monocultures and pairs, a pair is the only community
+holding its two organisms, so without it nothing predicts it, and the note says so.</li>
 <li><strong>What it cannot determine is named.</strong> An organism that washed out (under a hundredth of
 the largest steady state of its run) is not at a steady state and gives no equation. A row with fewer
-independent equations than unknowns, or a pair that never met, is listed among the reasons and gives no
-arc. A design where most organisms wash out determines little: of a published 12-species model, only the
-6 that coexist determine anything from the communities missing one member, while adding every pair
-determines almost all of it.</li>
+independent equations than unknowns, or whose partners stand in the same proportions in every community, or
+a pair that never met, is listed among the reasons and gives no arc. So is a row whose own term
+<code>B_ii</code> is not negative: either the organism has no self-limitation, or <code>r_i</code> is below
+D and it holds only beside partners that feed it, and the sign of every effect on it depends on which. A
+design where most organisms wash out determines little: of a published 12-species model, 7 coexist, five of
+the communities missing one member end with those same 7, and that design determines no coefficient, while
+adding every pair determines almost all of them.</li>
 <li><strong>The row scale.</strong> A steady state gives <code>A_ij / (r_i - D)</code>; the scale
 <code>r_i - D</code> is read from the chemostat's own start-up rather than from a batch growth rate, which
 changes in a chemostat. If the experiment's description states a batch period before the pump was
-switched on ("Chemostat mode started 4 hours after inoculation"), the rise inside it is r_i and the scale
-is r_i less D; if it says the dilution ran from inoculation, the early rise is r_i - D itself. Where it
-says neither, the row stays in units of <code>r_i - D</code>, its coefficient unit says so, and the arc's
-notes say why.</li>
+switched on ("Chemostat mode started 4 hours after inoculation"), there are two readings: the steepest rise
+inside the batch period, which is at most r_i, less D; and the steepest rise after the pump started, which
+is at most r_i - D. The larger is kept. If it says the dilution ran from inoculation, the steepest rise is
+r_i - D itself. Rates are per hour, as the dilution rate is. Each reading is a lower bound: a lag, or an
+inoculum near the plateau, keeps a short start-up from its maximum rate, and the scale then comes out low
+(with an inoculum a tenth of the plateau, by a quarter or more). A low scale shrinks a row's coefficients in
+proportion and changes no sign. Where the description says neither, the row stays in units of
+<code>r_i - D</code>, its coefficient unit says so, and the arc's notes say why. An organism measured at
+several dilution rates has a different <code>r_i - D</code> at each, so the package takes the first and
+names the others.</li>
 <li><strong>Each arc.</strong> Its strength is <code>log2(1 + B_ij x_j)</code> at the partner's abundance
-in the largest community holding both, its coefficient is <code>(r_i - D) B_ij</code> in 1/(time x
+in the largest community holding both, its coefficient is <code>(r_i - D) B_ij</code> in 1/(h x
 abundance) where the scale is known, and its spread is a bootstrap over the vessels of every community its
-row rests on. A row resting on a single vessel has no spread, so its arcs are undetermined.</li>
+row rests on, widened for the few vessels a chemostat run has. If any of those communities was read in a
+single vessel, the row has no spread, so its arcs are undetermined.</li>
 </ul>
 <p>mGrowthDB holds no design of this kind yet: its chemostat studies each run one community, which
 determines no row. The derivation is there for the data to come.</p>

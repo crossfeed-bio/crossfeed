@@ -273,7 +273,13 @@ def _resolve(a, announce=True):
             a.derivation = "integrated"
         told = ("and the integrated form" if chosen is None else
                 f"and the {chosen} derivation, which you asked for and gLV mode does not override")
-        if announce:
+        if announce and chosen == "steady":
+            # the steady-state derivation reads neither the comparison's growth property nor drop-out
+            # communities, so naming them as switched on said something false of the run (found in review)
+            print("gLV mode: growth rates on, and the steady derivation, which you asked for and gLV mode "
+                  "does not override; it reads chemostat steady states, so the growth property and the "
+                  "drop-out setting do not apply to it", file=sys.stderr)
+        elif announce:
             print("gLV mode: growth rates on, drop-out communities off, the comparison on the growth "
                   f"rate, {told}", file=sys.stderr)
     if a.derivation is None:
@@ -455,7 +461,7 @@ def _derive_species(a):
         import html
 
         from .gui import _empty_reason
-        print("\nno interactions: " + html.unescape(_empty_reason(result)), file=sys.stderr)
+        print("\nno interactions: " + html.unescape(_empty_reason(result, command_line=True)), file=sys.stderr)
     # "all of mGrowthDB" only when nothing narrowed it: the second box and Exclude these studies both
     # narrow All, which is deliberate, and saying otherwise is the same false claim the page carried
     narrowing = [x for x in (*a.conditions, *(a.exclude_studies or "").split(",")) if x and x.strip()]
@@ -492,7 +498,10 @@ def _rates_of(a, client, study_ids, net, skipped, records=None):
     from .derive import growth_rates
     from .integrated import METRIC as INTEGRATED
     from .integrated import fitted_rates
-    fitted = fitted_rates(records or [])
+    from .subcommunity import METRIC as STEADY
+    steady_run = getattr(a, "derivation", None) == "steady"
+    method = STEADY if steady_run else INTEGRATED
+    fitted = fitted_rates(records or [], method)
     if fitted:
         # An organism whose fit implies no plateau is given the measured one inside `two_stage`, before
         # its partners are fitted against it, from the monocultures of its own condition (#142 item 7).
@@ -505,8 +514,13 @@ def _rates_of(a, client, study_ids, net, skipped, records=None):
                       "has no self-limitation and no row in a matrix", file=sys.stderr)
         # keyed by the network's own nodes and named as it names them, as on the page (found in review)
         fitted = matrix.for_nodes(net, fitted)
-        net.meta["growth_rates"] = matrix.rate_meta(net, fitted, INTEGRATED)
+        net.meta["growth_rates"] = matrix.rate_meta(net, fitted, method)
         return fitted, skipped
+    if steady_run:
+        # never the batch monocultures in its place (found in review), as on the page
+        from .gui import STEADY_NO_RATE
+        print(STEADY_NO_RATE, file=sys.stderr)
+        return {}, skipped
     # the organisms of the arcs before any merge to the genus, as the page asks for them: with
     # --merge-genera the nodes are genera, no monoculture is of a genus, and no rate was computed (found in
     # review; this predates 0.4.0)

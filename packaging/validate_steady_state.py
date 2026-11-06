@@ -38,7 +38,7 @@ from scipy.integrate import solve_ivp
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from grownet.growth import GrowthCurve  # noqa: E402
-from grownet.subcommunity import fit, leave_one_out_predictions, row_scale  # noqa: E402
+from grownet.subcommunity import fit, leave_one_out_predictions, pool, row_scale  # noqa: E402
 
 NAMES = ["BH", "CA", "BU", "PC", "BO", "BV", "BT", "EL", "FP", "CH", "DP", "ER"]
 D = 0.05                # per hour, under every growth rate of the model (the slowest, ER, is 0.156)
@@ -60,9 +60,11 @@ def steady(u, A, members, washed_out=WASHED_OUT):
     Some sub-communities of a fitted gLV have no steady state at all and grow without bound; a chemostat run
     like that would hold no steady state either, so it is left out, and counted."""
     x0 = np.where(members, 0.01, 0.0)
+    # an organism not inoculated stays at exactly 0: left free, solver noise of 1e-14 grew into a member over
+    # 20,000 h, and the "leave out BU" community ended with BU at 0.309 (found in review)
     with np.errstate(over="ignore", invalid="ignore"):
-        sol = solve_ivp(lambda t, x: x * (u - D + A @ x), (0, 20000.0), x0, method="LSODA", rtol=1e-10,
-                        atol=1e-14)
+        sol = solve_ivp(lambda t, x: np.where(members, x * (u - D + A @ x), 0.0), (0, 20000.0), x0,
+                        method="LSODA", rtol=1e-10, atol=1e-14)
     x = sol.y[:, -1].copy()
     if not np.all(np.isfinite(x)) or x.max() > 1e3:
         return x, False
@@ -125,7 +127,14 @@ def report(label, u, A, design, scales, draws=0):
                       f"{np.mean(covered):.0%}")
     full = next((c for c in comms if c["name"].count("+") == n - 1), None)
     if full is not None:
-        pred = next(p for p in leave_one_out_predictions(comms) if p["community"] == full["name"])
+        # communities whose survivors are the same set are one equation (`pool`), so the full community may be
+        # pooled with the leave-one-out ones that lost the same members; it is predicted as that one
+        pooled = next(c for c in pool(comms) if full["name"] in (c.get("runs") or [c["name"]]))
+        runs = len(pooled.get("runs") or [pooled["name"]])
+        if runs > 1:
+            print(f"   the full community holds the same organisms as {runs - 1} other communities, so they are "
+                  "one equation")
+        pred = next(p for p in leave_one_out_predictions(comms) if p["community"] == pooled["name"])
         if pred["status"] == "predicted":
             err = [abs(pred["predicted"][k] - v) / v for k, v in pred["observed"].items()]
             print(f"   the full community predicted without it: max relative error {max(err):.2g} over "

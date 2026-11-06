@@ -43,7 +43,9 @@ def test_each_identified_coefficient_becomes_an_arc_with_its_strength_and_coeffi
     assert on_b["coefficient"] == pytest.approx(0.26 * -0.1 / UNIT, rel=1e-6)
     # what the arc says about how it was made
     assert on_a["metric"] == "steady_state:subcommunities" and "chemostat" in on_a["condition"]
-    assert on_a["cultivation_mode"] == "chemostat" and on_a["evidence"] == "biculture"
+    # its own evidence: the coefficient is fitted to every community holding the pair, so it is effective, and
+    # "biculture" (a direct mono against bi-culture comparison) was false of it (found in review)
+    assert on_a["cultivation_mode"] == "chemostat" and on_a["evidence"] == "steady_state"
     assert any("batch period" in n for n in on_a["notes"])               # where its row scale came from
 
 
@@ -57,6 +59,46 @@ def test_the_arcs_carry_a_spread_from_the_vessels_and_make_a_valid_network():
     net = records_to_network(records)
     assert not net.validate()
     assert {e.metric for e in net.edges} == {"steady_state:subcommunities"}
+
+
+def test_the_strength_sd_is_the_rows_bootstrap_spread_carried_through_the_strength():
+    """Vessels that differ give each row a spread, and the arc's sd is that spread times
+    |d strength / d B| = |x / ((1 + B x) ln 2)|, with x the partner's abundance on the arc and B its
+    coefficient over the row scale. The vessels of the other test are identical, so an sd of 0, or one
+    without the factor, passed it (found in review)."""
+    from test_subcommunity_inputs import _runs
+
+    from grownet.subcommunity import chemostat_groups, fit, pool
+    client, exps = _runs(extra_curves={(2, "a"): _startup(0.5, 0.04, 4.0, 1.1 * UNIT),
+                                       (4, "b"): _startup(0.3, 0.04, 4.0, 1.85 * UNIT),
+                                       (6, "a"): _startup(0.5, 0.04, 4.0, 0.95 * PAIR_A),
+                                       (6, "b"): _startup(0.3, 0.04, 4.0, 1.04 * PAIR_B)})
+    records, _ = SteadyStateDeriver(client=client).derive({"id": "S1", "name": "x"}, exps)
+    (group,) = chemostat_groups(client, exps)
+    rows = fit(pool(group["communities"]))["rows"]               # the deriver's own draws and seed
+    for arc in records:
+        i, j = arc["target_name"], arc["source_name"]
+        b, x = arc["coefficient"] / arc["fitted_rate"], arc["partner_abundance"]
+        expected = abs(x / ((1 + b * x) * math.log(2))) * rows[i]["sd"][j]
+        assert expected > 0.01 and arc["sd"] == pytest.approx(expected, abs=1e-4)
+        assert arc["coefficient_sd"] == pytest.approx(arc["fitted_rate"] * rows[i]["sd"][j], rel=1e-9)
+
+
+def test_a_row_resting_on_a_single_vessel_has_no_spread_and_its_arcs_stay_undetermined():
+    """One vessel per run: no bootstrap, so no sd, and presence is not decided (decision 5 of #310); an sd
+    of 0 would have made every such arc present (found in review)."""
+    from test_growth_rates import _client
+
+    from grownet.derive import output_meta
+    curves = {(1, "a"): _startup(0.5, 0.04, 4.0, 1.0 * UNIT), (3, "b"): _startup(0.3, 0.04, 4.0, 2.0 * UNIT),
+              (5, "a"): _startup(0.5, 0.04, 4.0, PAIR_A), (5, "b"): _startup(0.3, 0.04, 4.0, PAIR_B)}
+    exps = [_chemostat("E1", "a alone", ["a"], [(1, "V1")], description=RUN),
+            _chemostat("E2", "b alone", ["b"], [(3, "V1")], description=RUN),
+            _chemostat("E3", "a with b", ["a", "b"], [(5, "V1")], description=RUN)]
+    records, _ = SteadyStateDeriver(client=_client(curves)).derive({"id": "S1", "name": "x"}, exps)
+    assert records and all(r["sd"] is None and r["coefficient_sd"] is None for r in records)
+    edges, _ = output_meta(records)
+    assert edges and all(e["status"] is None for e in edges)
 
 
 def test_a_row_without_a_scale_stays_scaled_and_says_so():
@@ -229,3 +271,97 @@ def test_the_command_line_names_the_study_it_derived_not_the_last_reason_it_prin
     assert "No chemostat design here determines a row." in err
     assert "drop-out designs" not in err
     assert "--derivation steady" in err and "Advanced settings" not in err     # its own control
+
+
+def test_the_rates_say_they_are_r_less_d_from_a_chemostat_start_up_not_batch_rates():
+    """The rates of this derivation are r_i - D, read from a chemostat's start-up: they were labelled the
+    integrated form's, "batch experiments only", in the rates file, the report and the package (found in
+    review)."""
+    from grownet import integrated, matrix
+    from grownet.subcommunity import METRIC
+    records, _ = _derive()
+    rates = integrated.fitted_rates(records, METRIC)
+    assert {r["method"] for r in rates.values()} == {METRIC}
+    rule = matrix.rate_rule(METRIC)
+    assert "r_i - D" in rule and "start-up" in rule and "batch experiments only" not in rule
+
+
+def test_rates_at_two_dilution_rates_are_not_merged_into_one():
+    """r_i - D is a different number at each dilution rate: the median of 0.46 at D 0.04 and 0.30 at D 0.2 was
+    0.38, r_i - D at neither (found in review). The first dilution rate read is the package's, and the other
+    is named."""
+    from grownet import integrated
+    from grownet.subcommunity import METRIC
+    records, _ = _derive()
+    other = [{**r, "fitted_rate": r["fitted_rate"] - 0.16 if r["fitted_rate"] else None,
+              "fitted_rate_dilution": 0.2, "study_id": "S2"} for r in records]
+    rates = integrated.fitted_rates(records + other, METRIC)
+    by_name = {r["name"]: r for r in rates.values()}
+    assert by_name["a"]["rate"] == pytest.approx(0.46, abs=1e-6)
+    assert any("another dilution rate, 0.2 per h" in u for u in by_name["a"]["other_units"])
+
+
+def test_with_no_row_scaled_the_command_line_reads_no_batch_rate_in_its_place(monkeypatch, capsys):
+    """The help says the scale is never a batch growth rate; with no row scaled, the command line read the
+    batch monocultures instead (found in review)."""
+    import types
+
+    from grownet import __main__ as cli
+    from grownet.model import InteractionNetwork
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("batch growth rates read under the steady-state derivation")
+    monkeypatch.setattr("grownet.derive.growth_rates", refuse)
+    a = types.SimpleNamespace(derivation="steady", rate_method="easylinear", rate_window=5, spike_factor=None,
+                              capacity_max_fall=None)
+    net = InteractionNetwork()
+    found, _ = cli._rates_of(a, None, ["S1"], net, [], records=[])
+    assert found == {} and "no batch growth rate is read" in capsys.readouterr().err
+
+
+def test_the_second_box_selects_the_chemostat_runs_it_names():
+    """Naming one community in the second box keeps it and the monocultures under its conditions, and drops
+    a run at another dilution rate, as the other derivations read the box."""
+    faster = _chemostat("E7", "a alone, faster", ["a"], [(10, "V1"), (11, "V2")], dilution="0.1",
+                        description=RUN)
+    client, exps = _runs([faster], {(10, "a"): _startup(0.5, 0.1, 4.0, 0.8 * UNIT),
+                                    (11, "a"): _startup(0.5, 0.1, 4.0, 0.8 * UNIT)})
+    every, _ = SteadyStateDeriver(client=client).derive({"id": "S1", "name": "x"}, exps)
+    named, skipped = SteadyStateDeriver(client=client, selection={"experiments": ["E3"]}).derive(
+        {"id": "S1", "name": "x"}, exps)
+    assert named and {r["condition"] for r in named} == {r["condition"] for r in every if "0.04" in r["condition"]}
+    assert not any("E7" in r["experiments"] for r in named)
+    assert any(what == "monocultures kept alongside the experiments named" for what, _ in skipped)
+
+
+def test_the_page_and_the_command_line_describe_the_steady_state_derivation_when_it_is_chosen(capsys):
+    """The Derivation hint names all three; pressing gLV mode with steady chosen says steady was kept, not
+    "the derivation on the integrated form"; the command line names its own switch in an empty result and
+    does not announce a growth property it does not read (found in review)."""
+    from grownet import __main__ as cli
+    assert "Or steady" in gui.render_form("tok")
+    assert "steady-state derivation kept" in gui.GLV_MODE_STEADY_MESSAGE
+    result = {"settings": {**gui.DEFAULTS, "derivation": "steady"}, "studies": ["S1"], "resolved": [("x", {})],
+              "errors": [], "network": None, "hidden": {}, "skipped": []}
+    assert "--derivation steady" in gui._empty_reason(result, command_line=True)
+    assert "Advanced settings" in gui._empty_reason(result)
+    a = cli.build_parser().parse_args(["derive", "--live", "--all", "--glv-mode", "--derivation", "steady"])
+    capsys.readouterr()
+    cli._resolve(a)
+    err = capsys.readouterr().err
+    assert "steady derivation" in err and "the comparison on the growth rate" not in err
+
+
+def test_a_fitted_row_without_a_scale_is_left_out_of_the_package_for_that_reason():
+    """b's row was fitted, in units of its r_b - D, which no start-up gave: the package said "no growth rate
+    ... nothing on it can be fitted", against its own line naming b's row's unit (found in review)."""
+    import copy
+
+    from grownet import matrix
+    client, exps = _runs()
+    exps = copy.deepcopy(exps)
+    exps[1]["description"] = "No perturbations."                          # b alone: no batch period stated
+    records, _ = SteadyStateDeriver(client=client).derive({"id": "S1", "name": "x"}, exps)
+    net, rates, _payload, _readme = _package(records)
+    left = dict(matrix.coefficients(net, rates)["left_out"])
+    assert "fitted in units of its own r_i - D" in left["b"] and "nothing on it" not in left["b"]

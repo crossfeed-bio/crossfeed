@@ -75,19 +75,49 @@ def test_an_unstated_start_leaves_the_row_scaled_and_says_why():
     assert got["scale"] is None and "does not say when the dilution started" in got["how"]
 
 
-def test_a_batch_period_too_short_to_fit_or_a_washing_out_rate_gives_no_scale():
+def test_a_batch_period_too_short_to_fit_is_read_after_the_pump_and_a_washing_out_rate_gives_no_scale():
+    """A 1 h batch period holds two points, too few for a rate; the rise after the pump started is r - D = 0.46
+    itself, which is the other reading of the scale."""
     short = row_scale(_curve(_startup(0.5, 0.04, 1.0, 1.0e9)), 0.04, {"kind": "batch", "hours": 1.0, "said": "x"})
-    assert short["scale"] is None and "points" in short["how"]
+    # (easylinear refits over every window within its quota of the steepest, one of which reaches the plateau,
+    # so 0.4592 rather than 0.46: growthrates' rule, kept so rates agree with mGrowthDB's)
+    assert short["scale"] == pytest.approx(0.46, abs=2e-3) and "after the pump started" in short["how"]
+    # and with no point after the pump either, no scale
+    cut = [p for p in _startup(0.5, 0.04, 1.0, 1.0e9) if p[0] <= 1.0]
+    none = row_scale(_curve(cut), 0.04, {"kind": "batch", "hours": 1.0, "said": "x"})
+    assert none["scale"] is None and "points" in none["how"]
     # r 0.03 below D 0.04: no positive scale, so the organism could not hold a steady state at all
     slow = row_scale(_curve(_startup(0.03, 0.04, 6.0, 1.0e9)), 0.04, {"kind": "batch", "hours": 6.0, "said": "x"})
     assert slow["scale"] is None and "not above the dilution rate" in slow["how"]
 
 
-def test_a_batch_period_in_minutes_is_read_against_a_curve_in_hours():
-    got = row_scale(_curve(_startup(0.5, 0.04, 4.0, 1.0e9)), 0.04, {"kind": "batch", "hours": 4.0, "said": "x"})
-    in_minutes = [(t * 60, v, None) for t, v, _ in _startup(0.5, 0.04, 4.0, 1.0e9)]
-    minutes = row_scale(_curve(in_minutes, unit="min"), 0.04 / 60, {"kind": "batch", "hours": 4.0, "said": "x"})
-    assert minutes["scale"] == pytest.approx(got["scale"] / 60, rel=1e-9)     # per minute
+def test_a_curve_in_minutes_or_days_gives_the_scale_per_hour_as_the_dilution_rate_is():
+    """The dilution rate is recorded per hour (the chemostat check's /h), so the curve's rate is converted
+    before D is taken off: a curve timed in days gave 11.7 per day less 0.1 per hour, labelled 1/h (found in
+    review). The same run timed in minutes or in days gives the same 0.46 per hour."""
+    hours = _startup(0.5, 0.04, 4.0, 1.0e9, step=0.5)
+    period = {"kind": "batch", "hours": 4.0, "said": "x"}
+    got = row_scale(_curve(hours), 0.04, period)
+    minutes = row_scale(_curve([(t * 60, v, None) for t, v, _ in hours], unit="min"), 0.04, period)
+    days = row_scale(_curve([(t / 24, v, None) for t, v, _ in hours], unit="d"), 0.04, period)
+    assert got["scale"] == pytest.approx(0.46, abs=1e-9)
+    assert minutes["scale"] == pytest.approx(0.46, rel=1e-9) and days["scale"] == pytest.approx(0.46, rel=1e-9)
+
+
+def test_a_lag_inside_the_batch_period_is_overcome_by_the_rise_after_the_pump():
+    """Flat for 3 h of a 4 h batch period, then 0.5 /h: the batch period alone gives no rate, or one far too
+    low. After the pump starts the culture rises at r - D = 0.46 until it nears its plateau, and that reading is
+    kept: each is a lower bound, and the larger is the closer."""
+    lagged = []
+    for t in [i * 1.0 for i in range(49)]:
+        x = 1.0e6 if t <= 3 else 1.0e6 * math.exp(0.5 * (min(t, 4) - 3)) * math.exp(0.46 * max(t - 4, 0))
+        lagged.append((t, min(x, 1.0e9), None))
+    got = row_scale(_curve(lagged), 0.04, {"kind": "batch", "hours": 4.0, "said": "x"})
+    assert got["scale"] == pytest.approx(0.46, abs=2e-3) and "after the pump started" in got["how"]
+    # the batch period alone, the same run cut where the pump started: its one window easylinear tries (0 to
+    # 3 h, as growthrates tries them) is flat, so it gives no scale at all
+    alone = row_scale(_curve([p for p in lagged if p[0] <= 4]), 0.04, {"kind": "batch", "hours": 4.0, "said": "x"})
+    assert alone["scale"] is None and "no window rises" in alone["how"]
 
 
 # ---- whole runs into communities ------------------------------------------------------------------------
@@ -149,5 +179,8 @@ def test_a_perturbed_or_unknown_run_and_another_dilution_rate_are_kept_apart():
     slow = next(g for g in groups if g["dilution"] == 0.04)
     names = {c["name"] for c in slow["communities"]}
     assert "a with b" in names and "a with b again" not in names
+    # the perturbed run is in no community, by its own reason: "unperturbed" alone is in the unknown run's
+    # reason too, so a perturbed run let through passed the old check (found in review)
+    assert not any(c.get("experiment") == "E5" for c in slow["communities"])
     left = " ".join(why for _, why in slow["left_out"])
-    assert "perturbations" in left and "unperturbed" in left
+    assert "the run carries perturbations" in left and "does not say it is unperturbed" in left

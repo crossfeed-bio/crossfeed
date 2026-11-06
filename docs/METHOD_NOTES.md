@@ -635,9 +635,9 @@ idea here is to parameterize the gLV from steady-state abundances of sub-communi
 6. Synthetic fixtures in the repository; validation on published data local only.
 
 Measured before building, locally on Venturelli et al. 2018's fitted 12-species gLV (Mol Syst Biol, Code
-EV1 model T4, CC BY 4.0; nothing of theirs in git): simulated to steady state, only 6 of the 12 coexist, so
+EV1 model T4, CC BY 4.0; nothing of theirs in git): simulated to steady state, 7 of the 12 coexist, so
 the strict leave-one-out design identifies 0 of the 132 off-diagonal coefficients; with the 66 pairs added,
-128, exact to 2e-12; the six that coexist, as their own community, 30 of 30. Their measured data (Dataset
+128 (re-derived after review, below). Their measured data (Dataset
 EV3) has the leave-one-out design but is relative abundance only, from serial batch transfers, with no
 monocultures, and its CA- and CH- blocks are identical; it cannot be a test case. mGrowthDB holds no such
 design today: SMGDB00000005's control and SMGDB00000011's run each give one community.
@@ -652,22 +652,33 @@ period, and fits with `grownet.subcommunity`. Download Code EV1 yourself and run
 Errors are on the scale of each row's own `|B_ii|`, since the published fit sets many coefficients to exactly
 0 (it was L1-regularized), where an error relative to the true value means nothing.
 
+Re-derived on 2026-11-06 after a pre-release review found that the script let organisms that were never
+inoculated invade from solver noise over 20,000 h (the "leave out BU" community ended with BU at 0.309): the
+first numbers here came from that. With non-members held at 0, and with runs that end with the same organisms
+pooled into one equation (`subcommunity.pool`), numpy 2.2.6 and scipy 1.13.0:
+
 | design | off-diagonal identified | error | signs (true not 0) |
 |---|---|---|---|
-| EPICS: monocultures, 12 leave-one-out, full (2 never settle) | 0 of 132 | | |
+| EPICS: monocultures, 12 leave-one-out, full | 0 of 132 | | |
 | bottom-up: monocultures and 66 pairs | 126 of 132 | max 7e-14 | 96 of 96 |
-| all of the above (2 never settle) | 128 of 132 | max 0.0018 | 98 of 98 |
-| all, 3 vessels with 5% noise | 128 of 132 | median 0.022, max 3.4 | 96% |
+| all of the above | 128 of 132 | max 0.0018 | 98 of 98 |
+| all, 3 vessels with 5% noise | 128 of 132 | median 0.02, max 3.2 | 98% |
 
+- Every community settles; none is left out.
 - The row scales read from the start-up are within 1.6% of the true `u - D` (median 0.7%), slightly low,
   since self-limitation already slows the batch period; that is most of the package's error, `A = scale x B`
-  within 2% of the true `a_ij` on the `|a_ii|` scale (median 0.18%).
-- The full community, predicted by a fit made without it, is within 0.22% (18% with the noise).
-- With the noise, the bootstrap over vessels puts the true coefficient within 2 sd for 93% of them, close to
-  the nominal 95%. The worst coefficients are those whose partner is scarce in every community beside the
-  organism: PC on BT, off by 3.4 times BT's `|B_ii|`, has PC at no more than 0.007 OD beside BT (the median
-  over all coefficients is 0.23), and its spread is 1.8 times `|B_ii|`, so the arc says it is uncertain; the
-  next five worst all have their partner at 0.06 or less.
+  within 2% of the true `a_ij` on the `|a_ii|` scale (median 0.18%). The simulated start-up has no lag and a
+  small inoculum. Each reading is a lower bound: on a simulated start-up with an inoculum a tenth of the
+  plateau the scale is 25% low, and a lag lowers it further, which is why the rise after the pump started
+  is read too and the larger kept (a 2 h lag in a 4 h batch period took 57% off the batch reading alone and
+  19% off the larger of the two). A low scale shrinks a row's coefficients in proportion and changes no
+  sign.
+- The full community holds the same 7 organisms as five of the leave-one-out communities, so they are one
+  equation; predicted by a fit made without them, it is within 0.8% (49% with the noise).
+- With the noise, the bootstrap over vessels puts the true coefficient within 2 sd for 94% of them, against
+  the nominal 95%. The bootstrap draws the mean over vessels, the statistic the fit uses, and widens each
+  draw by `sqrt(n / (n - 1))` for n vessels, since a bootstrap of the mean of n vessels spreads only
+  `sqrt((n - 1) / n)` as far as the mean itself does (18% too narrow for three). The worst coefficients are those whose partner is scarce in every community beside the organism.
 - Only 7 of the 12 coexist in the full community at this D, so the strict leave-one-out design determines
   nothing; the pairs are what make the model identifiable, which is Karoline's decision 2.
 - Switching the 1% wash-out rule off changes nothing here.
