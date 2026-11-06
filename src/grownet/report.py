@@ -18,7 +18,9 @@ from .mgrowthdb import MGROWTHDB_API, NO_DATABASE_VERSION
 from .rates import doubling_time, time_unit
 
 
-def _value(key: str, value) -> str:
+def setting_value(key: str, value) -> str:
+    """A setting as the report AND the page write it ("on", "off", a list joined by "; "): public because both
+    render through it, so its output is a contract between them, not a private detail (Craig's agent)."""
     if value is None and key == "max_adjusted_p":
         return "off"
     if value is None and key.startswith("no_growth_"):
@@ -317,7 +319,7 @@ def report_text(result: dict) -> str:
             # beside "with every partner" (found in review)
             if key == "only_entered" and (result.get("all") or result.get("study")) and settings[key]:
                 note = "   <- not read in this run: no species was entered, so every partner is kept"
-            lines.append(f"  {label} ({flag.split()[0]}): {_value(key, settings[key])}{note}")
+            lines.append(f"  {label} ({flag.split()[0]}): {setting_value(key, settings[key])}{note}")
     lines.append("")
 
     shown = [e for e in net.edges if e.status != "absent"]

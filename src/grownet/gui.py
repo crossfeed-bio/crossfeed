@@ -474,7 +474,7 @@ def _arc_rows(net, edges) -> str:
         rows.append(f"<tr><td>{_esc(net.nodes[e.source].name or e.source)}</td>"
                     f"<td>{_esc(net.nodes[e.target].name or e.target)}</td>"
                     f"<td class=\"{sign}\">{_esc(_direction(e))}</td>"
-                    f"<td class=\"nowrap\">{_mean_sd(e.strength, e.sd)}</td>"
+                    f"<td class=\"nowrap\">{_mean_sd(e.strength, e.sd)}{_merged_note(e)}</td>"
                     f"<td>{_number(e.effect_over_sd, '.2f', MISSING)}</td>"
                     f"<td>{_esc(_number(e.n_with, 'd'))} / {_esc(_number(e.n_without, 'd'))}</td>"
                     f"<td>{_number(e.q_value, '.3g', MISSING)}</td><td>{_esc(e.condition)}</td>"
@@ -498,6 +498,17 @@ def _mean_sd(mean, sd) -> str:
         # obligate and abolished arcs have no ratio by construction, which is a result, not a gap
         return "<span class=\"muted\" title=\"one side did not grow, so there is no ratio\">no ratio</span>"
     return f"{mean:+.2f}" + ("" if sd is None else f" &plusmn; {sd:.2f}")
+
+
+def _merged_note(e) -> str:
+    """Under a merged arc's strength, that it is a median and over what: the cell showed "-1.49" alone, with
+    nothing to tell it from an arc as derived (found 2026-11-06). "N merged arcs: median" and not "median of
+    N", since an obligate or abolished arc counts among them without entering the median."""
+    if not e.merged_arcs:
+        return ""
+    spread = (f": median, range {e.strength_range[0]:+.2f} to {e.strength_range[1]:+.2f}"
+              if e.strength is not None and len(e.strength_range) == 2 else "")
+    return f"<br><span class=\"muted\">{e.merged_arcs} merged arcs{spread}</span>"
 
 
 def _absent_section(result: dict, absence: dict) -> str:
@@ -906,11 +917,13 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
     # empty one: a run that returns arcs under a changed threshold is the case a reader most needs told,
     # and it was the one case the page did not mark (#250)
     from .help import SETTINGS as help_settings
+    from .report import setting_value
     s_here = result.get("settings", {})
     off_default = [k for k, v in s_here.items() if k in DEFAULTS and v != DEFAULTS[k]]
     if off_default:
-        named = ", ".join(f"{_esc(help_settings[k][0] if k in help_settings else k)} = {_esc(str(s_here[k]))}"
-                          for k in sorted(off_default)[:6])
+        # each value as the report writes it: "on" where the page said "True" (found 2026-11-06)
+        named = ", ".join(f"{_esc(help_settings[k][0] if k in help_settings else k)} = "
+                          f"{_esc(setting_value(k, s_here[k]))}" for k in sorted(off_default)[:6])
         more = f", and {len(off_default) - 6} more" if len(off_default) > 6 else ""
         errors += (f"<p class=\"muted\">{len(off_default)} setting(s) are not at their default: "
                    f"{named}{more}. Advanced settings is open below.</p>")

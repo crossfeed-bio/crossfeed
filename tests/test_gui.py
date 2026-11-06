@@ -1178,6 +1178,42 @@ def test_a_setting_off_its_default_is_marked_on_a_result_that_has_arcs():
     assert "not at their default" not in _result_section("tok", result)
 
 
+def test_the_changed_settings_line_says_on_and_off_as_the_report_does():
+    """The line read "Merge parallel arcs = True", Python's word, where the report says "on" (found checking
+    Merge parallel arcs on the live page, 2026-11-06; Karoline: "Yes, fix both"). It now writes each value as
+    the report does: on and off, and the second box's lines joined by "; "."""
+    from grownet.gui import DEFAULTS, _result_section
+
+    result = _query()
+    result["settings"] = {**DEFAULTS, "merge_arcs": True, "conditions": "SMGDB00000002\nmucin"}
+    section = _result_section("tok", result)
+    assert "Merge parallel arcs = on" in section and "= True" not in section
+    assert "Media, experiments or studies = SMGDB00000002; mucin" in section
+
+
+def test_a_merged_arc_shows_in_the_table_that_it_is_a_median_of_several():
+    """The table showed a merged arc's median alone, as "-1.49", where an arc as derived shows a log2 mean
+    with its sd, so nothing on the page said it was merged or over what range (found checking Merge parallel
+    arcs on the live page, 2026-11-06; Karoline: "Yes, fix both"). The numbers are the live arc
+    B. thetaiotaomicron -> R. intestinalis: three arcs of -1.4901, -1.3027 and -2.5939, median -1.4901."""
+    from grownet.gui import _arc_rows
+    from grownet.model import Edge, InteractionNetwork, Node
+    net = InteractionNetwork()
+    for node in ("a", "b"):
+        net.add_node(Node(node, name=node.upper()))
+    merged = Edge("a", "b", "inhibition", strength=-1.4901, merged_arcs=3, strength_range=(-2.5939, -1.3027))
+    row = _arc_rows(net, [merged])
+    # "3 merged arcs: median", not "median of 3": an obligate arc counts among them without entering it
+    assert "-1.49" in row and "3 merged arcs: median, range -2.59 to -1.30" in row
+    # an arc as derived is shown as before, with no word about merging
+    plain = _arc_rows(net, [Edge("a", "b", "inhibition", strength=-1.49, sd=0.2)])
+    assert "-1.49 &plusmn; 0.20" in plain and "merged" not in plain
+    # obligate arcs count in merged_arcs and have no log2 mean: two of them merged have no ratio, no range,
+    # and the count still shows (help, "What a merged arc carries")
+    censored = _arc_rows(net, [Edge("a", "b", "facilitation", strength=None, outcome="obligate", merged_arcs=2)])
+    assert "no ratio" in censored and "2 merged arcs" in censored and "range" not in censored
+
+
 def test_the_glv_example_button_ignores_a_setting_left_in_the_form(server):
     """The button configures everything, which means it does not inherit what is already in the boxes.
 
