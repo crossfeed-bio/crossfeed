@@ -746,7 +746,7 @@ OFF_DIAGONAL = {
         "  An off-diagonal cell is A[i][j] = (r_i - D) B[i][j], fitted from chemostat steady states, not",
         "      from a growth curve: at a steady state every organism present satisfies",
         "      1 + sum_j B[i][j] N_j = 0, with B = A / (r_i - D) and D the dilution rate, so every",
-        "      unperturbed community of one medium, abundance unit and dilution rate (each organism read",
+        "      unperturbed community of one study, medium, abundance unit and dilution rate (each organism read",
         "      by one technique there) gives one equation per organism in it, and each row is their least",
         "      squares; runs that end with the same organisms are one community. The coefficients are",
         "      EFFECTIVE: an effect that needs a third organism is folded into the pairs that carry it.",
@@ -1081,6 +1081,11 @@ def _pair_values(net: InteractionNetwork, rates: dict = None, home: dict = None)
     for edge in net.edges:
         if edge.status == "absent":
             continue
+        if edge.source == edge.target:
+            # an arc from an organism to itself (Merge to genus joins strains of one genus) has no cell: the
+            # diagonal is -r_i / K_i, and the README says so; listed as "left at 0 ... cannot be fitted" it
+            # read as a pair the package failed (found in a fifth review)
+            continue
         # a package simulates one chemostat: a steady-state arc fitted at another dilution rate than the
         # rates' stays out of the cell, named, rather than entering a median with the package's own (the
         # cells mixed two dilution rates while the README said one, found in a third review)
@@ -1089,6 +1094,11 @@ def _pair_values(net: InteractionNetwork, rates: dict = None, home: dict = None)
         if package_d is not None and fitted_at and fitted_at != {f"{package_d:g}"}:
             entry = per_pair.setdefault((edge.target, edge.source), {"by_unit": {}, "reasons": [], "censored": {},
                                                                       "how": {}, "media": {}, "directions": []})
+            # an arc merged across dilution rates holds arcs at the package's own rate: its direction counts in
+            # the pair's sign check, as every arc's does, or a study at another rate that joined it decided a
+            # cell's sign by leaving (found in a fifth review)
+            if f"{package_d:g}" in fitted_at and edge.strength is not None:
+                entry["directions"].append(edge.strength)
             merged = (" (a merge, Merge parallel arcs or Merge to genus, joined arcs at several dilution rates: "
                       f"derive without it to keep those at {package_d:g} per h)" if len(fitted_at) > 1 else "")
             entry["reasons"].append(f"this arc was fitted at the dilution rate "
@@ -1901,6 +1911,10 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         # only the pairs inside a matrix: a pair outside every matrix whose arcs disagree is named with the
         # effects in no matrix, below, and "no pair disagreed" was false beside it (found in review)
         lines.append("  No pair in a matrix has arcs of opposite sign.")
+    within = sum(1 for e in net.edges if e.source == e.target and e.status != "absent")
+    if within:
+        lines.append(f"  {within} arc(s) are from one organism to itself, which Merge to genus produces, and have "
+                     "no cell: the diagonal is -r_i / K_i.")
     if got["left_out"]:
         lines.append("  These organisms are in no matrix, each for the reason beside it:")
         lines += [f"      {name}: {why}" for name, why in got["left_out"]]

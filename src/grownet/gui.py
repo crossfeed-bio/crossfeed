@@ -959,8 +959,9 @@ GLV_MODE_STEADY_MESSAGE = ("gLV mode on: growth rates on, and the steady-state d
 
 # What the page says when the steady-state derivation gave no row a scale, in place of batch growth rates.
 STEADY_NO_RATE = ("no growth rate: under the steady-state derivation an organism's rate is r_i - D, read from "
-                  "its own monoculture chemostat's start-up, and no row here got one (the reasons say why), so "
-                  "the rows stay in units of r_i - D and no batch growth rate is read in their place")
+                  "its own monoculture chemostat's start-up and carried by its arcs, and no arc here carries "
+                  "one: no row got a scale, or no arc survived the search's settings (the reasons say which). "
+                  "No batch growth rate is read in their place")
 
 
 # Under the steady-state derivation the check would score a package against the steady states it was fitted

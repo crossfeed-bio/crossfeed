@@ -835,7 +835,9 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
             # the steady-state derivation repeats a row's scale and own term on every arc of the row, so a row
             # with more partners weighed more in the median: one value per row, an organism's in one study and
             # chemostat group (found in a fourth review: 0.39 from three rows of 0.46, 0.32 and 0.30)
-            row = (nid, record.get("study_id", ""), record.get("condition", ""))
+            # one per study, dilution rate and medium: a split by technique gives the same organism's row in
+            # each part, under conditions that differ only in the techniques named (found in a fifth review)
+            row = (nid, record.get("study_id", ""), record.get("fitted_rate_dilution"), record.get("medium", ""))
             if row in seen_rows:
                 continue
             seen_rows.add(row)
@@ -866,7 +868,12 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
         else:
             at["rates"].append(rate)
             from .media import key_from_label as medium_key
-            at.setdefault("rates_by_medium", {}).setdefault(medium_key(record.get("medium") or ""), []).append(rate)
+            # by the medium, unit and technique the capacity is chosen by, so the steady-state rate comes from
+            # the same group as the capacity beside it (keyed by medium alone, a rate in Cells/mL sat beside a
+            # capacity in OD, found in a fifth review)
+            at.setdefault("rates_by_group", {}).setdefault(
+                (medium_key(record.get("medium") or ""), record.get("fitted_self_unit", ""),
+                 record.get("fitted_self_technique", "")), []).append(rate)
             at["points"].append(record.get("fit_points", 0))
             # the monoculture replicates stage 1 fitted this organism's rate from. `n` below counts the
             # fitted rows, which is what this path merges over, and the CSV's `replicates` column has meant
@@ -932,13 +939,15 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
 
     from .derive import OrganismRates
 
-    def rate_of(at, order):
+    def rate_of(at, order, chosen_group=None):
         """The median rate; under the steady-state derivation, of the medium the capacity comes from: its
         rate r_i - D and its capacity -1/B_ii are one fit's, and a median rate over two media beside one
         medium's capacity gave a diagonal that belonged to no fit (found in a fourth review)."""
-        by_medium = at.get("rates_by_medium") or {}
-        if str(method).startswith("steady_state") and order and by_medium.get(order[0][0]):
-            return statistics.median(by_medium[order[0][0]])
+        by_group = at.get("rates_by_group") or {}
+        if str(method).startswith("steady_state") and order and chosen_group is not None:
+            key = (order[0][0], chosen_group["unit"], chosen_group["technique"])
+            if by_group.get(key):
+                return statistics.median(by_group[key])
         return statistics.median(at["rates"])
     out = OrganismRates()
     for nid, at in gathered.items():
@@ -984,7 +993,7 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
                                + "; plateaus are compared only within one technique and unit")
                          for row in other["rows"]]
         out[nid] = {
-            "name": at["name"], "rate": rate_of(at, order),
+            "name": at["name"], "rate": rate_of(at, order, chosen),
             "unit": at["unit"],
             # what the median rests on: the fitted rows, which is what this derivation has instead of
             # monoculture replicates. `n_label` says so, because the report and the CSV read `n` as a

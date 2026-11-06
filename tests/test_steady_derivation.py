@@ -349,7 +349,7 @@ def test_with_no_row_scaled_the_command_line_reads_no_batch_rate_in_its_place(mo
                               capacity_max_fall=None)
     net = InteractionNetwork()
     found, _ = cli._rates_of(a, None, ["S1"], net, [], records=[])
-    assert found == {} and "no batch growth rate is read" in capsys.readouterr().err
+    assert found == {} and "No batch growth rate is read" in capsys.readouterr().err
 
 
 def test_the_second_box_selects_the_chemostat_runs_it_names():
@@ -423,7 +423,7 @@ def test_the_command_line_report_carries_the_notes_it_points_to():
     result = {"study": "S1", "entries": [], "resolved": [], "unresolved": [], "studies": ["S1"], "rates": {},
               "skipped": [], "errors": [], "network": records_to_network(records), "notes": notes}
     text = report_text(result)
-    assert "no batch growth rate is read" in text and "no steady-state check" in text
+    assert "No batch growth rate is read" in text and "no steady-state check" in text
 
 
 def test_an_empty_result_after_a_filter_does_not_say_the_study_holds_no_chemostat():
@@ -594,20 +594,34 @@ def test_a_genus_keeps_the_package_dilution_rate():
 
 
 def test_the_rate_comes_from_the_medium_the_capacity_comes_from():
-    """a fitted in Wilkins-Chalgren (r - D 0.46, one study) and in Gifu (0.86, two studies): the capacity is
-    Gifu's, where more rows were fitted, and so is the rate. The median over both media beside Gifu's capacity
-    gave a diagonal that belonged to no fit (found in a fourth review)."""
+    """a fitted in Wilkins-Chalgren (r - D 0.46, two studies) and in Gifu (0.86, 0.90 and 0.94, three
+    studies): the capacity is Gifu's, where more rows were fitted, and so is the rate, 0.90; over every row it
+    would be 0.86 (the median of five). The median over both media beside Gifu's capacity gave a diagonal that
+    belonged to no fit (found in a fourth review; the first test of it could not tell the two apart, found in
+    a fifth)."""
     from grownet import integrated
     from grownet.subcommunity import METRIC
     wc, _ = _derive()
-    gifu = [{**r, "medium": "Gifu Anaerobic Medium", "study_id": study,
-             "fitted_rate": r["fitted_rate"] + 0.4,
-             "fitted_self": r["fitted_self"] / r["fitted_rate"] * (r["fitted_rate"] + 0.4)}
-            for study in ("S2", "S3") for r in wc]
-    by_name = {r["name"]: r for r in integrated.fitted_rates(wc + gifu, METRIC).values()}
+    wc2 = [{**r, "study_id": "S5"} for r in wc]
+    gifu = [{**r, "medium": "Gifu Anaerobic Medium", "study_id": study, "fitted_rate": r["fitted_rate"] + up,
+             "fitted_self": r["fitted_self"] / r["fitted_rate"] * (r["fitted_rate"] + up)}
+            for study, up in (("S2", 0.40), ("S3", 0.44), ("S4", 0.48)) for r in wc]
+    by_name = {r["name"]: r for r in integrated.fitted_rates(wc + wc2 + gifu, METRIC).values()}
     assert by_name["a"]["capacity_medium"] == "Gifu Anaerobic Medium"
-    assert by_name["a"]["rate"] == pytest.approx(0.86, abs=1e-6)
+    assert by_name["a"]["rate"] == pytest.approx(0.90, abs=1e-6)
 
+
+def test_a_row_scale_is_the_median_over_every_monoculture_run():
+    """Two monoculture runs of a at one dilution rate, rising at 0.5 and at 0.7 per h: the scale is the median
+    over their vessels, 0.56 whichever run is read first. It was the last run's (found in a fifth review)."""
+    from test_growth_rates import _client
+
+    from grownet.subcommunity import chemostat_groups
+    curves = {(1, "a"): _startup(0.5, 0.04, 4.0, UNIT), (2, "a"): _startup(0.7, 0.04, 4.0, UNIT)}
+    for order in ((1, 2), (2, 1)):
+        exps = [_chemostat(f"E{i}", f"a alone {i}", ["a"], [(i, "V1")], description=RUN) for i in order]
+        (group,) = chemostat_groups(_client(curves), exps)
+        assert group["scales"]["a"]["scale"] == pytest.approx(0.56, abs=2e-3)
 
 def test_a_row_counts_once_in_the_rate_however_many_partners_it_has():
     """The steady-state derivation writes a row's scale on every arc of the row: a row with three partners
@@ -682,3 +696,65 @@ def test_a_run_still_changing_in_its_window_is_not_a_steady_state():
     assert names == ["a alone"]
     said = " ".join(why for g in groups for _, why in g["left_out"])
     assert "not at a steady state: b changes by" in said
+
+
+def test_a_split_by_technique_gives_an_arc_between_organisms_read_one_way_once():
+    """b is read by fc in a second pair run, so the runs are split by how b is read; a and c are read one way
+    throughout, and c's effect on a is the same measurement in both parts. Given once per part, it counted
+    twice in the cells, the rates and the capacities (found in a fifth review)."""
+    from test_growth_rates import _client
+    from test_subcommunity_inputs import _retag
+    curves = {(1, "a"): _startup(0.5, 0.04, 4.0, UNIT), (2, "a"): _startup(0.5, 0.04, 4.0, UNIT),
+              (3, "b"): _startup(0.3, 0.04, 4.0, 2 * UNIT), (4, "b"): _startup(0.3, 0.04, 4.0, 2 * UNIT),
+              (9, "c"): _startup(0.4, 0.04, 4.0, 1.5 * UNIT), (10, "c"): _startup(0.4, 0.04, 4.0, 1.5 * UNIT)}
+    for i in (5, 6, 7, 8):
+        curves[(i, "a")] = _startup(0.5, 0.04, 4.0, PAIR_A)
+        curves[(i, "b")] = _startup(0.3, 0.04, 4.0, PAIR_B if i < 7 else 2 * PAIR_B)
+    for i in (11, 12):
+        curves[(i, "a")] = _startup(0.5, 0.04, 4.0, 0.7 * UNIT)
+        curves[(i, "c")] = _startup(0.4, 0.04, 4.0, 1.0 * UNIT)
+    exps = [_chemostat("E1", "a alone", ["a"], [(1, "V1"), (2, "V2")], description=RUN),
+            _chemostat("E2", "b alone", ["b"], [(3, "V1"), (4, "V2")], description=RUN),
+            _chemostat("E3", "a with b", ["a", "b"], [(5, "V1"), (6, "V2")], description=RUN),
+            _chemostat("E4", "a with b again", ["a", "b"], [(7, "V1"), (8, "V2")], description=RUN),
+            _chemostat("E5", "c alone", ["c"], [(9, "V1"), (10, "V2")], description=RUN),
+            _chemostat("E6", "a with c", ["a", "c"], [(11, "V1"), (12, "V2")], description=RUN)]
+    client = _client(curves)
+    _retag(client, "b", "fc", bioreplicates={7, 8})
+    records, _ = SteadyStateDeriver(client=client).derive({"id": "S1", "name": "x"}, exps)
+    assert len([r for r in records if (r["source_name"], r["target_name"]) == ("c", "a")]) == 1
+    from grownet import integrated
+    from grownet.subcommunity import METRIC
+    assert integrated.fitted_rates(records, METRIC)
+    a_rows = {(r["study_id"], r["fitted_rate_dilution"], r["medium"]) for r in records if r["target_name"] == "a"}
+    assert len(a_rows) == 1                                     # one row of a, however many parts
+
+
+def test_an_arc_merged_across_dilution_rates_still_counts_in_the_pair_s_sign():
+    """Merged to genus: Prevotella helps Bacteroides alpha at D 0.04 and at D 0.2, and inhibits Bacteroides
+    beta at 0.04. The facilitation arc of the genus spans both rates and stays out of the cell; its direction
+    still counts, so the pair's arcs disagree and the cell is 0, named. Left out of the sign check, beta's
+    inhibition alone filled the cell, and a study at another rate decided its sign by leaving (found in a
+    fifth review)."""
+    from grownet import integrated, matrix
+    from grownet.derive import output_meta
+    from grownet.subcommunity import METRIC
+
+    def helped(records):
+        return [{**r, "coefficient": -r["coefficient"], "strength": -r["strength"], "effect": "facilitation",
+                 "metric_with": 2 * r["metric_without"] - r["metric_with"]}
+                if (r["source_name"], r["target_name"]) == ("Prevotella copri", "Bacteroides alpha") else r
+                for r in records]
+    alpha = {"a": "Bacteroides alpha", "b": "Prevotella copri"}
+    beta = {"a": "Bacteroides beta", "b": "Prevotella copri"}
+    raw = (helped(_renamed(_at_dilution(0.04, "S1"), alpha)) + helped(_renamed(_at_dilution(0.2, "S3"), alpha))
+           + _renamed(_at_dilution(0.04, "S2"), beta) + _renamed(_at_dilution(0.04, "F1"), {"a": "Clostridium c",
+                                                                                              "b": "Dorea d"}))
+    edges, meta = output_meta([dict(r) for r in raw], merge_genera=True)
+    net = records_to_network(edges, meta={"settings": {**gui.DEFAULTS, "derivation": "steady"}, **meta})
+    rates = matrix.for_nodes(net, integrated.fitted_rates(raw, METRIC), {})
+    got = matrix.coefficients(net, rates)
+    block = next(b for b in got["matrices"] if "Bacteroides" in b["organisms"])
+    order = block["organisms"]
+    assert block["matrix"][order.index("Bacteroides")][order.index("Prevotella")] == 0
+    assert ("Bacteroides", "Prevotella") in [tuple(p) for p in block["conflicts"]]

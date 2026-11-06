@@ -726,6 +726,11 @@ def _emit(a, net, skipped, extra, label, result):
             from .subcommunity import empty_reason as steady_reason
             print(f"\nNO interactions were derived for {label}: the network is empty. "
                   f"{steady_reason(skipped, command_line=True)}", file=sys.stderr)
+        elif a.derivation == "steady":
+            # rows were determined and a filter removed every arc: the lines above name it, and the batch
+            # sentences about pairwise and drop-out designs were false here (found in a fifth review)
+            print(f"\nNO interactions remain for {label}: the steady-state derivation determined rows, and the "
+                  f"settings above removed every arc.{try_these}", file=sys.stderr)
         else:
             print(f"\nNO interactions were derived for {label}: the network is empty.{why}\n"
                   "grownet derives interactions from pairwise (two-member) co-cultures and from drop-out "

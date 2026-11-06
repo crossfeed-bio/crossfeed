@@ -458,14 +458,23 @@ def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
                                      "techniques": {m: "; ".join(sorted(t)) for m, t in techniques.items()}})
         if len(members) == 1:
             period = batch_period(exp)
-            got = [row_scale(c, entry["dilution"], period) for rep in reps
-                   if (c := rep.curve(members[0])) is not None]
+            # every monoculture run's vessels are gathered first: the scale was set from each run in turn, so
+            # with two runs of one organism it was the last one read (found in a fifth review)
+            group.setdefault("readings", {}).setdefault(members[0], []).extend(
+                row_scale(c, entry["dilution"], period) for rep in reps if (c := rep.curve(members[0])) is not None)
+    for group in groups.values():
+        for organism, got in (group.pop("readings", None) or {}).items():
             scales = [g["scale"] for g in got if g["scale"] is not None]
-            group["scales"][members[0]] = ({"scale": statistics.median(scales), "how": got[0]["how"]
-                                            if len(scales) == len(got) else got[0]["how"] + " (some vessels "
-                                            "gave none)", "vessels": len(scales)} if scales else
-                                           {"scale": None, "how": got[0]["how"] if got else "no curve read",
-                                            "vessels": 0})
+            # the median over the vessels, said as such: the first vessel's own reading was quoted beside a
+            # scale that was not its (found in a fifth review)
+            median_how = (got[0]["how"] if len(scales) <= 1 else
+                          f"the median over {len(scales)} vessels' start-ups, {statistics.median(scales):.4g} per h; "
+                          f"the first: {got[0]['how']}")
+            group["scales"][organism] = ({"scale": statistics.median(scales), "how": median_how
+                                          if len(scales) == len(got) else median_how + " (some vessels "
+                                          "gave none)", "vessels": len(scales)} if scales else
+                                         {"scale": None, "how": got[0]["how"] if got else "no curve read",
+                                          "vessels": 0})
     settled = _by_technique(groups.values())
     for group in settled:
         for species in sorted({k for c in group["communities"] for k in c["abundance"]}):
@@ -525,6 +534,7 @@ def _by_technique(groups) -> list:
             techniques, communities = part["techniques"], part["communities"]
             t = ", ".join(f"{m} by {tech}" for m, tech in sorted(techniques.items()))
             out.append({**g, "communities": communities, "technique": t, "techniques": techniques,
+                        "split_on": sorted(mixed),
                         "scales": dict(g["scales"]),
                         "left_out": (list(g["left_out"]) if k == 0 else []) + [
                             (f"runs measured by {t}", f"fitted apart from the runs measured otherwise, since in "
@@ -541,7 +551,8 @@ def _communities(k: int) -> str:
 
 NEEDS = ("An organism's row has one unknown for its own limitation and one per partner it met at a steady "
          "state, so it needs at least that many communities holding it: its monoculture and a pair with each "
-         "partner, or the monocultures and every community missing one member, at one medium and dilution rate.")
+         "partner, or the monocultures and every community missing one member, at one medium and dilution rate "
+         "in one study.")
 
 
 def _group_summary(communities: list, got: dict) -> str:
@@ -623,7 +634,7 @@ def empty_reason(skipped: list, command_line: bool = False) -> str:
 
 METHOD = ("steady state v1: at a chemostat steady state every member present satisfies 1 + sum_j B_ij N_j = 0 "
           "with B = A / (r_i - D); each row solved by least squares over every unperturbed sub-community of "
-          "one medium, abundance unit and dilution rate, each organism read by one technique (EPICS, Ansari "
+          "one study, medium, abundance unit and dilution rate, each organism read by one technique (EPICS, Ansari "
           "et al. 2021, generalized)")
 METRIC = "steady_state:subcommunities"
 
@@ -664,7 +675,7 @@ class SteadyStateDeriver:
         "Each interaction is an effective generalized Lotka-Volterra coefficient fitted from chemostat steady "
         "states: at a steady state every organism present satisfies 1 + sum_j B_ij N_j = 0 with B = A / (r_i "
         "- D), and each organism's row is the least-squares solution over every unperturbed community of one "
-        "medium, abundance unit and dilution rate it was present in, each organism read by one technique "
+        "study, medium, abundance unit and dilution rate it was present in, each organism read by one technique "
         "there. Effective means that an effect needing "
         "a third organism is folded into the pairs that carry it, so a coefficient describes the communities "
         "it was fitted from. The strength beside it is log2(1 + B_ij x_j) at the partner's abundance in the "
@@ -703,6 +714,11 @@ class SteadyStateDeriver:
         identities = strain_identities(exps, [])
         records, skipped = [], []
         exps = select_experiments(exps, self.selection, skipped, study_id=study_id)
+        # the arcs already given by an earlier part of a split by technique, by medium, unit and dilution rate:
+        # an arc between two organisms each read one way is the same measurement in every part, and given once
+        # per part it was counted twice in the cells, the rates and the capacities, so reading one organism
+        # by flow cytometry in one run changed another's numbers (found in a fifth review)
+        given: set = set()
         for group in chemostat_groups(self.client, exps, self.spike_factor):
             label = (f"chemostat, D {group['dilution']:g} per h, {group['medium']}, {group['unit']}"
                      + (f", {group['technique']}" if group.get("technique") else ""))
@@ -716,7 +732,9 @@ class SteadyStateDeriver:
             # than once per coefficient, which was n^2 lines of the same sentence (Karoline, 2026-11-06: "Is
             # the error message in this case informative?")
             setting = label[len("chemostat, "):]
-            skipped += [(f"chemostat group at {setting}", _group_summary(communities, got))]
+            # fitted within one study, as every derivation reads one study at a time: named, so two groups of the
+            # same setting in two studies are not read as one contradicting itself (found in a fifth review)
+            skipped += [(f"chemostat group at {setting} in {study_id}", _group_summary(communities, got))]
             skipped += [(f"{what} [{label}]", why) for what, why in group["left_out"]]
             skipped += [(f"{species} in {community} [{label}]", "washed out: no steady-state equation")
                         for community, species in got["washed_out"]]
@@ -732,6 +750,12 @@ class SteadyStateDeriver:
                 for j, b in row["values"].items():
                     if j == i:
                         continue
+                    family = (group["dilution"], group["medium"], group["unit"], i, j)
+                    split_on = group.get("split_on") or ()
+                    if i not in split_on and j not in split_on:
+                        if family in given:
+                            continue
+                        given.add(family)
                     holding = [c for c in communities if (c["abundance"].get(i) or 0) > 0
                                and (c["abundance"].get(j) or 0) > 0]
                     largest = max(holding, key=lambda c: (len([v for v in c["abundance"].values() if v > 0]),
