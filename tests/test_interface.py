@@ -1130,7 +1130,9 @@ ISSUE_NUMBER = re.compile(r"(?<![\w&#])#\d{1,4}(?![0-9A-Fa-f])")
 def _visible(page: str) -> str:
     # any case and any space before the closing bracket, so no style or script text is read as visible
     # (CodeQL, on this pull request: the first version missed <SCRIPT>)
-    page = re.sub(r"<(style|script)\b.*?</\1\s*>", "", page, flags=re.S | re.I)
+    # an end tag may carry whitespace and junk before ">" (`</script\t\n bar>` still closes it), as CodeQL
+    # pointed out for the pattern below
+    page = re.sub(r"<(style|script)\b.*?</\1\b[^>]*>", "", page, flags=re.S | re.I)
     return " ".join(re.sub(r"<[^>]+>", " ", page).split())
 
 
@@ -1212,7 +1214,7 @@ def _viewer_text(page: str) -> str:
     # threw away with them (found in review: "(#12)" in a placeholder passed)
     shown += "\n" + "\n".join(m.group(2) for m in re.finditer(
         r"\b(title|placeholder|aria-label|alt)\s*=\s*\"([^\"]*)\"", page, flags=re.I))
-    for script in re.findall(r"<script\b[^>]*>(.*?)</script\s*>", page, flags=re.S | re.I):
+    for script in re.findall(r"<script\b[^>]*>(.*?)</script\b[^>]*>", page, flags=re.S | re.I):
         script = re.sub(r"/\*.*?\*/", "", script, flags=re.S)
         shown += "\n" + "\n".join(re.sub(r"(^|\s)//.*$", "", line) for line in script.splitlines())
     return shown
@@ -1231,6 +1233,8 @@ def test_no_issue_number_in_the_viewer_or_an_r_message():
                                               for ref in ISSUE_NUMBER.findall(text)]
     assert not any(found.values()), {name: refs for name, refs in found.items() if refs}
     # and the scans see what they are for: a planted number in a viewer string and in an R message
+    # an end tag with whitespace and junk before ">" still closes the script
+    assert "x(" not in _visible('<p>a</p><script>x("(#9)")</script\t\n bar><p>b</p>')
     assert ISSUE_NUMBER.findall(_viewer_text('<script>\nshow("see (#245)"); // (#1) a comment\n</script>')) \
         == ["#245"]
     assert ISSUE_NUMBER.findall(_viewer_text('<input placeholder="a study id (#12)"><b title="since #7">x</b>')) \
