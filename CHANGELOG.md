@@ -21,6 +21,12 @@ content.
   experiment's description (Karoline: "chemostat is not always switched on directly, so it would mean
   checking experiment description for a batch period"); where it does not say, the row stays in units of
   `r_i - D`. Live today: two studies each give one community, so nothing is derived.
+- **The derivation itself, `steady`** (#313): Derivation in Advanced settings and `--derivation steady`,
+  off by default, kept by gLV mode when chosen. Every identified coefficient becomes an arc with strength
+  `log2(1 + B_ij x_j)`, its coefficient (in 1/(time x abundance) where the row scale is known), the row's
+  bootstrap spread, and notes saying where the scale came from and how the largest community is predicted
+  by a fit made without it. What the design leaves undetermined is in the reasons. The help has a section
+  on it. The gLV package from it follows separately.
 
 
 ## [0.5.0] (2026-10-14)

@@ -78,7 +78,7 @@ EXAMPLE_MESSAGE = ("Example: three species that are grown together, with every s
 GLV_EXAMPLE = ("Bacteroides thetaiotaomicron", "Roseburia intestinalis")
 GLV_EXAMPLE_STUDY = "SMGDB00000002"
 METRICS = ("auc", "max", "growth_rate")
-DERIVATIONS = ("replicate", "integrated")
+DERIVATIONS = ("replicate", "integrated", "steady")
 
 
 def metric_name(s: dict) -> str:
@@ -663,6 +663,11 @@ def _empty_reason(result: dict) -> str:
     # where the specified comparison needs only two measurements per set. Say which setting moves, as the
     # page does everywhere else. It is gLV mode that selects that form (2026-10-10), so this is what a
     # reader meets when a package comes out empty rather than on an ordinary search.
+    if s.get("derivation") == "steady":
+        reason += (" The steady-state derivation reads continuous cultures only, and a row needs several "
+                   "communities of one medium and dilution rate holding the organism at a steady state; the "
+                   "reasons below say what each study held. Set Derivation in Advanced settings to derive "
+                   "from batch cultures.")
     if s.get("derivation", DEFAULTS["derivation"]) == "integrated" and any(
             "too few to fit a row" in why or "usable time point" in why
             for _, why in result.get("skipped", ())):
@@ -938,6 +943,10 @@ GLV_MODE_OFF_MESSAGE = ("gLV mode off: growth rates off, drop-out communities in
 def chosen_deriver(settings: dict, client=None):
     """The derivation a search runs, or None for the specified comparison, which `derive_interactions`
     builds itself. The integrated form of #127 is the advanced alternative Karoline approved."""
+    if (settings or {}).get("derivation") == "steady":
+        # the third derivation, from chemostat steady states of sub-communities (Karoline, #310)
+        from .subcommunity import SteadyStateDeriver
+        return SteadyStateDeriver(client=client, spike_factor=(settings or {}).get("spike_factor"))
     if (settings or {}).get("derivation") != "integrated":
         return None
     from .integrated import IntegratedDeriver
@@ -955,7 +964,7 @@ def glv_mode_on(settings: dict) -> bool:
     """
     s = {**DEFAULTS, **(settings or {})}
     return (bool(s["report_rates"]) and not s["include_dropout"] and s["metric"] == "growth_rate"
-            and s["derivation"] == "integrated")
+            and s["derivation"] in ("integrated", "steady"))
 
 
 def glv_mode(settings: dict, on: bool = True) -> dict:
@@ -971,8 +980,11 @@ def glv_mode(settings: dict, on: bool = True) -> dict:
         # and the integrated form, which is what a coefficient should be fitted by: it fits the row from
         # the whole time course rather than dividing a difference of two rates by one partner mean
         # (Karoline, 2026-10-10)
+        # the steady-state derivation is a gLV-mode choice too ("just for gLV mode and chemostat", #310),
+        # so pressing the mode with it chosen keeps it
+        keep = settings.get("derivation") == "steady"
         return {**settings, "report_rates": True, "include_dropout": False, "metric": "growth_rate",
-                "derivation": "integrated"}
+                "derivation": "steady" if keep else "integrated"}
     return {**settings, "report_rates": DEFAULTS["report_rates"],
             "include_dropout": DEFAULTS["include_dropout"], "metric": DEFAULTS["metric"],
             "derivation": DEFAULTS["derivation"]}
@@ -1191,7 +1203,9 @@ def _run_query(client, entries, settings: dict | None = None, index: dict | None
     # derivation rather than from a fresh object per study
     deriver = chosen_deriver(s, client)
     from .fetch import prefetch_studies
-    prefetch_studies(client, studies, s["include_non_batch"], progress=lambda d, t, m: say(d, t, m),
+    # the steady-state derivation reads chemostats, which a batch search leaves unread
+    prefetch_studies(client, studies, s["include_non_batch"] or s["derivation"] == "steady",
+                     progress=lambda d, t, m: say(d, t, m),
                      # the default derivation refuses a community of three or more, so prefetching the
                      # drop-out designs reads curves nothing can use (#142 item 10)
                      keep=narrowed,

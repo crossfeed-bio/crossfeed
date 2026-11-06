@@ -64,7 +64,8 @@ def test_the_command_line_has_the_same_choice():
     options = {o for action in derive._actions for o in action.option_strings}
     assert "--derivation" in options
     action = next(a for a in derive._actions if a.dest == "derivation")
-    assert set(action.choices) == {"replicate", "integrated"}
+    # and the third, from chemostat steady states (#310)
+    assert set(action.choices) == {"replicate", "integrated", "steady"}
     # The flag carries no default of its own: None means "not given", which is what lets gLV mode tell a
     # reader's explicit choice from one it filled in, and a run resolves None to the page's default. It
     # held "replicate" until 2026-10-10, when overriding an explicit flag was found to have broken the
