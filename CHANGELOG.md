@@ -10,7 +10,7 @@ content.
 
 - **The format id moves to `grownet.interaction_network/v5`** (Karoline, 2026-11-06, #305: "Is the
   measurement technique recorded as an arc attribute? If not, please add."), for one arc field,
-  `technique`. Nothing a `/v4` field means changes; `/v4` and older files still read and validate. The
+  `technique`, and one node field, `merged_nodes`. Nothing a `/v4` field means changes; `/v4` and older files still read and validate. The
   daily All network is also published as `all_result.v4.json` for installed 0.5.x copies, beside
   `all_result.json` for 0.3.x and 0.4.x.
 
@@ -23,6 +23,10 @@ content.
   technique of its arcs. Live on 2026-11-06: 145 arcs in All, qpcr 117, plates 15, fc 13, none with two.
   Merge parallel arcs merges arcs of different techniques and names them all (Karoline, 2026-11-06:
   "Yes, allow it"); no merge in today's All network crosses techniques, so this moves no live arc.
+- **A genus node lists the strains it stands for, `merged_nodes`** (Karoline, 2026-11-06, asked whether a
+  genus node should list its strain ids: "Yes, add it"): their node ids, sorted, in JSON, GraphML (joined
+  by "; ") and Cytoscape; empty on every node without Merge to genus. It kept none before. Live, All with
+  Merge to genus: 17 genus nodes list the 24 strains of the unmerged network, each once (*Bacteroides* 5).
 
 
 ## [0.5.0] (2026-10-14)

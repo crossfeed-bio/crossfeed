@@ -617,7 +617,8 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             if nid not in net.nodes:
                 net.add_node(Node(id=nid, name=r.get(f"{side}_name", ""), taxon_id=r.get(f"{side}_taxon_id", ""),
                                   species=r.get(f"{side}_species", ""), identity=r.get(f"{side}_identity", ""),
-                                  taxon_id_refused=r.get(f"{side}_taxon_id_refused", "") or ""))
+                                  taxon_id_refused=r.get(f"{side}_taxon_id_refused", "") or "",
+                                  merged_nodes=tuple(r.get(f"{side}_merged_nodes") or ())))
         # a merged arc (register item 14) rests on several studies and lists them; any other on one
         studies = r.get("studies") or [{"id": r["study_id"], "citation": r.get("study_citation", ""),
                                         "license": r.get("study_license", ""), "url": r.get("study_url", "")}]

@@ -77,6 +77,7 @@ _KEYS = [
     ("n_model_ref", "node", "model_ref", "string"),
     ("n_taxon_id", "node", "taxon_id", "string"),
     ("n_taxon_id_refused", "node", "taxon_id_refused", "string"),
+    ("n_merged_nodes", "node", "merged_nodes", "string"),
     ("n_species", "node", "species", "string"),
     ("n_identity", "node", "identity", "string"),
     ("n_genus", "node", "genus", "string"),
@@ -223,6 +224,7 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         _data(n, "n_model_ref", node.model_ref)
         _data(n, "n_taxon_id", node.taxon_id)
         _data(n, "n_taxon_id_refused", node.taxon_id_refused)
+        _data(n, "n_merged_nodes", "; ".join(node.merged_nodes))
         _data(n, "n_species", node.species)
         _data(n, "n_identity", node.identity)
         _data(n, "n_genus", genus(node))
