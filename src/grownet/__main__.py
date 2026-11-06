@@ -1,6 +1,7 @@
 """grownet command line: derive interaction networks from mGrowthDB.
 
   python -m grownet derive SMGDB00000004 --live                 # every species in one study
+  python -m grownet derive --live --all                         # the All network: every study in mGrowthDB
   python -m grownet derive --live --species "Faecalibacterium duncaniae" \
       "Blautia hydrogenotrophica" "Roseburia intestinalis"
   python -m grownet derive SMGDB00000004 --fixture records.json  # offline, from interaction records
@@ -24,6 +25,13 @@ from .mgrowthdb import MGrowthDBError, records_to_network
 from .schema import schema_json, validate_document
 
 DERIVE_EXAMPLES = """examples:
+  the All network, every study in mGrowthDB with every partner (the page with both boxes empty; at the
+  default settings it is the network derived once a day, read in seconds):
+    grownet derive --live --all --out all.json
+
+  every species in one medium, with every partner (the page with only the second box filled):
+    grownet derive --live --conditions "Wilkins-Chalgren" --out wc_all.json
+
   the gLV rows from the chemostat steady states of sub-communities (no study in mGrowthDB holds such a
   design yet, so this says what each organism lacks):
     grownet derive SMGDB00000011 --live --glv-mode --derivation steady --glv chemostat_glv.zip
@@ -39,7 +47,7 @@ DERIVE_EXAMPLES = """examples:
   a genus (all its species in mGrowthDB) with every partner, one node per genus:
     grownet derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
 
-  all of mGrowthDB (the page's All), arcs merged across studies and then to genus:
+  the All network, arcs merged across studies and then to genus:
     grownet derive --live --all --merge-arcs --merge-genera --out all_genera.json
 
   every species in one study, stricter about what counts as an interaction:
@@ -303,6 +311,11 @@ def _derive_run(a):
     if problem:
         print(problem, file=sys.stderr)
         return 2
+    if a.live and a.conditions and not (a.species or a.study or a.all_studies):
+        # the page's species box left empty with the second box filled (#300, Karoline 2026-11-04): every
+        # species in those media or studies, which is All under --conditions. Only with --live, so that
+        # --fixture keeps its own message rather than one about a flag nobody typed
+        a.all_studies = True
     if a.species or a.all_studies:
         return _derive_species(a)
     # Flags that only the search path can act on. The help says they apply "with --species or --all" and
@@ -318,7 +331,9 @@ def _derive_run(a):
               f"{cannot_act[0]}.", file=sys.stderr)
         return 2
     if not a.study:
-        print("derive needs a study id, or --species with names (see grownet derive --help)", file=sys.stderr)
+        # every route a derive can take, the two that need no species included (found in review)
+        print("derive needs a study id, --species with names, --conditions alone (every species in those "
+              "media, experiments or studies) or --all (see grownet derive --help)", file=sys.stderr)
         return 2
     if a.deriver and not a.live:
         print("--deriver applies to --live (it derives from raw growth data); "
@@ -834,11 +849,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     d = sub.add_parser(
-        "derive", help="derive an interaction network for species, or for one study",
+        "derive", help="derive an interaction network for species, media or studies, or the All network "
+                  "of every study in mGrowthDB (derive --live --all)",
         description="Derive an interaction network from mGrowthDB growth curves: for species, strains,\n"
-                    "genera or NCBI taxon ids (as the local page does), for all of mGrowthDB (--all, the\n"
-                    "page's All button), or for every species in one study. The settings are the local\n"
-                    "page's Advanced settings, with the same defaults.",
+                    "genera or NCBI taxon ids (as the local page does), for every species in some media or\n"
+                    "studies (--conditions alone), for every species in one study, or for all of mGrowthDB.\n"
+                    "For the All network, every study in mGrowthDB: grownet derive --live --all.\n"
+                    "The settings are the local page's Advanced settings, with the same defaults.",
         epilog=DERIVE_EXAMPLES, formatter_class=argparse.RawDescriptionHelpFormatter)
     what = d.add_argument_group("what to derive")
     what.add_argument("study", nargs="?", default="",
@@ -852,7 +869,7 @@ def build_parser() -> argparse.ArgumentParser:
                            "holding them is searched and one network returned, as on the local page (needs "
                            "--live)")
     what.add_argument("--all", action="store_true", dest="all_studies",
-                      help="every study in mGrowthDB, with every partner, as the page's All button (needs "
+                      help="every study in mGrowthDB, with every partner, as the page with both boxes empty (needs "
                            "--live; the study argument then limits it to those studies)")
     what.add_argument("--no-published", action="store_true",
                       help="with --all, derive live even when the network derived once a day in the grownet "
@@ -866,11 +883,13 @@ def build_parser() -> argparse.ArgumentParser:
                       help="media, experiment ids or study ids to look at (the page's second box): a medium "
                            "is matched as text against the medium name, the description and the experiment "
                            "name, an id picks that study (SMGDB...) or experiment (EMGDB...), and naming a "
-                           "comparison keeps the monocultures it is made against. Empty looks at every medium")
+                           "comparison keeps the monocultures it is made against. Empty looks at every medium. "
+                           "Without --species or a study, every species in what it names, with every partner, "
+                           "as the page does with the species box empty (with --live)")
     what.add_argument("--technique", default="", metavar="NAME",
                       help="keep only curves measured by this mGrowthDB technique (fc, 16s, qpcr, plates, ...), "
                            "in arcs and in monoculture rates and plateaus, and name the others (default: every "
-                           "technique; Karoline, #292)")
+                           "technique)")                                   # Karoline, #292
     what.add_argument("--exclude-studies", default="", metavar="IDS",
                       help="with --species or --all, comma separated study ids never to search (default: none)")
     what.add_argument("--all-partners", action="store_true",
@@ -957,8 +976,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     settings.add_argument("--glv-mode", action="store_true",
                           help="the page's gLV mode button: report growth rates, leave out drop-out "
-                               "communities, and compare the growth rate, which is what a fitted "
-                               "generalized Lotka-Volterra coefficient is made of")
+                               "communities, compare the growth rate, and derive on the integrated form "
+                               "unless --derivation names another, which is what a fitted generalized "
+                               "Lotka-Volterra coefficient is made of")
     settings.add_argument("--report-rates", action="store_true",
                           help="also report each organism's maximum specific growth rate in monoculture, "
                                "the median over replicates and studies, with the lag and the monoculture "

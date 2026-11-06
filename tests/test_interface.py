@@ -180,7 +180,10 @@ def test_the_input_field_starts_empty_under_a_header_naming_the_options_and_a_ro
     assert "placeholder" not in page
     # Karoline (2026-09-28): "Genus to be mentioned in the title above the input box and a genus example
     # query in the sentence below"
-    header = page.index('<label class="field" for="species">Species, strains, genera or NCBI taxon ids</label>')
+    # "(optional)" since #300 (Karoline, 2026-11-04: "the GUI text still implies that the first input field
+    # is not optional")
+    header = page.index('<label class="field" for="species">Species, strains, genera or NCBI taxon ids '
+                        '(optional)</label>')
     examples = page.index('<p class="examples">For example: ')
     assert header < examples < page.index("<textarea")            # a row below the header, above the box
     for example in gui.INPUT_EXAMPLES:                    # one species, one strain, one genus, one taxon id
@@ -290,9 +293,11 @@ def test_the_page_the_command_line_and_the_help_all_know_genera_and_all():
     page = help_page.render_help("tok", gui.DEFAULTS, gui.EXAMPLE)
     assert "Merge to genus" in page                                     # the advanced option
     assert help_page._name("supporting_pairs") in page and help_page._name("merged_pairs") in page  # the arc fields
-    assert "a genus (it stands for every species of it" in page and "The All button" in page
+    assert "a genus (it stands for every species of it" in page and "The species box is optional" in page
+    assert "<strong>For the All network</strong>, every study in mGrowthDB with every partner, leave both boxes" in page
     form = gui.render_form("tok")
-    assert 'name="merge_genera"' in form and 'name="all"' in form
+    # All is the species box left empty since #300 (Karoline, 2026-11-04: "Remove it"), not a button
+    assert 'name="merge_genera"' in form and 'name="all"' not in form
 
 
 def test_the_help_weighs_each_growth_measure():
@@ -494,11 +499,14 @@ def with_rates(monkeypatch):
     monkeypatch.setattr(gui, "growth_rates", lambda *a, **kw: (dict(RATES), []))
 
 
-def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
+def test_glv_mode_sits_in_the_bar_and_sets_what_a_simulation_needs(server):
     """Karoline, 2026-10-04, after a first attempt put two checkboxes in the bar: "this is now quite
     complex. So how about moving both options back to advanced parameters, with their default settings,
     and instead introduce a button 'gLV mode' next to 'All', which will enable growth rate collection and
-    disable drop-out communities? The GUI text can then be simplified somewhat."""
+    disable drop-out communities? The GUI text can then be simplified somewhat."
+
+    The All button it sat next to is gone since #300 (Karoline, 2026-11-04: "Remove it"), so the order
+    pinned here is the one that remains: Example, gLV example, gLV mode."""
     base, token = server
     _, page, _ = _open(f"{base}/?token={token}")
     bar = page[page.index('<div class="bar">'):]
@@ -506,10 +514,10 @@ def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
     assert 'name="glv_mode" value="1"' in bar and ">gLV mode</button>" in bar
     assert 'class="switch"' in bar and 'aria-pressed="false"' in bar      # a switch, standing at off
     assert '<span class="track"><span class="knob">' in bar               # drawn, not described
-    assert bar.index('name="glv_mode"') > bar.index('name="all"')        # next to All
-    # the gLV example button sits between them: it fills the boxes and the settings for a package that
-    # simulates and runs the search (Karoline, 2026-10-07)
-    assert bar.index('name="all"') < bar.index('name="glv_example"') < bar.index('name="glv_mode"')
+    assert 'name="all"' not in bar
+    # the gLV example button sits before it: it fills the boxes and the settings for a package that
+    # simulates (Karoline, 2026-10-07), and since 2026-11-06 waits for Find interactions as Example does
+    assert bar.index('name="example"') < bar.index('name="glv_example"') < bar.index('name="glv_mode"')
     assert not re.findall(r'<input[^>]*name="([^"]+)"', bar)             # and no checkboxes in the bar
     assert len(bar) < 720                                                # the text beside it stays short
 
@@ -821,7 +829,7 @@ def test_what_is_typed_in_the_second_box_stays_there_and_in_the_report(server):
 def test_several_entries_of_the_second_box_are_one_line_of_the_report():
     """Round 20 of the review: `--conditions SMGDB00000007 SMGDB00000014` (one entry per line in the box)
     printed the second study alone at the start of the next report line, with no label."""
-    from grownet.report import _value
+    from grownet.report import setting_value as _value
     assert _value("conditions", "SMGDB00000007\nSMGDB00000014\n") == "SMGDB00000007; SMGDB00000014"
     assert _value("conditions", "SMGDB00000001") == "SMGDB00000001"
     assert _value("conditions", "S7\r\n\r\nS14") == "S7; S14"       # blank lines are no entries
@@ -1114,3 +1122,312 @@ def test_the_report_query_line_and_the_page_heading_join_the_second_box_with_sem
                         "errors": [], "skipped": [], "entries": [], "all": True,
                         "settings": {"conditions": "SMGDB00000014\nWilkins-Chalgren, anaerobic"}})
     assert "matching SMGDB00000014; Wilkins-Chalgren, anaerobic" in text
+
+
+# ---- no GitHub issue numbers where a user reads (Karoline, 2026-11-06) --------------------------------
+#
+# "in general: users don't need to see github issue numbers anywhere", after "(#193)" showed under the
+# page's second box. An issue number is a developer's cross-reference; it belongs in a code comment beside
+# the text, not in the text.
+
+# "#193", "(#40, #54)", "since #119"; not a color ("#222222", six hex digits) and not an HTML entity.
+# The {1,4} cap IS the color defence, together with the trailing hex guard: with \d+ the match takes all six
+# digits of #123456, the guard sees the closing character, and every #RRGGBB color reads as an issue number.
+# So an issue number of five digits or more is not matched; widen it only with another defense for colors
+# (Craig's agent)
+ISSUE_NUMBER = re.compile(r"(?<![\w&#])#\d{1,4}(?![0-9A-Fa-f])")
+
+
+def _visible(page: str) -> str:
+    # any case and any space before the closing bracket, so no style or script text is read as visible
+    # (CodeQL, on this pull request: the first version missed <SCRIPT>)
+    # an end tag may carry whitespace and junk before ">" (`</script\t\n bar>` still closes it), as CodeQL
+    # pointed out for the pattern below
+    page = re.sub(r"<(style|script)\b.*?</\1\b[^>]*>", "", page, flags=re.S | re.I)
+    return " ".join(re.sub(r"<[^>]+>", " ", page).split())
+
+
+def test_no_issue_number_on_any_page_the_command_line_or_a_written_file():
+    from test_gui import _query
+
+    from grownet import published
+    from grownet.__main__ import build_parser
+    from grownet.export import to_graphml
+    from grownet.report import report_text
+    result = _query()
+    every = gui.run_query(FakeClient(), [], {"derivation": "replicate"}, all_studies=True, published=False)
+    parser = build_parser()
+    commands = next(a for a in parser._actions if a.choices).choices.values()
+    surfaces = {
+        "the page": _visible(gui.render_form("tok")), "a result": _visible(gui.render_result("tok", result)),
+        "an All result": _visible(gui.render_result("tok", every)), "the help": _visible(gui.render_help("tok")),
+        "the about page": _visible(gui.render_about("tok")), "the legend": _visible(gui.render_legend("tok")),
+        "the token page": _visible(gui.render_token_page(True, 8791)),
+        "the command line": parser.format_help() + "".join(c.format_help() for c in commands),
+        "the report": report_text(result), "the JSON": result["network"].to_json(),
+        "the GraphML": to_graphml(result["network"]), "the daily file": json.dumps(published.to_payload(every)),
+    }
+    found = {where: ISSUE_NUMBER.findall(text) for where, text in surfaces.items()}
+    assert not any(found.values()), {where: refs for where, refs in found.items() if refs}
+
+
+def test_no_issue_number_in_a_string_the_tool_can_show():
+    """The pages above show what one fake search reaches; a message for a case it does not reach is still
+    text a user reads. So every string literal under src/grownet is scanned, except docstrings, which only
+    a developer reads (the module docstring of __main__ is the command line's description, so it counts)."""
+    import ast
+    import io
+    import tokenize
+    from pathlib import Path
+    found = []
+    # every module, in subpackages too (`slices/`): a non-recursive glob left their messages unread (found
+    # in review)
+    for path in sorted((Path(__file__).resolve().parents[1] / "src" / "grownet").rglob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        docstrings = set()
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.body \
+                    and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, ast.Constant) \
+                    and isinstance(node.body[0].value.value, str) \
+                    and not (isinstance(node, ast.Module) and path.name == "__main__.py"):
+                docstrings.update(range(node.body[0].lineno, node.body[0].end_lineno + 1))
+        kinds = (tokenize.STRING, getattr(tokenize, "FSTRING_MIDDLE", tokenize.STRING))
+        for token in tokenize.generate_tokens(io.StringIO(source).readline):
+            if token.type in kinds and token.start[0] not in docstrings:
+                found += [f"{path.name}:{token.start[0]} {ref}" for ref in ISSUE_NUMBER.findall(token.string)]
+    assert found == [], found
+
+
+def _r_strings(source: str) -> list:
+    """The string literals of R code, outside comments: what print(), cat(), message() and stop() show."""
+    out, i, n = [], 0, len(source)
+    while i < n:
+        c = source[i]
+        if c == "#":                                   # a comment, roxygen included, to the end of the line
+            end = source.find("\n", i)
+            i = n if end < 0 else end
+        elif c in "'\"":
+            j = i + 1
+            while j < n and source[j] != c:
+                j += 2 if source[j] == "\\" else 1
+            out.append(source[i + 1:j])
+            i = j + 1
+        else:
+            i += 1
+    return out
+
+
+def _viewer_text(page: str) -> str:
+    """What the viewer (gui/index.html) can show: its visible HTML, and its script with the comments taken
+    out, since the messages, labels and tooltips it writes are string literals there."""
+    shown = _visible(page)
+    # and the attribute values a reader meets on hovering or in an empty field, which stripping the tags
+    # threw away with them (found in review: "(#12)" in a placeholder passed)
+    shown += "\n" + "\n".join(m.group(2) for m in re.finditer(
+        r"\b(title|placeholder|aria-label|alt)\s*=\s*\"([^\"]*)\"", page, flags=re.I))
+    for script in re.findall(r"<script\b[^>]*>(.*?)</script\b[^>]*>", page, flags=re.S | re.I):
+        script = re.sub(r"/\*.*?\*/", "", script, flags=re.S)
+        shown += "\n" + "\n".join(re.sub(r"(^|\s)//.*$", "", line) for line in script.splitlines())
+    return shown
+
+
+def test_no_issue_number_in_the_viewer_or_an_r_message():
+    """The viewer and the R package's own messages are read by users too; the scans above covered only
+    the tool's Python and the R help (found in review: "(#245)" in a viewer string and "(#142)" in a
+    cat() of print.grownet_glv passed)."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    found = {"gui/index.html": ISSUE_NUMBER.findall(_viewer_text((root / "gui" / "index.html")
+                                                                 .read_text(encoding="utf-8")))}
+    for path in (root / "r" / "R").glob("*.R"):
+        found[str(path.relative_to(root))] = [ref for text in _r_strings(path.read_text(encoding="utf-8"))
+                                              for ref in ISSUE_NUMBER.findall(text)]
+    assert not any(found.values()), {name: refs for name, refs in found.items() if refs}
+    # and the scans see what they are for: a planted number in a viewer string and in an R message
+    # an end tag with whitespace and junk before ">" still closes the script
+    assert "x(" not in _visible('<p>a</p><script>x("(#9)")</script\t\n bar><p>b</p>')
+    assert ISSUE_NUMBER.findall(_viewer_text('<script>\nshow("see (#245)"); // (#1) a comment\n</script>')) \
+        == ["#245"]
+    assert ISSUE_NUMBER.findall(_viewer_text('<input placeholder="a study id (#12)"><b title="since #7">x</b>')) \
+        == ["#12", "#7"]
+    assert _r_strings('cat("in no matrix (#142)\\n") # (#9) a comment\nx <- \'a\'') == \
+        ["in no matrix (#142)\\n", "a"]
+
+
+def test_no_issue_number_in_the_readme_or_the_r_package_help():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    texts = {"README.md": (root / "README.md").read_text(encoding="utf-8")}
+    for path in [*(root / "r" / "man").glob("*.Rd"), root / "r" / "README.md", root / "r" / "DESCRIPTION"]:
+        texts[str(path.relative_to(root))] = path.read_text(encoding="utf-8")
+    for path in (root / "r" / "R").glob("*.R"):          # roxygen, which becomes the help page
+        texts[str(path.relative_to(root))] = "\n".join(line for line in path.read_text(encoding="utf-8").splitlines()
+                                                       if line.lstrip().startswith("#'"))
+    found = {name: ISSUE_NUMBER.findall(text) for name, text in texts.items()}
+    assert not any(found.values()), {name: refs for name, refs in found.items() if refs}
+
+
+def test_the_issue_number_pattern_takes_issue_numbers_and_never_a_color():
+    """The cap and the hex guard together: #193 and #1234 are issue numbers; #222222 and #1a7f5a, colors,
+    are not (a pattern without the cap would read every color as an issue number)."""
+    assert ISSUE_NUMBER.findall("see #193 and #1234") == ["#193", "#1234"]
+    assert ISSUE_NUMBER.findall("color: #222222; fill: #1a7f5a; #123456") == []
+
+
+# ---- an empty species box (#300) ------------------------------------------------------------------
+#
+# Karoline, 2026-11-04: "1 functionality I'd like to add is to allow the species field to be empty when the
+# second field (media/studies) has content, so the query is automatically carried out for all species in
+# these media/studies. it also begs the question whether we need an 'All' button - perhaps the All network
+# could be delivered when both input fields are empty, unless changed advanced options necessitate a
+# re-search". Asked whether to remove the All button: "Remove it".
+
+def _as_a_browser_submits(page: str) -> dict:
+    """The fields the page's form sends as it stands: every input's value, a checkbox only when checked,
+    each select's selected option, each textarea's text. Buttons send nothing unless pressed."""
+    from html.parser import HTMLParser
+
+    class Form(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.fields, self.select, self.textarea = {}, None, None
+
+        def handle_starttag(self, tag, attrs):
+            a = dict(attrs)
+            if tag == "input" and a.get("name") and (a.get("type") != "checkbox" or "checked" in a):
+                self.fields[a["name"]] = a.get("value", "on")
+            elif tag == "select":
+                self.select = a.get("name")
+            elif tag == "option" and self.select and ("selected" in a or self.select not in self.fields):
+                self.fields[self.select] = a.get("value", "")
+            elif tag == "textarea":
+                self.textarea = a.get("name")
+                self.fields[self.textarea] = ""
+
+        def handle_endtag(self, tag):
+            if tag == "select":
+                self.select = None
+            elif tag == "textarea":
+                self.textarea = None
+
+        def handle_data(self, data):
+            if self.textarea:
+                self.fields[self.textarea] += data
+
+    form = Form()
+    form.feed(page[page.index("<form"):page.index("</form>")])
+    return form.fields
+
+
+def test_an_empty_species_box_searches_the_second_box_and_both_empty_give_all(server, monkeypatch):
+    calls = []
+    real = gui.run_query
+
+    def recording(client, entries, settings, *a, **kw):
+        calls.append({"entries": [e.strip() for e in entries if e.strip()], "all": kw.get("all_studies", False),
+                      "conditions": settings.get("conditions", ""),
+                      "published": kw.get("all_studies", False) and kw.get("published", True)
+                      and gui.daily.usable({**gui.DEFAULTS, **settings}, gui.DEFAULTS)})
+        return real(client, entries, settings, *a, **kw)
+
+    monkeypatch.setattr(gui, "run_query", recording)
+    GATE.set()
+    base, token = server
+    _, page, _ = _open(f"{base}/?token={token}")
+    defaults = _as_a_browser_submits(page)
+    assert gui.parse_settings({k: [v] for k, v in defaults.items()}) == gui.DEFAULTS, \
+        "the page as it opens must post the defaults, or the published row below proves nothing"
+
+    def find(species, conditions, **changed):
+        before = len(calls)
+        form = {**defaults, "species": species, "conditions": conditions, **changed}
+        _open(f"{base}/run?token={token}", urllib.parse.urlencode(form).encode())
+        for _ in range(500):                  # the search runs in a thread; its first call is enough
+            if len(calls) > before:
+                return calls[-1]
+            time.sleep(0.01)
+        raise AssertionError("Find interactions started no search")
+
+    # species filled, either box: the species search, as before
+    assert find(f"{A}\n{B}", "")["all"] is False
+    assert find(f"{A}\n{B}", "SMGDB00000001") == {"entries": [A, B], "all": False,
+                                                  "conditions": "SMGDB00000001", "published": False}
+    # species empty, second box filled: every species in those media or studies (All under the second box,
+    # which never reads the published network, since that one is every study)
+    assert find("", "SMGDB00000001") == {"entries": [], "all": True, "conditions": "SMGDB00000001",
+                                         "published": False}
+    # both empty, whitespace counting as empty: All, from the published network at the defaults ...
+    assert find(" \n ", "") == {"entries": [], "all": True, "conditions": "", "published": True}
+    # ... "unless changed advanced options necessitate a re-search": any changed setting derives it live
+    assert find("", "", absence_threshold="2")["published"] is False
+
+    # and there is no All button any more: the species box reads as optional and says what leaving it
+    # empty does, and the bar says in one sentence how to get the All network (Karoline, 2026-11-04: "we'll
+    # also need a brief sentence in the GUI (and CLI help) so people know how to get the All network. also,
+    # the GUI text still implies that the first input field is not optional")
+    assert 'name="all"' not in page and ">All</button>" not in page
+    assert "Species, strains, genera or NCBI taxon ids (optional)</label>" in page
+    hint = page[page.index('id="species"'):page.index('for="conditions"')]
+    assert "Left empty,\nevery species in the media or studies of the second box is searched" in hint
+    bar = page[page.index('<div class="bar">'):]
+    bar = bar[:bar.index("</div>")]
+    assert "For the All network, every study in mGrowthDB, press Find interactions with both\nboxes empty." in bar
+
+
+def test_the_command_line_help_says_how_to_get_the_all_network():
+    # Karoline, 2026-11-04: "we'll also need a brief sentence in the GUI (and CLI help) so people know how to
+    # get the All network". In the list of commands and in derive's own help, with the command to type
+    from grownet.__main__ import DERIVE_EXAMPLES, build_parser
+    parser = build_parser()
+    top = parser.format_help()
+    derive = next(a for a in parser._subparsers._actions if a.choices).choices["derive"].format_help()
+    assert "the All network of every study in" in top and "(derive --live --all)" in top
+    assert "For the All network, every study in mGrowthDB: grownet derive --live --all." in derive
+    assert DERIVE_EXAMPLES.startswith("examples:\n  the All network, every study in mGrowthDB")
+    assert "grownet derive --live --conditions \"Wilkins-Chalgren\" --out wc_all.json" in DERIVE_EXAMPLES
+
+
+def test_a_search_with_no_species_says_every_partner_was_kept_and_counts_its_studies():
+    """With the species box empty, under the second box or for All, every partner is kept, and the report
+    said "Only interactions between the species entered (--all-partners): on" beside "with every partner";
+    the page said "1 studies" (found in review)."""
+    from test_gui import FakeClient, _query
+
+    from grownet.report import report_text
+    note = "<- not read in this run: no species was entered, so every partner is kept"
+    for conditions in ("WC", ""):
+        result = gui.run_query(FakeClient(), [], {"derivation": "replicate", "conditions": conditions},
+                               all_studies=True, published=False)
+        line = next(x for x in report_text(result).splitlines() if "(--all-partners)" in x)
+        assert line.strip().endswith(note), line
+        assert len(result["studies"]) == 1
+        page = gui.render_result("tok", result)
+        assert "1 study" in page and "1 studies" not in page
+    # a species search reads the setting, and says nothing beside it
+    line = next(x for x in report_text(_query()).splitlines() if "(--all-partners)" in x)
+    assert "not read" not in line
+
+
+def test_derive_with_nothing_to_search_names_every_route(capsys):
+    """`derive --live` alone named a study id and --species only, while --conditions alone and --all derive
+    too (found in review)."""
+    from grownet.__main__ import main
+    assert main(["derive", "--live"]) == 2
+    said = capsys.readouterr().err
+    assert all(route in said for route in ("study id", "--species", "--conditions", "--all")), said
+
+
+def test_the_glv_mode_option_lists_every_setting_it_changes():
+    """`--glv-mode`'s help named three of the four settings the mode sets: the derivation was missing, the
+    error the help page had and lost (found in review). The same four are what the page's message names."""
+    from pathlib import Path
+
+    from grownet.__main__ import build_parser
+    parser = build_parser()
+    derive = next(a for a in parser._subparsers._actions if a.choices).choices["derive"]
+    text = " ".join(next(a for a in derive._actions if "--glv-mode" in a.option_strings).help.split())
+    for setting in ("growth rates", "drop-out communities", "compare the growth rate", "integrated form"):
+        assert setting in text, setting
+    readme = " ".join((Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8").split())
+    assert ("(growth rates on, drop-out communities off, the comparison on the growth rate, the integrated "
+            "form)") in readme

@@ -8,7 +8,7 @@ grow**net** turns experimentally grounded microbial co-growth data from
 [mGrowthDB](https://mgrowthdb.gbiomed.kuleuven.be/) into directed interaction networks, in a neutral and
 openly citable format that downstream tools (such as Syntropa and microbetag) can consume.
 
-grow**net** was called crossfeed until 2026-09-27 (#71). The package, the module and the command are
+grow**net** was called crossfeed until 2026-09-27. The package, the module and the command are
 `grownet`; the repository keeps the old name for now, so its address is still `crossfeed-bio/crossfeed`.
 
 It is a thin client: it pulls from mGrowthDB and emits a network. Nothing to host, nothing to pay for on a
@@ -147,6 +147,7 @@ seam.
 python -m grownet derive STUDY [--live | --fixture FILE] [--deriver MODULE:CLASS] [--format json|graphml|matrix] [--out FILE]
 python -m grownet derive --live --species NAME [NAME ...] [--all-partners] [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
 python -m grownet derive --live --all [STUDY,STUDY] [--out FILE] [--report FILE] [--to-cytoscape]
+python -m grownet derive --live --conditions NAME [NAME ...] [--out FILE] [--report FILE] [--to-cytoscape]
 python -m grownet validate FILE
 python -m grownet schema [--out FILE]
 ```
@@ -157,13 +158,16 @@ python -m grownet schema [--out FILE]
   the species given (`--all-partners` keeps their other partners too). A genus alone ("Blautia") stands
   for every species of it that mGrowthDB holds. The page's Example, from the command line:
   `grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica" "Roseburia intestinalis"`.
-- `derive --live --all` does what the page's All button does: every study in mGrowthDB, with every
-  partner (a study argument limits it to those studies). With the default settings it reads the network
+- `derive --live --all` does what the page does with both boxes empty: every study in mGrowthDB, with
+  every partner (a study argument limits it to those studies). With the default settings it reads the network
   derived once a day by `.github/workflows/all-network.yml` (the `all-network` release), when that is
   less than 36 hours old **and was derived by the same derivation your settings ask for**, and derives
   live otherwise; `--no-published` always derives live. The derivation is part of the condition because a
   format id moves when a field changes meaning and the derivation is not a field, so the artifact and a
   live run can carry the same format and entirely different networks.
+- `derive --live --conditions NAME ...` without `--species` or a study does what the page does with the
+  species box empty and the second box filled: every species in those media, experiments or studies,
+  with every partner.
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the three built-in ones (see below).
 - The command line does everything the local page does: every advanced setting has its option, and the
@@ -176,7 +180,7 @@ python -m grownet schema [--out FILE]
 - `--format matrix` emits the adjacency matrix as CSV, and with `--out x.csv` writes `x.about.txt` beside
   it: the version, the date, the derivation, the metric, every setting, the meaning of `0` and `NA`, the
   pairs left at 0, the `NA` cells with their bounds, and the sources, none of which the grid itself can
-  carry (#212). In the CSV: the organisms in the header row and in the first
+  carry. In the CSV: the organisms in the header row and in the first
   column, and a cell holding the log2 mean of the comparison, so `A[i][j]` is the effect of j on i. Each
   organism appears once, so arcs of one pair are merged across conditions and studies by their median, a
   pair whose arcs disagree in sign is left at 0, and an empty cell or an arc below the absence threshold
@@ -201,7 +205,7 @@ A `grownet` console command is installed too, so `grownet derive ...` works afte
 ## The legend
 
 One picture of what every arc, head, dash and flag means: [docs/legend.svg](https://raw.githubusercontent.com/crossfeed-bio/crossfeed/main/docs/legend.svg). The local
-page links to it ("What the arcs mean"), and the same vocabulary is what the Cytoscape style draws (#25).
+page links to it ("What the arcs mean"), and the same vocabulary is what the Cytoscape style draws.
 It is generated from the code (`make legend`), and a test requires it to name every effect, outcome,
 quality flag, caution, evidence and status the model defines, so it cannot fall behind them.
 
@@ -218,7 +222,10 @@ python -m grownet gui
 
 **Two boxes.** In the first, species names, strains, genera or NCBI taxon ids, one per line; grow**net**
 resolves them to taxon ids from mGrowthDB's own strain records, finds the studies holding them, derives
-the interactions, and shows them as a table. The second is optional and says **where** to look: a medium,
+the interactions, and shows them as a table. Leave the first box empty and every species in what the
+second box names is derived, with every partner; leave both empty for the whole of mGrowthDB, All, which
+with the default settings is the network derived once a day and otherwise is derived live. The
+second box is optional and says **where** to look: a medium,
 matched as text against the medium name mGrowthDB records, the experiment description and its name (so
 `wilkins` finds every spelling of Wilkins-Chalgren), an experiment id or a study id. Naming a comparison
 keeps the monocultures it is made against, and every arc records its `medium`. One word can reach several
@@ -226,11 +233,13 @@ media, because a medium with a sugar added or a carbon source left out is anothe
 mGrowthDB states that only in the description: those are told apart, never pooled, and the report names
 every medium a search read, so name an experiment id to read one of them alone.
 
-**Five buttons.** Find interactions; Example, which fills the first box with a pair that gives a result;
-All, which derives every study in mGrowthDB; gLV example, which fills both boxes and the settings for a
-package that simulates and runs it (the help walks that package through miaSim step by step); and the gLV
+**Four buttons.** Find interactions; Example, which fills the first box with a pair that gives a result;
+gLV example, which fills both boxes and the settings for a
+package that simulates, ready for Find interactions (the help walks that package through miaSim step by
+step); and the gLV
 mode switch, which sets what a simulation needs
-(growth rates on, drop-out communities off) and switches back when pressed again. Every setting sits
+(growth rates on, drop-out communities off, the comparison on the growth rate, the integrated form) and
+switches back when pressed again. Every setting sits
 behind "Advanced settings", with the same defaults the command line uses.
 
 **The result** carries the network in JSON, GraphML or the adjacency matrix, Send to Cytoscape, the
@@ -245,7 +254,7 @@ stay there.
 
 ## Simulate it in R
 
-Press the **gLV mode** switch beside All and the two settings a simulation needs are set in Advanced
+Press the **gLV mode** switch beside gLV example and the two settings a simulation needs are set in Advanced
 settings: **Report growth rates** on and **Include drop-out communities** off, since a drop-out arc may act
 through a third species (`--glv-mode` on the command line, which also sets the growth property and the
 derivation a coefficient needs; `--report-rates --no-dropout` sets two of the four and gives a different
@@ -787,7 +796,7 @@ each, are in the same file.
 number that would imply each was settled, what would settle it, and what it blocks (nothing, in every
 case). The most general of them is that the tool **never establishes a mechanism**: an arc says a partner
 changed a growth outcome, not the route by which it did, which is why the output says effect rather than
-mechanism and why the tool's own name is still an open question (#71). The
+mechanism and why the tool's own name is still an open question. The
 rule behind that file is the one the rest of the tool follows: where the data cannot settle a question,
 publish the measurement and name the weakness. A censored matrix cell is `NA` with its bound on the arc, a
 carrying capacity ships with how far its curves fell from their peak, an arc ships the share of the course
