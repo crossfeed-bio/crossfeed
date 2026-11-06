@@ -1053,6 +1053,24 @@ def test_the_glv_example_button_fills_everything_and_find_interactions_runs_it(s
         assert name in report
 
 
+def test_the_glv_example_with_its_species_cleared_searches_every_species_of_its_study(server):
+    """The gLV example fills the species and the study and waits; clear the species box and Find interactions
+    searches every species in the example's study under gLV mode, the empty-species route. Each of the two
+    changes was tested against a page without the other (raised in review of the set)."""
+    import grownet.gui as gui
+    base, token = server
+    with urllib.request.urlopen(f"{base}/run?token={token}",
+                                data=urllib.parse.urlencode({"glv_example": "1"}).encode(), timeout=30) as r:
+        fields = _form_fields(r.read().decode("utf-8"))
+    fields["species"] = ""
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=urllib.parse.urlencode(fields).encode(),
+                                timeout=30) as r:
+        page = r.read().decode("utf-8")
+    assert "every study matching" in page and gui.GLV_EXAMPLE_STUDY in page
+    said = json.loads(_get(f"{base}/download.json?token={token}"))["meta"]["settings"]
+    assert said["conditions"] == gui.GLV_EXAMPLE_STUDY and gui.glv_mode_on(said)
+
+
 def test_a_non_finite_advanced_setting_falls_back_to_its_default():
     """`nan`, `inf` and `1e999` in a settings box fall back to the default, so no output carries a token
     that is not JSON.
