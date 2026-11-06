@@ -20,6 +20,13 @@ content.
   An empty result of such a search speaks of "the studies searched", not "the studies holding these
   species".
 
+### Fixed
+
+- **The report of a search with no species entered no longer says only their interactions were kept.**
+  All printed "Only interactions between the species entered (--all-partners): on" beside "with every
+  partner"; the line now says the setting was not read in that run. The page counts "1 study", not "1
+  studies".
+
 ## [0.5.0] (2026-10-14)
 
 **Read this before upgrading: the formats move, the networks do not.** Measured on the whole of mGrowthDB
