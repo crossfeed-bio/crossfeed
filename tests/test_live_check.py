@@ -25,7 +25,8 @@ def _quantified(source="a", target="b", mw=2.0, mwo=1.0, sd=0.5, q=0.01, evidenc
             "q_value": q, "p_value": q / 2, "significance": round(-math.log10(q), 4), "status": "present",
             "outcome": "quantified", "evidence": evidence, "metric": "auc", "metric_with": mw,
             "metric_without": mwo, "n_with": 3, "n_without": 3, "experiments": ["E1"], "medium": "WC",
-            "partner_abundance": 2e8, "study_id": "S1", "study_citation": "A study", **extra}
+            "partner_abundance": 2e8, "study_id": "S1", "study_citation": "A study", "technique": "qpcr",
+            **extra}
 
 
 def _censored(**extra):
@@ -33,7 +34,8 @@ def _censored(**extra):
             "strength": None, "status": "present", "outcome": "obligate", "evidence": "biculture",
             "metric": "auc", "metric_with": 2.0, "metric_without": 0.0, "n_with": 3, "n_without": 3,
             "experiments": ["E2"], "medium": "WC", "bound_rule": "the rule's own words", "strength_bound": 2.5,
-            "partner_abundance": 1e8, "study_id": "S1", "study_citation": "A study", **extra}
+            "partner_abundance": 1e8, "study_id": "S1", "study_citation": "A study", "technique": "qpcr",
+            **extra}
 
 
 def _net(records, derivation="replicate"):
@@ -55,10 +57,19 @@ def test_a_well_formed_network_has_no_violation():
     ({"experiments": []}, "missing experiments"),
     ({"partner_abundance": None}, "missing partner_abundance"),
     ({"status": "absent"}, "status absent with |strength|"),
+    ({"technique": ""}, "missing technique"),
 ])
 def test_each_property_catches_its_violation(change, says):
     problems = network_problems(_net([_quantified(**change)]), "x")
     assert any(says in p for p in problems), problems
+
+
+def test_a_genus_node_must_list_its_strains():
+    """From /v5 on a genus node names the strains it stands for in `merged_nodes`."""
+    record = _quantified(source_identity="genus", source_merged_nodes=["ncbi:1", "ncbi:3"])
+    assert network_problems(_net([record]), "x") == []
+    record = _quantified(source_identity="genus")
+    assert any("genus node a lists no strain in merged_nodes" in p for p in network_problems(_net([record]), "x"))
 
 
 def test_a_censored_arc_must_say_its_rule_and_have_no_ratio():
@@ -629,3 +640,30 @@ def test_make_r_check_fails_on_a_skipped_r_test(tmp_path):
     if ci.exists():
         step = ci.read_text().split("- name: refuse a skipped R test", 1)[1].split("- name:", 1)[0]
         assert "continue-on-error" not in step
+
+
+def test_every_older_file_is_checked(tmp_path, monkeypatch):
+    """Each format from /v3 on gets its own file, and the check reads every one: with only the first, the
+    copy 0.5.x reads (all_result.v4.json) went out unchecked and the suite passed (found in review)."""
+    import json
+
+    import live_check
+    import publish_all
+    from test_gui import FakeClient
+
+    from grownet.gui import run_query
+    monkeypatch.setattr(publish_all, "run_query", lambda *a, **k: run_query(
+        FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
+    out = tmp_path / "out"
+    assert publish_all.main(str(out), None, previous=lambda: None) == 0
+    manifest = json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
+    older = publish_all.older_formats(manifest)
+    assert len(older) >= 2, older                     # /v3 and /v4 today
+    for schema in older:
+        path = out / publish_all.file_for(schema)
+        kept = path.read_text(encoding="utf-8")
+        path.unlink()
+        problems, _ = live_check.check_published(str(out))
+        assert any(p.startswith(f"{path.name}: not written") for p in problems), (schema, problems)
+        path.write_text(kept, encoding="utf-8")
+    assert live_check.check_published(str(out))[0] == []

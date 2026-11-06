@@ -61,6 +61,24 @@ def test_an_arc_of_the_integrated_form_records_the_technique_of_its_target():
     records, _ = IntegratedDeriver(client=client).derive({"id": "S1"}, exps)
     arc = next(r for r in records if r["target_name"] == "A" and r["source_name"] == "B")
     assert math.isfinite(arc["coefficient"]) and arc["technique"] == "qpcr"
+    # A's monoculture by flow cytometry, its co-culture by qpcr: the row rests on both, and says so. Taken
+    # from the co-culture alone it would read "qpcr" (found in review)
+    client.bioreplicates[1]["measurementContexts"][0]["techniqueType"] = "fc"
+    records, _ = IntegratedDeriver(client=client).derive({"id": "S1"}, exps)
+    arc = next(r for r in records if r["target_name"] == "A" and r["source_name"] == "B")
+    assert arc["technique"] == "fc; qpcr"
+
+
+def test_a_dropout_arc_records_the_technique_of_its_target():
+    """The drop-out comparison builds its own record; the fake measures every strain by qpcr. Every arc of
+    the hand-computed drop-out design of tests/test_derive.py carries it."""
+    from test_derive import _dropout_study
+
+    from grownet.derive import interactions_from_replicates
+    client, study, exps = _dropout_study()
+    records, _ = interactions_from_replicates(client, study, exps)
+    assert records and {r["evidence"] for r in records} == {"dropout"}
+    assert {r["technique"] for r in records} == {"qpcr"}
 
 
 def test_a_merged_arc_names_every_technique_its_arcs_rest_on():
@@ -74,11 +92,13 @@ def test_a_merged_arc_names_every_technique_its_arcs_rest_on():
                 "outcome": "quantified", "technique": technique, "study_id": "S1", "condition": "c",
                 "method": "m", "experiments": [], "quality": [], "cautions": [], "notes": [], "community": []}
     assert _merged([arc("qpcr", 1.0), arc("qpcr", 2.0)])["technique"] == "qpcr"
-    assert _merged([arc("qpcr", 1.0), arc("fc", 2.0), arc("qpcr", 3.0)])["technique"] == "qpcr; fc"
+    # sorted, as a single arc's are, so the same set reads the same whichever arc came first
+    assert _merged([arc("qpcr", 1.0), arc("fc", 2.0), arc("qpcr", 3.0)])["technique"] == "fc; qpcr"
+    assert _merged([arc("fc", 1.0), arc("qpcr; unrecorded", 2.0)])["technique"] == "fc; qpcr; unrecorded"
     # and the merge itself does not keep them apart: a qpcr arc of 1.0 and an fc arc of 3.0 between the
     # same pair, same sign, become one arc, the median 2.0 of two
     (one,), meta = merge_parallel([arc("qpcr", 1.0), arc("fc", 3.0)])
-    assert (one["merged_arcs"], one["strength"], one["technique"], meta["merged"]) == (2, 2.0, "qpcr; fc", 1)
+    assert (one["merged_arcs"], one["strength"], one["technique"], meta["merged"]) == (2, 2.0, "fc; qpcr", 1)
 
 
 def test_the_v5_field_reaches_the_file_graphml_and_validation():
@@ -92,8 +112,11 @@ def test_the_v5_field_reaches_the_file_graphml_and_validation():
     assert validate_document(doc, notes) == [] and not [n for n in notes if "declare" in n], notes
     assert InteractionNetwork.from_dict(doc).edges[0].technique == "fc"
     graphml = ET.fromstring(to_graphml(net))
-    keys = {k.get("attr.name") for k in graphml.iter("{http://graphml.graphdrawing.org/xmlns}key")}
+    ns = "{http://graphml.graphdrawing.org/xmlns}"
+    keys = {k.get("attr.name") for k in graphml.iter(f"{ns}key")}
     assert "technique" in keys
+    # declared and written: the value is on the edge
+    assert [d.text for d in graphml.iter(f"{ns}data") if d.get("key") == "e_technique"] == ["fc"]
 
 
 @pytest.mark.parametrize("schema", ["grownet.interaction_network/v4", "grownet.interaction_network/v3"])
@@ -140,3 +163,23 @@ def test_a_genus_node_lists_the_strains_it_stands_for():
     ns = "{http://graphml.graphdrawing.org/xmlns}"
     alpha = next(n for n in graphml.iter(f"{ns}node") if n.get("id") == "Alpha")
     assert [d.text for d in alpha.iter(f"{ns}data") if d.get("key") == "n_merged_nodes"] == ["ncbi:1; ncbi:3"]
+
+
+def test_a_genus_node_lists_its_strains_from_every_arc_of_the_genus():
+    """The strains of a genus node come from every arc of that genus, not from one merged arc: Alpha one
+    meets Beta and Alpha three meets Gamma, two genus arcs, and the Alpha node stands for both strains."""
+    from grownet.derive import merge_genus
+
+    def arc(source, source_name, target, target_name):
+        return {"source": source, "target": target, "source_name": source_name, "target_name": target_name,
+                "source_taxon_id": source.split(":")[-1], "target_taxon_id": target.split(":")[-1],
+                "source_identity": "ncbi", "target_identity": "ncbi", "effect": "facilitation",
+                "strength": 1.0, "status": "present", "outcome": "quantified", "study_id": "S1",
+                "condition": "c", "method": "m", "experiments": [], "quality": [], "cautions": [], "notes": [],
+                "community": []}
+    edges, _ = merge_genus([arc("ncbi:1", "Alpha one", "ncbi:2", "Beta two"),
+                            arc("ncbi:3", "Alpha three", "ncbi:4", "Gamma four")], merge=True)
+    net = records_to_network(edges)
+    assert len(net.edges) == 2
+    assert net.nodes["Alpha"].merged_nodes == ("ncbi:1", "ncbi:3")
+    assert (net.nodes["Beta"].merged_nodes, net.nodes["Gamma"].merged_nodes) == (("ncbi:2",), ("ncbi:4",))

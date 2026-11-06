@@ -1814,9 +1814,11 @@ def _merged(arcs: list) -> dict:
             "cultivation_mode": "; ".join(dict.fromkeys(a.get("cultivation_mode", "") for a in arcs)),
             "medium": "; ".join(dict.fromkeys(a.get("medium", "") for a in arcs if a.get("medium"))),
             # every technique the merged arcs rest on, as for the media: merging does not ask that they
-            # agree (Karoline, 2026-11-06, #305: "Yes, allow it"), so this is where a reader sees it did
-            "technique": "; ".join(dict.fromkeys(t for a in arcs
-                                                 for t in (a.get("technique") or "").split("; ") if t)),
+            # agree (Karoline, 2026-11-06, #305: "Yes, allow it"), so this is where a reader sees it did.
+            # Sorted, as `techniques_of` sorts a single arc's, so one set of techniques is one string: in
+            # first-seen order "qpcr; fc" and "fc; qpcr" were two categories to a filter (found in review)
+            "technique": "; ".join(sorted({t for a in arcs
+                                           for t in (a.get("technique") or "").split("; ") if t})),
             **_merged_partner(arcs),
             "method": f"{arcs[0].get('method', '')}; merged: the median of {len(arcs)} arcs",
             "merged_arcs": len(arcs),

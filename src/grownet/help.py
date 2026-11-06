@@ -1391,7 +1391,8 @@ describe one strain, and {_name("taxonomy")} and {_name("model_ref")} are empty 
 <p>The arcs say which of those strains each one rests on: {_name("merged_pairs")} names the pairs behind
 a genus arc, as species pairs or, when only taxon ids were entered, as strain pairs, and
 {_name("supporting_pairs")} counts them; a drop-out arc's {_name("community")} lists the members by their
-strain ids, which are not nodes of a genus network but are in their genus node's merged_nodes.</p>
+strain ids, which are not nodes of a genus network. A member that is the source or target of an arc is in
+its genus node's {_name("merged_nodes")}; a member on no arc is named only there.</p>
 
 <h2 id="decisions">Why it works this way</h2>
 <p>The main choices behind the method, each settled on the issue named (in the
