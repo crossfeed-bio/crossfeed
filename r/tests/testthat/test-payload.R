@@ -341,9 +341,11 @@ test_that("the summary reads cleanly: one 'fitted:', no names twice, a singular 
     # 3: singular
     expect_match(text, "1 organism; matrix 1 x 1", fixed = TRUE)
     expect_false(grepl("1 organisms", text, fixed = TRUE))
-    # 1: "fitted:" once, ending the heading, with the organisms under it
-    expect_equal(lengths(regmatches(text, gregexpr("fitted:", text, fixed = TRUE))), 1L)
-    expect_match(text, "a coefficient of theirs could not be fitted:\n       D: no growth rate", fixed = TRUE)
+    # 1: the heading once, with the organisms under it, and no "fitted:" starting a line
+    expect_equal(lengths(regmatches(text, gregexpr("in no matrix, each for the reason beside it:", text,
+                                                   fixed = TRUE))), 1L)
+    expect_false(grepl("fitted: ", text, fixed = TRUE))
+    expect_match(text, "each for the reason beside it:\n       D: no growth rate", fixed = TRUE)
     # 2: the names once; the next line refers to them rather than listing them again
     expect_match(text, "2 organism(s) have no growth rate: D, E\n       these are in no matrix;", fixed = TRUE)
     expect_false(grepl("D, E are in no matrix", text, fixed = TRUE))

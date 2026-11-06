@@ -301,8 +301,10 @@ print.grownet_glv <- function(x, ...) {
     }
     left_out <- x$caveats$left_out
     if (nrow(left_out)) {
-        # "fitted:" once, ending the heading, and the organisms under it; it began every line (#296)
-        cat(sprintf("   * %d organism(s) are in no matrix, because a coefficient of theirs could not be fitted:\n",
+        # the heading once, and the organisms under it; "fitted:" began every line (#296). It does not say
+        # they "could not be fitted": a row the steady-state derivation fitted, in units of r_i - D no
+        # start-up gave, is in no matrix for that reason, and its line says so (found in a second review)
+        cat(sprintf("   * %d organism(s) are in no matrix, each for the reason beside it:\n",
                     nrow(left_out)))
         for (i in seq_len(nrow(left_out))) {
             cat("       ", left_out$what[i], ": ", left_out$why[i], "\n", sep = "")
