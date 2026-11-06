@@ -165,7 +165,7 @@ python -m grownet schema [--out FILE]
   format id moves when a field changes meaning and the derivation is not a field, so the artifact and a
   live run can carry the same format and entirely different networks.
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
-- `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of either built-in one (see below).
+- `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the three built-in ones (see below).
 - The command line does everything the local page does: every advanced setting has its option, and the
   page's outputs are `--out FILE` (with `--format`), `--to-cytoscape`, `--report FILE` (the same report the
   page shows), and, with `--report-rates`, `--rates FILE` and `--glv FILE`. `grownet derive --help` lists
