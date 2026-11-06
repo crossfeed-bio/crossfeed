@@ -1199,6 +1199,7 @@ class IntegratedDeriver:
             media_identity,
             run_group,
             strain_identities,
+            techniques_of,
             why_no_monoculture,
         )
         from .growth import SPIKE_FACTOR
@@ -1490,6 +1491,9 @@ class IntegratedDeriver:
                         "metric_without": got["rate"],
                         # both are rates, in the rate's unit; the interval is the fit's own span (#213)
                         "metric_unit": rate_unit_of(curve),
+                        # the target's technique in the co-culture and in the monocultures its rate comes
+                        # from, every distinct one (#305)
+                        "technique": techniques_of([*reps, *monos], target),
                         "window": (None if not window or window.get("start") is None
                                    else round(window["end"] - window["start"], 6)),
                         "window_unit": (window or {}).get("unit", "") if window else "",

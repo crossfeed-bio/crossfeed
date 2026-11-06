@@ -252,6 +252,26 @@ the neutral band, the sign itself can move. Direction is not fully dependable fo
 band.** Options to build: restrict a published network to matched-technique comparisons, calibrate an
 offset between techniques, or widen the neutral band for mismatched edges.
 
+**What the tool does (2026-11-06, #305).** The first option is the rule: a species is never compared across
+techniques (`growth.check_comparable`, Karoline 2026-09-27), and a strain measured by several in one
+replicate is read by the one with more time points (#292). Every arc now records the technique its target
+was measured by, `technique` (format `/v5`). Measured on the live All network the same day: 145 arcs, qpcr
+117, plates 15, fc 13; with the arcs below the threshold, 223; in gLV mode, 10; no arc names two techniques,
+including in the integrated form, whose row spans the co-culture and the monocultures. Each study uses one
+technique, fc in SMGDB00000002, 6 and 7, qpcr in 4 and 8, plates in 13 and 14.
+
+**Decided (#305): Merge parallel arcs merges arcs of different techniques.** Karoline, 2026-11-06: "I think
+that measurement techniques should agree to the point that arcs with different measurement techniques can
+be merged. What do you think?" Each arc is a log2 ratio of one species measured one way on both sides, so
+the unit cancels as it does across studies, and merging already crosses studies, media and evidence. A
+technique's bias cancels only where it scales both sides alike: plates count living cells and qPCR counts
+genomes, so an effect that kills without lysing reads differently by the two. Asked whether merging should
+be allowed across techniques, Karoline answered "Yes, allow it" the same day. So the merge does not ask, as
+before the field existed, and a merged arc names every technique it rests on, which is how a reader sees
+that it crossed them. The choice moved no arc: of the five pairs with parallel arcs in All, none mixes techniques; the one pair
+measured by two (B. hydrogenotrophica on R. intestinalis, qpcr in SMGDB00000004 and fc in 7) has arcs of
+both signs and arcs below the threshold, so nothing of it merges either way.
+
 ## 7. Taxonomic identity and aggregation
 
 Two questions: at what rank is a node defined, and what stable identifier does it carry.
@@ -702,6 +722,32 @@ pooled into one equation (`subcommunity.pool`), numpy 2.2.6 and scipy 1.13.0:
 
 ## Open decisions
 
+    uv run --no-project --with numpy --with scipy python packaging/validate_steady_state.py twelveSpeciesT4.xml
+
+Errors are on the scale of each row's own `|B_ii|`, since the published fit sets many coefficients to exactly
+0 (it was L1-regularized), where an error relative to the true value means nothing.
+
+| design | off-diagonal identified | error | signs (true not 0) |
+|---|---|---|---|
+| EPICS: monocultures, 12 leave-one-out, full (2 never settle) | 0 of 132 | | |
+| bottom-up: monocultures and 66 pairs | 126 of 132 | max 7e-14 | 96 of 96 |
+| all of the above (2 never settle) | 128 of 132 | max 0.0018 | 98 of 98 |
+| all, 3 vessels with 5% noise | 128 of 132 | median 0.022, max 3.4 | 96% |
+
+- The row scales read from the start-up are within 1.6% of the true `u - D` (median 0.7%), slightly low,
+  since self-limitation already slows the batch period; that is most of the package's error, `A = scale x B`
+  within 2% of the true `a_ij` on the `|a_ii|` scale (median 0.18%).
+- The full community, predicted by a fit made without it, is within 0.22% (18% with the noise).
+- With the noise, the bootstrap over vessels puts the true coefficient within 2 sd for 93% of them, close to
+  the nominal 95%. The worst coefficients are those whose partner is scarce in every community beside the
+  organism: PC on BT, off by 3.4 times BT's `|B_ii|`, has PC at no more than 0.007 OD beside BT (the median
+  over all coefficients is 0.23), and its spread is 1.8 times `|B_ii|`, so the arc says it is uncertain; the
+  next five worst all have their partner at 0.06 or less.
+- Only 7 of the 12 coexist in the full community at this D, so the strict leave-one-out design determines
+  nothing; the pairs are what make the model identifiable, which is Karoline's decision 2.
+- Switching the 1% wash-out rule off changes nothing here.
+
+## Open decisions
 
 - **OPEN, 2026-10-11 (#266): one format bump to `/v4`, or none.** Three things a reader who did not run
   the tool cannot establish from the file need a field the format does not have: `metric_unit`, because

@@ -102,6 +102,8 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
     nodes = [{"data": {"id": node.id, "name": node.name or node.id, "taxon_id": node.taxon_id,
                        "species": node.species, "identity": node.identity,
                        "taxon_id_refused": node.taxon_id_refused,
+                       # v5: the strains a genus node stands for, joined as merged_pairs is
+                       "merged_nodes": "; ".join(node.merged_nodes),
                        "taxonomy": node.taxonomy, "model_ref": node.model_ref,
                        "genus": genus(node), "genus_color": colors[genus(node)]}}
              for node in net.nodes.values()]
@@ -146,6 +148,8 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
                 # other removals of its target (#214, #213, #209)
                 "metric_unit": edge.metric_unit, "window": edge.window, "window_unit": edge.window_unit,
                 "vs_other_removals": edge.vs_other_removals,
+                # v5: the technique the target was measured by (#305)
+                "technique": edge.technique,
                 # the gLV coefficient and what is known about it, the fit it came out of, the monoculture
                 # stage behind it, the target's capacity, and the rule behind a censored arc's bound.
                 # Every one of these was in the file and in GraphML and not here, found by comparing the

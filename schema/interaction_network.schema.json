@@ -13,6 +13,7 @@
   "properties": {
     "schema": {
       "enum": [
+        "grownet.interaction_network/v5",
         "grownet.interaction_network/v4",
         "grownet.interaction_network/v3",
         "grownet.interaction_network/v2",
@@ -194,6 +195,12 @@
         },
         "taxon_id_refused": {
           "type": "string"
+        },
+        "merged_nodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -548,6 +555,9 @@
             "number",
             "null"
           ]
+        },
+        "technique": {
+          "type": "string"
         },
         "rate_stage_method": {
           "type": "string"
