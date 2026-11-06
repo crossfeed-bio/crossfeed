@@ -6,6 +6,26 @@ content.
 
 ## [Unreleased]
 
+### Changed
+
+- **Find interactions with the species box empty searches every species in the media, experiments or
+  studies of the second box, with every partner, and with both boxes empty it is the whole of mGrowthDB;
+  the All button is gone** (Karoline, 2026-11-04, #300: "allow the species field to be empty when the
+  second field (media/studies) has content", and on the button, "Remove it"). This is the search the All
+  button ran, so nothing about its result changes: at the default settings it is the network derived once
+  a day, and any changed setting derives it live. The page no longer answers an empty box with "Type at
+  least one species". On the command line, `derive --live --conditions NAME ...` without `--species` or
+  a study does the same; `--all` is unchanged. The species box is marked optional, and one sentence under
+  the buttons, the help page, `grownet --help` and `grownet derive --help` say how to get the All network.
+  An empty result of such a search speaks of "the studies searched", not "the studies holding these
+  species".
+
+### Fixed
+
+- **The report of a search with no species entered no longer says only their interactions were kept.**
+  All printed "Only interactions between the species entered (--all-partners): on" beside "with every
+  partner"; the line now says the setting was not read in that run. The page counts "1 study", not "1
+  studies".
 ### Fixed
 
 - **The Baranyi fit reaches its optimum when the lag collapses** (#298). Its Levenberg-Marquardt loop damped

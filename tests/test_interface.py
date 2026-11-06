@@ -180,7 +180,10 @@ def test_the_input_field_starts_empty_under_a_header_naming_the_options_and_a_ro
     assert "placeholder" not in page
     # Karoline (2026-09-28): "Genus to be mentioned in the title above the input box and a genus example
     # query in the sentence below"
-    header = page.index('<label class="field" for="species">Species, strains, genera or NCBI taxon ids</label>')
+    # "(optional)" since #300 (Karoline, 2026-11-04: "the GUI text still implies that the first input field
+    # is not optional")
+    header = page.index('<label class="field" for="species">Species, strains, genera or NCBI taxon ids '
+                        '(optional)</label>')
     examples = page.index('<p class="examples">For example: ')
     assert header < examples < page.index("<textarea")            # a row below the header, above the box
     for example in gui.INPUT_EXAMPLES:                    # one species, one strain, one genus, one taxon id
@@ -290,9 +293,11 @@ def test_the_page_the_command_line_and_the_help_all_know_genera_and_all():
     page = help_page.render_help("tok", gui.DEFAULTS, gui.EXAMPLE)
     assert "Merge to genus" in page                                     # the advanced option
     assert help_page._name("supporting_pairs") in page and help_page._name("merged_pairs") in page  # the arc fields
-    assert "a genus (it stands for every species of it" in page and "The All button" in page
+    assert "a genus (it stands for every species of it" in page and "The species box is optional" in page
+    assert "<strong>For the All network</strong>, every study in mGrowthDB with every partner, leave both boxes" in page
     form = gui.render_form("tok")
-    assert 'name="merge_genera"' in form and 'name="all"' in form
+    # All is the species box left empty since #300 (Karoline, 2026-11-04: "Remove it"), not a button
+    assert 'name="merge_genera"' in form and 'name="all"' not in form
 
 
 def test_the_help_weighs_each_growth_measure():
@@ -494,11 +499,14 @@ def with_rates(monkeypatch):
     monkeypatch.setattr(gui, "growth_rates", lambda *a, **kw: (dict(RATES), []))
 
 
-def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
+def test_glv_mode_sits_in_the_bar_and_sets_what_a_simulation_needs(server):
     """Karoline, 2026-10-04, after a first attempt put two checkboxes in the bar: "this is now quite
     complex. So how about moving both options back to advanced parameters, with their default settings,
     and instead introduce a button 'gLV mode' next to 'All', which will enable growth rate collection and
-    disable drop-out communities? The GUI text can then be simplified somewhat."""
+    disable drop-out communities? The GUI text can then be simplified somewhat."
+
+    The All button it sat next to is gone since #300 (Karoline, 2026-11-04: "Remove it"), so the order
+    pinned here is the one that remains: Example, gLV example, gLV mode."""
     base, token = server
     _, page, _ = _open(f"{base}/?token={token}")
     bar = page[page.index('<div class="bar">'):]
@@ -506,10 +514,10 @@ def test_glv_mode_sits_next_to_all_and_sets_what_a_simulation_needs(server):
     assert 'name="glv_mode" value="1"' in bar and ">gLV mode</button>" in bar
     assert 'class="switch"' in bar and 'aria-pressed="false"' in bar      # a switch, standing at off
     assert '<span class="track"><span class="knob">' in bar               # drawn, not described
-    assert bar.index('name="glv_mode"') > bar.index('name="all"')        # next to All
-    # the gLV example button sits between them: it fills the boxes and the settings for a package that
+    assert 'name="all"' not in bar
+    # the gLV example button sits before it: it fills the boxes and the settings for a package that
     # simulates and runs the search (Karoline, 2026-10-07)
-    assert bar.index('name="all"') < bar.index('name="glv_example"') < bar.index('name="glv_mode"')
+    assert bar.index('name="example"') < bar.index('name="glv_example"') < bar.index('name="glv_mode"')
     assert not re.findall(r'<input[^>]*name="([^"]+)"', bar)             # and no checkboxes in the bar
     assert len(bar) < 720                                                # the text beside it stays short
 
@@ -1111,3 +1119,162 @@ def test_the_report_query_line_and_the_page_heading_join_the_second_box_with_sem
                         "errors": [], "skipped": [], "entries": [], "all": True,
                         "settings": {"conditions": "SMGDB00000014\nWilkins-Chalgren, anaerobic"}})
     assert "matching SMGDB00000014; Wilkins-Chalgren, anaerobic" in text
+
+
+# ---- an empty species box (#300) ------------------------------------------------------------------
+#
+# Karoline, 2026-11-04: "1 functionality I'd like to add is to allow the species field to be empty when the
+# second field (media/studies) has content, so the query is automatically carried out for all species in
+# these media/studies. it also begs the question whether we need an 'All' button - perhaps the All network
+# could be delivered when both input fields are empty, unless changed advanced options necessitate a
+# re-search". Asked whether to remove the All button: "Remove it".
+
+def _as_a_browser_submits(page: str) -> dict:
+    """The fields the page's form sends as it stands: every input's value, a checkbox only when checked,
+    each select's selected option, each textarea's text. Buttons send nothing unless pressed."""
+    from html.parser import HTMLParser
+
+    class Form(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.fields, self.select, self.textarea = {}, None, None
+
+        def handle_starttag(self, tag, attrs):
+            a = dict(attrs)
+            if tag == "input" and a.get("name") and (a.get("type") != "checkbox" or "checked" in a):
+                self.fields[a["name"]] = a.get("value", "on")
+            elif tag == "select":
+                self.select = a.get("name")
+            elif tag == "option" and self.select and ("selected" in a or self.select not in self.fields):
+                self.fields[self.select] = a.get("value", "")
+            elif tag == "textarea":
+                self.textarea = a.get("name")
+                self.fields[self.textarea] = ""
+
+        def handle_endtag(self, tag):
+            if tag == "select":
+                self.select = None
+            elif tag == "textarea":
+                self.textarea = None
+
+        def handle_data(self, data):
+            if self.textarea:
+                self.fields[self.textarea] += data
+
+    form = Form()
+    form.feed(page[page.index("<form"):page.index("</form>")])
+    return form.fields
+
+
+def test_an_empty_species_box_searches_the_second_box_and_both_empty_give_all(server, monkeypatch):
+    calls = []
+    real = gui.run_query
+
+    def recording(client, entries, settings, *a, **kw):
+        calls.append({"entries": [e.strip() for e in entries if e.strip()], "all": kw.get("all_studies", False),
+                      "conditions": settings.get("conditions", ""),
+                      "published": kw.get("all_studies", False) and kw.get("published", True)
+                      and gui.daily.usable({**gui.DEFAULTS, **settings}, gui.DEFAULTS)})
+        return real(client, entries, settings, *a, **kw)
+
+    monkeypatch.setattr(gui, "run_query", recording)
+    GATE.set()
+    base, token = server
+    _, page, _ = _open(f"{base}/?token={token}")
+    defaults = _as_a_browser_submits(page)
+    assert gui.parse_settings({k: [v] for k, v in defaults.items()}) == gui.DEFAULTS, \
+        "the page as it opens must post the defaults, or the published row below proves nothing"
+
+    def find(species, conditions, **changed):
+        before = len(calls)
+        form = {**defaults, "species": species, "conditions": conditions, **changed}
+        _open(f"{base}/run?token={token}", urllib.parse.urlencode(form).encode())
+        for _ in range(500):                  # the search runs in a thread; its first call is enough
+            if len(calls) > before:
+                return calls[-1]
+            time.sleep(0.01)
+        raise AssertionError("Find interactions started no search")
+
+    # species filled, either box: the species search, as before
+    assert find(f"{A}\n{B}", "")["all"] is False
+    assert find(f"{A}\n{B}", "SMGDB00000001") == {"entries": [A, B], "all": False,
+                                                  "conditions": "SMGDB00000001", "published": False}
+    # species empty, second box filled: every species in those media or studies (All under the second box,
+    # which never reads the published network, since that one is every study)
+    assert find("", "SMGDB00000001") == {"entries": [], "all": True, "conditions": "SMGDB00000001",
+                                         "published": False}
+    # both empty, whitespace counting as empty: All, from the published network at the defaults ...
+    assert find(" \n ", "") == {"entries": [], "all": True, "conditions": "", "published": True}
+    # ... "unless changed advanced options necessitate a re-search": any changed setting derives it live
+    assert find("", "", absence_threshold="2")["published"] is False
+
+    # and there is no All button any more: the species box reads as optional and says what leaving it
+    # empty does, and the bar says in one sentence how to get the All network (Karoline, 2026-11-04: "we'll
+    # also need a brief sentence in the GUI (and CLI help) so people know how to get the All network. also,
+    # the GUI text still implies that the first input field is not optional")
+    assert 'name="all"' not in page and ">All</button>" not in page
+    assert "Species, strains, genera or NCBI taxon ids (optional)</label>" in page
+    hint = page[page.index('id="species"'):page.index('for="conditions"')]
+    assert "Left empty,\nevery species in the media or studies of the second box is searched" in hint
+    bar = page[page.index('<div class="bar">'):]
+    bar = bar[:bar.index("</div>")]
+    assert "For the All network, every study in mGrowthDB, press Find interactions with both\nboxes empty." in bar
+
+
+def test_the_command_line_help_says_how_to_get_the_all_network():
+    # Karoline, 2026-11-04: "we'll also need a brief sentence in the GUI (and CLI help) so people know how to
+    # get the All network". In the list of commands and in derive's own help, with the command to type
+    from grownet.__main__ import DERIVE_EXAMPLES, build_parser
+    parser = build_parser()
+    top = parser.format_help()
+    derive = next(a for a in parser._subparsers._actions if a.choices).choices["derive"].format_help()
+    assert "the All network of every study in" in top and "(derive --live --all)" in top
+    assert "For the All network, every study in mGrowthDB: grownet derive --live --all." in derive
+    assert DERIVE_EXAMPLES.startswith("examples:\n  the All network, every study in mGrowthDB")
+    assert "grownet derive --live --conditions \"Wilkins-Chalgren\" --out wc_all.json" in DERIVE_EXAMPLES
+
+
+def test_a_search_with_no_species_says_every_partner_was_kept_and_counts_its_studies():
+    """With the species box empty, under the second box or for All, every partner is kept, and the report
+    said "Only interactions between the species entered (--all-partners): on" beside "with every partner";
+    the page said "1 studies" (found in review)."""
+    from test_gui import FakeClient, _query
+
+    from grownet.report import report_text
+    note = "<- not read in this run: no species was entered, so every partner is kept"
+    for conditions in ("WC", ""):
+        result = gui.run_query(FakeClient(), [], {"derivation": "replicate", "conditions": conditions},
+                               all_studies=True, published=False)
+        line = next(x for x in report_text(result).splitlines() if "(--all-partners)" in x)
+        assert line.strip().endswith(note), line
+        assert len(result["studies"]) == 1
+        page = gui.render_result("tok", result)
+        assert "1 study" in page and "1 studies" not in page
+    # a species search reads the setting, and says nothing beside it
+    line = next(x for x in report_text(_query()).splitlines() if "(--all-partners)" in x)
+    assert "not read" not in line
+
+
+def test_derive_with_nothing_to_search_names_every_route(capsys):
+    """`derive --live` alone named a study id and --species only, while --conditions alone and --all derive
+    too (found in review)."""
+    from grownet.__main__ import main
+    assert main(["derive", "--live"]) == 2
+    said = capsys.readouterr().err
+    assert all(route in said for route in ("study id", "--species", "--conditions", "--all")), said
+
+
+def test_the_glv_mode_option_lists_every_setting_it_changes():
+    """`--glv-mode`'s help named three of the four settings the mode sets: the derivation was missing, the
+    error the help page had and lost (found in review). The same four are what the page's message names."""
+    from pathlib import Path
+
+    from grownet.__main__ import build_parser
+    parser = build_parser()
+    derive = next(a for a in parser._subparsers._actions if a.choices).choices["derive"]
+    text = " ".join(next(a for a in derive._actions if "--glv-mode" in a.option_strings).help.split())
+    for setting in ("growth rates", "drop-out communities", "compare the growth rate", "integrated form"):
+        assert setting in text, setting
+    readme = " ".join((Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8").split())
+    assert ("(growth rates on, drop-out communities off, the comparison on the growth rate, the integrated "
+            "form)") in readme

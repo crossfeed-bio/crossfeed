@@ -355,19 +355,19 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
     return _page(f"""{note}<form method="post" action="/run?token={_esc(token)}">
 <div class="boxes">
 <div class="box">
-<label class="field" for="species">Species, strains, genera or NCBI taxon ids</label>
+<label class="field" for="species">Species, strains, genera or NCBI taxon ids (optional)</label>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in INPUT_EXAMPLES)}</p>
 <textarea id="species" name="species" rows="5">{_esc(entries)}</textarea>
-<p class="hint">One per line (a genus alone stands for all its species), or press Example. Interactions are
+<p class="hint">One per line (a genus alone stands for all its species), or press Example. Left empty,
+every species in the media or studies of the second box is searched, with every partner. Interactions are
 derived from mGrowthDB growth data on this machine; nothing is uploaded.</p>
 </div>
 <div class="box">
 <label class="field" for="conditions">Media, experiments or studies (optional)</label>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in selecting.EXAMPLES)}</p>
 <textarea id="conditions" name="conditions" rows="5">{_esc(conditions)}</textarea>
-<p class="hint"><strong>All reads this box.</strong> A study or medium left here narrows All to it, which
-is deliberate, so clear it to derive the whole of mGrowthDB; the gLV example button fills it and leaves it
-filled (#193).
+<p class="hint">With the species box empty, every species in what this box names is searched; the gLV
+example button fills it and leaves it filled, so clear it to derive the whole of mGrowthDB.
 One per line. A medium is matched as text, so "wilkins" finds every spelling of
 Wilkins-Chalgren <em>and</em> every variant of it: a medium with a sugar added or a carbon source left out
 is another environment, so those stay apart and the report names every medium the search read. An id
@@ -377,11 +377,11 @@ every medium.</p>
 </div>
 <div class="bar"><button class="primary" type="submit">Find interactions</button>
 <button type="submit" name="example" value="1">Example</button>
-<button type="submit" name="all" value="1">All</button>
 <button type="submit" name="glv_example" value="1">gLV example</button>
 <button type="submit" name="glv_mode" value="1" class="switch{glv_on}" aria-pressed="{glv_pressed}"
 ><span class="track"><span class="knob"></span></span>gLV mode</button>
-<span class="muted">All derives every study, ignoring the species box (half a minute). gLV example fills
+<span class="muted">For the All network, every study in mGrowthDB, press Find interactions with both
+boxes empty. gLV example fills
 the boxes and settings for a package that simulates, and runs it. gLV mode sets the four settings a
 package needs, the derivation among them; press it again to switch back.</span></div>
 {_settings_block(settings or {}, token, job)}
@@ -773,16 +773,19 @@ def _empty_reason_core(result: dict) -> str:
                 f"(k = {k:g}): the species do not affect each other by that rule. They are listed below, "
                 "and a lower k or Include arcs below the absence threshold keeps them in the file.")
     reasons = [reason for _, reason in result["skipped"]]
+    # All has no species typed: since #300 it is the species box left empty, so "these species" named
+    # nothing the reader had entered (Karoline, 2026-11-04: "please update the wording")
+    studies = "the studies searched" if result.get("all") else "the studies holding these species"
     unmatched = [r for r in reasons if "no experiment of this study matches" in r]
     if unmatched and len(unmatched) == len(result["studies"]):
         # the second box named a medium or an id that nothing in these studies carries (#113)
-        return ("No experiment of the studies holding these species matches the second box ("
+        return (f"No experiment of {studies} matches the second box ("
                 + _esc(s.get("conditions", "")) + "). A medium is matched as text, so a shorter word finds "
                 "more spellings; the report lists every study it looked at.")
     only_monocultures = [r for r in reasons if r.startswith("only monocultures")]
     if only_monocultures and len(only_monocultures) == len(result["studies"]):
-        return ("The studies holding these species grew them only alone, in monocultures, so there is no "
-                "co-culture or community to compare with.")
+        return (f"{studies.capitalize()} grew {'their species' if result.get('all') else 'them'} only alone, "
+                "in monocultures, so there is no co-culture or community to compare with.")
     non_batch = [r for r in reasons if "excluded by default with the growth measure" in r]
     if non_batch and len(non_batch) == len(reasons) and not s.get("include_non_batch"):
         return ("These studies are chemostat or serial dilution experiments. Their area under the curve and "
@@ -791,7 +794,7 @@ def _empty_reason_core(result: dict) -> str:
                 "experiments.")
     top = Counter(r.split(";")[0].strip() for r in reasons).most_common(1)
     why = f" The most common reason: {_esc(top[0][0])}." if top else ""
-    return (f"The studies holding these species gave no usable comparison.{why} {EMPTY_HELP} The report lists "
+    return (f"{studies.capitalize()} gave no usable comparison.{why} {EMPTY_HELP} The report lists "
             "the reason for every pair.")
 
 
@@ -836,13 +839,16 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
             if excluded_ids:
                 parts.append("excluding " + ", ".join(_esc(x) for x in excluded_ids[:3])
                              + (f" and {len(excluded_ids) - 3} more" if len(excluded_ids) > 3 else ""))
+            # the count is of the studies READ, which the second box narrows to its matches afterwards: "every
+            # study matching mucin: 29 studies" stood beside "the second box left out 26 of the 29" (found in
+            # review), so it says what the number is
             resolved = (f"<li>every study {' and '.join(parts)}, with every partner: "
-                        f"{len(result['studies'])} studies{daily_note}</li>"
-                        "<li class=\"muted\">All ignores the species box, not these. Clear them to derive "
-                        "the whole of mGrowthDB.</li>")
+                        f"{_count(len(result['studies']), 'study', 'studies')} searched{daily_note}</li>"
+                        "<li class=\"muted\">Clear them to derive the whole of mGrowthDB.</li>")
         else:
             species_heading, resolved = "<h2>All of mGrowthDB</h2>", (
-                f"<li>every study, with every partner: {len(result['studies'])} studies{daily_note}</li>")
+                f"<li>every study, with every partner: {_count(len(result['studies']), 'study', 'studies')}"
+                f"{daily_note}</li>")
     unresolved = _unresolved_list(result)
     net = result["network"]
     mismatch = any("MISMATCH" in (e.method or "") for e in net.edges)
@@ -924,6 +930,11 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
             f"<p class=\"muted\">Studies searched: {_esc(studies)}</p>{errors}{table}"
             f"{_absent_section(result, result.get('absence', {}))}{_sources(net)}{skipped}</section>")
 
+
+
+def _count(n: int, one: str, many: str) -> str:
+    """"1 study", "2 studies": the page read "1 studies" (found in review)."""
+    return f"{n} {one if n == 1 else many}"
 
 def render_result(token: str, result: dict, message: str = "") -> str:
     """The page with the result under the settings that produced it (#74)."""
@@ -1144,7 +1155,8 @@ def _run_query(client, entries, settings: dict | None = None, index: dict | None
     lose the rest. `progress(done, total, message)`, when given, is told where the search is: `total` is
     None until the studies are known (#75).
 
-    `all_studies` is the page's All button (Karoline, 2026-09-28): the entries are ignored and every study
+    `all_studies` is All (Karoline, 2026-09-28), which the page runs when the species box is empty (#300,
+    Karoline 2026-11-04; it was a button until then): the entries are ignored and every study
     mGrowthDB holds is derived, with every partner kept, still under the second box (media, experiments or
     studies) and Exclude these studies. With the default settings it is read from the network derived once a
     day in the grownet repository when that is less than 36 hours old and was derived by the same derivation
@@ -1799,16 +1811,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             job["thread"].join(self.wait)
             self._redirect(f"/?token={self.token}&job={job['id']}#result")
             return
-        if form.get("all"):
-            job = self._start([], settings, all_studies=True)
-            job["thread"].join(self.wait)
-            self._redirect(f"/?token={self.token}&job={job['id']}#result")
-            return
-        if not [e for e in entries if e.strip()]:
-            self._send(render_form(self.token, settings=settings, message="Type at least one species.",
-                                   conditions=settings.get("conditions", "")))
-            return
-        job = self._start(entries, settings)
+        # the species box left empty is All, under the second box and Exclude these studies as All always
+        # was (Karoline, 2026-11-04, #300: "allow the species field to be empty when the second field
+        # (media/studies) has content, so the query is automatically carried out for all species in these
+        # media/studies", and with both empty "the All network could be delivered ... unless changed
+        # advanced options necessitate a re-search", which `run_query` decides by `published.usable`).
+        # It replaces the All button ("Remove it") and the "Type at least one species" refusal.
+        everything = not [e for e in entries if e.strip()]
+        job = self._start([] if everything else entries, settings, all_studies=everything)
         job["thread"].join(self.wait)
         self._redirect(f"/?token={self.token}&job={job['id']}#result")
 

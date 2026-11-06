@@ -758,6 +758,17 @@ NCBI's brackets kept, so [Clostridium] is not Clostridium), shared by the genus 
 genus query, so they cannot disagree. `derive.merge_genus` runs after `merge_parallel` in
 `output_meta`. `gui.support_level` decides species or strain pairs. `SpeciesIndex.studies` lists every study
 the crawl found, which All derives. Names decide the genus: Phocaeicola (former Bacteroides) stays apart.
+
+**All has no button since 2026-11-04 (#300).** The page's handler runs All whenever the species box is
+empty (whitespace counts as empty), so the second box and Exclude these studies narrow it as they always
+did, and both boxes empty is the whole of mGrowthDB. Whether that reads the published network is still
+`run_query`'s call through `published.usable`, so a changed setting derives live with no logic in the
+handler. "Type at least one species" is gone with it. On the command line `--all` stays, and
+`--conditions` without `--species` or a study sets `all_studies` (only with `--live`, so `--fixture`
+keeps its own message). Two traps met building it: the page re-renders the form under every result, so
+hint text saying "all of mGrowthDB" trips the narrowed-All test's whole-page guard (the hint says "the
+whole of mGrowthDB"); and the test double's experiments carry no `studyId`, so a study id in the second
+box matches nothing in it unless the test adds one (`tests/test_help.py` does).
 ## Release (2026-09-27)
 
 Karoline's answers on the first release, in her words: the rename "Wait for #79 first"; version
