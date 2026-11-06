@@ -604,7 +604,8 @@ def test_the_growth_rates_are_their_own_download_and_bring_the_glv_control(serve
     # unaffected
     assert rows[0][5:] == ["method", "lag", "lag_method", "carrying_capacity", "capacity_unit",
                            "capacity_curves", "capacity_curves_left_out", "capacity_fall_from_peak",
-                           "capacity_medium", "capacity_source", "doubling_time", "capacity_technique"]
+                           "capacity_medium", "capacity_source", "doubling_time", "capacity_technique",
+                           "dilution"]   # last (Karoline, 2026-11-06: "yes to the dilution column")
     assert [row[0] for row in rows[1:]] == sorted([A, B])
     assert dict(zip([r[0] for r in rows[1:]], [r[1] for r in rows[1:]], strict=True))[A] == "0.4"
 
@@ -694,7 +695,9 @@ def test_the_command_line_writes_the_matrix_the_rates_and_the_glv_package(monkey
     assert rates_file.read_text(encoding="utf-8").splitlines()[0] == (
         "organism,growth_rate,unit,replicates,studies,method,lag,lag_method,carrying_capacity,"
         "capacity_unit,capacity_curves,capacity_curves_left_out,capacity_fall_from_peak,"
-        "capacity_medium,capacity_source,doubling_time,capacity_technique")
+        "capacity_medium,capacity_source,doubling_time,capacity_technique,dilution")
+    # `dilution` last (Karoline, 2026-11-06: "yes to the dilution column"), empty here: it is the dilution
+    # rate a steady-state rate r_i - D is at, and this run is not one
     with zipfile.ZipFile(io.BytesIO(package.read_bytes())) as archive:
         assert sorted(archive.namelist()) == ["README.txt", "growth_rates.csv",
                                               "interaction_matrix.Cells_per_mL.csv"]
@@ -742,7 +745,7 @@ def test_the_glv_menu_sends_to_r_and_the_page_says_what_arrived(server, with_rat
     monkeypatch.setattr(rbridge, "send", fake_send)
     _, page, _ = _open(f"{base}/glv?token={token}", b"to=r")
     assert "Sent to R: 2 organism(s), 2 growth rate(s)" in page
-    assert sent["payload"]["format"] == "grownet.glv/v2"
+    assert sent["payload"]["format"] == "grownet.glv/v3"
     assert sent["payload"]["matrices"][0]["organisms"] == sorted([A, B])
 
     # the same menu downloads the zip, so one control covers both
@@ -771,7 +774,7 @@ def test_r_can_fetch_the_same_parameters_from_the_page(server, with_rates, monke
     _, text, headers = _open(f"{base}/glv.json?token={token}")
     assert headers["Content-Type"].startswith("application/json")
     payload = json.loads(text)
-    assert payload["format"] == "grownet.glv/v2"
+    assert payload["format"] == "grownet.glv/v3"
     (block,) = payload["matrices"]
     assert block["organisms"] == sorted([A, B]) and block["unit"].startswith("1/(h x ")
     assert "readme" in payload and "caveats" in payload

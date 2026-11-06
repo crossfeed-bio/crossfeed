@@ -123,7 +123,7 @@ test_that("the written files keep what the download keeps", {
                                  "lag", "lag_method", "carrying_capacity", "capacity_unit",
                                  "capacity_curves", "capacity_curves_left_out",
                                  "capacity_fall_from_peak", "capacity_medium", "capacity_source",
-                                 "doubling_time"))
+                                 "doubling_time", "dilution"))
     # a count, 0 included, never NA
     expect_equal(rates$capacity_curves_left_out, c(0L, 1L))
     expect_equal(rates$capacity_fall_from_peak[1], 0.9)

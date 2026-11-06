@@ -305,15 +305,34 @@ test_that("the drop-out line counts the arcs in the cells where the package does
 })
 
 
-test_that("v2 is read, and the v1 and v0 of earlier versions still are, without a warning", {
+test_that("v3 is read, and the v2, v1 and v0 of earlier versions still are, without a warning", {
     # Karoline, 2026-10-14: the payload moved to grownet.glv/v2 for the fields 0.5.0 adds and the
-    # narrower matrices[].media; a payload this package does not know is read with a warning
+    # narrower matrices[].media; and to v3 on 2026-11-06 ("yes to the dilution column") for each rate's
+    # dilution; a payload this package does not know is read with a warning
     payload <- example_payload()
-    expect_equal(payload$format, "grownet.glv/v2")
+    expect_equal(payload$format, "grownet.glv/v3")
     expect_silent(grownet:::as_grownet_glv(payload))
-    payload$format <- "grownet.glv/v1"
-    expect_silent(grownet:::as_grownet_glv(payload))
+    for (older in c("grownet.glv/v2", "grownet.glv/v1")) {
+        payload$format <- older
+        expect_silent(grownet:::as_grownet_glv(payload))
+    }
     expect_silent(grownet:::as_grownet_glv(v0_payload()))
-    payload$format <- "grownet.glv/v3"
+    payload$format <- "grownet.glv/v4"
     expect_warning(grownet:::as_grownet_glv(payload), "reading it anyway")
+})
+
+
+test_that("a steady-state package says the dilution rate its rates are at, in print and in the rates", {
+    # grownet.glv/v3: each rate carries `dilution`, the rate per h r_i - D is at, and only the
+    # steady-state derivation gives one
+    payload <- example_payload()
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(payload))), collapse = "\n")
+    expect_false(grepl("dilution rate", text, fixed = TRUE))
+    for (i in seq_along(payload$growth_rate_detail)) payload$growth_rate_detail[[i]]$dilution <- 0.04
+    x <- grownet:::as_grownet_glv(payload)
+    text <- paste(capture.output(print(x)), collapse = "\n")
+    expect_match(text, "rates are r_i - D at the dilution rate 0.04 per h", fixed = TRUE)
+    frame <- grownet:::.rates_frame(x)
+    expect_equal(names(frame)[ncol(frame)], "dilution")
+    expect_equal(unique(frame$dilution), 0.04)
 })

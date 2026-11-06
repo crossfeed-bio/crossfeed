@@ -797,3 +797,19 @@ def test_a_row_without_a_scale_does_not_borrow_another_study_s():
     assert "in units of b's r_i - D" in named or "units of r_i - D" in named
     readme = matrix.readme_from(got, net, rates)
     assert "network derived before the two absolute rates" not in readme
+
+
+def test_the_rates_file_and_the_payload_say_the_dilution_rate_the_rates_are_at():
+    """Karoline, 2026-11-06: "yes to the dilution column". growth_rates.csv gains `dilution` as its last
+    column and each payload rate a `dilution` key (grownet.glv/v3): the rate per h the steady-state rates
+    r_i - D are at, 0.04 here; empty and None under every other derivation."""
+    import csv
+    import io
+
+    from grownet import matrix
+    records, _ = _derive()
+    net, rates, payload, _readme = _package(records)
+    rows = list(csv.DictReader(io.StringIO(matrix.rates_csv(rates, net))))
+    assert list(rows[0])[-1] == "dilution" and {r["dilution"] for r in rows} == {"0.04"}
+    assert payload["format"] == "grownet.glv/v3"
+    assert {d["dilution"] for d in payload["growth_rate_detail"]} == {0.04}

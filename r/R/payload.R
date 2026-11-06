@@ -11,8 +11,8 @@
 # sizes with -1 on the diagonal and +/-10 for a pair with no ratio. All are read, a field a version lacks
 # reads as absent, and the object says whether it holds fitted coefficients (`fitted`), because what a
 # cell means differs.
-GLV_FORMAT <- "grownet.glv/v2"
-GLV_FORMATS <- c("grownet.glv/v2", "grownet.glv/v1", "grownet.glv/v0")
+GLV_FORMAT <- "grownet.glv/v3"
+GLV_FORMATS <- c("grownet.glv/v3", "grownet.glv/v2", "grownet.glv/v1", "grownet.glv/v0")
 
 #' @noRd
 stop_grownet <- function(...) stop(paste0(...), call. = FALSE)
@@ -237,6 +237,13 @@ print.grownet_glv <- function(x, ...) {
                 if (nzchar(x$growth_rate_unit)) paste0(" (", x$growth_rate_unit, ")") else "",
                 if (length(outside)) sprintf("; %d more in the network have none and are in no matrix",
                                              length(outside)) else ""))
+    # the steady-state derivation's rates are r_i - D at one dilution rate, which a simulation of them
+    # reproduces (grownet.glv/v3; Karoline, 2026-11-06: "yes to the dilution column")
+    dilution <- unique(unlist(lapply(x$growth_rate_detail %||% list(), function(d) d$dilution)))
+    if (length(dilution) == 1) {
+        cat(sprintf("  rates are r_i - D at the dilution rate %s per h: the chemostat they were fitted in.\n",
+                    format(dilution)))
+    }
     cat("  A[i, j] is the effect of j on i: rows are affected, columns are the actor.\n")
     if (x$fitted) {
         # the package's own sentence, which says what its derivation fitted: an integrated cell is not a

@@ -6,6 +6,15 @@ content.
 
 ## [Unreleased]
 
+### Upgrading
+
+- **The gLV payload moves to `grownet.glv/v3`** (Karoline, 2026-11-06: "yes to the dilution column"): each
+  `growth_rate_detail` entry gains `dilution`, the dilution rate per h a steady-state rate `r_i - D` is at,
+  null under every other derivation. grownet 0.5.0's R package reads a v3 payload with a warning that the
+  format is newer than it knows, and the extra key does not reach its rates; this release's reads v3, v2,
+  v1 and v0. `growth_rates.csv` gains a `dilution` column, appended last, empty except under the
+  steady-state derivation, so a reader of the earlier columns finds them where they were.
+
 ### Added
 
 - **Groundwork for a third derivation: gLV rows from the steady states of sub-communities** (Karoline,
