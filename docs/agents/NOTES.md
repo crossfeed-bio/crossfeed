@@ -1202,3 +1202,14 @@ community from a fit without it. Measured locally on Venturelli et al. 2018's fi
 EV1, T4; nothing of theirs in git): strict leave-one-out identifies 0 of the 132 off-diagonal coefficients,
 because only 6 of the 12 coexist; adding the 66 pairs identifies 128 of 132, exact to 2e-12; the six that
 coexist, alone, 30 of 30. The chemostat inputs (#312) and the wiring (#313) are separate tasks.
+
+`subcommunity.chemostat_groups` (#312) turns continuous cultures into that input, one group per medium, unit
+and dilution rate. It takes the chemostat check's steady states (`steady.observed`, which now also keeps each
+vessel's value as `per_vessel`), uses only runs KNOWN to be unperturbed (the check's `_perturbed` returning
+None is not enough here), and leaves out a run with an inoculated member it could not read. `batch_period`
+reads when the pump started from the description (live: SMGDB00000011, "Chemostat mode started 4 hours after
+inoculation"); `row_scale` fits easylinear over that start-up. Live on 2026-11-06: SMGDB00000005's control and
+SMGDB00000011's run each give one community, so every row is underdetermined, and no study has a monoculture
+chemostat, so no scale. Grouping is by the medium string as recorded, so "Wilkins-Chalgren" (study 5) and
+"Wilkins-Chalgren Anaerobe Broth (WC)" (study 11) are apart; the wiring (#313) should key on
+`derive.media_identity` instead, as the rest of the tool does.

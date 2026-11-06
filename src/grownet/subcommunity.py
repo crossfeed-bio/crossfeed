@@ -37,6 +37,7 @@ Nothing here reads mGrowthDB; `#312` turns chemostat runs into these communities
 from __future__ import annotations
 
 import random
+import re
 import statistics
 
 from .integrated import MAX_CONDITION, _least_squares, _solve
@@ -163,3 +164,149 @@ def leave_one_out_predictions(communities: list) -> list:
         out.append({"community": c["name"], "status": "predicted",
                     "predicted": dict(zip(members, solved, strict=True)), "observed": here})
     return out
+
+
+# ---- chemostat runs into communities, and each row's scale from the run's own start-up (#312) ----------
+#
+# Karoline, on #310: chemostat steady states only; the row scale s_i = r_i - D "from the chemostat itself",
+# since "Mono-culture growth rates from batch are tricky, because they change in chemostat"; and "chemostat
+# is not always switched on directly, so it would mean checking experiment description for a batch period".
+# mGrowthDB records no such period in a field, so it is read from the description, as the chemostat check
+# reads perturbations; one live run says "Chemostat mode started 4 hours after inoculation".
+
+_NUMBER = r"(\d+(?:\.\d+)?)\s*-?\s*(h|hrs?|hours?|min|mins|minutes?|d|days?)\b"
+_BATCH = [re.compile(p, re.I) for p in (
+    rf"(?:chemostat|continuous)\s+(?:mode|operation|feeding|culture)?\s*(?:was\s+|were\s+)?"
+    rf"(?:started|switched on|turned on|began|initiated)\s+{_NUMBER}\s+after\s+inoculation",
+    rf"batch\s+(?:phase|period|growth|mode|stage)\s+(?:of|for|lasting)\s+{_NUMBER}",
+    rf"(?:pumps?|feed(?:ing)?|dilution|medium flow|inflow)\s+(?:was\s+|were\s+)?"
+    rf"(?:started|switched on|turned on|initiated|began)\s+(?:after|at)\s+{_NUMBER}",
+    rf"after\s+{_NUMBER}\s+(?:of\s+)?batch",
+)]
+_FROM_START = re.compile(
+    r"(?:chemostat\s+mode|dilution|pumps?|feed(?:ing)?|continuous\s+(?:mode|feeding))\s+(?:was\s+|were\s+)?"
+    r"(?:started\s+|switched on\s+|run\s+|applied\s+)?(?:from|at|upon|(?:directly|immediately)\s+(?:after|at|upon))"
+    r"\s+inoculation", re.I)
+_HOURS = {"h": 1.0, "hr": 1.0, "hrs": 1.0, "hour": 1.0, "hours": 1.0, "min": 1 / 60, "mins": 1 / 60,
+          "minute": 1 / 60, "minutes": 1 / 60, "d": 24.0, "day": 24.0, "days": 24.0}
+# a curve's time unit, in hours
+_PER_HOUR = {"h": 1.0, "hours": 1.0, "hour": 1.0, "min": 1 / 60, "minutes": 1 / 60, "d": 24.0, "days": 24.0}
+MIN_STARTUP_POINTS = 3
+
+
+def batch_period(exp: dict) -> dict:
+    """When the dilution started, as the description says: {"kind", "hours", "said"}, where kind is "batch"
+    (a batch period of `hours` before the pump), "from inoculation", or "unknown" (it does not say)."""
+    text = " ".join(str(exp.get(k) or "") for k in ("description", "name"))
+    for pattern in _BATCH:
+        m = pattern.search(text)
+        if m:
+            return {"kind": "batch", "hours": float(m.group(1)) * _HOURS[m.group(2).lower()], "said": m.group(0)}
+    m = _FROM_START.search(text)
+    if m:
+        return {"kind": "from inoculation", "hours": 0.0, "said": m.group(0)}
+    return {"kind": "unknown", "hours": None, "said": ""}
+
+
+def row_scale(curve, dilution: float, period: dict) -> dict:
+    """The row scale s_i = r_i - D from a monoculture chemostat's own start-up: {"scale", "how"}.
+
+    Inside a stated batch period the rise is r_i, so the scale is that rate less D; with the pump on from
+    inoculation the rise is r_i - D already. The rate is easylinear's, over the start-up only, with its
+    window shortened to the points there. Where the description does not say when the dilution started,
+    there is no scale and the row stays in units of r_i - D (decision 3 of #310)."""
+    from .rates import DEFAULT_WINDOW, RateUnavailable, easylinear_fit
+    if period["kind"] == "unknown":
+        return {"scale": None, "how": "the description does not say when the dilution started, so the start-up "
+                                      "cannot be told from batch growth; the row stays in units of r_i - D"}
+    per_hour = _PER_HOUR.get((curve.time_unit or "").lower())
+    if per_hour is None:
+        return {"scale": None, "how": f"the curve's time unit {curve.time_unit!r} is not one this reads"}
+    times, values = list(curve.times), list(curve.values)
+    if period["kind"] == "batch":
+        end = period["hours"] / per_hour
+        keep = [(t, v) for t, v in zip(times, values, strict=True) if t <= end + 1e-9]
+        times, values = [t for t, _ in keep], [v for _, v in keep]
+    if len(times) < MIN_STARTUP_POINTS:
+        return {"scale": None, "how": f"{len(times)} measured points in the start-up "
+                                      f"({period['said']}); a rate needs {MIN_STARTUP_POINTS}"}
+    try:
+        got = easylinear_fit(times, values, window=min(DEFAULT_WINDOW, len(times) - 1))
+    except RateUnavailable as e:
+        return {"scale": None, "how": f"no rate in the start-up ({period['said']}): {e}"}
+    if period["kind"] == "batch":
+        scale = got["rate"] - dilution
+        how = (f"batch period ({period['said']}): r_i {got['rate']:.4g} less the dilution rate {dilution:.4g}")
+    else:
+        scale = got["rate"]
+        how = f"pump on from inoculation ({period['said']}): the rise is r_i - D, {got['rate']:.4g}"
+    if not scale > 0:
+        return {"scale": None, "how": how + f"; {scale:.4g} is not above the dilution rate, so the organism "
+                                            "could not hold a steady state at it"}
+    return {"scale": scale, "how": how}
+
+
+def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
+    """The continuous cultures among `exps` as estimator input, one group per medium, abundance unit and
+    dilution rate (decision 1 of #310): {"medium", "unit", "dilution", "communities", "scales", "left_out"}.
+
+    The steady states are the chemostat check's (`steady.observed`: the mean over the last quarter of each
+    vessel, every run and organism it could not read named). A run is used only when it is known to be
+    unperturbed and records its dilution rate; a member below the check's wash-out share is 0; a run with an
+    inoculated member that could not be read is left out, since its effect on the others is unknown. The
+    scales come from the monoculture runs' start-up (`row_scale`), the median over their vessels.
+    """
+    from .adapter import replicates_for_experiment
+    from .growth import SPIKE_FACTOR
+    from .steady import _washed_out, observed
+    spike = SPIKE_FACTOR if spike_factor is None else spike_factor
+    by_id = {exp.get("id"): exp for exp in exps}
+    groups: dict = {}
+    for entry in observed(client, exps, spike):
+        name = entry["name"]
+        key = ((entry["medium"] or "").lower(), entry["unit"], entry["dilution"])
+        group = groups.setdefault(key, {"medium": entry["medium"], "unit": entry["unit"],
+                                        "dilution": entry["dilution"], "communities": [], "scales": {},
+                                        "left_out": []})
+        group["left_out"] += entry["left_out"]
+        if entry["why_not"]:
+            group["left_out"].append((name, entry["why_not"]))
+            continue
+        if entry["perturbed"] is None:
+            group["left_out"].append((name, "not used: its description does not say it is unperturbed, and "
+                                            "a fit takes only runs known to be at an unperturbed steady state"))
+            continue
+        exp = by_id.get(entry["experiment"]) or {}
+        members = [s.get("name") for s in exp.get("communityStrains") or []]
+        unread = [m for m in members if m not in entry["organisms"]]
+        if unread:
+            group["left_out"].append((name, f"no steady state read for {', '.join(unread)}, so its effect on "
+                                            "the others is unknown"))
+            continue
+        biggest = max(o["value"] for o in entry["organisms"].values())
+        abundance = {m: (0.0 if _washed_out(o["value"], biggest) else o["value"])
+                     for m, o in entry["organisms"].items()}
+        indices = sorted({i for o in entry["organisms"].values() for i in o.get("per_vessel", {})})
+        vessels = [{m: (0.0 if abundance[m] == 0.0 else o["per_vessel"][i])
+                    for m, o in entry["organisms"].items() if i in o.get("per_vessel", {})} for i in indices]
+        taken = {c["name"] for c in group["communities"]}
+        group["communities"].append({"name": name if name not in taken else f"{name} ({entry['experiment']})",
+                                     "abundance": abundance, "vessels": vessels,
+                                     "experiment": entry["experiment"]})
+        if len(members) == 1:
+            period = batch_period(exp)
+            reps, _ = replicates_for_experiment(client, exp, spike)
+            got = [row_scale(c, entry["dilution"], period) for rep in reps
+                   if (c := rep.curve(members[0])) is not None]
+            scales = [g["scale"] for g in got if g["scale"] is not None]
+            group["scales"][members[0]] = ({"scale": statistics.median(scales), "how": got[0]["how"]
+                                            if len(scales) == len(got) else got[0]["how"] + " (some vessels "
+                                            "gave none)", "vessels": len(scales)} if scales else
+                                           {"scale": None, "how": got[0]["how"] if got else "no curve read",
+                                            "vessels": 0})
+    for group in groups.values():
+        for species in sorted({k for c in group["communities"] for k in c["abundance"]}):
+            group["scales"].setdefault(species, {"scale": None, "vessels": 0,
+                                                 "how": "no monoculture chemostat of it in this group, so its "
+                                                        "row stays in units of r_i - D"})
+    return sorted((g for g in groups.values() if g["communities"]), key=lambda g: (g["dilution"], g["medium"]))
