@@ -6,6 +6,12 @@ content.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The R package's summary of a gLV package reads cleanly** (#296). "fitted:" no longer starts every line
+  of the organisms left out of the matrices; the organisms without a rate are not listed a second time on
+  the next line; and a one-organism matrix reads "1 organism", not "1 organisms". No number changes.
+
 ### Changed
 
 - **The help reads more easily** (Karoline, 2026-11-06). It no longer prints who decided what and when
