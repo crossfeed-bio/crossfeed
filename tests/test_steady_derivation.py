@@ -291,11 +291,14 @@ def _at_dilution(d: float, study: str, three_runs=False):
     the scales and the fitted values do), as
     study `study`; with `three_runs`, a second run of the pair too."""
     from test_growth_rates import _client
+    # long enough to settle at D 0.2 too, where b rises at 0.1 per h: at 48 h it was still rising inside the
+    # window its steady state is read in (found in a fourth review), which the derivation now refuses
+    END = 150.0
     ids = {"a": (21, 22), "b": (23, 24), "ab": (25, 26)}
-    curves = {(ids["a"][0], "a"): _startup(0.5, d, 4.0, UNIT), (ids["a"][1], "a"): _startup(0.5, d, 4.0, UNIT),
-              (ids["b"][0], "b"): _startup(0.3, d, 4.0, 2 * UNIT), (ids["b"][1], "b"): _startup(0.3, d, 4.0, 2 * UNIT),
-              **{(i, "a"): _startup(0.5, d, 4.0, PAIR_A) for i in ids["ab"]},
-              **{(i, "b"): _startup(0.3, d, 4.0, PAIR_B) for i in ids["ab"]}}
+    curves = {**{(i, "a"): _startup(0.5, d, 4.0, UNIT, end=END) for i in ids["a"]},
+              **{(i, "b"): _startup(0.3, d, 4.0, 2 * UNIT, end=END) for i in ids["b"]},
+              **{(i, "a"): _startup(0.5, d, 4.0, PAIR_A, end=END) for i in ids["ab"]},
+              **{(i, "b"): _startup(0.3, d, 4.0, PAIR_B, end=END) for i in ids["ab"]}}
     text = f"{d:.3f}"
     exps = [_chemostat("F1", "a alone", ["a"], [(ids["a"][0], "V1"), (ids["a"][1], "V2")], dilution=text,
                        description=RUN),
@@ -534,8 +537,8 @@ def test_a_run_s_wash_out_is_reported_by_the_derivation():
 def test_the_package_is_at_one_dilution_rate_in_its_cells_too():
     """a and b fitted at D 0.04 (S1) and D 0.2 (S2): the package is at 0.04, and its cells hold the D 0.04
     coefficients alone, the D 0.2 arcs named as left out; a cell was the median of both while the README
-    said one dilution rate (found in a third review). Here the D 0.2 coefficients are (0.5 - 0.2) B, unlike
-    the D 0.04 ones, 0.46 B."""
+    said one dilution rate (found in a third review). Here the D 0.2 coefficients are 0.3 B and 0.1 B, unlike
+    the D 0.04 ones, 0.46 B and 0.26 B."""
     from grownet import integrated, matrix
     from grownet.subcommunity import METRIC
     records = _at_dilution(0.04, "S1") + _at_dilution(0.2, "S2")
@@ -663,3 +666,19 @@ def test_report_notes_are_only_the_steady_derivation_s():
     assert cli._report_notes(plain, {}) == []
     bare = cli.build_parser().parse_args(["derive", "S1", "--live", "--derivation", "steady"])
     assert cli._report_notes(bare, {}) == []
+
+
+def test_a_run_still_changing_in_its_window_is_not_a_steady_state():
+    """b rises at r - D = 0.1 per h at D 0.2: by 48 h it is still rising inside the last quarter of the run,
+    which was averaged as its steady state and fitted, giving B_bb -0.67 where it is -0.5, with nothing
+    flagged (found in a fourth review). Such a run is left out and named."""
+    from test_growth_rates import _client
+    curves = {(1, "a"): _startup(0.5, 0.2, 4.0, UNIT), (3, "b"): _startup(0.3, 0.2, 4.0, 2 * UNIT)}
+    exps = [_chemostat("E1", "a alone", ["a"], [(1, "V1")], dilution="0.2", description=RUN),
+            _chemostat("E2", "b alone", ["b"], [(3, "V1")], dilution="0.2", description=RUN)]
+    from grownet.subcommunity import chemostat_groups
+    groups = chemostat_groups(_client(curves), exps)
+    names = [c["name"] for g in groups for c in g["communities"]]
+    assert names == ["a alone"]
+    said = " ".join(why for g in groups for _, why in g["left_out"])
+    assert "not at a steady state: b changes by" in said

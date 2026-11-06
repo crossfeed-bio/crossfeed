@@ -357,6 +357,36 @@ def row_scale(curve, dilution: float, period: dict) -> dict:
     return {"scale": scale, "how": how}
 
 
+SETTLED = 0.10    # the most an organism may change between the two halves of the window a steady state is read in
+
+
+def _still_changing(reps, washed) -> list:
+    """What in a run is not settled: an organism present whose mean over the second half of the window the
+    steady state is averaged over (`steady._tail_mean`) differs from the first half's by more than `SETTLED`,
+    in any vessel. A window of fewer than four points cannot be split and is not judged."""
+    from .steady import _tail_mean
+    out = []
+    for rep in reps:
+        for curve in rep.curves:
+            if curve.species in washed:
+                continue
+            _, (start, end), _ = _tail_mean(curve)
+            inside = [(t, v) for t, v in zip(curve.times, curve.values, strict=True)
+                      if start - 1e-9 <= t <= end + 1e-9 and v is not None]
+            if len(inside) < 4:
+                continue
+            half = len(inside) // 2
+            first = statistics.fmean(v for _, v in inside[:half])
+            second = statistics.fmean(v for _, v in inside[half:])
+            change = abs(second - first) / abs(second) if second else float("inf")
+            if change > SETTLED:
+                said = (f"{curve.species} changes by {change:.0%} between the two halves of the window averaged "
+                        f"({start:g} to {end:g} {curve.time_unit}), more than {SETTLED:.0%}")
+                if said not in out:
+                    out.append(said)
+    return out
+
+
 def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
     """The continuous cultures among `exps` as estimator input, one group per medium, abundance unit and
     dilution rate (decision 1 of #310): {"medium", "unit", "dilution", "communities", "scales", "left_out"}.
@@ -407,6 +437,12 @@ def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
             continue
         biggest = max(o["value"] for o in entry["organisms"].values())
         washed = {m for m, o in entry["organisms"].items() if _washed_out(o["value"], biggest)}
+        moving = _still_changing(reps, washed)
+        if moving:
+            # the mean over the last quarter of a run that is still rising is not a steady state, and fitted as
+            # one it gave wrong coefficients with nothing flagged (found in a fourth review)
+            group["left_out"].append((name, "not at a steady state: " + "; ".join(moving)))
+            continue
         indices = sorted({i for o in entry["organisms"].values() for i in o.get("per_vessel", {})})
         vessels = [{m: (0.0 if m in washed else o["per_vessel"][i])
                     for m, o in entry["organisms"].items() if i in o.get("per_vessel", {})} for i in indices]

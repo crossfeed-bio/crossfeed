@@ -60,7 +60,8 @@ content.
   start-up rather than batch rates; with no row scaled, no batch rate is read in their place, and the
   command line's report says so; the package takes one dilution rate for every organism, the one most rows
   were fitted at, whatever the order the studies were read in. An empty result after the second box or the
-  Technique setting no longer says the studies hold no chemostat. The validation script no longer lets
+  Technique setting no longer says the studies hold no chemostat. A run that is still changing in the
+  window its steady state is read in is left out and named, rather than fitted as one. The validation script no longer lets
   absent organisms invade from solver noise, reports six noise draws and the start-up's noise bias, and
   its numbers in METHOD_NOTES were re-derived.
 
