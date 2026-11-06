@@ -52,9 +52,11 @@ NEXT = (
     "counting those below the absence threshold, up to 117 times.",
     # #315, #316, #318, #319 (merged), #320 (validation), #321 (messages and every later fix to the
     # derivation); the dilution rate in the rates file and the package: branch dilution-column, its pull
+    # request not yet open; runs of several studies fitted together: branch steady-across-studies, its pull
     # request not yet open
     "A third derivation, for gLV mode: the rows fitted from the chemostat steady states of sub-communities, "
-    "every sub-community counting, its package at one dilution rate, which its rates name. mGrowthDB holds no "
+    "every sub-community counting, across studies where the medium matches, its package at one dilution "
+    "rate, which its rates name. mGrowthDB holds no "
     "such design yet, and it says what each organism lacks; on a published 12-species model, monocultures "
     "and pairs give 126 of its 132 coefficients.",
     # #299 (Baranyi damping)
