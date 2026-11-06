@@ -970,37 +970,84 @@ def test_opening_the_page_without_the_token_explains_itself(server):
     assert token not in body                                 # never the token itself
 
 
-def test_the_glv_example_button_configures_everything_and_runs(server):
-    """Karoline, 2026-10-07: "include a gLV example button in the GUI that configures everything for a
-    working gLV example". It fills both boxes and presses gLV mode, and runs the search, so a reader gets
-    a package to simulate from one press.
+def _form_fields(page: str) -> dict:
+    """What the page's form sends when Find interactions is pressed: each input's value, a checkbox only
+    when checked, each select's selected option, each textarea's text. Buttons send nothing."""
+    from html.parser import HTMLParser
+
+    class Form(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.fields, self.select, self.textarea = {}, None, None
+
+        def handle_starttag(self, tag, attrs):
+            a = dict(attrs)
+            if tag == "input" and a.get("name") and (a.get("type") != "checkbox" or "checked" in a):
+                self.fields[a["name"]] = a.get("value", "on")
+            elif tag == "select":
+                self.select = a.get("name")
+            elif tag == "option" and self.select and ("selected" in a or self.select not in self.fields):
+                self.fields[self.select] = a.get("value", "")
+            elif tag == "textarea":
+                self.textarea = a.get("name")
+                self.fields[self.textarea] = ""
+
+        def handle_endtag(self, tag):
+            self.select = None if tag == "select" else self.select
+            self.textarea = None if tag == "textarea" else self.textarea
+
+        def handle_data(self, data):
+            if self.textarea:
+                self.fields[self.textarea] += data
+
+    form = Form()
+    form.feed(page[page.index("<form"):page.index("</form>")])
+    return form.fields
+
+
+def test_the_glv_example_button_fills_everything_and_find_interactions_runs_it(server):
+    """Karoline, 2026-11-06: "The Example button fills the input fields, but gLV example fills the fields
+    and launches the search. Please change the gLV example behavior to be in line with 'Example'." So it
+    fills and waits, as Example does, and Find interactions runs what it filled.
+
+    What it fills is still everything a working package needs (Karoline, 2026-10-07: "include a gLV
+    example button in the GUI that configures everything for a working gLV example"): the example's
+    species in the first box, its study in the second, and every setting gLV mode sets.
 
     **It asserted `derivation == DEFAULTS["derivation"]` until 2026-10-10**, which is true whatever the
     default is, so it passed while the button quietly stopped being able to build a package: the default
     went back to the comparison, the button inherited it, and a comparison gives no gLV coefficient. The
-    assertion is now what the button has to achieve rather than what it happens to equal.
+    assertion is what the button has to achieve rather than what it happens to equal.
 
-    The double here serves the fake study, not SMGDB00000002, so what this pins is the configuring: the
-    example's species in the first box, its study in the second, and every setting gLV mode sets. The
+    The double here serves the fake study, not SMGDB00000002, so what this pins is the configuring; the
     package the real study gives is what the help's steps walk through.
     """
     import grownet.gui as gui
     base, token = server
-    data = urllib.parse.urlencode({"glv_example": "1"}).encode()
-    with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=30) as r:
-        page = r.read().decode("utf-8")
-    assert "Advanced settings" in page            # the result page, not an error
-
-    doc = json.loads(_get(f"{base}/download.json?token={token}"))
-    said = doc["meta"]["settings"]
-    assert said["conditions"] == gui.GLV_EXAMPLE_STUDY
+    with urllib.request.urlopen(f"{base}/run?token={token}",
+                                data=urllib.parse.urlencode({"glv_example": "1"}).encode(), timeout=30) as r:
+        page, landed = r.read().decode("utf-8"), r.geturl()
+    # filled, not searched: no job, no progress, no result, and a note saying what to press, as Example's
+    assert "job=" not in landed and "Searching" not in page and 'id="result"' not in page
+    assert "Press Find interactions" in page and gui.GLV_EXAMPLE_MESSAGE.split(".")[0] in page
+    fields = _form_fields(page)
+    assert fields["species"].split("\n") == list(gui.GLV_EXAMPLE)
+    assert fields["conditions"] == gui.GLV_EXAMPLE_STUDY
+    filled = gui.parse_settings({k: [v] for k, v in fields.items()})
     # every setting the mode sets, because a package needs all of them: a rate per organism, no arc that
     # may act through a third species, the comparison on a growth rate, and the form that fits the row
     for key, value in gui.glv_mode(dict(gui.DEFAULTS)).items():
         if gui.DEFAULTS[key] != value:
-            assert said[key] == value, f"the gLV example left {key} at {said[key]!r}"
-    assert said["derivation"] == "integrated" and gui.glv_mode_on(said)
-    # the species it asked for are the example's, which the report of the run names
+            assert filled[key] == value, f"the gLV example left {key} at {filled[key]!r}"
+    assert filled["derivation"] == "integrated" and gui.glv_mode_on(filled) and 'aria-pressed="true"' in page
+
+    # then Find interactions, the form as the page holds it, runs exactly that
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=urllib.parse.urlencode(fields).encode(),
+                                timeout=30) as r:
+        assert "Advanced settings" in r.read().decode("utf-8")
+    said = json.loads(_get(f"{base}/download.json?token={token}"))["meta"]["settings"]
+    assert said["conditions"] == gui.GLV_EXAMPLE_STUDY and gui.glv_mode_on(said)
+    assert said["derivation"] == "integrated"
     report = _get(f"{base}/report.txt?token={token}")
     for name in gui.GLV_EXAMPLE:
         assert name in report
@@ -1136,9 +1183,8 @@ def test_the_glv_example_button_ignores_a_setting_left_in_the_form(server):
 
     It took the posted form and applied gLV mode on top, so pressing it with an absence threshold of 9
     still in Advanced settings filled the boxes, ran, and produced no network and no package, against a
-    caption promising a package that simulates (#253). The fix reads `DEFAULTS` instead, and nothing
-    tested it: the existing button test posts `glv_example` alone, and an empty form parses to the
-    defaults either way, so reverting to the form was invisible (found reviewing round 10).
+    caption promising a package that simulates (#253). The fix reads `DEFAULTS` instead. Since the button
+    fills rather than runs (2026-11-06), what it filled is read off the page it returns.
     """
     import grownet.gui as gui
     base, token = server
@@ -1146,15 +1192,12 @@ def test_the_glv_example_button_ignores_a_setting_left_in_the_form(server):
     data = urllib.parse.urlencode({"glv_example": "1", "absence_threshold": "9",
                                    "spike_factor": "3"}).encode()
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=30) as r:
-        page = r.read().decode("utf-8")
-    assert "Advanced settings" in page
-
-    said = json.loads(_get(f"{base}/download.json?token={token}"))["meta"]["settings"]
-    assert said["absence_threshold"] == gui.DEFAULTS["absence_threshold"], said["absence_threshold"]
-    assert said["spike_factor"] == gui.DEFAULTS["spike_factor"], said["spike_factor"]
+        filled = gui.parse_settings({k: [v] for k, v in _form_fields(r.read().decode("utf-8")).items()})
+    assert filled["absence_threshold"] == gui.DEFAULTS["absence_threshold"], filled["absence_threshold"]
+    assert filled["spike_factor"] == gui.DEFAULTS["spike_factor"], filled["spike_factor"]
     # and the settings gLV mode does set are still set, so this did not simply ignore the press
-    assert said["conditions"] == gui.GLV_EXAMPLE_STUDY
-    assert said["report_rates"] is True
+    assert filled["conditions"] == gui.GLV_EXAMPLE_STUDY
+    assert filled["report_rates"] is True
 
 
 def test_the_page_offers_what_the_matrix_is_beside_it(server):

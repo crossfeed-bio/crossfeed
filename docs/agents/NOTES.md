@@ -964,6 +964,10 @@ with a result is `render_form(..., below=...)`, so the result sits under the set
 `details` holding `report.report_text`, also served at `/report.txt`. `tests/test_interface.py` quotes
 Karoline's words for these and checks each through the running server; see AGENTS.md before changing it.
 
+Only Find interactions starts a job. Example and gLV example fill the page and wait (`render_form` with a
+message); gLV example ran its search itself until 2026-11-06, when Karoline asked for it to work like
+Example. Its test submits the filled form the way a browser does (`tests/test_gui.py::_form_fields`).
+
 ## Help page
 
 `src/crossfeed/help.py` holds the help page as data keyed by the code's own names (#78):

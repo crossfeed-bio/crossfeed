@@ -8,6 +8,13 @@ content.
 
 ### Changed
 
+- **gLV example fills the page and waits, as Example does** (Karoline, 2026-11-06: "The Example button fills
+  the input fields, but gLV example fills the fields and launches the search. Please change the gLV example
+  behavior to be in line with 'Example'."). It fills both boxes and switches gLV mode on, and Find
+  interactions runs it.
+
+### Changed
+
 - **Find interactions with the species box empty searches every species in the media, experiments or
   studies of the second box, with every partner, and with both boxes empty it is the whole of mGrowthDB;
   the All button is gone** (Karoline, 2026-11-04, #300: "allow the species field to be empty when the

@@ -235,7 +235,8 @@ every medium a search read, so name an experiment id to read one of them alone.
 
 **Four buttons.** Find interactions; Example, which fills the first box with a pair that gives a result;
 gLV example, which fills both boxes and the settings for a
-package that simulates and runs it (the help walks that package through miaSim step by step); and the gLV
+package that simulates, ready for Find interactions (the help walks that package through miaSim step by
+step); and the gLV
 mode switch, which sets what a simulation needs
 (growth rates on, drop-out communities off, the comparison on the growth rate, the integrated form) and
 switches back when pressed again. Every setting sits

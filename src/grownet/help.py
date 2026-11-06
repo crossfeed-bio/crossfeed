@@ -1323,8 +1323,9 @@ within that run only, narrower than the difference between runs would make it.</
 determines no row. The derivation is there for the data to come.</p>
 
 <h2 id="glv-walkthrough">The gLV example, step by step</h2>
-<p><strong>gLV example</strong> beside Example fills both boxes and the one setting a package cannot be built
-without, and runs the search, so the route above has something concrete to run on. It is one search of
+<p><strong>gLV example</strong> beside Example fills both boxes and every setting a package needs, as
+Example fills its species, and Find interactions then runs it, so the route above has something concrete
+to run on. It is one search of
 one study, chosen by building the package of every study that yields one and scoring them: five give a
 package of two organisms or more, three of those settle with every organism above zero, and this one is
 the soundest of the three. Everything below is the generic route; only the numbers are this example's.</p>
@@ -1336,8 +1337,8 @@ out.</p>
 <ol>
 <li><strong>Press gLV example.</strong> The first box fills with
 <em>Bacteroides thetaiotaomicron</em> and <em>Roseburia intestinalis</em>, the second with
-<code>SMGDB00000002</code> so nothing else is read, Report growth rates goes on, and the search runs. On
-the command line the same run is
+<code>SMGDB00000002</code> so nothing else is read, and gLV mode goes on, Report growth rates among its
+settings. Then press <strong>Find interactions</strong>. On the command line the same run is
 <code>grownet derive --live --species "Bacteroides thetaiotaomicron" "Roseburia intestinalis"
 --conditions SMGDB00000002 --glv-mode --glv glv.zip</code>. The button presses gLV mode, so the
 command does too: without it the default derivation gives no coefficient and the run is refused.</li>

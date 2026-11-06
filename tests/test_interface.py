@@ -516,7 +516,7 @@ def test_glv_mode_sits_in_the_bar_and_sets_what_a_simulation_needs(server):
     assert '<span class="track"><span class="knob">' in bar               # drawn, not described
     assert 'name="all"' not in bar
     # the gLV example button sits before it: it fills the boxes and the settings for a package that
-    # simulates and runs the search (Karoline, 2026-10-07)
+    # simulates (Karoline, 2026-10-07), and since 2026-11-06 waits for Find interactions as Example does
     assert bar.index('name="example"') < bar.index('name="glv_example"') < bar.index('name="glv_mode"')
     assert not re.findall(r'<input[^>]*name="([^"]+)"', bar)             # and no checkboxes in the bar
     assert len(bar) < 720                                                # the text beside it stays short
