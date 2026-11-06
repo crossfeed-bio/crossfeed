@@ -203,18 +203,27 @@ def test_a_genus_node_keeps_no_strain_id_and_says_so():
     node = net.nodes["Lachnoclostridium"]
     assert (node.name, node.identity, node.taxon_id, node.species, node.taxon_id_refused) == \
         ("Lachnoclostridium", "genus", "", "", "")
+    # the strains it stands for are kept since #306 (Karoline: "Yes, add it"), by node id
+    assert node.merged_nodes == ("lachnoclostridium clostridioforme", "lachnoclostridium symbiosum")
     (arc,) = net.edges
     # what the arc keeps instead: the pairs behind it by name, and the community members' strain ids
     assert tuple(arc.merged_pairs) == ("Lachnoclostridium clostridioforme -> Bacteroides ovatus",
                                        "Lachnoclostridium symbiosum -> Bacteroides ovatus")
     assert arc.supporting_pairs == 2 and "lachnoclostridium symbiosum" in arc.community
     # and the help says each of these about a merged node, field by field
-    section = visible(PAGE[PAGE.index('id="merged-nodes"'):PAGE.index('id="decisions"')])
+    raw = PAGE[PAGE.index('id="merged-nodes"'):PAGE.index('id="decisions"')]
+    section = visible(raw)
+    # each field by its own name, as the help writes a field, so "species" is not found in "species pairs"
+    # nor "taxon_id" in "taxon_id_refused" (found in review)
     for field in (f.name for f in dataclasses.fields(model.Node)):
-        assert field in section, field
-    assert "strain ids are not kept on the node" in " ".join(section.split())
+        assert help._name(field) in raw, field
+    assert "merged_nodes lists the strains it stands for" in " ".join(section.split())
     for where in ("merged_pairs", "supporting_pairs", "community"):
-        assert where in section, where
+        assert help._name(where) in raw, where
+    # a drop-out member on no arc (ncbi:3 here) is in the arc's community and in no node's merged_nodes,
+    # and the help does not say otherwise
+    assert "ncbi:3" in arc.community and not any("ncbi:3" in n.merged_nodes for n in net.nodes.values())
+    assert "a member on no arc is named only there" in " ".join(section.split())
 
 
 def test_the_attribute_list_names_every_value_an_edge_can_take():

@@ -58,7 +58,7 @@ def test_every_v4_field_reaches_the_file_graphml_and_validation():
         "vs_other_removals": -0.5, "source_taxon_id": "1506553",
         "source_taxon_id_refused": "mGrowthDB gives taxon id 1506553 to different strains in this study"}])
     doc = net.to_dict()
-    assert doc["schema"] == SCHEMA == "grownet.interaction_network/v4"
+    assert doc["schema"] == SCHEMA          # written in the current format; the /v4 reading is tested below
     (edge,) = doc["edges"]
     assert (edge["metric_unit"], edge["window"], edge["window_unit"], edge["vs_other_removals"]) == \
         ("Cells/mL x h", 30.0, "h", -0.5)
@@ -305,3 +305,21 @@ def test_only_present_quantified_arcs_to_oneself_count_as_within_one_organism():
          "study_id": "S1"},                                   # no number and no extreme: nothing to count
         {"source": "a", "target": "b", "effect": "inhibition", "strength": -1.0, "study_id": "S1"}])
     assert matrix.counts(net)["within_one_organism"] == 2
+
+
+def test_a_v4_file_still_reads_and_validates_with_no_technique():
+    """The claim the /v5 move makes about /v4, tested rather than commented (Craig's agent: the old assertion
+    compared the document with the constant it was written with, which holds for any value): a /v4 document,
+    which has no `technique` and no `merged_nodes`, validates as /v4 and reads with both empty, as `model.py`
+    promises a file older than /v5 does."""
+    from grownet.model import KNOWN_SCHEMAS
+    doc = {"schema": "grownet.interaction_network/v4", "meta": {}, "studies": [{"id": "S1"}],
+           "nodes": [{"id": "a", "name": "A"}, {"id": "b", "name": "B"}],
+           "edges": [{"source": "a", "target": "b", "effect": "facilitation", "strength": 1.0,
+                      "study_ids": ["S1"], "metric_unit": "Cells/mL x h", "window": 30.0, "window_unit": "h"}]}
+    assert "grownet.interaction_network/v4" in KNOWN_SCHEMAS and SCHEMA != "grownet.interaction_network/v4"
+    notes = []
+    assert validate_document(doc, notes) == [], notes
+    net = InteractionNetwork.from_dict(doc)
+    assert net.edges[0].technique == "" and net.edges[0].window == 30.0
+    assert all(node.merged_nodes == () or not node.merged_nodes for node in net.nodes.values())

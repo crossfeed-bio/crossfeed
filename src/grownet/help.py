@@ -538,6 +538,13 @@ EDGE_ATTRIBUTES = {
                          "shares. The others include arcs below the absence threshold, which a default file "
                          "leaves out, so derive with --include-absent to recompute it from the file. Empty "
                          "for every other arc",
+    "technique": "how the target was measured, as mGrowthDB names the technique (fc for flow cytometry, "
+                 "qpcr, 16s, plates, od, ...): every distinct technique of its curves on both sides, "
+                 "joined by \"; \". An arc of the comparison has one, since a species is never compared "
+                 "across techniques; an arc of the integrated form names two when the co-culture and the "
+                 "monocultures its rate comes from were measured differently; Merge parallel arcs merges "
+                 "across techniques, and a merged arc names every technique of the arcs it merges. "
+                 "\"unrecorded\" where mGrowthDB names none",
     "rate_stage_method": "how the monoculture stage was resampled for that number: a bootstrap of its "
                          "replicates where the stage is the median of one fit per replicate, or a "
                          "delete-one jackknife where it is one regression over all of their rows",
@@ -576,7 +583,9 @@ MERGED_ATTRIBUTES = (
      "every value any merged arc carries; the notes also say how many of the arcs record no medium, when "
      "only some do"),
     (("study_ids",), "every study the merged arcs come from"),
-    (("condition", "cultivation_mode", "medium"), "every distinct value, joined by \"; \""),
+    # merging crosses techniques (#305)
+    (("condition", "cultivation_mode", "medium", "technique"),
+     "every distinct value, joined by \"; \": a merge crosses conditions, media and techniques"),
     (("evidence",), "dropout when any merged arc is a drop-out arc, since the merged arc may then act through "
                     "a third species; otherwise the merged arcs' evidence"),
     (("method",), "the first arc's method, followed by \"merged: the median of N arcs\""),
@@ -605,6 +614,8 @@ NODE_ATTRIBUTES = {
     "taxon_id": "the NCBI taxon id of the strain, as mGrowthDB records it",
     "taxon_id_refused": "why taxon_id is not this node's identity: mGrowthDB gave it to different strains of "
                         "one study, so it is not a join key; empty where taxon_id is the identity",
+    "merged_nodes": "with Merge to genus: the node ids of the strains this genus node stands for, among the "
+                    "network's arcs; empty on every other node",
     "species": "genus and species from the name, to merge with species-level networks",
     "identity": "what the id rests on: ncbi (the taxon id), name, or genus (with Merge to genus: the node "
                 "stands for every strain of its genus)",
@@ -1359,8 +1370,10 @@ give others; the report beside the download says what was read and when.</p>
 
 <h2 id="attributes">Arc and node attributes</h2>
 <p>Every downloaded network, JSON or GraphML, carries these for each arc (edge) and node. A network
-names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v4</code>,
-after <code>/v3</code> in 0.3.0 and 0.4.0. It moved to <code>/v1</code> in 0.2.0 because
+names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v5</code>,
+after <code>/v4</code> in 0.5.0, which a <code>/v5</code> file only adds <code>technique</code> and
+<code>merged_nodes</code> to, and
+<code>/v3</code> in 0.3.0 and 0.4.0. It moved to <code>/v1</code> in 0.2.0 because
 <code>significance</code> changed meaning, from the corrected p-value to -log10 of it, and to
 <code>/v2</code>, <code>/v3</code> and then <code>/v4</code> because optional arc and node fields were
 added and an installed 0.2.0 builds its arcs from every field a file carries, so it must
@@ -1415,14 +1428,16 @@ its genus, and a genus node is the genus itself:</p>
 <ul>
 <li>{_name("id")} and {_name("name")} are the genus, the first word of the name mGrowthDB gives
 (<em>[Clostridium]</em> apart from <em>Clostridium</em>), and {_name("identity")} is <code>genus</code>.</li>
+<li>{_name("merged_nodes")} lists the strains it stands for, by their node ids, sorted: every strain of
+the genus among the network's arcs.</li>
 <li>{_name("taxon_id")}, {_name("species")} and {_name("taxon_id_refused")} are empty, since they
 describe one strain, and {_name("taxonomy")} and {_name("model_ref")} are empty as on every node.</li>
 </ul>
-<p>So <strong>strain ids are not kept on the node</strong>. What the merge keeps of the strains is on the
-arcs: {_name("merged_pairs")} names the pairs behind a genus arc, as species pairs or, when only taxon ids
-were entered, as strain pairs, and {_name("supporting_pairs")} counts them; a drop-out arc's
-{_name("community")} still lists the members by their strain ids, which are not nodes of a genus network.
-To see which strains a genus stands for, derive the same search with Merge to genus off.</p>
+<p>The arcs say which of those strains each one rests on: {_name("merged_pairs")} names the pairs behind
+a genus arc, as species pairs or, when only taxon ids were entered, as strain pairs, and
+{_name("supporting_pairs")} counts them; a drop-out arc's {_name("community")} lists the members by their
+strain ids, which are not nodes of a genus network. A member that is the source or target of an arc is in
+its genus node's {_name("merged_nodes")}; a member on no arc is named only there.</p>
 
 <h2 id="decisions">Why it works this way</h2>
 <p>The main choices behind the method, each settled on the issue named (in the

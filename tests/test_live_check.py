@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "packaging"))
 from live_check import network_problems  # noqa: E402
 
 from grownet.mgrowthdb import records_to_network  # noqa: E402
+from grownet.published import FILE as CURRENT  # noqa: E402  the current format's file, all_result.v5.json
 
 
 def _quantified(source="a", target="b", mw=2.0, mwo=1.0, sd=0.5, q=0.01, evidence="biculture", **extra):
@@ -24,7 +25,8 @@ def _quantified(source="a", target="b", mw=2.0, mwo=1.0, sd=0.5, q=0.01, evidenc
             "q_value": q, "p_value": q / 2, "significance": round(-math.log10(q), 4), "status": "present",
             "outcome": "quantified", "evidence": evidence, "metric": "auc", "metric_with": mw,
             "metric_without": mwo, "n_with": 3, "n_without": 3, "experiments": ["E1"], "medium": "WC",
-            "partner_abundance": 2e8, "study_id": "S1", "study_citation": "A study", **extra}
+            "partner_abundance": 2e8, "study_id": "S1", "study_citation": "A study", "technique": "qpcr",
+            **extra}
 
 
 def _censored(**extra):
@@ -32,7 +34,8 @@ def _censored(**extra):
             "strength": None, "status": "present", "outcome": "obligate", "evidence": "biculture",
             "metric": "auc", "metric_with": 2.0, "metric_without": 0.0, "n_with": 3, "n_without": 3,
             "experiments": ["E2"], "medium": "WC", "bound_rule": "the rule's own words", "strength_bound": 2.5,
-            "partner_abundance": 1e8, "study_id": "S1", "study_citation": "A study", **extra}
+            "partner_abundance": 1e8, "study_id": "S1", "study_citation": "A study", "technique": "qpcr",
+            **extra}
 
 
 def _net(records, derivation="replicate"):
@@ -54,10 +57,19 @@ def test_a_well_formed_network_has_no_violation():
     ({"experiments": []}, "missing experiments"),
     ({"partner_abundance": None}, "missing partner_abundance"),
     ({"status": "absent"}, "status absent with |strength|"),
+    ({"technique": ""}, "missing technique"),
 ])
 def test_each_property_catches_its_violation(change, says):
     problems = network_problems(_net([_quantified(**change)]), "x")
     assert any(says in p for p in problems), problems
+
+
+def test_a_genus_node_must_list_its_strains():
+    """From /v5 on a genus node names the strains it stands for in `merged_nodes`."""
+    record = _quantified(source_identity="genus", source_merged_nodes=["ncbi:1", "ncbi:3"])
+    assert network_problems(_net([record]), "x") == []
+    record = _quantified(source_identity="genus")
+    assert any("genus node a lists no strain in merged_nodes" in p for p in network_problems(_net([record]), "x"))
 
 
 def test_a_censored_arc_must_say_its_rule_and_have_no_ratio():
@@ -224,7 +236,7 @@ def test_an_invalid_legacy_file_and_a_present_arc_among_the_absent_ones_are_caug
     legacy["network"]["edges"][0]["effect"] = "not an effect"             # invalid, same arc count
     legacy_path.write_text(json.dumps(legacy))
     assert any("all_result.json: invalid" in p for p in live_check.check_published(str(out))[0])
-    current_path = out / "all_result.v4.json"
+    current_path = out / CURRENT
     current = json.loads(current_path.read_text())
     edge = dict(current["network"]["edges"][0], status="present")
     current["absent"] = {**current["network"], "edges": [edge]}
@@ -263,7 +275,7 @@ def test_a_broken_older_file_is_named_as_that_file(tmp_path, monkeypatch):
     # a file that parses but is malformed, which is what a bug in the legacy strip would write: `"nodes":
     # null` raised in the field walk and reported the CURRENT file as unreadable (round 4 of the review)
     import json
-    good = json.loads((out / "all_result.v4.json").read_text())
+    good = json.loads((out / CURRENT).read_text())
     good["network"]["schema"] = "grownet.interaction_network/v3"
     # a network that is not there at all is named as that file too, which the edges probe is for
     (out / "all_result.json").write_text(json.dumps({**good, "network": None}))
@@ -360,7 +372,7 @@ def test_a_file_its_reader_would_refuse_is_a_problem(tmp_path, monkeypatch):
     out = tmp_path / "out"
     assert publish_all.main(str(out), None, previous=lambda: None) == 0
     assert live_check.check_published(str(out))[0] == []
-    current = json.loads((out / "all_result.v4.json").read_text())
+    current = json.loads((out / CURRENT).read_text())
     older = json.loads((out / "all_result.json").read_text())
 
     def problems_with(name, doc, change):
@@ -374,11 +386,11 @@ def test_a_file_its_reader_would_refuse_is_a_problem(tmp_path, monkeypatch):
 
     # the current file, as this version's reader sees it
     assert any("would not be served at the defaults: it is in the format" in p for p in problems_with(
-        "all_result.v4.json", current, lambda d: d.update(format="grownet.all_result/v9")))
+        CURRENT, current, lambda d: d.update(format="grownet.all_result/v9")))
     assert any("would not be served at the defaults: it carries no time" in p for p in problems_with(
-        "all_result.v4.json", current, lambda d: d["network"]["meta"].pop("derived_at")))
+        CURRENT, current, lambda d: d["network"]["meta"].pop("derived_at")))
     assert any("would not be served at the defaults: it was derived by the integrated" in p for p in problems_with(
-        "all_result.v4.json", current, lambda d: d["network"]["meta"]["settings"].update(derivation="integrated")))
+        CURRENT, current, lambda d: d["network"]["meta"]["settings"].update(derivation="integrated")))
     # the older file, as its readers see it
     assert ("all_result.json: its format is 'grownet.all_result/v9', and readers of "
             "grownet.interaction_network/v3 accept 'grownet.all_result/v1'") in problems_with(
@@ -410,7 +422,7 @@ def test_an_older_file_judged_by_its_readers_after_a_move_of_the_current_format(
         FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
     out = tmp_path / "out"
     assert publish_all.main(str(out), None, previous=lambda: None) == 0
-    clean = {name: (out / name).read_text() for name in ("all_result.v4.json", "all_result.json")}
+    clean = {name: (out / name).read_text() for name in (CURRENT, "all_result.json")}
     monkeypatch.setattr(published, "FORMAT", "grownet.all_result/v2")
     for name, text in clean.items():
         doc = json.loads(text)
@@ -446,7 +458,7 @@ def test_after_a_move_of_the_default_derivation_the_older_file_is_judged_by_its_
     assert publish_all.main(str(out), None, previous=lambda: None) == 0
     clean = (out / "all_result.json").read_text()
     monkeypatch.setitem(gui.DEFAULTS, "derivation", "integrated")
-    for name in ("all_result.v4.json", "all_result.json"):
+    for name in (CURRENT, "all_result.json"):
         doc = json.loads((out / name).read_text())
         doc["network"]["meta"]["settings"]["derivation"] = "integrated"
         (out / name).write_text(json.dumps(doc))
@@ -455,7 +467,7 @@ def test_after_a_move_of_the_default_derivation_the_older_file_is_judged_by_its_
             "accept 'replicate'") in problems, problems
     assert not any(p.startswith("All:") for p in problems), problems
     monkeypatch.undo()
-    for name in ("all_result.v4.json",):
+    for name in (CURRENT,):
         doc = json.loads((out / name).read_text())
         doc["network"]["meta"]["settings"]["derivation"] = "replicate"
         (out / name).write_text(json.dumps(doc))
@@ -518,22 +530,22 @@ def test_the_published_check_says_where_its_ratio_check_was_loose(tmp_path, monk
     out = tmp_path / "out"
     assert publish_all.main(str(out), None, previous=lambda: None) == 0
     assert "loosely" not in live_check.check_published(str(out))[1]
-    doc = json.loads((out / "all_result.v4.json").read_text())
+    doc = json.loads((out / CURRENT).read_text())
     # the double's arc has no strength, so it is given one, with an sd at the smallest a file can carry;
     # other properties may break, and only the summary is read here
     edge = doc["network"]["edges"][0]
     edge.update(strength=1.0, weight=1.0, effect="facilitation", sd=0.0001, effect_over_sd=10000.0)
-    (out / "all_result.v4.json").write_text(json.dumps(doc))
+    (out / CURRENT).write_text(json.dumps(doc))
     assert "effect_over_sd checked only loosely on 1 arc(s)" in live_check.check_published(str(out))[1]
     # and the arcs below the threshold count too (round 13: the double has none, so leaving them out
     # of the note survived): one more loose arc there makes two
     doc["absent"] = {**doc["network"], "edges": [{**edge, "status": "absent"}]}
-    (out / "all_result.v4.json").write_text(json.dumps(doc))
+    (out / CURRENT).write_text(json.dumps(doc))
     assert "effect_over_sd checked only loosely on 2 arc(s)" in live_check.check_published(str(out))[1]
     # and an arc of the network that cannot be checked is counted beside the below-threshold part, as the
     # loose ones are (round 14: keeping only the last part's unchecked count survived)
     doc["network"]["edges"].append({**edge, "source": edge["target"], "target": edge["source"], "sd": 0.0})
-    (out / "all_result.v4.json").write_text(json.dumps(doc))
+    (out / CURRENT).write_text(json.dumps(doc))
     assert "effect_over_sd not checked on 1 arc(s)" in live_check.check_published(str(out))[1]
 
 
@@ -552,11 +564,11 @@ def test_the_arcs_below_the_threshold_are_checked_against_the_networks_k(tmp_pat
         FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
     out = tmp_path / "out"
     assert publish_all.main(str(out), None, previous=lambda: None) == 0
-    doc = json.loads((out / "all_result.v4.json").read_text())
+    doc = json.loads((out / CURRENT).read_text())
     edge = {**doc["network"]["edges"][0], "strength": 1.0, "weight": 1.0, "effect": "facilitation", "sd": 0.5,
             "effect_over_sd": 2.0, "status": "absent"}
     doc["absent"] = {**doc["network"], "edges": [edge], "meta": {**doc["network"]["meta"], "absence": None}}
-    (out / "all_result.v4.json").write_text(json.dumps(doc))
+    (out / CURRENT).write_text(json.dumps(doc))
     problems = live_check.check_published(str(out))[0]
     assert any(p.startswith("All, below the threshold:") and "status absent with |strength| 1.0" in p
                for p in problems), problems
@@ -628,3 +640,30 @@ def test_make_r_check_fails_on_a_skipped_r_test(tmp_path):
     if ci.exists():
         step = ci.read_text().split("- name: refuse a skipped R test", 1)[1].split("- name:", 1)[0]
         assert "continue-on-error" not in step
+
+
+def test_every_older_file_is_checked(tmp_path, monkeypatch):
+    """Each format from /v3 on gets its own file, and the check reads every one: with only the first, the
+    copy 0.5.x reads (all_result.v4.json) went out unchecked and the suite passed (found in review)."""
+    import json
+
+    import live_check
+    import publish_all
+    from test_gui import FakeClient
+
+    from grownet.gui import run_query
+    monkeypatch.setattr(publish_all, "run_query", lambda *a, **k: run_query(
+        FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
+    out = tmp_path / "out"
+    assert publish_all.main(str(out), None, previous=lambda: None) == 0
+    manifest = json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
+    older = publish_all.older_formats(manifest)
+    assert len(older) >= 2, older                     # /v3 and /v4 today
+    for schema in older:
+        path = out / publish_all.file_for(schema)
+        kept = path.read_text(encoding="utf-8")
+        path.unlink()
+        problems, _ = live_check.check_published(str(out))
+        assert any(p.startswith(f"{path.name}: not written") for p in problems), (schema, problems)
+        path.write_text(kept, encoding="utf-8")
+    assert live_check.check_published(str(out))[0] == []

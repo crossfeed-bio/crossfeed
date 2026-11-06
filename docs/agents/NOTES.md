@@ -835,6 +835,13 @@ field and fails on a field the merge rewrites that the table does not name, or o
 the first arc beyond source, target, effect, metric and the two genus-merge fields.
 
 Only `merge_genus` merges nodes. It writes each side's name, taxon id, species, identity and (since
+2026-11-06) taxon_id_refused and merged_nodes onto the arc, and `records_to_network` builds the genus node
+from those; a side field it does not reset reaches the genus node from the first strain's arc. Since /v5 a
+genus node lists its strains in `merged_nodes`: every strain of that genus that is the source or target of
+an arc (`members` in `merge_genus`), sorted. A drop-out member on no arc is named only in the arc's
+`community`, and the help's "What a merged node carries" says so. `live_check` flags a genus node with an
+empty `merged_nodes` and an arc with an empty `technique`. A merged arc's `technique` is sorted, as
+`techniques_of` sorts a single arc's.
 2026-11-06) taxon_id_refused onto the arc, and `records_to_network` builds the genus node from those; a
 side field it does not reset reaches the genus node from the first strain's arc. Strain ids survive only on
 arcs (`merged_pairs` by name, `community` by id), which the help's "What a merged node carries" says.
@@ -880,9 +887,12 @@ history is not in the API, so a stored copy cannot tell it is stale (Karoline). 
 
 All is the one query whose cost grows with the whole of mGrowthDB (1,313 requests today, after #95), so
 `.github/workflows/all-network.yml` derives it once a day with `DEFAULTS` (`packaging/publish_all.py`,
-which refuses to publish a derivation with errors) and uploads `all_result.v4.json`, named by the format id,
-and `all_result.json`, the same in `/v3` for installed 0.3.x and 0.4.x copies (#289), to the `all-network`
-release. `grownet.published` reads it back: `usable` (the settings are the defaults), `fresh` (its format
+which refuses to publish a derivation with errors) and uploads `all_result.v5.json`, named by the format id,
+`all_result.v4.json`, the same in `/v4` for installed 0.5.x copies (#305), and `all_result.json`, the same in
+`/v3` for installed 0.3.x and 0.4.x copies (#289), to the `all-network` release. The older files come from
+`publish_all.older_formats` and the field manifest, so a format move needs only a `LEGACY_META` and a
+`READERS` entry for the new current id; the tests that pinned the current file's name (`test_publish_all`,
+`test_live_check`) read `published.FILE` now where they mean "the current file". `grownet.published` reads it back: `usable` (the settings are the defaults), `fresh` (its format
 and schema are this version's, and it is less than `MAX_AGE`, 36 hours, old) and `fetch` (None on any
 failure, so the caller derives live). `run_query(..., published=True)` tries it first; the publishing
 script passes `published=False`, and so does `--no-published`. `tests/conftest.py` stubs `fetch` so no
