@@ -2192,6 +2192,14 @@ class Deriver:
     # in mGrowthDB that grows only with a partner. The comparison finds 15 on the same corpus the same
     # day. Present and wrong is worse than missing, because a reader trusts it (#215 item 1).
     no_growth_rule = True
+    # Whether this derivation applies the page's second box (`selection`: media, experiments or studies)
+    # itself, after reading strain identities from EVERY experiment of the study, as an identity is only
+    # trusted when no other experiment gives its taxon id to another strain. `derive_interactions` hands
+    # such a deriver the selection; any other deriver is given the selected experiments only. The second
+    # box used to reach the specified comparison alone, so under the integrated form naming a medium
+    # changed nothing while gLV mode's message said it keeps a simulation to one environment (found in
+    # review, 2026-11-06).
+    applies_selection = False
     # The settings this derivation does not read, so the record of a run does not claim they were used.
     # Under the integrated form a reader saw "Include drop-out communities: on" where it derives none,
     # and changing `--metric` gave byte-identical networks while the recorded value changed (#215 item 3,
@@ -2218,6 +2226,7 @@ class ReplicateDeriver(Deriver):
 
     name = "replicate-v1"
     needs_client = True
+    applies_selection = True
     statistics = STATISTICS
     provisional = PROVISIONAL
 
@@ -2255,8 +2264,9 @@ def derive_interactions(client: MGrowthDBClient, study_id: str, deriver: Deriver
                         capacity_max_fall: float = CAPACITY_MAX_FALL):
     """Fetch a study and its experiments from the API, then derive interactions with `deriver`
     (default: ReplicateDeriver, the specified comparison). `metric`, `spike_factor`, `dropout` and
-    `capacity_max_fall` configure the default deriver only. A deriver that reads measured series says so
-    with `needs_client`."""
+    `capacity_max_fall` configure the default deriver only. `selection`, the page's second box, applies to
+    every deriver: one that `applies_selection` is handed it, any other is given the selected experiments.
+    A deriver that reads measured series says so with `needs_client`."""
     deriver = deriver or ReplicateDeriver(method=metric, spike_factor=spike_factor, dropout=dropout,
                                          include_non_batch=include_non_batch, no_growth_alpha=no_growth_alpha,
                                          no_growth_factor=no_growth_factor, keep=keep, selection=selection,
@@ -2271,4 +2281,14 @@ def derive_interactions(client: MGrowthDBClient, study_id: str, deriver: Deriver
     study = dict(client.get_study(study_id))
     study.setdefault("id", study_id)
     exps = [client.get_experiment(e["id"]) for e in study.get("experiments", [])]
-    return deriver.derive(study, exps)
+    if selection is None or selecting.empty(selection):
+        return deriver.derive(study, exps)
+    if getattr(deriver, "applies_selection", False):
+        # the same search hands every study the same selection, so the one deriver instance carries it
+        deriver.selection = selection
+        return deriver.derive(study, exps)
+    # a derivation that does not read the second box itself is given what the box selects
+    skipped: list = []
+    exps = select_experiments(exps, selection, skipped, study_id=study_id)
+    records, more = deriver.derive(study, exps)
+    return records, skipped + list(more)
