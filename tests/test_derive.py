@@ -111,8 +111,10 @@ def test_replicate_comparison_carries_uncertainty_onto_every_edge():
     assert (ba["n_with"], ba["n_without"]) == (2, 2)
     assert ba["outcome"] == "quantified" and ba["metric"] == "auc"
     assert ba["evidence"] == "biculture" and ba["quality"] == []
-    # no spike note: the one note is what each side started at, which every replicate-form arc says (#297)
-    assert len(ba["notes"]) == 1 and ba["notes"][0].startswith("started at ")
+    # no spike note, and what each side started at, which every replicate-form arc says (#297); not pinned
+    # as the only note, which would forbid the next one (Craig's agent)
+    assert not any("spike" in n for n in ba["notes"])
+    assert any(n.startswith("started at ") for n in ba["notes"])
     assert ba["cautions"] == ["two_replicates"]                   # two replicates per side (#47)
     assert ba["experiments"] == ["E_co", "E_mono A"]              # the co-culture, then the target's monocultures
     assert ba["weight"] == pytest.approx(1.0, abs=1e-4)
@@ -1204,3 +1206,17 @@ def test_a_biculture_arc_says_what_each_side_started_at():
     arc = next(e for e in _query()["network"].edges if e.effect == "facilitation")
     note = " ".join(arc.notes)
     assert "started at 1 Cells/mL in the co-culture and 1 in the monocultures, a factor of 1.00" in note
+
+
+def test_a_side_with_no_first_value_says_its_starting_density_could_not_be_read():
+    """A at 0 at the first point of its monocultures: there is no ratio, and the arc says the starting density
+    could not be compared, rather than saying nothing, which read as the two sides having matched."""
+    from grownet.derive import start_note
+    from grownet.growth import GrowthCurve, Replicate
+
+    def rep(first):
+        return Replicate((GrowthCurve(A, (0.0, 1.0, 2.0), (first, 2.0, 4.0), "h", "Cells/mL", "qpcr"),), "r")
+    (note,) = start_note([rep(1.0)], [rep(0.0)], A, "in the co-culture", "in the monocultures")
+    assert note.startswith(f"the starting density of {A} could not be compared in the co-culture")
+    (fine,) = start_note([rep(1.0)], [rep(2.0)], A, "in the co-culture", "in the monocultures")
+    assert fine.startswith("started at 1 Cells/mL in the co-culture and 2 in the monocultures")

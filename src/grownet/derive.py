@@ -1360,14 +1360,17 @@ def _pairwise(client, exp, monos, method, spike_factor, study_id, study_meta, re
 
 
 def start_note(with_reps, without_reps, target: str, with_side: str, without_side: str) -> list:
-    """The note saying what `target` was inoculated at on each side of a comparison, or [] where a side has
-    no positive first value. Reported, never matched on (Karoline, 2026-10-08, #172); the integrated form
-    wrote it and the replicate form did not, so the default derivation's arcs, drop-out ones included,
-    never said that their two sides began far apart (#297). The wording is the integrated form's."""
+    """The note saying what `target` was inoculated at on each side of a comparison, or that it could not be
+    read. Reported, never matched on (Karoline, 2026-10-08, #172); the integrated form wrote it and the
+    replicate form did not, so the default derivation's arcs, drop-out ones included, never said that their
+    two sides began far apart (#297). The wording is the integrated form's. Where a side has no positive
+    first value, or the sides are in different units, the arc says so: silence read as "the densities
+    matched" (Craig's agent)."""
     from .integrated import starting_densities
     got = starting_densities(with_reps, without_reps, target)
     if not got:
-        return []
+        return [f"the starting density of {target} could not be compared {with_side} and {without_side}: a "
+                "side has no positive first value, or the two are in different units"]
     return [f"started at {got['co']:.3g} {got['unit']} {with_side} and {got['mono']:.3g} {without_side}, a "
             f"factor of {got['ratio']:.2f}" + (", so the two sides of this comparison did not begin at the "
                                                 "same density" if got["ratio"] > 3 else "")]

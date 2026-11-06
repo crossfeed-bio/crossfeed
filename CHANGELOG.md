@@ -13,7 +13,8 @@ content.
   without R" for a drop-out arc), with the factor between them, and a warning above 3 times. Reported, never
   matched on (Karoline, 2026-10-08). It matters most for drop-out arcs, where each deletion was a separate
   vessel: live on 2026-11-06, 61 of the 190 drop-out arcs of All (with absences) start more than 3 times
-  apart, 24 more than 10 times, up to 117. No arc, strength or status changes; only the notes.
+  apart, 24 more than 10 times, up to 117. Where a side has no positive first value, the arc says the
+  starting density could not be compared. No arc, strength or status changes; only the notes.
 
 
 ## [0.5.0] (2026-10-14)
