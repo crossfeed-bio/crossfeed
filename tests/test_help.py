@@ -445,3 +445,51 @@ def test_every_command_the_help_page_prints_is_one_the_parser_accepts():
             problems.append(_species_flags(args))
         for problem in problems:
             assert problem == "", f"{command}\n  -> {problem}"
+
+
+# ---- the help reads for its readers (Karoline, 2026-11-06) --------------------------------------------
+#
+# "the help also has an entry: Karoline, 2026-10-07. please remove all such entries from the help, they are
+# not useful for readers. also, in 'the alias table', there is a 26 - is that a study? if so, please use the
+# full study number. also, please put species names in italics."
+
+def _visible_help(page: str = PAGE) -> str:
+    return " ".join(visible(re.sub(r"<(style|script)\b.*?</\1\s*>", "", page, flags=re.S | re.I)).split())
+
+
+def test_the_help_names_no_collaborator_and_date_beside_its_text():
+    text = _visible_help()
+    assert not re.findall(r"[^.]{0,40}\b(?:Karoline|Craig)\b[^.]{0,40}", text)
+
+
+def test_the_alias_table_gives_full_study_ids():
+    section = _visible_help(PAGE[PAGE.index("The alias table"):PAGE.index('<h2 id="idea">')])
+    assert "SMGDB00000005 and SMGDB00000026" in section
+    # every study named by number is named in full: no bare "and 26"
+    assert not re.search(r"\band \d{1,3}\b", section)
+
+
+def test_genus_and_species_names_are_in_italics():
+    """Every genus the help names, alone or with its species (and a species abbreviated to its genus's
+    initial), is in italics wherever it is prose. Commands, code and file names keep their own type."""
+    from grownet.help import TAXA
+    # the vocabulary covers every organism the page itself offers as an example
+    for name in (*gui.EXAMPLE, *gui.GLV_EXAMPLE, *gui.INPUT_EXAMPLES):
+        if name[:1].isalpha() and name[:1].isupper():
+            assert name.split()[0] in TAXA, name
+    body = re.sub(r"<(style|script)\b.*?</\1\s*>", "", PAGE, flags=re.S | re.I)
+    plain, open_tags = [], []
+    for token in re.split(r"(<[^>]+>)", body):
+        if token.startswith("<"):
+            m = re.match(r"<(/?)(\w+)", token)
+            if m and m.group(2).lower() in ("em", "i", "code", "pre", "title", "a"):
+                if m.group(1):
+                    open_tags.pop() if open_tags else None
+                else:
+                    open_tags.append(m.group(2).lower())
+            continue
+        if not open_tags:
+            plain.append(token)
+    genus = "|".join(sorted(TAXA))
+    found = re.findall(rf"\[?\b(?:{genus})\]?(?: [a-z]{{3,}})?|\b[A-Z]\. [a-z]{{4,}}", " ".join(plain))
+    assert found == [], found

@@ -209,3 +209,9 @@ them as a dated bullet with who gave them. Keep one-off requests out.
   The mechanical floor also still applies: `main` requires one approving review and GitHub never lets an
   author approve their own pull request, so an agent's own pull request still needs one approval from the
   other side before the button works. Reviewing `main` afterward is in addition to that, not instead.
+- 2026-11-06 (Karoline): **The help is written for its readers.** No "(Karoline, 2026-10-07)"-style
+  attribution beside its text ("please remove all such entries from the help, they are not useful for
+  readers"): who decided what, and when, belongs in code comments, docs/METHOD_NOTES.md and the issues.
+  Studies by their full id (SMGDB00000026, not 26), and genus and species names in italics ("please put
+  species names in italics"), which `help.TAXA` and `help.EPITHETS` do for the help; a new genus or
+  epithet in its text goes into those lists, and `tests/test_help.py` fails until it does.
