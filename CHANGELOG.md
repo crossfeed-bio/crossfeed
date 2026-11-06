@@ -6,6 +6,16 @@ content.
 
 ## [Unreleased]
 
+### Added
+
+- **Groundwork for a third derivation: gLV rows from the steady states of sub-communities** (Karoline,
+  2026-11-06, #310: "parameterize the gLV from steady-state abundances of sub-communities", from every
+  available sub-community rather than only the leave-one-out ones of EPICS). The estimator,
+  `grownet.subcommunity.fit`, solves each row of `A / (r_i - D)` by least squares over one steady-state
+  equation per member present, names every row and coefficient the design leaves undetermined, and
+  predicts each community from a fit made without it. It is not selectable yet; the chemostat inputs and
+  the setting follow.
+
 
 ## [0.5.0] (2026-10-14)
 

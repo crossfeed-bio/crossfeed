@@ -1190,3 +1190,15 @@ and the README: that is the one mistake this style can make.
   connection would have verified the certificate against the proxy (Craig's agent on #184; unreachable
   here, since nothing calls `set_tunnel`). Read the installed source of what you override, copy the rest
   of it, and state in the docstring which single thing differs.
+
+## gLV from the steady states of sub-communities (#310, 2026-11-06)
+
+`grownet.subcommunity` is the estimator of the third derivation Karoline asked for (EPICS, generalized to
+every sub-community; her decisions are on #310). It reads no data: `fit(communities)` takes
+`{"name", "abundance": {species: N}, "vessels": [...]}` and solves each row of B = A / s by
+`integrated._least_squares`, gated by `integrated.MAX_CONDITION`, so "identified" means what it means in the
+integrated form. A member at 0 washed out and gives no equation. `leave_one_out_predictions` predicts each
+community from a fit without it. Measured locally on Venturelli et al. 2018's fitted 12-species gLV (Code
+EV1, T4; nothing of theirs in git): strict leave-one-out identifies 0 of the 132 off-diagonal coefficients,
+because only 6 of the 12 coexist; adding the 66 pairs identifies 128 of 132, exact to 2e-12; the six that
+coexist, alone, 30 of 30. The chemostat inputs (#312) and the wiring (#313) are separate tasks.
