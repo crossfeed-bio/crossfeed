@@ -1920,8 +1920,10 @@ def merge_genus(edges: list, merge: bool = False, level: str = "species", curren
         pairs = sorted({_pair(a, level, name_of) for a in arcs})
         arc.update({side: genus for side, genus in (("source", source), ("target", target))})
         for side, genus in (("source", source), ("target", target)):
+            # and no strain's refused taxon id, which the genus node does not carry: the live
+            # Lachnoclostridium node said 1506553 was refused, from its first strain (2026-11-06)
             arc.update({f"{side}_name": genus, f"{side}_taxon_id": "", f"{side}_species": "",
-                        f"{side}_identity": "genus"})
+                        f"{side}_identity": "genus", f"{side}_taxon_id_refused": ""})
         arc.update(supporting_pairs=len(pairs), merged_pairs=pairs,
                    method=f"{arc.get('method', '')}; merged to genus: {len(arcs)} arcs over {len(pairs)} "
                           f"{level} pairs")

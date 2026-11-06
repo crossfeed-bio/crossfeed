@@ -144,6 +144,61 @@ def test_the_consequences_the_help_states_for_a_merged_arc_hold():
     assert (one["status"], one["merged_arcs"], one["source"]) == ("absent", 2, "Alpha")
 
 
+def test_the_node_attributes_have_their_own_header_after_the_merged_arcs():
+    """Karoline, 2026-11-06: "the help has a node attribute table under the header 'What a merged arc
+    carries'. please introduce a new header." The order is now: arc attributes, what a merged arc
+    carries, node attributes, what a merged node carries."""
+    order = ['<h3 id="arc-attributes">Arc attributes</h3>', "<th>Arc attribute</th>",
+             '<h3 id="merged">What a merged arc carries</h3>',
+             '<h3 id="node-attributes">Node attributes</h3>', "<th>Node attribute</th>",
+             '<h3 id="merged-nodes">What a merged node carries</h3>', '<h2 id="decisions">']
+    at = [PAGE.index(marker) for marker in order]
+    assert at == sorted(at), dict(zip(order, at, strict=True))
+
+
+def _genus_arcs():
+    """Two arcs from strains of one genus to another, as study 8 gives them live: the Lachnoclostridium
+    strains share taxon id 1506553, so each carries the refusal of that id as its identity."""
+    refused = ("mGrowthDB gives taxon id 1506553 to different strains in this study (Lachnoclostridium "
+               "clostridioforme 2_1_49FAA, Lachnoclostridium symbiosum WAL-14673), so it is not a join key")
+    def arc(source, name, strength):
+        return {"source": source, "target": "ncbi:2", "source_name": name, "target_name": "Bacteroides ovatus",
+                "source_taxon_id": "1506553", "source_species": " ".join(name.split()[:2]).lower(),
+                "source_identity": "name", "source_taxon_id_refused": refused,
+                "target_taxon_id": "2", "target_species": "bacteroides ovatus", "target_identity": "ncbi",
+                "effect": "inhibition", "strength": strength, "status": "present", "outcome": "quantified",
+                "evidence": "dropout", "community": [source, "ncbi:2", "ncbi:3"], "study_id": "S8",
+                "condition": "c", "method": "m", "experiments": [], "quality": [], "cautions": [], "notes": []}
+    return [arc("lachnoclostridium clostridioforme", "Lachnoclostridium clostridioforme 2_1_49FAA", -1.0),
+            arc("lachnoclostridium symbiosum", "Lachnoclostridium symbiosum WAL-14673", -3.0)]
+
+
+def test_a_genus_node_keeps_no_strain_id_and_says_so():
+    """Karoline, 2026-11-06: "for a merged node on genus level, are strain ids kept? please document merging
+    in nodes as well." They are not: a genus node is the genus, and the help says where the strains behind it
+    are found instead. It also kept the first strain's taxon_id_refused, so the live Lachnoclostridium node
+    said a taxon id was refused that the genus node does not carry (found answering her)."""
+    from grownet.derive import merge_genus
+    from grownet.mgrowthdb import records_to_network
+    edges, _ = merge_genus(_genus_arcs(), merge=True)
+    net = records_to_network(edges)
+    node = net.nodes["Lachnoclostridium"]
+    assert (node.name, node.identity, node.taxon_id, node.species, node.taxon_id_refused) == \
+        ("Lachnoclostridium", "genus", "", "", "")
+    (arc,) = net.edges
+    # what the arc keeps instead: the pairs behind it by name, and the community members' strain ids
+    assert tuple(arc.merged_pairs) == ("Lachnoclostridium clostridioforme -> Bacteroides ovatus",
+                                       "Lachnoclostridium symbiosum -> Bacteroides ovatus")
+    assert arc.supporting_pairs == 2 and "lachnoclostridium symbiosum" in arc.community
+    # and the help says each of these about a merged node, field by field
+    section = visible(PAGE[PAGE.index('id="merged-nodes"'):PAGE.index('id="decisions"')])
+    for field in (f.name for f in dataclasses.fields(model.Node)):
+        assert field in section, field
+    assert "strain ids are not kept on the node" in " ".join(section.split())
+    for where in ("merged_pairs", "supporting_pairs", "community"):
+        assert where in section, where
+
+
 def test_the_attribute_list_names_every_value_an_edge_can_take():
     text = " ".join(help.EDGE_ATTRIBUTES.values())
     for value in (*model.EFFECTS, *model.OUTCOMES, *model.QUALITY_FLAGS, *model.CAUTIONS, *model.EVIDENCE,

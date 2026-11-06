@@ -1332,6 +1332,7 @@ many monoculture replicates it rests on, the studies behind it and each study's 
 <code>without_a_rate</code>, the organisms that have none, with <code>why_without_a_rate</code> giving the
 reason where one is known: a genus whose strains' rates are in time units that are not converted, or an
 organism, or a genus of them, whose every study's rates were left out for their starting spread (#81).</p>
+<h3 id="arc-attributes">Arc attributes</h3>
 {edges}
 <h3 id="merged">What a merged arc carries</h3>
 <p>With <strong>Merge parallel arcs</strong> on (off by default), the arcs from one source to one target
@@ -1360,7 +1361,23 @@ interaction does not reach it.</li>
 <li>Opposite signs leave a whole pair apart: five facilitation arcs and one inhibition arc give six arcs,
 none merged.</li>
 </ul>
+<h3 id="node-attributes">Node attributes</h3>
 {nodes}
+<h3 id="merged-nodes">What a merged node carries</h3>
+<p>Only <strong>Merge to genus</strong> merges nodes; without it a node is one strain, keyed by its NCBI
+taxon id, or by its name where it has none or the id is refused. With it on, every strain node becomes
+its genus, and a genus node is the genus itself:</p>
+<ul>
+<li>{_name("id")} and {_name("name")} are the genus, the first word of the name mGrowthDB gives
+(<em>[Clostridium]</em> apart from <em>Clostridium</em>), and {_name("identity")} is <code>genus</code>.</li>
+<li>{_name("taxon_id")}, {_name("species")} and {_name("taxon_id_refused")} are empty, since they
+describe one strain, and {_name("taxonomy")} and {_name("model_ref")} are empty as on every node.</li>
+</ul>
+<p>So <strong>strain ids are not kept on the node</strong>. What the merge keeps of the strains is on the
+arcs: {_name("merged_pairs")} names the pairs behind a genus arc, as species pairs or, when only taxon ids
+were entered, as strain pairs, and {_name("supporting_pairs")} counts them; a drop-out arc's
+{_name("community")} still lists the members by their strain ids, which are not nodes of a genus network.
+To see which strains a genus stands for, derive the same search with Merge to genus off.</p>
 
 <h2 id="decisions">Why it works this way</h2>
 <p>The main choices behind the method, each settled on the issue named (in the

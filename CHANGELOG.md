@@ -13,7 +13,17 @@ content.
   arcs Merge parallel arcs and Merge to genus merge, a table of every attribute's rule (a median, a union,
   kept only where all merged arcs agree, or empty), and four consequences for reading one: the median is
   unweighted, obligate and abolished arcs count without entering it, a merged arc is present when any of
-  its arcs is, and a pair with arcs of both signs is not merged. Documentation only: arcs merge as before.
+  its arcs is, and a pair with arcs of both signs is not merged. Arcs merge as before.
+- **The help says what a merged node carries** (Karoline, 2026-11-06: "for a merged node on genus level, are
+  strain ids kept? please document merging in nodes as well"), under its own header, Node attributes, with
+  the node table: a genus node keeps no strain id, and the arcs' `merged_pairs`, `supporting_pairs` and
+  `community` are where the strains behind it are named.
+
+### Fixed
+
+- **A genus node no longer carries one of its strains' `taxon_id_refused`.** With Merge to genus on, the
+  live Lachnoclostridium node said taxon id 1506553 was refused, a statement about one strain on a node that
+  carries no taxon id.
 
 
 ## [0.5.0] (2026-10-14)
