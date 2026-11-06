@@ -638,8 +638,10 @@ idea here is to parameterize the gLV from steady-state abundances of sub-communi
 2021, Nature Computational Science 1:619). Her decisions, on #310:
 
 1. **Chemostat steady states only** ("Yes on 1"): unperturbed runs, at the chemostat check's tail mean, one
-   fit per medium (by `media_identity`), abundance unit and dilution rate, within one study (every derivation
-   reads one study at a time; pooling runs across studies would be a further choice, not taken).
+   fit per medium (by `media_identity`, the strict rule, so the medium composition matches), abundance unit
+   and dilution rate, across the studies of a search: asked, Karoline answered "for the new chemostat
+   inference mode, the medium composition has to match but other than that, I don't see why not"
+   (2026-11-06). Every other derivation still reads one study at a time.
 2. **Every sub-community, not only leave-one-out** ("EPICS is a strict scheme on leave-one-out [...] could we
    have something more flexible that would try parameterisation on all available sub-communities?"). Each
    community gives `1 + sum_j B_ij N_j = 0` per member present, `B = A / (r_i - D)`; each row is a least

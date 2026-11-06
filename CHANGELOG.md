@@ -84,6 +84,11 @@ content.
   the replicate comparison's sentences about co-cultures and drop-out designs. The `--derivation` help,
   the command-line examples and the README describe the third derivation.
 
+- **The steady-state derivation fits the runs of every study a search reads together**, where the medium
+  composition, the abundance unit and the dilution rate match (Karoline, 2026-11-06: "for the new chemostat
+  inference mode, the medium composition has to match but other than that, I don't see why not"), so a
+  pair measured in one study and the monocultures in another determine a row that neither does alone. An
+  arc names every study its row was fitted from. Every other derivation still reads one study at a time.
 - **The steady-state derivation, hardened before release.** Runs that end with the same organisms present
   are one community, since they reach one steady state, and its bootstrap draws whole runs: kept apart, two
   noisy runs of one pair made rows look determined from noise alone. A row whose own term is not negative

@@ -821,7 +821,7 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
     # and an organism fitted only at another D is named with that reason. The other derivations record
     # none, so this never fires for them.
     by_dilution: dict = {}
-    for d in {(r.get("target"), r.get("study_id"), r["fitted_rate_dilution"]) for r in records
+    for d in {(r.get("target"), r.get("fitted_group") or r.get("study_id"), r["fitted_rate_dilution"]) for r in records
               if r.get("fitted_rate") is not None and r.get("fitted_rate_dilution") is not None}:
         by_dilution[d[2]] = by_dilution.get(d[2], 0) + 1
     package_dilution = (min(by_dilution, key=lambda d: (-by_dilution[d], d)) if by_dilution else None)
@@ -838,7 +838,9 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
             # keyed by study, dilution rate, medium, and the unit and technique of its own term: two fits that
             # differ in those are two rows, and the capacity rule chooses between them (dropping the unit kept
             # the first one read, found in a sixth review)
-            row = (nid, record.get("study_id", ""), record.get("fitted_rate_dilution"), record.get("medium", ""),
+            # a fit pooled across studies is one row, whichever study each of its arcs names
+            row = (nid, record.get("fitted_group") or record.get("study_id", ""), record.get("fitted_rate_dilution"),
+                   record.get("medium", ""),
                    record.get("fitted_self_unit", ""), record.get("fitted_self_technique", ""))
             if row in seen_rows:
                 continue

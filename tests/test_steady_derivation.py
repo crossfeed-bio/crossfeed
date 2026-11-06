@@ -329,7 +329,7 @@ def test_rates_at_two_dilution_rates_are_not_merged_into_one():
         assert by_name["a"]["capacity"] == pytest.approx(1.0 * UNIT, rel=1e-6)
         assert by_name["b"]["capacity"] == pytest.approx(2.0 * UNIT, rel=1e-6)
     # more rows at D 0.2: that D is the package's, for every organism
-    more = fast + [{**r, "study_id": "S3"} for r in fast]
+    more = fast + [{**r, "study_id": "S3", "fitted_group": "S3"} for r in fast]
     by_name = {r["name"]: r for r in integrated.fitted_rates(slow + more, METRIC).values()}
     assert by_name["a"]["rate"] == pytest.approx(0.30, abs=1e-6) and by_name["b"]["dilution"] == 0.2
 
@@ -602,8 +602,9 @@ def test_the_rate_comes_from_the_medium_the_capacity_comes_from():
     from grownet import integrated
     from grownet.subcommunity import METRIC
     wc, _ = _derive()
-    wc2 = [{**r, "study_id": "S5"} for r in wc]
-    gifu = [{**r, "medium": "Gifu Anaerobic Medium", "study_id": study, "fitted_rate": r["fitted_rate"] + up,
+    wc2 = [{**r, "study_id": "S5", "fitted_group": "S5"} for r in wc]
+    gifu = [{**r, "medium": "Gifu Anaerobic Medium", "study_id": study, "fitted_group": study,
+             "fitted_rate": r["fitted_rate"] + up,
              "fitted_self": r["fitted_self"] / r["fitted_rate"] * (r["fitted_rate"] + up)}
             for study, up in (("S2", 0.40), ("S3", 0.44), ("S4", 0.48)) for r in wc]
     by_name = {r["name"]: r for r in integrated.fitted_rates(wc + wc2 + gifu, METRIC).values()}
@@ -797,3 +798,57 @@ def test_a_row_without_a_scale_does_not_borrow_another_study_s():
     assert "in units of b's r_i - D" in named or "units of r_i - D" in named
     readme = matrix.readme_from(got, net, rates)
     assert "network derived before the two absolute rates" not in readme
+
+
+def test_runs_of_two_studies_in_one_medium_are_fitted_together():
+    """The pair a with b in study S1 and the monocultures in study S2, one medium composition and dilution
+    rate: neither study alone determines a row, together they do (Karoline, 2026-11-06: "for the new chemostat
+    inference mode, the medium composition has to match but other than that, I don't see why not"). Each arc
+    names both studies, and the row counts once in the rates."""
+    from test_subcommunity_inputs import _runs
+
+    from grownet import integrated
+    from grownet.subcommunity import METRIC
+    client, exps = _runs()
+    s1 = {"id": "S1", "name": "the pair"}, [exps[2]]
+    s2 = {"id": "S2", "name": "the monocultures"}, [exps[0], exps[1]]
+    alone = [SteadyStateDeriver(client=client).derive(*s) for s in (s1, s2)]
+    assert not any(records for records, _ in alone)
+    records, skipped = SteadyStateDeriver(client=client).derive_many([s1, s2])
+    on_a = _arc(records, "b", "a")
+    assert on_a["coefficient"] == pytest.approx(0.46 * -0.25 / UNIT, rel=1e-6)
+    assert [s["id"] for s in on_a["studies"]] == ["S1", "S2"]
+    assert any(what.endswith(" in S1, S2") for what, _ in skipped if what.startswith("chemostat group at"))
+    a = next(r for r in integrated.fitted_rates(records, METRIC).values() if r["name"] == "a")
+    assert a["n"] == 1
+
+
+def test_runs_of_two_studies_in_different_media_are_not_fitted_together():
+    """The same split, with the monocultures in another medium: the composition differs, so the runs are two
+    fits and neither determines a row."""
+    import copy
+
+    from test_subcommunity_inputs import _runs
+    client, exps = _runs()
+    monos = copy.deepcopy([exps[0], exps[1]])
+    for exp in monos:
+        exp["compartments"][0]["mediumName"] = "Gifu Anaerobic Medium"
+    records, _ = SteadyStateDeriver(client=client).derive_many([({"id": "S1", "name": "x"}, [exps[2]]),
+                                                                ({"id": "S2", "name": "y"}, monos)])
+    assert records == []
+
+
+def test_the_page_hands_every_study_of_a_search_to_the_steady_derivation_at_once(monkeypatch):
+    """A search reads its studies one by one; under the steady-state derivation it gives them all to one
+    `derive_many`, so runs of several studies can be fitted together."""
+    from test_gui import FakeClient
+
+    calls = []
+
+    class Recording(SteadyStateDeriver):
+        def derive_many(self, studies):
+            calls.append([study["id"] for study, _ in studies])
+            return [], []
+    monkeypatch.setattr(gui, "chosen_deriver", lambda settings, client=None: Recording(client=client))
+    gui.run_query(FakeClient(), [], {**gui.DEFAULTS, "derivation": "steady"}, all_studies=True, published=False)
+    assert len(calls) == 1 and calls[0]
