@@ -585,7 +585,10 @@ def _emit(a, net, skipped, extra, label, result):
             f.write(rates_csv(organism_rates, net))
         print(f"wrote the growth rates to {a.rates}: {len(organism_rates)} organism(s)", file=sys.stderr)
     checked = []
-    if a.steady_check and organism_rates:
+    if a.steady_check and a.derivation == "steady":
+        from .gui import STEADY_CHECK_CIRCULAR
+        print(STEADY_CHECK_CIRCULAR, file=sys.stderr)
+    elif a.steady_check and organism_rates:
         # a chemostat steady state is an independent test of the parameters: it satisfies A x = -(r - D)
         # and was never used to fit them (#125)
         from . import steady

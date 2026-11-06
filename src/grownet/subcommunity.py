@@ -444,6 +444,11 @@ class SteadyStateDeriver:
                         "sd": None if sd is None else round(sd, 4), "se": None,
                         "p_value": None, "q_value": None, "significance": None,
                         "effect_over_sd": (None if not sd or strength is None else round(abs(strength) / sd, 4)),
+                        # i's net growth rate its row implies with the partner at x and without it, as the
+                        # integrated form records them, so the package takes the coefficient from their
+                        # difference over x like any fitted arc; a row with no scale has no rate to give
+                        "metric_with": None if s_i is None else s_i * (1 + b * x),
+                        "metric_without": s_i, "metric_unit": "1/h" if s_i is not None else "",
                         "coefficient": (s_i * b) if s_i is not None else b,
                         "coefficient_unit": unit_coefficient,
                         "coefficient_sd": (None if sd_b is None else (s_i or 1.0) * sd_b),

@@ -1217,5 +1217,10 @@ chemostat, so no scale. Grouping is by the medium string as recorded, so "Wilkin
 `subcommunity.SteadyStateDeriver` (#313) is the third choice of `chosen_deriver` ("steady"). Its records
 mimic the integrated form's where a package will need them (`coefficient`, `fitted_rate` = the row scale
 or None, `fitted_self`, units), with metric `steady_state:subcommunities`; `glv_mode` keeps "steady" when
-chosen and `glv_mode_on` accepts it. The gLV package from it (matrix.py, which branches on
-"integrated"/"replicate" in many places) is a separate task.
+chosen and `glv_mode_on` accepts it. The gLV package (#317): its records carry `metric_with` =
+`s_i (1 + B_ij x_j)` and `metric_without` = `s_i`, as the integrated form's do, so `matrix._per_arc` takes
+the coefficient from their difference over x like any fitted arc; `FITTED_METRIC_PREFIX` is a tuple now;
+`derivation_of` knows "steady", and each per-derivation text table has a "steady" entry, plus
+`model_assumptions(derivation)`. A row with no scale has no `metric_with`, gives no cell, and is named
+(`its row is in units of ... r_i - D`). `gui.STEADY_CHECK_CIRCULAR` replaces the steady-state check under
+this derivation. Checked in the R package: the payload loads, `solve(A, -r)` is the observed pair.
