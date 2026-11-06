@@ -664,6 +664,9 @@ def test_all_narrowed_by_the_second_box_does_not_claim_the_whole_database(server
     # from "Studies searched:", and twice from the embedded report's settings block, so asserting the id
     # alone passed however the heading was worded
     assert "matching SMGDB00000002" in page and "Clear them to derive" in page
+    # the number beside it is of the studies searched, which the second box narrows afterwards: it read as
+    # the number of studies matching (found in review)
+    assert re.search(r"matching SMGDB00000002, with every partner: \d+ stud(y|ies) searched", page), page
     # two entries, one holding a comma, are joined with "; " (round 22)
     data = b"species=&conditions=SMGDB00000002%0D%0AWilkins-Chalgren%2C+anaerobic"
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:

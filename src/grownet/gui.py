@@ -824,8 +824,11 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
             if excluded_ids:
                 parts.append("excluding " + ", ".join(_esc(x) for x in excluded_ids[:3])
                              + (f" and {len(excluded_ids) - 3} more" if len(excluded_ids) > 3 else ""))
+            # the count is of the studies READ, which the second box narrows to its matches afterwards: "every
+            # study matching mucin: 29 studies" stood beside "the second box left out 26 of the 29" (found in
+            # review), so it says what the number is
             resolved = (f"<li>every study {' and '.join(parts)}, with every partner: "
-                        f"{_count(len(result['studies']), 'study', 'studies')}{daily_note}</li>"
+                        f"{_count(len(result['studies']), 'study', 'studies')} searched{daily_note}</li>"
                         "<li class=\"muted\">Clear them to derive the whole of mGrowthDB.</li>")
         else:
             species_heading, resolved = "<h2>All of mGrowthDB</h2>", (
