@@ -58,7 +58,7 @@ def test_every_v4_field_reaches_the_file_graphml_and_validation():
         "vs_other_removals": -0.5, "source_taxon_id": "1506553",
         "source_taxon_id_refused": "mGrowthDB gives taxon id 1506553 to different strains in this study"}])
     doc = net.to_dict()
-    assert doc["schema"] == SCHEMA == "grownet.interaction_network/v4"
+    assert doc["schema"] == SCHEMA          # /v5 since #305, which keeps every /v4 field
     (edge,) = doc["edges"]
     assert (edge["metric_unit"], edge["window"], edge["window_unit"], edge["vs_other_removals"]) == \
         ("Cells/mL x h", 30.0, "h", -0.5)

@@ -6,6 +6,23 @@ content.
 
 ## [Unreleased]
 
+### Upgrading
+
+- **The format id moves to `grownet.interaction_network/v5`** (Karoline, 2026-11-06, #305: "Is the
+  measurement technique recorded as an arc attribute? If not, please add."), for one arc field,
+  `technique`. Nothing a `/v4` field means changes; `/v4` and older files still read and validate. The
+  daily All network is also published as `all_result.v4.json` for installed 0.5.x copies, beside
+  `all_result.json` for 0.3.x and 0.4.x.
+
+### Added
+
+- **Every arc records how its target was measured, `technique`** (#305): the mGrowthDB technique (fc, qpcr,
+  plates, 16s, ...) of the target's curves on both sides, in JSON, GraphML, Cytoscape and the help. An arc
+  of the comparison has one, since a species is never compared across techniques; the integrated form
+  names two if the co-culture and the monocultures its rate comes from differ; a merged arc names every
+  technique of its arcs. Live on 2026-11-06: 145 arcs in All, qpcr 117, plates 15, fc 13, none with two.
+  Whether Merge parallel arcs may cross techniques is open on #305; today no merge does.
+
 
 ## [0.5.0] (2026-10-14)
 

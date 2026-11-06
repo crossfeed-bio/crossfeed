@@ -255,6 +255,8 @@ SCHEMA_DOC = {
                 "window": {"type": ["number", "null"]},
                 "window_unit": {"type": "string"},
                 "vs_other_removals": {"type": ["number", "null"]},
+                # v5: the technique the target was measured by (#305)
+                "technique": {"type": "string"},
                 "rate_stage_method": {"type": "string"},
                 "rate_stage_n": {"type": ["integer", "null"]},
             },

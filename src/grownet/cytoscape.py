@@ -146,6 +146,8 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
                 # other removals of its target (#214, #213, #209)
                 "metric_unit": edge.metric_unit, "window": edge.window, "window_unit": edge.window_unit,
                 "vs_other_removals": edge.vs_other_removals,
+                # v5: the technique the target was measured by (#305)
+                "technique": edge.technique,
                 # the gLV coefficient and what is known about it, the fit it came out of, the monoculture
                 # stage behind it, the target's capacity, and the rule behind a censored arc's bound.
                 # Every one of these was in the file and in GraphML and not here, found by comparing the
