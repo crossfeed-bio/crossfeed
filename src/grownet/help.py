@@ -580,8 +580,9 @@ MERGED_ATTRIBUTES = (
      "every value any merged arc carries; the notes also say how many of the arcs record no medium, when "
      "only some do"),
     (("study_ids",), "every study the merged arcs come from"),
+    # merging crosses techniques (#305)
     (("condition", "cultivation_mode", "medium", "technique"),
-     "every distinct value, joined by \"; \": a merge crosses conditions, media and techniques (#305)"),
+     "every distinct value, joined by \"; \": a merge crosses conditions, media and techniques"),
     (("evidence",), "dropout when any merged arc is a drop-out arc, since the merged arc may then act through "
                     "a third species; otherwise the merged arcs' evidence"),
     (("method",), "the first arc's method, followed by \"merged: the median of N arcs\""),
