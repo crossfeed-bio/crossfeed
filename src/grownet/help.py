@@ -125,9 +125,9 @@ RELEASES = (
 
 # key in gui.DEFAULTS -> (label on the page, command line flag, what it does and when to change it)
 SETTINGS = {
-    "derivation": ("Derivation", "--derivation replicate|integrated",
-                   "How an interaction is derived. The two answer different questions and neither is the "
-                   "stricter version of the other, so each is the default for its own job. "
+    "derivation": ("Derivation", "--derivation replicate|integrated|steady",
+                   "How an interaction is derived. The first two answer different questions and neither is "
+                   "the stricter version of the other, so each is the default for its own job. "
                    "replicate (the default) is the comparison the collaboration specified, a growth "
                    "property of the replicates with the partner against the replicates without it. It "
                    "needs only two measurements per set, so a sparsely sampled study still gives it "
@@ -149,7 +149,10 @@ SETTINGS = {
                    "cannot identify. Its weaknesses are what it cannot express: a community of three or "
                    "more is reported rather than derived, so it gives no drop-out arc at all, and it has "
                    "no no-growth rule, so no censored arc and no measured bound. It also needs a time "
-                   "course: a study measured at two or three points gives it nothing."),
+                   "course: a study measured at two or three points gives it nothing. "
+                   "steady, off by default and meant for gLV mode, fits the rows from the steady states of "
+                   "chemostat sub-communities instead of from growth curves, and reads continuous cultures "
+                   "only; see The derivation from chemostat steady states."),
     "metric": ("Growth property", "--metric auc|max|growth_rate",
                "The growth property compared with and without the partner. The area under the curve (auc, "
                "the default) combines lag, rate and yield in one number; the maximal abundance (max) keeps "
@@ -256,7 +259,8 @@ SETTINGS = {
                    "Off by default, since interactions are condition-specific. On, the arcs from one strain to "
                    "another, across conditions, studies and evidence, become one arc: its strength is the median "
                    "of their log2 means, with the range, and it lists every study, experiment and condition it "
-                   "rests on. Arcs whose signs disagree are not merged; absent arcs stay separate."),
+                   "rests on. Arcs whose signs disagree are not merged; absent arcs stay separate. What each "
+                   "attribute of a merged arc means is under Arc and node attributes."),
     "merge_genera": ("Merge to genus", "--merge-genera",
                      "Off by default. On, every strain becomes its genus, and the arcs between two genera merge "
                      "by sign, so two genera can be joined by a facilitation arc and an inhibition arc. The "
@@ -314,7 +318,9 @@ SETTINGS = {
                      "network also gets its maximum specific growth rate in monoculture, the median over the "
                      "replicates and studies that have one, downloadable as its own CSV and used by the gLV "
                      "parameters. Batch monocultures only: in a chemostat the rate a curve shows is the "
-                     "dilution rate. The gLV mode button turns it on."),
+                     "dilution rate. Under the steady-state derivation the rate is instead r_i - D, read from "
+                     "each organism's own monoculture chemostat start-up, with the capacity its row implies. "
+                     "The gLV mode button turns it on."),
 }
 
 # command line options of `derive` that are not advanced settings -> what they do
@@ -334,7 +340,7 @@ CLI_ONLY = {
     "--r-port": "the port that R session listens on (default 8793, what grownet_listen() uses)",
     "--species": "species, strain or genus names, or NCBI taxon ids: search every study holding them, as the page "
                  "does",
-    "--all": "every study in mGrowthDB, with every partner, as the page's All button (with --live)",
+    "--all": "every study in mGrowthDB, with every partner, as the page with both boxes empty (with --live)",
     "--no-published": "with --all, derive live instead of reading the network derived once a day",
     "--no-cache": "read everything from mGrowthDB again, instead of reusing what an earlier run read for "
                   "a study whose uploadedAt has not changed. Responses are kept in the user cache "
@@ -359,8 +365,11 @@ EDGE_ATTRIBUTES = {
                 "replicates; empty for obligate and abolished. Under the specified comparison this is "
                 "exactly log2(metric_with / metric_without). Under the integrated form it is the mean of "
                 "the per-replicate log2 effects while that pair comes from the median coefficient, so "
-                "the two are near and not equal, and it is this field the absence threshold acts on",
-    "sd": "standard deviation of the strength, the spread of the comparison",
+                "the two are near and not equal, and it is this field the absence threshold acts on. Under "
+                "the steady-state derivation it is log2(1 + B_ij x_j), the fitted row's net growth with the "
+                "partner at its abundance in the largest community holding both over without it",
+    "sd": "standard deviation of the strength, the spread of the comparison (under the steady-state "
+          "derivation, from the bootstrap over vessels, or over runs where runs were pooled)",
     "se": "standard error of the strength",
     "n_with": "replicates with the source present",
     "n_without": "replicates with the source absent",
@@ -425,7 +434,9 @@ EDGE_ATTRIBUTES = {
              "comparison are not meant to begin at the same density, so refusing a comparison for that "
              "would discard measurements rather than confounds",
     "evidence": "biculture (monoculture against a two-member co-culture: a direct interaction) or dropout "
-                "(a community against the same community without the source: direct or indirect)",
+                "(a community against the same community without the source: direct or indirect) or steady_state (a "
+                "coefficient fitted to the chemostat steady states of sub-communities, under the steady-state "
+                "derivation: effective, so an effect needing a third organism is folded into the pairs)",
     "community": "the members of the culture the arc comes from: the pair for a co-culture, the full "
                  "community for a drop-out arc",
     "condition": "the experiment the edge comes from; interactions are condition-specific",
@@ -534,6 +545,13 @@ EDGE_ATTRIBUTES = {
                          "shares. The others include arcs below the absence threshold, which a default file "
                          "leaves out, so derive with --include-absent to recompute it from the file. Empty "
                          "for every other arc",
+    "technique": "how the target was measured, as mGrowthDB names the technique (fc for flow cytometry, "
+                 "qpcr, 16s, plates, od, ...): every distinct technique of its curves on both sides, "
+                 "joined by \"; \". An arc of the comparison has one, since a species is never compared "
+                 "across techniques; an arc of the integrated form names two when the co-culture and the "
+                 "monocultures its rate comes from were measured differently; Merge parallel arcs merges "
+                 "across techniques, and a merged arc names every technique of the arcs it merges. "
+                 "\"unrecorded\" where mGrowthDB names none",
     "rate_stage_method": "how the monoculture stage was resampled for that number: a bootstrap of its "
                          "replicates where the stage is the median of one fit per replicate, or a "
                          "delete-one jackknife where it is one regression over all of their rows",
@@ -553,6 +571,49 @@ EDGE_ATTRIBUTES = {
     "merged_pairs": "with Merge to genus: those pairs, as source -> target",
 }
 
+# What each arc field becomes when Merge parallel arcs (or Merge to genus) merges arcs, as `derive._merged`
+# does it, one row per rule (#302; Karoline, 2026-11-06: "please document this in the help in the context of
+# the arc attributes"). tests/test_help.py merges two arcs that differ in every field and checks that each
+# field the merge rewrites is named here, so a new field cannot reach a merged arc undocumented.
+MERGED_ATTRIBUTES = (
+    (("strength",), "the median of the merged arcs' log2 means, each arc that has one counting once"),
+    (("strength_range",), "the lowest and highest of those log2 means"),
+    (("weight",), "the absolute value of that median"),
+    (("merged_arcs",), "how many arcs were merged, obligate and abolished ones included"),
+    (("outcome",), "quantified when any merged arc has a log2 mean; otherwise the outcome they all share, "
+                   "obligate or abolished"),
+    (("status",), "present when any merged arc is present, otherwise empty (undetermined)"),
+    (("sd", "se", "effect_over_sd", "p_value", "q_value", "significance", "n_with", "n_without"),
+     "empty: a median has no spread and no test of its own, and the merged arcs' tests are not combined. "
+     "Each merged arc was tested, and passed the q-value filter when it is on, before the merge"),
+    (("quality", "cautions", "notes", "experiments", "community"),
+     "every value any merged arc carries; the notes also say how many of the arcs record no medium, when "
+     "only some do"),
+    (("study_ids",), "every study the merged arcs come from"),
+    # merging crosses techniques (#305)
+    (("condition", "cultivation_mode", "medium", "technique"),
+     "every distinct value, joined by \"; \": a merge crosses conditions, media and techniques"),
+    (("evidence",), "dropout when any merged arc is a drop-out arc, since the merged arc may then act through "
+                    "a third species; otherwise the merged arcs' evidence"),
+    (("method",), "the first arc's method, followed by \"merged: the median of N arcs\""),
+    (("coefficient",), "the median of the merged arcs' coefficients when every one has a coefficient in one "
+                       "unit; otherwise as the row below"),
+    (("coefficient_unit", "coefficient_sd", "coefficient_n", "coefficient_sd_from_rate_stage", "fit_r2",
+      "fit_null_r2", "fit_condition", "fit_window_share", "rate_mismatch_to_zero", "se_replicates",
+      "se_rate_stage", "se_rate_selection", "rate_selection_spread", "rate_stage_method", "rate_stage_n",
+      "strength_bound", "bound_rule", "target_capacity", "target_capacity_unit", "target_capacity_n",
+      "window", "window_unit", "metric_unit", "metric_with", "metric_without"),
+     "the merged arcs' value when they all carry the same one, otherwise empty: each describes one "
+     "comparison, and one arc's value does not describe a median of several. bound_rule is also empty when "
+     "the bounds differ, so a rule is never shown beside a bound it did not produce"),
+    (("vs_other_removals",), "empty: it compares one drop-out with the others of its group, which a merged "
+                             "arc is not"),
+    (("partner_abundance", "partner_abundance_unit", "partner_abundance_n"),
+     "the median over the merged arcs that measured the partner, in one abundance unit, with their counts "
+     "summed; when they used more than one unit, empty, with a note, since abundances in different units "
+     "are not converted"),
+)
+
 # Node field -> meaning
 NODE_ATTRIBUTES = {
     "id": "ncbi:<taxon id> for a strain with an NCBI taxon id, otherwise genus and species from the name",
@@ -560,6 +621,8 @@ NODE_ATTRIBUTES = {
     "taxon_id": "the NCBI taxon id of the strain, as mGrowthDB records it",
     "taxon_id_refused": "why taxon_id is not this node's identity: mGrowthDB gave it to different strains of "
                         "one study, so it is not a join key; empty where taxon_id is the identity",
+    "merged_nodes": "with Merge to genus: the node ids of the strains this genus node stands for, among the "
+                    "network's arcs; empty on every other node",
     "species": "genus and species from the name, to merge with species-level networks",
     "identity": "what the id rests on: ncbi (the taxon id), name, or genus (with Merge to genus: the node "
                 "stands for every strain of its genus)",
@@ -730,6 +793,7 @@ SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"), ("mea
             ("statistics", "How an interaction is decided"),
             ("glv", "The matrix, the growth rates and gLV"),
             ("glv-assumptions", "What a gLV model assumes"),
+            ("glv-steady", "The derivation from chemostat steady states"),
             ("glv-walkthrough", "The gLV example, step by step"),
             ("settings", "Advanced settings"), ("attributes", "Arc and node attributes"),
             ("decisions", "Why it works this way"), ("cli", "The command line"),
@@ -750,6 +814,9 @@ def render_help(token: str, defaults: dict, example: tuple, job: str = "") -> st
         for key, (label, flag, text) in SETTINGS.items()) + "</dl>"
     edges = _table(("Arc attribute", "Meaning"), (
         f"<tr><td>{_name(k)}</td><td>{_e(v)}</td></tr>" for k, v in EDGE_ATTRIBUTES.items()))
+    merged = _table(("Arc attributes", "On a merged arc"), (
+        f"<tr><td>{', '.join(_name(f) for f in fields)}</td><td>{_e(text)}</td></tr>"
+        for fields, text in MERGED_ATTRIBUTES))
     nodes = _table(("Node attribute", "Meaning"), (
         f"<tr><td>{_name(k)}</td><td>{_e(v)}</td></tr>" for k, v in NODE_ATTRIBUTES.items()))
     decisions = "".join(f"<li><strong>{_e(d)}</strong> {_e(why)}</li>" for d, why in DECISIONS)
@@ -762,8 +829,10 @@ def render_help(token: str, defaults: dict, example: tuple, job: str = "") -> st
 <h2 id="what">What grownet does</h2>
 <p>Type species names, one per line, strain names, a genus (it stands for every species of it in
 mGrowthDB), or NCBI taxon ids. grownet looks them up in mGrowthDB, reads the growth curves of every study
-that holds them, and derives the interactions between them on this machine. The All button ignores the
-box and derives every study in mGrowthDB, with every partner. With the default settings, All reads the
+that holds them, and derives the interactions between them on this machine. The species box is optional:
+left empty, grownet derives every species in the media or studies of the second box, with every partner.
+<strong>For the All network</strong>, every study in mGrowthDB with every partner, leave both boxes empty
+and press Find interactions. With the default settings, All reads the
 network the grownet repository derives from mGrowthDB once a day, when it is less than 36 hours old and
 was derived by the same derivation your settings ask for, which
 spares mGrowthDB the 1,926 requests a cold corpus run sends, or
@@ -775,8 +844,9 @@ download.</p>
 
 <h2 id="where">Choosing where to look</h2>
 <p>The second box beside the species is optional and says <strong>where</strong> to look, not how to decide
-an interaction. Leave it empty and every medium is used, which is what grownet did before. One entry per
-line:</p>
+an interaction. Leave it empty and every medium is used, which is what grownet did before. With the
+species box empty, it is the whole search: every species in what it names, with every partner. One entry
+per line:</p>
 <ul>
 <li>a <strong>medium</strong>, matched as text and case-insensitively against the medium name mGrowthDB
 records on an experiment's compartments, its description and its name. The spellings differ between
@@ -896,7 +966,7 @@ continuous culture that forms a pair or a drop-out design today, so this changes
 decides what happens when one arrives.</p>
 
 <h2 id="example">Try the example</h2>
-<p>The Example button fills the box with {_e(pair)}, a pair with enough data to show a result: the
+<p>The Example button fills the species box with {_e(pair)}, a pair with enough data to show a result: the
 <a href="#cli">command line</a> section runs the same search.</p>
 
 <h2 id="reading">Reading the result</h2>
@@ -1032,7 +1102,7 @@ spike rather than a level the culture held. They are in
 <code>lag_method</code> columns, in the network's meta and in the report, with every curve that gave no
 capacity named and why. Each arc also carries <code>partner_abundance</code>, the actor's own abundance in
 the co-cultures averaged over the window the target's growth rate was fitted in.</p>
-<p><strong>Start with the gLV mode button</strong>, beside All. It sets the three settings a simulation
+<p><strong>Start with the gLV mode button</strong>, beside gLV example. It sets the three settings a simulation
 needs and leaves them in sight in Advanced settings: <strong>Report growth rates</strong> on, since a
 simulation needs a rate per organism; <strong>Include drop-out communities</strong> off, since such an
 arc compares a community with the same community without one member and the effect may run through a third
@@ -1202,9 +1272,73 @@ environment and for long enough to reach late stationary phase, and to compare h
 the late abundances in each. That is a question about the organisms, not about the parameters, and it is
 outside what {NAME} sets out to do: growth curves in, network out.</p>
 
+<h2 id="glv-steady">The derivation from chemostat steady states</h2>
+<p>A third way to fit the gLV rows, off by default: choose <strong>steady</strong> under
+<strong>Derivation</strong> in Advanced settings (or <code>--derivation steady</code>), with gLV mode on.
+It needs no growth curve to be fitted. At a chemostat steady state every organism present satisfies
+<code>1 + sum_j B_ij N_j = 0</code>, with <code>B_ij = A_ij / (r_i - D)</code> and D the dilution rate,
+so each community whose steady state was measured gives one equation per organism in it, and each
+organism's row is the least-squares solution over all of its equations, its own limitation with the rest.
+This is the idea of EPICS (Ansari et al. 2021, <em>Nature Computational Science</em>), which reads only
+the monocultures and the communities missing one member; here every measured sub-community counts, so
+monocultures, pairs, larger communities and the full one all contribute.</p>
+<ul>
+<li><strong>What it reads.</strong> Continuous cultures known to be unperturbed, at the steady state the
+chemostat check reads (the mean over the last quarter of each vessel; a run in which an organism still
+changes by more than a tenth between the two halves of that quarter is not at a steady state, and is left
+out and named), one fit per study, medium, abundance
+unit and dilution rate (runs of two studies are never fitted together, as every derivation reads one study
+at a time), each organism read by one technique within it: where an organism is read one way in some
+runs and another way in others, the runs using its more common technique are kept and the others left out
+and named, and so is a run whose vessels read one organism two ways. A run whose description does not say
+it is unperturbed is left out and named, and so is a run with a member that could not be read. Runs that
+end with the same organisms present are one community, their runs pooled: they reach one steady state, so
+they give one equation, not several.</li>
+<li><strong>Effective coefficients.</strong> An effect that needs a third organism is folded into the
+pairs that carry it, so a coefficient describes the communities it was fitted from, and its arcs carry
+evidence <code>steady_state</code>. Each community is also predicted by a fit made without it, and the
+arcs' notes give predicted against observed where that fit can predict it: a community its siblings predict
+badly is where such effects show. In a design of monocultures and pairs, a pair is the only community
+holding its two organisms, so without it nothing predicts it, and the note says so.</li>
+<li><strong>What it cannot determine is named.</strong> An organism that washed out (under a hundredth of
+the largest steady state of its run) is not at a steady state and gives no equation. A row with fewer
+independent equations than unknowns, or whose partners stand in the same proportions in every community, or
+a pair that never met, is listed among the reasons and gives no arc. So is a row whose own term
+<code>B_ii</code> is not negative: either the organism has no self-limitation, or <code>r_i</code> is below
+D and it holds only beside partners that feed it, and the sign of every effect on it depends on which. A
+design where most organisms wash out determines little: of a published 12-species model, 7 coexist, five of
+the communities missing one member end with those same 7, and that design determines no coefficient, while
+adding every pair determines almost all of them.</li>
+<li><strong>The row scale.</strong> A steady state gives <code>A_ij / (r_i - D)</code>; the scale
+<code>r_i - D</code> is read from the chemostat's own start-up rather than from a batch growth rate, which
+changes in a chemostat. If the experiment's description states a batch period before the pump was
+switched on ("Chemostat mode started 4 hours after inoculation"), there are two readings: the steepest rise
+inside the batch period, which is at most r_i, less D; and the steepest rise after the pump started, which
+is at most r_i - D. The larger is kept. If it says the dilution ran from inoculation, the steepest rise is
+r_i - D itself. Rates are per hour, as the dilution rate is. The scale is an estimate and can miss both
+ways: a lag, or an inoculum near the plateau, keeps a short start-up from its maximum rate and pulls it low,
+and noise on the measurements pulls it high, since the steepest stretch is kept (on simulated start-ups,
+5% noise on each point put it a tenth high at the median). An error in the scale scales a row's
+coefficients in proportion and changes no sign. Where the description says neither, the row stays in units
+of <code>r_i - D</code>, its coefficient unit says so, and the arc's notes say why. An organism measured at
+several dilution rates has a different <code>r_i - D</code> at each, and a package simulates one chemostat,
+so it takes one dilution rate for every organism, the one most rows were fitted at, and names the
+others.</li>
+<li><strong>Each arc.</strong> Its strength is <code>log2(1 + B_ij x_j)</code> at the partner's abundance
+in the largest community holding both, its coefficient is <code>(r_i - D) B_ij</code> in 1/(h x
+abundance) where the scale is known, and its spread is a bootstrap over the vessels of every community its
+row rests on (over the runs, where runs were pooled), widened for the few a chemostat run has. If any of
+those communities was read in a single vessel, the row has no spread, so its arcs are undetermined. The
+vessels of one run share its inoculum and its history, so a community read in one run has a spread from
+within that run only, narrower than the difference between runs would make it.</li>
+</ul>
+<p>mGrowthDB holds no design of this kind yet: its chemostat studies each run one community, which
+determines no row. The derivation is there for the data to come.</p>
+
 <h2 id="glv-walkthrough">The gLV example, step by step</h2>
-<p><strong>gLV example</strong> beside All fills both boxes and the one setting a package cannot be built
-without, and runs the search, so the route above has something concrete to run on. It is one search of
+<p><strong>gLV example</strong> beside Example fills both boxes and every setting a package needs, as
+Example fills its species, and Find interactions then runs it, so the route above has something concrete
+to run on. It is one search of
 one study, chosen by building the package of every study that yields one and scoring them: five give a
 package of two organisms or more, three of those settle with every organism above zero, and this one is
 the soundest of the three. Everything below is the generic route; only the numbers are this example's.</p>
@@ -1216,8 +1350,8 @@ out.</p>
 <ol>
 <li><strong>Press gLV example.</strong> The first box fills with
 <em>Bacteroides thetaiotaomicron</em> and <em>Roseburia intestinalis</em>, the second with
-<code>SMGDB00000002</code> so nothing else is read, Report growth rates goes on, and the search runs. On
-the command line the same run is
+<code>SMGDB00000002</code> so nothing else is read, and gLV mode goes on, Report growth rates among its
+settings. Then press <strong>Find interactions</strong>. On the command line the same run is
 <code>grownet derive --live --species "Bacteroides thetaiotaomicron" "Roseburia intestinalis"
 --conditions SMGDB00000002 --glv-mode --glv glv.zip</code>. The button presses gLV mode, so the
 command does too: without it the default derivation gives no coefficient and the run is refused.</li>
@@ -1283,8 +1417,10 @@ give others; the report beside the download says what was read and when.</p>
 
 <h2 id="attributes">Arc and node attributes</h2>
 <p>Every downloaded network, JSON or GraphML, carries these for each arc (edge) and node. A network
-names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v4</code>,
-after <code>/v3</code> in 0.3.0 and 0.4.0. It moved to <code>/v1</code> in 0.2.0 because
+names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v5</code>,
+after <code>/v4</code> in 0.5.0, which a <code>/v5</code> file only adds <code>technique</code> and
+<code>merged_nodes</code> to, and
+<code>/v3</code> in 0.3.0 and 0.4.0. It moved to <code>/v1</code> in 0.2.0 because
 <code>significance</code> changed meaning, from the corrected p-value to -log10 of it, and to
 <code>/v2</code>, <code>/v3</code> and then <code>/v4</code> because optional arc and node fields were
 added and an installed 0.2.0 builds its arcs from every field a file carries, so it must
@@ -1300,8 +1436,55 @@ many monoculture replicates it rests on, the studies behind it and each study's 
 <code>without_a_rate</code>, the organisms that have none, with <code>why_without_a_rate</code> giving the
 reason where one is known: a genus whose strains' rates are in time units that are not converted, or an
 organism, or a genus of them, whose every study's rates were left out for their starting spread.</p>
+<h3 id="arc-attributes">Arc attributes</h3>
 {edges}
+<h3 id="merged">What a merged arc carries</h3>
+<p>With <strong>Merge parallel arcs</strong> on (off by default), the arcs from one source to one target
+become one arc, across conditions, media, studies and evidence, when there are at least two and all have
+the same sign. An arc below the absence threshold has no sign and is never merged; by default it has
+already been left out, as have the q-value filter's and the hidden low-quality ones, before the merge
+begins. A pair whose arcs have both signs is not merged at all: every arc stays as derived, and the
+network's meta counts such pairs (<code>left_apart_for_disagreeing_signs</code>, a count in the network's
+meta rather than an arc attribute, so it is not in the table below). <strong>Merge to
+genus</strong> runs after it and merges the arcs between two genera by sign the same way, so with both on a
+genus arc is the median of merged arcs' medians; it also merges their absent arcs, one per genus pair. On a
+merged arc:</p>
+{merged}
+<p>Every other attribute is the first merged arc's: {_name("source")}, {_name("target")},
+{_name("effect")} and {_name("metric")}, which every merged arc shares, and {_name("supporting_pairs")} and
+{_name("merged_pairs")}, which only Merge to genus sets.</p>
+<p><strong>Reading a merged arc.</strong> Four consequences of these rules:</p>
+<ul>
+<li>The median is unweighted: an arc from one replicate per side counts as much as one from six. The arcs
+as derived, with Merge parallel arcs off, say which was which.</li>
+<li>An obligate or abolished arc has no log2 mean, so it counts in {_name("merged_arcs")} and not in the
+median: one arc of +0.2 and three obligate arcs give a quantified arc of strength 0.2. An arc made only of
+obligate arcs, or only of abolished ones, keeps that outcome.</li>
+<li>A merged arc is present when any of its arcs is, including when the others are undetermined (a single
+replicate), and the arcs below the absence threshold have left before the merge, so evidence against the
+interaction does not reach it.</li>
+<li>Opposite signs leave a whole pair apart: five facilitation arcs and one inhibition arc give six arcs,
+none merged.</li>
+</ul>
+<h3 id="node-attributes">Node attributes</h3>
 {nodes}
+<h3 id="merged-nodes">What a merged node carries</h3>
+<p>Only <strong>Merge to genus</strong> merges nodes; without it a node is one strain, keyed by its NCBI
+taxon id, or by its name where it has none or the id is refused. With it on, every strain node becomes
+its genus, and a genus node is the genus itself:</p>
+<ul>
+<li>{_name("id")} and {_name("name")} are the genus, the first word of the name mGrowthDB gives
+(<em>[Clostridium]</em> apart from <em>Clostridium</em>), and {_name("identity")} is <code>genus</code>.</li>
+<li>{_name("merged_nodes")} lists the strains it stands for, by their node ids, sorted: every strain of
+the genus among the network's arcs.</li>
+<li>{_name("taxon_id")}, {_name("species")} and {_name("taxon_id_refused")} are empty, since they
+describe one strain, and {_name("taxonomy")} and {_name("model_ref")} are empty as on every node.</li>
+</ul>
+<p>The arcs say which of those strains each one rests on: {_name("merged_pairs")} names the pairs behind
+a genus arc, as species pairs or, when only taxon ids were entered, as strain pairs, and
+{_name("supporting_pairs")} counts them; a drop-out arc's {_name("community")} lists the members by their
+strain ids, which are not nodes of a genus network. A member that is the source or target of an arc is in
+its genus node's {_name("merged_nodes")}; a member on no arc is named only there.</p>
 
 <h2 id="decisions">Why it works this way</h2>
 <p>The main choices behind the method, each settled with the collaboration in the
@@ -1314,26 +1497,31 @@ its report, and the network sent to Cytoscape:</p>
 <pre>{_e(EXAMPLE_CLI)}</pre>
 <p>Without installing anything, <code>uvx --from git+{REPOSITORY} {COMMAND} ...</code> runs the same
 command. Other uses:</p>
-<pre>{COMMAND} derive SMGDB00000004 --live --format graphml --out study4.graphml
+<pre>{COMMAND} derive --live --all --out all.json
+{COMMAND} derive SMGDB00000004 --live --format graphml --out study4.graphml
 {COMMAND} derive --live --species Blautia --conditions "Wilkins-Chalgren" --out wc.json
+{COMMAND} derive --live --conditions "Wilkins-Chalgren" --out wc_all.json
 {COMMAND} derive SMGDB00000004 --live --format matrix --out study4_matrix.csv
 {COMMAND} derive SMGDB00000004 --live --glv-mode --rates study4_rates.csv --glv study4_glv.zip
 {COMMAND} derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
 {COMMAND} derive --live --all --merge-arcs --merge-genera --out all_genera.json
 {COMMAND} gui
 {COMMAND} validate example.json</pre>
-<p>The first derives one whole study; the second searches a genus in one medium (the second box, from
-the command line); the third writes a study as the adjacency matrix; the fourth adds the growth rates and
-the gLV parameters (<a href="#glv">the matrix, the growth rates and gLV</a>); the fifth a genus, every
-species of it with every partner, one node per genus; the sixth all of mGrowthDB, as the All button does,
-merged across studies and then to genus; the seventh opens this page, and the last checks a file against
-the format. Every advanced setting has its flag (see the list above), and
+<p>The first is the All network, every study in mGrowthDB, as the page gives it with both boxes empty;
+the second derives one whole study; the third searches a genus in one medium (the second box, from the
+command line); the fourth every species in that medium, as the page does with the species box empty; the
+fifth writes a study as the adjacency matrix; the sixth adds the growth rates and the gLV parameters
+(<a href="#glv">the matrix, the growth rates and gLV</a>); the seventh a genus, every species of it with
+every partner, one node per genus; the eighth the All network merged across studies and then to genus;
+the ninth opens this page, and the last checks a file against the format. Every advanced setting has its
+flag (see the list above), and
 <code>{COMMAND} derive --help</code> lists them all. Besides those:</p>
 <ul>{cli_only}</ul>
 
 <h2 id="empty">No network came back</h2>
 <ol>
-<li>Look at the Species list at the top of the result. An entry under "Not used" gave nothing, and says why:
+<li>After a species search, look at the Species list at the top of the result. An entry under "Not used"
+gave nothing, and says why:
 see <a href="#qa">the first question</a>.</li>
 <li>"Studies searched: none" means no study in mGrowthDB holds those strains.</li>
 <li>Open "pair(s) the data did not support": each line says why a pair gave no edge.</li>
@@ -1348,8 +1536,9 @@ supports, or tick "Include chemostat and serial dilution experiments" to use the
 <li>every edge is below the absence threshold: open that section of the result, or set k to 0;</li>
 <li>the partners are species you did not type: untick "Only interactions between the species
 entered";</li>
-<li>the second box is holding the search to a medium, an experiment or a study that these species were
-not grown in: empty it, or try a shorter word, since a medium is matched as text (the result says how
+<li>the second box is holding the search to a medium, an experiment or a study that the species were not
+grown in, or, with the species box empty, that holds no usable comparison: empty it, or try a shorter
+word, since a medium is matched as text (the result says how
 many studies it left out).</li>
 </ul></li>
 </ol>
