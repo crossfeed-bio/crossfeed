@@ -57,6 +57,12 @@ LEGACY_META = {"grownet.interaction_network/v3": {
     "tool", "tool_version", "project", "settings_not_used", "derived_on", "derived_at", "source_db",
     "provisional", "absence", "statistics", "query", "species", "studies", "errors", "complete", "study_id",
     "settings", "build", "slice", "selection", "no_growth", "filters", "hidden", "merge", "genus", "data",
+    "growth_rates"},
+    # /v5 (#305) adds an edge field and no meta key: the same set, for when the format moves on again
+    "grownet.interaction_network/v5": {
+    "tool", "tool_version", "project", "settings_not_used", "derived_on", "derived_at", "source_db",
+    "provisional", "absence", "statistics", "query", "species", "studies", "errors", "complete", "study_id",
+    "settings", "build", "slice", "selection", "no_growth", "filters", "hidden", "merge", "genus", "data",
     "growth_rates"}}
 
 
@@ -64,10 +70,11 @@ LEGACY_META = {"grownet.interaction_network/v3": {
 # of the versions that read it: 0.3.0 and 0.4.0 both read grownet.all_result/v1) and the derivation their
 # default settings ask for (0.4.0's DEFAULTS say replicate; 0.3.x checks none). A copy refuses any other
 # and derives All live, so an older file that followed a move of the current format or the current default
-# derivation would strand every installed copy while every check passed (found in review). The /v4 entry
-# is this version's, for when the format moves on.
+# derivation would strand every installed copy while every check passed (found in review). 0.5.0 reads
+# /v4 and asks for the same; the /v5 entry is this version's, for when the format moves on.
 READERS = {"grownet.interaction_network/v3": {"format": "grownet.all_result/v1", "derivation": "replicate"},
-           "grownet.interaction_network/v4": {"format": "grownet.all_result/v1", "derivation": "replicate"}}
+           "grownet.interaction_network/v4": {"format": "grownet.all_result/v1", "derivation": "replicate"},
+           "grownet.interaction_network/v5": {"format": "grownet.all_result/v1", "derivation": "replicate"}}
 
 
 def legacy_payload(payload: dict, legacy_schema: str = LEGACY["schema"]) -> dict:

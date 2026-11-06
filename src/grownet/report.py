@@ -314,6 +314,11 @@ def report_text(result: dict) -> str:
                     else "   <- not read in this run: alpha 0 switches the test off and nothing was censored"
                     if key == "no_growth_factor" and settings.get("no_growth_alpha") == 0
                     else "   <- not read by this derivation")
+            # with no species entered every partner is kept, whatever the box says: All, and the species box
+            # left empty under the second box, said "Only interactions between the species entered: on"
+            # beside "with every partner" (found in review)
+            if key == "only_entered" and (result.get("all") or result.get("study")) and settings[key]:
+                note = "   <- not read in this run: no species was entered, so every partner is kept"
             lines.append(f"  {label} ({flag.split()[0]}): {setting_value(key, settings[key])}{note}")
     lines.append("")
 

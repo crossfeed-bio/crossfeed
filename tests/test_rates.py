@@ -38,6 +38,22 @@ def test_baranyi_recovers_the_rate_of_a_baranyi_curve():
     assert baranyi(T, [math.exp(y) for y in logs]) == pytest.approx(0.6, rel=0.02)
 
 
+@pytest.mark.parametrize("step, mu", [(2.0, 1.0), (3.0, 0.6)])
+def test_baranyi_recovers_the_rate_of_a_curve_with_no_lag(step, mu):
+    # #298: y0 = 0, d = 3 (the curve rises e^3, about 20 times), lag 1e-9 h (h0 = 1e-9 * mu), sampled every
+    # `step` hours at 10 points. The curve IS the model, so the exact optimum is mu itself with a residual
+    # of 0. The starts estimate a lag from the steepest slope, and the fit then drives h0 toward 0, where
+    # its Jacobian column vanishes: damped by that column's own diagonal, the system stayed singular and
+    # the fit stopped short, at 0.802 for mu 1.0 and 0.555 for mu 0.6. Damped by the largest diagonal seen
+    # (MINPACK's choice, as in R's nls.lm), it reaches mu.
+    times = [step * i for i in range(10)]
+    logs = [rates._baranyi(t, 0.0, mu, 3.0, 1e-9 * mu) for t in times]
+    fit = rates.baranyi_fit(times, [math.exp(y) for y in logs])
+    assert fit["rate"] == pytest.approx(mu, rel=1e-6)
+    assert fit["r2"] == pytest.approx(1.0, abs=1e-9)
+    assert fit["lag"] < 1e-6
+
+
 def test_baranyi_fits_the_rise_of_a_curve_that_falls_after_its_peak():
     # Karoline (2026-09-28, "Fit up to the maximum", then "End of the plateau"): a sigmoid rise to 4 (log) by
     # 7 h, then a fall back to
@@ -155,3 +171,28 @@ def test_easylinear_refits_from_the_first_marked_window_to_the_last_as_growthrat
     # the reference's own answer on this curve, from growthrates 0.8.5: points 0 to 14, mumax 0.2142857
     assert abs(got["rate"] - 0.2142857) < 1e-7, got
 
+
+
+def test_a_refusal_whose_better_fit_lies_past_the_guard_names_the_guard(monkeypatch):
+    """The best fit puts the rate past the guard (5 times the steepest observed slope) and the best fit inside
+    it explains too little: the refusal names the guard, not only the inside fit's R2, which sent the reader
+    to the data instead of to the guard (Craig's agent, on the Baranyi damping). Every start returns the same
+    two candidates here: one past the guard with a small residual, one inside it with a large one."""
+    import math
+
+    import pytest
+
+    from grownet import rates
+    calls = {"n": 0}
+
+    def fake(xs, ys, start):
+        calls["n"] += 1
+        mu = 100.0 if calls["n"] % 2 else 0.5
+        residual = 0.01 if mu > 50 else 50.0
+        return [start[0], math.log(mu), start[2], start[3]], residual
+    monkeypatch.setattr(rates, "_fit_once", fake)
+    times = [float(t) for t in range(12)]
+    values = [math.exp(0.5 * t) if t < 8 else math.exp(4.0) for t in times]
+    with pytest.raises(rates.RateUnavailable) as refused:
+        rates.baranyi_fit(times, values)
+    assert "the guard refuses" in str(refused.value) and "best fit within the guard" in str(refused.value)

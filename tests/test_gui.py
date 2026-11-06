@@ -302,11 +302,15 @@ def test_server_refuses_a_request_without_the_token(server):
         assert e.value.code == 403
 
 
-def test_server_asks_for_a_species_when_none_given(server):
+def test_server_runs_all_when_both_boxes_are_empty(server):
+    # it used to answer "Type at least one species"; since #300 both boxes empty is All (Karoline,
+    # 2026-11-04: "perhaps the All network could be delivered when both input fields are empty")
     base, token = server
-    data = urllib.parse.urlencode({"species": "  "}).encode()
+    data = urllib.parse.urlencode({"species": "  ", "derivation": "replicate"}).encode()
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
-        assert "Type at least one species" in r.read().decode("utf-8")
+        page = r.read().decode("utf-8")
+    assert "Type at least one species" not in page
+    assert "All of mGrowthDB" in page or "Searching" in page             # a quick fake search, or its progress
 
 
 def test_a_port_in_use_gives_a_plain_message_not_a_traceback():
@@ -612,7 +616,7 @@ def test_all_ignores_the_box_and_derives_every_study_with_every_partner():
     assert r["all"] and r["studies"] == ["SMGDB00000001"] and r["resolved"] == [] and r["unresolved"] == []
     assert r["network"].meta["query"] == "all" and r["network"].edges        # the study's arcs, every partner
     page = render_result("tok", r)
-    assert "<h2>All of mGrowthDB</h2>" in page and "1 studies" in page
+    assert "<h2>All of mGrowthDB</h2>" in page and "1 study" in page
 
 
 def test_all_still_leaves_out_the_excluded_studies_and_says_so():
@@ -620,32 +624,30 @@ def test_all_still_leaves_out_the_excluded_studies_and_says_so():
     assert r["studies"] == [] and "Exclude these studies" in render_result("tok", r)
 
 
-def test_the_all_button_sits_next_to_example_with_its_explainer(server):
+def test_the_species_box_says_what_leaving_it_empty_does_and_there_is_no_all_button(server):
+    # the All button and its caption are gone since #300 (Karoline, 2026-11-04: "Remove it"): the species
+    # box left empty runs All, under the second box, so the second box's warning "All reads this box"
+    # (#193) has nothing left to warn about
     base, token = server
     form = _get(f"{base}/?token={token}")
-    assert '<button type="submit" name="example" value="1">Example</button>\n<button type="submit" name="all"' in form
-    # the caption said "All derives every study, ignoring the boxes", and All reads the second box by
-    # design (run_query's docstring, Karoline 2026-09-28), so the caption was the false half (#193)
-    assert "All derives every study, ignoring the species box" in form
-    assert "ignoring the boxes" not in form
-    # the bar has a length limit Karoline set, so the second box's own hint carries the rest
-    assert "All reads this box" in form and "clear it to derive the whole of mGrowthDB" in form
-    # and the gLV example button beside them, which fills the boxes and the settings for a package that
-    # simulates and runs the search (Karoline, 2026-10-07)
-    assert 'name="glv_example" value="1">gLV example</button>' in form
+    assert 'name="all"' not in form and "All derives every study" not in form and "All reads this box" not in form
+    assert "Left empty,\nevery species in the media or studies of the second box is searched" in form
+    # Example and the gLV example button beside it, which fills the boxes and the settings for a package
+    # that simulates and runs the search (Karoline, 2026-10-07)
+    assert ('<button type="submit" name="example" value="1">Example</button>\n'
+            '<button type="submit" name="glv_example"') in form
     assert "gLV example fills" in form
-    with urllib.request.urlopen(f"{base}/run?token={token}", data=b"all=1&species=", timeout=10) as r:
-        page = r.read().decode("utf-8")
-    assert "All of mGrowthDB" in page or "Searching" in page             # a quick fake search, or its progress
 
 
 def test_all_narrowed_by_the_second_box_does_not_claim_the_whole_database(server):
     """Pressing All with a study id left in the second box narrowed the search and still headed the result
     "All of mGrowthDB". The gLV example button fills that box and leaves it filled, so gLV example then
     All reported a network of one study as the whole database (#193). The narrowing is deliberate; the
-    heading was the defect."""
+    heading was the defect.
+    Since #300 there is no All button: the species box left empty with a study in the second box is
+    exactly this search, and it is what Karoline asked for."""
     base, token = server
-    data = b"all=1&species=&conditions=SMGDB00000002"
+    data = b"species=&conditions=SMGDB00000002"
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
         page = r.read().decode("utf-8")
     assert "Searching" not in page, "this needs the result page, not the progress page, or it proves nothing"
@@ -662,8 +664,11 @@ def test_all_narrowed_by_the_second_box_does_not_claim_the_whole_database(server
     # from "Studies searched:", and twice from the embedded report's settings block, so asserting the id
     # alone passed however the heading was worded
     assert "matching SMGDB00000002" in page and "Clear them to derive" in page
+    # the number beside it is of the studies searched, which the second box narrows afterwards: it read as
+    # the number of studies matching (found in review)
+    assert re.search(r"matching SMGDB00000002, with every partner: \d+ stud(y|ies) searched", page), page
     # two entries, one holding a comma, are joined with "; " (round 22)
-    data = b"all=1&species=&conditions=SMGDB00000002%0D%0AWilkins-Chalgren%2C+anaerobic"
+    data = b"species=&conditions=SMGDB00000002%0D%0AWilkins-Chalgren%2C+anaerobic"
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
         page = r.read().decode("utf-8")
     # in the page's own list, not only in the report embedded below it, which says the same
@@ -671,7 +676,7 @@ def test_all_narrowed_by_the_second_box_does_not_claim_the_whole_database(server
 
     # and the OTHER control that narrows All, which the first version of this test did not cover and the
     # fix therefore did not either: Exclude these studies, which the code comment named all along
-    data = b"all=1&species=&exclude_studies=SMGDB00000002"
+    data = b"species=&exclude_studies=SMGDB00000002"
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
         page = r.read().decode("utf-8")
     assert "Searching" not in page, "this needs the result page, or it proves nothing"
@@ -912,6 +917,35 @@ def test_an_empty_result_says_what_the_second_box_left_out():
     assert "second box" not in _empty_reason(result)
 
 
+def test_an_empty_all_result_speaks_of_the_studies_searched_not_of_species_typed():
+    """Since #300 an empty species box runs All, so an empty network there came back as "The studies
+    holding these species gave no usable comparison" with no species typed (Karoline, 2026-11-04: "please
+    update the wording"). Each reason that named "these species" is checked on both kinds of search."""
+    from grownet.gui import _empty_reason
+    unmatched = "no experiment of this study matches the media, experiments or studies entered"
+
+    def reason(all_search, skipped, conditions=""):
+        return _empty_reason({"settings": {**DEFAULTS, "conditions": conditions}, "studies": ["S1", "S2"],
+                              "resolved": [] if all_search else [("x", {1: "x"})], "all": all_search,
+                              "errors": [], "network": None, "hidden": {}, "skipped": skipped})
+
+    cases = [  # (skipped, conditions, the start of the sentence for a species search, and for All)
+        ([("study S1", unmatched), ("study S2", unmatched)], "mucin",
+         "No experiment of the studies holding these species matches the second box",
+         "No experiment of the studies searched matches the second box"),
+        ([("study S1", "only monocultures here"), ("study S2", "only monocultures here")], "",
+         "The studies holding these species grew them only alone",
+         "The studies searched grew their species only alone"),
+        ([("a pair", "no usable per-strain series")], "",
+         "The studies holding these species gave no usable comparison",
+         "The studies searched gave no usable comparison"),
+    ]
+    for skipped, conditions, species_search, all_search in cases:
+        assert species_search in reason(False, skipped, conditions)        # a species search: as before
+        said = reason(True, skipped, conditions)
+        assert all_search in said and "these species" not in said, said
+
+
 def test_opening_the_page_without_the_token_explains_itself(server):
     """Karoline, 2026-10-04: "localhost:8791 shows an error". Opening the port by hand, or an old tab from
     a previous run, used to give a bare server error page. It still refuses, in grownet's own words."""
@@ -936,37 +970,84 @@ def test_opening_the_page_without_the_token_explains_itself(server):
     assert token not in body                                 # never the token itself
 
 
-def test_the_glv_example_button_configures_everything_and_runs(server):
-    """Karoline, 2026-10-07: "include a gLV example button in the GUI that configures everything for a
-    working gLV example". It fills both boxes and presses gLV mode, and runs the search, so a reader gets
-    a package to simulate from one press.
+def _form_fields(page: str) -> dict:
+    """What the page's form sends when Find interactions is pressed: each input's value, a checkbox only
+    when checked, each select's selected option, each textarea's text. Buttons send nothing."""
+    from html.parser import HTMLParser
+
+    class Form(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.fields, self.select, self.textarea = {}, None, None
+
+        def handle_starttag(self, tag, attrs):
+            a = dict(attrs)
+            if tag == "input" and a.get("name") and (a.get("type") != "checkbox" or "checked" in a):
+                self.fields[a["name"]] = a.get("value", "on")
+            elif tag == "select":
+                self.select = a.get("name")
+            elif tag == "option" and self.select and ("selected" in a or self.select not in self.fields):
+                self.fields[self.select] = a.get("value", "")
+            elif tag == "textarea":
+                self.textarea = a.get("name")
+                self.fields[self.textarea] = ""
+
+        def handle_endtag(self, tag):
+            self.select = None if tag == "select" else self.select
+            self.textarea = None if tag == "textarea" else self.textarea
+
+        def handle_data(self, data):
+            if self.textarea:
+                self.fields[self.textarea] += data
+
+    form = Form()
+    form.feed(page[page.index("<form"):page.index("</form>")])
+    return form.fields
+
+
+def test_the_glv_example_button_fills_everything_and_find_interactions_runs_it(server):
+    """Karoline, 2026-11-06: "The Example button fills the input fields, but gLV example fills the fields
+    and launches the search. Please change the gLV example behavior to be in line with 'Example'." So it
+    fills and waits, as Example does, and Find interactions runs what it filled.
+
+    What it fills is still everything a working package needs (Karoline, 2026-10-07: "include a gLV
+    example button in the GUI that configures everything for a working gLV example"): the example's
+    species in the first box, its study in the second, and every setting gLV mode sets.
 
     **It asserted `derivation == DEFAULTS["derivation"]` until 2026-10-10**, which is true whatever the
     default is, so it passed while the button quietly stopped being able to build a package: the default
     went back to the comparison, the button inherited it, and a comparison gives no gLV coefficient. The
-    assertion is now what the button has to achieve rather than what it happens to equal.
+    assertion is what the button has to achieve rather than what it happens to equal.
 
-    The double here serves the fake study, not SMGDB00000002, so what this pins is the configuring: the
-    example's species in the first box, its study in the second, and every setting gLV mode sets. The
+    The double here serves the fake study, not SMGDB00000002, so what this pins is the configuring; the
     package the real study gives is what the help's steps walk through.
     """
     import grownet.gui as gui
     base, token = server
-    data = urllib.parse.urlencode({"glv_example": "1"}).encode()
-    with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=30) as r:
-        page = r.read().decode("utf-8")
-    assert "Advanced settings" in page            # the result page, not an error
-
-    doc = json.loads(_get(f"{base}/download.json?token={token}"))
-    said = doc["meta"]["settings"]
-    assert said["conditions"] == gui.GLV_EXAMPLE_STUDY
+    with urllib.request.urlopen(f"{base}/run?token={token}",
+                                data=urllib.parse.urlencode({"glv_example": "1"}).encode(), timeout=30) as r:
+        page, landed = r.read().decode("utf-8"), r.geturl()
+    # filled, not searched: no job, no progress, no result, and a note saying what to press, as Example's
+    assert "job=" not in landed and "Searching" not in page and 'id="result"' not in page
+    assert "Press Find interactions" in page and gui.GLV_EXAMPLE_MESSAGE.split(".")[0] in page
+    fields = _form_fields(page)
+    assert fields["species"].split("\n") == list(gui.GLV_EXAMPLE)
+    assert fields["conditions"] == gui.GLV_EXAMPLE_STUDY
+    filled = gui.parse_settings({k: [v] for k, v in fields.items()})
     # every setting the mode sets, because a package needs all of them: a rate per organism, no arc that
     # may act through a third species, the comparison on a growth rate, and the form that fits the row
     for key, value in gui.glv_mode(dict(gui.DEFAULTS)).items():
         if gui.DEFAULTS[key] != value:
-            assert said[key] == value, f"the gLV example left {key} at {said[key]!r}"
-    assert said["derivation"] == "integrated" and gui.glv_mode_on(said)
-    # the species it asked for are the example's, which the report of the run names
+            assert filled[key] == value, f"the gLV example left {key} at {filled[key]!r}"
+    assert filled["derivation"] == "integrated" and gui.glv_mode_on(filled) and 'aria-pressed="true"' in page
+
+    # then Find interactions, the form as the page holds it, runs exactly that
+    with urllib.request.urlopen(f"{base}/run?token={token}", data=urllib.parse.urlencode(fields).encode(),
+                                timeout=30) as r:
+        assert "Advanced settings" in r.read().decode("utf-8")
+    said = json.loads(_get(f"{base}/download.json?token={token}"))["meta"]["settings"]
+    assert said["conditions"] == gui.GLV_EXAMPLE_STUDY and gui.glv_mode_on(said)
+    assert said["derivation"] == "integrated"
     report = _get(f"{base}/report.txt?token={token}")
     for name in gui.GLV_EXAMPLE:
         assert name in report
@@ -1138,9 +1219,8 @@ def test_the_glv_example_button_ignores_a_setting_left_in_the_form(server):
 
     It took the posted form and applied gLV mode on top, so pressing it with an absence threshold of 9
     still in Advanced settings filled the boxes, ran, and produced no network and no package, against a
-    caption promising a package that simulates (#253). The fix reads `DEFAULTS` instead, and nothing
-    tested it: the existing button test posts `glv_example` alone, and an empty form parses to the
-    defaults either way, so reverting to the form was invisible (found reviewing round 10).
+    caption promising a package that simulates (#253). The fix reads `DEFAULTS` instead. Since the button
+    fills rather than runs (2026-11-06), what it filled is read off the page it returns.
     """
     import grownet.gui as gui
     base, token = server
@@ -1148,15 +1228,12 @@ def test_the_glv_example_button_ignores_a_setting_left_in_the_form(server):
     data = urllib.parse.urlencode({"glv_example": "1", "absence_threshold": "9",
                                    "spike_factor": "3"}).encode()
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=30) as r:
-        page = r.read().decode("utf-8")
-    assert "Advanced settings" in page
-
-    said = json.loads(_get(f"{base}/download.json?token={token}"))["meta"]["settings"]
-    assert said["absence_threshold"] == gui.DEFAULTS["absence_threshold"], said["absence_threshold"]
-    assert said["spike_factor"] == gui.DEFAULTS["spike_factor"], said["spike_factor"]
+        filled = gui.parse_settings({k: [v] for k, v in _form_fields(r.read().decode("utf-8")).items()})
+    assert filled["absence_threshold"] == gui.DEFAULTS["absence_threshold"], filled["absence_threshold"]
+    assert filled["spike_factor"] == gui.DEFAULTS["spike_factor"], filled["spike_factor"]
     # and the settings gLV mode does set are still set, so this did not simply ignore the press
-    assert said["conditions"] == gui.GLV_EXAMPLE_STUDY
-    assert said["report_rates"] is True
+    assert filled["conditions"] == gui.GLV_EXAMPLE_STUDY
+    assert filled["report_rates"] is True
 
 
 def test_the_page_offers_what_the_matrix_is_beside_it(server):

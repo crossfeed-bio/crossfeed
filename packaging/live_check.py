@@ -108,7 +108,9 @@ def arc_problems(e, derivation: str, k: float | None = None, names: dict | None 
     where = (f"{names.get(e.source, e.source)} -> {names.get(e.target, e.target)} "
              f"({e.evidence}, {e.outcome}, {e.medium or e.condition})")
     out = []
-    missing = _have(e, "study_ids", "metric", "experiments", "evidence")
+    # `technique` from /v5 on: every arc says how its target was measured, "unrecorded" where mGrowthDB
+    # names nothing, so an empty one is a writer that forgot it (found in review)
+    missing = _have(e, "study_ids", "metric", "experiments", "evidence", "technique")
     if not (e.medium or e.condition):
         missing.append("medium or condition")
     if e.outcome in CENSORED:
@@ -176,6 +178,9 @@ def network_problems(net, label: str, k=None) -> list:
     if not net.edges:
         out.append(f"{label}: no arcs at all")
     names = {nid: node.name or nid for nid, node in net.nodes.items()}
+    # a genus node stands for strains, and from /v5 on says which (found in review)
+    out += [f"{label}: genus node {nid} lists no strain in merged_nodes" for nid, node in net.nodes.items()
+            if node.identity == "genus" and not node.merged_nodes]
     for e in net.edges:
         out += [f"{label}: {p}" for p in arc_problems(e, derivation, k, names)]
         for sid in e.study_ids:
