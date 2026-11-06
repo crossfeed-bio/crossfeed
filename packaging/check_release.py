@@ -29,6 +29,21 @@ ROOT = Path(__file__).resolve().parents[1]
 STALE_DATE_DAYS = 1
 
 
+
+def next_release(help_source: str):
+    """The value of `NEXT` in help.py's source, as Python reads it: () when there is none, and a problem's
+    text when it is not a literal (so a computed NEXT is never taken for an empty one)."""
+    import ast
+    for node in ast.parse(help_source).body:
+        targets = node.targets if isinstance(node, ast.Assign) else \
+            [node.target] if isinstance(node, ast.AnnAssign) and node.value is not None else []
+        if any(isinstance(target, ast.Name) and target.id == "NEXT" for target in targets):
+            try:
+                return tuple(ast.literal_eval(node.value))
+            except ValueError:
+                return ("NEXT is not a literal the release check can read",)
+    return ()
+
 def check(tag: str, root: Path = ROOT, releasing: bool = True, today=None) -> tuple:
     """(problems, the release notes) for `tag`.
 
@@ -119,15 +134,27 @@ def check(tag: str, root: Path = ROOT, releasing: bool = True, today=None) -> tu
                 if help_text.exists() else None
             if help_text.exists() and not listed:
                 problems.append(f"src/grownet/help.py RELEASES has no entry for {version}")
-            # what the About page lists as in development belongs under the version once it is released
-            # (2026-11-06)
-            if help_text.exists() and re.search(r"^NEXT = \((?!\s*\))", help_text.read_text(encoding="utf-8"),
-                                                re.M):
-                problems.append(f"src/grownet/help.py NEXT still lists the next release's changes: move them "
-                                f"into RELEASES under {version} and leave NEXT = ()")
-            elif listed and listed.group(1) != heading.group(1):
+            if listed and listed.group(1) != heading.group(1):
                 problems.append(f"src/grownet/help.py RELEASES dates {version} {listed.group(1)}, CHANGELOG.md "
                                 f"says {heading.group(1)}")
+            # what the About page lists as in development belongs under the version once it is released
+            # (2026-11-06). Its own check, so a wrong RELEASES date is still reported beside it, and the
+            # value read as Python reads it: a regex on `NEXT = (` passed `NEXT: tuple = (` and `NEXT = [`
+            # (found in review)
+            if help_text.exists():
+                pending = next_release(help_text.read_text(encoding="utf-8"))
+                if pending:
+                    problems.append(f"src/grownet/help.py NEXT still lists the next release's changes: move "
+                                    f"them into RELEASES under {version} and leave NEXT = ()")
+        # the notes are the section as written, so a kind of change under two headings reads as two lists
+        # in the release (found in review: twelve `###` headings from merging eighteen branches' entries)
+        if releasing:
+            kinds = re.findall(r"(?m)^### +(.+?)\s*$", notes)
+            repeated = sorted({k for k in kinds if kinds.count(k) > 1})
+            if repeated:
+                problems.append(f"CHANGELOG.md's section for {version} has more than one "
+                                f"{', '.join('### ' + k for k in repeated)}; merge each kind of change under "
+                                "one heading")
     # The R companion is versioned separately and RELEASING.md calls r/DESCRIPTION the only signal an
     # installed R copy is out of date, so a release that forgets it ships a package that cannot tell a
     # reader to update (#142 item 10).

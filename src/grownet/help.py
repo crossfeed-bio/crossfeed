@@ -37,8 +37,9 @@ NEXT = (
     "strains it stands for: the network format moves to /v5, and the daily All network is still published "
     "for earlier versions. Merging parallel arcs crosses techniques and names them, and the page shows a "
     "merged arc as a median with its range.",
-    "Every arc of the default derivation says what its two sides started at, and warns where they differ "
-    "more than 3 times, as 61 of the 190 drop-out arcs in mGrowthDB do, up to 117 times.",
+    "Every arc of the default derivation whose two sides have a first value says what they started at, "
+    "and warns where they differ more than 3 times, as 61 of the 190 drop-out arcs in mGrowthDB do, "
+    "counting those below the absence threshold, up to 117 times.",
     "A third derivation, for gLV mode: the rows fitted from the chemostat steady states of sub-communities, "
     "every sub-community counting. mGrowthDB holds no such design yet, and it says what each organism "
     "lacks; on a published 12-species model, monocultures and pairs give 126 of its 132 coefficients exactly.",
