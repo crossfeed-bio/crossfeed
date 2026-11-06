@@ -211,10 +211,14 @@ def fit(communities: list, draws: int = DRAWS, seed: int = 0) -> dict:
         values = {j: [] for j in row["values"]}
         for sample in samples:
             again = _fit_row(i, _equations(sample).get(i, []))
-            if again["status"] == "identified":
+            if again["status"] == "identified" and all(j in again["values"] for j in values):
                 for j in values:
-                    values[j].append(again["values"].get(j, 0.0))
-        if all(len(v) >= 2 for v in values.values()):
+                    values[j].append(again["values"][j])
+        # how many draws the spread rests on, and a spread only where at least half of them gave the row: a draw
+        # that does not determine it is not an estimate of zero, and an sd from 2 of 200 draws read like one
+        # from all of them (raised in review of the estimator)
+        row["draws"] = min((len(v) for v in values.values()), default=0)
+        if row["draws"] >= max(2, len(samples) // 2):
             row["sd"] = {j: statistics.stdev(v) for j, v in values.items()}
     return {"rows": rows, "washed_out": washed_out, "unidentified": unidentified, "why": why}
 
@@ -359,6 +363,7 @@ def row_scale(curve, dilution: float, period: dict) -> dict:
                 scale, said = value, words
         how = (f"batch period ({period['said']}): {said}, the larger of the two readings of r_i - D"
                if len(readings) == 2 else f"batch period ({period['said']}): {said}, the one reading of r_i - D")
+    # `not scale > 0`, not `scale <= 0`: a NaN scale fails it too, and is refused with the rest
     if not scale > 0:
         return {"scale": None, "how": how + f"; {scale:.4g} is not above the dilution rate, so the organism "
                                             "could not hold a steady state at it"}
@@ -424,8 +429,10 @@ def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
         for rep in reps:
             for c in rep.curves:
                 techniques.setdefault(c.species, set()).add(c.technique or "unrecorded")
+        # the dilution rate to the six digits a condition writes it with, so 0.04 and 0.0400000001 are one
+        # group rather than two too small to determine anything (raised in review of the inputs)
         key = (media_identity(exp)["key"] if exp else (entry["medium"] or "").lower(), entry["unit"],
-               entry["dilution"])
+               float(f"{entry['dilution']:.6g}"))
         group = groups.setdefault(key, {"medium": entry["medium"], "unit": entry["unit"],
                                         "dilution": entry["dilution"], "communities": [], "scales": {},
                                         "left_out": []})

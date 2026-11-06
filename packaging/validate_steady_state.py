@@ -180,6 +180,20 @@ def main(path):
            if scales[k]["scale"] is not None]
     print(f"row scales from the start-up: {len(rel)} of {n}; error relative to u - D: median "
           f"{np.median(rel):.2g}, max {max(rel):.2g}")
+    # the same start-ups timed in minutes and in days: the scale is per hour whatever the curve's unit, as the
+    # dilution rate is (raised in review: every curve here was in hours, so the unit path went unchecked)
+    period = {"kind": "batch", "hours": BATCH_HOURS, "said": "a 4 h batch period"}
+    other = []
+    for i in range(n):
+        c = startup(u, A, i)
+        for unit, per in (("min", 60.0), ("d", 1 / 24)):
+            again = row_scale(GrowthCurve(c.species, tuple(t * per for t in c.times), c.values, unit, "OD600", "od"),
+                              D, period)["scale"]
+            if scales[NAMES[i]]["scale"] is not None:
+                other.append(abs(again / scales[NAMES[i]]["scale"] - 1))
+    print(f"the same start-ups in minutes and in days: scales differ from the hours' by at most {max(other):.2g}")
+    print("a community counts as settled when every member present grows at under 1e-6 per h after 20,000 h of "
+          "simulation; one that does not is left out and counted")
     monos = [(i,) for i in range(n)]
     loo = [tuple(j for j in range(n) if j != h) for h in range(n)]
     full = [tuple(range(n))]

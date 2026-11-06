@@ -665,7 +665,8 @@ pooled into one equation (`subcommunity.pool`), numpy 2.2.6 and scipy 1.13.0:
 | all of the above | 128 of 132 | max 0.0018 | 98 of 98 |
 | all, 3 vessels with 5% noise, six draws | 128 of 132 | median 0.016 to 0.025, max 0.66 to 3.2 | 98% to 99% |
 
-- Every community settles; none is left out.
+- Every community settles (every member present grows at under 1e-6 per h after 20,000 h); none is left out.
+- The same start-ups timed in minutes and in days give the hours' scales to 2e-16.
 - The row scales read from the noiseless simulated start-ups are within 1.6% of the true `u - D` (median
   0.7%), slightly low, since self-limitation already slows the batch period; that is most of the package's
   error, `A = scale x B` (formed in the script from the fitted rows and the start-up scales, as the package
@@ -683,7 +684,7 @@ pooled into one equation (`subcommunity.pool`), numpy 2.2.6 and scipy 1.13.0:
   equation; predicted by a fit made without them, it is within 0.8% without noise and between 2.8% and 110%
   with it, over the six draws.
 - With the noise, the bootstrap over runs and vessels puts the true coefficient within 2 sd for 85% to 94%
-  of them over the six draws (94, 88, 91, 85, 86, 91), against the nominal 95%: the spread is somewhat
+  of them over the six draws (94, 87, 90, 85, 85, 91), against the nominal 95%: the spread is somewhat
   narrow. It draws the mean, the statistic the fit uses, widens each draw by `sqrt(n / (n - 1))` for n
   replicates, since a bootstrap of the mean of n spreads only `sqrt((n - 1) / n)` as far as the mean itself
   does (18% too narrow for three), and draws whole runs where runs were pooled, since vessels of one run are

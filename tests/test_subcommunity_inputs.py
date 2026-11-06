@@ -295,3 +295,19 @@ def test_a_run_is_settled_when_its_window_s_two_halves_agree_within_a_tenth(firs
     rep = Replicate((GrowthCurve("a", times, values, "h", "Cells/mL", "qpcr"),), "V1")
     assert bool(_still_changing([rep], set())) is moving
     assert _still_changing([rep], {"a"}) == []
+
+
+def test_dilution_rates_that_differ_past_six_digits_are_one_group():
+    """0.04 and 0.0400000001 are one dilution rate as a condition writes it: two groups, each too small to
+    determine anything, would say nothing about why (raised in review of the inputs)."""
+    client, exps = _runs()
+    exps[2]["compartments"][0]["dilutionRate"] = "0.0400000001"
+    (group,) = chemostat_groups(client, exps)
+    assert len(group["communities"]) == 3
+
+
+def test_a_spread_says_how_many_draws_it_rests_on():
+    client, exps = _runs()
+    (group,) = chemostat_groups(client, exps)
+    rows = fit(group["communities"], draws=50)["rows"]
+    assert rows["a"]["draws"] == 50 and rows["a"]["sd"] is not None
