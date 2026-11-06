@@ -215,3 +215,11 @@ them as a dated bullet with who gave them. Keep one-off requests out.
   Studies by their full id (SMGDB00000026, not 26), and genus and species names in italics ("please put
   species names in italics"), which `help.TAXA` and `help.EPITHETS` do for the help; a new genus or
   epithet in its text goes into those lists, and `tests/test_help.py` fails until it does.
+- 2026-11-06 (Karoline): **No GitHub issue numbers in anything a user of the tool sees.** Her words, after
+  "(#193)" turned up under the page's second box: "in general: users don't need to see github issue
+  numbers anywhere". That covers the page and its help, the command line's help and messages, the report,
+  every file the tool writes, the R package's help, and the README. Issue numbers stay where developers
+  read: code comments, docstrings, tests, commit messages and pull requests, and the records under
+  `docs/` and `CHANGELOG.md` (asked whether those should drop them too: "Keep them there"). `tests/test_interface.py`
+  renders each surface and scans the string literals under `src/grownet/` (subpackages included), the
+  viewer's text and script outside comments, and the R package's messages, so a new one fails the build.

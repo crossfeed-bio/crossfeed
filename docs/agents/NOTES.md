@@ -758,6 +758,17 @@ NCBI's brackets kept, so [Clostridium] is not Clostridium), shared by the genus 
 genus query, so they cannot disagree. `derive.merge_genus` runs after `merge_parallel` in
 `output_meta`. `gui.support_level` decides species or strain pairs. `SpeciesIndex.studies` lists every study
 the crawl found, which All derives. Names decide the genus: Phocaeicola (former Bacteroides) stays apart.
+
+**All has no button since 2026-11-04 (#300).** The page's handler runs All whenever the species box is
+empty (whitespace counts as empty), so the second box and Exclude these studies narrow it as they always
+did, and both boxes empty is the whole of mGrowthDB. Whether that reads the published network is still
+`run_query`'s call through `published.usable`, so a changed setting derives live with no logic in the
+handler. "Type at least one species" is gone with it. On the command line `--all` stays, and
+`--conditions` without `--species` or a study sets `all_studies` (only with `--live`, so `--fixture`
+keeps its own message). Two traps met building it: the page re-renders the form under every result, so
+hint text saying "all of mGrowthDB" trips the narrowed-All test's whole-page guard (the hint says "the
+whole of mGrowthDB"); and the test double's experiments carry no `studyId`, so a study id in the second
+box matches nothing in it unless the test adds one (`tests/test_help.py` does).
 ## Release (2026-09-27)
 
 Karoline's answers on the first release, in her words: the rename "Wait for #79 first"; version
@@ -829,6 +840,23 @@ merged record lists `studies` (dicts), which `records_to_network` turns into sev
 merging off and `min_studies` 1 the edges pass through untouched (records need no source or target then).
 On 2026-09-27 no pair in mGrowthDB had arcs from two studies, so `min_studies` 2 gives an empty network.
 
+The help documents every field's rule in `help.MERGED_ATTRIBUTES` (2026-11-06, #302). Changing `_merged`, or
+adding an arc field, means changing that table: `tests/test_help.py` merges two arcs that differ in every
+field and fails on a field the merge rewrites that the table does not name, or one it passes through from
+the first arc beyond source, target, effect, metric and the two genus-merge fields.
+
+Only `merge_genus` merges nodes. It writes each side's name, taxon id, species, identity and (since
+2026-11-06) taxon_id_refused and merged_nodes onto the arc, and `records_to_network` builds the genus node
+from those; a side field it does not reset reaches the genus node from the first strain's arc. Since /v5 a
+genus node lists its strains in `merged_nodes`: every strain of that genus that is the source or target of
+an arc (`members` in `merge_genus`), sorted. A drop-out member on no arc is named only in the arc's
+`community`, and the help's "What a merged node carries" says so. `live_check` flags a genus node with an
+empty `merged_nodes` and an arc with an empty `technique`. A merged arc's `technique` is sorted, as
+`techniques_of` sorts a single arc's.
+2026-11-06) taxon_id_refused onto the arc, and `records_to_network` builds the genus node from those; a
+side field it does not reset reaches the genus node from the first strain's arc. Strain ids survive only on
+arcs (`merged_pairs` by name, `community` by id), which the help's "What a merged node carries" says.
+
 ## Reading only what a search needs (2026-09-27)
 
 `derive.relevant_experiments(exps, keep)` is the one rule for what a search with "only the species
@@ -853,6 +881,21 @@ as no growth. Metric names carry the rule: "growth_rate:easylinear:5", "growth_r
 asked for the implementation as its own option (2026-09-27); easylinear is the default because it
 reproduces mGrowthDB's numbers.
 
+2026-11-04 (#298): `_fit_once` damps by the largest diagonal of J'J seen so far (MINPACK's scaling, as in
+R's `nls.lm`), not the current diagonal. When a fit drives h0 toward 0, the `log_h0` column of J vanishes,
+damping a zero diagonal adds nothing, and `_solve` returned None thirty times, so the fit ended short of
+the optimum with nothing to show for it. foodnet, whose `_fit_once` was the same code, found it against R
+`growthrates` with the same objective, starts and guards; `baranyi` is checked against R only through
+those curves, not by a script in this repository. Every lag the replicate form reports with
+`--report-rates` comes from `baranyi_fit`, whichever estimator gives the rate. The fix changed no default
+arc on the live corpus; only Baranyi rates, their arcs and one lag moved (CHANGELOG, #298). Test it on a
+synthetic curve that IS the model with no lag (`test_baranyi_recovers_the_rate_of_a_curve_with_no_lag`):
+the exact answer is known, and real curves cannot enter the repository. Open, for a human (#298): foodnet's
+decision 35 (no rate when the best fit lies past the guard, a `guard_limited` flag at 90% of it, r2 and
+rss reported) is not adopted here. After this fix, the two study 2 curves whose best fit lies past the
+guard are refused, and the refusal names the guard (it gave the true but misleading "R2 0.61" of the best
+fit inside the guard until Craig's agent's review).
+
 ## Speed: parallel prefetch (2026-09-27)
 
 Nearly all of a search's time was waiting on requests made one after another (about 100 ms each; 839 for
@@ -870,9 +913,12 @@ history is not in the API, so a stored copy cannot tell it is stale (Karoline). 
 
 All is the one query whose cost grows with the whole of mGrowthDB (1,313 requests today, after #95), so
 `.github/workflows/all-network.yml` derives it once a day with `DEFAULTS` (`packaging/publish_all.py`,
-which refuses to publish a derivation with errors) and uploads `all_result.v4.json`, named by the format id,
-and `all_result.json`, the same in `/v3` for installed 0.3.x and 0.4.x copies (#289), to the `all-network`
-release. `grownet.published` reads it back: `usable` (the settings are the defaults), `fresh` (its format
+which refuses to publish a derivation with errors) and uploads `all_result.v5.json`, named by the format id,
+`all_result.v4.json`, the same in `/v4` for installed 0.5.x copies (#305), and `all_result.json`, the same in
+`/v3` for installed 0.3.x and 0.4.x copies (#289), to the `all-network` release. The older files come from
+`publish_all.older_formats` and the field manifest, so a format move needs only a `LEGACY_META` and a
+`READERS` entry for the new current id; the tests that pinned the current file's name (`test_publish_all`,
+`test_live_check`) read `published.FILE` now where they mean "the current file". `grownet.published` reads it back: `usable` (the settings are the defaults), `fresh` (its format
 and schema are this version's, and it is less than `MAX_AGE`, 36 hours, old) and `fetch` (None on any
 failure, so the caller derives live). `run_query(..., published=True)` tries it first; the publishing
 script passes `published=False`, and so does `--no-published`. `tests/conftest.py` stubs `fetch` so no
@@ -917,6 +963,14 @@ with a result is `render_form(..., below=...)`, so the result sits under the set
 (#76) are `_outputs`: a GET form to `/download?format=json|graphml`, the POST to `/cytoscape`, and a
 `details` holding `report.report_text`, also served at `/report.txt`. `tests/test_interface.py` quotes
 Karoline's words for these and checks each through the running server; see AGENTS.md before changing it.
+
+Setting values on the page go through `report._value`, the report's own formatter (on/off, none, the
+second box's lines joined by "; "), so the page and the report cannot word one setting two ways
+(2026-11-06). A merged arc's strength cell carries `_merged_note`: "N merged arcs: median, range a to b".
+
+Only Find interactions starts a job. Example and gLV example fill the page and wait (`render_form` with a
+message); gLV example ran its search itself until 2026-11-06, when Karoline asked for it to work like
+Example. Its test submits the filled form the way a browser does (`tests/test_gui.py::_form_fields`).
 
 ## Help page
 
@@ -1195,3 +1249,42 @@ and the README: that is the one mistake this style can make.
   connection would have verified the certificate against the proxy (Craig's agent on #184; unreachable
   here, since nothing calls `set_tunnel`). Read the installed source of what you override, copy the rest
   of it, and state in the docstring which single thing differs.
+
+## gLV from the steady states of sub-communities (#310, 2026-11-06)
+
+`grownet.subcommunity` is the estimator of the third derivation Karoline asked for (EPICS, generalized to
+every sub-community; her decisions are on #310). It reads no data: `fit(communities)` takes
+`{"name", "abundance": {species: N}, "vessels": [...]}` and solves each row of B = A / s by
+`integrated._least_squares`, gated by `integrated.MAX_CONDITION`, so "identified" means what it means in the
+integrated form. A member at 0 washed out and gives no equation. `leave_one_out_predictions` predicts each
+community from a fit without it. Measured locally on Venturelli et al. 2018's fitted 12-species gLV (Code
+EV1, T4; nothing of theirs in git): strict leave-one-out identifies 0 of the 132 off-diagonal coefficients,
+because 7 of the 12 coexist and five of the leave-one-out communities end with those same 7 (one equation
+under `pool`); adding the 66 pairs identifies 128 of 132 (`packaging/validate_steady_state.py`, numbers in
+METHOD_NOTES). `fit` pools communities with the same members present (`pool`) and refuses a row whose own
+term is not negative (status "no self-limitation"): both came from the pre-release review. The chemostat inputs (#312) and the wiring (#313) are separate tasks.
+
+`subcommunity.chemostat_groups` (#312) turns continuous cultures into that input, one group per medium, unit
+and dilution rate. It takes the chemostat check's steady states (`steady.observed`, which now also keeps each
+vessel's value as `per_vessel`), uses only runs KNOWN to be unperturbed (the check's `_perturbed` returning
+None is not enough here), and leaves out a run with an inoculated member it could not read. `batch_period`
+reads when the pump started from the description (live: SMGDB00000011, "Chemostat mode started 4 hours after
+inoculation"); `row_scale` fits easylinear over that start-up. Live on 2026-11-06: SMGDB00000005's control and
+SMGDB00000011's run each give one community, so every row is underdetermined, and no study has a monoculture
+chemostat, so no scale. Grouping is by the medium string as recorded, so "Wilkins-Chalgren" (study 5) and
+"Wilkins-Chalgren Anaerobe Broth (WC)" (study 11) are apart; the wiring (#313) should key on
+`derive.media_identity` instead, as the rest of the tool does. (Done in #313: groups key on it.)
+
+`subcommunity.SteadyStateDeriver` (#313) is the third choice of `chosen_deriver` ("steady"). Its records
+mimic the integrated form's where a package will need them (`coefficient`, `fitted_rate` = the row scale
+or None, `fitted_self`, units), with metric `steady_state:subcommunities`; `glv_mode` keeps "steady" when
+chosen and `glv_mode_on` accepts it. The gLV package (#317): its records carry `metric_with` =
+`s_i (1 + B_ij x_j)` and `metric_without` = `s_i`, as the integrated form's do, so `matrix._per_arc` takes
+the coefficient from their difference over x like any fitted arc; `FITTED_METRIC_PREFIX` is a tuple now;
+`derivation_of` knows "steady", and each per-derivation text table has a "steady" entry, plus
+`model_assumptions(derivation)`. A row with no scale has no `metric_with`, gives no cell, and is named
+(`its row is in units of ... r_i - D`). `gui.STEADY_CHECK_CIRCULAR` replaces the steady-state check under
+this derivation. Checked in the R package: the payload loads, `solve(A, -r)` is the observed pair.
+chosen and `glv_mode_on` accepts it. The gLV package from it (matrix.py, which branches on
+"integrated"/"replicate" in many places) is a separate task.
+`derive.media_identity` instead, as the rest of the tool does.

@@ -43,7 +43,9 @@ ARCS = [
      "the target's with-set did not grow in this comparison. Always present, like obligate"),
     ("11 6", 3, FACILITATION, "arrow", "dropout evidence",
      "the source was removed from a community, so its effect can run through a third member. A solid arc "
-     "is biculture evidence: one species against the same species with one partner, direct"),
+     "is biculture evidence: one species against the same species with one partner, direct; or "
+     "steady_state evidence: a coefficient fitted to chemostat steady states of sub-communities, effective, "
+     "so an effect needing a third member is folded into the pairs"),
     ("2 5", 3, FACILITATION, "arrow", "single_replicate",
      "one replicate on a side: the comparison holds, its spread is unknown, and its status stays "
      "undetermined. Drawn, because one replicate is often all a study has"),
