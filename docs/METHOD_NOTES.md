@@ -260,14 +260,15 @@ was measured by, `technique` (format `/v5`). Measured on the live All network th
 including in the integrated form, whose row spans the co-culture and the monocultures. Each study uses one
 technique, fc in SMGDB00000002, 6 and 7, qpcr in 4 and 8, plates in 13 and 14.
 
-**OPEN (#305): may Merge parallel arcs merge arcs of different techniques?** Karoline, 2026-11-06: "I think
+**Decided (#305): Merge parallel arcs merges arcs of different techniques.** Karoline, 2026-11-06: "I think
 that measurement techniques should agree to the point that arcs with different measurement techniques can
 be merged. What do you think?" Each arc is a log2 ratio of one species measured one way on both sides, so
 the unit cancels as it does across studies, and merging already crosses studies, media and evidence. A
 technique's bias cancels only where it scales both sides alike: plates count living cells and qPCR counts
-genomes, so an effect that kills without lysing reads differently by the two. Until it is settled the merge
-does not ask, as before the field existed, and a merged arc names every technique it rests on. Today the
-choice moves no arc: of the five pairs with parallel arcs in All, none mixes techniques; the one pair
+genomes, so an effect that kills without lysing reads differently by the two. Asked whether merging should
+be allowed across techniques, Karoline answered "Yes, allow it" the same day. So the merge does not ask, as
+before the field existed, and a merged arc names every technique it rests on, which is how a reader sees
+that it crossed them. The choice moved no arc: of the five pairs with parallel arcs in All, none mixes techniques; the one pair
 measured by two (B. hydrogenotrophica on R. intestinalis, qpcr in SMGDB00000004 and fc in 7) has arcs of
 both signs and arcs below the threshold, so nothing of it merges either way.
 
@@ -631,9 +632,6 @@ predictor that scores a fit omitted the fitted constant, so the intercept's fits
 parameter they had. No R2 comparison is quoted above for that reason.
 
 ## Open decisions
-
-- **OPEN, 2026-11-06 (#305): whether Merge parallel arcs may cross techniques.** In item 6, with the
-  measurement: no merge in today's All network crosses techniques, so either answer moves no live arc.
 
 - **OPEN, 2026-10-11 (#266): one format bump to `/v4`, or none.** Three things a reader who did not run
   the tool cannot establish from the file need a field the format does not have: `metric_unit`, because
