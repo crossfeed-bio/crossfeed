@@ -1212,4 +1212,11 @@ inoculation"); `row_scale` fits easylinear over that start-up. Live on 2026-11-0
 SMGDB00000011's run each give one community, so every row is underdetermined, and no study has a monoculture
 chemostat, so no scale. Grouping is by the medium string as recorded, so "Wilkins-Chalgren" (study 5) and
 "Wilkins-Chalgren Anaerobe Broth (WC)" (study 11) are apart; the wiring (#313) should key on
+`derive.media_identity` instead, as the rest of the tool does. (Done in #313: groups key on it.)
+
+`subcommunity.SteadyStateDeriver` (#313) is the third choice of `chosen_deriver` ("steady"). Its records
+mimic the integrated form's where a package will need them (`coefficient`, `fitted_rate` = the row scale
+or None, `fitted_self`, units), with metric `steady_state:subcommunities`; `glv_mode` keeps "steady" when
+chosen and `glv_mode_on` accepts it. The gLV package from it (matrix.py, which branches on
+"integrated"/"replicate" in many places) is a separate task.
 `derive.media_identity` instead, as the rest of the tool does.

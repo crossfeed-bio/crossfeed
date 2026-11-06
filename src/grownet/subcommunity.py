@@ -257,6 +257,7 @@ def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
     scales come from the monoculture runs' start-up (`row_scale`), the median over their vessels.
     """
     from .adapter import replicates_for_experiment
+    from .derive import media_identity
     from .growth import SPIKE_FACTOR
     from .steady import _washed_out, observed
     spike = SPIKE_FACTOR if spike_factor is None else spike_factor
@@ -264,7 +265,11 @@ def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
     groups: dict = {}
     for entry in observed(client, exps, spike):
         name = entry["name"]
-        key = ((entry["medium"] or "").lower(), entry["unit"], entry["dilution"])
+        exp = by_id.get(entry["experiment"]) or {}
+        # the medium by the tool's one rule, so "Wilkins-Chalgren" and "Wilkins-Chalgren Anaerobe Broth (WC)"
+        # are one medium here as everywhere else (Karoline, 2026-10-07)
+        key = (media_identity(exp)["key"] if exp else (entry["medium"] or "").lower(), entry["unit"],
+               entry["dilution"])
         group = groups.setdefault(key, {"medium": entry["medium"], "unit": entry["unit"],
                                         "dilution": entry["dilution"], "communities": [], "scales": {},
                                         "left_out": []})
@@ -276,7 +281,6 @@ def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
             group["left_out"].append((name, "not used: its description does not say it is unperturbed, and "
                                             "a fit takes only runs known to be at an unperturbed steady state"))
             continue
-        exp = by_id.get(entry["experiment"]) or {}
         members = [s.get("name") for s in exp.get("communityStrains") or []]
         unread = [m for m in members if m not in entry["organisms"]]
         if unread:
@@ -310,3 +314,144 @@ def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
                                                  "how": "no monoculture chemostat of it in this group, so its "
                                                         "row stays in units of r_i - D"})
     return sorted((g for g in groups.values() if g["communities"]), key=lambda g: (g["dilution"], g["medium"]))
+
+
+# ---- the derivation (#313) ------------------------------------------------------------------------------
+
+METHOD = ("steady state v1: at a chemostat steady state every member present satisfies 1 + sum_j B_ij N_j = 0 "
+          "with B = A / (r_i - D); each row solved by least squares over every unperturbed sub-community of "
+          "one medium, abundance unit and dilution rate (EPICS, Ansari et al. 2021, generalized)")
+METRIC = "steady_state:subcommunities"
+
+
+class SteadyStateDeriver:
+    """The third derivation: gLV rows from the chemostat steady states of sub-communities (#310).
+
+    Off by default and chosen with Derivation in Advanced settings or `--derivation steady`. It reads
+    continuous cultures only (`chemostat_groups`), fits each group's rows (`fit`), and turns every
+    identified off-diagonal coefficient into an arc:
+
+      * strength log2(1 + B_ij x_j*), x_j* the partner's abundance in the largest community of the group
+        holding both, the scale the other derivations report on; where 1 + B_ij x_j* is not positive the
+        partner would stop i's net growth, and the arc is abolished with no ratio, as the integrated form's;
+      * its sd from the row's bootstrap over vessels, through d strength / d B = x / ((1 + B x) ln 2), and
+        none where a community of the row has a single vessel, so presence is then undetermined;
+      * the coefficient s_i B_ij in 1/(time x abundance) where the row's scale s_i = r_i - D was read from
+        the chemostat's own start-up, and B_ij itself, in units of r_i - D, where it was not.
+
+    What the design leaves undetermined, what washed out, and how each community is predicted by a fit
+    made without it are in the skipped reasons and the arcs' notes.
+    """
+
+    name = "steady-v1"
+    method = METHOD
+    no_growth_rule = False
+    # it reads chemostat steady states only, so none of the comparison's settings reaches it
+    ignores = ("metric", "rate_method", "rate_window", "include_dropout", "include_non_batch",
+               "no_growth_alpha", "no_growth_factor", "capacity_max_fall")
+    needs_client = True
+    statistics = {
+        "test": "none: the spread of each coefficient is a bootstrap over the vessels of every community its "
+                "row rests on, and there is no test statistic",
+        "correction": "{name} over every comparison tested in this derivation (none here)",
+        "role": "presence is decided by the absence threshold on the bootstrap spread",
+    }
+    provisional = (
+        "Each interaction is an effective generalized Lotka-Volterra coefficient fitted from chemostat steady "
+        "states: at a steady state every organism present satisfies 1 + sum_j B_ij N_j = 0 with B = A / (r_i "
+        "- D), and each organism's row is the least-squares solution over every unperturbed community of one "
+        "medium, abundance unit and dilution rate it was present in. Effective means that an effect needing "
+        "a third organism is folded into the pairs that carry it, so a coefficient describes the communities "
+        "it was fitted from. The strength beside it is log2(1 + B_ij x_j) at the partner's abundance in the "
+        "largest community holding both. An interaction is reported when |strength| is at least k standard "
+        "deviations, the spread being a bootstrap over vessels; a row resting on a single vessel has none "
+        "(see docs/METHOD_NOTES.md in the grownet repository)."
+    )
+
+    def __init__(self, client=None, spike_factor: float = None, draws: int = DRAWS, **_ignored):
+        self.client = client
+        self.spike_factor = spike_factor
+        self.draws = draws
+
+    def derive(self, study: dict, exps: list):
+        import math
+
+        from .derive import _identity, strain_identities
+        from .integrated import _log2_effect
+        if self.client is None:
+            raise ValueError("SteadyStateDeriver needs a client: it reads each vessel's measured series")
+        study_id = study.get("id", "")
+        study_meta = {"study_citation": study.get("name") or study_id, "study_license": "",
+                      "study_url": study.get("url", "")}
+        identities = strain_identities(exps, [])
+        records, skipped = [], []
+        for group in chemostat_groups(self.client, exps, self.spike_factor):
+            label = (f"chemostat, D {group['dilution']:g} per time unit, {group['medium']}, "
+                     f"{group['unit']}")
+            skipped += [(f"{what} [{label}]", why) for what, why in group["left_out"]]
+            communities = group["communities"]
+            got = fit(communities, draws=self.draws)
+            skipped += [(f"{species} in {community} [{label}]", "washed out: no steady-state equation")
+                        for community, species in got["washed_out"]]
+            for (i, j), why in got["why"].items():
+                if i != j:
+                    skipped.append((f"{j} -> {i} [{label}]", why))
+            predictions = {p["community"]: p for p in leave_one_out_predictions(communities)}
+            for i, row in got["rows"].items():
+                if row["status"] != "identified":
+                    continue
+                scale = group["scales"].get(i, {"scale": None, "how": "no scale"})
+                s_i = scale["scale"]
+                unit_coefficient = (f"1/(h x {group['unit']})" if s_i is not None
+                                    else f"1/{group['unit']}, in units of r_i - D")
+                for j, b in row["values"].items():
+                    if j == i:
+                        continue
+                    holding = [c for c in communities if (c["abundance"].get(i) or 0) > 0
+                               and (c["abundance"].get(j) or 0) > 0]
+                    largest = max(holding, key=lambda c: (len([v for v in c["abundance"].values() if v > 0]),
+                                                          c["name"]))
+                    x = largest["abundance"][j]
+                    strength = _log2_effect(b, x, 1.0)
+                    sd_b = (row["sd"] or {}).get(j) if row["sd"] is not None else None
+                    sd = (None if sd_b is None or strength is None
+                          else abs(x / ((1 + b * x) * math.log(2))) * sd_b)
+                    check = predictions.get(largest["name"], {})
+                    notes = [f"row scale: {scale['how']}"]
+                    if check.get("status") == "predicted" and i in check["predicted"]:
+                        notes.append(f"{largest['name']} predicted without it: {i} at "
+                                     f"{check['predicted'][i]:.3g}, observed {check['observed'][i]:.3g}")
+                    elif check.get("status"):
+                        notes.append(f"{largest['name']} {check['status']}")
+                    source, target = _identity(identities, j), _identity(identities, i)
+                    records.append({
+                        "source": source["id"], "target": target["id"], "source_name": j, "target_name": i,
+                        "source_taxon_id": source["taxon_id"], "target_taxon_id": target["taxon_id"],
+                        "source_species": source["species"], "target_species": target["species"],
+                        "source_identity": source["identity"], "target_identity": target["identity"],
+                        "effect": "facilitation" if b > 0 else "inhibition",
+                        "strength": None if strength is None else round(strength, 4),
+                        "outcome": "abolished" if strength is None else "quantified",
+                        "strength_bound": None,
+                        "bound_rule": ("no ratio: at this partner level the fitted row puts the organism's "
+                                       "net growth at or below zero" if strength is None else ""),
+                        "metric": METRIC, "method": METHOD, "evidence": "biculture",
+                        "quality": [], "cautions": [], "notes": notes,
+                        "cultivation_mode": "chemostat", "medium": group["medium"], "condition": label,
+                        "community": sorted(_identity(identities, m)["id"] for m in largest["abundance"]),
+                        "experiments": sorted({c.get("experiment", "") for c in holding} - {""}),
+                        "n_with": len(largest.get("vessels") or []) or None, "n_without": None,
+                        "sd": None if sd is None else round(sd, 4), "se": None,
+                        "p_value": None, "q_value": None, "significance": None,
+                        "effect_over_sd": (None if not sd or strength is None else round(abs(strength) / sd, 4)),
+                        "coefficient": (s_i * b) if s_i is not None else b,
+                        "coefficient_unit": unit_coefficient,
+                        "coefficient_sd": (None if sd_b is None else (s_i or 1.0) * sd_b),
+                        "fitted_rate": s_i, "fitted_rate_unit": "1/h",
+                        "fitted_self": (s_i * row["values"][i]) if s_i is not None else row["values"][i],
+                        "fitted_self_unit": group["unit"],
+                        "partner_abundance": x, "partner_abundance_unit": group["unit"],
+                        "partner_abundance_n": len(largest.get("vessels") or []),
+                        "study_id": study_id, **study_meta,
+                    })
+        return records, skipped

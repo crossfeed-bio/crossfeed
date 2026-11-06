@@ -125,7 +125,7 @@ RELEASES = (
 
 # key in gui.DEFAULTS -> (label on the page, command line flag, what it does and when to change it)
 SETTINGS = {
-    "derivation": ("Derivation", "--derivation replicate|integrated",
+    "derivation": ("Derivation", "--derivation replicate|integrated|steady",
                    "How an interaction is derived. The two answer different questions and neither is the "
                    "stricter version of the other, so each is the default for its own job. "
                    "replicate (the default) is the comparison the collaboration specified, a growth "
@@ -149,7 +149,10 @@ SETTINGS = {
                    "cannot identify. Its weaknesses are what it cannot express: a community of three or "
                    "more is reported rather than derived, so it gives no drop-out arc at all, and it has "
                    "no no-growth rule, so no censored arc and no measured bound. It also needs a time "
-                   "course: a study measured at two or three points gives it nothing."),
+                   "course: a study measured at two or three points gives it nothing. "
+                   "steady, off by default and meant for gLV mode, fits the rows from the steady states of "
+                   "chemostat sub-communities instead of from growth curves, and reads continuous cultures "
+                   "only; see The derivation from chemostat steady states."),
     "metric": ("Growth property", "--metric auc|max|growth_rate",
                "The growth property compared with and without the partner. The area under the curve (auc, "
                "the default) combines lag, rate and yield in one number; the maximal abundance (max) keeps "
@@ -717,6 +720,7 @@ SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"), ("mea
             ("statistics", "How an interaction is decided"),
             ("glv", "The matrix, the growth rates and gLV"),
             ("glv-assumptions", "What a gLV model assumes"),
+            ("glv-steady", "The derivation from chemostat steady states"),
             ("glv-walkthrough", "The gLV example, step by step"),
             ("settings", "Advanced settings"), ("attributes", "Arc and node attributes"),
             ("decisions", "Why it works this way"), ("cli", "The command line"),
@@ -1188,6 +1192,46 @@ interaction is stable at all, the design that answers it is to run the same pair
 environment and for long enough to reach late stationary phase, and to compare how the partner changes
 the late abundances in each. That is a question about the organisms, not about the parameters, and it is
 outside what {NAME} sets out to do: growth curves in, network out.</p>
+
+<h2 id="glv-steady">The derivation from chemostat steady states</h2>
+<p>A third way to fit the gLV rows, off by default: choose <strong>steady</strong> under
+<strong>Derivation</strong> in Advanced settings (or <code>--derivation steady</code>), with gLV mode on.
+It needs no growth curve to be fitted. At a chemostat steady state every organism present satisfies
+<code>1 + sum_j B_ij N_j = 0</code>, with <code>B_ij = A_ij / (r_i - D)</code> and D the dilution rate,
+so each community whose steady state was measured gives one equation per organism in it, and each
+organism's row is the least-squares solution over all of its equations, its own limitation with the rest.
+This is the idea of EPICS (Ansari et al. 2021, <em>Nature Computational Science</em>), which reads only
+the monocultures and the communities missing one member; here every measured sub-community counts, so
+monocultures, pairs, larger communities and the full one all contribute.</p>
+<ul>
+<li><strong>What it reads.</strong> Continuous cultures known to be unperturbed, at the steady state the
+chemostat check reads (the mean over the last quarter of each vessel), one fit per medium, abundance unit
+and dilution rate. A run whose description does not say it is unperturbed is left out and named, and so is
+a run with a member that could not be read.</li>
+<li><strong>Effective coefficients.</strong> An effect that needs a third organism is folded into the
+pairs that carry it, so a coefficient describes the communities it was fitted from. Each community is
+also predicted by a fit made without it, and the arcs' notes give predicted against observed: a community
+its siblings predict badly is where such effects show.</li>
+<li><strong>What it cannot determine is named.</strong> An organism that washed out (under a hundredth of
+the largest steady state of its run) is not at a steady state and gives no equation. A row with fewer
+independent equations than unknowns, or a pair that never met, is listed among the reasons and gives no
+arc. A design where most organisms wash out determines little: of a published 12-species model, only the
+6 that coexist determine anything from the communities missing one member, while adding every pair
+determines almost all of it.</li>
+<li><strong>The row scale.</strong> A steady state gives <code>A_ij / (r_i - D)</code>; the scale
+<code>r_i - D</code> is read from the chemostat's own start-up rather than from a batch growth rate, which
+changes in a chemostat. If the experiment's description states a batch period before the pump was
+switched on ("Chemostat mode started 4 hours after inoculation"), the rise inside it is r_i and the scale
+is r_i less D; if it says the dilution ran from inoculation, the early rise is r_i - D itself. Where it
+says neither, the row stays in units of <code>r_i - D</code>, its coefficient unit says so, and the arc's
+notes say why.</li>
+<li><strong>Each arc.</strong> Its strength is <code>log2(1 + B_ij x_j)</code> at the partner's abundance
+in the largest community holding both, its coefficient is <code>(r_i - D) B_ij</code> in 1/(time x
+abundance) where the scale is known, and its spread is a bootstrap over the vessels of every community its
+row rests on. A row resting on a single vessel has no spread, so its arcs are undetermined.</li>
+</ul>
+<p>mGrowthDB holds no design of this kind yet: its chemostat studies each run one community, which
+determines no row. The derivation is there for the data to come.</p>
 
 <h2 id="glv-walkthrough">The gLV example, step by step</h2>
 <p><strong>gLV example</strong> beside All fills both boxes and the one setting a package cannot be built

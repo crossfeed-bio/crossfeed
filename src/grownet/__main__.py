@@ -843,7 +843,7 @@ def build_parser() -> argparse.ArgumentParser:
     settings.add_argument("--rate-window", type=int, default=5, metavar="N",
                           help="with easylinear: the points in each fitted window (default 5, as mGrowthDB)")
     # None means "not given", so gLV mode can tell a reader's explicit choice from the default it fills
-    settings.add_argument("--derivation", choices=["replicate", "integrated"], default=None,
+    settings.add_argument("--derivation", choices=["replicate", "integrated", "steady"], default=None,
                           help="replicate (default), the specified comparison of replicate sets, the only "
                                "form that gives drop-out arcs and the no-growth rule's censored bounds; "
                                "or integrated, which fits each organism's row from the whole time course "
