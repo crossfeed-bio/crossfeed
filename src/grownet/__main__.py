@@ -730,7 +730,7 @@ def _emit(a, net, skipped, extra, label, result):
             # rows were determined and a filter removed every arc: the lines above name it, and the batch
             # sentences about pairwise and drop-out designs were false here (found in a fifth review)
             print(f"\nNO interactions remain for {label}: the steady-state derivation determined rows, and the "
-                  f"settings above removed every arc.{try_these}", file=sys.stderr)
+                  f"search's settings removed every arc (the lines above count them).{try_these}", file=sys.stderr)
         else:
             print(f"\nNO interactions were derived for {label}: the network is empty.{why}\n"
                   "grownet derives interactions from pairwise (two-member) co-cultures and from drop-out "

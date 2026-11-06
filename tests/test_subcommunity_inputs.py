@@ -276,3 +276,22 @@ def test_a_run_whose_vessels_read_one_organism_two_ways_is_left_out():
     (group,) = chemostat_groups(client, exps)
     assert "a with b" not in [c["name"] for c in group["communities"]]
     assert any("its vessels read b by fc; qpcr" in why for _, why in group["left_out"])
+
+
+@pytest.mark.parametrize("first, second, moving", [
+    (10.0, 11.5, True),        # rising 15% between the halves: still changing
+    (11.5, 10.0, True),        # falling 15%: still changing
+    (10.0, 10.8, False),       # 7.4% (0.8 / 10.8): settled within a tenth
+    (11.05, 10.0, True),       # falling 10.5%: just past the tenth
+])
+def test_a_run_is_settled_when_its_window_s_two_halves_agree_within_a_tenth(first, second, moving):
+    """The second half's mean against the first's, relative to the second, over the window the steady state
+    is averaged in (the last quarter of a 0 to 40 h run: 30 to 40 h, six points here); a washed-out member is
+    not judged."""
+    from grownet.growth import GrowthCurve, Replicate
+    from grownet.subcommunity import _still_changing
+    times = tuple(float(t) for t in range(0, 42, 2))
+    values = tuple(5.0 if t < 30 else (first if t < 36 else second) for t in times)
+    rep = Replicate((GrowthCurve("a", times, values, "h", "Cells/mL", "qpcr"),), "V1")
+    assert bool(_still_changing([rep], set())) is moving
+    assert _still_changing([rep], {"a"}) == []
