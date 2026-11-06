@@ -940,6 +940,13 @@ GLV_MODE_OFF_MESSAGE = ("gLV mode off: growth rates off, drop-out communities in
                         "comparison of replicate sets, which are the defaults.")
 
 
+# Under the steady-state derivation the check would score a package against the steady states it was fitted
+# to, and its rates already have D subtracted, so the check's -(r - D) would subtract it twice (#317)
+STEADY_CHECK_CIRCULAR = ("no steady-state check: under the steady-state derivation the parameters were fitted to "
+                         "these chemostat steady states, so agreeing with them tests nothing, and the rates already "
+                         "have the dilution folded in. The setting is recorded as asked for and nothing was scored.")
+
+
 def chosen_deriver(settings: dict, client=None):
     """The derivation a search runs, or None for the specified comparison, which `derive_interactions`
     builds itself. The integrated form of #127 is the advanced alternative Karoline approved."""
@@ -1279,7 +1286,8 @@ def _run_query(client, entries, settings: dict | None = None, index: dict | None
     # from every row the derivation fitted, not the ones the display kept: the rate is a property of the
     # organism, and it moved by 14 per cent with --include-absent while it was a median over the arcs
     # that survived (Karoline, 2026-10-12, on #204: option 1)
-    fitted = integrated.fitted_rates(fitted_rows) if s.get("derivation") == "integrated" else {}
+    fitted = (integrated.fitted_rates(fitted_rows) if s.get("derivation") in ("integrated", "steady")
+              else {})
     if fitted:
         # the derivation fitted a rate and a self-limitation per organism, and those are the parameters
         # that go with its coefficients (#127)
@@ -1326,6 +1334,8 @@ def _run_query(client, entries, settings: dict | None = None, index: dict | None
         notes.append("no steady-state check: it scores the growth rates and coefficients of the run, so "
                       "it needs Report growth rates, which gLV mode turns on. The setting is recorded as "
                       "asked for and nothing was scored.")
+    elif s.get("steady_check") and s.get("derivation") == "steady":
+        notes.append(STEADY_CHECK_CIRCULAR)
     elif s.get("steady_check") and organism_rates:
         say(len(studies), len(studies), "Reading the chemostat steady states")
         try:

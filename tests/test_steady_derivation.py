@@ -111,3 +111,58 @@ def test_an_empty_result_says_what_this_derivation_needs():
                                                                         "holds both a and b at a steady state")]}
     reason = _empty_reason(result)
     assert "continuous cultures" in reason and "Derivation" in reason
+
+
+# ---- the gLV package from it (#317) ------------------------------------------------------------------------
+
+def _package(records):
+    from grownet import integrated, matrix
+    net = records_to_network(records, meta={"settings": {**gui.DEFAULTS, "derivation": "steady"}})
+    rates = matrix.for_nodes(net, integrated.fitted_rates(records), {})
+    return net, rates, matrix.glv_payload(net, rates), matrix.readme_from(matrix.coefficients(net, rates), net, rates)
+
+
+def test_the_package_holds_the_generating_glv_with_the_dilution_folded_in():
+    """The rates are the row scales r - D (0.46 and 0.26), the matrix is (r - D) B in 1/(h x Cells/mL), and so
+    the package's equilibrium, the solution of A x = -r, is the pair the chemostat held: 0.526316e8 and
+    1.894737e8 (a row's scale cancels at a steady state)."""
+    records, _ = _derive()
+    net, rates, payload, readme = _package(records)
+    assert {rates[n]["name"]: round(rates[n]["rate"], 6) for n in rates} == {"a": 0.46, "b": 0.26}
+    (block,) = payload["matrices"]
+    order = block["organisms"]
+    A = {(order[i], order[j]): block["interactions"][i][j] for i in range(2) for j in range(2)}
+    assert A[("a", "a")] == pytest.approx(0.46 * -1.0 / UNIT, rel=1e-6)
+    assert A[("a", "b")] == pytest.approx(0.46 * -0.25 / UNIT, rel=1e-6)
+    assert A[("b", "a")] == pytest.approx(0.26 * -0.1 / UNIT, rel=1e-6)
+    assert A[("b", "b")] == pytest.approx(0.26 * -0.5 / UNIT, rel=1e-6)
+    equilibrium = dict(zip(order, block["equilibrium"], strict=True))
+    assert equilibrium == pytest.approx({"a": PAIR_A, "b": PAIR_B}, rel=1e-6)
+    # and the README says how its cells were made, in this derivation's own words
+    assert payload["caveats"]["derivation"] == "steady"
+    assert "1 + sum_j B[i][j] N_j = 0" in readme and "dilution" in readme.lower()
+
+
+def test_a_row_without_a_scale_gives_no_cell_and_says_why():
+    """Its coefficient is in units of r_b - D, which cannot sit in a matrix of 1/(h x Cells/mL): b has no rate
+    and its row's cell is named rather than mixed in."""
+    import copy
+
+    client, exps = _runs()
+    exps = copy.deepcopy(exps)
+    exps[1]["description"] = "No perturbations."
+    records, _ = SteadyStateDeriver(client=client).derive({"id": "S1", "name": "x"}, exps)
+    net, rates, payload, readme = _package(records)
+    assert all(rates[n]["name"] != "b" or rates[n].get("rate") is None for n in rates)
+    assert "in units of r_i - D" in readme
+
+
+def test_the_steady_state_check_is_not_run_on_its_own_chemostats():
+    from grownet.gui import STEADY_CHECK_CIRCULAR
+    assert "fitted to these chemostat steady states" in STEADY_CHECK_CIRCULAR
+
+
+def test_the_readme_states_the_assumptions_of_this_derivation_not_of_the_batch_ones():
+    records, _ = _derive()
+    readme = " ".join(_package(records)[3].split())
+    assert "INTERACTIONS ARE EFFECTIVE AND ADD UP" in readme and "measured between two of them" not in readme

@@ -26,6 +26,13 @@ content.
   `log2(1 + B_ij x_j)`, its coefficient (in 1/(time x abundance) where the row scale is known), the row's
   bootstrap spread, and notes saying where the scale came from and how the largest community is predicted
   by a fit made without it. What the design leaves undetermined is in the reasons. The help has a section
+  on it.
+- **The gLV package from it** (#317): rates `r_i - D` (the dilution folded in, so the package simulates the
+  chemostat) and the matrix `(r_i - D) B`, whose equilibrium is the community the chemostats held. The
+  README and the payload's caveats state its formula and its own model assumptions (effective
+  coefficients, fitted from communities of every size). A row whose scale was not read stays out of the
+  matrix, named, rather than mixing units. The steady-state check is not run under it, since it would score
+  the package against the chemostats it was fitted to and subtract D twice.
   on it. The gLV package from it follows separately.
 
 
