@@ -49,9 +49,14 @@ workflow's short-lived GitHub identity instead ("trusted publishing").
 1. **A release pull request** that:
    - sets the version in `pyproject.toml` and in `src/grownet/__init__.py` (`__version__`);
    - moves the entries under `## [Unreleased]` in `CHANGELOG.md` into a new `## [x.y.z] (YYYY-MM-DD)`
-     section below it, leaving `## [Unreleased]` empty; the release check refuses an empty version section;
+     section below it, leaving `## [Unreleased]` empty; the release check refuses an empty version section,
+     and one with a kind of change under two headings (`### Added` twice), so the entries the branches
+     added are merged into one list per kind, `### Upgrading` first, each saying the released state;
    - adds the version and the same date to `RELEASES` in `src/grownet/help.py`, the "what changed" list
-     the help page shows; the release check refuses a date there that differs from the changelog's;
+     the help page shows, made from the lines of `NEXT` there (the About page's "Next release"), and
+     leaves `NEXT = ()`. Before that, it drops any `NEXT` line whose pull request did not merge, or rewrites
+     it to what did: the comment above each line names its pull requests, since no check can see that; the release check refuses a date there that differs from the changelog's, and a
+     `NEXT` that still lists anything;
    - sets `version:` and `date-released:` in `CITATION.cff` to the same version and the same date, and
      that date is **the day the tag is cut**: the release check refuses a date more than a day old, since
      a date prepared earlier is otherwise invisible to every other check. The

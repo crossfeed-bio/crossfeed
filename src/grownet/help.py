@@ -27,6 +27,46 @@ STYLE_LINK = "/grownet_style.xml?token=__TOKEN__"
 ABOUT = (f"{NAME} was built by Karoline Faust (KU Leuven) and Craig Heilmann (Syntropa), working through "
          "their AI coding agents (Claude).")
 
+# What the next release brings, while it is in development: merged and not yet released, in the words of the
+# log below (Karoline, 2026-11-06: "is the About section updated?"; it said nothing since 0.5.0). The release
+# check refuses a tag while this is not empty, so at a release its lines move under the version with its date.
+# Each line names, in the comment above it, the pull request(s) it describes, so the release pull request can
+# drop the line of any that did not merge before tagging (RELEASING.md step 1). Numbers stay in these
+# comments, never in the strings: the page is read by users.
+NEXT = (
+    # #301 (empty species box, All button removed), #308 (gLV example fills and waits)
+    "Leave the species box empty to search every species in the media or studies of the second box; leave "
+    "both boxes empty for the All network. The All button is gone, and gLV example fills the page and waits "
+    "for Find interactions, as Example does.",
+    # #325 (the second box under every derivation)
+    "The second box applies under every derivation: naming a medium, an experiment or a study narrows a "
+    "gLV-mode search too, where only the default derivation read it before, so a gLV-mode result changes "
+    "when one is named.",
+    # #306 (technique, merged_nodes, format /v5, merging across techniques), #304 (a merged arc on the page)
+    "Every arc records how its target was measured (fc, qpcr, plates, ...), and a genus node lists the "
+    "strains it stands for: the network format moves to /v5, and the daily All network is still published "
+    "for earlier versions. Merging parallel arcs crosses techniques and names them, and the page shows a "
+    "merged arc as a median with its range.",
+    # #323 (starting-density notes)
+    "Every arc of the default derivation whose two sides have a first value says what they started at, "
+    "and warns where they differ more than 3 times, as 61 of the 190 drop-out arcs in mGrowthDB do, "
+    "counting those below the absence threshold, up to 117 times.",
+    # #315, #316, #318, #319 (merged), #320 (validation), #321 (messages and every later fix to the
+    # derivation); the dilution rate in the rates file and the package: branch dilution-column, its pull
+    # request not yet open; runs of several studies fitted together: branch steady-across-studies, its pull
+    # request not yet open
+    "A third derivation, for gLV mode: the rows fitted from the chemostat steady states of sub-communities, "
+    "every sub-community counting, across studies where the medium matches, its package at one dilution "
+    "rate, which its rates name. mGrowthDB holds no "
+    "such design yet, and it says what each organism lacks; on a published 12-species model, monocultures "
+    "and pairs give 126 of its 132 coefficients.",
+    # #299 (Baranyi damping)
+    "The Baranyi growth-rate fit reaches its best fit where a lag collapses; nothing changes by default.",
+    # #303 (merged arcs and nodes), #309 (italics, readability), #307 (no issue numbers), #322 (R summary)
+    "The help explains what a merged arc and a merged node carry, sets species names in italics, and reads "
+    "more easily, with no issue numbers, and the R package's summary of a gLV package reads more cleanly.",
+)
+
 # What changed in each release, a few lines each, newest first (Karoline, 2026-10-04: "a small log of what
 # happened in each new release"). The changelog in the repository is the full record; this is the summary a
 # user of the page wants, so each line says what they can now do rather than what moved in the code. A test
@@ -1630,6 +1670,9 @@ def render_about() -> str:
         f"<h3>{_e(version)} <span class=\"muted\">{_e(date)}</span></h3><ul>"
         + "".join(f"<li>{_e(line)}</li>" for line in lines) + "</ul>"
         for version, date, lines in RELEASES)
+    if NEXT:
+        log = ("<h3>Next release <span class=\"muted\">in development</span></h3><ul>"
+               + "".join(f"<li>{_e(line)}</li>" for line in NEXT) + "</ul>" + log)
     return (f"<h2 class=\"page\">About {_e(NAME)}</h2><p>{_e(ABOUT)}</p>"
             f"<p>Source code, issues and license: <a href=\"{REPOSITORY}\">{REPOSITORY}</a></p>"
             f"<p>Version {_e(__version__)}.</p>"

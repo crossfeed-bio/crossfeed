@@ -205,6 +205,12 @@ content.
   monocultures and pairs it recovers 126 of the 132 coefficients exactly; with 5% noise over three vessels
   the bootstrap spread covers the truth for 93% of them. The numbers are in METHOD_NOTES.
 
+### Changed
+
+- **The About page says what the next release brings while it is in development** (Karoline, 2026-11-06: "is
+  the About section updated?"), under "Next release", above the log of released versions. The release check
+  refuses a tag while that list is not empty, so it moves under the version at release.
+
 
 ## [0.5.0] (2026-10-14)
 

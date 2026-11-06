@@ -506,3 +506,46 @@ def test_entries_left_under_unreleased_are_refused_at_a_tag(tmp_path):
     changelog.write_text(text.replace("## [0.1.0]", "## [Unreleased]\n\n### Added\n- **Left behind**\n\n## [0.1.0]",
                                       1))
     assert any("still has entries under [Unreleased]" in p for p in check("v0.1.0", repo, today=FIXTURE_DAY)[0])
+
+
+def test_a_release_cannot_ship_with_the_next_release_still_listed(tmp_path):
+    """The About page lists what the next release brings while it is in development (Karoline, 2026-11-06:
+    "is the About section updated?"). At a release those lines belong under the version, with its date, so a
+    tag with `NEXT` still holding them is refused, as one with no RELEASES entry is."""
+    repo = _repo(tmp_path)
+    help_file = repo / "src" / "grownet" / "help.py"
+    help_file.write_text('NEXT = (\n    "a thing that changed",\n)\nRELEASES = [\n    ("0.1.0", "2026-10-01", '
+                         '("first",)),\n]\n')
+    assert any("NEXT still lists" in p for p in check("v0.1.0", repo, today=FIXTURE_DAY)[0])
+    help_file.write_text('NEXT = ()\nRELEASES = [\n    ("0.1.0", "2026-10-01", ("first",)),\n]\n')
+    assert check("v0.1.0", repo, today=FIXTURE_DAY)[0] == []
+    # read as Python reads it, whatever its spelling: an annotation or a list passed a regex on `NEXT = (`,
+    # and a computed one is not taken for empty (found in review)
+    for spelled in ('NEXT: tuple[str, ...] = (\n    "a thing",\n)', 'NEXT = [\n    "a thing",\n]',
+                    'NEXT = ("a thing",)', 'NEXT = tuple(["a thing"])'):
+        help_file.write_text(spelled + '\nRELEASES = [\n    ("0.1.0", "2026-10-01", ("first",)),\n]\n')
+        assert any("NEXT still lists" in p for p in check("v0.1.0", repo, today=FIXTURE_DAY)[0]), spelled
+    for empty in ("NEXT = ()", "NEXT: tuple = ()", "NEXT = []"):
+        help_file.write_text(empty + '\nRELEASES = [\n    ("0.1.0", "2026-10-01", ("first",)),\n]\n')
+        assert check("v0.1.0", repo, today=FIXTURE_DAY)[0] == [], empty
+    # and a RELEASES date that disagrees is reported beside it, not hidden by it (found in review)
+    help_file.write_text('NEXT = ("a thing",)\nRELEASES = [\n    ("0.1.0", "2026-09-28", ("first",)),\n]\n')
+    problems = check("v0.1.0", repo, today=FIXTURE_DAY)[0]
+    assert any("NEXT still lists" in p for p in problems) and any("RELEASES dates 0.1.0 2026-09-28" in p
+                                                                  for p in problems), problems
+
+
+def test_a_kind_of_change_under_two_headings_is_refused_at_a_tag(tmp_path):
+    """The release's notes are its changelog section as written, so `### Added` twice reads as two lists of
+    additions in the release (found in review: merging eighteen branches' entries gave twelve headings)."""
+    repo = _repo(tmp_path)
+    changelog = repo / "CHANGELOG.md"
+    changelog.write_text(changelog.read_text().replace(
+        "### Added\n- the first release\n", "### Added\n- the first release\n\n### Fixed\n- a fix\n\n"
+        "### Added\n- a second list\n"))
+    problems = check("v0.1.0", repo, today=FIXTURE_DAY)[0]
+    assert any("has more than one ### Added" in p for p in problems), problems
+    assert not any("### Fixed" in p for p in problems)
+    # not without a tag: [Unreleased] collects each branch's entries until the release merges them
+    assert not any("more than one" in p for p in check("v0.1.0", repo, releasing=False,
+                                                       today=FIXTURE_DAY)[0])
