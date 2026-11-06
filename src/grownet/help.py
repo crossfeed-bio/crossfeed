@@ -538,8 +538,9 @@ EDGE_ATTRIBUTES = {
                  "qpcr, 16s, plates, od, ...): every distinct technique of its curves on both sides, "
                  "joined by \"; \". An arc of the comparison has one, since a species is never compared "
                  "across techniques; an arc of the integrated form names two when the co-culture and the "
-                 "monocultures its rate comes from were measured differently; a merged arc names every "
-                 "technique of the arcs it merges. \"unrecorded\" where mGrowthDB names none",
+                 "monocultures its rate comes from were measured differently; Merge parallel arcs merges "
+                 "across techniques, and a merged arc names every technique of the arcs it merges. "
+                 "\"unrecorded\" where mGrowthDB names none",
     "rate_stage_method": "how the monoculture stage was resampled for that number: a bootstrap of its "
                          "replicates where the stage is the median of one fit per replicate, or a "
                          "delete-one jackknife where it is one regression over all of their rows",

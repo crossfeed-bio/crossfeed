@@ -64,14 +64,21 @@ def test_an_arc_of_the_integrated_form_records_the_technique_of_its_target():
 
 
 def test_a_merged_arc_names_every_technique_its_arcs_rest_on():
-    """Until #305's question is settled, Merge parallel arcs merges across techniques, as it did before the
-    field existed, and says so the way it says which media it crossed: every distinct value, joined."""
+    """Merge parallel arcs merges across techniques (Karoline, 2026-11-06, on #305: "I think that measurement
+    techniques should agree to the point that arcs with different measurement techniques can be merged",
+    and asked whether to allow it, "Yes, allow it"), and says so the way it says which media it crossed:
+    every distinct value, joined."""
+    from grownet.derive import merge_parallel
     def arc(technique, strength):
         return {"source": "a", "target": "b", "effect": "facilitation", "strength": strength, "status": "present",
                 "outcome": "quantified", "technique": technique, "study_id": "S1", "condition": "c",
                 "method": "m", "experiments": [], "quality": [], "cautions": [], "notes": [], "community": []}
     assert _merged([arc("qpcr", 1.0), arc("qpcr", 2.0)])["technique"] == "qpcr"
     assert _merged([arc("qpcr", 1.0), arc("fc", 2.0), arc("qpcr", 3.0)])["technique"] == "qpcr; fc"
+    # and the merge itself does not keep them apart: a qpcr arc of 1.0 and an fc arc of 3.0 between the
+    # same pair, same sign, become one arc, the median 2.0 of two
+    (one,), meta = merge_parallel([arc("qpcr", 1.0), arc("fc", 3.0)])
+    assert (one["merged_arcs"], one["strength"], one["technique"], meta["merged"]) == (2, 2.0, "qpcr; fc", 1)
 
 
 def test_the_v5_field_reaches_the_file_graphml_and_validation():

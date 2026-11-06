@@ -1811,7 +1811,7 @@ def _merged(arcs: list) -> dict:
             "cultivation_mode": "; ".join(dict.fromkeys(a.get("cultivation_mode", "") for a in arcs)),
             "medium": "; ".join(dict.fromkeys(a.get("medium", "") for a in arcs if a.get("medium"))),
             # every technique the merged arcs rest on, as for the media: merging does not ask that they
-            # agree, which is #305's open question
+            # agree (Karoline, 2026-11-06, #305: "Yes, allow it"), so this is where a reader sees it did
             "technique": "; ".join(dict.fromkeys(t for a in arcs
                                                  for t in (a.get("technique") or "").split("; ") if t)),
             **_merged_partner(arcs),

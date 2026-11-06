@@ -21,7 +21,8 @@ content.
   of the comparison has one, since a species is never compared across techniques; the integrated form
   names two if the co-culture and the monocultures its rate comes from differ; a merged arc names every
   technique of its arcs. Live on 2026-11-06: 145 arcs in All, qpcr 117, plates 15, fc 13, none with two.
-  Whether Merge parallel arcs may cross techniques is open on #305; today no merge does.
+  Merge parallel arcs merges arcs of different techniques and names them all (Karoline, 2026-11-06:
+  "Yes, allow it"); no merge in today's All network crosses techniques, so this moves no live arc.
 
 
 ## [0.5.0] (2026-10-14)
