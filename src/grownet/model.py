@@ -38,11 +38,13 @@ from dataclasses import asdict, dataclass, field, fields
 # was computed over and its unit (#213), and a drop-out arc's difference from the other removals of the
 # same target (#209 option 2); on the node, why its `taxon_id` is not its identity (#217 option b). Nothing
 # a v3 field means changes, so a v3 reader reads a v4 file with five fields it ignores.
-SCHEMA = "grownet.interaction_network/v4"
+# v5 (Karoline, 2026-11-06, #305: "Is the measurement technique recorded as an arc attribute? If not, please
+# add."): one edge field, `technique`. Nothing a v4 field means changes.
+SCHEMA = "grownet.interaction_network/v5"
 # Older ids a reader still accepts, newest first. A v0 document is valid: its `significance` means what v0
 # said it means, which is why `grownet validate` names the version it read.
-PREVIOUS_SCHEMAS = ("grownet.interaction_network/v3", "grownet.interaction_network/v2",
-                    "grownet.interaction_network/v1",
+PREVIOUS_SCHEMAS = ("grownet.interaction_network/v4", "grownet.interaction_network/v3",
+                    "grownet.interaction_network/v2", "grownet.interaction_network/v1",
                     "grownet.interaction_network/v0")
 KNOWN_SCHEMAS = (SCHEMA, *PREVIOUS_SCHEMAS)
 EFFECTS = ("facilitation", "inhibition", "neutral")
@@ -221,6 +223,12 @@ class Edge:
     # same full community (same target, study, medium, metric and reference), where there are at least two
     # others: what this removal did beyond the level the whole group shares (#209 option 2). None otherwise
     vs_other_removals: float | None = None
+    # the mGrowthDB technique the target was measured by (fc, qpcr, 16s, ...), every distinct one its curves
+    # on both sides of the comparison used, joined by "; " (#305). One for an arc of the comparison, which
+    # never compares a species across techniques (growth.check_comparable); the integrated form fits over
+    # the co-culture and the monoculture rate, so it names both if they differ. "unrecorded" where
+    # mGrowthDB names none. Empty in a file older than v5
+    technique: str = ""
     rate_stage_method: str = ""
     rate_stage_n: int | None = None
     merged_arcs: int | None = None  # arcs merged into this one (register item 14), None when not merged

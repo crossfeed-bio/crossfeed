@@ -137,6 +137,7 @@ _KEYS = [
     ("e_window", "edge", "window", "double"),
     ("e_window_unit", "edge", "window_unit", "string"),
     ("e_vs_other_removals", "edge", "vs_other_removals", "double"),
+    ("e_technique", "edge", "technique", "string"),
     ("e_rate_stage_method", "edge", "rate_stage_method", "string"),
     ("e_rate_stage_n", "edge", "rate_stage_n", "int"),
     ("e_merged_arcs", "edge", "merged_arcs", "int"),
@@ -291,7 +292,7 @@ def to_graphml(net: InteractionNetwork, pretty: bool = True) -> str:
         for name in ("fit_null_r2", "coefficient_sd", "coefficient_n",
                      "coefficient_sd_from_rate_stage", "se_replicates", "se_rate_stage",
                      "se_rate_selection", "rate_selection_spread",
-                     "metric_unit", "window", "window_unit", "vs_other_removals",
+                     "metric_unit", "window", "window_unit", "vs_other_removals", "technique",
                      "rate_stage_method", "rate_stage_n", "fit_window_share",
                      "rate_mismatch_to_zero"):
             _data(ed, f"e_{name}", getattr(e, name, None))

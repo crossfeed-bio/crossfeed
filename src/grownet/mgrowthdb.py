@@ -661,6 +661,7 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             rate_selection_spread=r.get("rate_selection_spread"),
             metric_unit=r.get("metric_unit", "") or "", window=r.get("window"),
             window_unit=r.get("window_unit", "") or "", vs_other_removals=r.get("vs_other_removals"),
+            technique=r.get("technique", "") or "",
             rate_stage_method=r.get("rate_stage_method", "") or "",
             rate_stage_n=r.get("rate_stage_n"),
             merged_arcs=r.get("merged_arcs"), strength_range=tuple(r.get("strength_range", ())),

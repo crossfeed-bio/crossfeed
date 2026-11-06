@@ -535,6 +535,12 @@ EDGE_ATTRIBUTES = {
                          "shares. The others include arcs below the absence threshold, which a default file "
                          "leaves out, so derive with --include-absent to recompute it from the file. Empty "
                          "for every other arc",
+    "technique": "how the target was measured, as mGrowthDB names the technique (fc for flow cytometry, "
+                 "qpcr, 16s, plates, od, ...): every distinct technique of its curves on both sides, "
+                 "joined by \"; \". An arc of the comparison has one, since a species is never compared "
+                 "across techniques; an arc of the integrated form names two when the co-culture and the "
+                 "monocultures its rate comes from were measured differently; a merged arc names every "
+                 "technique of the arcs it merges. \"unrecorded\" where mGrowthDB names none",
     "rate_stage_method": "how the monoculture stage was resampled for that number: a bootstrap of its "
                          "replicates where the stage is the median of one fit per replicate, or a "
                          "delete-one jackknife where it is one regression over all of their rows",
@@ -1315,8 +1321,9 @@ give others; the report beside the download says what was read and when.</p>
 
 <h2 id="attributes">Arc and node attributes</h2>
 <p>Every downloaded network, JSON or GraphML, carries these for each arc (edge) and node. A network
-names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v4</code>,
-after <code>/v3</code> in 0.3.0 and 0.4.0. It moved to <code>/v1</code> in 0.2.0 because
+names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v5</code>,
+after <code>/v4</code> in 0.5.0, which a <code>/v5</code> file only adds <code>technique</code> to, and
+<code>/v3</code> in 0.3.0 and 0.4.0. It moved to <code>/v1</code> in 0.2.0 because
 <code>significance</code> changed meaning, from the corrected p-value to -log10 of it, and to
 <code>/v2</code>, <code>/v3</code> and then <code>/v4</code> because optional arc and node fields were
 added and an installed 0.2.0 builds its arcs from every field a file carries, so it must

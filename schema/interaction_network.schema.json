@@ -13,6 +13,7 @@
   "properties": {
     "schema": {
       "enum": [
+        "grownet.interaction_network/v5",
         "grownet.interaction_network/v4",
         "grownet.interaction_network/v3",
         "grownet.interaction_network/v2",
@@ -547,6 +548,9 @@
             "number",
             "null"
           ]
+        },
+        "technique": {
+          "type": "string"
         },
         "rate_stage_method": {
           "type": "string"
