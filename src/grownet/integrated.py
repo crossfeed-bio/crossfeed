@@ -795,7 +795,7 @@ def _stage_set(study: str, record: dict):
     monocultures = tuple(sorted((record.get("experiments") or [])[1:]))
     return (study, monocultures)
 
-def fitted_rates(records: list) -> dict:
+def fitted_rates(records: list, method: str = METRIC) -> dict:
     """{node id: the rate entry a package takes} from the arcs of an integrated run.
 
     The fit gives `r_i` and `A_ii`, so the plateau it implies is `K_i = -r_i / A_ii`: an organism on its
@@ -813,11 +813,36 @@ def fitted_rates(records: list) -> dict:
     were all "whichever arc the loop reached first" (#142 item 4).
     """
     gathered: dict = {}
+    # One dilution rate for the whole package: the steady-state derivation's rate is r_i - D, a different
+    # number at each D, and a package simulates ONE chemostat. Keeping each organism's first D read mixed
+    # dilution rates across organisms and changed with the order of the records (found in review). The D
+    # with the most scaled rows (an organism's row in one study at one D, however many partners it has: it
+    # counted arcs, found in a third review) is the package's, the lowest on a tie; the others are named,
+    # and an organism fitted only at another D is named with that reason. The other derivations record
+    # none, so this never fires for them.
+    by_dilution: dict = {}
+    for d in {(r.get("target"), r.get("study_id"), r["fitted_rate_dilution"]) for r in records
+              if r.get("fitted_rate") is not None and r.get("fitted_rate_dilution") is not None}:
+        by_dilution[d[2]] = by_dilution.get(d[2], 0) + 1
+    package_dilution = (min(by_dilution, key=lambda d: (-by_dilution[d], d)) if by_dilution else None)
+    seen_rows: set = set()
     for record in records:
         nid, rate = record.get("target"), record.get("fitted_rate")
         own = record.get("fitted_self")
         if nid is None or rate is None:
             continue
+        if record.get("fitted_rate_dilution") is not None:
+            # the steady-state derivation repeats a row's scale and own term on every arc of the row, so a row
+            # with more partners weighed more in the median: one value per row, an organism's in one study and
+            # chemostat group (found in a fourth review: 0.39 from three rows of 0.46, 0.32 and 0.30)
+            # keyed by study, dilution rate, medium, and the unit and technique of its own term: two fits that
+            # differ in those are two rows, and the capacity rule chooses between them (dropping the unit kept
+            # the first one read, found in a sixth review)
+            row = (nid, record.get("study_id", ""), record.get("fitted_rate_dilution"), record.get("medium", ""),
+                   record.get("fitted_self_unit", ""), record.get("fitted_self_technique", ""))
+            if row in seen_rows:
+                continue
+            seen_rows.add(row)
         at = gathered.setdefault(nid, {
             "name": record.get("target_name", nid), "unit": record.get("fitted_rate_unit", "1/h"),
             "rates": [], "points": [], "studies": [], "per_study": {}, "other_units": [],
@@ -827,6 +852,15 @@ def fitted_rates(records: list) -> dict:
             "stage_n": {}, "by_medium": {}})
         study = record.get("study_id", "")
         unit = record.get("fitted_rate_unit", "1/h")
+        dilution = record.get("fitted_rate_dilution")
+        if dilution != package_dilution:
+            # r_i - D at another dilution rate: the median of 0.46 at D 0.04 and 0.30 at D 0.2 was 0.38, r_i -
+            # D at neither (found in review). Named, as a rate in another time unit is; its capacity is left
+            # too, since K = -1/B_ii = -(r_i - D)/A_ii depends on D as well.
+            named = f"{study} (r_i - D at another dilution rate, {dilution:g} per h)"
+            if named not in at["other_units"]:
+                at["other_units"].append(named)
+            continue
         if unit != at["unit"]:
             # a rate in another time unit is not converted, and its row's plateau stays: K = -r/A_ii has no
             # time unit when r and A_ii come from one fit, as `derive.merge_rates` keeps such a study's
@@ -835,6 +869,13 @@ def fitted_rates(records: list) -> dict:
                 at["other_units"].append(f"{study} ({unit})")
         else:
             at["rates"].append(rate)
+            from .media import key_from_label as medium_key
+            # by the medium, unit and technique the capacity is chosen by, so the steady-state rate comes from
+            # the same group as the capacity beside it (keyed by medium alone, a rate in Cells/mL sat beside a
+            # capacity in OD, found in a fifth review)
+            at.setdefault("rates_by_group", {}).setdefault(
+                (medium_key(record.get("medium") or ""), record.get("fitted_self_unit", ""),
+                 record.get("fitted_self_technique", "")), []).append(rate)
             at["points"].append(record.get("fit_points", 0))
             # the monoculture replicates stage 1 fitted this organism's rate from. `n` below counts the
             # fitted rows, which is what this path merges over, and the CSV's `replicates` column has meant
@@ -898,9 +939,33 @@ def fitted_rates(records: list) -> dict:
         at["capacity_points"].append(record.get("fit_points", 0))
         at["capacity_per_study"].setdefault(study, []).append(-rate / own)
 
-    out: dict = {}
+    from .derive import OrganismRates
+
+    def rate_of(at, order, chosen_group=None):
+        """The median rate; under the steady-state derivation, of the medium the capacity comes from: its
+        rate r_i - D and its capacity -1/B_ii are one fit's, and a median rate over two media beside one
+        medium's capacity gave a diagonal that belonged to no fit (found in a fourth review)."""
+        by_group = at.get("rates_by_group") or {}
+        if str(method).startswith("steady_state") and order and chosen_group is not None:
+            key = (order[0][0], chosen_group["unit"], chosen_group["technique"])
+            if by_group.get(key):
+                return statistics.median(by_group[key])
+        return statistics.median(at["rates"])
+    out = OrganismRates()
     for nid, at in gathered.items():
         if not at["rates"]:
+            elsewhere = sorted({u.split("another dilution rate, ")[1].split(" per h")[0] for u in at["other_units"]
+                                if "another dilution rate, " in u})
+            # only where it has no row at the package's dilution rate at all: a row there without a scale has
+            # its own reason, which this one hid (found in a fourth review)
+            at_package = any(r.get("target") == nid and r.get("fitted_rate_dilution") == package_dilution
+                             for r in records)
+            if elsewhere and not at_package:
+                # its rows were all fitted at another dilution rate: it is not in this package, and the README
+                # said it had "no growth rate ... nothing on it can be fitted" (found in a third review)
+                out.no_rate[nid] = (at["name"], f"its rows were fitted at the dilution rate {', '.join(elsewhere)} "
+                                                f"per h, and this package's rates are r_i - D at {package_dilution:g} "
+                                                "per h, one chemostat")
             continue
         # the medium with the most rows is the one published; a tie goes to the first label, so the
         # choice does not depend on the order the rows arrived in. `merge_rates` chooses the same way.
@@ -930,7 +995,8 @@ def fitted_rates(records: list) -> dict:
                                + "; plateaus are compared only within one technique and unit")
                          for row in other["rows"]]
         out[nid] = {
-            "name": at["name"], "rate": statistics.median(at["rates"]), "unit": at["unit"],
+            "name": at["name"], "rate": rate_of(at, order, chosen),
+            "unit": at["unit"],
             # what the median rests on: the fitted rows, which is what this derivation has instead of
             # monoculture replicates. `n_label` says so, because the report and the CSV read `n` as a
             # count of replicates and this path never had any (it used to report time points under that
@@ -942,7 +1008,9 @@ def fitted_rates(records: list) -> dict:
             # sorted, so the whole entry is a function of the rows and not of the order they arrived in
             "studies": sorted(at["studies"]),
             "per_study": {study: statistics.median(values) for study, values in at["per_study"].items()},
-            "other_units": at["other_units"], "method": METRIC, "lag": None, "lag_method": "",
+            "other_units": at["other_units"], "method": method, "lag": None, "lag_method": "",
+            # the dilution rate the rate is r_i - D at, under the steady-state derivation; None otherwise
+            "dilution": package_dilution,
             "capacity": statistics.median(chosen["values"]) if chosen else None,
             "capacity_unit": chosen["unit"] if chosen else "",
             "capacity_technique": chosen["technique"] if chosen else "",
@@ -1131,6 +1199,7 @@ class IntegratedDeriver:
             media_identity,
             run_group,
             strain_identities,
+            techniques_of,
             why_no_monoculture,
         )
         from .growth import SPIKE_FACTOR
@@ -1422,6 +1491,9 @@ class IntegratedDeriver:
                         "metric_without": got["rate"],
                         # both are rates, in the rate's unit; the interval is the fit's own span (#213)
                         "metric_unit": rate_unit_of(curve),
+                        # the target's technique in the co-culture and in the monocultures its rate comes
+                        # from, every distinct one (#305)
+                        "technique": techniques_of([*reps, *monos], target),
                         "window": (None if not window or window.get("start") is None
                                    else round(window["end"] - window["start"], 6)),
                         "window_unit": (window or {}).get("unit", "") if window else "",

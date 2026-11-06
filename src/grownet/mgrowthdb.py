@@ -617,7 +617,8 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             if nid not in net.nodes:
                 net.add_node(Node(id=nid, name=r.get(f"{side}_name", ""), taxon_id=r.get(f"{side}_taxon_id", ""),
                                   species=r.get(f"{side}_species", ""), identity=r.get(f"{side}_identity", ""),
-                                  taxon_id_refused=r.get(f"{side}_taxon_id_refused", "") or ""))
+                                  taxon_id_refused=r.get(f"{side}_taxon_id_refused", "") or "",
+                                  merged_nodes=tuple(r.get(f"{side}_merged_nodes") or ())))
         # a merged arc (register item 14) rests on several studies and lists them; any other on one
         studies = r.get("studies") or [{"id": r["study_id"], "citation": r.get("study_citation", ""),
                                         "license": r.get("study_license", ""), "url": r.get("study_url", "")}]
@@ -661,6 +662,7 @@ def records_to_network(records: Iterable[dict], meta: dict | None = None) -> Int
             rate_selection_spread=r.get("rate_selection_spread"),
             metric_unit=r.get("metric_unit", "") or "", window=r.get("window"),
             window_unit=r.get("window_unit", "") or "", vs_other_removals=r.get("vs_other_removals"),
+            technique=r.get("technique", "") or "",
             rate_stage_method=r.get("rate_stage_method", "") or "",
             rate_stage_n=r.get("rate_stage_n"),
             merged_arcs=r.get("merged_arcs"), strength_range=tuple(r.get("strength_range", ())),

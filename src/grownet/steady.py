@@ -153,7 +153,7 @@ def observed(client, exps: list, spike_factor: float = SPIKE_FACTOR) -> list:
         windows = []
         for strain in exp.get("communityStrains") or []:
             species = strain.get("name")
-            values, points = [], 0
+            values, points, per_vessel = [], 0, {}
             for i, rep in enumerate(reps):
                 curve = rep.curve(species)
                 if curve is None:
@@ -174,10 +174,13 @@ def observed(client, exps: list, spike_factor: float = SPIKE_FACTOR) -> list:
                                               f"{entry['unit']}; left out rather than converted"))
                     continue
                 values.append(value)
+                per_vessel[i] = value
                 windows.append(window)
             if values:
+                # `per_vessel` by vessel index, for the steady-state derivation's bootstrap over vessels
+                # (#312); `check` reads only the median
                 entry["organisms"][species] = {"value": statistics.median(values), "vessels": len(values),
-                                               "spread": (min(values), max(values))}
+                                               "spread": (min(values), max(values)), "per_vessel": per_vessel}
         if windows:
             entry["window"] = (min(w[0] for w in windows), max(w[1] for w in windows))
         reasons = []

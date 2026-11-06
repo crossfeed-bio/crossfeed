@@ -38,17 +38,22 @@ from dataclasses import asdict, dataclass, field, fields
 # was computed over and its unit (#213), and a drop-out arc's difference from the other removals of the
 # same target (#209 option 2); on the node, why its `taxon_id` is not its identity (#217 option b). Nothing
 # a v3 field means changes, so a v3 reader reads a v4 file with five fields it ignores.
-SCHEMA = "grownet.interaction_network/v4"
+# v5 (Karoline, 2026-11-06, #305: "Is the measurement technique recorded as an arc attribute? If not, please
+# add."): one edge field, `technique`, and in the same move one node field, `merged_nodes`, the strains a
+# genus node stands for. Nothing a v4 field means changes.
+SCHEMA = "grownet.interaction_network/v5"
 # Older ids a reader still accepts, newest first. A v0 document is valid: its `significance` means what v0
 # said it means, which is why `grownet validate` names the version it read.
-PREVIOUS_SCHEMAS = ("grownet.interaction_network/v3", "grownet.interaction_network/v2",
-                    "grownet.interaction_network/v1",
+PREVIOUS_SCHEMAS = ("grownet.interaction_network/v4", "grownet.interaction_network/v3",
+                    "grownet.interaction_network/v2", "grownet.interaction_network/v1",
                     "grownet.interaction_network/v0")
 KNOWN_SCHEMAS = (SCHEMA, *PREVIOUS_SCHEMAS)
 EFFECTS = ("facilitation", "inhibition", "neutral")
 # what an edge was derived from: a mono versus bi-culture comparison (a direct interaction), or a full
-# versus drop-out community comparison (not necessarily direct: strictly a hyper-arc, kept as an arc)
-EVIDENCE = ("biculture", "dropout")
+# versus drop-out community comparison (not necessarily direct: strictly a hyper-arc, kept as an arc), or a
+# gLV row fitted to the chemostat steady states of sub-communities (an effective coefficient: an effect
+# that needs a third organism is folded into the pairs; the steady-state derivation)
+EVIDENCE = ("biculture", "dropout", "steady_state")
 # what the comparison could say about the target's growth (grownet.interaction)
 OUTCOMES = ("quantified", "obligate", "abolished", "no_growth")
 # why an edge is low quality: hidden by default and never read as the absence of an interaction
@@ -114,6 +119,10 @@ class Node:
     # (SMGDB00000008: 1506553 is both L. clostridioforme and L. symbiosum). The id stays, since it is what
     # the source says; this says it is not a join key (Karoline, 2026-10-12, #217 option b). Empty otherwise.
     taxon_id_refused: str = ""
+    # with Merge to genus: the node ids of the strains this genus node stands for, among the network's arcs,
+    # sorted (Karoline, 2026-11-06: "Yes, add it", asked whether a genus node should list its strain ids).
+    # Empty on every other node. v5
+    merged_nodes: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -221,6 +230,12 @@ class Edge:
     # same full community (same target, study, medium, metric and reference), where there are at least two
     # others: what this removal did beyond the level the whole group shares (#209 option 2). None otherwise
     vs_other_removals: float | None = None
+    # the mGrowthDB technique the target was measured by (fc, qpcr, 16s, ...), every distinct one its curves
+    # on both sides of the comparison used, joined by "; " (#305). One for an arc of the comparison, which
+    # never compares a species across techniques (growth.check_comparable); the integrated form fits over
+    # the co-culture and the monoculture rate, so it names both if they differ. "unrecorded" where
+    # mGrowthDB names none. Empty in a file older than v5
+    technique: str = ""
     rate_stage_method: str = ""
     rate_stage_n: int | None = None
     merged_arcs: int | None = None  # arcs merged into this one (register item 14), None when not merged
@@ -309,7 +324,10 @@ class InteractionNetwork:
         for s in d.get("studies", []):
             net.add_study(Study(**{k: v for k, v in s.items() if k in known_studies}))
         for n in d.get("nodes", []):
-            net.add_node(Node(**{k: v for k, v in n.items() if k in known_nodes}))
+            kept = {k: v for k, v in n.items() if k in known_nodes}
+            if "merged_nodes" in kept:              # a JSON list, kept as the tuple the field is
+                kept["merged_nodes"] = tuple(kept["merged_nodes"] or ())
+            net.add_node(Node(**kept))
         for e in d.get("edges", []):
             # a field this reader does not know is dropped rather than raising, so a newer document is
             # read as far as it can be: `Edge(**e)` is what would have made 0.2.0 fail on a 0.3.0 network

@@ -1,6 +1,7 @@
 """grownet command line: derive interaction networks from mGrowthDB.
 
   python -m grownet derive SMGDB00000004 --live                 # every species in one study
+  python -m grownet derive --live --all                         # the All network: every study in mGrowthDB
   python -m grownet derive --live --species "Faecalibacterium duncaniae" \
       "Blautia hydrogenotrophica" "Roseburia intestinalis"
   python -m grownet derive SMGDB00000004 --fixture records.json  # offline, from interaction records
@@ -24,6 +25,17 @@ from .mgrowthdb import MGrowthDBError, records_to_network
 from .schema import schema_json, validate_document
 
 DERIVE_EXAMPLES = """examples:
+  the All network, every study in mGrowthDB with every partner (the page with both boxes empty; at the
+  default settings it is the network derived once a day, read in seconds):
+    grownet derive --live --all --out all.json
+
+  every species in one medium, with every partner (the page with only the second box filled):
+    grownet derive --live --conditions "Wilkins-Chalgren" --out wc_all.json
+
+  the gLV rows from the chemostat steady states of sub-communities (no study in mGrowthDB holds such a
+  design yet, so this says what each organism lacks):
+    grownet derive SMGDB00000011 --live --glv-mode --derivation steady --glv chemostat_glv.zip
+
   the local page's Example, written to a file, with its report, and sent to Cytoscape:
     grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica" "Roseburia intestinalis" \\
         --out example.json --report example_report.txt --to-cytoscape
@@ -35,7 +47,7 @@ DERIVE_EXAMPLES = """examples:
   a genus (all its species in mGrowthDB) with every partner, one node per genus:
     grownet derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
 
-  all of mGrowthDB (the page's All), arcs merged across studies and then to genus:
+  the All network, arcs merged across studies and then to genus:
     grownet derive --live --all --merge-arcs --merge-genera --out all_genera.json
 
   every species in one study, stricter about what counts as an interaction:
@@ -269,7 +281,13 @@ def _resolve(a, announce=True):
             a.derivation = "integrated"
         told = ("and the integrated form" if chosen is None else
                 f"and the {chosen} derivation, which you asked for and gLV mode does not override")
-        if announce:
+        if announce and chosen == "steady":
+            # the steady-state derivation reads neither the comparison's growth property nor drop-out
+            # communities, so naming them as switched on said something false of the run (found in review)
+            print("gLV mode: growth rates on, and the steady derivation, which you asked for and gLV mode "
+                  "does not override; it reads chemostat steady states, so the growth property and the "
+                  "drop-out setting do not apply to it", file=sys.stderr)
+        elif announce:
             print("gLV mode: growth rates on, drop-out communities off, the comparison on the growth "
                   f"rate, {told}", file=sys.stderr)
     if a.derivation is None:
@@ -293,6 +311,11 @@ def _derive_run(a):
     if problem:
         print(problem, file=sys.stderr)
         return 2
+    if a.live and a.conditions and not (a.species or a.study or a.all_studies):
+        # the page's species box left empty with the second box filled (#300, Karoline 2026-11-04): every
+        # species in those media or studies, which is All under --conditions. Only with --live, so that
+        # --fixture keeps its own message rather than one about a flag nobody typed
+        a.all_studies = True
     if a.species or a.all_studies:
         return _derive_species(a)
     # Flags that only the search path can act on. The help says they apply "with --species or --all" and
@@ -308,7 +331,9 @@ def _derive_run(a):
               f"{cannot_act[0]}.", file=sys.stderr)
         return 2
     if not a.study:
-        print("derive needs a study id, or --species with names (see grownet derive --help)", file=sys.stderr)
+        # every route a derive can take, the two that need no species included (found in review)
+        print("derive needs a study id, --species with names, --conditions alone (every species in those "
+              "media, experiments or studies) or --all (see grownet derive --help)", file=sys.stderr)
         return 2
     if a.deriver and not a.live:
         print("--deriver applies to --live (it derives from raw growth data); "
@@ -387,7 +412,7 @@ def _derive_run(a):
             net.meta["complete"] = False
     result = {"study": a.study, "entries": [], "resolved": [], "unresolved": [], "studies": [a.study],
               "rates": organism_rates, "client": client if a.live else None,
-              "skipped": skipped, "errors": errors, "network": net}
+              "skipped": skipped, "errors": errors, "network": net, "notes": _report_notes(a, organism_rates)}
     code = _emit(a, net, skipped, extra, a.study, result)
     # the species and All paths exit 1 on an incomplete run since #243; this path exited 0 when curves
     # could not be read, so the two paths still disagreed about the same failure (#247)
@@ -451,7 +476,7 @@ def _derive_species(a):
         import html
 
         from .gui import _empty_reason
-        print("\nno interactions: " + html.unescape(_empty_reason(result)), file=sys.stderr)
+        print("\nno interactions: " + html.unescape(_empty_reason(result, command_line=True)), file=sys.stderr)
     # "all of mGrowthDB" only when nothing narrowed it: the second box and Exclude these studies both
     # narrow All, which is deliberate, and saying otherwise is the same false claim the page carried
     narrowing = [x for x in (*a.conditions, *(a.exclude_studies or "").split(",")) if x and x.strip()]
@@ -476,6 +501,16 @@ def _incomplete(result) -> int:
     return 1
 
 
+def _report_notes(a, organism_rates) -> list:
+    """The notes the page's report carries for the same run, for a study's report: the command line printed
+    them and pointed at the report for the reason, and the report did not hold it (found in a second review).
+    The species and All paths take theirs from the page's own search."""
+    from .gui import STEADY_CHECK_CIRCULAR, STEADY_NO_RATE
+    steady_run = getattr(a, "derivation", None) == "steady"
+    return (([STEADY_NO_RATE] if getattr(a, "report_rates", False) and steady_run and not organism_rates else [])
+            + ([STEADY_CHECK_CIRCULAR] if getattr(a, "steady_check", False) and steady_run else []))
+
+
 def _rates_of(a, client, study_ids, net, skipped, records=None):
     """(rates by node id, skipped): the monoculture growth rates of these studies, keyed by the network's
     own nodes, with the network's meta recording them as the page does.
@@ -488,7 +523,10 @@ def _rates_of(a, client, study_ids, net, skipped, records=None):
     from .derive import growth_rates
     from .integrated import METRIC as INTEGRATED
     from .integrated import fitted_rates
-    fitted = fitted_rates(records or [])
+    from .subcommunity import METRIC as STEADY
+    steady_run = getattr(a, "derivation", None) == "steady"
+    method = STEADY if steady_run else INTEGRATED
+    fitted = fitted_rates(records or [], method)
     if fitted:
         # An organism whose fit implies no plateau is given the measured one inside `two_stage`, before
         # its partners are fitted against it, from the monocultures of its own condition (#142 item 7).
@@ -501,8 +539,13 @@ def _rates_of(a, client, study_ids, net, skipped, records=None):
                       "has no self-limitation and no row in a matrix", file=sys.stderr)
         # keyed by the network's own nodes and named as it names them, as on the page (found in review)
         fitted = matrix.for_nodes(net, fitted)
-        net.meta["growth_rates"] = matrix.rate_meta(net, fitted, INTEGRATED)
+        net.meta["growth_rates"] = matrix.rate_meta(net, fitted, method)
         return fitted, skipped
+    if steady_run:
+        # never the batch monocultures in its place (found in review), as on the page
+        from .gui import STEADY_NO_RATE
+        print(STEADY_NO_RATE, file=sys.stderr)
+        return {}, skipped
     # the organisms of the arcs before any merge to the genus, as the page asks for them: with
     # --merge-genera the nodes are genera, no monoculture is of a genus, and no rate was computed (found in
     # review; this predates 0.4.0)
@@ -585,7 +628,10 @@ def _emit(a, net, skipped, extra, label, result):
             f.write(rates_csv(organism_rates, net))
         print(f"wrote the growth rates to {a.rates}: {len(organism_rates)} organism(s)", file=sys.stderr)
     checked = []
-    if a.steady_check and organism_rates:
+    if a.steady_check and a.derivation == "steady":
+        from .gui import STEADY_CHECK_CIRCULAR
+        print(STEADY_CHECK_CIRCULAR, file=sys.stderr)
+    elif a.steady_check and organism_rates:
         # a chemostat steady state is an independent test of the parameters: it satisfies A x = -(r - D)
         # and was never used to fit them (#125)
         from . import steady
@@ -606,7 +652,13 @@ def _emit(a, net, skipped, extra, label, result):
     # the files beside the numbers, the same for the zip and for R, as the page sends them (found in
     # review: --to-r sent none)
     from . import steady as steady_module
-    extra_files = {"steady_state_check.txt": steady_module.as_text(checked)} if a.steady_check else None
+    from .gui import STEADY_CHECK_CIRCULAR
+    # under the steady-state derivation the check is refused, and the file said "mGrowthDB holds no
+    # continuous culture of these organisms" (found in a fourth review): it says why there is no check
+    if a.steady_check and a.derivation == "steady":
+        extra_files = {"steady_state_check.txt": STEADY_CHECK_CIRCULAR + "\n"}
+    else:
+        extra_files = {"steady_state_check.txt": steady_module.as_text(checked)} if a.steady_check else None
     if a.glv and organism_rates:
         from .matrix import glv_package
         with open(a.glv, "wb") as f:
@@ -647,8 +699,10 @@ def _emit(a, net, skipped, extra, label, result):
         # and not "how many pairs gave nothing" (#232)
         print(f"\nskipped {len(pairs)} pair(s) the data did not cleanly support"
               + (f", and {len(notes)} note(s) on the data read" if notes else "") + ":", file=sys.stderr)
-        for label, reason in pairs + notes:
-            print(f"  - {label}: {reason}", file=sys.stderr)
+        # `what`, not `label`: the loop variable shadowed this function's own `label`, so an empty network
+        # was announced for the last reason's subject instead of the study (found 2026-11-06)
+        for what, reason in pairs + notes:
+            print(f"  - {what}: {reason}", file=sys.stderr)
     if extra:
         if extra["absence"]["absent"]:
             left_out = extra["hidden"].get("absent", 0)
@@ -682,11 +736,22 @@ def _emit(a, net, skipped, extra, label, result):
         for tag in ("<strong>", "</strong>"):
             try_these = try_these.replace(tag, "")
         why += try_these
-        print(f"\nNO interactions were derived for {label}: the network is empty.{why}\n"
-              "grownet derives interactions from pairwise (two-member) co-cultures and from drop-out "
-              "designs (a community plus the same community without one member); other larger communities "
-              "yield nothing until a method suited to their design is chosen (see docs/METHOD_NOTES.md).",
-              file=sys.stderr)
+        from .subcommunity import determined_any
+        if a.derivation == "steady" and not determined_any(skipped):
+            from .subcommunity import empty_reason as steady_reason
+            print(f"\nNO interactions were derived for {label}: the network is empty. "
+                  f"{steady_reason(skipped, command_line=True)}", file=sys.stderr)
+        elif a.derivation == "steady":
+            # rows were determined and a filter removed every arc: the lines above name it, and the batch
+            # sentences about pairwise and drop-out designs were false here (found in a fifth review)
+            print(f"\nNO interactions remain for {label}: the steady-state derivation determined rows, and the "
+                  f"search's settings removed every arc (the lines above count them).{try_these}", file=sys.stderr)
+        else:
+            print(f"\nNO interactions were derived for {label}: the network is empty.{why}\n"
+                  "grownet derives interactions from pairwise (two-member) co-cultures and from drop-out "
+                  "designs (a community plus the same community without one member); other larger "
+                  "communities yield nothing until a method suited to their design is chosen (see "
+                  "docs/METHOD_NOTES.md).", file=sys.stderr)
     return 1 if no_rates else 0
 
 
@@ -784,11 +849,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     d = sub.add_parser(
-        "derive", help="derive an interaction network for species, or for one study",
+        "derive", help="derive an interaction network for species, media or studies, or the All network "
+                  "of every study in mGrowthDB (derive --live --all)",
         description="Derive an interaction network from mGrowthDB growth curves: for species, strains,\n"
-                    "genera or NCBI taxon ids (as the local page does), for all of mGrowthDB (--all, the\n"
-                    "page's All button), or for every species in one study. The settings are the local\n"
-                    "page's Advanced settings, with the same defaults.",
+                    "genera or NCBI taxon ids (as the local page does), for every species in some media or\n"
+                    "studies (--conditions alone), for every species in one study, or for all of mGrowthDB.\n"
+                    "For the All network, every study in mGrowthDB: grownet derive --live --all.\n"
+                    "The settings are the local page's Advanced settings, with the same defaults.",
         epilog=DERIVE_EXAMPLES, formatter_class=argparse.RawDescriptionHelpFormatter)
     what = d.add_argument_group("what to derive")
     what.add_argument("study", nargs="?", default="",
@@ -802,7 +869,7 @@ def build_parser() -> argparse.ArgumentParser:
                            "holding them is searched and one network returned, as on the local page (needs "
                            "--live)")
     what.add_argument("--all", action="store_true", dest="all_studies",
-                      help="every study in mGrowthDB, with every partner, as the page's All button (needs "
+                      help="every study in mGrowthDB, with every partner, as the page with both boxes empty (needs "
                            "--live; the study argument then limits it to those studies)")
     what.add_argument("--no-published", action="store_true",
                       help="with --all, derive live even when the network derived once a day in the grownet "
@@ -816,7 +883,9 @@ def build_parser() -> argparse.ArgumentParser:
                       help="media, experiment ids or study ids to look at (the page's second box): a medium "
                            "is matched as text against the medium name, the description and the experiment "
                            "name, an id picks that study (SMGDB...) or experiment (EMGDB...), and naming a "
-                           "comparison keeps the monocultures it is made against. Empty looks at every medium")
+                           "comparison keeps the monocultures it is made against. Empty looks at every medium. "
+                           "Without --species or a study, every species in what it names, with every partner, "
+                           "as the page does with the species box empty (with --live)")
     what.add_argument("--technique", default="", metavar="NAME",
                       help="keep only curves measured by this mGrowthDB technique (fc, 16s, qpcr, plates, ...), "
                            "in arcs and in monoculture rates and plateaus, and name the others (default: every "
@@ -843,13 +912,16 @@ def build_parser() -> argparse.ArgumentParser:
     settings.add_argument("--rate-window", type=int, default=5, metavar="N",
                           help="with easylinear: the points in each fitted window (default 5, as mGrowthDB)")
     # None means "not given", so gLV mode can tell a reader's explicit choice from the default it fills
-    settings.add_argument("--derivation", choices=["replicate", "integrated"], default=None,
+    settings.add_argument("--derivation", choices=["replicate", "integrated", "steady"], default=None,
                           help="replicate (default), the specified comparison of replicate sets, the only "
                                "form that gives drop-out arcs and the no-growth rule's censored bounds; "
                                "or integrated, which fits each organism's row from the whole time course "
                                "and gives the gLV coefficients directly, which --glv-mode selects. "
                                "Integrated derives no arc from a community of three or more, so no "
-                               "drop-out arc (the page's Derivation setting)")
+                               "drop-out arc. Or steady, off by default and meant for --glv-mode, which fits "
+                               "the rows from the chemostat steady states of sub-communities (monocultures, "
+                               "pairs, communities missing one member, any others) and reads continuous "
+                               "cultures only (the page's Derivation setting)")
     settings.add_argument("--metric", choices=["auc", "max", "growth_rate"], default="auc",
                           help="the growth property compared: auc, the area under the curve (default); max, the "
                                "maximal abundance; or growth_rate, the maximum specific growth rate")
@@ -904,13 +976,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     settings.add_argument("--glv-mode", action="store_true",
                           help="the page's gLV mode button: report growth rates, leave out drop-out "
-                               "communities, and compare the growth rate, which is what a fitted "
-                               "generalized Lotka-Volterra coefficient is made of")
+                               "communities, compare the growth rate, and derive on the integrated form "
+                               "unless --derivation names another, which is what a fitted generalized "
+                               "Lotka-Volterra coefficient is made of")
     settings.add_argument("--report-rates", action="store_true",
                           help="also report each organism's maximum specific growth rate in monoculture, "
                                "the median over replicates and studies, with the lag and the monoculture "
-                               "carrying capacity beside it (the page's Report growth rates); needed for "
-                               "--glv")
+                               "carrying capacity beside it (the page's Report growth rates; under "
+                               "--derivation steady, r_i - D from a chemostat start-up); needed for --glv")
     settings.add_argument("--merge-arcs", action="store_true",
                           help="merge the arcs of each source and target, across conditions and studies, into "
                                "one with the median log2 mean and its range; arcs whose signs disagree are not "
@@ -944,7 +1017,8 @@ def build_parser() -> argparse.ArgumentParser:
                               "of one matrix of fitted coefficients per abundance unit, the matching growth "
                               "rates and a README (needs --report-rates; under the default derivation it "
                               "also needs --metric growth_rate, which the integrated form does not, and "
-                              "--glv-mode sets all of them, the integrated form included)")
+                              "--glv-mode sets all of them and selects the integrated form, unless "
+                              "--derivation names another)")
     outputs.add_argument("--steady-check", action="store_true",
                          help="score the gLV parameters against the chemostat steady states mGrowthDB "
                               "holds for these organisms: the report gets the comparison and the zip a "
