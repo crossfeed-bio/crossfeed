@@ -457,9 +457,21 @@ def _visible_help(page: str = PAGE) -> str:
     return " ".join(visible(re.sub(r"<(style|script)\b.*?</\1\s*>", "", page, flags=re.S | re.I)).split())
 
 
+# a note of who decided what and when, in any shape: "(Karoline, 2026-10-07)", "(decided 2026-10-07)",
+# "(#42, amended 2026-10-03)". A date the reader needs, when something was measured, is not one
+DECISION_NOTE = re.compile(r"\([^()]*\b(?:decided|agreed|amended|settled|ruled|asked|said|proposed|chosen)\b"
+                           r"[^()]*\b20\d\d-\d\d-\d\d\b[^()]*\)|\([^()]*\b20\d\d-\d\d-\d\d\b[^()]*\b(?:decided|"
+                           r"agreed|amended|settled|ruled)\b[^()]*\)")
+
+
 def test_the_help_names_no_collaborator_and_date_beside_its_text():
     text = _visible_help()
     assert not re.findall(r"[^.]{0,40}\b(?:Karoline|Craig)\b[^.]{0,40}", text)
+    # nor any other note of when something was decided (found in review: "(decided 2026-10-07)" passed)
+    assert DECISION_NOTE.findall(text) == []
+    for planted in ("(decided 2026-10-07)", "(#42, amended 2026-10-03)", "(agreed on 2026-10-11 with both)"):
+        assert DECISION_NOTE.findall(f"a rule {planted}."), planted
+    assert not DECISION_NOTE.findall("(measured live on 2026-10-11 it matches them)")
 
 
 def test_the_alias_table_gives_full_study_ids():
@@ -493,3 +505,27 @@ def test_genus_and_species_names_are_in_italics():
     genus = "|".join(sorted(TAXA))
     found = re.findall(rf"\[?\b(?:{genus})\]?(?: [a-z]{{3,}})?|\b[A-Z]\. [a-z]{{4,}}", " ".join(plain))
     assert found == [], found
+    # and a name the lists do not hold yet: the lists italicize only what they know, so a new name would
+    # pass the check above unseen (found in review: "Akkermansia muciniphila" plain, and "Bacteroides
+    # fragilis" as <em>Bacteroides</em> fragilis, both passed)
+    assert _names_missing_from_the_lists(body) == []
+    for planted in ("grows with Akkermansia muciniphila here", "and <em>Bacteroides</em> fragilis here"):
+        assert _names_missing_from_the_lists(planted), planted
+
+
+# the words that follow a name in the help's prose, which are English and not an epithet; a new one is
+# added here, an epithet goes into help.EPITHETS
+FOLLOWS_A_NAME = {"from", "about", "apart", "that", "bound", "with", "when", "which", "were", "have", "alone",
+                  "strains", "species", "grows", "into", "over", "than", "this", "they"}
+# the endings of a Latin epithet
+LATIN = r"(?:ii|ae|us|um|is|ensis|ica|ila|oides|iformis|ans|ens|ata|ina|ida|ella|ia|i|a)"
+
+
+def _names_missing_from_the_lists(body: str) -> list:
+    """Binomials in `body` that help.TAXA and help.EPITHETS would not italicize whole: an epithet left
+    upright after an italic genus, or a capitalized word and a Latin epithet in plain prose."""
+    half = [m.group(0) for m in re.finditer(r"</em> ([a-z]{4,})\b", body) if m.group(1) not in FOLLOWS_A_NAME]
+    plain = re.sub(r"<(em|i|code|pre|title|a)\b[^>]*>.*?</\1>", " ", body, flags=re.S | re.I)
+    plain = " ".join(re.sub(r"<[^>]+>", " ", plain).split())
+    whole = re.findall(rf"\b[A-Z][a-z]{{3,}} [a-z]{{4,}}{LATIN}\b", plain)
+    return half + whole

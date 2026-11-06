@@ -611,10 +611,10 @@ DECISIONS = (
     ("Experiments are pooled only when they are replicates.",
      "Interactions depend on the environment, so experiments with different conditions give parallel "
      "arcs, one each (#47)."),
+    # #42, amended 2026-10-03
     ("A culture is compared on a measure its mode supports.",
      "Chemostat and serial dilution runs are derived with max, the level they settle at, and left out with "
-     "an area under the curve or a growth rate, which measure something else under dilution (#42, amended "
-     "2026-10-03)."),
+     "an area under the curve or a growth rate, which measure something else under dilution."),
     ("Suspect curves are flagged, never silently dropped or replaced.",
      "A replicate with an implausible spike is left out and reported, with the other techniques measured "
      "on it named (#39)."),
