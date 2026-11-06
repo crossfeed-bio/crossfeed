@@ -1121,6 +1121,156 @@ def test_the_report_query_line_and_the_page_heading_join_the_second_box_with_sem
     assert "matching SMGDB00000014; Wilkins-Chalgren, anaerobic" in text
 
 
+# ---- no GitHub issue numbers where a user reads (Karoline, 2026-11-06) --------------------------------
+#
+# "in general: users don't need to see github issue numbers anywhere", after "(#193)" showed under the
+# page's second box. An issue number is a developer's cross-reference; it belongs in a code comment beside
+# the text, not in the text.
+
+# "#193", "(#40, #54)", "since #119"; not a color ("#222222", six hex digits) and not an HTML entity.
+# The {1,4} cap IS the color defence, together with the trailing hex guard: with \d+ the match takes all six
+# digits of #123456, the guard sees the closing character, and every #RRGGBB color reads as an issue number.
+# So an issue number of five digits or more is not matched; widen it only with another defense for colors
+# (Craig's agent)
+ISSUE_NUMBER = re.compile(r"(?<![\w&#])#\d{1,4}(?![0-9A-Fa-f])")
+
+
+def _visible(page: str) -> str:
+    # any case and any space before the closing bracket, so no style or script text is read as visible
+    # (CodeQL, on this pull request: the first version missed <SCRIPT>)
+    # an end tag may carry whitespace and junk before ">" (`</script\t\n bar>` still closes it), as CodeQL
+    # pointed out for the pattern below
+    page = re.sub(r"<(style|script)\b.*?</\1\b[^>]*>", "", page, flags=re.S | re.I)
+    return " ".join(re.sub(r"<[^>]+>", " ", page).split())
+
+
+def test_no_issue_number_on_any_page_the_command_line_or_a_written_file():
+    from test_gui import _query
+
+    from grownet import published
+    from grownet.__main__ import build_parser
+    from grownet.export import to_graphml
+    from grownet.report import report_text
+    result = _query()
+    every = gui.run_query(FakeClient(), [], {"derivation": "replicate"}, all_studies=True, published=False)
+    parser = build_parser()
+    commands = next(a for a in parser._actions if a.choices).choices.values()
+    surfaces = {
+        "the page": _visible(gui.render_form("tok")), "a result": _visible(gui.render_result("tok", result)),
+        "an All result": _visible(gui.render_result("tok", every)), "the help": _visible(gui.render_help("tok")),
+        "the about page": _visible(gui.render_about("tok")), "the legend": _visible(gui.render_legend("tok")),
+        "the token page": _visible(gui.render_token_page(True, 8791)),
+        "the command line": parser.format_help() + "".join(c.format_help() for c in commands),
+        "the report": report_text(result), "the JSON": result["network"].to_json(),
+        "the GraphML": to_graphml(result["network"]), "the daily file": json.dumps(published.to_payload(every)),
+    }
+    found = {where: ISSUE_NUMBER.findall(text) for where, text in surfaces.items()}
+    assert not any(found.values()), {where: refs for where, refs in found.items() if refs}
+
+
+def test_no_issue_number_in_a_string_the_tool_can_show():
+    """The pages above show what one fake search reaches; a message for a case it does not reach is still
+    text a user reads. So every string literal under src/grownet is scanned, except docstrings, which only
+    a developer reads (the module docstring of __main__ is the command line's description, so it counts)."""
+    import ast
+    import io
+    import tokenize
+    from pathlib import Path
+    found = []
+    # every module, in subpackages too (`slices/`): a non-recursive glob left their messages unread (found
+    # in review)
+    for path in sorted((Path(__file__).resolve().parents[1] / "src" / "grownet").rglob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        docstrings = set()
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.body \
+                    and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, ast.Constant) \
+                    and isinstance(node.body[0].value.value, str) \
+                    and not (isinstance(node, ast.Module) and path.name == "__main__.py"):
+                docstrings.update(range(node.body[0].lineno, node.body[0].end_lineno + 1))
+        kinds = (tokenize.STRING, getattr(tokenize, "FSTRING_MIDDLE", tokenize.STRING))
+        for token in tokenize.generate_tokens(io.StringIO(source).readline):
+            if token.type in kinds and token.start[0] not in docstrings:
+                found += [f"{path.name}:{token.start[0]} {ref}" for ref in ISSUE_NUMBER.findall(token.string)]
+    assert found == [], found
+
+
+def _r_strings(source: str) -> list:
+    """The string literals of R code, outside comments: what print(), cat(), message() and stop() show."""
+    out, i, n = [], 0, len(source)
+    while i < n:
+        c = source[i]
+        if c == "#":                                   # a comment, roxygen included, to the end of the line
+            end = source.find("\n", i)
+            i = n if end < 0 else end
+        elif c in "'\"":
+            j = i + 1
+            while j < n and source[j] != c:
+                j += 2 if source[j] == "\\" else 1
+            out.append(source[i + 1:j])
+            i = j + 1
+        else:
+            i += 1
+    return out
+
+
+def _viewer_text(page: str) -> str:
+    """What the viewer (gui/index.html) can show: its visible HTML, and its script with the comments taken
+    out, since the messages, labels and tooltips it writes are string literals there."""
+    shown = _visible(page)
+    # and the attribute values a reader meets on hovering or in an empty field, which stripping the tags
+    # threw away with them (found in review: "(#12)" in a placeholder passed)
+    shown += "\n" + "\n".join(m.group(2) for m in re.finditer(
+        r"\b(title|placeholder|aria-label|alt)\s*=\s*\"([^\"]*)\"", page, flags=re.I))
+    for script in re.findall(r"<script\b[^>]*>(.*?)</script\b[^>]*>", page, flags=re.S | re.I):
+        script = re.sub(r"/\*.*?\*/", "", script, flags=re.S)
+        shown += "\n" + "\n".join(re.sub(r"(^|\s)//.*$", "", line) for line in script.splitlines())
+    return shown
+
+
+def test_no_issue_number_in_the_viewer_or_an_r_message():
+    """The viewer and the R package's own messages are read by users too; the scans above covered only
+    the tool's Python and the R help (found in review: "(#245)" in a viewer string and "(#142)" in a
+    cat() of print.grownet_glv passed)."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    found = {"gui/index.html": ISSUE_NUMBER.findall(_viewer_text((root / "gui" / "index.html")
+                                                                 .read_text(encoding="utf-8")))}
+    for path in (root / "r" / "R").glob("*.R"):
+        found[str(path.relative_to(root))] = [ref for text in _r_strings(path.read_text(encoding="utf-8"))
+                                              for ref in ISSUE_NUMBER.findall(text)]
+    assert not any(found.values()), {name: refs for name, refs in found.items() if refs}
+    # and the scans see what they are for: a planted number in a viewer string and in an R message
+    # an end tag with whitespace and junk before ">" still closes the script
+    assert "x(" not in _visible('<p>a</p><script>x("(#9)")</script\t\n bar><p>b</p>')
+    assert ISSUE_NUMBER.findall(_viewer_text('<script>\nshow("see (#245)"); // (#1) a comment\n</script>')) \
+        == ["#245"]
+    assert ISSUE_NUMBER.findall(_viewer_text('<input placeholder="a study id (#12)"><b title="since #7">x</b>')) \
+        == ["#12", "#7"]
+    assert _r_strings('cat("in no matrix (#142)\\n") # (#9) a comment\nx <- \'a\'') == \
+        ["in no matrix (#142)\\n", "a"]
+
+
+def test_no_issue_number_in_the_readme_or_the_r_package_help():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    texts = {"README.md": (root / "README.md").read_text(encoding="utf-8")}
+    for path in [*(root / "r" / "man").glob("*.Rd"), root / "r" / "README.md", root / "r" / "DESCRIPTION"]:
+        texts[str(path.relative_to(root))] = path.read_text(encoding="utf-8")
+    for path in (root / "r" / "R").glob("*.R"):          # roxygen, which becomes the help page
+        texts[str(path.relative_to(root))] = "\n".join(line for line in path.read_text(encoding="utf-8").splitlines()
+                                                       if line.lstrip().startswith("#'"))
+    found = {name: ISSUE_NUMBER.findall(text) for name, text in texts.items()}
+    assert not any(found.values()), {name: refs for name, refs in found.items() if refs}
+
+
+def test_the_issue_number_pattern_takes_issue_numbers_and_never_a_color():
+    """The cap and the hex guard together: #193 and #1234 are issue numbers; #222222 and #1a7f5a, colors,
+    are not (a pattern without the cap would read every color as an issue number)."""
+    assert ISSUE_NUMBER.findall("see #193 and #1234") == ["#193", "#1234"]
+    assert ISSUE_NUMBER.findall("color: #222222; fill: #1a7f5a; #123456") == []
+
+
 # ---- an empty species box (#300) ------------------------------------------------------------------
 #
 # Karoline, 2026-11-04: "1 functionality I'd like to add is to allow the species field to be empty when the

@@ -889,7 +889,7 @@ def build_parser() -> argparse.ArgumentParser:
     what.add_argument("--technique", default="", metavar="NAME",
                       help="keep only curves measured by this mGrowthDB technique (fc, 16s, qpcr, plates, ...), "
                            "in arcs and in monoculture rates and plateaus, and name the others (default: every "
-                           "technique; Karoline, #292)")
+                           "technique)")                                   # Karoline, #292
     what.add_argument("--exclude-studies", default="", metavar="IDS",
                       help="with --species or --all, comma separated study ids never to search (default: none)")
     what.add_argument("--all-partners", action="store_true",

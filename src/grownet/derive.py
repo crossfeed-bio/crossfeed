@@ -762,7 +762,7 @@ def _refuse_pooling_across_starts(entry: dict, skipped: list) -> None:
     if high <= MAX_START_SPREAD * low:
         return
     why = (f"they started from {low:.3g} to {high:.3g} {units.pop()}, {high / low:.0f} times apart, and a rate "
-           f"is not pooled across starting densities more than {MAX_START_SPREAD:g} times apart (#81)")
+           f"is not pooled across starting densities more than {MAX_START_SPREAD:g} times apart")    # #81
     skipped.append((f"{entry['name']} monocultures, growth rate", why + ": left out for this study"))
     # kept with the organism, so an organism left with no rate at all says why where its rate would be
     # (found in review: the page named two causes, both false, for SMGDB00000014's two organisms)
