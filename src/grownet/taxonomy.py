@@ -39,7 +39,7 @@ class SpeciesIndex(dict):
     """The species list: genus and species key -> {taxon id: a name seen for it}, as a plain dict, plus
     `current`: taxon id -> its current name, the one used by the most recently published study holding it
     (Karoline, #24, 2026-09-18). Old names stay in the list, so they still resolve. `studies`: the ids of
-    every study the crawl found, in id order, which the page's All button derives."""
+    every study the crawl found, in id order, which the page's All network derives."""
 
     def __init__(self, *args, current=None, studies=(), **kwargs):
         super().__init__(*args, **kwargs)

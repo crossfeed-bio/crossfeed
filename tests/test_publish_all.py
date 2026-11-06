@@ -114,8 +114,8 @@ def test_main_publishes_a_run_the_floor_allows_and_the_notes_are_not_an_asset(tm
         FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
     out = tmp_path / "out"
     assert publish_all.main(str(out), str(tmp_path / "notes.md"), previous=lambda: None) == 0
-    assert sorted(p.name for p in out.iterdir()) == sorted([FILE, publish_all.LEGACY["file"], publish_all.NETWORK,
-                                                            publish_all.REPORT])
+    assert sorted(p.name for p in out.iterdir()) == sorted([FILE, publish_all.LEGACY["file"], "all_result.v4.json",
+                                                            publish_all.NETWORK, publish_all.REPORT])
     assert "This run:" in (tmp_path / "notes.md").read_text(encoding="utf-8")
 
 
@@ -151,10 +151,21 @@ def test_the_older_format_is_published_beside_the_current_one(tmp_path, monkeypa
         FakeClient(), [], dict(publish_all.DEFAULTS), all_studies=True, published=False))
     out = tmp_path / "out"
     assert publish_all.main(str(out), None, previous=lambda: None) == 0
-    assert FILE == "all_result.v4.json"
+    assert FILE == "all_result.v5.json"
     current = json.loads((out / FILE).read_text(encoding="utf-8"))
     legacy = json.loads((out / "all_result.json").read_text(encoding="utf-8"))
-    assert current["network"]["schema"].endswith("/v4") and legacy["network"]["schema"].endswith("/v3")
+    assert current["network"]["schema"].endswith("/v5") and legacy["network"]["schema"].endswith("/v3")
+    # the /v4 file, which installed 0.5.0 copies read (#305): the same arcs without `technique`, and served
+    # by such a copy, its own SCHEMA and the derivation it asks for
+    v4 = json.loads((out / "all_result.v4.json").read_text(encoding="utf-8"))
+    assert v4["network"]["schema"] == "grownet.interaction_network/v4"
+    assert current["network"]["edges"] and all(e.get("technique") for e in current["network"]["edges"])
+    assert not any("technique" in e for e in v4["network"]["edges"])
+    assert len(v4["network"]["edges"]) == len(current["network"]["edges"])
+    with monkeypatch.context() as m:
+        m.setattr(published, "SCHEMA", "grownet.interaction_network/v4")
+        at = datetime.datetime.fromisoformat(v4["network"]["meta"]["derived_at"]) + datetime.timedelta(hours=1)
+        assert published.why_not_fresh(v4, at, publish_all.DEFAULTS) is None
     manifest = json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
     v3 = manifest["formats"]["grownet.interaction_network/v3"]
     for kind, key in (("node", "nodes"), ("edge", "edges"), ("study", "studies")):
@@ -201,13 +212,16 @@ def test_every_older_format_from_v3_gets_its_own_file():
     `all_result.v4.json`, and every installed /v4 copy would derive All live. Every format id from /v3 to
     the one before the current gets a file, read from the manifest."""
     manifest = json.loads((ROOT / "schema" / "format_fields.json").read_text(encoding="utf-8"))
-    assert publish_all.older_formats(manifest) == ["grownet.interaction_network/v3"]
+    # at /v5 (#305) exactly what this test was written to foresee: the /v4 readers get their file
+    assert publish_all.older_formats(manifest) == ["grownet.interaction_network/v3", "grownet.interaction_network/v4"]
     assert publish_all.file_for("grownet.interaction_network/v3") == "all_result.json"
-    later = {**manifest, "formats": {**manifest["formats"], "grownet.interaction_network/v5":
-                                     manifest["formats"]["grownet.interaction_network/v4"]},
-             "current": "grownet.interaction_network/v5"}
-    assert publish_all.older_formats(later) == ["grownet.interaction_network/v3", "grownet.interaction_network/v4"]
     assert publish_all.file_for("grownet.interaction_network/v4") == "all_result.v4.json"
+    later = {**manifest, "formats": {**manifest["formats"], "grownet.interaction_network/v6":
+                                     manifest["formats"]["grownet.interaction_network/v5"]},
+             "current": "grownet.interaction_network/v6"}
+    assert publish_all.older_formats(later) == ["grownet.interaction_network/v3", "grownet.interaction_network/v4",
+                                                "grownet.interaction_network/v5"]
+    assert publish_all.file_for("grownet.interaction_network/v5") == "all_result.v5.json"
 
 
 def test_the_arcs_below_the_threshold_are_written_in_the_older_format_too():
