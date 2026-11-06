@@ -33,6 +33,9 @@ NEXT = (
     "Leave the species box empty to search every species in the media or studies of the second box; leave "
     "both boxes empty for the All network. The All button is gone, and gLV example fills the page and waits "
     "for Find interactions, as Example does.",
+    "The second box applies under every derivation: naming a medium, an experiment or a study narrows a "
+    "gLV-mode search too, where only the default derivation read it before, so a gLV-mode result changes "
+    "when one is named.",
     "Every arc records how its target was measured (fc, qpcr, plates, ...), and a genus node lists the "
     "strains it stands for: the network format moves to /v5, and the daily All network is still published "
     "for earlier versions. Merging parallel arcs crosses techniques and names them, and the page shows a "
@@ -42,7 +45,8 @@ NEXT = (
     "counting those below the absence threshold, up to 117 times.",
     "A third derivation, for gLV mode: the rows fitted from the chemostat steady states of sub-communities, "
     "every sub-community counting. mGrowthDB holds no such design yet, and it says what each organism "
-    "lacks; on a published 12-species model, monocultures and pairs give 126 of its 132 coefficients exactly.",
+    "lacks; on a published 12-species model, monocultures and pairs give 126 of its 132 coefficients, "
+    "within 2% of the model's on the scale of each organism's self-limitation.",
     "The Baranyi growth-rate fit reaches its best fit where a lag collapses; nothing changes by default.",
     "The help explains what a merged arc and a merged node carry, sets species names in italics, and reads "
     "more easily, with no issue numbers, and the R package's summary of a gLV package reads more cleanly.",
