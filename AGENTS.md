@@ -213,5 +213,6 @@ them as a dated bullet with who gave them. Keep one-off requests out.
   "(#193)" turned up under the page's second box: "in general: users don't need to see github issue
   numbers anywhere". That covers the page and its help, the command line's help and messages, the report,
   every file the tool writes, the R package's help, and the README. Issue numbers stay where developers
-  read: code comments, docstrings, tests, commit messages and pull requests. `tests/test_interface.py`
+  read: code comments, docstrings, tests, commit messages and pull requests, and the records under
+  `docs/` and `CHANGELOG.md` (asked whether those should drop them too: "Keep them there"). `tests/test_interface.py`
   renders each surface and scans the string literals under `src/grownet/`, so a new one fails the build.
