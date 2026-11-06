@@ -974,6 +974,11 @@ Example. Its test submits the filled form the way a browser does (`tests/test_gu
 
 ## Help page
 
+`render_help` sets every genus and species name in italics on the way out (`_italicize_taxa`, from
+`TAXA` and `EPITHETS`), skipping code, commands and text already in italics, because much of the help's
+text sits in tables that escape it and so cannot carry markup (2026-11-06). The test names every genus the
+page offers as an example, so a new organism in the help needs its genus or epithet added there.
+
 `src/crossfeed/help.py` holds the help page as data keyed by the code's own names (#78):
 `SETTINGS` by `gui.DEFAULTS` key, `EDGE_ATTRIBUTES` and `NODE_ATTRIBUTES` by model field, `CLI_ONLY` for
 `derive` options that are not page settings. `tests/test_help.py` requires an entry for every setting,
@@ -1244,6 +1249,15 @@ and the README: that is the one mistake this style can make.
   connection would have verified the certificate against the proxy (Craig's agent on #184; unreachable
   here, since nothing calls `set_tunnel`). Read the installed source of what you override, copy the rest
   of it, and state in the docstring which single thing differs.
+
+## Starting densities on every arc (#297, 2026-11-06)
+
+`derive.start_note` wraps `integrated.starting_densities` (the median first value of each side, never
+matched on, #172) and the replicate form now writes it on biculture arcs (co-culture against the target's
+monocultures) and drop-out arcs (full community against the community without R), in the integrated form's
+wording. A side with no positive first value gives no note. Live: every one of the 190 drop-out arcs of All
+(with absences) carries it; 32 of 33 bicultures.
+
 
 ## gLV from the steady states of sub-communities (#310, 2026-11-06)
 

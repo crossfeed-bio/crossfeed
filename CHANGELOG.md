@@ -6,6 +6,38 @@ content.
 
 ## [Unreleased]
 
+### Changed
+
+- **Every arc of the default derivation says what each side started at** (#297), as the integrated form's
+  arcs did: "started at X in the co-culture and Y in the monocultures" (or "in the full community and Y
+  without R" for a drop-out arc), with the factor between them, and a warning above 3 times. Reported, never
+  matched on (Karoline, 2026-10-08). It matters most for drop-out arcs, where each deletion was a separate
+  vessel: live on 2026-11-06, 61 of the 190 drop-out arcs of All (with absences) start more than 3 times
+  apart, 24 more than 10 times, up to 117. Where a side has no positive first value, the arc says the
+  starting density could not be compared. No arc, strength or status changes; only the notes.
+
+### Fixed
+
+- **The R package's summary of a gLV package reads cleanly** (#296). "fitted:" no longer starts every line
+  of the organisms left out of the matrices; the organisms without a rate are not listed a second time on
+  the next line; and a one-organism matrix reads "1 organism", not "1 organisms". No number changes.
+
+### Changed
+
+- **The help reads more easily** (Karoline, 2026-11-06). It no longer prints who decided what and when
+  beside its text ("they are not useful for readers"), names study SMGDB00000026 in full in the alias
+  table, sets genus and species names in italics, and its gLV sections are split into shorter parts and
+  lists with every formula kept. Three passages were also wrong or unclear and are corrected: gLV mode sets
+  four settings, not three (the derivation was missing); an undefined "ratio L" and "x_j_star" are now
+  r_with, r_without and x_j; and the R package's handling of +10 and -10 cells is said to concern parameters
+  from grownet 0.2.0 and earlier only.
+
+### Changed
+
+- **No GitHub issue numbers in what a user sees** (Karoline, 2026-11-06: "in general: users don't need to see
+  github issue numbers anywhere"). They are gone from the page, the help, the command line's help and
+  messages, the R package's help and the README, and a test keeps new ones out.
+
 ### Fixed
 
 - **The page says when an arc is merged, and writes a changed setting as the report does** (found checking
@@ -172,6 +204,12 @@ content.
 - **An empty network from the command line is announced under the study's name again.** `derive STUDY`
   printed "NO interactions were derived for" the last reason it had listed, since the loop printing the
   reasons reused the name of the study's label; on every derivation.
+
+### Changed
+
+- **The About page says what the next release brings while it is in development** (Karoline, 2026-11-06: "is
+  the About section updated?"), under "Next release", above the log of released versions. The release check
+  refuses a tag while that list is not empty, so it moves under the version at release.
 
 
 ## [0.5.0] (2026-10-14)

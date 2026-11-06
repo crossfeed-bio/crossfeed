@@ -110,7 +110,11 @@ def test_replicate_comparison_carries_uncertainty_onto_every_edge():
     assert ba["se"] == pytest.approx(SPREAD / math.sqrt(2), abs=1e-4)
     assert (ba["n_with"], ba["n_without"]) == (2, 2)
     assert ba["outcome"] == "quantified" and ba["metric"] == "auc"
-    assert ba["evidence"] == "biculture" and ba["quality"] == [] and ba["notes"] == []
+    assert ba["evidence"] == "biculture" and ba["quality"] == []
+    # no spike note, and what each side started at, which every replicate-form arc says (#297); not pinned
+    # as the only note, which would forbid the next one (Craig's agent)
+    assert not any("spike" in n for n in ba["notes"])
+    assert any(n.startswith("started at ") for n in ba["notes"])
     assert ba["cautions"] == ["two_replicates"]                   # two replicates per side (#47)
     assert ba["experiments"] == ["E_co", "E_mono A"]              # the co-culture, then the target's monocultures
     assert ba["weight"] == pytest.approx(1.0, abs=1e-4)
@@ -1175,3 +1179,44 @@ def test_a_renamed_strain_is_merged_and_listed_by_its_current_name():
     by_name = {**old, "target_identity": "name"}
     (kept,), _ = merge_genus([by_name], merge=True, current=current)
     assert kept["merged_pairs"] == ["Blautia hydrogenotrophica -> Faecalibacterium prausnitzii"]
+
+
+def test_a_replicate_form_arc_says_what_each_side_started_at():
+    """#297: `starting_densities` (Karoline, 2026-10-08: report the starting density, never match on it) was
+    called only by the integrated form, so the default derivation's arcs, drop-out ones included, never said
+    that the two sides began at different densities; in SMGDB00000008 59 of 182 drop-out arcs start more than
+    3 times apart, up to 117. The first values of the fixture above, as medians over each side's replicates:
+    A in the full community 1 and 3 (median 2), without C 1 and 1 (median 1): a factor of 2; C in the full
+    community 1 and 1 (1), without B 3 and 7 (5): a factor of 5, over the 3 at which the note warns."""
+    client, study, exps = _dropout_study()
+    records, _ = interactions_from_replicates(client, study, exps)
+    arcs = _by_arc(records)
+    on_a = " ".join(arcs[(C, A)]["notes"])
+    assert "started at 2" in on_a and "in the full community and 1 without " + C in on_a
+    assert "a factor of 2.00" in on_a and "did not begin at the same density" not in on_a
+    on_c = " ".join(arcs[(B, C)]["notes"])
+    assert "in the full community and 5 without " + B in on_c and "a factor of 5.00" in on_c
+    assert "so the two sides of this comparison did not begin at the same density" in on_c
+
+
+def test_a_biculture_arc_says_what_each_side_started_at():
+    """The fake study of tests/test_gui.py: A starts at 1 in both co-culture replicates and in both
+    monocultures, so the note says a factor of 1.00, with no warning."""
+    from test_gui import _query
+    arc = next(e for e in _query()["network"].edges if e.effect == "facilitation")
+    note = " ".join(arc.notes)
+    assert "started at 1 Cells/mL in the co-culture and 1 in the monocultures, a factor of 1.00" in note
+
+
+def test_a_side_with_no_first_value_says_its_starting_density_could_not_be_read():
+    """A at 0 at the first point of its monocultures: there is no ratio, and the arc says the starting density
+    could not be compared, rather than saying nothing, which read as the two sides having matched."""
+    from grownet.derive import start_note
+    from grownet.growth import GrowthCurve, Replicate
+
+    def rep(first):
+        return Replicate((GrowthCurve(A, (0.0, 1.0, 2.0), (first, 2.0, 4.0), "h", "Cells/mL", "qpcr"),), "r")
+    (note,) = start_note([rep(1.0)], [rep(0.0)], A, "in the co-culture", "in the monocultures")
+    assert note.startswith(f"the starting density of {A} could not be compared in the co-culture")
+    (fine,) = start_note([rep(1.0)], [rep(2.0)], A, "in the co-culture", "in the monocultures")
+    assert fine.startswith("started at 1 Cells/mL in the co-culture and 2 in the monocultures")
