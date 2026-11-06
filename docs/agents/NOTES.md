@@ -918,6 +918,10 @@ with a result is `render_form(..., below=...)`, so the result sits under the set
 `details` holding `report.report_text`, also served at `/report.txt`. `tests/test_interface.py` quotes
 Karoline's words for these and checks each through the running server; see AGENTS.md before changing it.
 
+Setting values on the page go through `report._value`, the report's own formatter (on/off, none, the
+second box's lines joined by "; "), so the page and the report cannot word one setting two ways
+(2026-11-06). A merged arc's strength cell carries `_merged_note`: "N merged arcs: median, range a to b".
+
 ## Help page
 
 `src/crossfeed/help.py` holds the help page as data keyed by the code's own names (#78):

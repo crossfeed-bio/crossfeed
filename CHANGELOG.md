@@ -6,6 +6,14 @@ content.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The page says when an arc is merged, and writes a changed setting as the report does** (found checking
+  Merge parallel arcs on the live page, 2026-11-06; Karoline: "Yes, fix both"). A merged arc's strength
+  showed as a bare median, "-1.49", like any arc; it now reads "3 merged arcs: median, range -2.59 to -1.30"
+  under it. The line naming the settings off their defaults said "Merge parallel arcs = True"; it now says
+  "on", and joins the second box's lines with "; ", as the report does.
+
 
 ## [0.5.0] (2026-10-14)
 
