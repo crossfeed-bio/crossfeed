@@ -73,6 +73,42 @@ content.
   the package against the chemostats it was fitted to and subtract D twice.
 - **A local validation of it** (#314): `packaging/validate_steady_state.py` runs it on the fitted 12-species
   gLV of Venturelli et al. 2018 (download their Code EV1; nothing of theirs is in the repository). From
+  monocultures and pairs it recovers 126 of the 132 coefficients of B exactly; with 5% noise over three
+  vessels the bootstrap spread covers the truth for 85% to 94% of them over six noise draws. The numbers
+  are in METHOD_NOTES.
+- **When the design is insufficient, it says what is missing** (Karoline, 2026-11-06: "There will be cases
+  when the available sub-communities are insufficient to make the derivation (the current state of
+  mGrowthDB). Is the error message in this case informative?"). One line per chemostat group (how many
+  communities were at a steady state, how many rows that determines, and what a row needs) and one per
+  organism, where it was one per coefficient; and the page and the command line lead with that, instead of
+  the replicate comparison's sentences about co-cultures and drop-out designs. The `--derivation` help,
+  the command-line examples and the README describe the third derivation.
+
+- **The steady-state derivation, hardened before release.** Runs that end with the same organisms present
+  are one community, since they reach one steady state, and its bootstrap draws whole runs: kept apart, two
+  noisy runs of one pair made rows look determined from noise alone. A row whose own term is not negative
+  is named, not reported, since its sign depends on whether the organism's growth rate is below the
+  dilution rate (an obligate cross-feeder's feeders were called inhibitors). Its arcs carry evidence
+  `steady_state` (a new value of `evidence`), not `biculture`, and the gLV package no longer says every arc
+  compares two organisms directly. The row scale is per hour whatever the curve's time unit, and is the
+  larger of two readings, the batch period's rise less D and the rise after the pump started, so a lag in
+  a short batch period no longer halves it; it is an estimate, which noise pulls high, and the help says
+  so. The bootstrap draws the statistic the fit uses (the mean) and is widened for few replicates. Each
+  organism is read by one technique within a fit: the runs using its more common technique are kept and
+  the others named. The rates say they are `r_i - D` from a chemostat
+  start-up rather than batch rates; with no row scaled, no batch rate is read in their place, and the
+  command line's report says so; the package takes one dilution rate for every organism, the one most rows
+  were fitted at, whatever the order the studies were read in. An empty result after the second box or the
+  Technique setting no longer says the studies hold no chemostat. A run that is still changing in the
+  window its steady state is read in is left out and named, rather than fitted as one. The validation script no longer lets
+  absent organisms invade from solver noise, reports six noise draws and the start-up's noise bias, and
+  its numbers in METHOD_NOTES were re-derived.
+
+### Fixed
+
+- **An empty network from the command line is announced under the study's name again.** `derive STUDY`
+  printed "NO interactions were derived for" the last reason it had listed, since the loop printing the
+  reasons reused the name of the study's label; on every derivation.
   monocultures and pairs it recovers 126 of the 132 coefficients exactly; with 5% noise over three vessels
   the bootstrap spread covers the truth for 93% of them. The numbers are in METHOD_NOTES.
 

@@ -38,7 +38,7 @@ from scipy.integrate import solve_ivp
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from grownet.growth import GrowthCurve  # noqa: E402
-from grownet.subcommunity import fit, leave_one_out_predictions, row_scale  # noqa: E402
+from grownet.subcommunity import fit, leave_one_out_predictions, pool, row_scale  # noqa: E402
 
 NAMES = ["BH", "CA", "BU", "PC", "BO", "BV", "BT", "EL", "FP", "CH", "DP", "ER"]
 D = 0.05                # per hour, under every growth rate of the model (the slowest, ER, is 0.156)
@@ -60,9 +60,11 @@ def steady(u, A, members, washed_out=WASHED_OUT):
     Some sub-communities of a fitted gLV have no steady state at all and grow without bound; a chemostat run
     like that would hold no steady state either, so it is left out, and counted."""
     x0 = np.where(members, 0.01, 0.0)
+    # an organism not inoculated stays at exactly 0: left free, solver noise of 1e-14 grew into a member over
+    # 20,000 h, and the "leave out BU" community ended with BU at 0.309 (found in review)
     with np.errstate(over="ignore", invalid="ignore"):
-        sol = solve_ivp(lambda t, x: x * (u - D + A @ x), (0, 20000.0), x0, method="LSODA", rtol=1e-10,
-                        atol=1e-14)
+        sol = solve_ivp(lambda t, x: np.where(members, x * (u - D + A @ x), 0.0), (0, 20000.0), x0,
+                        method="LSODA", rtol=1e-10, atol=1e-14)
     x = sol.y[:, -1].copy()
     if not np.all(np.isfinite(x)) or x.max() > 1e3:
         return x, False
@@ -99,6 +101,25 @@ def communities(u, A, groups, vessels=1, noise=0.0, seed=0, washed_out=WASHED_OU
     return out, unsettled
 
 
+def startup_noise(u, A, sigma, draws=20, seed=1):
+    """How the row scale read from a start-up with lognormal noise `sigma` on each point compares with the
+    true u - D: the share above it, and the median ratio. The steepest window is kept, so noise pulls it up."""
+    import statistics
+    rng = random.Random(seed)
+    ratios = []
+    for i in range(len(NAMES)):
+        curve = startup(u, A, i)
+        for _ in range(draws):
+            noisy = GrowthCurve(NAMES[i], curve.times, tuple(v * math.exp(rng.gauss(0, sigma)) for v in curve.values),
+                                "h", "OD600", "od")
+            got = row_scale(noisy, D, {"kind": "batch", "hours": BATCH_HOURS, "said": "a 4 h batch period"})
+            if got["scale"] is not None:
+                ratios.append(got["scale"] / (u[i] - D))
+    high = sum(r > 1 for r in ratios) / len(ratios)
+    print(f"row scales from start-ups with {sigma:.0%} noise on each point: {len(ratios)} read, above u - D in "
+          f"{high:.0%}, median ratio {statistics.median(ratios):.2f}, max {max(ratios):.2f}")
+
+
 def report(label, u, A, design, scales, draws=0):
     comms, unsettled = design
     n = len(NAMES)
@@ -125,7 +146,14 @@ def report(label, u, A, design, scales, draws=0):
                       f"{np.mean(covered):.0%}")
     full = next((c for c in comms if c["name"].count("+") == n - 1), None)
     if full is not None:
-        pred = next(p for p in leave_one_out_predictions(comms) if p["community"] == full["name"])
+        # communities whose survivors are the same set are one equation (`pool`), so the full community may be
+        # pooled with the leave-one-out ones that lost the same members; it is predicted as that one
+        pooled = next(c for c in pool(comms) if full["name"] in (c.get("runs") or [c["name"]]))
+        runs = len(pooled.get("runs") or [pooled["name"]])
+        if runs > 1:
+            print(f"   the full community holds the same organisms as {runs - 1} other communities, so they are "
+                  "one equation")
+        pred = next(p for p in leave_one_out_predictions(comms) if p["community"] == pooled["name"])
         if pred["status"] == "predicted":
             err = [abs(pred["predicted"][k] - v) / v for k, v in pred["observed"].items()]
             print(f"   the full community predicted without it: max relative error {max(err):.2g} over "
@@ -152,6 +180,20 @@ def main(path):
            if scales[k]["scale"] is not None]
     print(f"row scales from the start-up: {len(rel)} of {n}; error relative to u - D: median "
           f"{np.median(rel):.2g}, max {max(rel):.2g}")
+    # the same start-ups timed in minutes and in days: the scale is per hour whatever the curve's unit, as the
+    # dilution rate is (raised in review: every curve here was in hours, so the unit path went unchecked)
+    period = {"kind": "batch", "hours": BATCH_HOURS, "said": "a 4 h batch period"}
+    other = []
+    for i in range(n):
+        c = startup(u, A, i)
+        for unit, per in (("min", 60.0), ("d", 1 / 24)):
+            again = row_scale(GrowthCurve(c.species, tuple(t * per for t in c.times), c.values, unit, "OD600", "od"),
+                              D, period)["scale"]
+            if scales[NAMES[i]]["scale"] is not None:
+                other.append(abs(again / scales[NAMES[i]]["scale"] - 1))
+    print(f"the same start-ups in minutes and in days: scales differ from the hours' by at most {max(other):.2g}")
+    print("a community counts as settled when every member present grows at under 1e-6 per h after 20,000 h of "
+          "simulation; one that does not is left out and counted")
     monos = [(i,) for i in range(n)]
     loo = [tuple(j for j in range(n) if j != h) for h in range(n)]
     full = [tuple(range(n))]
@@ -163,10 +205,15 @@ def main(path):
     report("bottom-up: monocultures and pairs", u, A, communities(u, A, monos + pairs), scales)
     report("all: monocultures, pairs, leave-one-out, full", u, A, communities(u, A, monos + pairs + loo + full),
            scales)
-    report("all, 3 vessels with 5% noise", u, A, communities(u, A, monos + pairs + loo + full, 3, 0.05),
-           scales, draws=200)
+    # the coverage of one noise draw is itself noisy, so six draws (found in a second review: one seed said 94%)
+    for seed in range(6):
+        report(f"all, 3 vessels with 5% noise, draw {seed}", u, A,
+               communities(u, A, monos + pairs + loo + full, 3, 0.05, seed=seed), scales, draws=200)
     # what the 1% wash-out rule costs: an organism below it is read as gone though it is still there
     report("bottom-up, wash-out rule off", u, A, communities(u, A, monos + pairs, washed_out=0.0), scales)
+    report("all, wash-out rule off", u, A, communities(u, A, monos + pairs + loo + full, washed_out=0.0), scales)
+    for sigma in (0.02, 0.05, 0.10):
+        startup_noise(u, A, sigma)
 
 
 if __name__ == "__main__":

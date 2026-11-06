@@ -11,7 +11,7 @@ scale (r_i - D in a chemostat). Every coefficient here is invented: nothing of a
 import pytest
 
 from grownet.integrated import _solve
-from grownet.subcommunity import UNIT_ROW, fit, leave_one_out_predictions
+from grownet.subcommunity import UNIT_ROW, _resample, _row_reasons, fit, leave_one_out_predictions, pool
 
 # Two species, by hand. B = [[-1, -0.25], [-0.1, -0.5]]: a alone settles at 1 (1 - 1*1 = 0), b alone at 2
 # (1 - 0.5*2 = 0). Together: -x_a - 0.25 x_b = -1 and -0.1 x_a - 0.5 x_b = -1. The first gives
@@ -129,3 +129,137 @@ def test_the_spread_comes_from_vessels_and_is_none_without_two():
 
 def test_the_rows_are_in_units_of_the_row_scale():
     assert UNIT_ROW == "1/abundance, in units of the row scale s_i (r_i - D in a chemostat)"
+
+
+def test_a_row_whose_own_term_is_not_negative_is_named_not_given_a_sign():
+    """An obligate cross-feeder X: r_X = 0.1 below D = 0.2, so it washes out alone and lives on J's and K's
+    products (A_XJ = 0.6, A_XK = 0.5 above zero). Its row is B_X = A_X / (r_X - D) = A_X / -0.1, so
+    {X: 10, J: -6, K: -5}: every sign flipped by the negative scale. Reported, J and K were called its
+    inhibitors (found in review). B_XX = 10 is not negative, which a self-limited organism's never is unless
+    r_X < D, so the row cannot say which way its partners act, and it is named instead."""
+    B = {"X": {"X": 10.0, "J": -6.0, "K": -5.0},
+         "J": {"X": -0.1 / 0.6, "J": -1.0 / 0.6, "K": -0.2 / 0.6},
+         "K": {"X": 0.0, "J": -0.3 / 0.5, "K": -1.0 / 0.5}}
+    x_alone = {"name": "X", "abundance": {"X": 0.0}}                    # 1 + 10 x = 0 has no positive root
+    design = [x_alone, _community("J", B=B), _community("K", B=B), _community("J", "K", B=B),
+              _community("X", "J", B=B), _community("X", "K", B=B), _community("X", "J", "K", B=B)]
+    got = fit(design, draws=0)
+    assert got["rows"]["X"]["status"] == "no self-limitation" and got["rows"]["X"]["values"] == {}
+    assert got["rows"]["X"]["own"] == pytest.approx(10.0, rel=1e-9)
+    assert ("X", "J") in got["unidentified"] and "decides the sign" in got["why"][("X", "J")]
+    assert any(i == "X" and "cannot hold alone at this dilution rate" in why for i, why in _row_reasons(got))
+    # the others are untouched: J's and K's rows are exact
+    assert got["rows"]["J"]["values"] == pytest.approx(B["J"], abs=1e-9)
+
+
+def test_runs_of_the_same_members_are_one_equation_not_two():
+    """Two runs of the pair a+b and nothing else: one set of members has one steady state, so this is one
+    equation per row, with two unknowns, and no row is determined. Kept apart, the runs' noise made two
+    equations, and the rows were "identified" from noise alone, more often the noisier the runs (found in
+    review). Pooled, the runs are the community's vessels."""
+    pair = _steady(["a", "b"])
+    one = {"name": "a+b", "abundance": {k: v * 1.03 for k, v in pair.items()}}
+    two = {"name": "a+b again", "abundance": {"a": pair["a"] * 0.96, "b": pair["b"] * 1.05}}
+    got = fit([one, two], draws=0)
+    assert got["rows"]["a"]["status"] == got["rows"]["b"]["status"] == "underdetermined"
+    assert got["rows"]["a"]["equations"] == 1
+    (pooled,) = pool([one, two])
+    assert len(pooled["vessels"]) == 2 and sorted(pooled["runs"]) == ["a+b", "a+b again"]
+    assert pooled["abundance"]["a"] == pytest.approx(pair["a"] * (1.03 + 0.96) / 2, rel=1e-12)
+
+
+def test_a_community_left_out_is_not_in_the_fit_that_predicts_it():
+    """The EPICS design of three species without the full community: leave out the pair a+b and a never
+    meets b, so its effect on a is not determined and a+b cannot be predicted. A fit that kept the community
+    it predicts would always predict it exactly."""
+    design = [_community("a"), _community("b"), _community("c"),
+              _community("b", "c"), _community("a", "c"), _community("a", "b")]
+    pair = next(p for p in leave_one_out_predictions(design) if p["community"] == "a+b")
+    assert pair["status"].startswith("not predicted") and "a on b" in pair["status"]
+
+
+def test_partners_in_the_same_proportions_everywhere_leave_the_row_undetermined():
+    """b and c are always together, at 1 : 1.000001, in every community holding a, so a's equations cannot
+    tell b's effect from c's: six communities, six equations for a's five unknowns (a to e), and still not
+    determined, because two columns are all but equal: past the condition limit."""
+    e = 1.000001
+    design = [{"name": "abc", "abundance": {"a": 1.0, "b": 1.0, "c": e}},
+              {"name": "abcd", "abundance": {"a": 2.0, "b": 0.5, "c": 0.5 * e, "d": 1.0}},
+              {"name": "abce", "abundance": {"a": 0.5, "b": 2.0, "c": 2.0 * e, "e": 1.0}},
+              {"name": "ade", "abundance": {"a": 1.5, "d": 0.7, "e": 0.4}},
+              {"name": "ad", "abundance": {"a": 1.2, "d": 0.9}},
+              {"name": "ae", "abundance": {"a": 0.8, "e": 1.3}}]
+    got = fit(design, draws=0)
+    assert got["rows"]["a"]["status"] == "underdetermined" and got["rows"]["a"]["equations"] == 6
+    assert len(got["rows"]["a"]["columns"]) == 5
+    assert any(i == "a" and "too alike to tell apart" in why for i, why in _row_reasons(got))
+    # and with c at a proportion of its own in one community, the same design passes the limit (these
+    # abundances are invented, not steady states of one B, so only the condition is the point here)
+    from grownet.integrated import MAX_CONDITION
+    design[0] = {"name": "abc", "abundance": {"a": 1.0, "b": 1.0, "c": 3.0}}
+    assert fit(design, draws=0)["rows"]["a"]["condition"] <= MAX_CONDITION
+
+
+def test_runs_are_pooled_by_the_members_present_not_by_what_was_inoculated():
+    """a+b, and a+b+c where c washed out, end with the same members: one steady state, one community. a+b
+    run twice where one run lost b ends with different members: two. The wash-out is reported under the run
+    that lost it, not under the pool's name (found in a second review)."""
+    pair = _steady(["a", "b"])
+    lost_c = {"name": "a+b+c", "abundance": {**pair, "c": 0.0}}
+    assert len(pool([{"name": "a+b", "abundance": dict(pair)}, lost_c])) == 1
+    lost_b = {"name": "a+b, b lost", "abundance": {"a": 1.0, "b": 0.0}}
+    assert len(pool([{"name": "a+b", "abundance": dict(pair)}, lost_b])) == 2
+    got = fit([{"name": "a+b", "abundance": dict(pair)}, lost_c, _community("a"), _community("b")], draws=0)
+    assert got["washed_out"] == [("a+b+c", "c")]
+    (pooled,) = [c for c in pool([{"name": "a+b", "abundance": dict(pair)}, lost_c]) if "runs" in c]
+    assert "c" not in pooled["abundance"]
+
+
+def test_the_bootstrap_spreads_as_far_as_the_mean_and_keeps_a_member_present():
+    """Three vessels at 1, 2 and 6: the mean 3 has a standard error s / sqrt(3) = 2.646 / 1.732 = 1.528. A
+    plain bootstrap of the mean spreads sqrt(2 / 3) of that, 1.247; widened by sqrt(3 / 2) it spreads 1.528
+    (found in review). And two vessels at 1 and 100: a draw of the 1 twice, widened, would fall below 0,
+    which would read the member as washed out; it stays present."""
+    import random
+    import statistics
+    rng = random.Random(0)
+    c = {"name": "x", "abundance": {"a": 3.0}, "vessels": [{"a": 1.0}, {"a": 2.0}, {"a": 6.0}]}
+    draws = [_resample([c], rng)[0]["abundance"]["a"] for _ in range(4000)]
+    assert statistics.pstdev(draws) == pytest.approx(statistics.stdev([1.0, 2.0, 6.0]) / 3 ** 0.5, rel=0.05)
+    wide = {"name": "y", "abundance": {"a": 50.5}, "vessels": [{"a": 1.0}, {"a": 100.0}]}
+    assert all(_resample([wide], rng)[0]["abundance"]["a"] > 0 for _ in range(200))
+
+
+def test_a_left_out_run_takes_its_twin_runs_with_it():
+    """Called on runs as they come, two runs of a+b are one community: leaving it out leaves both out, so a
+    never meets b and the pair is not predicted, instead of being predicted exactly by its own twin."""
+    pair = _steady(["a", "b"])
+    runs = [_community("a"), _community("b"), {"name": "a+b", "abundance": dict(pair)},
+            {"name": "a+b again", "abundance": dict(pair)}]
+    (twins,) = [p for p in leave_one_out_predictions(runs) if p["community"].startswith("a+b")]
+    assert twins["community"] == "a+b (2 runs)" and twins["status"].startswith("not predicted")
+
+
+def test_pooled_runs_are_drawn_whole_not_vessel_by_vessel():
+    """Two runs of a+b, three vessels each, a at 1 in every vessel of one and 3 in every vessel of the other:
+    the runs differ and their vessels do not. Drawing runs gives draw means of 1, 2 or 3 (p 1/4, 1/2, 1/4), sd
+    sqrt(1/2) = 0.707, widened by sqrt(2): 1.0. Drawing the six vessels as independent gives about 0.44, a
+    spread that called arcs present far too readily (found in a third review)."""
+    import random
+    import statistics
+    one = {"name": "a+b", "abundance": {"a": 1.0, "b": 1.0}, "vessels": [{"a": 1.0, "b": 1.0}] * 3}
+    two = {"name": "a+b again", "abundance": {"a": 3.0, "b": 1.0}, "vessels": [{"a": 3.0, "b": 1.0}] * 3}
+    (pooled,) = pool([one, two])
+    assert pooled["abundance"]["a"] == pytest.approx(2.0)
+    rng = random.Random(0)
+    draws = [_resample([pooled], rng)[0]["abundance"]["a"] for _ in range(4000)]
+    assert statistics.pstdev(draws) == pytest.approx(1.0, rel=0.06)
+
+
+def test_a_pool_is_the_mean_of_its_runs_not_of_its_vessels():
+    """One run with one vessel at 1, one with three at 3: the runs' means are 1 and 3, so the pool is 2; over
+    the four vessels it would be 2.5."""
+    one = {"name": "a+b", "abundance": {"a": 1.0, "b": 1.0}, "vessels": [{"a": 1.0, "b": 1.0}]}
+    two = {"name": "a+b again", "abundance": {"a": 3.0, "b": 1.0}, "vessels": [{"a": 3.0, "b": 1.0}] * 3}
+    (pooled,) = pool([one, two])
+    assert pooled["abundance"]["a"] == pytest.approx(2.0)

@@ -239,7 +239,8 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   censored one. Or integrated, which gLV mode selects and which fits each organism's row from the whole time
   course, ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt), over its growth phase; it needs no
   growth property and gives the gLV coefficients directly, and it reports every row its design cannot
-  identify</span></div>
+  identify. Or steady, off by default and meant for gLV mode, which fits the rows from the chemostat steady
+  states of sub-communities, continuous cultures only</span></div>
 <div class="row"><label>Growth rate window
   <input name="rate_window" type="text" size="6" value="{_esc(s['rate_window'])}"></label>
   <span class="muted">with easylinear: the points in each fitted window (default 5, as mGrowthDB)</span></div>
@@ -585,9 +586,15 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
                "--merge-genera produces, and have no cell in this matrix: the diagonal is written there."
                if count.get("within_one_organism") else "")
             + f"{na_hint}</p>")
-    rate_hint = ("<p class=\"hint\">The growth rates are each organism's maximum specific growth rate in "
-                 "monoculture, the median over the replicates and studies that have one, with the lag and the "
-                 "carrying capacity beside each. The gLV package holds fitted per-capita coefficients, one "
+    # under the steady-state derivation the rates are r_i - D from a chemostat start-up, with no lag (the
+    # batch sentence was shown for them, found in a third review)
+    rates_are = ("r_i - D, each organism's growth rate less the dilution rate, read from its own monoculture "
+                 "chemostat's start-up at the package's one dilution rate, with the carrying capacity its row "
+                 "implies beside each" if result.get("settings", {}).get("derivation") == "steady" else
+                 "each organism's maximum specific growth rate in monoculture, the median over the replicates "
+                 "and studies that have one, with the lag and the carrying capacity beside each")
+    rate_hint = (f"<p class=\"hint\">The growth rates are {rates_are}. "
+                 "The gLV package holds fitted per-capita coefficients, one "
                  "matrix per abundance unit, the matching growth rates and a README stating every formula "
                  "and naming whatever could not be fitted.</p>") if organism_rates else ""
     units = matrix.abundance_units(result["network"], organism_rates)
@@ -655,19 +662,22 @@ def _unresolved_list(result: dict) -> str:
     return f"<p class=\"note\">Not used:</p><ul class=\"unresolved\">{''.join(items)}</ul>"
 
 
-def _empty_reason(result: dict) -> str:
-    """Why a search came back empty, with what the second box left out said first (#113)."""
+def _empty_reason(result: dict, command_line: bool = False) -> str:
+    """Why a search came back empty, with what the second box left out said first (#113). `command_line`
+    names the command line's control where a sentence names one (the steady-state derivation's lead)."""
     reason = _empty_reason_core(result)
     s = result.get("settings", {})
+    # the steady-state derivation's own lead, in place of the replicate comparison's sentences about pairwise
+    # co-cultures and drop-out designs, which say nothing about chemostat steady states (2026-11-06)
+    from .subcommunity import determined_any
+    if (s.get("derivation") == "steady" and not result.get("errors") and result.get("studies")
+            and not determined_any(result.get("skipped", ()))):
+        from .subcommunity import empty_reason as steady_reason
+        reason = _esc(steady_reason(result.get("skipped", ()), command_line=command_line))
     # the integrated form fits a row from a time course, so a sparsely sampled study gives it nothing
     # where the specified comparison needs only two measurements per set. Say which setting moves, as the
     # page does everywhere else. It is gLV mode that selects that form (2026-10-10), so this is what a
     # reader meets when a package comes out empty rather than on an ordinary search.
-    if s.get("derivation") == "steady":
-        reason += (" The steady-state derivation reads continuous cultures only, and a row needs several "
-                   "communities of one medium and dilution rate holding the organism at a steady state; the "
-                   "reasons below say what each study held. Set Derivation in Advanced settings to derive "
-                   "from batch cultures.")
     if s.get("derivation", DEFAULTS["derivation"]) == "integrated" and any(
             "too few to fit a row" in why or "usable time point" in why
             for _, why in result.get("skipped", ())):
@@ -938,6 +948,20 @@ GLV_MODE_MESSAGE = ("gLV mode on: growth rates on, drop-out communities off, the
 GLV_MODE_OFF_MESSAGE = ("gLV mode off: growth rates off, drop-out communities included again, the "
                         "comparison back on the area under the curve and the derivation back to the "
                         "comparison of replicate sets, which are the defaults.")
+# ... and when the steady-state derivation is chosen, which gLV mode keeps: it said "the derivation on the
+# integrated form" while steady stayed selected (found in review)
+GLV_MODE_STEADY_MESSAGE = ("gLV mode on: growth rates on, and the steady-state derivation kept, which you chose: "
+                           "it fits the rows from chemostat steady states of sub-communities, so the growth "
+                           "property and the drop-out setting do not apply to it. Growth rates and the "
+                           "derivation are in Advanced settings, and pressing gLV mode again switches them "
+                           "back. Name one medium in the second box to keep a fit to one environment.")
+
+
+# What the page says when the steady-state derivation gave no row a scale, in place of batch growth rates.
+STEADY_NO_RATE = ("no growth rate: under the steady-state derivation an organism's rate is r_i - D, read from "
+                  "its own monoculture chemostat's start-up and carried by its arcs, and no arc here carries "
+                  "one: no row got a scale, or no arc survived the search's settings (the reasons say which). "
+                  "No batch growth rate is read in their place")
 
 
 # Under the steady-state derivation the check would score a package against the steady states it was fitted
@@ -1286,8 +1310,12 @@ def _run_query(client, entries, settings: dict | None = None, index: dict | None
     # from every row the derivation fitted, not the ones the display kept: the rate is a property of the
     # organism, and it moved by 14 per cent with --include-absent while it was a median over the arcs
     # that survived (Karoline, 2026-10-12, on #204: option 1)
-    fitted = (integrated.fitted_rates(fitted_rows) if s.get("derivation") in ("integrated", "steady")
-              else {})
+    # the derivation's own name for its rates: the steady-state derivation's are r_i - D from a chemostat's
+    # start-up, and were labelled the integrated form's, "batch experiments only" (found in review)
+    from .subcommunity import METRIC as STEADY_METRIC
+    fitted_method = STEADY_METRIC if s.get("derivation") == "steady" else integrated.METRIC
+    fitted = (integrated.fitted_rates(fitted_rows, fitted_method)
+              if s.get("derivation") in ("integrated", "steady") else {})
     if fitted:
         # the derivation fitted a rate and a self-limitation per organism, and those are the parameters
         # that go with its coefficients (#127)
@@ -1301,7 +1329,11 @@ def _run_query(client, entries, settings: dict | None = None, index: dict | None
         # So there is no second pass here: it used to read every study's monocultures again to substitute
         # a plateau afterwards, which cost a crawl and published a row no fit had produced.
         # `self_limitation_source` on each row says where the diagonal came from, or why there is none.
-        net.meta["growth_rates"] = matrix.rate_meta(net, organism_rates, integrated.METRIC)
+        net.meta["growth_rates"] = matrix.rate_meta(net, organism_rates, fitted_method)
+    elif s["report_rates"] and s.get("derivation") == "steady":
+        # never the batch monocultures: the steady-state derivation's rate is r_i - D from the chemostat's own
+        # start-up, and reading batch rates in its place contradicted the help (found in review)
+        notes.append(STEADY_NO_RATE)
     elif s["report_rates"]:
         say(len(studies), len(studies), "Reading the monoculture growth rates")
         found, rate_skips = growth_rates(client, studies, wanted=rate_nodes,
@@ -1735,7 +1767,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             turning_on = not glv_mode_on(settings)
             settings = glv_mode(settings, turning_on)
             self._send(render_form(self.token, "\n".join(entries), settings,
-                                   message=GLV_MODE_MESSAGE if turning_on else GLV_MODE_OFF_MESSAGE,
+                                   message=(GLV_MODE_STEADY_MESSAGE if turning_on and
+                                            settings.get("derivation") == "steady" else
+                                            GLV_MODE_MESSAGE if turning_on else GLV_MODE_OFF_MESSAGE),
                                    conditions=settings.get("conditions", "")))
             return
         if form.get("example"):

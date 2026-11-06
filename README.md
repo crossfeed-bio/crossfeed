@@ -165,7 +165,7 @@ python -m grownet schema [--out FILE]
   format id moves when a field changes meaning and the derivation is not a field, so the artifact and a
   live run can carry the same format and entirely different networks.
 - `derive STUDY --fixture FILE` runs the downstream seam offline from a JSON list of interaction records.
-- `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of either built-in one (see below).
+- `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the three built-in ones (see below).
 - The command line does everything the local page does: every advanced setting has its option, and the
   page's outputs are `--out FILE` (with `--format`), `--to-cytoscape`, `--report FILE` (the same report the
   page shows), and, with `--report-rates`, `--rates FILE` and `--glv FILE`. `grownet derive --help` lists
@@ -473,6 +473,22 @@ Every arc carries the coefficient, the condition number of its fit, its R2 and t
 with every interaction set to zero; a row the design
 cannot identify, and a community of three or more members, are reported rather than derived.
 
+**The derivation from chemostat steady states.** `--derivation steady`, off by default and meant for gLV
+mode, fits the rows from steady states instead of growth curves. At a chemostat steady state every organism
+present satisfies `1 + sum_j B_ij N_j = 0` with `B = A / (r_i - D)`, so every unperturbed community of one
+study, medium, abundance unit and dilution rate (each organism read by one technique there) gives one equation per
+organism in it, and each row is their least squares: the idea of EPICS (Ansari et al. 2021), which reads only the monocultures and the communities
+missing one member, with every measured sub-community counted here. The row scale `r_i - D` is read from the
+organism's own monoculture chemostat start-up (the larger of the rise inside a batch period the description
+states, less D, and the rise after the pump started; or the rise from inoculation), never from a batch growth
+rate, so the package's rates are `r_i - D` and it simulates the
+chemostat. What a design cannot determine is said once per chemostat group and once per organism: a row has
+one unknown for its own limitation and one per partner, and needs at least that many communities holding the
+organism. No study in mGrowthDB holds such a design yet; on the fitted 12-species gLV of Venturelli et al.
+2018, monocultures and pairs recover 126 of its 132 coefficients of B exactly, and `A = (r_i - D) B`, formed
+from them and the start-up scales, within 2% of each organism's self-limitation without measurement noise
+(`packaging/validate_steady_state.py`).
+
 **Scoring the package against a chemostat.** `--steady-check` (with `--report-rates --live`) scores the
 gLV parameters against the steady states mGrowthDB holds for these organisms in continuous culture: a
 chemostat satisfies `A x = -(r - D)` at steady state with D the dilution rate it records, and those
@@ -654,10 +670,12 @@ before you implement one.
 
 ## How the derivation works
 
-**Two derivations, and which one runs when.** `ReplicateDeriver` (`src/grownet/derive.py`) is the default,
-and is what produces a network. `IntegratedDeriver` (`src/grownet/integrated.py`) is what gLV mode
-selects, and is the only form that gives a gLV coefficient. Neither is the stricter version of the
-other; each answers a different question, and each has a weakness the other does not.
+**Three derivations, and which one runs when.** `ReplicateDeriver` (`src/grownet/derive.py`) is the
+default, and is what produces a network. `IntegratedDeriver` (`src/grownet/integrated.py`) is what gLV mode
+selects, and fits a gLV coefficient from growth curves. `SteadyStateDeriver` (`src/grownet/subcommunity.py`)
+is the third, chosen only when asked for, which fits the coefficients from chemostat steady states instead. Neither of
+the first two is the stricter version of the other; each answers a different question, and each has a
+weakness the other does not.
 
 **What the comparison cannot do** is give a coefficient that is free of the organism's own density: a
 coefficient from it is a difference of two separately fitted growth rates divided by one partner mean,
@@ -668,6 +686,13 @@ arc from a community of three or more, so no **drop-out** arc exists under it; a
 rule, so there are no **censored** arcs, no measured bounds and no `NA` cells. On the whole of mGrowthDB
 the comparison gives 145 arcs, 122 of them drop-out, with 12 censored bounds; the integrated form gives
 12 arcs and no bounds (measured 2026-10-09). That is why it is not the default.
+
+**What the steady-state form needs** is a design mGrowthDB does not hold yet: several unperturbed
+chemostat communities of one medium and dilution rate per organism, at least as many as the organism has
+unknowns (its own limitation and one per partner it met). Its coefficients are effective, an effect that
+needs a third organism being folded into the pairs that carry it, and each community is predicted by a fit
+made without it so a reader can see where that matters. Today it derives nothing, and says what each
+organism lacks.
 
 It was the default for one release, 0.3.0. The comparison that chose it was run in gLV mode, where
 drop-out communities are off on both sides, so it measured the two forms on the question gLV mode asks

@@ -344,6 +344,7 @@
           "enum": [
             "biculture",
             "dropout",
+            "steady_state",
             null
           ]
         },

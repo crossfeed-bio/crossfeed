@@ -7,7 +7,7 @@ networkx, and Gephi read, so a grownet network drops straight into an existing n
 Dependency-free (standard library xml only). The graph is directed, and every edge keeps its effect,
 strength, significance (-log10 of the q-value), the q-value, condition, method, the space-joined
 study_ids (the edge-level attribution), and
-when known the evidence (biculture or dropout), the community, the space-joined cautions,
+when known the evidence (biculture, dropout or steady_state), the community, the space-joined cautions,
 and the space-joined ids of the experiments the edge compares.
 
 **A list whose members can contain a space is joined with "; ", not " ".** `community` holds NODE IDS and
