@@ -366,7 +366,7 @@ EDGE_ATTRIBUTES = {
                 "the steady-state derivation it is log2(1 + B_ij x_j), the fitted row's net growth with the "
                 "partner at its abundance in the largest community holding both over without it",
     "sd": "standard deviation of the strength, the spread of the comparison (under the steady-state "
-          "derivation, from the bootstrap over vessels)",
+          "derivation, from the bootstrap over vessels, or over runs where runs were pooled)",
     "se": "standard error of the strength",
     "n_with": "replicates with the source present",
     "n_without": "replicates with the source absent",
@@ -1248,8 +1248,10 @@ others.</li>
 <li><strong>Each arc.</strong> Its strength is <code>log2(1 + B_ij x_j)</code> at the partner's abundance
 in the largest community holding both, its coefficient is <code>(r_i - D) B_ij</code> in 1/(h x
 abundance) where the scale is known, and its spread is a bootstrap over the vessels of every community its
-row rests on, widened for the few vessels a chemostat run has. If any of those communities was read in a
-single vessel, the row has no spread, so its arcs are undetermined.</li>
+row rests on (over the runs, where runs were pooled), widened for the few a chemostat run has. If any of
+those communities was read in a single vessel, the row has no spread, so its arcs are undetermined. The
+vessels of one run share its inoculum and its history, so a community read in one run has a spread from
+within that run only, narrower than the difference between runs would make it.</li>
 </ul>
 <p>mGrowthDB holds no design of this kind yet: its chemostat studies each run one community, which
 determines no row. The derivation is there for the data to come.</p>

@@ -816,13 +816,14 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
     # One dilution rate for the whole package: the steady-state derivation's rate is r_i - D, a different
     # number at each D, and a package simulates ONE chemostat. Keeping each organism's first D read mixed
     # dilution rates across organisms and changed with the order of the records (found in review). The D
-    # with the most scaled rows is the package's, the lowest on a tie; the others are named. The other
-    # derivations record none, so this never fires for them.
+    # with the most scaled rows (an organism's row in one study at one D, however many partners it has: it
+    # counted arcs, found in a third review) is the package's, the lowest on a tie; the others are named,
+    # and an organism fitted only at another D is named with that reason. The other derivations record
+    # none, so this never fires for them.
     by_dilution: dict = {}
-    for record in records:
-        if record.get("fitted_rate") is not None and record.get("fitted_rate_dilution") is not None:
-            d = record["fitted_rate_dilution"]
-            by_dilution[d] = by_dilution.get(d, 0) + 1
+    for d in {(r.get("target"), r.get("study_id"), r["fitted_rate_dilution"]) for r in records
+              if r.get("fitted_rate") is not None and r.get("fitted_rate_dilution") is not None}:
+        by_dilution[d[2]] = by_dilution.get(d[2], 0) + 1
     package_dilution = (min(by_dilution, key=lambda d: (-by_dilution[d], d)) if by_dilution else None)
     for record in records:
         nid, rate = record.get("target"), record.get("fitted_rate")
@@ -918,9 +919,18 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
         at["capacity_points"].append(record.get("fit_points", 0))
         at["capacity_per_study"].setdefault(study, []).append(-rate / own)
 
-    out: dict = {}
+    from .derive import OrganismRates
+    out = OrganismRates()
     for nid, at in gathered.items():
         if not at["rates"]:
+            elsewhere = sorted({u.split("another dilution rate, ")[1].split(" per h")[0] for u in at["other_units"]
+                                if "another dilution rate, " in u})
+            if elsewhere:
+                # its rows were all fitted at another dilution rate: it is not in this package, and the README
+                # said it had "no growth rate ... nothing on it can be fitted" (found in a third review)
+                out.no_rate[nid] = (at["name"], f"its rows were fitted at the dilution rate {', '.join(elsewhere)} "
+                                                f"per h, and this package's rates are r_i - D at {package_dilution:g} "
+                                                "per h, one chemostat")
             continue
         # the medium with the most rows is the one published; a tie goes to the first label, so the
         # choice does not depend on the order the rows arrived in. `merge_rates` chooses the same way.

@@ -215,3 +215,19 @@ def test_an_organism_read_by_two_techniques_splits_the_runs_and_says_why():
     assert len(groups) == 2
     said = " ".join(why for g in groups for _, why in g["left_out"])
     assert "b by fc and qpcr" in said
+
+
+def test_runs_reading_the_same_organisms_by_swapped_techniques_are_fitted_apart():
+    """One run of a with b reads a by fc and b by qPCR, a second the other way round: splitting by the run's
+    set of techniques put both in one fit, where a and b were each read two ways (found in a third review).
+    Within every fit each organism has one technique."""
+    second = _chemostat("E4", "a with b again", ["a", "b"], [(7, "V1"), (8, "V2")], description=RUN)
+    client, exps = _runs([second], {(i, s): _startup(0.5 if s == "a" else 0.3, 0.04, 4.0,
+                                                      PAIR_A if s == "a" else PAIR_B)
+                                    for i in (7, 8) for s in ("a", "b")})
+    _retag(client, "a", "fc", bioreplicates={5, 6})
+    _retag(client, "b", "fc", bioreplicates={7, 8})
+    for group in chemostat_groups(client, exps):
+        for m in group["techniques"]:
+            read = {c["techniques"][m] for c in group["communities"] if m in c["techniques"]}
+            assert len(read) == 1, (group["technique"], m, read)

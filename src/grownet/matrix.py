@@ -787,7 +787,10 @@ MODEL_ASSUMPTIONS = (
 STEADY_ASSUMPTIONS = (
     "  EVERY COEFFICIENT IS CONSTANT. One number stands for the effect of j on i at every steady state the",
     "      row was fitted from. A chemostat holds its medium, so the drift of a batch culture does not",
-    "      enter, but a different dilution rate or medium is another environment and another fit.",
+    "      enter, but a different medium is another environment and another fit. The rates and the",
+    "      diagonal are at one dilution rate, the package's; an off-diagonal cell takes the arcs of every",
+    "      dilution rate, since A_ij = (r_i - D) B_ij does not depend on D in a gLV, which holds for",
+    "      these effective coefficients only as far as the communities behave as one.",
     "  INTERACTIONS ARE EFFECTIVE AND ADD UP. The cells are fitted from communities of every size, so an",
     "      effect that needs a third organism is folded into the pairs that carry it, and a cell",
     "      describes the communities it was fitted from rather than the pair alone. The network's arcs",
@@ -1379,6 +1382,11 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                                    "one, in the same abundance unit as that partner, so its "
                                    "self-limitation cannot be fitted" + (f"; it has no growth rate: {known}"
                                                                          if known else "")))
+        elif rate.get("rate") is None and "this package's rates are r_i - D at" in getattr(rates, "no_rate",
+                                                                                          {}).get(name, ""):
+            # fitted at another dilution rate than the package's (the steady-state derivation): the reason
+            # says so in full, and "nothing on it can be fitted" was false (found in a third review)
+            left_out.append((name, rates.no_rate[name]))
         elif rate.get("rate") is None and name in getattr(rates, "no_rate", {}):
             # its strains have rates, in units that are not converted: the README said it had none at all
             # (found in review)

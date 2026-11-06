@@ -145,7 +145,9 @@ def pool(communities: list) -> list:
                           if any((v.get(k) or 0) > 0 for v in vessels)})
         abundance = {k: statistics.fmean(m[k] for m in means if k in m) for k in sorted(present)}
         experiments = sorted({e for c in runs for e in (c.get("experiments") or [c.get("experiment", "")]) if e})
-        out.append({"name": f"{runs[0]['name']} ({len(runs)} runs)", "abundance": abundance,
+        # named by the organisms present, not by the first run read: "a with c (2 runs)" named a monoculture
+        # pool after a run whose c washed out (found in a third review); `runs` names the runs
+        out.append({"name": f"{'+'.join(sorted(present))} ({len(runs)} runs)", "abundance": abundance,
                     "vessels": [v for c in runs for v in (c.get("vessels") or [c["abundance"]])],
                     "run_means": means, "experiments": experiments, "runs": [c["name"] for c in runs]})
     return out
@@ -457,12 +459,22 @@ def _by_technique(groups) -> list:
             out.append(g)
             continue
         said = "; ".join(f"{m} by {' and '.join(sorted(ts))}" for m, ts in sorted(mixed.items()))
-        split: dict = {}
-        for c in g["communities"]:
-            t = "; ".join(sorted(set(c.get("techniques", {}).values())))
-            split.setdefault(t, []).append(c)
-        for k, (t, communities) in enumerate(sorted(split.items())):
-            techniques = {m: tech for c in communities for m, tech in c.get("techniques", {}).items()}
+        # each run joins the first part whose organisms it reads the same way, so within a part every organism
+        # has one technique: splitting by the run's set of techniques put a run reading a by fc and b by qpcr
+        # beside one reading them the other way round (found in a third review)
+        parts: list = []
+        for c in sorted(g["communities"], key=lambda c: c["name"]):
+            own = c.get("techniques", {})
+            for part in parts:
+                if all(part["techniques"].get(m, t) == t for m, t in own.items()):
+                    part["techniques"].update(own)
+                    part["communities"].append(c)
+                    break
+            else:
+                parts.append({"techniques": dict(own), "communities": [c]})
+        for k, part in enumerate(parts):
+            techniques, communities = part["techniques"], part["communities"]
+            t = ", ".join(f"{m} by {tech}" for m, tech in sorted(techniques.items()))
             out.append({**g, "communities": communities, "technique": t, "techniques": techniques,
                         "scales": dict(g["scales"]),
                         "left_out": (list(g["left_out"]) if k == 0 else []) + [
@@ -581,8 +593,8 @@ class SteadyStateDeriver:
                "no_growth_alpha", "no_growth_factor", "capacity_max_fall")
     needs_client = True
     statistics = {
-        "test": "none: the spread of each coefficient is a bootstrap over the vessels of every community its "
-                "row rests on, and there is no test statistic",
+        "test": "none: the spread of each coefficient is a bootstrap over the vessels (or pooled runs) of every "
+                "community its row rests on, and there is no test statistic",
         "correction": "{name} over every comparison tested in this derivation (none here)",
         "role": "presence is decided by the absence threshold on the bootstrap spread",
     }
@@ -595,7 +607,8 @@ class SteadyStateDeriver:
         "a third organism is folded into the pairs that carry it, so a coefficient describes the communities "
         "it was fitted from. The strength beside it is log2(1 + B_ij x_j) at the partner's abundance in the "
         "largest community holding both. An interaction is reported when |strength| is at least k standard "
-        "deviations, the spread being a bootstrap over vessels; a row with any community read in a single "
+        "deviations, the spread being a bootstrap over vessels (over runs where runs were pooled, and within "
+        "one run otherwise, so narrower than run-to-run differences); a row with any community read in a single "
         "vessel has none. Runs that end with the same organisms are one community, and a row whose own term is "
         "not negative is not reported, since the sign of every effect on it would depend on whether r_i is "
         "below D (see docs/METHOD_NOTES.md in the grownet repository)."
@@ -634,7 +647,9 @@ class SteadyStateDeriver:
             # runs of the same members are one equation (`pool`), here as in the fit, so an arc's community,
             # its experiments and its leave-one-out note name what the fit used
             communities = pool(group["communities"])
-            got = fit(communities, draws=self.draws)
+            # the fit takes the runs as they are and pools them itself, so a run's wash-out is reported under
+            # its own name: pooled first, it was lost (found in a third review)
+            got = fit(group["communities"], draws=self.draws)
             # what the design can and cannot determine, said once for the group and once per organism rather
             # than once per coefficient, which was n^2 lines of the same sentence (Karoline, 2026-11-06: "Is
             # the error message in this case informative?")

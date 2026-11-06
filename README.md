@@ -484,7 +484,8 @@ chemostat. What a design cannot determine is said once per chemostat group and o
 one unknown for its own limitation and one per partner, and needs at least that many communities holding the
 organism. No study in mGrowthDB holds such a design yet; on the fitted 12-species gLV of Venturelli et al.
 2018, monocultures and pairs recover 126 of its 132 coefficients of B exactly, and the package's
-`A = (r_i - D) B` within 2% (`packaging/validate_steady_state.py`).
+`A = (r_i - D) B` within 2% of each organism's self-limitation without measurement noise
+(`packaging/validate_steady_state.py`).
 
 **Scoring the package against a chemostat.** `--steady-check` (with `--report-rates --live`) scores the
 gLV parameters against the steady states mGrowthDB holds for these organisms in continuous culture: a

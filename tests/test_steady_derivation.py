@@ -471,3 +471,56 @@ def test_the_command_line_names_the_rates_as_this_derivation_s():
     rule = net.meta["growth_rates"]["rule"]
     assert found and rule.startswith("steady_state:subcommunities") and "batch experiments only" not in rule
     assert "at the dilution rate 0.04 per h" in rule
+
+
+def _renamed(records, names):
+    """The records with organisms renamed, as another study's organisms."""
+    out = []
+    for r in records:
+        r = dict(r)
+        for side in ("source", "target"):
+            new = names[r[f"{side}_name"]]
+            r[f"{side}_name"], r[side] = new, f"name:{new}"
+        out.append(r)
+    return out
+
+
+def test_an_organism_fitted_only_at_another_dilution_rate_is_named_with_that_reason():
+    """c and d were fitted only at D 0.2, and the package is at D 0.04 (a and b, two rows each... a tie broken
+    to the lowest): they are not in it, and the README said they had "no growth rate ... nothing on it can be
+    fitted" (found in a third review). It names the dilution rate instead."""
+    from grownet import integrated, matrix
+    from grownet.subcommunity import METRIC
+    records = _at_dilution(0.04, "S1") + _renamed(_at_dilution(0.2, "S2"), {"a": "c", "b": "d"})
+    net = records_to_network(records, meta={"settings": {**gui.DEFAULTS, "derivation": "steady"}})
+    rates = matrix.for_nodes(net, integrated.fitted_rates(records, METRIC), {})
+    left = dict(matrix.coefficients(net, rates)["left_out"])
+    assert "fitted at the dilution rate 0.2 per h" in left["c"] and "0.04 per h" in left["c"]
+    assert "nothing on it" not in left["c"]
+
+
+def test_the_package_dilution_rate_counts_rows_not_arcs():
+    """One organism with three partners at D 0.1 is one row; two organisms with one partner each at D 0.05 are
+    two rows: D 0.05 is the package's (it counted arcs and chose 0.1, found in a third review)."""
+    from grownet import integrated
+    from grownet.subcommunity import METRIC
+
+    def row(target, partner, d):
+        return {"target": target, "target_name": target, "source": partner, "fitted_rate": 0.4,
+                "fitted_rate_unit": "1/h", "fitted_rate_dilution": d, "fitted_self": -0.4e-8, "study_id": "S"}
+    records = [row("a", p, 0.1) for p in ("x", "y", "z")] + [row("x", "a", 0.05), row("y", "a", 0.05)]
+    rates = integrated.fitted_rates(records, METRIC)
+    assert rates["x"]["dilution"] == 0.05 and "a" not in rates
+    assert "0.1 per h" in rates.no_rate["a"][1]
+
+
+def test_a_run_s_wash_out_is_reported_by_the_derivation():
+    """a with b, and a with b and c where c washed out: the two end with the same members and are pooled, and
+    c's wash-out is still reported, under its own run (pooled before the fit, it was lost: found in a third
+    review)."""
+    lost = _chemostat("E4", "a with b, c lost", ["a", "b", "c"], [(7, "V1"), (8, "V2")], description=RUN)
+    curves = {(i, "a"): _startup(0.5, 0.04, 4.0, PAIR_A) for i in (7, 8)}
+    curves.update({(i, "b"): _startup(0.3, 0.04, 4.0, PAIR_B) for i in (7, 8)})
+    curves.update({(i, "c"): _startup(0.3, 0.04, 4.0, 0.001 * UNIT) for i in (7, 8)})
+    _, skipped = _derive([lost], curves)
+    assert any(what.startswith("c in a with b, c lost") and "washed out" in why for what, why in skipped)
