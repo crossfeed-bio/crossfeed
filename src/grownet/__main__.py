@@ -585,7 +585,10 @@ def _emit(a, net, skipped, extra, label, result):
             f.write(rates_csv(organism_rates, net))
         print(f"wrote the growth rates to {a.rates}: {len(organism_rates)} organism(s)", file=sys.stderr)
     checked = []
-    if a.steady_check and organism_rates:
+    if a.steady_check and a.derivation == "steady":
+        from .gui import STEADY_CHECK_CIRCULAR
+        print(STEADY_CHECK_CIRCULAR, file=sys.stderr)
+    elif a.steady_check and organism_rates:
         # a chemostat steady state is an independent test of the parameters: it satisfies A x = -(r - D)
         # and was never used to fit them (#125)
         from . import steady
@@ -843,7 +846,7 @@ def build_parser() -> argparse.ArgumentParser:
     settings.add_argument("--rate-window", type=int, default=5, metavar="N",
                           help="with easylinear: the points in each fitted window (default 5, as mGrowthDB)")
     # None means "not given", so gLV mode can tell a reader's explicit choice from the default it fills
-    settings.add_argument("--derivation", choices=["replicate", "integrated"], default=None,
+    settings.add_argument("--derivation", choices=["replicate", "integrated", "steady"], default=None,
                           help="replicate (default), the specified comparison of replicate sets, the only "
                                "form that gives drop-out arcs and the no-growth rule's censored bounds; "
                                "or integrated, which fits each organism's row from the whole time course "

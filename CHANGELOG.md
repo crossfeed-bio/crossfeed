@@ -6,6 +6,35 @@ content.
 
 ## [Unreleased]
 
+### Added
+
+- **Groundwork for a third derivation: gLV rows from the steady states of sub-communities** (Karoline,
+  2026-11-06, #310: "parameterize the gLV from steady-state abundances of sub-communities", from every
+  available sub-community rather than only the leave-one-out ones of EPICS). The estimator,
+  `grownet.subcommunity.fit`, solves each row of `A / (r_i - D)` by least squares over one steady-state
+  equation per member present, names every row and coefficient the design leaves undetermined, and
+  predicts each community from a fit made without it. It is not selectable yet; the chemostat inputs and
+  the setting follow.
+- **The chemostat inputs for it** (#312): `subcommunity.chemostat_groups` turns continuous cultures into
+  communities, one fit per medium, unit and dilution rate, from runs known to be unperturbed, and reads each
+  row's scale `r_i - D` from a monoculture chemostat's own start-up. When the pump started is read from the
+  experiment's description (Karoline: "chemostat is not always switched on directly, so it would mean
+  checking experiment description for a batch period"); where it does not say, the row stays in units of
+  `r_i - D`. Live today: two studies each give one community, so nothing is derived.
+- **The derivation itself, `steady`** (#313): Derivation in Advanced settings and `--derivation steady`,
+  off by default, kept by gLV mode when chosen. Every identified coefficient becomes an arc with strength
+  `log2(1 + B_ij x_j)`, its coefficient (in 1/(time x abundance) where the row scale is known), the row's
+  bootstrap spread, and notes saying where the scale came from and how the largest community is predicted
+  by a fit made without it. What the design leaves undetermined is in the reasons. The help has a section
+  on it.
+- **The gLV package from it** (#317): rates `r_i - D` (the dilution folded in, so the package simulates the
+  chemostat) and the matrix `(r_i - D) B`, whose equilibrium is the community the chemostats held. The
+  README and the payload's caveats state its formula and its own model assumptions (effective
+  coefficients, fitted from communities of every size). A row whose scale was not read stays out of the
+  matrix, named, rather than mixing units. The steady-state check is not run under it, since it would score
+  the package against the chemostats it was fitted to and subtract D twice.
+  on it. The gLV package from it follows separately.
+
 ### Fixed
 
 - **The second box now applies under the integrated derivation too.** Media, experiments and studies named
