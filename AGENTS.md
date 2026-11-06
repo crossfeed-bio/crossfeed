@@ -215,4 +215,5 @@ them as a dated bullet with who gave them. Keep one-off requests out.
   every file the tool writes, the R package's help, and the README. Issue numbers stay where developers
   read: code comments, docstrings, tests, commit messages and pull requests, and the records under
   `docs/` and `CHANGELOG.md` (asked whether those should drop them too: "Keep them there"). `tests/test_interface.py`
-  renders each surface and scans the string literals under `src/grownet/`, so a new one fails the build.
+  renders each surface and scans the string literals under `src/grownet/` (subpackages included), the
+  viewer's text and script outside comments, and the R package's messages, so a new one fails the build.

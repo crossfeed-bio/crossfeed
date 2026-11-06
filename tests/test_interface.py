@@ -1163,7 +1163,9 @@ def test_no_issue_number_in_a_string_the_tool_can_show():
     import tokenize
     from pathlib import Path
     found = []
-    for path in sorted((Path(__file__).resolve().parents[1] / "src" / "grownet").glob("*.py")):
+    # every module, in subpackages too (`slices/`): a non-recursive glob left their messages unread (found
+    # in review)
+    for path in sorted((Path(__file__).resolve().parents[1] / "src" / "grownet").rglob("*.py")):
         source = path.read_text(encoding="utf-8")
         docstrings = set()
         for node in ast.walk(ast.parse(source)):
@@ -1177,6 +1179,54 @@ def test_no_issue_number_in_a_string_the_tool_can_show():
             if token.type in kinds and token.start[0] not in docstrings:
                 found += [f"{path.name}:{token.start[0]} {ref}" for ref in ISSUE_NUMBER.findall(token.string)]
     assert found == [], found
+
+
+def _r_strings(source: str) -> list:
+    """The string literals of R code, outside comments: what print(), cat(), message() and stop() show."""
+    out, i, n = [], 0, len(source)
+    while i < n:
+        c = source[i]
+        if c == "#":                                   # a comment, roxygen included, to the end of the line
+            end = source.find("\n", i)
+            i = n if end < 0 else end
+        elif c in "'\"":
+            j = i + 1
+            while j < n and source[j] != c:
+                j += 2 if source[j] == "\\" else 1
+            out.append(source[i + 1:j])
+            i = j + 1
+        else:
+            i += 1
+    return out
+
+
+def _viewer_text(page: str) -> str:
+    """What the viewer (gui/index.html) can show: its visible HTML, and its script with the comments taken
+    out, since the messages, labels and tooltips it writes are string literals there."""
+    shown = _visible(page)
+    for script in re.findall(r"<script\b[^>]*>(.*?)</script\s*>", page, flags=re.S | re.I):
+        script = re.sub(r"/\*.*?\*/", "", script, flags=re.S)
+        shown += "\n" + "\n".join(re.sub(r"(^|\s)//.*$", "", line) for line in script.splitlines())
+    return shown
+
+
+def test_no_issue_number_in_the_viewer_or_an_r_message():
+    """The viewer and the R package's own messages are read by users too; the scans above covered only
+    the tool's Python and the R help (found in review: "(#245)" in a viewer string and "(#142)" in a
+    cat() of print.grownet_glv passed)."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    found = {"gui/index.html": ISSUE_NUMBER.findall(_viewer_text((root / "gui" / "index.html")
+                                                                 .read_text(encoding="utf-8")))}
+    for path in (root / "r" / "R").glob("*.R"):
+        found[str(path.relative_to(root))] = [ref for text in _r_strings(path.read_text(encoding="utf-8"))
+                                              for ref in ISSUE_NUMBER.findall(text)]
+    assert not any(found.values()), {name: refs for name, refs in found.items() if refs}
+    # and the scans see what they are for: a planted number in a viewer string and in an R message
+    assert ISSUE_NUMBER.findall(_viewer_text('<script>\nshow("see (#245)"); // (#1) a comment\n</script>')) \
+        == ["#245"]
+    assert _r_strings('cat("in no matrix (#142)\\n") # (#9) a comment\nx <- \'a\'') == \
+        ["in no matrix (#142)\\n", "a"]
 
 
 def test_no_issue_number_in_the_readme_or_the_r_package_help():
