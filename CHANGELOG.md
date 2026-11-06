@@ -21,7 +21,8 @@ content.
     Two lags that were already zero stay zero (below 1e-11 h), and one moves by 1e-4 h.
   - **With `--rate-method baranyi`**, four of six organisms' rates move:
     - *B. thetaiotaomicron*: 0.787 to 0.838 /h, now over 9 replicates instead of 11, since two curves
-      whose best fit lies past the guard are now refused;
+      whose best fit lies past the guard are now refused, and the refusal says so (it gave the R2 of the
+      best fit inside the guard, which sent a reader to the data rather than to the guard);
     - *Faecalibacterium duncaniae A2-165*: 0.366 to 0.398 /h;
     - *Roseburia intestinalis L1-82*: 0.603 to 0.624 /h;
     - *Blautia hydrogenotrophica DSM 10507*: 0.259 to 0.257 /h.

@@ -171,3 +171,28 @@ def test_easylinear_refits_from_the_first_marked_window_to_the_last_as_growthrat
     # the reference's own answer on this curve, from growthrates 0.8.5: points 0 to 14, mumax 0.2142857
     assert abs(got["rate"] - 0.2142857) < 1e-7, got
 
+
+
+def test_a_refusal_whose_better_fit_lies_past_the_guard_names_the_guard(monkeypatch):
+    """The best fit puts the rate past the guard (5 times the steepest observed slope) and the best fit inside
+    it explains too little: the refusal names the guard, not only the inside fit's R2, which sent the reader
+    to the data instead of to the guard (Craig's agent, on the Baranyi damping). Every start returns the same
+    two candidates here: one past the guard with a small residual, one inside it with a large one."""
+    import math
+
+    import pytest
+
+    from grownet import rates
+    calls = {"n": 0}
+
+    def fake(xs, ys, start):
+        calls["n"] += 1
+        mu = 100.0 if calls["n"] % 2 else 0.5
+        residual = 0.01 if mu > 50 else 50.0
+        return [start[0], math.log(mu), start[2], start[3]], residual
+    monkeypatch.setattr(rates, "_fit_once", fake)
+    times = [float(t) for t in range(12)]
+    values = [math.exp(0.5 * t) if t < 8 else math.exp(4.0) for t in times]
+    with pytest.raises(rates.RateUnavailable) as refused:
+        rates.baranyi_fit(times, values)
+    assert "the guard refuses" in str(refused.value) and "best fit within the guard" in str(refused.value)

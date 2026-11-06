@@ -865,7 +865,8 @@ synthetic curve that IS the model with no lag (`test_baranyi_recovers_the_rate_o
 the exact answer is known, and real curves cannot enter the repository. Open, for a human (#298): foodnet's
 decision 35 (no rate when the best fit lies past the guard, a `guard_limited` flag at 90% of it, r2 and
 rss reported) is not adopted here. After this fix, the two study 2 curves whose best fit lies past the
-guard are refused, one of them with the misleading reason "R2 0.61".
+guard are refused, and the refusal names the guard (it gave the true but misleading "R2 0.61" of the best
+fit inside the guard until Craig's agent's review).
 
 ## Speed: parallel prefetch (2026-09-27)
 
