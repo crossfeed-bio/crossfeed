@@ -130,13 +130,21 @@ def pool(communities: list) -> list:
     runs (`run_means`), and it holds the members present only: a member one run inoculated and lost is that
     run's wash-out, which `fit` reports under the run's own name. Its name is its members', with the count,
     and `runs` names them all."""
+    def by_values(v: dict) -> tuple:
+        return tuple(sorted((k, x if x is not None else -1.0) for k, x in v.items()))
+
     groups: dict = {}
     for c in communities:
         groups.setdefault(frozenset(_present(c)), []).append(c)
     out = []
-    for present, runs in groups.items():
+    # in an order set by what the communities hold, never by their names or the order they were read in: the
+    # bootstrap draws in this order, and reordering the runs moved an arc's spread across the absence
+    # threshold (found in a sixth review)
+    for present in sorted(groups, key=lambda p: (len(p), tuple(sorted(p)))):
+        runs = sorted(groups[present], key=lambda c: by_values(c["abundance"]))
         if len(runs) == 1:
-            out.append(runs[0])
+            out.append({**runs[0], "vessels": sorted(runs[0].get("vessels") or [], key=by_values)}
+                       if runs[0].get("vessels") else runs[0])
             continue
         means = []
         for c in runs:
@@ -148,7 +156,7 @@ def pool(communities: list) -> list:
         # named by the organisms present, not by the first run read: "a with c (2 runs)" named a monoculture
         # pool after a run whose c washed out (found in a third review); `runs` names the runs
         out.append({"name": f"{'+'.join(sorted(present))} ({len(runs)} runs)", "abundance": abundance,
-                    "vessels": [v for c in runs for v in (c.get("vessels") or [c["abundance"]])],
+                    "vessels": sorted((v for c in runs for v in (c.get("vessels") or [c["abundance"]])), key=by_values),
                     "run_means": means, "experiments": experiments, "runs": [c["name"] for c in runs]})
     return out
 
@@ -481,7 +489,9 @@ def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
             group["scales"].setdefault(species, {"scale": None, "vessels": 0,
                                                  "how": "no monoculture chemostat of it in this group, so its "
                                                         "row stays in units of r_i - D"})
-    return sorted((g for g in settled if g["communities"]),
+    # a group with no usable run is kept for its reasons: dropped, a lone still-rising or perturbed run was
+    # named nowhere (found in a sixth review); the derivation reports it and fits nothing
+    return sorted((g for g in settled if g["communities"] or g["left_out"]),
                   key=lambda g: (g["dilution"], g["medium"], g["technique"]))
 
 
@@ -705,6 +715,9 @@ class SteadyStateDeriver:
         for group in chemostat_groups(self.client, exps, self.spike_factor):
             label = (f"chemostat, D {group['dilution']:g} per h, {group['medium']}, {group['unit']}"
                      + (f", {group['technique']}" if group.get("technique") else ""))
+            if not group["communities"]:
+                skipped += [(f"{what} [{label}]", why) for what, why in group["left_out"]]
+                continue
             # runs of the same members are one equation (`pool`), here as in the fit, so an arc's community,
             # its experiments and its leave-one-out note name what the fit used
             communities = pool(group["communities"])
@@ -735,8 +748,9 @@ class SteadyStateDeriver:
                         continue
                     holding = [c for c in communities if (c["abundance"].get(i) or 0) > 0
                                and (c["abundance"].get(j) or 0) > 0]
-                    largest = max(holding, key=lambda c: (len([v for v in c["abundance"].values() if v > 0]),
-                                                          c["name"]))
+                    # a tie between communities of one size is broken by their members, not their names (by
+                    # name, renaming two runs changed an arc's strength, found in a sixth review)
+                    largest = max(holding, key=lambda c: (len(_present(c)), tuple(sorted(_present(c)))))
                     x = largest["abundance"][j]
                     strength = _log2_effect(b, x, 1.0)
                     sd_b = (row["sd"] or {}).get(j) if row["sd"] is not None else None

@@ -164,7 +164,7 @@ def test_runs_of_the_same_members_are_one_equation_not_two():
     assert got["rows"]["a"]["status"] == got["rows"]["b"]["status"] == "underdetermined"
     assert got["rows"]["a"]["equations"] == 1
     (pooled,) = pool([one, two])
-    assert len(pooled["vessels"]) == 2 and pooled["runs"] == ["a+b", "a+b again"]
+    assert len(pooled["vessels"]) == 2 and sorted(pooled["runs"]) == ["a+b", "a+b again"]
     assert pooled["abundance"]["a"] == pytest.approx(pair["a"] * (1.03 + 0.96) / 2, rel=1e-12)
 
 
