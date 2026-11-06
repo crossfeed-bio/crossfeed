@@ -829,6 +829,11 @@ merged record lists `studies` (dicts), which `records_to_network` turns into sev
 merging off and `min_studies` 1 the edges pass through untouched (records need no source or target then).
 On 2026-09-27 no pair in mGrowthDB had arcs from two studies, so `min_studies` 2 gives an empty network.
 
+The help documents every field's rule in `help.MERGED_ATTRIBUTES` (2026-11-06, #302). Changing `_merged`, or
+adding an arc field, means changing that table: `tests/test_help.py` merges two arcs that differ in every
+field and fails on a field the merge rewrites that the table does not name, or one it passes through from
+the first arc beyond source, target, effect, metric and the two genus-merge fields.
+
 ## Reading only what a search needs (2026-09-27)
 
 `derive.relevant_experiments(exps, keep)` is the one rule for what a search with "only the species

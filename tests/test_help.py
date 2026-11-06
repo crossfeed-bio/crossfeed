@@ -50,6 +50,100 @@ def test_every_edge_and_node_field_is_explained():
         assert f"<code>{name}</code>" in PAGE.replace("<wbr>", "")
 
 
+# ---- what a merged arc carries (#302) ----------------------------------------------------------------
+#
+# Karoline, 2026-11-06, after asking "how is grownet currently merging arc attributes when arcs are merged
+# across studies?": "please document this in the help in the context of the arc attributes".
+
+# the fields a merged arc takes from its first arc: the four every merged arc shares, and the two only
+# Merge to genus sets. Anything else the first arc would pass through unexamined.
+FROM_THE_FIRST_ARC = {"source", "target", "effect", "metric", "supporting_pairs", "merged_pairs"}
+
+
+def _two_arcs_that_differ_in_every_field():
+    """Two arcs with a different, non-empty value in every field of the format, so any field the merge
+    rewrites shows as a difference from the first arc."""
+    def value(field, kind, i):
+        if kind == "tuple":
+            return [f"{field}-{i}"]
+        if kind.startswith("float"):
+            return [1.0, 3.0][i]
+        if kind.startswith("int"):
+            return [5, 7][i]                  # neither is 2, the count of a merge of two
+        return f"{field}-{i}"
+    arcs = [{f.name: value(f.name, str(f.type), i) for f in dataclasses.fields(model.Edge)} for i in (0, 1)]
+    for i, arc in enumerate(arcs):
+        arc.update(status=[None, "present"][i], evidence=["biculture", "dropout"][i], outcome=f"censored-{i}",
+                   study_id=f"S{i}", study_citation=f"study {i}")
+    return arcs
+
+
+def test_the_help_says_what_every_attribute_becomes_on_a_merged_arc():
+    from grownet.derive import _merged
+    arcs = _two_arcs_that_differ_in_every_field()
+    merged = _merged(arcs)
+    fields = {f.name for f in dataclasses.fields(model.Edge)}
+    changed = {k for k in fields if merged.get(k) != arcs[0].get(k)}
+    if [s["id"] for s in merged["studies"]] != [arcs[0]["study_id"]]:      # `study_ids` is written from these
+        changed.add("study_ids")
+    named = [f for row_fields, _ in help.MERGED_ATTRIBUTES for f in row_fields]
+    assert len(named) == len(set(named)), "a field is named in two rows"
+    assert set(named) <= fields, set(named) - fields
+    # every field the merge rewrites is in the help's table, and every field it does not is one the help
+    # names as taken from the first arc, so a new arc field cannot reach a merged arc undocumented
+    assert changed - set(named) == set(), changed - set(named)
+    assert fields - changed == FROM_THE_FIRST_ARC, fields - changed
+    section = PAGE[PAGE.index('id="merged"'):PAGE.index('id="decisions"')]
+    section = section.replace("<wbr>", "")
+    for field in [*named, *FROM_THE_FIRST_ARC]:
+        assert f"<code>{field}</code>" in section, field
+
+
+def test_the_consequences_the_help_states_for_a_merged_arc_hold():
+    """Each claim of the help's "Reading a merged arc", checked on arcs whose answer is computed by hand."""
+    from grownet.derive import merge_genus, merge_parallel, output_meta
+    text = " ".join(visible(PAGE).split())                  # as read, not as the source wraps it
+
+    def arc(strength, **kw):
+        effect = "facilitation" if (strength or 1) > 0 else "inhibition"
+        return {"source": "ncbi:1", "target": "ncbi:2", "source_name": "Alpha one", "target_name": "Beta two",
+                "effect": effect, "strength": strength, "status": "present", "outcome": "quantified",
+                "evidence": "biculture", "condition": "c", "experiments": [], "quality": [], "cautions": [],
+                "notes": [], "community": [], "method": "m", "study_id": "S1", **kw}
+
+    # unweighted: 1.0 on six replicates and 3.0 on one give the median of the two, 2.0, not 1.29
+    assert "The median is unweighted" in text
+    (one,), _ = merge_parallel([arc(1.0, n_with=6, n_without=6), arc(3.0, n_with=1, n_without=1)])
+    assert one["strength"] == 2.0 and one["n_with"] is None
+    # censored arcs count and do not enter the median: +0.2 and three obligate arcs give 0.2, of four arcs
+    assert "one arc of +0.2 and three obligate arcs give a quantified arc of strength 0.2" in text
+    (one,), _ = merge_parallel([arc(0.2)] + [arc(None, outcome="obligate", effect="facilitation")] * 3)
+    assert (one["strength"], one["outcome"], one["merged_arcs"]) == (0.2, "quantified", 4)
+    # present when any merged arc is: one present, two undetermined (empty status)
+    assert "A merged arc is present when any of its arcs is" in text
+    (one,), _ = merge_parallel([arc(1.0), arc(2.0, status=None), arc(4.0, status=None)])
+    assert one["status"] == "present"
+    # arcs below the absence threshold leave before the merge: 1.0 with sd 0.1 is present, 0.05 with sd 0.5
+    # is below k = 1, so the merge sees one arc and merges nothing
+    assert "arcs below the absence threshold have left before the merge" in text
+    records = [arc(1.0, sd=0.1, n_with=3, n_without=3, p_value=0.01),
+               arc(0.05, sd=0.5, n_with=3, n_without=3, p_value=0.9)]
+    for r in records:
+        r.pop("status")
+    edges, meta = output_meta(records, merge_arcs=True)
+    assert len(edges) == 1 and not edges[0].get("merged_arcs") and meta["hidden"]["absent"] == 1
+    # both signs: five facilitation arcs and one inhibition arc give six arcs, none merged
+    assert "five facilitation arcs and one inhibition arc give six arcs, none merged" in text
+    edges, meta = merge_parallel([arc(1.0)] * 5 + [arc(-0.5)])
+    assert len(edges) == 6 and meta["merged"] == 0 and meta["left_apart_for_disagreeing_signs"] == 1
+    # Merge to genus also merges absent arcs: two absent arcs from species of one genus to another give one
+    assert "also merges their absent arcs" in text
+    absent = [arc(0.01, status="absent", source="ncbi:3", source_name="Alpha three"),
+              arc(0.02, status="absent")]
+    (one,), _ = merge_genus(absent, merge=True)
+    assert (one["status"], one["merged_arcs"], one["source"]) == ("absent", 2, "Alpha")
+
+
 def test_the_attribute_list_names_every_value_an_edge_can_take():
     text = " ".join(help.EDGE_ATTRIBUTES.values())
     for value in (*model.EFFECTS, *model.OUTCOMES, *model.QUALITY_FLAGS, *model.CAUTIONS, *model.EVIDENCE,

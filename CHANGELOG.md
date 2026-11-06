@@ -6,6 +6,15 @@ content.
 
 ## [Unreleased]
 
+### Added
+
+- **The help says what each arc attribute becomes on a merged arc** (Karoline, 2026-11-06, #302: "please
+  document this in the help in the context of the arc attributes"), under Arc and node attributes: which
+  arcs Merge parallel arcs and Merge to genus merge, a table of every attribute's rule (a median, a union,
+  kept only where all merged arcs agree, or empty), and four consequences for reading one: the median is
+  unweighted, obligate and abolished arcs count without entering it, a merged arc is present when any of
+  its arcs is, and a pair with arcs of both signs is not merged. Documentation only: arcs merge as before.
+
 
 ## [0.5.0] (2026-10-14)
 
