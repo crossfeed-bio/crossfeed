@@ -133,8 +133,16 @@ test_that("the coverage line counts the organisms outside every matrix too", {
     only_outside$caveats$without_a_rate <- list("D")
     text <- paste(capture.output(print(grownet:::as_grownet_glv(only_outside))), collapse = "\n")
     expect_false(grepl("as_miasim() stops", text, fixed = TRUE))
-    # the one organism without a rate was just named, so the line refers to it (#296)
-    expect_match(text, "it is in no matrix", fixed = TRUE)
+    # the one organism without a rate was just named, so the line refers to it (#296), in the singular
+    # throughout (found in review: "it is in no matrix; as_miasim() simulates without them")
+    expect_match(text, "it is in no matrix; as_miasim() simulates without it.", fixed = TRUE)
+    expect_match(text, "; 1 more in the network has none and is in no matrix", fixed = TRUE)
+    expect_false(grepl("1 more in the network have", text, fixed = TRUE))
+    # one outside among several without a rate: named, in the singular
+    one_of_two <- example_payload()
+    one_of_two$caveats$without_a_rate <- list("C", "D")
+    text <- paste(capture.output(print(grownet:::as_grownet_glv(one_of_two))), collapse = "\n")
+    expect_match(text, "D is in no matrix; as_miasim() simulates without it.", fixed = TRUE)
     only_inside <- example_payload()
     only_inside$caveats$without_a_rate <- list("C")
     text <- paste(capture.output(print(grownet:::as_grownet_glv(only_inside))), collapse = "\n")

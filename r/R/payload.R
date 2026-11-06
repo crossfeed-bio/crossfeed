@@ -238,8 +238,9 @@ print.grownet_glv <- function(x, ...) {
     cat(sprintf("  growth rates: %d of the %d organism%s in a matrix%s%s\n", with_rate, length(x$organisms),
                 if (length(x$organisms) == 1L) "" else "s",
                 if (nzchar(x$growth_rate_unit)) paste0(" (", x$growth_rate_unit, ")") else "",
-                if (length(outside)) sprintf("; %d more in the network have none and are in no matrix",
-                                             length(outside)) else ""))
+                if (length(outside) == 1L) "; 1 more in the network has none and is in no matrix"
+                else if (length(outside)) sprintf("; %d more in the network have none and are in no matrix",
+                                                  length(outside)) else ""))
     cat("  A[i, j] is the effect of j on i: rows are affected, columns are the actor.\n")
     if (x$fitted) {
         # the package's own sentence, which says what its derivation fitted: an integrated cell is not a
@@ -286,12 +287,16 @@ print.grownet_glv <- function(x, ...) {
         if (length(outside)) {
             # the names were just listed: when it is the same set, refer to them rather than list them
             # again (#296)
+            one <- length(outside) == 1L
             who <- if (setequal(outside, missing)) {
-                if (length(outside) == 1L) "it is" else "these are"
+                if (one) "it is" else "these are"
             } else {
-                paste(paste(outside, collapse = ", "), "are")
+                paste(paste(outside, collapse = ", "), if (one) "is" else "are")
             }
-            cat("       ", who, " in no matrix; as_miasim() simulates without them.\n", sep = "")
+            # the number agrees with the organisms named: "it is ... without them" read wrong (found in
+            # review)
+            cat("       ", who, " in no matrix; as_miasim() simulates without ", if (one) "it" else "them",
+                ".\n", sep = "")
         }
     }
     left_out <- x$caveats$left_out
