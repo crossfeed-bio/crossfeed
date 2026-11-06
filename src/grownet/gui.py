@@ -892,7 +892,7 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
     # empty one: a run that returns arcs under a changed threshold is the case a reader most needs told,
     # and it was the one case the page did not mark (#250)
     from .help import SETTINGS as help_settings
-    from .report import _value as setting_value
+    from .report import setting_value
     s_here = result.get("settings", {})
     off_default = [k for k, v in s_here.items() if k in DEFAULTS and v != DEFAULTS[k]]
     if off_default:
