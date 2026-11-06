@@ -1737,6 +1737,9 @@ def _merged(arcs: list) -> dict:
     numeric = [a["strength"] for a in arcs if a.get("strength") is not None]
     strength = round(median(numeric), 4) if numeric else None
     outcomes = {a.get("outcome") for a in arcs}
+    # the arcs[0] fallback cannot fire today: obligate is a facilitation and abolished an inhibition (`_effect`),
+    # and only arcs of one sign are merged, so arcs without a log2 mean share one outcome; it stays as a guard
+    # against a future sign rule (Craig's agent)
     outcome = QUANTIFIED if numeric else (outcomes.pop() if len(outcomes) == 1 else arcs[0].get("outcome"))
 
     def union(key):
@@ -1920,8 +1923,10 @@ def merge_genus(edges: list, merge: bool = False, level: str = "species", curren
         pairs = sorted({_pair(a, level, name_of) for a in arcs})
         arc.update({side: genus for side, genus in (("source", source), ("target", target))})
         for side, genus in (("source", source), ("target", target)):
+            # and no strain's refused taxon id, which the genus node does not carry: the live
+            # Lachnoclostridium node said 1506553 was refused, from its first strain (2026-11-06)
             arc.update({f"{side}_name": genus, f"{side}_taxon_id": "", f"{side}_species": "",
-                        f"{side}_identity": "genus"})
+                        f"{side}_identity": "genus", f"{side}_taxon_id_refused": ""})
         arc.update(supporting_pairs=len(pairs), merged_pairs=pairs,
                    method=f"{arc.get('method', '')}; merged to genus: {len(arcs)} arcs over {len(pairs)} "
                           f"{level} pairs")
