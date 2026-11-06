@@ -121,3 +121,59 @@ def test_a_deriver_that_does_not_read_the_box_itself_is_given_the_selected_exper
     _records, skipped = derive_interactions(client, "S1", deriver=deriver, selection=parse(["Broth Y"]))
     assert deriver.seen == sorted(ids["Y"])
     assert ("seen", "ok") in skipped
+
+
+def _renamed(client):
+    """The same study, its strains named and given taxon ids: B in both media is one strain, 555; A is
+    strain X1 in Broth X and strain Y9 in Broth Y, both given taxon id 999, so 999 is ambiguous in this
+    study and not a join key (`strain_identities`)."""
+    names = {("X", "A"): ("Bacteroides fragilis X1", 999), ("Y", "A"): ("Bacteroides fragilis Y9", 999),
+             ("X", "B"): ("Roseburia hominis R1", 555), ("Y", "B"): ("Roseburia hominis R1", 555)}
+    for exp in client.experiments.values():
+        tag = "X" if "Broth X" in exp["name"] else "Y"
+        exp["communityStrains"] = [{"name": names[(tag, s["name"])][0], "NCBId": names[(tag, s["name"])][1]}
+                                   for s in exp["communityStrains"]]
+        for rep in exp["bioreplicates"]:
+            for context in client.bioreplicates[rep["id"]]["measurementContexts"]:
+                context["subject"]["name"] = names[(tag, context["subject"]["name"])][0]
+    return client
+
+
+@pytest.mark.parametrize("derivation", sorted(DERIVATIONS))
+def test_identities_are_read_from_the_whole_study_before_the_second_box_selects(derivation):
+    """A taxon id is a join key only where no experiment of the study gives it to another strain. Naming
+    Broth X leaves strain X1 alone with taxon id 999, but the study also gives 999 to Y9 in Broth Y, so X1
+    stays identified by genus and species: selecting before reading the identities would trust 999, and a
+    node's id would change with what the second box names."""
+    client, _ids = _study()
+    client = _renamed(client)
+    deriver = DERIVATIONS[derivation]()
+    if deriver is not None:
+        deriver.client = client
+    records, skipped = derive_interactions(client, "S1", deriver=deriver, metric="growth_rate",
+                                           selection=parse(["Broth X"]))
+    ids = {r[side] for r in records for side in ("source", "target")}
+    assert records and "bacteroides fragilis" in ids and "ncbi:999" not in ids, ids
+    assert "ncbi:555" in ids                                  # an unambiguous id is still the key
+    if derivation == "replicate":
+        # the comparison names the conflict among its reasons; the integrated form reads identities without
+        # reporting them, as it did before the second box reached it
+        assert any(label == "taxon id 999" for label, _ in skipped)
+
+
+def test_a_deriver_that_does_not_read_the_box_keeps_the_boxs_reasons_ahead_of_its_own():
+    """Naming Broth Y's co-culture brings its monocultures along, and the run says so; a plugged-in
+    deriver's own reasons follow that one rather than replacing it."""
+    from grownet.derive import Deriver
+
+    class Seen(Deriver):
+        name = "seen"
+
+        def derive(self, study, exps):
+            return [], [("seen", "ok")]
+
+    client, _ids = _study()
+    _records, skipped = derive_interactions(client, "S1", deriver=Seen(), selection=parse([CODES["Yab"]]))
+    labels = [label for label, _ in skipped]
+    assert "monocultures kept alongside the experiments named" in labels and "seen" in labels
+    assert labels.index("monocultures kept alongside the experiments named") < labels.index("seen")
