@@ -82,7 +82,8 @@ def test_what_the_design_does_not_determine_is_named_not_derived():
     records, skipped = _derive([alone], {(11, "c"): _startup(0.4, 0.04, 4.0, 3.0 * UNIT)})
     assert not any("c" in (r["source_name"], r["target_name"]) for r in records)
     reasons = " ".join(why for _, why in skipped)
-    assert "no community holds both" in reasons
+    # one line per organism, not per coefficient: a and b each never met c
+    assert "no community holds it at a steady state with c" in reasons
 
 
 def test_the_setting_offers_it_off_by_default():
@@ -110,7 +111,7 @@ def test_an_empty_result_says_what_this_derivation_needs():
               "errors": [], "network": None, "hidden": {}, "skipped": [("b -> a [chemostat]", "no community "
                                                                         "holds both a and b at a steady state")]}
     reason = _empty_reason(result)
-    assert "continuous cultures" in reason and "Derivation" in reason
+    assert "continuous culture" in reason and "Derivation" in reason
 
 
 # ---- the gLV package from it (#317) ------------------------------------------------------------------------
@@ -166,3 +167,65 @@ def test_the_readme_states_the_assumptions_of_this_derivation_not_of_the_batch_o
     records, _ = _derive()
     readme = " ".join(_package(records)[3].split())
     assert "INTERACTIONS ARE EFFECTIVE AND ADD UP" in readme and "measured between two of them" not in readme
+
+
+# ---- what a search is told when the design cannot determine a row (the state of mGrowthDB today) --------
+#
+# Karoline, 2026-11-06: "There will be cases when the available sub-communities are insufficient to make
+# the derivation (the current state of mGrowthDB). Is the error message in this case informative?" It was
+# not: one line per coefficient (30 for six organisms), a headline naming one organism's wash-out, and a
+# closing sentence about the default derivation.
+
+def _one_community():
+    """Like SMGDB00000011 today: one unperturbed chemostat of three organisms, no monoculture, no pair."""
+    three = _chemostat("E9", "No perturbations", ["a", "b", "c"], [(12, "V1")], description=RUN)
+    from test_growth_rates import _client
+    curves = {(12, "a"): _startup(0.5, 0.04, 4.0, 0.5 * UNIT), (12, "b"): _startup(0.3, 0.04, 4.0, 1.5 * UNIT),
+              (12, "c"): _startup(0.4, 0.04, 4.0, 0.8 * UNIT)}
+    return _client(curves), [three]
+
+
+def test_an_insufficient_design_says_so_once_per_group_and_once_per_organism():
+    client, exps = _one_community()
+    records, skipped = SteadyStateDeriver(client=client).derive({"id": "S11", "name": "x"}, exps)
+    assert records == []
+    whats = [what for what, _ in skipped]
+    assert not any(" -> " in w for w in whats), "no line per coefficient"
+    group = next(why for what, why in skipped if what.startswith("chemostat group at D 0.04"))
+    assert "1 community at an unperturbed steady state" in group and "no row is determined" in group
+    assert "its monoculture and a pair with each partner" in group
+    per_organism = [why for what, why in skipped if what.startswith(("a [", "b [", "c ["))]
+    assert len(per_organism) == 3
+    assert all("1 community holds it at a steady state, for 3 unknowns" in why for why in per_organism)
+
+
+def test_the_page_leads_with_what_the_design_lacks():
+    from grownet.gui import _empty_reason
+    client, exps = _one_community()
+    _, skipped = SteadyStateDeriver(client=client).derive({"id": "S11", "name": "x"}, exps)
+    result = {"settings": {**gui.DEFAULTS, "derivation": "steady"}, "studies": ["S11"], "resolved": [("x", {})],
+              "errors": [], "network": None, "hidden": {}, "skipped": skipped}
+    reason = _empty_reason(result)
+    assert reason.startswith("No chemostat design here determines a row.")
+    assert "1 community at an unperturbed steady state" in reason
+    assert "drop-out designs" not in reason and "pairwise (two-member) co-cultures" not in reason
+
+
+def test_the_command_line_names_the_study_it_derived_not_the_last_reason_it_printed(monkeypatch, capsys,
+                                                                                   tmp_path):
+    """`_emit` printed the reasons in a loop whose variable shadowed its own `label`, so an empty network was
+    announced as "NO interactions were derived for <the last reason's subject>"; on main too, for every
+    derivation (found answering Karoline's question)."""
+    from grownet.__main__ import main
+    client, exps = _one_community()
+    client.studies = {"S11": {"id": "S11", "name": "x", "experiments": [{"id": e["id"]} for e in exps]}}
+    client.experiments = {e["id"]: e for e in exps}
+    monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", lambda **kw: client)
+    monkeypatch.setattr("grownet.fetch.prefetch_studies", lambda *a, **k: None)
+    main(["derive", "S11", "--live", "--derivation", "steady", "--out", str(tmp_path / "n.json")])
+    err = capsys.readouterr().err
+    headline = next(line for line in err.splitlines() if "NO interactions were derived" in line)
+    assert "for S11" in headline
+    assert "No chemostat design here determines a row." in err
+    assert "drop-out designs" not in err
+    assert "--derivation steady" in err and "Advanced settings" not in err     # its own control

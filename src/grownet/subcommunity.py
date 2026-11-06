@@ -316,6 +316,68 @@ def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
     return sorted((g for g in groups.values() if g["communities"]), key=lambda g: (g["dilution"], g["medium"]))
 
 
+# ---- what a design determines, in words (#310) ---------------------------------------------------------
+
+def _communities(k: int) -> str:
+    return f"{k} community" if k == 1 else f"{k} communities"
+
+
+NEEDS = ("An organism's row has one unknown for its own limitation and one per partner it met at a steady "
+         "state, so it needs at least that many communities holding it: its monoculture and a pair with each "
+         "partner, or the monocultures and every community missing one member, at one medium and dilution rate.")
+
+
+def _group_summary(communities: list, got: dict) -> str:
+    """One sentence for a chemostat group: what it held, how many rows that determines, and what a row needs."""
+    names = [c["name"] for c in communities]
+    present = sorted({k for c in communities for k, v in c["abundance"].items() if v > 0})
+    rows = [r for r in got["rows"].values() if r["status"] == "identified" and len(r["values"]) > 1]
+    shown = ", ".join(names[:4]) + (f" and {len(names) - 4} more" if len(names) > 4 else "")
+    held = (f"{_communities(len(names))} at an unperturbed steady state ({shown}), "
+            f"{len(present)} organism(s) present; ")
+    if not rows:
+        return held + "no row is determined. " + NEEDS
+    return held + f"{len(rows)} of {len(present)} rows determined."
+
+
+def _row_reasons(got: dict) -> list:
+    """(organism, why) for every row the design leaves undetermined or incomplete, one line each."""
+    out = []
+    for i, row in got["rows"].items():
+        if row["status"] == "no equation":
+            out.append((i, "washed out of every community it was inoculated into: no steady-state equation"))
+            continue
+        if row["status"] == "underdetermined":
+            e, u = row["equations"], len(row["columns"])
+            holds = f"{_communities(e)} hold{'s' if e == 1 else ''} it at a steady state, for {u} unknowns"
+            out.append((i, f"its row is not determined: {holds} (its own limitation and {u - 1} partner(s))"
+                        + ("" if e < u else ", and they are too alike to tell apart: the partners stand in "
+                                            "the same proportions in each")))
+            continue
+        never = [j for (r, j), why in got["why"].items() if r == i and j != i and "no community holds both" in why]
+        if never:
+            out.append((i, f"no community holds it at a steady state with {', '.join(never)}, so their effects "
+                           "on it are not derived"))
+    return out
+
+
+def empty_reason(skipped: list, command_line: bool = False) -> str:
+    """Why the steady-state derivation gave nothing, from what the groups held: the lead the page and the
+    command line give instead of the replicate comparison's own sentences. Each surface names its own
+    control for going back to batch cultures."""
+    switch = ("Derive without --derivation steady to read batch cultures instead." if command_line else
+              "Set Derivation in Advanced settings to derive from batch cultures instead.")
+    groups = [(what[len("chemostat group at "):], why) for what, why in skipped
+              if what.startswith("chemostat group at ")]
+    if not groups:
+        return ("No chemostat design here determines a row: these studies hold no continuous culture at an "
+                "unperturbed steady state with its dilution rate recorded, which is all this derivation reads. "
+                f"The reasons say what each study held. {switch}")
+    said = " ".join(f"At {setting}: {why}" for setting, why in groups[:3])
+    more = f" ({len(groups) - 3} more groups among the reasons.)" if len(groups) > 3 else ""
+    return f"No chemostat design here determines a row. {said}{more} The reasons say what each organism lacks. {switch}"
+
+
 # ---- the derivation (#313) ------------------------------------------------------------------------------
 
 METHOD = ("steady state v1: at a chemostat steady state every member present satisfies 1 + sum_j B_ij N_j = 0 "
@@ -388,14 +450,17 @@ class SteadyStateDeriver:
         for group in chemostat_groups(self.client, exps, self.spike_factor):
             label = (f"chemostat, D {group['dilution']:g} per time unit, {group['medium']}, "
                      f"{group['unit']}")
-            skipped += [(f"{what} [{label}]", why) for what, why in group["left_out"]]
             communities = group["communities"]
             got = fit(communities, draws=self.draws)
+            # what the design can and cannot determine, said once for the group and once per organism rather
+            # than once per coefficient, which was n^2 lines of the same sentence (Karoline, 2026-11-06: "Is
+            # the error message in this case informative?")
+            setting = label[len("chemostat, "):]
+            skipped += [(f"chemostat group at {setting}", _group_summary(communities, got))]
+            skipped += [(f"{what} [{label}]", why) for what, why in group["left_out"]]
             skipped += [(f"{species} in {community} [{label}]", "washed out: no steady-state equation")
                         for community, species in got["washed_out"]]
-            for (i, j), why in got["why"].items():
-                if i != j:
-                    skipped.append((f"{j} -> {i} [{label}]", why))
+            skipped += [(f"{i} [{label}]", why) for i, why in _row_reasons(got)]
             predictions = {p["community"]: p for p in leave_one_out_predictions(communities)}
             for i, row in got["rows"].items():
                 if row["status"] != "identified":

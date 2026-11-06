@@ -659,15 +659,15 @@ def _empty_reason(result: dict) -> str:
     """Why a search came back empty, with what the second box left out said first (#113)."""
     reason = _empty_reason_core(result)
     s = result.get("settings", {})
+    # the steady-state derivation's own lead, in place of the replicate comparison's sentences about pairwise
+    # co-cultures and drop-out designs, which say nothing about chemostat steady states (2026-11-06)
+    if s.get("derivation") == "steady" and not result.get("errors") and result.get("studies"):
+        from .subcommunity import empty_reason as steady_reason
+        reason = _esc(steady_reason(result.get("skipped", ())))
     # the integrated form fits a row from a time course, so a sparsely sampled study gives it nothing
     # where the specified comparison needs only two measurements per set. Say which setting moves, as the
     # page does everywhere else. It is gLV mode that selects that form (2026-10-10), so this is what a
     # reader meets when a package comes out empty rather than on an ordinary search.
-    if s.get("derivation") == "steady":
-        reason += (" The steady-state derivation reads continuous cultures only, and a row needs several "
-                   "communities of one medium and dilution rate holding the organism at a steady state; the "
-                   "reasons below say what each study held. Set Derivation in Advanced settings to derive "
-                   "from batch cultures.")
     if s.get("derivation", DEFAULTS["derivation"]) == "integrated" and any(
             "too few to fit a row" in why or "usable time point" in why
             for _, why in result.get("skipped", ())):

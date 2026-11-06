@@ -37,6 +37,19 @@ content.
   gLV of Venturelli et al. 2018 (download their Code EV1; nothing of theirs is in the repository). From
   monocultures and pairs it recovers 126 of the 132 coefficients exactly; with 5% noise over three vessels
   the bootstrap spread covers the truth for 93% of them. The numbers are in METHOD_NOTES.
+- **When the design is insufficient, it says what is missing** (Karoline, 2026-11-06: "There will be cases
+  when the available sub-communities are insufficient to make the derivation (the current state of
+  mGrowthDB). Is the error message in this case informative?"). One line per chemostat group (how many
+  communities were at a steady state, how many rows that determines, and what a row needs) and one per
+  organism, where it was one per coefficient; and the page and the command line lead with that, instead of
+  the replicate comparison's sentences about co-cultures and drop-out designs. The `--derivation` help,
+  the command-line examples and the README describe the third derivation.
+
+### Fixed
+
+- **An empty network from the command line is announced under the study's name again.** `derive STUDY`
+  printed "NO interactions were derived for" the last reason it had listed, since the loop printing the
+  reasons reused the name of the study's label; on every derivation.
 
 
 ## [0.5.0] (2026-10-14)

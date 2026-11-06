@@ -24,6 +24,10 @@ from .mgrowthdb import MGrowthDBError, records_to_network
 from .schema import schema_json, validate_document
 
 DERIVE_EXAMPLES = """examples:
+  the gLV rows from the chemostat steady states of sub-communities (no study in mGrowthDB holds such a
+  design yet, so this says what each organism lacks):
+    grownet derive SMGDB00000011 --live --glv-mode --derivation steady --glv chemostat_glv.zip
+
   the local page's Example, written to a file, with its report, and sent to Cytoscape:
     grownet derive --live --species "Faecalibacterium duncaniae" "Blautia hydrogenotrophica" "Roseburia intestinalis" \\
         --out example.json --report example_report.txt --to-cytoscape
@@ -650,8 +654,10 @@ def _emit(a, net, skipped, extra, label, result):
         # and not "how many pairs gave nothing" (#232)
         print(f"\nskipped {len(pairs)} pair(s) the data did not cleanly support"
               + (f", and {len(notes)} note(s) on the data read" if notes else "") + ":", file=sys.stderr)
-        for label, reason in pairs + notes:
-            print(f"  - {label}: {reason}", file=sys.stderr)
+        # `what`, not `label`: the loop variable shadowed this function's own `label`, so an empty network
+        # was announced for the last reason's subject instead of the study (found 2026-11-06)
+        for what, reason in pairs + notes:
+            print(f"  - {what}: {reason}", file=sys.stderr)
     if extra:
         if extra["absence"]["absent"]:
             left_out = extra["hidden"].get("absent", 0)
@@ -685,11 +691,16 @@ def _emit(a, net, skipped, extra, label, result):
         for tag in ("<strong>", "</strong>"):
             try_these = try_these.replace(tag, "")
         why += try_these
-        print(f"\nNO interactions were derived for {label}: the network is empty.{why}\n"
-              "grownet derives interactions from pairwise (two-member) co-cultures and from drop-out "
-              "designs (a community plus the same community without one member); other larger communities "
-              "yield nothing until a method suited to their design is chosen (see docs/METHOD_NOTES.md).",
-              file=sys.stderr)
+        if a.derivation == "steady":
+            from .subcommunity import empty_reason as steady_reason
+            print(f"\nNO interactions were derived for {label}: the network is empty. "
+                  f"{steady_reason(skipped, command_line=True)}", file=sys.stderr)
+        else:
+            print(f"\nNO interactions were derived for {label}: the network is empty.{why}\n"
+                  "grownet derives interactions from pairwise (two-member) co-cultures and from drop-out "
+                  "designs (a community plus the same community without one member); other larger "
+                  "communities yield nothing until a method suited to their design is chosen (see "
+                  "docs/METHOD_NOTES.md).", file=sys.stderr)
     return 1 if no_rates else 0
 
 
@@ -852,7 +863,10 @@ def build_parser() -> argparse.ArgumentParser:
                                "or integrated, which fits each organism's row from the whole time course "
                                "and gives the gLV coefficients directly, which --glv-mode selects. "
                                "Integrated derives no arc from a community of three or more, so no "
-                               "drop-out arc (the page's Derivation setting)")
+                               "drop-out arc. Or steady, off by default and meant for --glv-mode, which fits "
+                               "the rows from the chemostat steady states of sub-communities (monocultures, "
+                               "pairs, communities missing one member, any others) and reads continuous "
+                               "cultures only (the page's Derivation setting)")
     settings.add_argument("--metric", choices=["auc", "max", "growth_rate"], default="auc",
                           help="the growth property compared: auc, the area under the curve (default); max, the "
                                "maximal abundance; or growth_rate, the maximum specific growth rate")
