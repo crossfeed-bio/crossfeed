@@ -293,8 +293,8 @@ SETTINGS = {
                   "plates, and so on), in arcs and in monoculture rates and plateaus, and name every other "
                   "curve as left out. Empty by default. Without it, a plateau or an arc is still compared "
                   "only with one of the same technique and unit, and where one strain is measured by several "
-                  "techniques the one with more time points is used (Karoline, #292). Culture-level counts "
-                  "stay plate counts and flow cytometry only (#140), so OD is never one."),
+                  "techniques the one with more time points is used (Karoline). Culture-level counts "
+                  "stay plate counts and flow cytometry only, so OD is never one."),
     "exclude_studies": ("Exclude these studies", "--exclude-studies IDS",
                         "Comma separated mGrowthDB study ids that are never searched, for example a study "
                         "you know to be unsuitable. Empty by default. It applies after the second box, "
@@ -567,56 +567,69 @@ NODE_ATTRIBUTES = {
     "model_ref": "a link to a metabolic model, when known",
 }
 
-# (decision, why), with the issue that settled it
+# (decision, why); the issue that settled each is in the comment above it, since a user of the page
+# does not need issue numbers (Karoline, 2026-11-06)
 DECISIONS = (
+    # #34
     ("Interactions are derived, not looked up.",
      "mGrowthDB stores growth curves. grownet compares each species' growth with and without a partner "
-     "across replicates, on your machine, each time you search (#34)."),
+     "across replicates, on your machine, each time you search."),
+    # #3
     ("One number per comparison: the mean log2 ratio of the replicate sets.",
      "log2(with) minus log2(without) per species, averaged over replicates, with the spread of both sets "
-     "combined in the sd. A log ratio is symmetric: a doubling is +1 and a halving is -1 (#3)."),
+     "combined in the sd. A log ratio is symmetric: a doubling is +1 and a halving is -1."),
+    # #1
     ("Curves are compared over the time they share.",
      "Areas and maxima are taken from the common first time point to the earliest last time point of the "
      "curves compared (for a bi-culture, every curve of the design; for a drop-out arc, the target's curves "
-     "with and without the removed member), interpolating at that end, so no curve is extrapolated (#1)."),
+     "with and without the removed member), interpolating at that end, so no curve is extrapolated."),
+    # #40, #54
     ("An edge is present by its size against its spread, not by a p-value.",
      "With two or three replicates a real effect rarely reaches significance, so the test is reported as "
-     "support and does not decide. The absence threshold k does: |mean| of at least k sd (#40, #54)."),
+     "support and does not decide. The absence threshold k does: |mean| of at least k sd."),
+    # #54
     ("A measured absence is kept, as status absent.",
      "\"We looked and found nothing\" is a result, so absent edges stay in the downloads and are hidden "
-     "from view, not deleted (#54)."),
+     "from view, not deleted."),
+    # #40
     ("Low quality is not absence.",
      "An edge with a quality flag keeps the sign of its mean and is hidden by default; it is never called "
-     "absent, because a weak measurement says nothing about whether the interaction exists (#40)."),
+     "absent, because a weak measurement says nothing about whether the interaction exists."),
+    # #37, #68
     ("Growth is checked before any ratio.",
      "With two or three replicates a real rise rarely reaches significance, so a set counts as grown when "
      "the paired test finds a rise or when it rose by the factor (1.5 by default). The strong claims, "
-     "obligate and abolished, then need two reasons rather than one underpowered test (#37, #68)."),
+     "obligate and abolished, then need two reasons rather than one underpowered test."),
+    # #16
     ("No growth is a result.",
      "A target that did not grow without its partner in a comparison is obligate there; one that did "
-     "not grow with it is abolished. Both are the extremes of their direction and are always shown "
-     "(#16). The rule is per comparison, so the same pair can be obligate in one condition and "
+     "not grow with it is abolished. Both are the extremes of their direction and are always shown. "
+     "The rule is per comparison, so the same pair can be obligate in one condition and "
      "quantified in another."),
+    # #23, #24
     ("Nodes are strains, keyed by NCBI taxon id.",
      "Names change: taxon 411483 is Faecalibacterium prausnitzii A2-165 in one study and Faecalibacterium "
      "duncaniae A2-165 in others, after the 2022 reclassification. Names are resolved through mGrowthDB "
-     "only, which keeps one source of truth (#23, #24)."),
+     "only, which keeps one source of truth."),
+    # #47
     ("Drop-out communities count, labeled as possibly indirect.",
-     "A community without one member shows what that member does, but maybe through the others (#47)."),
+     "A community without one member shows what that member does, but maybe through the others."),
     ("A species is compared only with itself measured the same way.",
      "Its monocultures and co-cultures must use the same species-identifying technique, not only the same "
      "unit, since otherwise an effect could be the change of technique; whole-culture measurements such as "
      "OD are not used for this."),
+    # #47
     ("Experiments are pooled only when they are replicates.",
      "Interactions depend on the environment, so experiments with different conditions give parallel "
-     "arcs, one each (#47)."),
+     "arcs, one each."),
+    # #42, amended 2026-10-03
     ("A culture is compared on a measure its mode supports.",
      "Chemostat and serial dilution runs are derived with max, the level they settle at, and left out with "
-     "an area under the curve or a growth rate, which measure something else under dilution (#42, amended "
-     "2026-10-03)."),
+     "an area under the curve or a growth rate, which measure something else under dilution."),
+    # #39
     ("Suspect curves are flagged, never silently dropped or replaced.",
      "A replicate with an implausible spike is left out and reported, with the other techniques measured "
-     "on it named (#39)."),
+     "on it named."),
     ("Merging summarizes; it is off by default.",
      "Interactions are condition-specific, so arcs are shown as derived. Merge parallel arcs and Merge to "
      "genus condense them on request: by the median, never across signs, and with Merge to genus each arc "
@@ -1033,7 +1046,7 @@ one environment. The package's README says which of these hold for the numbers i
 from drop-out designs, and which media they were measured in.</p>
 
 <p><strong>The gLV parameters.</strong> The gLV control writes a zip for a generalized Lotka-Volterra
-simulator, and since #119 it holds <strong>fitted coefficients</strong> rather than effect sizes:
+simulator, and it holds <strong>fitted coefficients</strong> rather than effect sizes:
 <code>interaction_matrix.&lt;unit&gt;.csv</code>, one matrix per abundance unit and named after it, where
 the diagonal is <code>A[i][i] = -r_i / K_i</code> with K the organism's own monoculture carrying capacity,
 and an off-diagonal cell is whatever the derivation fitted, which the package's own README.txt and the
@@ -1286,13 +1299,13 @@ carries <code>meta.growth_rates</code>: the rule the rates follow, a rate per or
 many monoculture replicates it rests on, the studies behind it and each study's own median, and
 <code>without_a_rate</code>, the organisms that have none, with <code>why_without_a_rate</code> giving the
 reason where one is known: a genus whose strains' rates are in time units that are not converted, or an
-organism, or a genus of them, whose every study's rates were left out for their starting spread (#81).</p>
+organism, or a genus of them, whose every study's rates were left out for their starting spread.</p>
 {edges}
 {nodes}
 
 <h2 id="decisions">Why it works this way</h2>
-<p>The main choices behind the method, each settled on the issue named (in the
-<a href="{ISSUES}">issue tracker</a>).</p>
+<p>The main choices behind the method, each settled with the collaboration in the
+<a href="{ISSUES}">issue tracker</a>.</p>
 <ul class="decisions">{decisions}</ul>
 
 <h2 id="cli">The command line</h2>

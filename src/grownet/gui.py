@@ -366,7 +366,7 @@ derived from mGrowthDB growth data on this machine; nothing is uploaded.</p>
 <textarea id="conditions" name="conditions" rows="5">{_esc(conditions)}</textarea>
 <p class="hint"><strong>All reads this box.</strong> A study or medium left here narrows All to it, which
 is deliberate, so clear it to derive the whole of mGrowthDB; the gLV example button fills it and leaves it
-filled (#193).
+filled.
 One per line. A medium is matched as text, so "wilkins" finds every spelling of
 Wilkins-Chalgren <em>and</em> every variant of it: a medium with a sugar added or a carbon source left out
 is another environment, so those stay apart and the report names every medium the search read. An id

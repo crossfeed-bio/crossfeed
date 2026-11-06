@@ -209,3 +209,9 @@ them as a dated bullet with who gave them. Keep one-off requests out.
   The mechanical floor also still applies: `main` requires one approving review and GitHub never lets an
   author approve their own pull request, so an agent's own pull request still needs one approval from the
   other side before the button works. Reviewing `main` afterward is in addition to that, not instead.
+- 2026-11-06 (Karoline): **No GitHub issue numbers in anything a user of the tool sees.** Her words, after
+  "(#193)" turned up under the page's second box: "in general: users don't need to see github issue
+  numbers anywhere". That covers the page and its help, the command line's help and messages, the report,
+  every file the tool writes, the R package's help, and the README. Issue numbers stay where developers
+  read: code comments, docstrings, tests, commit messages and pull requests. `tests/test_interface.py`
+  renders each surface and scans the string literals under `src/grownet/`, so a new one fails the build.
