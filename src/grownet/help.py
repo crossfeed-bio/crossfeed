@@ -340,7 +340,7 @@ CLI_ONLY = {
     "--r-port": "the port that R session listens on (default 8793, what grownet_listen() uses)",
     "--species": "species, strain or genus names, or NCBI taxon ids: search every study holding them, as the page "
                  "does",
-    "--all": "every study in mGrowthDB, with every partner, as the page's All button (with --live)",
+    "--all": "every study in mGrowthDB, with every partner, as the page with both boxes empty (with --live)",
     "--no-published": "with --all, derive live instead of reading the network derived once a day",
     "--no-cache": "read everything from mGrowthDB again, instead of reusing what an earlier run read for "
                   "a study whose uploadedAt has not changed. Responses are kept in the user cache "
@@ -816,8 +816,10 @@ def render_help(token: str, defaults: dict, example: tuple, job: str = "") -> st
 <h2 id="what">What grownet does</h2>
 <p>Type species names, one per line, strain names, a genus (it stands for every species of it in
 mGrowthDB), or NCBI taxon ids. grownet looks them up in mGrowthDB, reads the growth curves of every study
-that holds them, and derives the interactions between them on this machine. The All button ignores the
-box and derives every study in mGrowthDB, with every partner. With the default settings, All reads the
+that holds them, and derives the interactions between them on this machine. The species box is optional:
+left empty, grownet derives every species in the media or studies of the second box, with every partner.
+<strong>For the All network</strong>, every study in mGrowthDB with every partner, leave both boxes empty
+and press Find interactions. With the default settings, All reads the
 network the grownet repository derives from mGrowthDB once a day, when it is less than 36 hours old and
 was derived by the same derivation your settings ask for, which
 spares mGrowthDB the 1,926 requests a cold corpus run sends, or
@@ -829,8 +831,9 @@ download.</p>
 
 <h2 id="where">Choosing where to look</h2>
 <p>The second box beside the species is optional and says <strong>where</strong> to look, not how to decide
-an interaction. Leave it empty and every medium is used, which is what grownet did before. One entry per
-line:</p>
+an interaction. Leave it empty and every medium is used, which is what grownet did before. With the
+species box empty, it is the whole search: every species in what it names, with every partner. One entry
+per line:</p>
 <ul>
 <li>a <strong>medium</strong>, matched as text and case-insensitively against the medium name mGrowthDB
 records on an experiment's compartments, its description and its name. The spellings differ between
@@ -950,7 +953,7 @@ continuous culture that forms a pair or a drop-out design today, so this changes
 decides what happens when one arrives.</p>
 
 <h2 id="example">Try the example</h2>
-<p>The Example button fills the box with {_e(pair)}, a pair with enough data to show a result: the
+<p>The Example button fills the species box with {_e(pair)}, a pair with enough data to show a result: the
 <a href="#cli">command line</a> section runs the same search.</p>
 
 <h2 id="reading">Reading the result</h2>
@@ -1086,7 +1089,7 @@ spike rather than a level the culture held. They are in
 <code>lag_method</code> columns, in the network's meta and in the report, with every curve that gave no
 capacity named and why. Each arc also carries <code>partner_abundance</code>, the actor's own abundance in
 the co-cultures averaged over the window the target's growth rate was fitted in.</p>
-<p><strong>Start with the gLV mode button</strong>, beside All. It sets the three settings a simulation
+<p><strong>Start with the gLV mode button</strong>, beside gLV example. It sets the three settings a simulation
 needs and leaves them in sight in Advanced settings: <strong>Report growth rates</strong> on, since a
 simulation needs a rate per organism; <strong>Include drop-out communities</strong> off, since such an
 arc compares a community with the same community without one member and the effect may run through a third
@@ -1320,8 +1323,9 @@ within that run only, narrower than the difference between runs would make it.</
 determines no row. The derivation is there for the data to come.</p>
 
 <h2 id="glv-walkthrough">The gLV example, step by step</h2>
-<p><strong>gLV example</strong> beside All fills both boxes and the one setting a package cannot be built
-without, and runs the search, so the route above has something concrete to run on. It is one search of
+<p><strong>gLV example</strong> beside Example fills both boxes and every setting a package needs, as
+Example fills its species, and Find interactions then runs it, so the route above has something concrete
+to run on. It is one search of
 one study, chosen by building the package of every study that yields one and scoring them: five give a
 package of two organisms or more, three of those settle with every organism above zero, and this one is
 the soundest of the three. Everything below is the generic route; only the numbers are this example's.</p>
@@ -1333,8 +1337,8 @@ out.</p>
 <ol>
 <li><strong>Press gLV example.</strong> The first box fills with
 <em>Bacteroides thetaiotaomicron</em> and <em>Roseburia intestinalis</em>, the second with
-<code>SMGDB00000002</code> so nothing else is read, Report growth rates goes on, and the search runs. On
-the command line the same run is
+<code>SMGDB00000002</code> so nothing else is read, and gLV mode goes on, Report growth rates among its
+settings. Then press <strong>Find interactions</strong>. On the command line the same run is
 <code>grownet derive --live --species "Bacteroides thetaiotaomicron" "Roseburia intestinalis"
 --conditions SMGDB00000002 --glv-mode --glv glv.zip</code>. The button presses gLV mode, so the
 command does too: without it the default derivation gives no coefficient and the run is refused.</li>
@@ -1480,26 +1484,31 @@ its report, and the network sent to Cytoscape:</p>
 <pre>{_e(EXAMPLE_CLI)}</pre>
 <p>Without installing anything, <code>uvx --from git+{REPOSITORY} {COMMAND} ...</code> runs the same
 command. Other uses:</p>
-<pre>{COMMAND} derive SMGDB00000004 --live --format graphml --out study4.graphml
+<pre>{COMMAND} derive --live --all --out all.json
+{COMMAND} derive SMGDB00000004 --live --format graphml --out study4.graphml
 {COMMAND} derive --live --species Blautia --conditions "Wilkins-Chalgren" --out wc.json
+{COMMAND} derive --live --conditions "Wilkins-Chalgren" --out wc_all.json
 {COMMAND} derive SMGDB00000004 --live --format matrix --out study4_matrix.csv
 {COMMAND} derive SMGDB00000004 --live --glv-mode --rates study4_rates.csv --glv study4_glv.zip
 {COMMAND} derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
 {COMMAND} derive --live --all --merge-arcs --merge-genera --out all_genera.json
 {COMMAND} gui
 {COMMAND} validate example.json</pre>
-<p>The first derives one whole study; the second searches a genus in one medium (the second box, from
-the command line); the third writes a study as the adjacency matrix; the fourth adds the growth rates and
-the gLV parameters (<a href="#glv">the matrix, the growth rates and gLV</a>); the fifth a genus, every
-species of it with every partner, one node per genus; the sixth all of mGrowthDB, as the All button does,
-merged across studies and then to genus; the seventh opens this page, and the last checks a file against
-the format. Every advanced setting has its flag (see the list above), and
+<p>The first is the All network, every study in mGrowthDB, as the page gives it with both boxes empty;
+the second derives one whole study; the third searches a genus in one medium (the second box, from the
+command line); the fourth every species in that medium, as the page does with the species box empty; the
+fifth writes a study as the adjacency matrix; the sixth adds the growth rates and the gLV parameters
+(<a href="#glv">the matrix, the growth rates and gLV</a>); the seventh a genus, every species of it with
+every partner, one node per genus; the eighth the All network merged across studies and then to genus;
+the ninth opens this page, and the last checks a file against the format. Every advanced setting has its
+flag (see the list above), and
 <code>{COMMAND} derive --help</code> lists them all. Besides those:</p>
 <ul>{cli_only}</ul>
 
 <h2 id="empty">No network came back</h2>
 <ol>
-<li>Look at the Species list at the top of the result. An entry under "Not used" gave nothing, and says why:
+<li>After a species search, look at the Species list at the top of the result. An entry under "Not used"
+gave nothing, and says why:
 see <a href="#qa">the first question</a>.</li>
 <li>"Studies searched: none" means no study in mGrowthDB holds those strains.</li>
 <li>Open "pair(s) the data did not support": each line says why a pair gave no edge.</li>
@@ -1514,8 +1523,9 @@ supports, or tick "Include chemostat and serial dilution experiments" to use the
 <li>every edge is below the absence threshold: open that section of the result, or set k to 0;</li>
 <li>the partners are species you did not type: untick "Only interactions between the species
 entered";</li>
-<li>the second box is holding the search to a medium, an experiment or a study that these species were
-not grown in: empty it, or try a shorter word, since a medium is matched as text (the result says how
+<li>the second box is holding the search to a medium, an experiment or a study that the species were not
+grown in, or, with the species box empty, that holds no usable comparison: empty it, or try a shorter
+word, since a medium is matched as text (the result says how
 many studies it left out).</li>
 </ul></li>
 </ol>

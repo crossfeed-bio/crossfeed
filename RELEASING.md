@@ -128,7 +128,7 @@ Pausing comes first because the next scheduled run would otherwise rebuild the s
 with every result file gone, that first run compares itself with `all_network.json` for the floor.
 
 `published.fetch` then gets nothing, returns `None`, and every copy derives live, which is the designed
-fallback and is what the All button does when GitHub is unreachable. `all_network.json` and
+fallback and is what the page's All network (both boxes empty) does when GitHub is unreachable. `all_network.json` and
 `all_report.txt` stay: no copy of grownet reads them, and the next run's floor compares itself with
 `all_network.json`. Verify that every result file is gone for every reader, not only for the version
 installed where you check:

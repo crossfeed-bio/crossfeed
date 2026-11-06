@@ -77,6 +77,10 @@ EXAMPLE_MESSAGE = ("Example: three species that are grown together, with every s
 # the co-culture it was fitted from by about 90 times (2026-10-07, #155 item 13).
 GLV_EXAMPLE = ("Bacteroides thetaiotaomicron", "Roseburia intestinalis")
 GLV_EXAMPLE_STUDY = "SMGDB00000002"
+# what the button says once it has filled the page, as Example does: it fills and waits (Karoline,
+# 2026-11-06: "Please change the gLV example behavior to be in line with 'Example'")
+GLV_EXAMPLE_MESSAGE = ("gLV example: two species of one study, with gLV mode on and every other setting at its "
+                       "default, for a package that simulates. Press Find interactions.")
 METRICS = ("auc", "max", "growth_rate")
 DERIVATIONS = ("replicate", "integrated", "steady")
 
@@ -355,19 +359,19 @@ def render_form(token: str, entries: str = "", settings: dict | None = None, mes
     return _page(f"""{note}<form method="post" action="/run?token={_esc(token)}">
 <div class="boxes">
 <div class="box">
-<label class="field" for="species">Species, strains, genera or NCBI taxon ids</label>
+<label class="field" for="species">Species, strains, genera or NCBI taxon ids (optional)</label>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in INPUT_EXAMPLES)}</p>
 <textarea id="species" name="species" rows="5">{_esc(entries)}</textarea>
-<p class="hint">One per line (a genus alone stands for all its species), or press Example. Interactions are
+<p class="hint">One per line (a genus alone stands for all its species), or press Example. Left empty,
+every species in the media or studies of the second box is searched, with every partner. Interactions are
 derived from mGrowthDB growth data on this machine; nothing is uploaded.</p>
 </div>
 <div class="box">
 <label class="field" for="conditions">Media, experiments or studies (optional)</label>
 <p class="examples">For example: {" &middot; ".join(_esc(x) for x in selecting.EXAMPLES)}</p>
 <textarea id="conditions" name="conditions" rows="5">{_esc(conditions)}</textarea>
-<p class="hint"><strong>All reads this box.</strong> A study or medium left here narrows All to it, which
-is deliberate, so clear it to derive the whole of mGrowthDB; the gLV example button fills it and leaves it
-filled (#193).
+<p class="hint">With the species box empty, every species in what this box names is searched; the gLV
+example button fills it and leaves it filled, so clear it to derive the whole of mGrowthDB.
 One per line. A medium is matched as text, so "wilkins" finds every spelling of
 Wilkins-Chalgren <em>and</em> every variant of it: a medium with a sugar added or a carbon source left out
 is another environment, so those stay apart and the report names every medium the search read. An id
@@ -377,12 +381,12 @@ every medium.</p>
 </div>
 <div class="bar"><button class="primary" type="submit">Find interactions</button>
 <button type="submit" name="example" value="1">Example</button>
-<button type="submit" name="all" value="1">All</button>
 <button type="submit" name="glv_example" value="1">gLV example</button>
 <button type="submit" name="glv_mode" value="1" class="switch{glv_on}" aria-pressed="{glv_pressed}"
 ><span class="track"><span class="knob"></span></span>gLV mode</button>
-<span class="muted">All derives every study, ignoring the species box (half a minute). gLV example fills
-the boxes and settings for a package that simulates, and runs it. gLV mode sets the four settings a
+<span class="muted">For the All network, every study in mGrowthDB, press Find interactions with both
+boxes empty. gLV example fills
+the boxes and settings for a package that simulates. gLV mode sets the four settings a
 package needs, the derivation among them; press it again to switch back.</span></div>
 {_settings_block(settings or {}, token, job)}
 </form>{below}""", token, refresh, job)
@@ -470,7 +474,7 @@ def _arc_rows(net, edges) -> str:
         rows.append(f"<tr><td>{_esc(net.nodes[e.source].name or e.source)}</td>"
                     f"<td>{_esc(net.nodes[e.target].name or e.target)}</td>"
                     f"<td class=\"{sign}\">{_esc(_direction(e))}</td>"
-                    f"<td class=\"nowrap\">{_mean_sd(e.strength, e.sd)}</td>"
+                    f"<td class=\"nowrap\">{_mean_sd(e.strength, e.sd)}{_merged_note(e)}</td>"
                     f"<td>{_number(e.effect_over_sd, '.2f', MISSING)}</td>"
                     f"<td>{_esc(_number(e.n_with, 'd'))} / {_esc(_number(e.n_without, 'd'))}</td>"
                     f"<td>{_number(e.q_value, '.3g', MISSING)}</td><td>{_esc(e.condition)}</td>"
@@ -494,6 +498,17 @@ def _mean_sd(mean, sd) -> str:
         # obligate and abolished arcs have no ratio by construction, which is a result, not a gap
         return "<span class=\"muted\" title=\"one side did not grow, so there is no ratio\">no ratio</span>"
     return f"{mean:+.2f}" + ("" if sd is None else f" &plusmn; {sd:.2f}")
+
+
+def _merged_note(e) -> str:
+    """Under a merged arc's strength, that it is a median and over what: the cell showed "-1.49" alone, with
+    nothing to tell it from an arc as derived (found 2026-11-06). "N merged arcs: median" and not "median of
+    N", since an obligate or abolished arc counts among them without entering the median."""
+    if not e.merged_arcs:
+        return ""
+    spread = (f": median, range {e.strength_range[0]:+.2f} to {e.strength_range[1]:+.2f}"
+              if e.strength is not None and len(e.strength_range) == 2 else "")
+    return f"<br><span class=\"muted\">{e.merged_arcs} merged arcs{spread}</span>"
 
 
 def _absent_section(result: dict, absence: dict) -> str:
@@ -773,16 +788,19 @@ def _empty_reason_core(result: dict) -> str:
                 f"(k = {k:g}): the species do not affect each other by that rule. They are listed below, "
                 "and a lower k or Include arcs below the absence threshold keeps them in the file.")
     reasons = [reason for _, reason in result["skipped"]]
+    # All has no species typed: since #300 it is the species box left empty, so "these species" named
+    # nothing the reader had entered (Karoline, 2026-11-04: "please update the wording")
+    studies = "the studies searched" if result.get("all") else "the studies holding these species"
     unmatched = [r for r in reasons if "no experiment of this study matches" in r]
     if unmatched and len(unmatched) == len(result["studies"]):
         # the second box named a medium or an id that nothing in these studies carries (#113)
-        return ("No experiment of the studies holding these species matches the second box ("
+        return (f"No experiment of {studies} matches the second box ("
                 + _esc(s.get("conditions", "")) + "). A medium is matched as text, so a shorter word finds "
                 "more spellings; the report lists every study it looked at.")
     only_monocultures = [r for r in reasons if r.startswith("only monocultures")]
     if only_monocultures and len(only_monocultures) == len(result["studies"]):
-        return ("The studies holding these species grew them only alone, in monocultures, so there is no "
-                "co-culture or community to compare with.")
+        return (f"{studies.capitalize()} grew {'their species' if result.get('all') else 'them'} only alone, "
+                "in monocultures, so there is no co-culture or community to compare with.")
     non_batch = [r for r in reasons if "excluded by default with the growth measure" in r]
     if non_batch and len(non_batch) == len(reasons) and not s.get("include_non_batch"):
         return ("These studies are chemostat or serial dilution experiments. Their area under the curve and "
@@ -791,7 +809,7 @@ def _empty_reason_core(result: dict) -> str:
                 "experiments.")
     top = Counter(r.split(";")[0].strip() for r in reasons).most_common(1)
     why = f" The most common reason: {_esc(top[0][0])}." if top else ""
-    return (f"The studies holding these species gave no usable comparison.{why} {EMPTY_HELP} The report lists "
+    return (f"{studies.capitalize()} gave no usable comparison.{why} {EMPTY_HELP} The report lists "
             "the reason for every pair.")
 
 
@@ -836,13 +854,16 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
             if excluded_ids:
                 parts.append("excluding " + ", ".join(_esc(x) for x in excluded_ids[:3])
                              + (f" and {len(excluded_ids) - 3} more" if len(excluded_ids) > 3 else ""))
+            # the count is of the studies READ, which the second box narrows to its matches afterwards: "every
+            # study matching mucin: 29 studies" stood beside "the second box left out 26 of the 29" (found in
+            # review), so it says what the number is
             resolved = (f"<li>every study {' and '.join(parts)}, with every partner: "
-                        f"{len(result['studies'])} studies{daily_note}</li>"
-                        "<li class=\"muted\">All ignores the species box, not these. Clear them to derive "
-                        "the whole of mGrowthDB.</li>")
+                        f"{_count(len(result['studies']), 'study', 'studies')} searched{daily_note}</li>"
+                        "<li class=\"muted\">Clear them to derive the whole of mGrowthDB.</li>")
         else:
             species_heading, resolved = "<h2>All of mGrowthDB</h2>", (
-                f"<li>every study, with every partner: {len(result['studies'])} studies{daily_note}</li>")
+                f"<li>every study, with every partner: {_count(len(result['studies']), 'study', 'studies')}"
+                f"{daily_note}</li>")
     unresolved = _unresolved_list(result)
     net = result["network"]
     mismatch = any("MISMATCH" in (e.method or "") for e in net.edges)
@@ -896,11 +917,13 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
     # empty one: a run that returns arcs under a changed threshold is the case a reader most needs told,
     # and it was the one case the page did not mark (#250)
     from .help import SETTINGS as help_settings
+    from .report import setting_value
     s_here = result.get("settings", {})
     off_default = [k for k, v in s_here.items() if k in DEFAULTS and v != DEFAULTS[k]]
     if off_default:
-        named = ", ".join(f"{_esc(help_settings[k][0] if k in help_settings else k)} = {_esc(str(s_here[k]))}"
-                          for k in sorted(off_default)[:6])
+        # each value as the report writes it: "on" where the page said "True" (found 2026-11-06)
+        named = ", ".join(f"{_esc(help_settings[k][0] if k in help_settings else k)} = "
+                          f"{_esc(setting_value(k, s_here[k]))}" for k in sorted(off_default)[:6])
         more = f", and {len(off_default) - 6} more" if len(off_default) > 6 else ""
         errors += (f"<p class=\"muted\">{len(off_default)} setting(s) are not at their default: "
                    f"{named}{more}. Advanced settings is open below.</p>")
@@ -924,6 +947,11 @@ def _result_section(token: str, result: dict, message: str = "") -> str:
             f"<p class=\"muted\">Studies searched: {_esc(studies)}</p>{errors}{table}"
             f"{_absent_section(result, result.get('absence', {}))}{_sources(net)}{skipped}</section>")
 
+
+
+def _count(n: int, one: str, many: str) -> str:
+    """"1 study", "2 studies": the page read "1 studies" (found in review)."""
+    return f"{n} {one if n == 1 else many}"
 
 def render_result(token: str, result: dict, message: str = "") -> str:
     """The page with the result under the settings that produced it (#74)."""
@@ -1144,7 +1172,8 @@ def _run_query(client, entries, settings: dict | None = None, index: dict | None
     lose the rest. `progress(done, total, message)`, when given, is told where the search is: `total` is
     None until the studies are known (#75).
 
-    `all_studies` is the page's All button (Karoline, 2026-09-28): the entries are ignored and every study
+    `all_studies` is All (Karoline, 2026-09-28), which the page runs when the species box is empty (#300,
+    Karoline 2026-11-04; it was a button until then): the entries are ignored and every study
     mGrowthDB holds is derived, with every partner kept, still under the second box (media, experiments or
     studies) and Exclude these studies. With the default settings it is read from the network derived once a
     day in the grownet repository when that is less than 36 hours old and was derived by the same derivation
@@ -1782,8 +1811,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                                    message=EXAMPLE_MESSAGE, conditions=""))
             return
         if form.get("glv_example"):
-            # everything a working simulation needs, and then the search itself: the two organisms, the
-            # study they are in so nothing else is read, and the whole of gLV mode. It used to add only
+            # everything a working simulation needs: the two organisms, the study they are in so nothing
+            # else is read, and the whole of gLV mode. It fills the page and waits for Find interactions,
+            # as Example does; it ran the search itself until 2026-11-06 (Karoline: "Please change the gLV
+            # example behavior to be in line with 'Example'"). It used to add only
             # the growth rates and rely on the shipped derivation being the integrated form; with the
             # comparison back as the default it inherited that instead and the button produced a run no
             # package can be built from, on a study chosen for the other form (found reviewing #199,
@@ -1795,20 +1826,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             # pressing it with an absence threshold of 9 still in the form filled the boxes, ran, and
             # produced no network and no package, against a caption promising a package that simulates
             settings = {**glv_mode(dict(DEFAULTS)), "conditions": GLV_EXAMPLE_STUDY}
-            job = self._start(list(GLV_EXAMPLE), settings)
-            job["thread"].join(self.wait)
-            self._redirect(f"/?token={self.token}&job={job['id']}#result")
+            self._send(render_form(self.token, "\n".join(GLV_EXAMPLE), settings,
+                                   message=GLV_EXAMPLE_MESSAGE, conditions=GLV_EXAMPLE_STUDY))
             return
-        if form.get("all"):
-            job = self._start([], settings, all_studies=True)
-            job["thread"].join(self.wait)
-            self._redirect(f"/?token={self.token}&job={job['id']}#result")
-            return
-        if not [e for e in entries if e.strip()]:
-            self._send(render_form(self.token, settings=settings, message="Type at least one species.",
-                                   conditions=settings.get("conditions", "")))
-            return
-        job = self._start(entries, settings)
+        # the species box left empty is All, under the second box and Exclude these studies as All always
+        # was (Karoline, 2026-11-04, #300: "allow the species field to be empty when the second field
+        # (media/studies) has content, so the query is automatically carried out for all species in these
+        # media/studies", and with both empty "the All network could be delivered ... unless changed
+        # advanced options necessitate a re-search", which `run_query` decides by `published.usable`).
+        # It replaces the All button ("Remove it") and the "Type at least one species" refusal.
+        everything = not [e for e in entries if e.strip()]
+        job = self._start([] if everything else entries, settings, all_studies=everything)
         job["thread"].join(self.wait)
         self._redirect(f"/?token={self.token}&job={job['id']}#result")
 

@@ -6,6 +6,67 @@ content.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The page says when an arc is merged, and writes a changed setting as the report does** (found checking
+  Merge parallel arcs on the live page, 2026-11-06; Karoline: "Yes, fix both"). A merged arc's strength
+  showed as a bare median, "-1.49", like any arc; it now reads "3 merged arcs: median, range -2.59 to -1.30"
+  under it. The line naming the settings off their defaults said "Merge parallel arcs = True"; it now says
+  "on", and joins the second box's lines with "; ", as the report does.
+
+### Changed
+
+- **gLV example fills the page and waits, as Example does** (Karoline, 2026-11-06: "The Example button fills
+  the input fields, but gLV example fills the fields and launches the search. Please change the gLV example
+  behavior to be in line with 'Example'."). It fills both boxes and switches gLV mode on, and Find
+  interactions runs it.
+
+### Changed
+
+- **Find interactions with the species box empty searches every species in the media, experiments or
+  studies of the second box, with every partner, and with both boxes empty it is the whole of mGrowthDB;
+  the All button is gone** (Karoline, 2026-11-04, #300: "allow the species field to be empty when the
+  second field (media/studies) has content", and on the button, "Remove it"). This is the search the All
+  button ran, so nothing about its result changes: at the default settings it is the network derived once
+  a day, and any changed setting derives it live. The page no longer answers an empty box with "Type at
+  least one species". On the command line, `derive --live --conditions NAME ...` without `--species` or
+  a study does the same; `--all` is unchanged. The species box is marked optional, and one sentence under
+  the buttons, the help page, `grownet --help` and `grownet derive --help` say how to get the All network.
+  An empty result of such a search speaks of "the studies searched", not "the studies holding these
+  species".
+
+### Fixed
+
+- **The report of a search with no species entered no longer says only their interactions were kept.**
+  All printed "Only interactions between the species entered (--all-partners): on" beside "with every
+  partner"; the line now says the setting was not read in that run. The page counts "1 study", not "1
+  studies".
+### Fixed
+
+- **The Baranyi fit reaches its optimum when the lag collapses** (#298). Its Levenberg-Marquardt loop damped
+  each step by the current diagonal of J'J. When a fit drives the lag toward zero, that column of the
+  Jacobian vanishes, the damped system stayed singular, and the fit stopped short of the best fit, with no
+  sign to the caller. It now damps by the largest diagonal seen so far, as MINPACK and R's `nls.lm` do.
+  Found by the foodnet project, whose fit was the same code. On 40 monoculture curves fitted by R
+  `growthrates` with the same objective, starts and guards, R found a lower residual on 13 before this
+  fix and on none after it. Measured live on all of mGrowthDB against 0.5.0 on 2026-11-04:
+  - **Nothing changes by default**: the 223 arcs of All, gLV mode with either rate method, and
+    `--metric growth_rate` (39 arcs) are identical.
+  - **Lags (`--report-rates`)**: *Bacteroides thetaiotaomicron VPI-5482*'s goes from 0.667 to 0.703 h.
+    Two lags that were already zero stay zero (below 1e-11 h), and one moves by 1e-4 h.
+  - **With `--rate-method baranyi`**, four of six organisms' rates move:
+    - *B. thetaiotaomicron*: 0.787 to 0.838 /h, now over 9 replicates instead of 11, since two curves
+      whose best fit lies past the guard are now refused, and the refusal says so (it gave the R2 of the
+      best fit inside the guard, which sent a reader to the data rather than to the guard);
+    - *Faecalibacterium duncaniae A2-165*: 0.366 to 0.398 /h;
+    - *Roseburia intestinalis L1-82*: 0.603 to 0.624 /h;
+    - *Blautia hydrogenotrophica DSM 10507*: 0.259 to 0.257 /h.
+  - **Arcs with `--metric growth_rate --rate-method baranyi`**: 19 of the 24 change strength.
+    - Three now rest on one replicate and are undetermined (two were absent, one present). One of them
+      changes sign: *R. intestinalis* to *B. thetaiotaomicron* in BTRI_WC, 0.91 to -0.55, now resting
+      on the one monoculture curve left after the two refusals above.
+    - Of the rest, the largest change is -0.55 to -0.35, and one arc moves from absent to present
+      (-0.1124 to -0.1139, at the threshold).
 ### Upgrading
 
 - **The format id moves to `grownet.interaction_network/v5`** (Karoline, 2026-11-06, #305: "Is the
