@@ -195,6 +195,12 @@
         },
         "taxon_id_refused": {
           "type": "string"
+        },
+        "merged_nodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },

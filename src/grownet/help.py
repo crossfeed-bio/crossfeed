@@ -609,6 +609,8 @@ NODE_ATTRIBUTES = {
     "taxon_id": "the NCBI taxon id of the strain, as mGrowthDB records it",
     "taxon_id_refused": "why taxon_id is not this node's identity: mGrowthDB gave it to different strains of "
                         "one study, so it is not a join key; empty where taxon_id is the identity",
+    "merged_nodes": "with Merge to genus: the node ids of the strains this genus node stands for, among the "
+                    "network's arcs; empty on every other node",
     "species": "genus and species from the name, to merge with species-level networks",
     "identity": "what the id rests on: ncbi (the taxon id), name, or genus (with Merge to genus: the node "
                 "stands for every strain of its genus)",
@@ -1323,7 +1325,8 @@ give others; the report beside the download says what was read and when.</p>
 <h2 id="attributes">Arc and node attributes</h2>
 <p>Every downloaded network, JSON or GraphML, carries these for each arc (edge) and node. A network
 names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v5</code>,
-after <code>/v4</code> in 0.5.0, which a <code>/v5</code> file only adds <code>technique</code> to, and
+after <code>/v4</code> in 0.5.0, which a <code>/v5</code> file only adds <code>technique</code> and
+<code>merged_nodes</code> to, and
 <code>/v3</code> in 0.3.0 and 0.4.0. It moved to <code>/v1</code> in 0.2.0 because
 <code>significance</code> changed meaning, from the corrected p-value to -log10 of it, and to
 <code>/v2</code>, <code>/v3</code> and then <code>/v4</code> because optional arc and node fields were

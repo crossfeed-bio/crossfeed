@@ -103,3 +103,40 @@ def test_an_older_file_still_reads_and_validates(schema):
            "edges": [{"source": "a", "target": "b", "effect": "facilitation", "study_ids": ["S1"]}]}
     assert validate_document(doc) == []
     assert InteractionNetwork.from_dict(doc).edges[0].technique == ""
+
+
+def test_a_genus_node_lists_the_strains_it_stands_for():
+    """Karoline, 2026-11-06, asked whether a genus node should list its strain ids, in the same unreleased
+    format move as `technique`: "Yes, add it". It did not: a genus node kept no strain id, and the strains
+    were named only on its arcs. `merged_nodes` is the strain node ids of that genus among the network's
+    arcs, sorted; empty on every node without Merge to genus."""
+    from grownet.derive import merge_genus
+
+    def arc(source, source_name, target, target_name, strength):
+        return {"source": source, "target": target, "source_name": source_name, "target_name": target_name,
+                "source_taxon_id": source.split(":")[-1], "target_taxon_id": target.split(":")[-1],
+                "source_identity": "ncbi", "target_identity": "ncbi", "effect": "facilitation",
+                "strength": strength, "status": "present", "outcome": "quantified", "study_id": "S1",
+                "condition": "c", "method": "m", "experiments": [], "quality": [], "cautions": [], "notes": [],
+                "community": []}
+    # Alpha has two strains among the arcs, Beta one; Alpha one -> Beta and Alpha three -> Beta merge into
+    # one genus arc, so the network holds two nodes
+    arcs = [arc("ncbi:3", "Alpha three", "ncbi:2", "Beta two", 1.0),
+            arc("ncbi:1", "Alpha one", "ncbi:2", "Beta two", 3.0)]
+    by_strain = records_to_network(arcs)
+    assert all(node.merged_nodes == () for node in by_strain.nodes.values())
+    edges, _ = merge_genus(arcs, merge=True)
+    net = records_to_network(edges)
+    assert net.nodes["Alpha"].merged_nodes == ("ncbi:1", "ncbi:3")
+    assert net.nodes["Beta"].merged_nodes == ("ncbi:2",)
+    # in every file: JSON (and back), GraphML joined by "; " as the arc lists are, and valid
+    import json
+    doc = json.loads(net.to_json())                       # as the file holds it
+    assert next(n for n in doc["nodes"] if n["id"] == "Alpha")["merged_nodes"] == ["ncbi:1", "ncbi:3"]
+    assert InteractionNetwork.from_dict(doc).nodes["Alpha"].merged_nodes == ("ncbi:1", "ncbi:3")
+    notes = []
+    assert validate_document(doc, notes) == [] and not [n for n in notes if "declare" in n], notes
+    graphml = ET.fromstring(to_graphml(net))
+    ns = "{http://graphml.graphdrawing.org/xmlns}"
+    alpha = next(n for n in graphml.iter(f"{ns}node") if n.get("id") == "Alpha")
+    assert [d.text for d in alpha.iter(f"{ns}data") if d.get("key") == "n_merged_nodes"] == ["ncbi:1; ncbi:3"]

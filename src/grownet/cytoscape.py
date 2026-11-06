@@ -102,6 +102,8 @@ def network_json(net: InteractionNetwork, name: str = "grownet") -> dict:
     nodes = [{"data": {"id": node.id, "name": node.name or node.id, "taxon_id": node.taxon_id,
                        "species": node.species, "identity": node.identity,
                        "taxon_id_refused": node.taxon_id_refused,
+                       # v5: the strains a genus node stands for, joined as merged_pairs is
+                       "merged_nodes": "; ".join(node.merged_nodes),
                        "taxonomy": node.taxonomy, "model_ref": node.model_ref,
                        "genus": genus(node), "genus_color": colors[genus(node)]}}
              for node in net.nodes.values()]

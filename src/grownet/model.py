@@ -39,7 +39,8 @@ from dataclasses import asdict, dataclass, field, fields
 # same target (#209 option 2); on the node, why its `taxon_id` is not its identity (#217 option b). Nothing
 # a v3 field means changes, so a v3 reader reads a v4 file with five fields it ignores.
 # v5 (Karoline, 2026-11-06, #305: "Is the measurement technique recorded as an arc attribute? If not, please
-# add."): one edge field, `technique`. Nothing a v4 field means changes.
+# add."): one edge field, `technique`, and in the same move one node field, `merged_nodes`, the strains a
+# genus node stands for. Nothing a v4 field means changes.
 SCHEMA = "grownet.interaction_network/v5"
 # Older ids a reader still accepts, newest first. A v0 document is valid: its `significance` means what v0
 # said it means, which is why `grownet validate` names the version it read.
@@ -116,6 +117,10 @@ class Node:
     # (SMGDB00000008: 1506553 is both L. clostridioforme and L. symbiosum). The id stays, since it is what
     # the source says; this says it is not a join key (Karoline, 2026-10-12, #217 option b). Empty otherwise.
     taxon_id_refused: str = ""
+    # with Merge to genus: the node ids of the strains this genus node stands for, among the network's arcs,
+    # sorted (Karoline, 2026-11-06: "Yes, add it", asked whether a genus node should list its strain ids).
+    # Empty on every other node. v5
+    merged_nodes: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -317,7 +322,10 @@ class InteractionNetwork:
         for s in d.get("studies", []):
             net.add_study(Study(**{k: v for k, v in s.items() if k in known_studies}))
         for n in d.get("nodes", []):
-            net.add_node(Node(**{k: v for k, v in n.items() if k in known_nodes}))
+            kept = {k: v for k, v in n.items() if k in known_nodes}
+            if "merged_nodes" in kept:              # a JSON list, kept as the tuple the field is
+                kept["merged_nodes"] = tuple(kept["merged_nodes"] or ())
+            net.add_node(Node(**kept))
         for e in d.get("edges", []):
             # a field this reader does not know is dropped rather than raising, so a newer document is
             # read as far as it can be: `Edge(**e)` is what would have made 0.2.0 fail on a 0.3.0 network

@@ -181,6 +181,8 @@ SCHEMA_DOC = {
                 "identity": {"enum": [*IDENTITIES, ""]},
                 # why taxon_id is not this node's identity; empty where it is (v4, #217)
                 "taxon_id_refused": {"type": "string"},
+                # v5: the strain node ids a genus node stands for
+                "merged_nodes": {"type": "array", "items": {"type": "string"}},
             },
         },
         "edge": {

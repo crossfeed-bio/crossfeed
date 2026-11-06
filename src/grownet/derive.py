@@ -1922,10 +1922,12 @@ def merge_genus(edges: list, merge: bool = False, level: str = "species", curren
             "rule": "nodes by genus; arcs by source genus, target genus and sign; median of the log2 means"}
     if not merge:
         return edges, info
-    groups, name_of = {}, {}
+    groups, name_of, members = {}, {}, {}
     for e in edges:
         for side in ("source", "target"):
             name_of.setdefault(e[side], organism(e, side))
+            # the strains each genus node stands for, which the node keeps (merged_nodes, 2026-11-06)
+            members.setdefault(genus_name(organism(e, side)), set()).add(e[side])
     for e in edges:
         kind = ABSENT if e.get("status") == ABSENT else e.get("effect")
         key = (genus_name(organism(e, "source")), genus_name(organism(e, "target")), kind)
@@ -1941,7 +1943,8 @@ def merge_genus(edges: list, merge: bool = False, level: str = "species", curren
             # and no strain's refused taxon id, which the genus node does not carry: the live
             # Lachnoclostridium node said 1506553 was refused, from its first strain (2026-11-06)
             arc.update({f"{side}_name": genus, f"{side}_taxon_id": "", f"{side}_species": "",
-                        f"{side}_identity": "genus", f"{side}_taxon_id_refused": ""})
+                        f"{side}_identity": "genus", f"{side}_taxon_id_refused": "",
+                        f"{side}_merged_nodes": sorted(members[genus])})
         arc.update(supporting_pairs=len(pairs), merged_pairs=pairs,
                    method=f"{arc.get('method', '')}; merged to genus: {len(arcs)} arcs over {len(pairs)} "
                           f"{level} pairs")

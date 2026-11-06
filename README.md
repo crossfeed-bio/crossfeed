@@ -318,7 +318,8 @@ it moves from was released, which is why 0.3.0 ships `/v3` and no release carrie
 for five optional fields a reader could not otherwise get: on an arc, the unit of `metric_with` and
 `metric_without`, the interval the metric was computed over and its unit, and a drop-out arc's difference
 from the other removals of its target; on a node, why its `taxon_id` is not its identity. It moved to `/v5`
-for one arc field, `technique`, how the target was measured. Files from 0.1.x
+for one arc field, `technique`, how the target was measured, and one node field, `merged_nodes`, the
+strains a genus node stands for with Merge to genus. Files from 0.1.x
 (`/v0`) and 0.2.x (`/v1`) are still valid, and `grownet validate` names the version it read. It is the contract downstream tools
 read, and it is pinned by a JSON Schema at
 [`schema/interaction_network.schema.json`](https://github.com/crossfeed-bio/crossfeed/blob/main/schema/interaction_network.schema.json). Its `meta` records
