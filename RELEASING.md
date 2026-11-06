@@ -113,8 +113,9 @@ files the workflow writes.
 ## If the daily All artifact is broken
 
 The `all-network` workflow publishes the All network as assets of the `all-network` release, from
-`main`, once a day: `all_result.<format>.json` (today `all_result.v4.json`), named by the format id a copy
-reads, and `all_result.json`, the same network in `/v3` for installed 0.3.x and 0.4.x copies (#289). A
+`main`, once a day: `all_result.<format>.json` (today `all_result.v5.json`), named by the format id a copy
+reads, `all_result.v4.json`, the same network in `/v4` for installed 0.5.x copies (#305), and
+`all_result.json`, the same network in `/v3` for installed 0.3.x and 0.4.x copies (#289). A
 copy of this version reads its file while it is less than 36 hours old; 0.3.x and 0.4.x read theirs while
 it is less than a day old. If a bad artifact goes out, **pause the workflow, then delete every result file**:
 
@@ -132,7 +133,7 @@ Pausing comes first because the next scheduled run would otherwise rebuild the s
 with every result file gone, that first run compares itself with `all_network.json` for the floor.
 
 `published.fetch` then gets nothing, returns `None`, and every copy derives live, which is the designed
-fallback and is what the All button does when GitHub is unreachable. `all_network.json` and
+fallback and is what the page's All network (both boxes empty) does when GitHub is unreachable. `all_network.json` and
 `all_report.txt` stay: no copy of grownet reads them, and the next run's floor compares itself with
 `all_network.json`. Verify that every result file is gone for every reader, not only for the version
 installed where you check:

@@ -50,6 +50,182 @@ def test_every_edge_and_node_field_is_explained():
         assert f"<code>{name}</code>" in PAGE.replace("<wbr>", "")
 
 
+# ---- what a merged arc carries (#302) ----------------------------------------------------------------
+#
+# Karoline, 2026-11-06, after asking "how is grownet currently merging arc attributes when arcs are merged
+# across studies?": "please document this in the help in the context of the arc attributes".
+
+# the fields a merged arc takes from its first arc: the four every merged arc shares, and the two only
+# Merge to genus sets. Anything else the first arc would pass through unexamined.
+FROM_THE_FIRST_ARC = {"source", "target", "effect", "metric", "supporting_pairs", "merged_pairs"}
+
+
+def _two_arcs_that_differ_in_every_field():
+    """Two arcs with a different, non-empty value in every field of the format, so any field the merge
+    rewrites shows as a difference from the first arc."""
+    def value(field, kind, i):
+        if kind == "tuple":
+            return [f"{field}-{i}"]
+        if kind.startswith("float"):
+            return [1.0, 3.0][i]
+        if kind.startswith("int"):
+            return [5, 7][i]                  # neither is 2, the count of a merge of two
+        return f"{field}-{i}"
+    arcs = [{f.name: value(f.name, str(f.type), i) for f in dataclasses.fields(model.Edge)} for i in (0, 1)]
+    for i, arc in enumerate(arcs):
+        arc.update(status=[None, "present"][i], evidence=["biculture", "dropout"][i], outcome=f"censored-{i}",
+                   study_id=f"S{i}", study_citation=f"study {i}")
+    return arcs
+
+
+def test_the_help_says_what_every_attribute_becomes_on_a_merged_arc():
+    from grownet.derive import _merged
+    arcs = _two_arcs_that_differ_in_every_field()
+    merged = _merged(arcs)
+    fields = {f.name for f in dataclasses.fields(model.Edge)}
+    changed = {k for k in fields if merged.get(k) != arcs[0].get(k)}
+    if [s["id"] for s in merged["studies"]] != [arcs[0]["study_id"]]:      # `study_ids` is written from these
+        changed.add("study_ids")
+    named = [f for row_fields, _ in help.MERGED_ATTRIBUTES for f in row_fields]
+    assert len(named) == len(set(named)), "a field is named in two rows"
+    assert set(named) <= fields, set(named) - fields
+    # every field the merge rewrites is in the help's table, and every field it does not is one the help
+    # names as taken from the first arc, so a new arc field cannot reach a merged arc undocumented
+    assert changed - set(named) == set(), changed - set(named)
+    assert fields - changed == FROM_THE_FIRST_ARC, fields - changed
+    section = PAGE[PAGE.index('id="merged"'):PAGE.index('id="decisions"')]
+    section = section.replace("<wbr>", "")
+    for field in [*named, *FROM_THE_FIRST_ARC]:
+        assert f"<code>{field}</code>" in section, field
+
+
+def test_two_obligate_arcs_that_agree_keep_their_outcome_and_every_field_they_share():
+    """The other half of the table's rules, which arcs differing in every field cannot reach: two arcs with no
+    log2 mean keep the outcome they share, and a one-comparison field all merged arcs agree on is kept, not
+    emptied (Craig's agent: the ratchet above covers the fields, not both sides of each rule)."""
+    from grownet.derive import COMPARISON_FIELDS, _merged
+    arcs = _two_arcs_that_differ_in_every_field()
+    for arc in arcs:
+        arc.update(strength=None, outcome="obligate", effect="facilitation")
+        for field in COMPARISON_FIELDS:
+            arc[field] = arcs[0][field]
+    merged = _merged(arcs)
+    assert (merged["outcome"], merged["strength"], merged["merged_arcs"]) == ("obligate", None, 2)
+    for field in COMPARISON_FIELDS:
+        assert merged[field] == arcs[0][field], field
+    assert "otherwise the outcome they all share" in dict(
+        (fields, text) for fields, text in help.MERGED_ATTRIBUTES)[("outcome",)]
+
+
+def test_the_consequences_the_help_states_for_a_merged_arc_hold():
+    """Each claim of the help's "Reading a merged arc", checked on arcs whose answer is computed by hand."""
+    from grownet.derive import merge_genus, merge_parallel, output_meta
+    text = " ".join(visible(PAGE).split())                  # as read, not as the source wraps it
+
+    def arc(strength, **kw):
+        effect = "facilitation" if (strength or 1) > 0 else "inhibition"
+        return {"source": "ncbi:1", "target": "ncbi:2", "source_name": "Alpha one", "target_name": "Beta two",
+                "effect": effect, "strength": strength, "status": "present", "outcome": "quantified",
+                "evidence": "biculture", "condition": "c", "experiments": [], "quality": [], "cautions": [],
+                "notes": [], "community": [], "method": "m", "study_id": "S1", **kw}
+
+    # unweighted: 1.0 on six replicates and 3.0 on one give the median of the two, 2.0, not 1.29
+    assert "The median is unweighted" in text
+    (one,), _ = merge_parallel([arc(1.0, n_with=6, n_without=6), arc(3.0, n_with=1, n_without=1)])
+    assert one["strength"] == 2.0 and one["n_with"] is None
+    # censored arcs count and do not enter the median: +0.2 and three obligate arcs give 0.2, of four arcs
+    assert "one arc of +0.2 and three obligate arcs give a quantified arc of strength 0.2" in text
+    (one,), _ = merge_parallel([arc(0.2)] + [arc(None, outcome="obligate", effect="facilitation")] * 3)
+    assert (one["strength"], one["outcome"], one["merged_arcs"]) == (0.2, "quantified", 4)
+    # present when any merged arc is: one present, two undetermined (empty status)
+    assert "A merged arc is present when any of its arcs is" in text
+    (one,), _ = merge_parallel([arc(1.0), arc(2.0, status=None), arc(4.0, status=None)])
+    assert one["status"] == "present"
+    # arcs below the absence threshold leave before the merge: 1.0 with sd 0.1 is present, 0.05 with sd 0.5
+    # is below k = 1, so the merge sees one arc and merges nothing
+    assert "arcs below the absence threshold have left before the merge" in text
+    records = [arc(1.0, sd=0.1, n_with=3, n_without=3, p_value=0.01),
+               arc(0.05, sd=0.5, n_with=3, n_without=3, p_value=0.9)]
+    for r in records:
+        r.pop("status")
+    edges, meta = output_meta(records, merge_arcs=True)
+    assert len(edges) == 1 and not edges[0].get("merged_arcs") and meta["hidden"]["absent"] == 1
+    # both signs: five facilitation arcs and one inhibition arc give six arcs, none merged
+    assert "five facilitation arcs and one inhibition arc give six arcs, none merged" in text
+    edges, meta = merge_parallel([arc(1.0)] * 5 + [arc(-0.5)])
+    assert len(edges) == 6 and meta["merged"] == 0 and meta["left_apart_for_disagreeing_signs"] == 1
+    # Merge to genus also merges absent arcs: two absent arcs from species of one genus to another give one
+    assert "also merges their absent arcs" in text
+    absent = [arc(0.01, status="absent", source="ncbi:3", source_name="Alpha three"),
+              arc(0.02, status="absent")]
+    (one,), _ = merge_genus(absent, merge=True)
+    assert (one["status"], one["merged_arcs"], one["source"]) == ("absent", 2, "Alpha")
+
+
+def test_the_node_attributes_have_their_own_header_after_the_merged_arcs():
+    """Karoline, 2026-11-06: "the help has a node attribute table under the header 'What a merged arc
+    carries'. please introduce a new header." The order is now: arc attributes, what a merged arc
+    carries, node attributes, what a merged node carries."""
+    order = ['<h3 id="arc-attributes">Arc attributes</h3>', "<th>Arc attribute</th>",
+             '<h3 id="merged">What a merged arc carries</h3>',
+             '<h3 id="node-attributes">Node attributes</h3>', "<th>Node attribute</th>",
+             '<h3 id="merged-nodes">What a merged node carries</h3>', '<h2 id="decisions">']
+    at = [PAGE.index(marker) for marker in order]
+    assert at == sorted(at), dict(zip(order, at, strict=True))
+
+
+def _genus_arcs():
+    """Two arcs from strains of one genus to another, as study 8 gives them live: the Lachnoclostridium
+    strains share taxon id 1506553, so each carries the refusal of that id as its identity."""
+    refused = ("mGrowthDB gives taxon id 1506553 to different strains in this study (Lachnoclostridium "
+               "clostridioforme 2_1_49FAA, Lachnoclostridium symbiosum WAL-14673), so it is not a join key")
+    def arc(source, name, strength):
+        return {"source": source, "target": "ncbi:2", "source_name": name, "target_name": "Bacteroides ovatus",
+                "source_taxon_id": "1506553", "source_species": " ".join(name.split()[:2]).lower(),
+                "source_identity": "name", "source_taxon_id_refused": refused,
+                "target_taxon_id": "2", "target_species": "bacteroides ovatus", "target_identity": "ncbi",
+                "effect": "inhibition", "strength": strength, "status": "present", "outcome": "quantified",
+                "evidence": "dropout", "community": [source, "ncbi:2", "ncbi:3"], "study_id": "S8",
+                "condition": "c", "method": "m", "experiments": [], "quality": [], "cautions": [], "notes": []}
+    return [arc("lachnoclostridium clostridioforme", "Lachnoclostridium clostridioforme 2_1_49FAA", -1.0),
+            arc("lachnoclostridium symbiosum", "Lachnoclostridium symbiosum WAL-14673", -3.0)]
+
+
+def test_a_genus_node_keeps_no_strain_id_and_says_so():
+    """Karoline, 2026-11-06: "for a merged node on genus level, are strain ids kept? please document merging
+    in nodes as well." They are not: a genus node is the genus, and the help says where the strains behind it
+    are found instead. It also kept the first strain's taxon_id_refused, so the live Lachnoclostridium node
+    said a taxon id was refused that the genus node does not carry (found answering her)."""
+    from grownet.derive import merge_genus
+    from grownet.mgrowthdb import records_to_network
+    edges, _ = merge_genus(_genus_arcs(), merge=True)
+    net = records_to_network(edges)
+    node = net.nodes["Lachnoclostridium"]
+    assert (node.name, node.identity, node.taxon_id, node.species, node.taxon_id_refused) == \
+        ("Lachnoclostridium", "genus", "", "", "")
+    # the strains it stands for are kept since #306 (Karoline: "Yes, add it"), by node id
+    assert node.merged_nodes == ("lachnoclostridium clostridioforme", "lachnoclostridium symbiosum")
+    (arc,) = net.edges
+    # what the arc keeps instead: the pairs behind it by name, and the community members' strain ids
+    assert tuple(arc.merged_pairs) == ("Lachnoclostridium clostridioforme -> Bacteroides ovatus",
+                                       "Lachnoclostridium symbiosum -> Bacteroides ovatus")
+    assert arc.supporting_pairs == 2 and "lachnoclostridium symbiosum" in arc.community
+    # and the help says each of these about a merged node, field by field
+    raw = PAGE[PAGE.index('id="merged-nodes"'):PAGE.index('id="decisions"')]
+    section = visible(raw)
+    # each field by its own name, as the help writes a field, so "species" is not found in "species pairs"
+    # nor "taxon_id" in "taxon_id_refused" (found in review)
+    for field in (f.name for f in dataclasses.fields(model.Node)):
+        assert help._name(field) in raw, field
+    assert "merged_nodes lists the strains it stands for" in " ".join(section.split())
+    for where in ("merged_pairs", "supporting_pairs", "community"):
+        assert help._name(where) in raw, where
+    # a drop-out member on no arc (ncbi:3 here) is in the arc's community and in no node's merged_nodes,
+    # and the help does not say otherwise
+    assert "ncbi:3" in arc.community and not any("ncbi:3" in n.merged_nodes for n in net.nodes.values())
+    assert "a member on no arc is named only there" in " ".join(section.split())
+
+
 def test_the_attribute_list_names_every_value_an_edge_can_take():
     text = " ".join(help.EDGE_ATTRIBUTES.values())
     for value in (*model.EFFECTS, *model.OUTCOMES, *model.QUALITY_FLAGS, *model.CAUTIONS, *model.EVIDENCE,
@@ -126,7 +302,7 @@ def test_the_command_line_species_search_gives_the_pages_network(monkeypatch, ca
 
 
 def test_the_command_line_all_gives_the_pages_all_network(monkeypatch, capsys, tmp_path):
-    # `derive --live --all` and the page's All button: the same edges, and the report says what was asked
+    # `derive --live --all` and the page with both boxes empty: the same edges, and the report says what was asked
     monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", FakeClient)
     out, report = tmp_path / "all.json", tmp_path / "all.txt"
     assert main(["derive", "--live", "--all", "--merge-genera", "--derivation", "replicate",
@@ -137,6 +313,36 @@ def test_the_command_line_all_gives_the_pages_all_network(monkeypatch, capsys, t
     assert cli["edges"] == page["edges"] and cli["edges"] and cli["meta"]["query"] == "all"
     assert {n["identity"] for n in cli["nodes"]} == {"genus"}
     assert "query: all of mGrowthDB" in report.read_text(encoding="utf-8")
+
+
+def test_the_command_line_with_conditions_and_no_species_gives_the_pages_empty_species_box(monkeypatch, capsys,
+                                                                                          tmp_path):
+    # #300 (Karoline, 2026-11-04): the page's species box left empty with media or studies in the second
+    # box searches every species in them. `--conditions` without `--species` or a study does the same, and
+    # the report says what was asked, not "all of mGrowthDB"
+    class InStudy(FakeClient):
+        """The fake study's experiments, carrying the study id mGrowthDB gives them, which the second box
+        matches a study id against."""
+
+        def study_experiments(self, study_id):
+            return [{**e, "studyId": study_id} for e in super().study_experiments(study_id)]
+
+        def get_experiment(self, experiment_id):
+            return {**super().get_experiment(experiment_id), "studyId": self.study_id}
+
+    monkeypatch.setattr("grownet.mgrowthdb.MGrowthDBClient", InStudy)
+    out, report = tmp_path / "wc.json", tmp_path / "wc.txt"
+    assert main(["derive", "--live", "--conditions", "SMGDB00000001", "--derivation", "replicate",
+                 "--out", str(out), "--report", str(report)]) == 0
+    cli = json.loads(out.read_text(encoding="utf-8"))
+    page = json.loads(gui.run_query(InStudy(), [], {"conditions": "SMGDB00000001", "derivation": "replicate"},
+                                    all_studies=True)["network"].to_json())
+    assert cli["edges"] == page["edges"] and cli["edges"] and cli["meta"]["query"] == "all"
+    text = report.read_text(encoding="utf-8")
+    assert "all of mgrowthdb" not in text.lower() and "SMGDB00000001" in text
+    # a study argument keeps its own meaning (derive that one study), and nothing at all still asks for one
+    assert main(["derive", "--live"]) == 2
+    assert "needs a study id" in capsys.readouterr().err
 
 
 def test_species_search_needs_live_and_rejects_a_deriver(capsys, tmp_path):
@@ -466,3 +672,90 @@ def test_every_command_the_help_page_prints_is_one_the_parser_accepts():
             problems.append(_species_flags(args))
         for problem in problems:
             assert problem == "", f"{command}\n  -> {problem}"
+
+
+# ---- the help reads for its readers (Karoline, 2026-11-06) --------------------------------------------
+#
+# "the help also has an entry: Karoline, 2026-10-07. please remove all such entries from the help, they are
+# not useful for readers. also, in 'the alias table', there is a 26 - is that a study? if so, please use the
+# full study number. also, please put species names in italics."
+
+def _visible_help(page: str = PAGE) -> str:
+    return " ".join(visible(re.sub(r"<(style|script)\b.*?</\1\s*>", "", page, flags=re.S | re.I)).split())
+
+
+# a note of who decided what and when, in any shape: "(Karoline, 2026-10-07)", "(decided 2026-10-07)",
+# "(#42, amended 2026-10-03)". A date the reader needs, when something was measured, is not one
+# Either order, any case, the same verbs both ways (found in review: "(Settled on 2026-10-07.)" and
+# "(2026-10-07: chosen by both)" passed)
+_DECIDED = r"(?:decided|agreed|amended|settled|ruled|asked|said|proposed|chosen)"
+DECISION_NOTE = re.compile(rf"\([^()]*\b{_DECIDED}\b[^()]*\b20\d\d-\d\d-\d\d\b[^()]*\)"
+                           rf"|\([^()]*\b20\d\d-\d\d-\d\d\b[^()]*\b{_DECIDED}\b[^()]*\)", re.I)
+
+
+def test_the_help_names_no_collaborator_and_date_beside_its_text():
+    text = _visible_help()
+    assert not re.findall(r"[^.]{0,40}\b(?:Karoline|Craig)\b[^.]{0,40}", text)
+    # nor any other note of when something was decided (found in review: "(decided 2026-10-07)" passed)
+    assert DECISION_NOTE.findall(text) == []
+    for planted in ("(decided 2026-10-07)", "(#42, amended 2026-10-03)", "(agreed on 2026-10-11 with both)",
+                    "(Settled on 2026-10-07.)", "(2026-10-07: chosen by both)"):
+        assert DECISION_NOTE.findall(f"a rule {planted}."), planted
+    assert not DECISION_NOTE.findall("(measured live on 2026-10-11 it matches them)")
+
+
+def test_the_alias_table_gives_full_study_ids():
+    section = _visible_help(PAGE[PAGE.index("The alias table"):PAGE.index('<h2 id="idea">')])
+    assert "SMGDB00000005 and SMGDB00000026" in section
+    # every study named by number is named in full: no bare "and 26"
+    assert not re.search(r"\band \d{1,3}\b", section)
+
+
+def test_genus_and_species_names_are_in_italics():
+    """Every genus the help names, alone or with its species (and a species abbreviated to its genus's
+    initial), is in italics wherever it is prose. Commands, code and file names keep their own type."""
+    from grownet.help import TAXA
+    # the vocabulary covers every organism the page itself offers as an example
+    for name in (*gui.EXAMPLE, *gui.GLV_EXAMPLE, *gui.INPUT_EXAMPLES):
+        if name[:1].isalpha() and name[:1].isupper():
+            assert name.split()[0] in TAXA, name
+    body = re.sub(r"<(style|script)\b.*?</\1\s*>", "", PAGE, flags=re.S | re.I)
+    plain, open_tags = [], []
+    for token in re.split(r"(<[^>]+>)", body):
+        if token.startswith("<"):
+            m = re.match(r"<(/?)(\w+)", token)
+            if m and m.group(2).lower() in ("em", "i", "code", "pre", "title", "a"):
+                if m.group(1):
+                    open_tags.pop() if open_tags else None
+                else:
+                    open_tags.append(m.group(2).lower())
+            continue
+        if not open_tags:
+            plain.append(token)
+    genus = "|".join(sorted(TAXA))
+    found = re.findall(rf"\[?\b(?:{genus})\]?(?: [a-z]{{3,}})?|\b[A-Z]\. [a-z]{{4,}}", " ".join(plain))
+    assert found == [], found
+    # and a name the lists do not hold yet: the lists italicize only what they know, so a new name would
+    # pass the check above unseen (found in review: "Akkermansia muciniphila" plain, and "Bacteroides
+    # fragilis" as <em>Bacteroides</em> fragilis, both passed)
+    assert _names_missing_from_the_lists(body) == []
+    for planted in ("grows with Akkermansia muciniphila here", "and <em>Bacteroides</em> fragilis here"):
+        assert _names_missing_from_the_lists(planted), planted
+
+
+# the words that follow a name in the help's prose, which are English and not an epithet; a new one is
+# added here, an epithet goes into help.EPITHETS
+FOLLOWS_A_NAME = {"from", "about", "apart", "that", "bound", "with", "when", "which", "were", "have", "alone",
+                  "strains", "species", "grows", "into", "over", "than", "this", "they"}
+# the endings of a Latin epithet
+LATIN = r"(?:ii|ae|us|um|is|ensis|ica|ila|oides|iformis|ans|ens|ata|ina|ida|ella|ia|i|a)"
+
+
+def _names_missing_from_the_lists(body: str) -> list:
+    """Binomials in `body` that help.TAXA and help.EPITHETS would not italicize whole: an epithet left
+    upright after an italic genus, or a capitalized word and a Latin epithet in plain prose."""
+    half = [m.group(0) for m in re.finditer(r"</em> ([a-z]{4,})\b", body) if m.group(1) not in FOLLOWS_A_NAME]
+    plain = re.sub(r"<(em|i|code|pre|title|a)\b[^>]*>.*?</\1>", " ", body, flags=re.S | re.I)
+    plain = " ".join(re.sub(r"<[^>]+>", " ", plain).split())
+    whole = re.findall(rf"\b[A-Z][a-z]{{3,}} [a-z]{{4,}}{LATIN}\b", plain)
+    return half + whole

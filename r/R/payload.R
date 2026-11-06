@@ -212,8 +212,10 @@ print.grownet_glv <- function(x, ...) {
                 x$tool, x$tool_version, x$derived_at, x$source_db))
     with_rate <- sum(!is.na(x$growth_rates))
     for (block in x$matrices) {
-        cat(sprintf("  %d organisms; matrix %d x %d%s\n",
-                    length(block$organisms), nrow(block$interactions), ncol(block$interactions),
+        # "1 organism", not "1 organisms" (#296)
+        cat(sprintf("  %d organism%s; matrix %d x %d%s\n",
+                    length(block$organisms), if (length(block$organisms) == 1L) "" else "s",
+                    nrow(block$interactions), ncol(block$interactions),
                     if (nzchar(block$unit)) paste0(", every cell in ", block$unit) else ""))
     }
     if (length(x$matrices) > 1) {
@@ -233,10 +235,12 @@ print.grownet_glv <- function(x, ...) {
     # the matrices, so this read "8 of 8" for an 11-organism network while caveats$without_a_rate named
     # the other 3 (#211 item 3). The ones outside every matrix are now counted where the coverage is.
     outside <- setdiff(x$caveats$without_a_rate, x$organisms)
-    cat(sprintf("  growth rates: %d of the %d organisms in a matrix%s%s\n", with_rate, length(x$organisms),
+    cat(sprintf("  growth rates: %d of the %d organism%s in a matrix%s%s\n", with_rate, length(x$organisms),
+                if (length(x$organisms) == 1L) "" else "s",
                 if (nzchar(x$growth_rate_unit)) paste0(" (", x$growth_rate_unit, ")") else "",
-                if (length(outside)) sprintf("; %d more in the network have none and are in no matrix",
-                                             length(outside)) else ""))
+                if (length(outside) == 1L) "; 1 more in the network has none and is in no matrix"
+                else if (length(outside)) sprintf("; %d more in the network have none and are in no matrix",
+                                                  length(outside)) else ""))
     cat("  A[i, j] is the effect of j on i: rows are affected, columns are the actor.\n")
     if (x$fitted) {
         # the package's own sentence, which says what its derivation fitted: an integrated cell is not a
@@ -281,16 +285,29 @@ print.grownet_glv <- function(x, ...) {
         }
         outside <- setdiff(missing, x$organisms)
         if (length(outside)) {
-            cat("       ", paste(outside, collapse = ", "),
-                " are in no matrix; as_miasim() simulates without them.\n", sep = "")
+            # the names were just listed: when it is the same set, refer to them rather than list them
+            # again (#296)
+            one <- length(outside) == 1L
+            who <- if (setequal(outside, missing)) {
+                if (one) "it is" else "these are"
+            } else {
+                paste(paste(outside, collapse = ", "), if (one) "is" else "are")
+            }
+            # the number agrees with the organisms named: "it is ... without them" read wrong (found in
+            # review)
+            cat("       ", who, " in no matrix; as_miasim() simulates without ", if (one) "it" else "them",
+                ".\n", sep = "")
         }
     }
     left_out <- x$caveats$left_out
     if (nrow(left_out)) {
-        cat(sprintf("   * %d organism(s) are in no matrix, because a coefficient of theirs could not be\n",
+        # the heading once, and the organisms under it; "fitted:" began every line (#296). It does not say
+        # they "could not be fitted": a row the steady-state derivation fitted, in units of r_i - D no
+        # start-up gave, is in no matrix for that reason, and its line says so (found in a second review)
+        cat(sprintf("   * %d organism(s) are in no matrix, each for the reason beside it:\n",
                     nrow(left_out)))
         for (i in seq_len(nrow(left_out))) {
-            cat("       fitted: ", left_out$what[i], ": ", left_out$why[i], "\n", sep = "")
+            cat("       ", left_out$what[i], ": ", left_out$why[i], "\n", sep = "")
         }
     }
     # the effects the matrices hold at 0 for want of a coefficient, and those in no matrix at all, as the

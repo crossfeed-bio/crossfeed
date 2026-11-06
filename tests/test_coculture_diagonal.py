@@ -158,8 +158,8 @@ def test_a_sign_conflict_of_an_organism_dropped_as_unusable_is_named_outside_its
     assert "A" in [name for name, _ in got["left_out"]], got["left_out"]
     assert [block["conflicts"] for block in got["matrices"]] == [[]], got["matrices"]
     why = dict(((a, b), w) for a, b, w in got["across_units"])[("A", "C")]
-    assert why == ("its arcs disagree in sign, so they are not merged; A could not be fitted, so this effect is "
-                   "in no matrix"), why
+    assert why == ("its arcs disagree in sign, so they are not merged; A is in no matrix, so this effect is "
+                   "in none"), why
     readme = matrix.readme_from(got, net, rates)
     assert "left at 0 rather than averaged" not in readme
     assert "No pair in a matrix has arcs of opposite sign." in readme
@@ -185,8 +185,8 @@ def test_a_sign_conflict_between_organisms_in_no_common_matrix_is_named():
     net = records_to_network(base + [inhibition, _obligate_unconverted("b", "c")])
     got = matrix.coefficients(net, rates)
     assert matrix.rows(net)[2] == [("C", "B")]
-    assert got["across_units"] == [("C", "B", "its arcs disagree in sign, so they are not merged; C could not be "
-                                              "fitted, so this effect is in no matrix")]
+    assert got["across_units"] == [("C", "B", "its arcs disagree in sign, so they are not merged; C is in no "
+                                              "matrix, so this effect is in none")]
     # across units: C and D in CFUs/mL
     net = records_to_network(base + [inhibition, _obligate_unconverted("b", "c"),
                                      _arc("d", "c", 0.8, 0.4, unit="CFUs/mL")])
@@ -324,7 +324,7 @@ def test_an_effect_in_no_matrix_for_want_of_a_coefficient_is_not_one_between_uni
              "c": _rate("C", 0.5, 0.8, "OD"), "e": _rate("E", 0.5, 0.6, "OD")}
     got = matrix.coefficients(net, rates)
     assert len(got["matrices"]) == 2
-    assert got["across_units"] == [("A", "D", "D could not be fitted, so this effect is in no matrix")]
+    assert got["across_units"] == [("A", "D", "D is in no matrix, so this effect is in none")]
     assert "no effect between organisms counted differently was measured" in \
         matrix.glv_payload(net, rates)["caveats"]["units"]
 

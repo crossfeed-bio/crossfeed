@@ -137,7 +137,11 @@ def test_the_viewer_writes_the_same_graphml_as_the_command_line(tmp_path):
               "outcome": "quantified", "metric": "integrated:two_stage", "evidence": "biculture",
               "community": ["ncbi:1", "ncbi:2"], "p_value": 0.0042, "q_value": 0.0068,
               "significance": 2.1675, "effect_over_sd": 2.5, "n_without": 3,
-              "supporting_pairs": 1, "merged_pairs": ["Blautia a -> Roseburia b"]}
+              "supporting_pairs": 1, "merged_pairs": ["Blautia a -> Roseburia b"],
+              # the /v5 fields: an arc's techniques, and a genus node's strains, whose ids may hold spaces,
+              # so a list joined by " " could not be split back (found in review)
+              "technique": "fc; qpcr", "source_identity": "genus",
+              "source_merged_nodes": ["blautia a", "blautia producta 2"]}
     # and the graph-level meta the viewer was reading at the wrong depth
     meta = {"absence": {"rule": "|log2 mean| < k sd", "k": 1.0, "absent": 7},
             "hidden": {"low_quality": 2, "absent": 7},
