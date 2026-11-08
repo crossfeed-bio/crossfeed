@@ -15,6 +15,25 @@ Rules for this file:
 
 ## Current state
 
+- 2026-11-08 (#275, instance in #333): **a guard that fails closed still needs to know how many times to
+  look.** The daily All publish refuses when it cannot read the artifact it would replace, because a read
+  that does not succeed means "cannot tell whether this run collapsed" and not "there is nothing to
+  compare with". That part is right. What was missing is that the guard read once, so a single HTTP 504
+  from the CDN that serves the release asset refused the whole day's publish (run 42471472131), and a
+  re-run with nothing changed went green: the answer had cleared by itself.
+  **The rule to carry forward:** failing closed sets what a guard decides, and it says nothing about how
+  hard the guard tried to find out. For a condition the code's own message calls transient ("run the
+  workflow again"), one observation is the defect even when the verdict on that observation is correct.
+  Ask of any fail-closed check how many times it looks before it refuses, and whether its cost of a false
+  refusal is paid by someone who is not in the room: here it was every installed copy, which derives All
+  live from mGrowthDB once the published file ages out, 36 hours on this version and a day on 0.3.x and
+  0.4.x.
+  **What keeps it narrow**, and what the test arms are: only an answer that waiting fixes is read again.
+  A 404 is the first run; a code that waiting does not fix answers on the first read; a body that parses
+  and is not a network is a format defect and not a network one. A retry that cannot tell those apart
+  would turn a 403 into four 403s and a daily job into a slower daily job, and would hide a format defect
+  behind a delay.
+
 - 2026-10-11 (#255 item 2): **a derived quantity is collected where it is measured, not rebuilt from what
   survived.** `_widen_by_rate_selection` rebuilt its rate table from `pending`, the arcs that became
   records, keyed by `id(got)`. Both are wrong for the quantity: the spread is how much stage 1 moves when

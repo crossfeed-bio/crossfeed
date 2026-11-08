@@ -47,8 +47,11 @@ def test_an_unreadable_previous_artifact_refuses_and_only_a_404_compares_with_no
         raise urllib.error.HTTPError(url, 503, "Service Unavailable", {}, None)
     assert previous_arcs(missing) is None and floor(5, previous_arcs(missing)) == []
     for opener, says in ((offline, "OSError: offline"), (unavailable, "HTTP 503")):
-        reason = previous_arcs(opener)
+        waited = []
+        reason = previous_arcs(opener, sleep=waited.append)
         assert says in reason, reason
+        # read again before the refusal stands, and a bounded number of times
+        assert len(waited) == publish_all.READS - 1, waited
         refused = floor(145, reason)
         assert refused and "could not be read" in refused[0] and "allow_drop" in refused[0]
         assert floor(145, reason, allow_drop=True) == [], "a hand run can still publish"
@@ -61,6 +64,54 @@ def test_an_unreadable_previous_artifact_refuses_and_only_a_404_compares_with_no
             return False
     body = json.dumps({"network": {"edges": [{}, {}, {}]}}).encode()
     assert previous_arcs(lambda url, timeout: Response(body)) == 3
+
+
+def test_a_gateway_answer_that_clears_is_read_again_and_one_that_cannot_clear_is_not():
+    """One HTTP 504 reading the artifact refused a whole day's publish (run 42471472131 on 2026-11-08),
+    and the floor's own advice, "run the workflow again", was carried out by hand six hours later with
+    every 0.3.x and 0.4.x copy already deriving All live. The refusal was right and the single read was
+    not. So an answer that waiting fixes is read again, and nothing else is."""
+    import urllib.error
+
+    class Response(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    body = json.dumps({"network": {"edges": [{}, {}, {}, {}, {}]}}).encode()
+    reads, waited = [], []
+
+    def clears_on_the_third(url, timeout):
+        reads.append(url)
+        if len(reads) < 3:
+            raise urllib.error.HTTPError(url, 504, "Gateway Time-out", {}, None)
+        return Response(body)
+    assert previous_arcs(clears_on_the_third, sleep=waited.append) == 5, "the day publishes"
+    assert len(reads) == 3, reads
+    assert waited == [publish_all.BACKOFF, publish_all.BACKOFF ** 2], "and waits longer each time"
+
+    # The other direction, which is what keeps this a transient case and not a blanket retry: a code
+    # that waiting does not fix, and a body that parses and is not a network, are each answered on the
+    # first read, and each still refuses the publish.
+    forbidden = []
+
+    def no_token(url, timeout):
+        forbidden.append(url)
+        raise urllib.error.HTTPError(url, 403, "Forbidden", {}, None)
+    reason = previous_arcs(no_token, sleep=waited.append)
+    assert len(forbidden) == 1 and "HTTP 403" in reason, (forbidden, reason)
+    assert floor(145, reason) and "could not be read" in floor(145, reason)[0]
+
+    wrong = []
+
+    def not_a_network(url, timeout):
+        wrong.append(url)
+        return Response(json.dumps({"nodes": []}).encode())
+    reason = previous_arcs(not_a_network, sleep=waited.append)
+    assert len(wrong) == 1 and "KeyError" in reason, (wrong, reason)
+    assert floor(145, reason), reason
 
 
 def _result():
