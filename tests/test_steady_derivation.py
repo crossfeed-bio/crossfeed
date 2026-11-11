@@ -976,6 +976,12 @@ def test_pooling_does_not_move_the_package_dilution_rate():
     for records in (pooled, apart):
         rates = integrated.fitted_rates(records, METRIC)
         assert rates["a"]["dilution"] == 0.1 and "x" not in rates
+    # one study: a in three media at D 0.1 is one organism's row in that study, against x and y at D 0.2;
+    # D 0.2 is the package's, as before the pooling (counted per fit, it became 0.1; Craig's agent's example)
+    one = [{**row("a", 0.1, ["S1"]), "medium": m, "fitted_group": f"D 0.1, {m} in S1"} for m in ("M1", "M2", "M3")]
+    one += [row("x", 0.2, ["S1"]), row("y", 0.2, ["S1"])]
+    rates = integrated.fitted_rates(one, METRIC)
+    assert rates["x"]["dilution"] == 0.2 and "a" not in rates
 
 
 def test_a_run_left_out_for_its_technique_names_the_studies_that_set_it():
