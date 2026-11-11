@@ -7,6 +7,7 @@ the model. Adding any of those without a line here fails the tests, the same way
 from __future__ import annotations
 
 import html
+import re
 
 from . import __version__, rbridge
 from .brand import COMMAND, NAME
@@ -25,6 +26,46 @@ STYLE_LINK = "/grownet_style.xml?token=__TOKEN__"
 # their agreement.
 ABOUT = (f"{NAME} was built by Karoline Faust (KU Leuven) and Craig Heilmann (Syntropa), working through "
          "their AI coding agents (Claude).")
+
+# What the next release brings, while it is in development: merged and not yet released, in the words of the
+# log below (Karoline, 2026-11-06: "is the About section updated?"; it said nothing since 0.5.0). The release
+# check refuses a tag while this is not empty, so at a release its lines move under the version with its date.
+# Each line names, in the comment above it, the pull request(s) it describes, so the release pull request can
+# drop the line of any that did not merge before tagging (RELEASING.md step 1). Numbers stay in these
+# comments, never in the strings: the page is read by users.
+NEXT = (
+    # #301 (empty species box, All button removed), #308 (gLV example fills and waits)
+    "Leave the species box empty to search every species in the media or studies of the second box; leave "
+    "both boxes empty for the All network. The All button is gone, and gLV example fills the page and waits "
+    "for Find interactions, as Example does.",
+    # #325 (the second box under every derivation)
+    "The second box applies under every derivation: naming a medium, an experiment or a study narrows a "
+    "gLV-mode search too, where only the default derivation read it before, so a gLV-mode result changes "
+    "when one is named.",
+    # #306 (technique, merged_nodes, format /v5, merging across techniques), #304 (a merged arc on the page)
+    "Every arc records how its target was measured (fc, qpcr, plates, ...), and a genus node lists the "
+    "strains it stands for: the network format moves to /v5, and the daily All network is still published "
+    "for earlier versions. Merging parallel arcs crosses techniques and names them, and the page shows a "
+    "merged arc as a median with its range.",
+    # #323 (starting-density notes)
+    "Every arc of the default derivation whose two sides have a first value says what they started at, "
+    "and warns where they differ more than 3 times, as 61 of the 190 drop-out arcs in mGrowthDB do, "
+    "counting those below the absence threshold, up to 117 times.",
+    # #315, #316, #318, #319 (merged), #320 (validation), #321 (messages and every later fix to the
+    # derivation); the dilution rate in the rates file and the package: branch dilution-column, its pull
+    # request not yet open; runs of several studies fitted together: branch steady-across-studies, its pull
+    # request not yet open
+    "A third derivation, for gLV mode: the rows fitted from the chemostat steady states of sub-communities, "
+    "every sub-community counting, across studies where the medium matches, its package at one dilution "
+    "rate, which its rates name. mGrowthDB holds no "
+    "such design yet, and it says what each organism lacks; on a published 12-species model, monocultures "
+    "and pairs give 126 of its 132 coefficients.",
+    # #299 (Baranyi damping)
+    "The Baranyi growth-rate fit reaches its best fit where a lag collapses; nothing changes by default.",
+    # #303 (merged arcs and nodes), #309 (italics, readability), #307 (no issue numbers), #322 (R summary)
+    "The help explains what a merged arc and a merged node carry, sets species names in italics, and reads "
+    "more easily, with no issue numbers, and the R package's summary of a gLV package reads more cleanly.",
+)
 
 # What changed in each release, a few lines each, newest first (Karoline, 2026-10-04: "a small log of what
 # happened in each new release"). The changelog in the repository is the full record; this is the summary a
@@ -297,8 +338,8 @@ SETTINGS = {
                   "plates, and so on), in arcs and in monoculture rates and plateaus, and name every other "
                   "curve as left out. Empty by default. Without it, a plateau or an arc is still compared "
                   "only with one of the same technique and unit, and where one strain is measured by several "
-                  "techniques the one with more time points is used (Karoline, #292). Culture-level counts "
-                  "stay plate counts and flow cytometry only (#140), so OD is never one."),
+                  "techniques the one with more time points is used. Culture-level counts "
+                  "stay plate counts and flow cytometry only, so OD is never one."),
     "exclude_studies": ("Exclude these studies", "--exclude-studies IDS",
                         "Comma separated mGrowthDB study ids that are never searched, for example a study "
                         "you know to be unsuitable. Empty by default. It applies after the second box, "
@@ -340,7 +381,7 @@ CLI_ONLY = {
     "--r-port": "the port that R session listens on (default 8793, what grownet_listen() uses)",
     "--species": "species, strain or genus names, or NCBI taxon ids: search every study holding them, as the page "
                  "does",
-    "--all": "every study in mGrowthDB, with every partner, as the page's All button (with --live)",
+    "--all": "every study in mGrowthDB, with every partner, as the page with both boxes empty (with --live)",
     "--no-published": "with --all, derive live instead of reading the network derived once a day",
     "--no-cache": "read everything from mGrowthDB again, instead of reusing what an earlier run read for "
                   "a study whose uploadedAt has not changed. Responses are kept in the user cache "
@@ -630,56 +671,69 @@ NODE_ATTRIBUTES = {
     "model_ref": "a link to a metabolic model, when known",
 }
 
-# (decision, why), with the issue that settled it
+# (decision, why); the issue that settled each is in the comment above it, since a user of the page
+# does not need issue numbers (Karoline, 2026-11-06)
 DECISIONS = (
+    # #34
     ("Interactions are derived, not looked up.",
      "mGrowthDB stores growth curves. grownet compares each species' growth with and without a partner "
-     "across replicates, on your machine, each time you search (#34)."),
+     "across replicates, on your machine, each time you search."),
+    # #3
     ("One number per comparison: the mean log2 ratio of the replicate sets.",
      "log2(with) minus log2(without) per species, averaged over replicates, with the spread of both sets "
-     "combined in the sd. A log ratio is symmetric: a doubling is +1 and a halving is -1 (#3)."),
+     "combined in the sd. A log ratio is symmetric: a doubling is +1 and a halving is -1."),
+    # #1
     ("Curves are compared over the time they share.",
      "Areas and maxima are taken from the common first time point to the earliest last time point of the "
      "curves compared (for a bi-culture, every curve of the design; for a drop-out arc, the target's curves "
-     "with and without the removed member), interpolating at that end, so no curve is extrapolated (#1)."),
+     "with and without the removed member), interpolating at that end, so no curve is extrapolated."),
+    # #40, #54
     ("An edge is present by its size against its spread, not by a p-value.",
      "With two or three replicates a real effect rarely reaches significance, so the test is reported as "
-     "support and does not decide. The absence threshold k does: |mean| of at least k sd (#40, #54)."),
+     "support and does not decide. The absence threshold k does: |mean| of at least k sd."),
+    # #54
     ("A measured absence is kept, as status absent.",
      "\"We looked and found nothing\" is a result, so absent edges stay in the downloads and are hidden "
-     "from view, not deleted (#54)."),
+     "from view, not deleted."),
+    # #40
     ("Low quality is not absence.",
      "An edge with a quality flag keeps the sign of its mean and is hidden by default; it is never called "
-     "absent, because a weak measurement says nothing about whether the interaction exists (#40)."),
+     "absent, because a weak measurement says nothing about whether the interaction exists."),
+    # #37, #68
     ("Growth is checked before any ratio.",
      "With two or three replicates a real rise rarely reaches significance, so a set counts as grown when "
      "the paired test finds a rise or when it rose by the factor (1.5 by default). The strong claims, "
-     "obligate and abolished, then need two reasons rather than one underpowered test (#37, #68)."),
+     "obligate and abolished, then need two reasons rather than one underpowered test."),
+    # #16
     ("No growth is a result.",
      "A target that did not grow without its partner in a comparison is obligate there; one that did "
-     "not grow with it is abolished. Both are the extremes of their direction and are always shown "
-     "(#16). The rule is per comparison, so the same pair can be obligate in one condition and "
+     "not grow with it is abolished. Both are the extremes of their direction and are always shown. "
+     "The rule is per comparison, so the same pair can be obligate in one condition and "
      "quantified in another."),
+    # #23, #24
     ("Nodes are strains, keyed by NCBI taxon id.",
      "Names change: taxon 411483 is Faecalibacterium prausnitzii A2-165 in one study and Faecalibacterium "
      "duncaniae A2-165 in others, after the 2022 reclassification. Names are resolved through mGrowthDB "
-     "only, which keeps one source of truth (#23, #24)."),
+     "only, which keeps one source of truth."),
+    # #47
     ("Drop-out communities count, labeled as possibly indirect.",
-     "A community without one member shows what that member does, but maybe through the others (#47)."),
+     "A community without one member shows what that member does, but maybe through the others."),
     ("A species is compared only with itself measured the same way.",
      "Its monocultures and co-cultures must use the same species-identifying technique, not only the same "
      "unit, since otherwise an effect could be the change of technique; whole-culture measurements such as "
      "OD are not used for this."),
+    # #47
     ("Experiments are pooled only when they are replicates.",
      "Interactions depend on the environment, so experiments with different conditions give parallel "
-     "arcs, one each (#47)."),
+     "arcs, one each."),
+    # #42, amended 2026-10-03
     ("A culture is compared on a measure its mode supports.",
      "Chemostat and serial dilution runs are derived with max, the level they settle at, and left out with "
-     "an area under the curve or a growth rate, which measure something else under dilution (#42, amended "
-     "2026-10-03)."),
+     "an area under the curve or a growth rate, which measure something else under dilution."),
+    # #39
     ("Suspect curves are flagged, never silently dropped or replaced.",
      "A replicate with an implausible spike is left out and reported, with the other techniques measured "
-     "on it named (#39)."),
+     "on it named."),
     ("Merging summarizes; it is off by default.",
      "Interactions are condition-specific, so arcs are shown as derived. Merge parallel arcs and Merge to "
      "genus condense them on request: by the median, never across signs, and with Merge to genus each arc "
@@ -788,9 +842,50 @@ SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"), ("mea
             ("issues", "Report a problem or ask for a feature"))
 
 
+# Genera the help names, and the species epithets it writes after them or after a genus initial
+# ("B. thetaiotaomicron"). `render_help` sets each in italics wherever it is prose, which the text cannot
+# do itself where a table escapes it (Karoline, 2026-11-06: "please put species names in italics"). A
+# name outside these lists stays upright, which tests/test_help.py catches for every genus it names.
+TAXA = ("Agrobacterium", "Arthromitus", "Bacteroides", "Bifidobacterium", "Blautia", "Clostridium",
+        "Comamonas", "Escherichia", "Faecalibacterium", "Flavonifractor", "Lachnoclostridium",
+        "Lactiplantibacillus", "Lactobacillus", "Microbacterium", "Ochrobactrum", "Phocaeicola", "Roseburia",
+        "Ruminococcus", "Streptococcus")
+EPITHETS = ("bulgaricus", "caudatum", "aurelia", "cerevisiae", "clostridioforme", "coli", "delbrueckii",
+            "duncaniae", "hydrogenotrophica", "intestinalis", "ovatus", "plantarum", "prausnitzii", "scindens",
+            "symbiosum", "thermophilus", "thetaiotaomicron")
+# a genus with or without its epithet, a genus initial with one, or an epithet alone ("prausnitzii or
+# duncaniae"), in that order of preference
+_TAXON = re.compile(rf"\[?\b(?:{'|'.join(TAXA)})\]?(?: (?:{'|'.join(EPITHETS)})\b)?"
+                    rf"|\b[A-Z]\. (?:{'|'.join(EPITHETS)})\b|\b(?:{'|'.join(EPITHETS)})\b")
+# where a name is not prose: code and commands keep their own type, and text already in italics stays so
+_UPRIGHT = ("code", "pre", "em", "i", "title")
+
+
+def _italicize_taxa(page: str) -> str:
+    """Every genus and species name in `page`'s prose, in <em>; tags and their attributes untouched."""
+    out, open_tags = [], []
+    for token in re.split(r"(<[^>]+>)", page):
+        if token.startswith("<"):
+            m = re.match(r"<(/?)(\w+)", token)
+            if m and m.group(2).lower() in _UPRIGHT and not token.endswith("/>"):
+                if m.group(1):
+                    if open_tags:
+                        open_tags.pop()
+                else:
+                    open_tags.append(m.group(2).lower())
+            out.append(token)
+        else:
+            out.append(token if open_tags else _TAXON.sub(lambda n: f"<em>{n.group(0)}</em>", token))
+    return "".join(out)
+
+
 def render_help(token: str, defaults: dict, example: tuple, job: str = "") -> str:
     """The help page body. `defaults` is gui.DEFAULTS and `example` gui.EXAMPLE, passed in to keep this
-    module free of the server."""
+    module free of the server. Genus and species names are set in italics on the way out."""
+    return _italicize_taxa(_help_body(token, defaults, example, job))
+
+
+def _help_body(token: str, defaults: dict, example: tuple, job: str = "") -> str:
     t = _e(token)
     legend_job = _e(f"&job={job}") if job else ""      # so the legend's Back returns to the search
     toc = "".join(f"<li><a href=\"#{key}\">{_e(title)}</a></li>" for key, title in SECTIONS)
@@ -816,8 +911,10 @@ def render_help(token: str, defaults: dict, example: tuple, job: str = "") -> st
 <h2 id="what">What grownet does</h2>
 <p>Type species names, one per line, strain names, a genus (it stands for every species of it in
 mGrowthDB), or NCBI taxon ids. grownet looks them up in mGrowthDB, reads the growth curves of every study
-that holds them, and derives the interactions between them on this machine. The All button ignores the
-box and derives every study in mGrowthDB, with every partner. With the default settings, All reads the
+that holds them, and derives the interactions between them on this machine. The species box is optional:
+left empty, grownet derives every species in the media or studies of the second box, with every partner.
+<strong>For the All network</strong>, every study in mGrowthDB with every partner, leave both boxes empty
+and press Find interactions. With the default settings, All reads the
 network the grownet repository derives from mGrowthDB once a day, when it is less than 36 hours old and
 was derived by the same derivation your settings ask for, which
 spares mGrowthDB the 1,926 requests a cold corpus run sends, or
@@ -829,8 +926,9 @@ download.</p>
 
 <h2 id="where">Choosing where to look</h2>
 <p>The second box beside the species is optional and says <strong>where</strong> to look, not how to decide
-an interaction. Leave it empty and every medium is used, which is what grownet did before. One entry per
-line:</p>
+an interaction. Leave it empty and every medium is used, which is what grownet did before. With the
+species box empty, it is the whole search: every species in what it names, with every partner. One entry
+per line:</p>
 <ul>
 <li>a <strong>medium</strong>, matched as text and case-insensitively against the medium name mGrowthDB
 records on an experiment's compartments, its description and its name. The spellings differ between
@@ -844,7 +942,7 @@ report names what came along.</li>
 </ul>
 <p>Why it matters more than it used to: a network of interactions can carry arcs from several media and
 say so on each arc, while a <a href="#glv">gLV simulation</a> takes one matrix of numbers, and numbers from
-different environments do not belong in one simulation (Karoline, 2026-10-04). Nothing about the method
+different environments do not belong in one simulation. Nothing about the method
 changes: a comparison never mixed media, because the medium is part of the conditions two replicate sets
 must share. Every arc records its <code>medium</code>, so a network says which environments it came
 from.</p>
@@ -862,12 +960,12 @@ that merely contains another is not a match, since "Wilkins-Chalgren Anaerobe Br
 0.1 and 0.75 percent linoleic acid are two environments. The rule decides what a carrying capacity may be
 pooled over, which chemostat a gLV package may be scored against, and what the second box reaches; where
 two studies spell one medium differently, grownet says the names differ and names the word rather
-than merging names that disagree (Karoline, 2026-10-07).</p>
+than merging names that disagree.</p>
 <p><strong>The alias table.</strong> Two live names disagree with the others rather than being less
 complete: SMGDB00000001 writes "Wilkins-Chalgren An<strong>e</strong>robe Broth (WC)", a typo, and
-SMGDB00000005 and 26 write "Wilkins-Chalgren" alone, a short form. The rule tells both apart from the
+SMGDB00000005 and SMGDB00000026 write "Wilkins-Chalgren" alone, a short form. The rule tells both apart from the
 full name, and a looser match would merge names differing by a digit, which in medium names is routine.
-So those two are merged by hand, in a table Karoline curates
+So those two are merged by hand, in a curated table
 (<code>grownet.media.WORD_ALIASES</code> and <code>NAME_ALIASES</code>). It is the one place grownet
 calls two names that disagree one medium, so it is never silent: a chemostat scored across an alias says
 which entry made it one medium, and a carrying capacity whose curves were recorded under more than one
@@ -950,7 +1048,7 @@ continuous culture that forms a pair or a drop-out design today, so this changes
 decides what happens when one arrives.</p>
 
 <h2 id="example">Try the example</h2>
-<p>The Example button fills the box with {_e(pair)}, a pair with enough data to show a result: the
+<p>The Example button fills the species box with {_e(pair)}, a pair with enough data to show a result: the
 <a href="#cli">command line</a> section runs the same search.</p>
 
 <h2 id="reading">Reading the result</h2>
@@ -1033,35 +1131,36 @@ merging then uses only the arcs that passed.</p>
 
 <h2 id="glv">The matrix, the growth rates and gLV</h2>
 <p><strong>The adjacency matrix.</strong> The format menu writes the network as a square table of
-comma-separated values, the organisms in the header row and in the first column. The table carries no
-settings, version or date, so the entry below it, <em>Adjacency matrix: what it is</em>, writes a text
-file to keep beside it: how it was made, every setting, what 0 and NA mean in it, the pairs left at 0,
-and the studies to cite. From the command line it is written beside the CSV. A cell holds the log2
-mean of the comparison, so <code>A[i][j]</code> is the effect of j on i: rows are affected, columns are
-the actor. Each organism appears once, so arcs of one pair from several conditions or studies are merged
-by their median, the same rule the Merge arcs setting uses; a pair whose arcs disagree in sign is left at
-0 rather than averaged. An empty cell is 0, and so is an arc below the absence threshold, which the
-threshold judged no interaction. An obligate interaction (the affected organism grows only with the actor)
-has no log2 ratio at all, because one side did not grow, so its cell holds <strong>NA</strong>: neither a
-number, which a cell cannot mark as a bound, nor 0, which would read as no interaction about the strongest
-effect in the set. The effect is still measured, and it travels on the arc: the no-growth rule allows the
-side that did not grow at most its factor (1.5 by default) over its own measured start, which bounds the
-ratio from below for an obligate pair and from above for an abolished one. The arc carries that
-<strong>measured bound</strong>
-(<code>strength_bound</code>) with the rule behind it (<code>bound_rule</code>), the report prints it, and
-the page names every cell left NA beside the download. The cell holds NA rather than the bound because a
-cell cannot say which kind of number it holds, so a bound printed there is indistinguishable from a ratio,
-which is what was wrong with the stated extreme it used to carry. Such an arc sets a cell only when no arc of that
-pair was quantified. The diagonal of this matrix is 0; only the gLV package fits it.</p>
-<p><strong>A bound on an area is weaker than a bound on a rate</strong>, which matters when the growth
-property is the default area under the curve rather than the growth rate gLV mode sets. A culture that
-did not grow still carries the area of its own inoculum for the whole window, so the area the rule allows
-it can be as large as the area the growing side reached, and the bound then says nothing beyond zero: that
-cell stays 0 and the report says so, naming the growth rate and the maximum as the properties that bound
-such a comparison tightly. On the maximum the bound is the factor times the measured start, and on a
-growth rate it is the rate that would produce the allowed rise over the window, both far under what a
-growing side reaches. So a search meant to size an obligate or abolished interaction is better run on the
-growth rate or on the maximum, and gLV mode already uses the growth rate.</p>
+comma-separated values, with the organisms in the header row and in the first column. A cell holds the
+log2 mean of the comparison, so <code>A[i][j]</code> is the effect of j on i: rows are affected, columns
+are the actor.</p>
+<ul>
+<li>Each organism appears once, so the arcs of one pair from several conditions or studies are merged by
+their median, the rule the Merge parallel arcs setting uses. A pair whose arcs disagree in sign is left at
+0 rather than averaged.</li>
+<li>An empty cell is 0, and so is an arc below the absence threshold, which the threshold judged no
+interaction. The diagonal is 0; only the gLV package fits it.</li>
+<li>An obligate interaction (the affected organism grows only with the actor) or an abolished one has no
+log2 ratio, because one side did not grow, so its cell holds <strong>NA</strong>. Not 0, which would read
+as no interaction where the effect is the strongest in the set, and not a number, since a cell cannot say
+that it holds a bound rather than a ratio. Such an arc fills a cell only when no arc of that pair was
+quantified.</li>
+</ul>
+<p>The effect of an obligate or abolished arc is still measured, and it travels on the arc: the
+no-growth rule allows the side that did not grow at most its factor (1.5 by default) over its measured start,
+which bounds the ratio from below for an obligate pair and from above for an abolished one. The arc
+carries that <strong>measured bound</strong> (<code>strength_bound</code>) and the rule behind it
+(<code>bound_rule</code>), the report prints it, and the page names every NA cell beside the download.</p>
+<p>The table itself carries no settings, version or date, so the menu entry below it, <em>Adjacency
+matrix: what it is</em>, writes a text file to keep beside it: how it was made, every setting, what 0 and
+NA mean, the pairs left at 0, and the studies to cite. The command line writes it beside the CSV.</p>
+<p><strong>A bound on an area is weaker than a bound on a rate.</strong> A culture that did not grow
+still carries the area of its own inoculum for the whole window, so on the default growth property, the
+area under the curve, the area the rule allows it can be as large as the growing side's, and the bound says
+nothing beyond zero: that cell stays 0 and the report says so. On the maximum the bound is the factor times
+the measured start, and on a growth rate it is the rate that would produce the allowed rise over the
+window; both are far under what a growing side reaches. So to size an obligate or abolished interaction,
+search on the growth rate or the maximum. gLV mode already uses the growth rate.</p>
 <p><strong>The growth rates.</strong> With Report growth rates on, every organism in the network also
 gets its maximum specific growth rate in monoculture: the method the Growth rate method setting names
 (easylinear by default, the one mGrowthDB reports), the median over the replicates and studies that have
@@ -1069,86 +1168,93 @@ one, with each study's own median kept beside it in the network's meta. Batch mo
 chemostat or a serial dilution the rate a curve shows is the dilution rate, and a rate from a co-culture
 would be growth with a partner, which is the comparison, not the organism's own rate. An organism whose
 curves give no rate is named on the page and in the report, never given a substitute number.</p>
-<p><strong>Three more quantities travel with a rate</strong>, which is what a gLV coefficient is made of:
-which estimator produced the rate; the <strong>lag</strong>, always from the Baranyi fit, the only
-estimator that has one, whichever one produced the rate, and empty under the integrated derivation,
-whose model has no lag term at all; and the organism's monoculture
-<strong>carrying capacity</strong>, the plateau of its curves, taken only from curves certified to have
-reached stationary phase and left in the abundance unit they were measured in. A culture that grew, peaked
-and then declined has stopped growing, so it is certified too and its plateau is that peak; how far those
-curves had fallen from their peak at the last measurement is published beside the capacity
-(<code>capacity_fall_from_peak</code>), which is empty where the capacity is the plateau a fit implies
-rather than one a curve reached, since then there is no curve whose fall could be measured; and a curve
-that fell further than the
-<strong>Carrying capacity decline limit</strong> gives no capacity at all, because there the peak is a
-spike rather than a level the culture held. They are in
-<code>growth_rates.csv</code>, which names both estimators in its <code>method</code> and
-<code>lag_method</code> columns, in the network's meta and in the report, with every curve that gave no
-capacity named and why. Each arc also carries <code>partner_abundance</code>, the actor's own abundance in
-the co-cultures averaged over the window the target's growth rate was fitted in.</p>
-<p><strong>Start with the gLV mode button</strong>, beside All. It sets the three settings a simulation
-needs and leaves them in sight in Advanced settings: <strong>Report growth rates</strong> on, since a
-simulation needs a rate per organism; <strong>Include drop-out communities</strong> off, since such an
-arc compares a community with the same community without one member and the effect may run through a third
-species, while a gLV coefficient is meant to be the direct effect of one organism on another; and
-<strong>Growth property</strong> on the growth rate, since a coefficient is built from a ratio of rates.
-It leaves <strong>Growth rate method</strong> alone, easylinear by default, which is the estimator the
-measurements favor; anyone who wants the Baranyi rate sets it there, and the lag is Baranyi's either way.
-Name one
-medium in the second box as well (<a href="#where">choosing where to look</a>), because a simulation is of
-one environment. The package's README says which of these hold for the numbers in it: how many arcs came
-from drop-out designs, and which media they were measured in.</p>
+<p><strong>Three more quantities travel with a rate</strong>, since a gLV coefficient is made of them:</p>
+<ul>
+<li>the <strong>estimator</strong> that produced the rate;</li>
+<li>the <strong>lag</strong>, always from the Baranyi fit, the only estimator that has one, whichever
+estimator produced the rate; empty under the integrated derivation, whose model has no lag term;</li>
+<li>the organism's monoculture <strong>carrying capacity</strong>: the plateau of the curves certified to
+have reached stationary phase, in the abundance unit they were measured in. A culture that peaked and then
+declined has stopped growing, so it is certified too, with that peak as its plateau, and how far it had
+fallen by the last measurement is published as <code>capacity_fall_from_peak</code> (empty where the
+capacity is the plateau a fit implies, since no curve reached it). A curve that fell further than the
+<strong>Carrying capacity decline limit</strong> gives no capacity, because its peak is a spike rather
+than a level the culture held.</li>
+</ul>
+<p>They are in <code>growth_rates.csv</code>, whose <code>method</code> and <code>lag_method</code>
+columns name both estimators, in the network's meta, and in the report, which names every curve that gave
+no capacity and why. Each arc also carries <code>partner_abundance</code>: the actor's abundance in the
+co-cultures, averaged over the window in which the target's growth rate was fitted.</p>
+<p><strong>Start with the gLV mode button</strong>, beside gLV example. It sets the four settings a
+simulation needs and leaves them in sight in Advanced settings:</p>
+<ul>
+<li><strong>Report growth rates</strong> on, since a simulation needs a rate per organism;</li>
+<li><strong>Include drop-out communities</strong> off, since a drop-out arc compares a community with
+the same community without one member, so its effect may run through a third species, while a gLV
+coefficient is meant to be the direct effect of one organism on another;</li>
+<li><strong>Growth property</strong> on the growth rate, since a coefficient is built from rates;</li>
+<li><strong>Derivation</strong> on the integrated form, which fits each organism's row from the whole time
+course (below).</li>
+</ul>
+<p>It leaves <strong>Growth rate method</strong> at easylinear, the estimator the measurements favor; set
+Baranyi there if you want it, and the lag is Baranyi's either way. Name one medium in the second box too
+(<a href="#where">choosing where to look</a>), because a simulation is of one environment. The package's
+README says how many arcs came from drop-out designs and which media they were measured in.</p>
 
 <p><strong>The gLV parameters.</strong> The gLV control writes a zip for a generalized Lotka-Volterra
-simulator, and since #119 it holds <strong>fitted coefficients</strong> rather than effect sizes:
-<code>interaction_matrix.&lt;unit&gt;.csv</code>, one matrix per abundance unit and named after it, where
-the diagonal is <code>A[i][i] = -r_i / K_i</code> with K the organism's own monoculture carrying capacity,
-and an off-diagonal cell is whatever the derivation fitted, which the package's own README.txt and the
-payload's <code>caveats.coefficients</code> state. Under the default, the integrated form, it is a
-parameter of the fit of the whole row, <code>ln(x_i(T) / x_i(0)) = r_i T + sum_j A[i][j] integral(x_j
-dt)</code>, with the condition number of that fit and its R2 on every arc. Under the comparison of
-replicate sets it is <code>A[i][j] = (r_with - r_without) / x_j</code>, the difference between i's
-own growth rate with j and without it, over the partner's abundance averaged across the window i's rate
-was fitted in; both rates come from the same comparison and are in the report, so every cell can be
-rebuilt by hand. Where one of them is 0 because i grew only with j, or only without it, the cell is still
-that difference: no floor and no stated extreme enters the package, and an organism that grows only with a
-partner gets a whole row, <code>r_i = 0</code> with its self-limitation fitted at the plateau it reaches
-beside that partner. An organism that does grow alone but whose monocultures never settled is fitted at
-its plateau beside its partners in the same way, rather than left out, and the README names it; one whose
-partners suppress it harder than its own rate there is named instead, since a self-limitation at or above
-zero is not one. The package also carries
-<code>growth_rates.csv</code> (one rate per organism, matched to a matrix by the organism column and never
-by position, with how many values it rests on, and beside it the estimator, the lag, the carrying capacity
-and the <strong>doubling time</strong> the rate implies, <code>ln(2) / r</code> in the time unit of the
-rate. In gLV mode a rate is the median over every row the derivation fitted for that organism, so no
-display setting moves it; a network derived with <code>--fixture</code> holds only the rows someone kept,
-so its rates follow the settings that made the fixture); and <code>README.txt</code>, which states
-every formula and unit, names any pair left at 0 for disagreeing in sign, names every organism and every
-effect that could not be fitted and why, and names the media its effects between organisms were measured in,
-matrix by matrix: a simulation is of one environment and takes one matrix, so a matrix whose effects come
-from several media is named in capitals with a pointer to the second box
-(<a href="#where">choosing where to look</a>), and matrices of one medium each are named with theirs.
-Every cell is a per-capita effect in 1/(time x abundance), so nothing in the package is a convention
-and nothing needs scaling to match the rest. Abundances are
-never converted between units, which is why each unit has its own matrix: a cell mass conversion would
-have to be invented, while the dynamics are the same in any unit. The result section says before the
-download when a search spans several units, and how many matrices that means. It is not a loss: organisms
-counted differently are seldom grown together in mGrowthDB, so an effect between them is seldom measured,
-and the matrices are separate systems rather than one matrix with corners missing; where one was measured,
-the package names it among the effects in no matrix. If you do want them in one
-matrix, the factor is yours to apply and to report, as a scaling factor is. A simulation of these numbers can still
-grow without bound and come back as NA, which now says something about the measurements, two organisms
-fitted as facilitating each other more than each limits itself, rather than about a convention; the
-equilibrium of a fit is the solution of A x = -r, and a negative entry there means the fit has no positive
-steady state.</p>
+simulator. It holds <strong>fitted coefficients</strong>, not effect sizes, in three kinds of file:</p>
+<ul>
+<li><code>interaction_matrix.&lt;unit&gt;.csv</code>, one matrix per abundance unit and named after it.
+Every cell is a per-capita effect in 1/(time x abundance), so nothing in it needs scaling.</li>
+<li><code>growth_rates.csv</code>: one rate per organism, matched to a matrix by the organism column and
+never by position, with how many values it rests on, the estimator, the lag, the carrying capacity and the
+<strong>doubling time</strong> the rate implies, <code>ln(2) / r</code> in the rate's time unit. In gLV
+mode a rate is the median over every row the derivation fitted for that organism, so no display setting
+moves it. A network derived with <code>--fixture</code> holds only the rows someone kept, so its rates
+follow the settings that made the fixture.</li>
+<li><code>README.txt</code>, which states every formula and unit, names every pair left at 0 for
+disagreeing in sign and every organism and effect that could not be fitted, with the reason, and names the
+media each matrix's effects were measured in. A simulation is of one environment, so a matrix whose
+effects come from several media is named in capitals, with a pointer to the second box
+(<a href="#where">choosing where to look</a>), and a matrix of one medium is named with it.</li>
+</ul>
+<p><strong>What a cell is.</strong> The diagonal is <code>A[i][i] = -r_i / K_i</code>, with K_i the
+organism's own monoculture carrying capacity. An off-diagonal cell is whatever the derivation fitted,
+which the README and the payload's <code>caveats.coefficients</code> state:</p>
+<ul>
+<li>Under the integrated form, the one gLV mode selects, it is a parameter of the fit of the whole row,
+<code>ln(x_i(T) / x_i(0)) = r_i T + sum_j A[i][j] integral(x_j dt)</code>, and every arc carries the
+condition number and the R2 of that fit.</li>
+<li>Under the comparison of replicate sets it is <code>A[i][j] = (r_with - r_without) / x_j</code>: i's
+growth rate with j minus its rate without j, over j's abundance averaged across the window in which i's
+rate was fitted. Both rates are in the report, so every cell can be rebuilt by hand. Where one of them is
+0, because i grew only with j or only without it, the cell is still that difference:
+no floor and no stated extreme enters the package.</li>
+</ul>
+<p>Two kinds of organism get a row fitted at the plateau they reach beside their partners rather than in
+monoculture: one that grows only with a partner (<code>r_i = 0</code>), and one that grows alone but whose
+monocultures never settled; the README names the latter. One whose partners suppress it harder than its
+own rate there is named instead and left out, since a self-limitation at or above zero is not one.</p>
+<p><strong>One matrix per unit.</strong> Abundances are never converted between units, since a cell
+mass conversion would have to be invented, while the dynamics are the same in any unit. The result section
+says before the download when a search spans several units and how many matrices that gives. Little is
+lost: organisms counted differently are seldom grown together in mGrowthDB, so the matrices are separate
+systems rather than one matrix with corners missing, and an effect that was measured between them is named
+among the effects in no matrix. To put them in one matrix, apply and report the conversion factor
+yourself.</p>
+<p><strong>A run that does not settle.</strong> The equilibrium of a package is the solution of
+<code>A x = -r</code>. A negative entry there means the fit has no positive steady state, and a simulation
+can then grow without bound and come back as NA. With fitted coefficients that says something about the
+measurements, two organisms fitted as facilitating each other more than each limits itself, rather than
+about a convention.</p>
 <p><strong>The derivation gLV mode selects, from the whole time course.</strong> It fits each organism's
 row instead of comparing replicate sets; it is what <strong>gLV mode</strong> turns on, and
 <strong>Derivation</strong> in Advanced settings (or <code>--derivation integrated</code>) selects it
 without the rest of the mode. The default derivation is the comparison of replicate sets, which gives the
 drop-out and censored arcs this one cannot.
-Integrating dx_i/dt = x_i (r_i + sum_j A_ij x_j) gives
-ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt), which is linear in r_i and in every A_ij, so
-one least-squares fit per organism returns its whole row: no growth property, no log2 ratio, no
+Integrating <code>dx_i/dt = x_i (r_i + sum_j A_ij x_j)</code> gives
+<code>ln(x_i(T) / x_i(0)) = r_i T + sum_j A_ij integral(x_j dt)</code>, which is linear in r_i and in
+every A_ij, so one least-squares fit per organism returns its whole row: no growth property, no log2 ratio, no
 plateau to certify, and no partner abundance to divide by, since the regressor is the partner's own time
 integral. The monocultures identify r_i and its own limitation A_ii, which are then held fixed while the
 co-cultures give the partners, because inside one experiment those columns rise too nearly together to
@@ -1161,10 +1267,10 @@ R2 and the condition number of that fit, and a row the design cannot identify is
 than published. A community of three or more members is reported too, not derived: this form could fit a
 row inside one, which would be a new kind of evidence and needs a decision first. The growth rates and
 the carrying capacities of such a run come from the same fit, the capacity being the plateau it implies,
--r_i / A_ii, so a package is all of one piece.</p>
+<code>-r_i / A_ii</code>, so a package is all of one piece.</p>
 <p><strong>Scoring the package against a chemostat.</strong> A package is built from batch co-cultures,
 and mGrowthDB also holds continuous cultures, where a community sits at a steady state that satisfies
-A x = -(r - D) with D the dilution rate. Those numbers were never used to fit the parameters, so they test
+<code>A x = -(r - D)</code> with D the dilution rate. Those numbers were never used to fit the parameters, so they test
 them. <strong>Check against chemostat steady states</strong> in Advanced settings (or
 <code>--steady-check</code>) puts the comparison in the report and a <code>steady_state_check.txt</code>
 in the package: predicted against observed, per organism, with every chemostat it could not use and why
@@ -1172,13 +1278,13 @@ in the package: predicted against observed, per organism, with every chemostat i
 organism in common). It is off by default, because it reads the curves of chemostats a search does not
 otherwise need. The check's own output names every continuous culture it found and what it did with
 each, so which ones qualify is read from the run rather than from this page.</p>
-<p>So a package needs the comparison to be on the <strong>growth rate</strong>: the area under the curve
-and the maximum cannot produce the ratio L. gLV mode sets that, and without it the page says which
-setting to change rather than converting the wrong quantity. The rate estimator sets where a package
-settles as well as how fast a simulation runs: the diagonal's r_i is a median over replicates and
-studies while each off-diagonal uses its own comparison's two rates, x_j_star is the mean over the
-window that estimator fitted in, and the rate guards reject different curves. The equilibrium of a
-package, the solution of A x = -r, therefore belongs to the estimator that produced it, and the
+<p><strong>The package needs the growth property to be the growth rate.</strong> The area under the
+curve and the maximum are not rates, so they cannot give r_with and r_without. gLV mode sets the growth
+rate, and without it the page says which setting to change rather than converting the wrong quantity. The
+rate estimator decides where a package settles, not only how fast a simulation runs: r_i on the diagonal is
+a median over replicates and studies, each off-diagonal cell uses its own comparison's two rates, x_j is
+averaged over the window that estimator fitted, and the estimators' guards reject different curves. So the
+equilibrium, the solution of <code>A x = -r</code>, belongs to the estimator that produced it, and the
 package names which one that was.</p>
 
 <p><strong>In R, with the companion package.</strong> The same control sends the parameters straight into
@@ -1217,10 +1323,11 @@ is replaced silently. <code>grownet_listen()</code> takes one parameter set and 
 again before each send, including after restarting {NAME}, whose new run has its own address and token.
 Sending while nothing is listening changes nothing in R; the page says so and shows the line that fetches
 the same parameters instead.</p>
-<p>The caveats travel as data, not as text to be read first: the object prints them every time,
-<code>glv_matrix()</code> warns and names the cells that hold +10 or -10 and takes
-<code>placeholders = "na"</code> or <code>"zero"</code> to convert them, and
+<p>The caveats travel as data, not as text to be read first: the object prints them every time, and
 <code>as_miasim()</code> stops when an organism has no growth rate, since a simulation cannot invent one.
+Parameters from grownet 0.2.0 and earlier could hold +10 or -10 for a pair with no ratio;
+<code>glv_matrix()</code> warns about those cells, names them, and takes
+<code>placeholders = "na"</code> or <code>"zero"</code> to convert them.
 <code>glv_readme()</code> prints grownet's own README, and <code>glv_write()</code> saves the three files
 the download holds. When a port cannot be opened, <code>grownet_glv(url)</code> reads the same parameters
 from the address the page shows under its gLV control.</p>
@@ -1320,8 +1427,9 @@ within that run only, narrower than the difference between runs would make it.</
 determines no row. The derivation is there for the data to come.</p>
 
 <h2 id="glv-walkthrough">The gLV example, step by step</h2>
-<p><strong>gLV example</strong> beside All fills both boxes and the one setting a package cannot be built
-without, and runs the search, so the route above has something concrete to run on. It is one search of
+<p><strong>gLV example</strong> beside Example fills both boxes and every setting a package needs, as
+Example fills its species, and Find interactions then runs it, so the route above has something concrete
+to run on. It is one search of
 one study, chosen by building the package of every study that yields one and scoring them: five give a
 package of two organisms or more, three of those settle with every organism above zero, and this one is
 the soundest of the three. Everything below is the generic route; only the numbers are this example's.</p>
@@ -1333,8 +1441,8 @@ out.</p>
 <ol>
 <li><strong>Press gLV example.</strong> The first box fills with
 <em>Bacteroides thetaiotaomicron</em> and <em>Roseburia intestinalis</em>, the second with
-<code>SMGDB00000002</code> so nothing else is read, Report growth rates goes on, and the search runs. On
-the command line the same run is
+<code>SMGDB00000002</code> so nothing else is read, and gLV mode goes on, Report growth rates among its
+settings. Then press <strong>Find interactions</strong>. On the command line the same run is
 <code>grownet derive --live --species "Bacteroides thetaiotaomicron" "Roseburia intestinalis"
 --conditions SMGDB00000002 --glv-mode --glv glv.zip</code>. The button presses gLV mode, so the
 command does too: without it the default derivation gives no coefficient and the run is refused.</li>
@@ -1401,8 +1509,8 @@ give others; the report beside the download says what was read and when.</p>
 <h2 id="attributes">Arc and node attributes</h2>
 <p>Every downloaded network, JSON or GraphML, carries these for each arc (edge) and node. A network
 names the format it speaks in its <code>schema</code> field, <code>grownet.interaction_network/v5</code>,
-after <code>/v4</code> in 0.5.0, which a <code>/v5</code> file only adds <code>technique</code> and
-<code>merged_nodes</code> to, and
+after <code>/v4</code> in 0.5.0, to which a <code>/v5</code> file adds <code>technique</code> and
+<code>merged_nodes</code>, and the <code>evidence</code> value <code>steady_state</code>, and
 <code>/v3</code> in 0.3.0 and 0.4.0. It moved to <code>/v1</code> in 0.2.0 because
 <code>significance</code> changed meaning, from the corrected p-value to -log10 of it, and to
 <code>/v2</code>, <code>/v3</code> and then <code>/v4</code> because optional arc and node fields were
@@ -1418,7 +1526,7 @@ carries <code>meta.growth_rates</code>: the rule the rates follow, a rate per or
 many monoculture replicates it rests on, the studies behind it and each study's own median, and
 <code>without_a_rate</code>, the organisms that have none, with <code>why_without_a_rate</code> giving the
 reason where one is known: a genus whose strains' rates are in time units that are not converted, or an
-organism, or a genus of them, whose every study's rates were left out for their starting spread (#81).</p>
+organism, or a genus of them, whose every study's rates were left out for their starting spread.</p>
 <h3 id="arc-attributes">Arc attributes</h3>
 {edges}
 <h3 id="merged">What a merged arc carries</h3>
@@ -1470,8 +1578,8 @@ strain ids, which are not nodes of a genus network. A member that is the source 
 its genus node's {_name("merged_nodes")}; a member on no arc is named only there.</p>
 
 <h2 id="decisions">Why it works this way</h2>
-<p>The main choices behind the method, each settled on the issue named (in the
-<a href="{ISSUES}">issue tracker</a>).</p>
+<p>The main choices behind the method, each settled with the collaboration in the
+<a href="{ISSUES}">issue tracker</a>.</p>
 <ul class="decisions">{decisions}</ul>
 
 <h2 id="cli">The command line</h2>
@@ -1480,26 +1588,31 @@ its report, and the network sent to Cytoscape:</p>
 <pre>{_e(EXAMPLE_CLI)}</pre>
 <p>Without installing anything, <code>uvx --from git+{REPOSITORY} {COMMAND} ...</code> runs the same
 command. Other uses:</p>
-<pre>{COMMAND} derive SMGDB00000004 --live --format graphml --out study4.graphml
+<pre>{COMMAND} derive --live --all --out all.json
+{COMMAND} derive SMGDB00000004 --live --format graphml --out study4.graphml
 {COMMAND} derive --live --species Blautia --conditions "Wilkins-Chalgren" --out wc.json
+{COMMAND} derive --live --conditions "Wilkins-Chalgren" --out wc_all.json
 {COMMAND} derive SMGDB00000004 --live --format matrix --out study4_matrix.csv
 {COMMAND} derive SMGDB00000004 --live --glv-mode --rates study4_rates.csv --glv study4_glv.zip
 {COMMAND} derive --live --species Bacteroides --all-partners --merge-genera --out bacteroides.json
 {COMMAND} derive --live --all --merge-arcs --merge-genera --out all_genera.json
 {COMMAND} gui
 {COMMAND} validate example.json</pre>
-<p>The first derives one whole study; the second searches a genus in one medium (the second box, from
-the command line); the third writes a study as the adjacency matrix; the fourth adds the growth rates and
-the gLV parameters (<a href="#glv">the matrix, the growth rates and gLV</a>); the fifth a genus, every
-species of it with every partner, one node per genus; the sixth all of mGrowthDB, as the All button does,
-merged across studies and then to genus; the seventh opens this page, and the last checks a file against
-the format. Every advanced setting has its flag (see the list above), and
+<p>The first is the All network, every study in mGrowthDB, as the page gives it with both boxes empty;
+the second derives one whole study; the third searches a genus in one medium (the second box, from the
+command line); the fourth every species in that medium, as the page does with the species box empty; the
+fifth writes a study as the adjacency matrix; the sixth adds the growth rates and the gLV parameters
+(<a href="#glv">the matrix, the growth rates and gLV</a>); the seventh a genus, every species of it with
+every partner, one node per genus; the eighth the All network merged across studies and then to genus;
+the ninth opens this page, and the last checks a file against the format. Every advanced setting has its
+flag (see the list above), and
 <code>{COMMAND} derive --help</code> lists them all. Besides those:</p>
 <ul>{cli_only}</ul>
 
 <h2 id="empty">No network came back</h2>
 <ol>
-<li>Look at the Species list at the top of the result. An entry under "Not used" gave nothing, and says why:
+<li>After a species search, look at the Species list at the top of the result. An entry under "Not used"
+gave nothing, and says why:
 see <a href="#qa">the first question</a>.</li>
 <li>"Studies searched: none" means no study in mGrowthDB holds those strains.</li>
 <li>Open "pair(s) the data did not support": each line says why a pair gave no edge.</li>
@@ -1514,8 +1627,9 @@ supports, or tick "Include chemostat and serial dilution experiments" to use the
 <li>every edge is below the absence threshold: open that section of the result, or set k to 0;</li>
 <li>the partners are species you did not type: untick "Only interactions between the species
 entered";</li>
-<li>the second box is holding the search to a medium, an experiment or a study that these species were
-not grown in: empty it, or try a shorter word, since a medium is matched as text (the result says how
+<li>the second box is holding the search to a medium, an experiment or a study that the species were not
+grown in, or, with the species box empty, that holds no usable comparison: empty it, or try a shorter
+word, since a medium is matched as text (the result says how
 many studies it left out).</li>
 </ul></li>
 </ol>
@@ -1556,6 +1670,9 @@ def render_about() -> str:
         f"<h3>{_e(version)} <span class=\"muted\">{_e(date)}</span></h3><ul>"
         + "".join(f"<li>{_e(line)}</li>" for line in lines) + "</ul>"
         for version, date, lines in RELEASES)
+    if NEXT:
+        log = ("<h3>Next release <span class=\"muted\">in development</span></h3><ul>"
+               + "".join(f"<li>{_e(line)}</li>" for line in NEXT) + "</ul>" + log)
     return (f"<h2 class=\"page\">About {_e(NAME)}</h2><p>{_e(ABOUT)}</p>"
             f"<p>Source code, issues and license: <a href=\"{REPOSITORY}\">{REPOSITORY}</a></p>"
             f"<p>Version {_e(__version__)}.</p>"

@@ -6,12 +6,107 @@ content.
 
 ## [Unreleased]
 
+### Changed
+
+- **Every arc of the default derivation says what each side started at** (#297), as the integrated form's
+  arcs did: "started at X in the co-culture and Y in the monocultures" (or "in the full community and Y
+  without R" for a drop-out arc), with the factor between them, and a warning above 3 times. Reported, never
+  matched on (Karoline, 2026-10-08). It matters most for drop-out arcs, where each deletion was a separate
+  vessel: live on 2026-11-06, 61 of the 190 drop-out arcs of All (with absences) start more than 3 times
+  apart, 24 more than 10 times, up to 117. Where a side has no positive first value, the arc says the
+  starting density could not be compared. No arc, strength or status changes; only the notes.
+
+### Fixed
+
+- **The R package's summary of a gLV package reads cleanly** (#296). "fitted:" no longer starts every line
+  of the organisms left out of the matrices; the organisms without a rate are not listed a second time on
+  the next line; and a one-organism matrix reads "1 organism", not "1 organisms". No number changes.
+
+### Changed
+
+- **The help reads more easily** (Karoline, 2026-11-06). It no longer prints who decided what and when
+  beside its text ("they are not useful for readers"), names study SMGDB00000026 in full in the alias
+  table, sets genus and species names in italics, and its gLV sections are split into shorter parts and
+  lists with every formula kept. Three passages were also wrong or unclear and are corrected: gLV mode sets
+  four settings, not three (the derivation was missing); an undefined "ratio L" and "x_j_star" are now
+  r_with, r_without and x_j; and the R package's handling of +10 and -10 cells is said to concern parameters
+  from grownet 0.2.0 and earlier only.
+
+### Changed
+
+- **No GitHub issue numbers in what a user sees** (Karoline, 2026-11-06: "in general: users don't need to see
+  github issue numbers anywhere"). They are gone from the page, the help, the command line's help and
+  messages, the R package's help and the README, and a test keeps new ones out.
+
+### Fixed
+
+- **The page says when an arc is merged, and writes a changed setting as the report does** (found checking
+  Merge parallel arcs on the live page, 2026-11-06; Karoline: "Yes, fix both"). A merged arc's strength
+  showed as a bare median, "-1.49", like any arc; it now reads "3 merged arcs: median, range -2.59 to -1.30"
+  under it. The line naming the settings off their defaults said "Merge parallel arcs = True"; it now says
+  "on", and joins the second box's lines with "; ", as the report does.
+
+### Changed
+
+- **gLV example fills the page and waits, as Example does** (Karoline, 2026-11-06: "The Example button fills
+  the input fields, but gLV example fills the fields and launches the search. Please change the gLV example
+  behavior to be in line with 'Example'."). It fills both boxes and switches gLV mode on, and Find
+  interactions runs it.
+
+### Changed
+
+- **Find interactions with the species box empty searches every species in the media, experiments or
+  studies of the second box, with every partner, and with both boxes empty it is the whole of mGrowthDB;
+  the All button is gone** (Karoline, 2026-11-04, #300: "allow the species field to be empty when the
+  second field (media/studies) has content", and on the button, "Remove it"). This is the search the All
+  button ran, so nothing about its result changes: at the default settings it is the network derived once
+  a day, and any changed setting derives it live. The page no longer answers an empty box with "Type at
+  least one species". On the command line, `derive --live --conditions NAME ...` without `--species` or
+  a study does the same; `--all` is unchanged. The species box is marked optional, and one sentence under
+  the buttons, the help page, `grownet --help` and `grownet derive --help` say how to get the All network.
+  An empty result of such a search speaks of "the studies searched", not "the studies holding these
+  species".
+
+### Fixed
+
+- **The report of a search with no species entered no longer says only their interactions were kept.**
+  All printed "Only interactions between the species entered (--all-partners): on" beside "with every
+  partner"; the line now says the setting was not read in that run. The page counts "1 study", not "1
+  studies".
+### Fixed
+
+- **The Baranyi fit reaches its optimum when the lag collapses** (#298). Its Levenberg-Marquardt loop damped
+  each step by the current diagonal of J'J. When a fit drives the lag toward zero, that column of the
+  Jacobian vanishes, the damped system stayed singular, and the fit stopped short of the best fit, with no
+  sign to the caller. It now damps by the largest diagonal seen so far, as MINPACK and R's `nls.lm` do.
+  Found by the foodnet project, whose fit was the same code. On 40 monoculture curves fitted by R
+  `growthrates` with the same objective, starts and guards, R found a lower residual on 13 before this
+  fix and on none after it. Measured live on all of mGrowthDB against 0.5.0 on 2026-11-04:
+  - **Nothing changes by default**: the 223 arcs of All, gLV mode with either rate method, and
+    `--metric growth_rate` (39 arcs) are identical.
+  - **Lags (`--report-rates`)**: *Bacteroides thetaiotaomicron VPI-5482*'s goes from 0.667 to 0.703 h.
+    Two lags that were already zero stay zero (below 1e-11 h), and one moves by 1e-4 h.
+  - **With `--rate-method baranyi`**, four of six organisms' rates move:
+    - *B. thetaiotaomicron*: 0.787 to 0.838 /h, now over 9 replicates instead of 11, since two curves
+      whose best fit lies past the guard are now refused, and the refusal says so (it gave the R2 of the
+      best fit inside the guard, which sent a reader to the data rather than to the guard);
+    - *Faecalibacterium duncaniae A2-165*: 0.366 to 0.398 /h;
+    - *Roseburia intestinalis L1-82*: 0.603 to 0.624 /h;
+    - *Blautia hydrogenotrophica DSM 10507*: 0.259 to 0.257 /h.
+  - **Arcs with `--metric growth_rate --rate-method baranyi`**: 19 of the 24 change strength.
+    - Three now rest on one replicate and are undetermined (two were absent, one present). One of them
+      changes sign: *R. intestinalis* to *B. thetaiotaomicron* in BTRI_WC, 0.91 to -0.55, now resting
+      on the one monoculture curve left after the two refusals above.
+    - Of the rest, the largest change is -0.55 to -0.35, and one arc moves from absent to present
+      (-0.1124 to -0.1139, at the threshold).
 ### Upgrading
 
 - **The format id moves to `grownet.interaction_network/v5`** (Karoline, 2026-11-06, #305: "Is the
   measurement technique recorded as an arc attribute? If not, please add."), for one arc field,
-  `technique`, and one node field, `merged_nodes`. Nothing a `/v4` field means changes; `/v4` and older files still read and validate. The
-  daily All network is also published as `all_result.v4.json` for installed 0.5.x copies, beside
+  `technique`, and one node field, `merged_nodes`, and one value of `evidence`, `steady_state`, for the arcs
+  of the steady-state derivation (0.5.0's validator refuses it, as it refuses a `/v5` file). Nothing a `/v4`
+  field means changes for the values it had; `/v4` and older files still read and validate. The daily All
+  network is also published as `all_result.v4.json` for installed 0.5.x copies, beside
   `all_result.json` for 0.3.x and 0.4.x.
 
 ### Added
@@ -114,9 +209,22 @@ content.
 - **An empty network from the command line is announced under the study's name again.** `derive STUDY`
   printed "NO interactions were derived for" the last reason it had listed, since the loop printing the
   reasons reused the name of the study's label; on every derivation.
-  monocultures and pairs it recovers 126 of the 132 coefficients exactly; with 5% noise over three vessels
-  the bootstrap spread covers the truth for 93% of them. The numbers are in METHOD_NOTES.
 
+### Changed
+
+- **The About page says what the next release brings while it is in development** (Karoline, 2026-11-06: "is
+  the About section updated?"), under "Next release", above the log of released versions. The release check
+  refuses a tag while that list is not empty, so it moves under the version at release.
+
+### Fixed
+
+- **The second box now applies under the integrated derivation too.** Media, experiments and studies named
+  there reached the default derivation alone, so in gLV mode naming a medium changed nothing, although the
+  mode's own message says it keeps a simulation to one environment. Measured live: Bacteroides and
+  Roseburia with every partner, `--conditions EMGDB000000024 --derivation integrated` gave 7 arcs from 12
+  experiments, now the 2 arcs of that co-culture and its 2 monocultures, which is what the default
+  derivation gives; with `--conditions mucin`, 7 arcs became 0, as with the default derivation. A
+  derivation plugged in with `--deriver` is now given the selected experiments only.
 
 ## [0.5.0] (2026-10-14)
 

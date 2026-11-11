@@ -758,6 +758,17 @@ NCBI's brackets kept, so [Clostridium] is not Clostridium), shared by the genus 
 genus query, so they cannot disagree. `derive.merge_genus` runs after `merge_parallel` in
 `output_meta`. `gui.support_level` decides species or strain pairs. `SpeciesIndex.studies` lists every study
 the crawl found, which All derives. Names decide the genus: Phocaeicola (former Bacteroides) stays apart.
+
+**All has no button since 2026-11-04 (#300).** The page's handler runs All whenever the species box is
+empty (whitespace counts as empty), so the second box and Exclude these studies narrow it as they always
+did, and both boxes empty is the whole of mGrowthDB. Whether that reads the published network is still
+`run_query`'s call through `published.usable`, so a changed setting derives live with no logic in the
+handler. "Type at least one species" is gone with it. On the command line `--all` stays, and
+`--conditions` without `--species` or a study sets `all_studies` (only with `--live`, so `--fixture`
+keeps its own message). Two traps met building it: the page re-renders the form under every result, so
+hint text saying "all of mGrowthDB" trips the narrowed-All test's whole-page guard (the hint says "the
+whole of mGrowthDB"); and the test double's experiments carry no `studyId`, so a study id in the second
+box matches nothing in it unless the test adds one (`tests/test_help.py` does).
 ## Release (2026-09-27)
 
 Karoline's answers on the first release, in her words: the rename "Wait for #79 first"; version
@@ -870,6 +881,21 @@ as no growth. Metric names carry the rule: "growth_rate:easylinear:5", "growth_r
 asked for the implementation as its own option (2026-09-27); easylinear is the default because it
 reproduces mGrowthDB's numbers.
 
+2026-11-04 (#298): `_fit_once` damps by the largest diagonal of J'J seen so far (MINPACK's scaling, as in
+R's `nls.lm`), not the current diagonal. When a fit drives h0 toward 0, the `log_h0` column of J vanishes,
+damping a zero diagonal adds nothing, and `_solve` returned None thirty times, so the fit ended short of
+the optimum with nothing to show for it. foodnet, whose `_fit_once` was the same code, found it against R
+`growthrates` with the same objective, starts and guards; `baranyi` is checked against R only through
+those curves, not by a script in this repository. Every lag the replicate form reports with
+`--report-rates` comes from `baranyi_fit`, whichever estimator gives the rate. The fix changed no default
+arc on the live corpus; only Baranyi rates, their arcs and one lag moved (CHANGELOG, #298). Test it on a
+synthetic curve that IS the model with no lag (`test_baranyi_recovers_the_rate_of_a_curve_with_no_lag`):
+the exact answer is known, and real curves cannot enter the repository. Open, for a human (#298): foodnet's
+decision 35 (no rate when the best fit lies past the guard, a `guard_limited` flag at 90% of it, r2 and
+rss reported) is not adopted here. After this fix, the two study 2 curves whose best fit lies past the
+guard are refused, and the refusal names the guard (it gave the true but misleading "R2 0.61" of the best
+fit inside the guard until Craig's agent's review).
+
 ## Speed: parallel prefetch (2026-09-27)
 
 Nearly all of a search's time was waiting on requests made one after another (about 100 ms each; 839 for
@@ -938,7 +964,20 @@ with a result is `render_form(..., below=...)`, so the result sits under the set
 `details` holding `report.report_text`, also served at `/report.txt`. `tests/test_interface.py` quotes
 Karoline's words for these and checks each through the running server; see AGENTS.md before changing it.
 
+Setting values on the page go through `report._value`, the report's own formatter (on/off, none, the
+second box's lines joined by "; "), so the page and the report cannot word one setting two ways
+(2026-11-06). A merged arc's strength cell carries `_merged_note`: "N merged arcs: median, range a to b".
+
+Only Find interactions starts a job. Example and gLV example fill the page and wait (`render_form` with a
+message); gLV example ran its search itself until 2026-11-06, when Karoline asked for it to work like
+Example. Its test submits the filled form the way a browser does (`tests/test_gui.py::_form_fields`).
+
 ## Help page
+
+`render_help` sets every genus and species name in italics on the way out (`_italicize_taxa`, from
+`TAXA` and `EPITHETS`), skipping code, commands and text already in italics, because much of the help's
+text sits in tables that escape it and so cannot carry markup (2026-11-06). The test names every genus the
+page offers as an example, so a new organism in the help needs its genus or epithet added there.
 
 `src/crossfeed/help.py` holds the help page as data keyed by the code's own names (#78):
 `SETTINGS` by `gui.DEFAULTS` key, `EDGE_ATTRIBUTES` and `NODE_ATTRIBUTES` by model field, `CLI_ONLY` for
@@ -1210,6 +1249,15 @@ and the README: that is the one mistake this style can make.
   connection would have verified the certificate against the proxy (Craig's agent on #184; unreachable
   here, since nothing calls `set_tunnel`). Read the installed source of what you override, copy the rest
   of it, and state in the docstring which single thing differs.
+
+## Starting densities on every arc (#297, 2026-11-06)
+
+`derive.start_note` wraps `integrated.starting_densities` (the median first value of each side, never
+matched on, #172) and the replicate form now writes it on biculture arcs (co-culture against the target's
+monocultures) and drop-out arcs (full community against the community without R), in the integrated form's
+wording. A side with no positive first value gives no note. Live: every one of the 190 drop-out arcs of All
+(with absences) carries it; 32 of 33 bicultures.
+
 
 ## gLV from the steady states of sub-communities (#310, 2026-11-06)
 

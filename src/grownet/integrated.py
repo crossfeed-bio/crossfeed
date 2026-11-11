@@ -1177,9 +1177,12 @@ class IntegratedDeriver:
         "change any of these results (see docs/METHOD_NOTES.md in the grownet repository)."
     )
 
+    applies_selection = True
+
     def __init__(self, client=None, spike_factor: float = None, max_condition: float = MAX_CONDITION,
-                 include_non_batch: bool = False, **_ignored):
+                 include_non_batch: bool = False, selection=None, **_ignored):
         self.client = client
+        self.selection = selection
         self.spike_factor = spike_factor
         self.max_condition = max_condition
         self.include_non_batch = include_non_batch
@@ -1200,6 +1203,7 @@ class IntegratedDeriver:
             cultivation,
             media_identity,
             run_group,
+            select_experiments,
             strain_identities,
             techniques_of,
             why_no_monoculture,
@@ -1221,6 +1225,10 @@ class IntegratedDeriver:
         # Collected here, where the fit happens, so it is what the run did rather than what survived.
         rates_by_set: dict = {}
         identities = strain_identities(exps, [])
+        # the second box, after the identities, which are read from every experiment of the study as the
+        # comparison reads them; the monocultures a kept co-culture is compared against come along, which
+        # is also what stage 1 fits its rates from
+        exps = select_experiments(exps, self.selection, skipped, study_id=study.get("id"))
         # the replicates of every experiment, split into monocultures of one organism and communities
         monocultures: dict = {}
         communities = []
