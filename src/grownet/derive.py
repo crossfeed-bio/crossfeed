@@ -1783,10 +1783,12 @@ def _merged(arcs: list) -> dict:
 
     studies = []
     for a in arcs:
-        st = {"id": a["study_id"], "citation": a.get("study_citation", ""), "license": a.get("study_license", ""),
-              "url": a.get("study_url", "")}
-        if st["id"] not in {s["id"] for s in studies}:
-            studies.append(st)
+        # an arc fitted across studies names them all in its own `studies` (the steady-state derivation);
+        # reading only `study_id` kept the first and lost the others (raised in review of the pooling)
+        for st in a.get("studies") or [{"id": a["study_id"], "citation": a.get("study_citation", ""),
+                                        "license": a.get("study_license", ""), "url": a.get("study_url", "")}]:
+            if st["id"] not in {s["id"] for s in studies}:
+                studies.append(dict(st))
     conditions = list(dict.fromkeys(a.get("condition", "") for a in arcs))
 
     def agreed(key, empty):

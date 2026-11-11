@@ -183,7 +183,11 @@ content.
   composition, the abundance unit and the dilution rate match (Karoline, 2026-11-06: "for the new chemostat
   inference mode, the medium composition has to match but other than that, I don't see why not"), so a
   pair measured in one study and the monocultures in another determine a row that neither does alone. An
-  arc names every study its row was fitted from. Every other derivation still reads one study at a time.
+  arc names every study its row was fitted from. Runs are pooled by each strain's identity as its own study
+  judges it, so a strain renamed between studies pools where its taxon id agrees (Karoline, 2026-11-11: "if
+  taxon ids agree and names differ, the studies can still be pooled"), and a strain whose taxon id one
+  study refuses is not pooled with its runs elsewhere, which is said. Every other derivation still reads one
+  study at a time.
 - **The steady-state derivation, hardened before release.** Runs that end with the same organisms present
   are one community, since they reach one steady state, and its bootstrap draws whole runs: kept apart, two
   noisy runs of one pair made rows look determined from noise alone. A row whose own term is not negative

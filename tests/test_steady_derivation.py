@@ -21,6 +21,13 @@ def _derive(extra_runs=(), extra_curves=None):
     return SteadyStateDeriver(client=client).derive({"id": "S1", "name": "an invented study"}, exps)
 
 
+def _as_study(record, study):
+    """A record as if fitted in study `study` alone: its study, its fit and the studies it rests on."""
+    meta = {"id": study, "citation": study, "license": "", "url": ""}
+    return {**record, "study_id": study, "fitted_group": f"{record.get('condition', '')} in {study}",
+            "studies": [meta]}
+
+
 def _arc(records, source, target):
     return next(r for r in records if r["source_name"] == source and r["target_name"] == target)
 
@@ -329,7 +336,7 @@ def test_rates_at_two_dilution_rates_are_not_merged_into_one():
         assert by_name["a"]["capacity"] == pytest.approx(1.0 * UNIT, rel=1e-6)
         assert by_name["b"]["capacity"] == pytest.approx(2.0 * UNIT, rel=1e-6)
     # more rows at D 0.2: that D is the package's, for every organism
-    more = fast + [{**r, "study_id": "S3", "fitted_group": "S3"} for r in fast]
+    more = fast + [_as_study(r, "S3") for r in fast]
     by_name = {r["name"]: r for r in integrated.fitted_rates(slow + more, METRIC).values()}
     assert by_name["a"]["rate"] == pytest.approx(0.30, abs=1e-6) and by_name["b"]["dilution"] == 0.2
 
@@ -602,8 +609,8 @@ def test_the_rate_comes_from_the_medium_the_capacity_comes_from():
     from grownet import integrated
     from grownet.subcommunity import METRIC
     wc, _ = _derive()
-    wc2 = [{**r, "study_id": "S5", "fitted_group": "S5"} for r in wc]
-    gifu = [{**r, "medium": "Gifu Anaerobic Medium", "study_id": study, "fitted_group": study,
+    wc2 = [_as_study(r, "S5") for r in wc]
+    gifu = [{**_as_study(r, study), "medium": "Gifu Anaerobic Medium",
              "fitted_rate": r["fitted_rate"] + up,
              "fitted_self": r["fitted_self"] / r["fitted_rate"] * (r["fitted_rate"] + up)}
             for study, up in (("S2", 0.40), ("S3", 0.44), ("S4", 0.48)) for r in wc]
@@ -849,6 +856,145 @@ def test_the_page_hands_every_study_of_a_search_to_the_steady_derivation_at_once
         def derive_many(self, studies):
             calls.append([study["id"] for study, _ in studies])
             return [], []
+    class TwoStudies(FakeClient):
+        """The fake study served under two ids, so a search finds two studies."""
+        ids = ("SMGDB00000001", "SMGDB00000002")
+
+        def study_experiments(self, study_id):
+            return super().study_experiments(self.study_id)
+
+        def get_study(self, study_id):
+            return {**super().get_study(self.study_id), "id": study_id}
+
+        def search(self, strain_ncbi_ids=None, metabolite_chebi_ids=None):
+            return {"studies": list(self.ids)}
     monkeypatch.setattr(gui, "chosen_deriver", lambda settings, client=None: Recording(client=client))
-    gui.run_query(FakeClient(), [], {**gui.DEFAULTS, "derivation": "steady"}, all_studies=True, published=False)
-    assert len(calls) == 1 and calls[0]
+    gui.run_query(TwoStudies(), ["Faecalibacterium prausnitzii"], {**gui.DEFAULTS, "derivation": "steady"},
+                  published=False)
+    # one call with both studies; given them one at a time, it fitted each study's runs apart
+    assert calls == [list(TwoStudies.ids)]
+
+
+# ---- one organism across studies: identity judged in each study, runs pooled by it --------------------
+
+PRAUSNITZII = "Faecalibacterium prausnitzii A2-165"
+DUNCANIAE = "Faecalibacterium duncaniae A2-165"
+THETA = "Bacteroides thetaiotaomicron VPI-5482"
+
+
+def _split(a_in_s2=PRAUSNITZII, taxa=True, s1_extra=(), s2_extra=()):
+    """The invented design split over two studies: the pair in S1, the monocultures in S2, where the first
+    organism may go by another name (`a_in_s2`). With `taxa`, every strain carries its NCBI taxon id."""
+    from test_growth_rates import _client
+    curves = {(1, a_in_s2): _startup(0.5, 0.04, 4.0, UNIT), (2, a_in_s2): _startup(0.5, 0.04, 4.0, UNIT),
+              (3, THETA): _startup(0.3, 0.04, 4.0, 2 * UNIT), (4, THETA): _startup(0.3, 0.04, 4.0, 2 * UNIT),
+              **{(i, PRAUSNITZII): _startup(0.5, 0.04, 4.0, PAIR_A) for i in (5, 6)},
+              **{(i, THETA): _startup(0.3, 0.04, 4.0, PAIR_B) for i in (5, 6)}}
+    exps = [_chemostat("E1", "a alone", [a_in_s2], [(1, "V1"), (2, "V2")], description=RUN),
+            _chemostat("E2", "b alone", [THETA], [(3, "V1"), (4, "V2")], description=RUN),
+            _chemostat("E3", "a with b", [PRAUSNITZII, THETA], [(5, "V1"), (6, "V2")], description=RUN)]
+    if taxa:
+        for exp in exps:
+            for strain in exp["communityStrains"]:
+                strain["NCBId"] = 226186 if strain["name"] == THETA else 411483
+    return _client(curves), [({"id": "S1", "name": "the pair"}, [exps[2], *s1_extra]),
+                             ({"id": "S2", "name": "the monocultures"}, [exps[0], exps[1], *s2_extra])]
+
+
+def _sharing_411483(exp_id):
+    """A batch experiment in which 411483 is also given to another strain, so the study refuses it."""
+    return {"id": exp_id, "name": "another strain", "cultivationMode": "batch", "description": "",
+            "communityStrains": [{"name": "Faecalibacterium prausnitzii M21-2", "NCBId": 411483}],
+            "compartments": [{"mediumName": "Wilkins-Chalgren Anaerobe Broth"}], "bioreplicates": []}
+
+
+def test_a_strain_renamed_between_studies_pools_by_its_taxon_id():
+    """F. prausnitzii A2-165 in one study is F. duncaniae A2-165 in the other, taxon id 411483 in both: one
+    organism, so the runs pool and determine the rows (Karoline, 2026-11-11: "if taxon ids agree and names
+    differ, the studies can still be pooled"). Without the taxon ids the two names are two organisms, and
+    a's row is not determined (b's is: the pair and b alone)."""
+    client, studies = _split(a_in_s2=DUNCANIAE)
+    records, _ = SteadyStateDeriver(client=client).derive_many(studies)
+    on_a = next(r for r in records if r["source"] == "ncbi:226186" and r["target"] == "ncbi:411483")
+    assert on_a["coefficient"] == pytest.approx(0.46 * -0.25 / UNIT, rel=1e-6)
+    assert on_a["target_name"] == PRAUSNITZII and on_a["target_identity"] == "ncbi"
+    assert [s["id"] for s in on_a["studies"]] == ["S1", "S2"]
+    assert on_a["community"] == ["ncbi:226186", "ncbi:411483"]
+    client, studies = _split(a_in_s2=DUNCANIAE, taxa=False)
+    records, _ = SteadyStateDeriver(client=client).derive_many(studies)
+    assert records and not [r for r in records if r["target_name"] in (PRAUSNITZII, DUNCANIAE)]
+
+
+def test_a_strain_whose_taxon_id_one_study_refuses_is_not_pooled_across_them():
+    """S2 gives 411483 to a second strain too, so there A2-165 is identified by genus and species, and in S1
+    by its taxon id: two identities, so its runs are not pooled, and the reason is given once. Judged over
+    both studies at once, the conflict in S2 demoted it in S1 too. Its row is not determined; b's is, and
+    its arc from A2-165 is from S1's identity, the pair's."""
+    client, studies = _split(s2_extra=[_sharing_411483("E9")])
+    records, skipped = SteadyStateDeriver(client=client).derive_many(studies)
+    assert not [r for r in records if r["target_name"] == PRAUSNITZII]
+    assert {r["source"] for r in records if r["target_name"] == THETA} == {"ncbi:411483"}
+    (why,) = [why for what, why in skipped if what == PRAUSNITZII]
+    assert "identified differently" in why and "ncbi:411483" in why and "faecalibacterium prausnitzii" in why
+
+
+def test_a_steady_arc_says_why_its_strain_lost_its_taxon_id():
+    """Refused in both studies, A2-165 is one organism by genus and species, so the runs pool; its arcs say
+    why its taxon id was refused, as the other derivations' do."""
+    client, studies = _split(s1_extra=[_sharing_411483("E8")], s2_extra=[_sharing_411483("E9")])
+    records, _ = SteadyStateDeriver(client=client).derive_many(studies)
+    on_a = next(r for r in records if r["target_name"] == PRAUSNITZII and r["source_name"] == THETA)
+    assert on_a["target"] == "faecalibacterium prausnitzii" and on_a["target_identity"] == "name"
+    assert "411483" in on_a["target_taxon_id_refused"] and on_a["source_taxon_id_refused"] == ""
+
+
+def test_an_arc_merged_with_a_pooled_one_keeps_every_study():
+    """A pooled arc rests on S1 and S2; merged with the same arc from S3, the merged arc names all three, and
+    `min_studies` counts them (it named S1 and S3, found in review of the pooling)."""
+    from grownet.derive import merge_parallel
+    client, studies = _split()
+    records, _ = SteadyStateDeriver(client=client).derive_many(studies)
+    on_a = next(r for r in records if r["source_name"] == THETA and r["target_name"] == PRAUSNITZII)
+    (merged,), info = merge_parallel([on_a, _as_study(on_a, "S3")], min_studies=3)
+    assert info["merged"] == 1 and [s["id"] for s in merged["studies"]] == ["S1", "S2", "S3"]
+
+
+def test_pooling_does_not_move_the_package_dilution_rate():
+    """a fitted at D 0.1 from runs of S1 and S2 pooled is a row in each, as the two studies fitted apart are;
+    x at D 0.05 is one row. D 0.1 is the package's either way (counted once, the pooled row tied with x's
+    and the lower D won)."""
+    from grownet import integrated
+    from grownet.subcommunity import METRIC
+
+    def row(target, d, studies):
+        return {"target": target, "target_name": target, "source": "p", "fitted_rate": 0.4,
+                "fitted_rate_unit": "1/h", "fitted_rate_dilution": d, "fitted_self": -0.4e-8,
+                "study_id": studies[0], "fitted_group": f"D {d} in {', '.join(studies)}",
+                "studies": [{"id": s} for s in studies]}
+    pooled = [row("a", 0.1, ["S1", "S2"]), row("x", 0.05, ["S3"])]
+    apart = [row("a", 0.1, ["S1"]), row("a", 0.1, ["S2"]), row("x", 0.05, ["S3"])]
+    for records in (pooled, apart):
+        rates = integrated.fitted_rates(records, METRIC)
+        assert rates["a"]["dilution"] == 0.1 and "x" not in rates
+
+
+def test_a_run_left_out_for_its_technique_names_the_studies_that_set_it():
+    """b is read by fc in a second pair run in S2 and by qPCR in the other runs, which come from S1 and S2:
+    the run is left out, and the reason says which studies' runs read b the way the fit keeps."""
+    from test_growth_rates import _client
+    from test_subcommunity_inputs import _retag
+    curves = {(1, "a"): _startup(0.5, 0.04, 4.0, UNIT), (2, "a"): _startup(0.5, 0.04, 4.0, UNIT),
+              (3, "b"): _startup(0.3, 0.04, 4.0, 2 * UNIT), (4, "b"): _startup(0.3, 0.04, 4.0, 2 * UNIT)}
+    for i in (5, 6, 7):
+        curves[(i, "a")] = _startup(0.5, 0.04, 4.0, PAIR_A)
+        curves[(i, "b")] = _startup(0.3, 0.04, 4.0, PAIR_B)
+    client = _client(curves)
+    _retag(client, "b", "fc", bioreplicates={7})
+    pair = _chemostat("E3", "a with b", ["a", "b"], [(5, "V1"), (6, "V2")], description=RUN)
+    again = _chemostat("E4", "a with b again", ["a", "b"], [(7, "V1")], description=RUN)
+    monos = [_chemostat("E1", "a alone", ["a"], [(1, "V1"), (2, "V2")], description=RUN),
+             _chemostat("E2", "b alone", ["b"], [(3, "V1"), (4, "V2")], description=RUN)]
+    _, skipped = SteadyStateDeriver(client=client).derive_many([({"id": "S1", "name": "x"}, [pair]),
+                                                                ({"id": "S2", "name": "y"}, [*monos, again])])
+    (why,) = [why for what, why in skipped if what.startswith("a with b again")]
+    assert "b by fc" in why and "(in S1, S2)" in why
