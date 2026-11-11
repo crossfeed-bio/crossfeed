@@ -820,8 +820,10 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
     # counted arcs, found in a third review) is the package's, the lowest on a tie; the others are named,
     # and an organism fitted only at another D is named with that reason. The other derivations record
     # none, so this never fires for them. A row pooled across studies counts once in each study it rests
-    # on, as the same rows fitted apart did, so pooling does not move the package's dilution rate (raised in
-    # review of the pooling, when a pooled row counted once).
+    # on: that is the count's own unit, an organism's row in one study at one D, and it gives the count the
+    # same rows fitted apart give, so pooling does not move the package's dilution rate; a row that exists
+    # only pooled counts the same way, for each study whose runs it rests on (raised in review of the
+    # pooling, when a pooled row counted once).
     by_dilution: dict = {}
     for d in {(r.get("target"), s, r["fitted_rate_dilution"]) for r in records
               if r.get("fitted_rate") is not None and r.get("fitted_rate_dilution") is not None

@@ -882,9 +882,10 @@ DUNCANIAE = "Faecalibacterium duncaniae A2-165"
 THETA = "Bacteroides thetaiotaomicron VPI-5482"
 
 
-def _split(a_in_s2=PRAUSNITZII, taxa=True, s1_extra=(), s2_extra=()):
+def _split(a_in_s2=PRAUSNITZII, taxa=True, s1_extra=(), s2_extra=(), published=("", "")):
     """The invented design split over two studies: the pair in S1, the monocultures in S2, where the first
-    organism may go by another name (`a_in_s2`). With `taxa`, every strain carries its NCBI taxon id."""
+    organism may go by another name (`a_in_s2`). With `taxa`, every strain carries its NCBI taxon id;
+    `published` is when S1 and S2 were published."""
     from test_growth_rates import _client
     curves = {(1, a_in_s2): _startup(0.5, 0.04, 4.0, UNIT), (2, a_in_s2): _startup(0.5, 0.04, 4.0, UNIT),
               (3, THETA): _startup(0.3, 0.04, 4.0, 2 * UNIT), (4, THETA): _startup(0.3, 0.04, 4.0, 2 * UNIT),
@@ -897,8 +898,9 @@ def _split(a_in_s2=PRAUSNITZII, taxa=True, s1_extra=(), s2_extra=()):
         for exp in exps:
             for strain in exp["communityStrains"]:
                 strain["NCBId"] = 226186 if strain["name"] == THETA else 411483
-    return _client(curves), [({"id": "S1", "name": "the pair"}, [exps[2], *s1_extra]),
-                             ({"id": "S2", "name": "the monocultures"}, [exps[0], exps[1], *s2_extra])]
+    return _client(curves), [({"id": "S1", "name": "the pair", "publishedAt": published[0]}, [exps[2], *s1_extra]),
+                             ({"id": "S2", "name": "the monocultures", "publishedAt": published[1]},
+                              [exps[0], exps[1], *s2_extra])]
 
 
 def _sharing_411483(exp_id):
@@ -911,10 +913,15 @@ def _sharing_411483(exp_id):
 def test_a_strain_renamed_between_studies_pools_by_its_taxon_id():
     """F. prausnitzii A2-165 in one study is F. duncaniae A2-165 in the other, taxon id 411483 in both: one
     organism, so the runs pool and determine the rows (Karoline, 2026-11-11: "if taxon ids agree and names
-    differ, the studies can still be pooled"). Without the taxon ids the two names are two organisms, and
-    a's row is not determined (b's is: the pair and b alone)."""
-    client, studies = _split(a_in_s2=DUNCANIAE)
-    records, _ = SteadyStateDeriver(client=client).derive_many(studies)
+    differ, the studies can still be pooled"). The arc goes by the later study's name, whichever study id
+    sorts first (by the first study id, it kept the superseded name, raised in review of the pooling).
+    Without the taxon ids the two names are two organisms, and a's row is not determined (b's is: the pair
+    and b alone)."""
+    for published, name in ((("2019-05-01", "2024-02-01"), DUNCANIAE), (("2024-02-01", "2019-05-01"), PRAUSNITZII)):
+        client, studies = _split(a_in_s2=DUNCANIAE, published=published)
+        records, _ = SteadyStateDeriver(client=client).derive_many(studies)
+        on_b = next(r for r in records if r["source"] == "ncbi:411483" and r["target"] == "ncbi:226186")
+        assert on_b["source_name"] == name
     on_a = next(r for r in records if r["source"] == "ncbi:226186" and r["target"] == "ncbi:411483")
     assert on_a["coefficient"] == pytest.approx(0.46 * -0.25 / UNIT, rel=1e-6)
     assert on_a["target_name"] == PRAUSNITZII and on_a["target_identity"] == "ncbi"
@@ -934,6 +941,12 @@ def test_a_strain_whose_taxon_id_one_study_refuses_is_not_pooled_across_them():
     records, skipped = SteadyStateDeriver(client=client).derive_many(studies)
     assert not [r for r in records if r["target_name"] == PRAUSNITZII]
     assert {r["source"] for r in records if r["target_name"] == THETA} == {"ncbi:411483"}
+    # the reasons name the strains, not the keys the fit runs on; the two identities of one name are told
+    # apart by their keys (they said "ncbi:226186" after the pooling, found while fixing its review)
+    lines = [what for what, _ in skipped if what.endswith("qpcr]")]
+    assert sorted(lines) == sorted(f"{n} [chemostat, D 0.04 per h, Wilkins-Chalgren Anaerobe Broth, Cells/mL, qpcr]"
+                                   for n in (THETA, f"{PRAUSNITZII} (ncbi:411483)",
+                                             f"{PRAUSNITZII} (faecalibacterium prausnitzii)"))
     (why,) = [why for what, why in skipped if what == PRAUSNITZII]
     assert "identified differently" in why and "ncbi:411483" in why and "faecalibacterium prausnitzii" in why
 
@@ -1004,3 +1017,41 @@ def test_a_run_left_out_for_its_technique_names_the_studies_that_set_it():
                                                                 ({"id": "S2", "name": "y"}, [*monos, again])])
     (why,) = [why for what, why in skipped if what.startswith("a with b again")]
     assert "b by fc" in why and "(in S1, S2)" in why
+
+
+def test_an_arc_goes_by_the_name_of_a_study_it_rests_on():
+    """A2-165 is F. prausnitzii in S1, run there in another medium, and F. duncaniae in S3, where the whole
+    design is: the arcs rest on S3 alone and go by S3's name. Seeded by the first study of the search, an
+    arc said S3 in its studies and S1's name (raised in review of the pooling)."""
+    from test_growth_rates import _client
+    curves = {(1, DUNCANIAE): _startup(0.5, 0.04, 4.0, UNIT), (2, DUNCANIAE): _startup(0.5, 0.04, 4.0, UNIT),
+              (3, THETA): _startup(0.3, 0.04, 4.0, 2 * UNIT), (4, THETA): _startup(0.3, 0.04, 4.0, 2 * UNIT),
+              **{(i, DUNCANIAE): _startup(0.5, 0.04, 4.0, PAIR_A) for i in (5, 6)},
+              **{(i, THETA): _startup(0.3, 0.04, 4.0, PAIR_B) for i in (5, 6)},
+              (7, PRAUSNITZII): _startup(0.5, 0.04, 4.0, UNIT), (8, PRAUSNITZII): _startup(0.5, 0.04, 4.0, UNIT)}
+    s3 = [_chemostat("E1", "a alone", [DUNCANIAE], [(1, "V1"), (2, "V2")], description=RUN),
+          _chemostat("E2", "b alone", [THETA], [(3, "V1"), (4, "V2")], description=RUN),
+          _chemostat("E3", "a with b", [DUNCANIAE, THETA], [(5, "V1"), (6, "V2")], description=RUN)]
+    s1 = [_chemostat("E7", "a alone in Gifu", [PRAUSNITZII], [(7, "V1"), (8, "V2")], description=RUN,
+                     medium="Gifu Anaerobic Medium")]
+    for exp in s1 + s3:
+        for strain in exp["communityStrains"]:
+            strain["NCBId"] = 226186 if strain["name"] == THETA else 411483
+    records, _ = SteadyStateDeriver(client=_client(curves)).derive_many(
+        [({"id": "S1", "name": "x", "publishedAt": "2025-01-01"}, s1),
+         ({"id": "S3", "name": "y", "publishedAt": "2019-01-01"}, s3)])
+    assert records and all([s["id"] for s in r["studies"]] == ["S3"] for r in records)
+    assert {r["target_name"] for r in records} == {DUNCANIAE, THETA}
+
+
+def test_a_row_whose_runs_cannot_be_traced_to_a_study_is_not_credited_to_one(monkeypatch):
+    """Every run is read from a study, so this is not reached today; if a pooled community ever names a run
+    the search did not read, its row is left out and said, not credited to the first study of the search."""
+    from grownet import subcommunity
+    real = subcommunity.pool
+    monkeypatch.setattr(subcommunity, "pool",
+                        lambda communities: [{**c, "experiments": ["E404"]} for c in real(communities)])
+    client, studies = _split()
+    records, skipped = SteadyStateDeriver(client=client).derive_many(studies)
+    assert records == []
+    assert sum("not traced to a study (E404)" in why for _, why in skipped) == 2

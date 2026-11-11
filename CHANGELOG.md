@@ -186,8 +186,9 @@ content.
   arc names every study its row was fitted from. Runs are pooled by each strain's identity as its own study
   judges it, so a strain renamed between studies pools where its taxon id agrees (Karoline, 2026-11-11: "if
   taxon ids agree and names differ, the studies can still be pooled"), and a strain whose taxon id one
-  study refuses is not pooled with its runs elsewhere, which is said. Every other derivation still reads one
-  study at a time.
+  study refuses is not pooled with its runs elsewhere, which is said. A pooled organism goes by the name the
+  most recently published of the arc's own studies gives it, so a renamed strain shows its later name. Every
+  other derivation still reads one study at a time.
 - **The steady-state derivation, hardened before release.** Runs that end with the same organisms present
   are one community, since they reach one steady state, and its bootstrap draws whole runs: kept apart, two
   noisy runs of one pair made rows look determined from noise alone. A row whose own term is not negative

@@ -740,11 +740,12 @@ class SteadyStateDeriver:
         from .integrated import _log2_effect
         if self.client is None:
             raise ValueError("SteadyStateDeriver needs a client: it reads each vessel's measured series")
-        metas, of_exp, by_study, records, skipped = {}, {}, {}, [], []
+        metas, of_exp, by_study, published, records, skipped = {}, {}, {}, {}, [], []
         for study, exps in sorted(studies, key=lambda s: s[0].get("id", "")):
             study_id = study.get("id", "")
             metas[study_id] = {"id": study_id, "citation": study.get("name") or study_id, "license": "",
                                "url": study.get("url", "")}
+            published[study_id] = study.get("publishedAt") or study.get("uploadedAt") or ""
             # a strain's identity is judged within its own study, as every derivation judges it, over the whole
             # study (a taxon id given to two strain names there is refused as before); then the experiments the
             # second box asks for, with the monocultures under the same conditions. Runs of several studies are
@@ -760,15 +761,24 @@ class SteadyStateDeriver:
         def study_of(exp):
             return of_exp.get(exp.get("id"), ("", None))[0]
 
-        # the identity of each organism key, and the name to show it by: the first study's, by study id
+        # each organism key's identity as each study gives it, with the name it goes by there
         identity_of: dict = {}
         names_of: dict = {}
 
         def key_of(exp, name):
             got = _identity(by_study.get(study_of(exp), {}), name)
-            identity_of.setdefault(got["id"], {**got, "name": name})
+            identity_of.setdefault(got["id"], {}).setdefault(study_of(exp), {**got, "name": name})
             names_of.setdefault(name, set()).add(got["id"])
             return got["id"]
+
+        def shown(key, arc_studies):
+            # an arc names its organism as one of the studies the arc rests on does, the most recently
+            # published, so a renamed strain goes by its later name; the first study of the whole search named
+            # it, which could be a study the arc does not rest on and, for A2-165, the superseded name
+            # (raised in review of the pooling)
+            per_study = identity_of[key]
+            ours = [s for s in arc_studies if s in per_study] or sorted(per_study)
+            return per_study[max(ours, key=lambda s: (published.get(s, ""), s))]
 
         exps = [exp for _, exp in of_exp.values()]
         groups = chemostat_groups(self.client, exps, self.spike_factor, key_of=key_of, study_of=study_of)
@@ -777,11 +787,24 @@ class SteadyStateDeriver:
         skipped += [(name, f"identified differently in the studies searched ({', '.join(sorted(ids))}), so its "
                            "runs are fitted as different organisms rather than pooled")
                     for name, ids in sorted(names_of.items()) if len(ids) > 1]
+        def say(lines, in_studies):
+            # the fit is keyed by identity, so its reasons name "ncbi:226186" where a reader wants the strain:
+            # each key is put back as the name it goes by in the group's studies (with the key where two
+            # identities share a name), in one pass so a name put in is not read again
+            keys = sorted(identity_of, key=len, reverse=True)
+            if not keys:
+                return list(lines)
+            names = {k: shown(k, in_studies)["name"] for k in keys}
+            twice = {n for n in names.values() if list(names.values()).count(n) > 1}
+            names = {k: (f"{n} ({k})" if n in twice else n) for k, n in names.items()}
+            pattern = re.compile(r"(?<![\w:])(" + "|".join(map(re.escape, keys)) + r")(?![\w:])")
+            return [tuple(pattern.sub(lambda m: names[m.group(1)], part) for part in line) for line in lines]
+
         for group in groups:
             label = (f"chemostat, D {group['dilution']:g} per h, {group['medium']}, {group['unit']}"
                      + (f", {group['technique']}" if group.get("technique") else ""))
             if not group["communities"]:
-                skipped += [(f"{what} [{label}]", why) for what, why in group["left_out"]]
+                skipped += say([(f"{what} [{label}]", why) for what, why in group["left_out"]], [])
                 continue
             # runs of the same members are one equation (`pool`), here as in the fit, so an arc's community,
             # its experiments and its leave-one-out note name what the fit used
@@ -796,12 +819,12 @@ class SteadyStateDeriver:
             # the studies the group's runs come from, named, since one fit may span several
             in_studies = sorted({of_exp[e][0] for c in group["communities"]
                                  for e in (c.get("experiments") or [c.get("experiment", "")]) if e in of_exp})
-            skipped += [(f"chemostat group at {setting} in {', '.join(in_studies)}",
-                         _group_summary(communities, got))]
-            skipped += [(f"{what} [{label}]", why) for what, why in group["left_out"]]
-            skipped += [(f"{species} in {community} [{label}]", "washed out: no steady-state equation")
-                        for community, species in got["washed_out"]]
-            skipped += [(f"{i} [{label}]", why) for i, why in _row_reasons(got)]
+            skipped += say([(f"chemostat group at {setting} in {', '.join(in_studies)}",
+                             _group_summary(communities, got))]
+                           + [(f"{what} [{label}]", why) for what, why in group["left_out"]]
+                           + [(f"{species} in {community} [{label}]", "washed out: no steady-state equation")
+                              for community, species in got["washed_out"]]
+                           + [(f"{i} [{label}]", why) for i, why in _row_reasons(got)], in_studies)
             predictions = {p["community"]: p for p in leave_one_out_predictions(communities)}
             for i, row in got["rows"].items():
                 if row["status"] != "identified":
@@ -810,6 +833,20 @@ class SteadyStateDeriver:
                 s_i = scale["scale"]
                 unit_coefficient = (f"1/(h x {group['unit']})" if s_i is not None
                                     else f"1/{group['unit']}, in units of r_i - D")
+                # every study the row was fitted from: the coefficient rests on all of the row's equations, not
+                # only on the communities holding the pair
+                row_experiments = {e for c in communities if (c["abundance"].get(i) or 0) > 0
+                                   for e in (c.get("experiments") or [c.get("experiment", "")])}
+                untraced = sorted(e or "(no id)" for e in row_experiments if e not in of_exp)
+                if untraced:
+                    # a row that cannot name every study it rests on is not reported: it was credited to the
+                    # first study of the search, a plausible citation and a wrong one (raised in review of the
+                    # pooling). Not reached today, since every run is read from a study; said if it ever is
+                    skipped.append((f"{shown(i, in_studies)['name']} [{label}]",
+                                    f"its row rests on runs not traced to a study ({', '.join(untraced)}), so the "
+                                    "study it would cite is unknown and its arcs are not reported"))
+                    continue
+                arc_studies = sorted({of_exp[e][0] for e in row_experiments})
                 for j, b in row["values"].items():
                     if j == i:
                         continue
@@ -825,11 +862,6 @@ class SteadyStateDeriver:
                           else abs(x / ((1 + b * x) * math.log(2))) * sd_b)
                     arc_experiments = sorted({e for c in holding
                                               for e in (c.get("experiments") or [c.get("experiment", "")])} - {""})
-                    # every study the row was fitted from: the coefficient rests on all of the row's equations,
-                    # not only on the communities holding the pair
-                    row_experiments = {e for c in communities if (c["abundance"].get(i) or 0) > 0
-                                       for e in (c.get("experiments") or [c.get("experiment", "")])}
-                    arc_studies = sorted({of_exp[e][0] for e in row_experiments if e in of_exp}) or sorted(metas)[:1]
                     check = predictions.get(largest["name"], {})
                     notes = [f"row scale: {scale['how']}"]
                     if check.get("status") == "predicted" and i in check["predicted"]:
@@ -837,8 +869,10 @@ class SteadyStateDeriver:
                                      f"{check['predicted'][i]:.3g}, observed {check['observed'][i]:.3g}")
                     elif check.get("status"):
                         notes.append(f"{largest['name']} {check['status']}")
-                    # the communities are keyed by identity (`key_of`); the name shown is the first study's
-                    source, target = identity_of[j], identity_of[i]
+                    notes = [line for (line,) in say([(n,) for n in notes], arc_studies)]
+                    # the communities are keyed by identity (`key_of`); each is shown as one of the arc's studies
+                    # gives it (`shown`)
+                    source, target = shown(j, arc_studies), shown(i, arc_studies)
                     records.append({
                         "source": source["id"], "target": target["id"],
                         "source_name": source["name"], "target_name": target["name"],
