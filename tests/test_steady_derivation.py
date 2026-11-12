@@ -932,6 +932,25 @@ def test_a_strain_renamed_between_studies_pools_by_its_taxon_id():
     assert records and not [r for r in records if r["target_name"] in (PRAUSNITZII, DUNCANIAE)]
 
 
+def test_an_arc_says_the_other_names_its_studies_give_an_organism():
+    """The latest study's name is a guess at the current one, so the arc says the other names and how the
+    one shown was chosen; with no dates, that the study id chose it (named silently by the study id sorting
+    last, raised in review of the pooling). One name throughout says nothing."""
+    for published, how in ((("2019-05-01", "2024-02-01"), "the most recently published of them"),
+                           (("", ""), "no publication date tells them apart"),
+                           (("2024-02-01", "2024-02-01"), "no publication date tells them apart")):
+        client, studies = _split(a_in_s2=DUNCANIAE, published=published)
+        records, _ = SteadyStateDeriver(client=client).derive_many(studies)
+        for r in records:
+            shown = r["source_name"] if r["source"] == "ncbi:411483" else r["target_name"]
+            other = PRAUSNITZII if shown == DUNCANIAE else DUNCANIAE
+            (note,) = [n for n in r["notes"] if "is named differently" in n]
+            assert note.startswith(f"{shown} is named differently") and f"{other} in S" in note and how in note
+    client, studies = _split()
+    records, _ = SteadyStateDeriver(client=client).derive_many(studies)
+    assert records and not [n for r in records for n in r["notes"] if "is named differently" in n]
+
+
 def test_a_strain_whose_taxon_id_one_study_refuses_is_not_pooled_across_them():
     """S2 gives 411483 to a second strain too, so there A2-165 is identified by genus and species, and in S1
     by its taxon id: two identities, so its runs are not pooled, and the reason is given once. Judged over
