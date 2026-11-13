@@ -33,6 +33,17 @@ Rules for this file:
   and is not a network is a format defect and not a network one. A retry that cannot tell those apart
   would turn a 403 into four 403s and a daily job into a slower daily job, and would hide a format defect
   behind a delay.
+  **And naming the exception class is half the work, which the first version of this got wrong**
+  (Karoline's agent, reviewing, who reproduced it against a local socket that promised 100 bytes and
+  sent 10). It retried `JSONDecodeError` on the reasoning that a body cut short reaches the parser as
+  short bytes. That is only the form without a `Content-Length`, chunked or close-delimited. When the
+  server sends a length, `read()` notices the shortfall itself and raises `http.client.IncompleteRead`,
+  which derives from `HTTPException` and **not** from `OSError`, so it fell through to the blanket
+  clause and refused on the first read: the one transient case the retry exists for, and a release asset
+  from the CDN normally carries a length. The rule to carry forward is that a retry is only as narrow as
+  the class it names, and that the class a failure actually arrives in is worth reproducing rather than
+  reasoning about. `HTTPException` itself was offered and declined: it would also retry a malformed
+  status line or headers, which is a broken response rather than a short one.
 
 - 2026-10-11 (#255 item 2): **a derived quantity is collected where it is measured, not rebuilt from what
   survived.** `_widen_by_rate_selection` rebuilt its rate table from `pending`, the arcs that became

@@ -25,10 +25,12 @@ content.
   went green, so the answer had cleared by itself. By then every 0.3.x and 0.4.x copy had been deriving
   All live for six hours, their day having ended twelve minutes before the failure was reported. An
   answer that waiting fixes is now read up to four times, two seconds apart and then four and then
-  eight, before the refusal stands. The refusal itself is unchanged, and so is every case that waiting
-  does not fix: a 404 is still the first run, a 403 still answers on the first read, a body that parses
-  and is not a network is still a format defect rather than a network one, and every read failing still
-  refuses. No number changes.
+  eight, before the refusal stands. A body cut short is read again in both of the forms it arrives in:
+  with a length, where the read itself notices the shortfall, and without one, where the short bytes
+  reach the parser. The refusal itself is unchanged, and so is every case that waiting does not fix: a
+  404 is still the first run, a 403 still answers on the first read, a body that parses and is not a
+  network is still a format defect rather than a network one, and every read failing still refuses. No
+  number changes.
 
 - **The R package's summary of a gLV package reads cleanly** (#296). "fitted:" no longer starts every line
   of the organisms left out of the matrices; the organisms without a rate are not listed a second time on

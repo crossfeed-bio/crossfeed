@@ -6,6 +6,7 @@ Writes all_result.<format>.json (what the page and `grownet derive --all` read),
 the older format installed copies read), all_network.json and all_report.txt,
 and, when given NOTES_FILE, the release description for this run, which the workflow sets on every run.
 """
+import http.client
 import json
 import os
 import sys
@@ -177,9 +178,24 @@ def previous_arcs(opener=urllib.request.urlopen, sleep=time.sleep) -> int | str 
                 reason = f"GitHub answered HTTP {e.code}"
                 if e.code not in WAITS_OUT:
                     return reason
-            except (TimeoutError, json.JSONDecodeError, OSError) as e:
-                # URLError and ConnectionError are OSError, and a body cut short raises JSONDecodeError:
-                # each of those is the network between here and the asset, so each is read again
+            except (TimeoutError, json.JSONDecodeError, http.client.IncompleteRead, OSError) as e:
+                # URLError and ConnectionError are OSError. A BODY CUT SHORT TAKES TWO FORMS, and the
+                # first version of this named only the second one (Karoline's agent, reviewing, who
+                # reproduced it against a local socket promising 100 bytes and sending 10). When the
+                # server sent a Content-Length, `read()` notices the shortfall itself and raises
+                # http.client.IncompleteRead, which derives from HTTPException and NOT from OSError, so
+                # it fell through to the blanket clause below and refused on the FIRST read: the one
+                # transient case this function exists for. JSONDecodeError is the other form, where
+                # there was no length (chunked or close-delimited) and the short bytes reach
+                # json.loads. A release asset from the CDN normally carries a length, so IncompleteRead
+                # is the likely one. Each of these is the network between here and the asset, so each
+                # is read again.
+                #
+                # NARROWER THAN HTTPException ON PURPOSE, which was offered and is the author's call.
+                # HTTPException would also retry a malformed status line or malformed headers. Those are
+                # a broken response rather than a short one, waiting does not obviously fix them, and
+                # retrying them would turn a server defect into four slow server defects behind a delay.
+                # The rule this function keeps is that only an answer waiting fixes is read again.
                 reason = f"{type(e).__name__}: {e}"
             except Exception as e:     # noqa: BLE001 - every other failure is reported, and refuses below
                 return f"{type(e).__name__}: {e}"

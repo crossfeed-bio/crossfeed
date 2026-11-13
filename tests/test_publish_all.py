@@ -114,6 +114,52 @@ def test_a_gateway_answer_that_clears_is_read_again_and_one_that_cannot_clear_is
     assert floor(145, reason), reason
 
 
+def test_a_body_cut_short_is_read_again_in_both_of_the_forms_it_arrives_in():
+    """Karoline's agent, reviewing: "A body cut short usually does not arrive as JSONDecodeError". When
+    the server sent a Content-Length and the connection drops partway, `read()` notices the shortfall
+    itself and raises http.client.IncompleteRead, which derives from HTTPException and not from
+    OSError, so it fell through the retried tuple and refused on the FIRST read. A release asset served
+    by the CDN normally carries a length, so that is the likely form of the very case this retry exists
+    for. Both forms are now read again.
+
+    Hand computed: each opener fails twice and succeeds on the third read, so the arc count is the 5
+    edges of the body, the opener is called 3 times, and 2 waits are taken, of 2.0 and 4.0 seconds."""
+    import http.client
+
+    class Response(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class Truncated(Response):
+        """A response whose body is cut short AFTER a Content-Length promised more, which is what the
+        CDN serves. `read()` raises rather than returning the short bytes."""
+
+        def read(self, *a):
+            raise http.client.IncompleteRead(b"{\"network\": {\"ed", 84)
+
+    body = json.dumps({"network": {"edges": [{}, {}, {}, {}, {}]}}).encode()
+    # the two forms, in the order the review distinguished them: with a length, read() raises
+    # IncompleteRead; without one (chunked or close-delimited) the short bytes reach json.loads
+    short = b"{\"network\": {\"ed"
+    for cut in (lambda url, timeout: Truncated(), lambda url, timeout: Response(short)):
+        reads, waited = [], []
+
+        def clears_on_the_third(url, timeout, cut=cut, reads=reads):
+            reads.append(url)
+            return cut(url, timeout) if len(reads) < 3 else Response(body)
+        assert previous_arcs(clears_on_the_third, sleep=waited.append) == 5, "the day publishes"
+        assert len(reads) == 3, reads
+        assert waited == [publish_all.BACKOFF, publish_all.BACKOFF ** 2], waited
+
+    # and it still fails closed when every read is cut short, which is the floor this never lifts
+    reason = previous_arcs(lambda url, timeout: Truncated(), sleep=lambda s: None)
+    assert "IncompleteRead" in reason and f"every one of {publish_all.READS} reads" in reason, reason
+    assert floor(145, reason) and "could not be read" in floor(145, reason)[0]
+
+
 def _result():
     net = InteractionNetwork(meta={"derived_at": "2026-10-12T10:03:41+00:00", "tool_version": "0.4.0",
                                    "settings": {"derivation": "replicate"}})
