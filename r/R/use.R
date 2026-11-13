@@ -168,6 +168,8 @@ glv_readme <- function(x, print = TRUE) {
         capacity_source = text("carrying_capacity_source"),
         # derived from the column beside it and adds no measurement, as the download's last column is
         doubling_time = ifelse(is.na(rate) | rate <= 0, NA_real_, log(2) / rate),
+        # last, as the download writes it: the dilution rate per h a steady-state rate r_i - D is at
+        dilution = vapply(detail, function(d) as.numeric(pick(d, "dilution", NA_real_)), numeric(1)),
         stringsAsFactors = FALSE)
 }
 

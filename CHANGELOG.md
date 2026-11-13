@@ -101,6 +101,13 @@ content.
       (-0.1124 to -0.1139, at the threshold).
 ### Upgrading
 
+- **The gLV payload moves to `grownet.glv/v3`** (Karoline, 2026-11-06: "yes to the dilution column"): each
+  `growth_rate_detail` entry gains `dilution`, the dilution rate per h a steady-state rate `r_i - D` is at,
+  null under every other derivation. grownet 0.5.0's R package reads a v3 payload with a warning that the
+  format is newer than it knows, and the extra key does not reach its rates; this release's reads v3, v2,
+  v1 and v0. `growth_rates.csv` gains a `dilution` column, appended last, empty except under the
+  steady-state derivation, so a reader of the earlier columns finds them where they were.
+
 - **The format id moves to `grownet.interaction_network/v5`** (Karoline, 2026-11-06, #305: "Is the
   measurement technique recorded as an arc attribute? If not, please add."), for one arc field,
   `technique`, and one node field, `merged_nodes`, and one value of `evidence`, `steady_state`, for the arcs
