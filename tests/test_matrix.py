@@ -129,13 +129,13 @@ def test_the_rates_file_says_what_each_median_rests_on():
     assert table[0] == ["organism", "growth_rate", "unit", "replicates", "studies", "method", "lag",
                         "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves",
                         "capacity_curves_left_out", "capacity_fall_from_peak", "capacity_medium",
-                        "capacity_source", "doubling_time", "capacity_technique"]
+                        "capacity_source", "doubling_time", "capacity_technique", "dilution"]
     # the lag names its own estimator, since it is Baranyi's whichever one produced the rate
     assert table[1] == ["A", "0.42", "1/h", "6", "S1 S2", "growth_rate:easylinear:5", "1.25", "baranyi",
-                        "2e+08", "Cells/mL", "4", "", "", "", "", "1.65", ""]
+                        "2e+08", "Cells/mL", "4", "", "", "", "", "1.65", "", ""]
     # a rate with none of the gLV quantities keeps its row and leaves them empty (#118)
     plain = list(csv.reader(io.StringIO(matrix.rates_csv({"a": {"rate": 0.42, "unit": "1/h"}}, net))))
-    assert plain[1] == ["A", "0.42", "1/h", "", "", "", "", "", "", "", "", "", "", "", "", "1.65", ""]
+    assert plain[1] == ["A", "0.42", "1/h", "", "", "", "", "", "", "", "", "", "", "", "", "1.65", "", ""]
 
     # and a capacity that rests on fewer curves than were read says how many gave none, so an empty or
     # thin capacity does not read as absence (found 2026-10-06)
@@ -811,7 +811,9 @@ def test_the_rates_file_names_the_technique_of_the_plateau():
     """#292: growth_rates.csv names the technique a capacity was measured by, in its last column."""
     rates = {"a": {**_STRAIN, "name": "A", "capacity_technique": "fc"}}
     table = list(csv.reader(io.StringIO(matrix.rates_csv(rates))))
-    assert table[0][-1] == "capacity_technique" and table[1][-1] == "fc"
+    # the technique's column, beside the dilution rate appended after it (2026-11-06), empty for a batch rate
+    at = table[0].index("capacity_technique")
+    assert table[1][at] == "fc" and table[0][-1] == "dilution" and table[1][-1] == ""
 
 
 def test_the_payload_and_the_report_name_the_technique_of_the_plateau():
