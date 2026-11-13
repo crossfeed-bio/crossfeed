@@ -797,12 +797,21 @@ class SteadyStateDeriver:
                 return None
             picked = max(ours, key=lambda s: (published.get(s, ""), s))
             rivals = [s for s in ours if per_study[s]["name"] != chosen["name"]]
-            dated = bool(published.get(picked)) and all(published.get(s, "") < published[picked] for s in rivals)
-            how = ("the name in the most recently published of them" if dated else
-                   "the name in the study whose id sorts last, as no publication date tells them apart")
-            return (f"{chosen['name']} is named differently in studies this arc rests on: "
-                    + "; ".join(f"{n} in {', '.join(ss)}" for n, ss in sorted(others.items()))
-                    + f"; it is shown by {how}")
+            undated = [s for s in rivals if not published.get(s)]
+            # a date chose only where the shown study has one and every dated rival is earlier; an undated
+            # rival is said, since "most recently published" overclaims about a study with no date (raised in
+            # review of the pooling)
+            if published.get(picked) and all(published.get(s, "") < published[picked] for s in rivals):
+                how = "the name in the most recently published of them" + (
+                    f", as {', '.join(undated)} carries no publication date" if undated else "")
+            else:
+                how = "the name in the study whose id sorts last, as no publication date tells them apart"
+            # no "; " inside: notes are written joined by "; ", and a note holding it splits into fragments
+            # (raised in review of the pooling). It opens with the key, which `say` turns into the name shown,
+            # with the key where two identities share that name, as every other line of the arc
+            return (f"{key} is named differently in studies this arc rests on, "
+                    + ", ".join(f"{n} (in {', '.join(ss)})" for n, ss in sorted(others.items()))
+                    + f", and is shown by {how}")
 
         exps = [exp for _, exp in of_exp.values()]
         groups = chemostat_groups(self.client, exps, self.spike_factor, key_of=key_of, study_of=study_of)
@@ -893,8 +902,8 @@ class SteadyStateDeriver:
                                      f"{check['predicted'][i]:.3g}, observed {check['observed'][i]:.3g}")
                     elif check.get("status"):
                         notes.append(f"{largest['name']} {check['status']}")
-                    notes = [line for (line,) in say([(n,) for n in notes], arc_studies)]
                     notes += [n for n in (other_names(j, arc_studies), other_names(i, arc_studies)) if n]
+                    notes = [line for (line,) in say([(n,) for n in notes], arc_studies)]
                     # the communities are keyed by identity (`key_of`); each is shown as one of the arc's studies
                     # gives it (`shown`)
                     source, target = shown(j, arc_studies), shown(i, arc_studies)

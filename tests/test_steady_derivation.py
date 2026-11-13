@@ -882,7 +882,7 @@ DUNCANIAE = "Faecalibacterium duncaniae A2-165"
 THETA = "Bacteroides thetaiotaomicron VPI-5482"
 
 
-def _split(a_in_s2=PRAUSNITZII, taxa=True, s1_extra=(), s2_extra=(), published=("", "")):
+def _split(a_in_s2=PRAUSNITZII, taxa=True, s1_extra=(), s2_extra=(), published=("", ""), extra_curves=None):
     """The invented design split over two studies: the pair in S1, the monocultures in S2, where the first
     organism may go by another name (`a_in_s2`). With `taxa`, every strain carries its NCBI taxon id;
     `published` is when S1 and S2 were published."""
@@ -890,7 +890,7 @@ def _split(a_in_s2=PRAUSNITZII, taxa=True, s1_extra=(), s2_extra=(), published=(
     curves = {(1, a_in_s2): _startup(0.5, 0.04, 4.0, UNIT), (2, a_in_s2): _startup(0.5, 0.04, 4.0, UNIT),
               (3, THETA): _startup(0.3, 0.04, 4.0, 2 * UNIT), (4, THETA): _startup(0.3, 0.04, 4.0, 2 * UNIT),
               **{(i, PRAUSNITZII): _startup(0.5, 0.04, 4.0, PAIR_A) for i in (5, 6)},
-              **{(i, THETA): _startup(0.3, 0.04, 4.0, PAIR_B) for i in (5, 6)}}
+              **{(i, THETA): _startup(0.3, 0.04, 4.0, PAIR_B) for i in (5, 6)}, **(extra_curves or {})}
     exps = [_chemostat("E1", "a alone", [a_in_s2], [(1, "V1"), (2, "V2")], description=RUN),
             _chemostat("E2", "b alone", [THETA], [(3, "V1"), (4, "V2")], description=RUN),
             _chemostat("E3", "a with b", [PRAUSNITZII, THETA], [(5, "V1"), (6, "V2")], description=RUN)]
@@ -937,6 +937,7 @@ def test_an_arc_says_the_other_names_its_studies_give_an_organism():
     one shown was chosen; with no dates, that the study id chose it (named silently by the study id sorting
     last, raised in review of the pooling). One name throughout says nothing."""
     for published, how in ((("2019-05-01", "2024-02-01"), "the most recently published of them"),
+                           (("", "2024-02-01"), "the most recently published of them, as S1 carries no "),
                            (("", ""), "no publication date tells them apart"),
                            (("2024-02-01", "2024-02-01"), "no publication date tells them apart")):
         client, studies = _split(a_in_s2=DUNCANIAE, published=published)
@@ -945,7 +946,21 @@ def test_an_arc_says_the_other_names_its_studies_give_an_organism():
             shown = r["source_name"] if r["source"] == "ncbi:411483" else r["target_name"]
             other = PRAUSNITZII if shown == DUNCANIAE else DUNCANIAE
             (note,) = [n for n in r["notes"] if "is named differently" in n]
-            assert note.startswith(f"{shown} is named differently") and f"{other} in S" in note and how in note
+            assert note.startswith(f"{shown} is named differently") and f"{other} (in S" in note
+            assert note.endswith(how) if how.endswith("of them") else how in note
+            # notes are written joined by "; ", so a note must not hold it (it split into three)
+            assert "; " not in note
+    # two other names in two more studies: the list is one note too
+    third = "Faecalibacterium sp. A2-165"
+    client, studies = _split(a_in_s2=DUNCANIAE, published=("2019-05-01", "2024-02-01"),
+                             extra_curves={(i, third): _startup(0.5, 0.04, 4.0, UNIT) for i in (31, 32)})
+    s3 = _chemostat("E31", "a alone again", [third], [(31, "V1"), (32, "V2")], description=RUN)
+    s3["communityStrains"][0]["NCBId"] = 411483
+    records, _ = SteadyStateDeriver(client=client).derive_many(
+        studies + [({"id": "S0", "name": "z", "publishedAt": "2010-01-01"}, [s3])])
+    on_a = [r for r in records if r["target"] == "ncbi:411483"]
+    assert on_a and all(f"{PRAUSNITZII} (in S1), {third} (in S0)" in n and "; " not in n
+                        for r in on_a for n in r["notes"] if "is named differently" in n)
     client, studies = _split()
     records, _ = SteadyStateDeriver(client=client).derive_many(studies)
     assert records and not [n for r in records for n in r["notes"] if "is named differently" in n]
