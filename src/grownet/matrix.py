@@ -1640,11 +1640,11 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
     # computed inside the loop above it described the block before the removal, so a block that dropped a
     # row carried an equilibrium of the wrong length, which named an organism it does not hold and raised
     # on the package's own README (found 2026-10-06, round 2 of the review).
-    from .steady import MAX_EQUILIBRIUM_CONDITION, condition_of, solve
+    from .steady import MAX_EQUILIBRIUM_CONDITION, condition_of, settled, solve
     for block in matrices:
         rate_of = [(rates.get(nid) or {}).get("rate") for nid in block["ids"]]
         block["equilibrium"], block["not_above_zero"], block["equilibrium_why_not"] = None, [], ""
-        block["equilibrium_condition"] = None
+        block["equilibrium_condition"], block["settled"] = None, None
         if not all(r is not None for r in rate_of):
             block["equilibrium_why_not"] = "not every organism in this matrix has a growth rate"
             continue
@@ -1667,6 +1667,10 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
         block["equilibrium"] = answer
         block["not_above_zero"] = [name for name, value
                                    in zip(block["organisms"], answer, strict=True) if value <= 0]
+        # where a simulation of it settles, which is the equilibrium above only when all of it is above
+        # zero: with an entry at or below zero the system settles on a sub-community, and the README named
+        # every such organism as lost when the state it settles in keeps some of them (2026-11-13)
+        block["settled"] = settled(block["matrix"], rate_of)
     # the cells the matrices hold: a pair left at 0, or in no matrix, has no cell to describe, and was
     # listed as one taken from the ratio, from merged arcs, or from a comparison where one side did not
     # grow (found in review; #211 item 2 fixed the last for organisms in no matrix only)
@@ -1764,6 +1768,35 @@ def _rate_method_lines(got: dict, derivation: str = "replicate", rates: dict | N
     return lines
 
 
+def _settled_lines(block: dict, rates: dict) -> list:
+    """Where a matrix settles when the solution of `A x = -r` with every organism present is not that state:
+    the stable state of `steady.settled`, the organisms it loses and their rates there, and the full
+    solution after it as the reason the reader's own `solve(A, -r)` differs."""
+    names, where = block["organisms"], block.get("settled") or {}
+    units = {(rates.get(nid) or {}).get("unit", RATE_UNIT) for nid in block["ids"]}
+    per = units.pop() if len(units) == 1 else "in the unit of its growth rate"
+    interior = ", ".join(f"{name} {value:.4g}" for name, value
+                         in zip(names, block["equilibrium"], strict=True))
+    if where.get("state") is None:
+        out = ["      where it settles: NOT FOUND, because " + (where.get("why_not") or "it was not searched")
+               + "."]
+    else:
+        kept = [names[i] for i in where["kept"]]
+        out = [f"      where it settles (in {block['abundance_unit']}): "
+               + (", ".join(f"{names[i]} {where['state'][i]:.4g}" for i in where["kept"])
+                  if kept else "every organism lost")
+               + (", with " + ", ".join(names[i] for i in where["lost"]) + " lost" if kept else ""),
+               "          A simulation settles there: the organisms it keeps satisfy A x = -r, and each one",
+               "          it loses shrinks if a few cells are added ("
+               + ", ".join(f"{names[i]} at {where['invasion'][i]:.2g} {per}"
+                           for i in where["lost"]) + ")."]
+    if block.get("not_above_zero"):
+        out += ["          The solution of A x = -r with every organism present, " + interior + ",",
+                "          puts " + ", ".join(block["not_above_zero"]) + " at or below zero, so it is not "
+                "a state of this matrix."]
+    return out
+
+
 def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
     """What a reader has to know before feeding the converted files to a simulator (#119)."""
     meta = net.meta
@@ -1798,7 +1831,8 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "      limits itself, which these measurements then say, rather than a convention. Scaling the",
         "      cells would hide that rather than settle it; the equilibrium of the fit is the solution of",
         "      A x = -r, and a negative entry there means this fit has no steady state with every",
-        "      organism above zero. A simulation can still settle with fewer of them.",
+        "      organism above zero. A simulation can still settle with fewer of them, and MATRICES below",
+        "      names the state it settles in and the organisms it loses.",
         # the diagonal in the derivation's own words too: it was unbranched and described the comparison's
         # route, so the default's README said K_i is a plateau the curves reached when on that path A_ii
         # is what the fit produced and K is derived from it (#155 item 11)
@@ -1833,12 +1867,8 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
             lines.append("      where it settles: NOT COMPUTED. "
                          + (block.get("equilibrium_why_not")
                             or "an organism here has no rate"))
-        elif block.get("not_above_zero"):
-            lines.append("      where it settles: NOWHERE WITH EVERY ORGANISM ABOVE ZERO. The solution of "
-                         "A x = -r puts")
-            lines.append("          " + ", ".join(block["not_above_zero"]) + " at or below zero, so a "
-                         "simulation of this matrix")
-            lines.append("          settles with fewer organisms than it holds, or grows without bound.")
+        elif block.get("not_above_zero") or (block.get("settled") or {}).get("state") is None:
+            lines += _settled_lines(block, rates)
         else:
             condition = block.get("equilibrium_condition")
             lines.append("      where it settles (the solution of A x = -r, in "
@@ -1991,8 +2021,9 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
                       "media": list(block["media"]), "cells": block["cells"], "file": block["file"],
                       # the cells whose arcs record no medium, which `media` cannot say (found in review)
                       "cells_with_unrecorded_medium": block.get("unrecorded", 0),
-                      # where this matrix settles, so a reader does not have to solve it to find out
-                      # that it settles nowhere with every organism above zero
+                      # the solution of A x = -r with every organism present, which is where this
+                      # matrix settles when none of it is at or below zero; the README names the state
+                      # it settles in otherwise (`steady.settled`)
                       "equilibrium": (list(block["equilibrium"])
                                       if block.get("equilibrium") is not None else None),
                       "equilibrium_condition": block.get("equilibrium_condition"),

@@ -111,9 +111,12 @@ def test_the_prediction_is_the_solution_of_a_x_equals_minus_r_minus_d():
     # A on its own: the sub-community of one organism the chemostat would hold
     assert steady.predicted(block, RATES, 0.0, [A])["values"][A] == pytest.approx(1.0e9)
     assert steady.predicted(block, RATES, 0.040, [A])["values"][A] == pytest.approx(9.0e8)
-    # and a dilution rate above the growth rate washes the organism out, which is not a positive state
+    # and a dilution rate above the growth rate washes the organism out: it is lost, at 0, and a few cells
+    # of it shrink at r - D = 0.4 - 0.5 = -0.1 /h, while A x = -(r - D) alone gives -2.5e8, which is no state
     washed = steady.predicted(block, RATES, 0.5, [A])
-    assert washed["values"][A] < 0 and "not positive" in washed["notes"][A]
+    assert washed["values"][A] == 0.0 and washed["lost"] == [A]
+    assert "cannot grow back in" in washed["notes"][A] and "grow at -0.1 /h" in washed["notes"][A]
+    assert washed["interior"][A] == pytest.approx(-2.5e8)
 
 
 def test_the_check_reports_the_ratio_per_organism():
@@ -132,19 +135,33 @@ def test_the_check_reports_the_ratio_per_organism():
 
 
 def test_an_organism_the_fit_washes_out_and_the_chemostat_lost_too_agrees():
-    """SMGDB00000011's Faecalibacterium duncaniae sits at 0 in every vessel. A fit that sends it to zero
-    or below agrees in direction, and the check says so rather than printing a ratio of infinity."""
+    """SMGDB00000011's Faecalibacterium duncaniae sits at 0 in every vessel. A fit that loses it agrees in
+    direction, and the check says so rather than printing a ratio of infinity. Here the dilution, 0.5 /h,
+    is above both rates (A 0.4, B 0.2), so the package settles with neither."""
     client = _client({(1, A): _flat(1.0, start=1.0e7),      # A fell to about nothing
                       (1, B): _flat(3.0e8)})                # while B held 3e8, so A is 3e-9 of the run
-    exp = _chemostat("E1", "no perturbations", [A, B], [(1, "V1")])
+    exp = _chemostat("E1", "no perturbations", [A, B], [(1, "V1")], dilution="0.5")
     seen = steady.observed(client, [exp])
+    (check,) = steady.check(_package(), RATES, seen)
+    row = next(r for r in check["rows"] if r["organism"] == A)
+    assert row["ratio"] is None and "washes this organism out and the chemostat did too" in row["note"]
+    held = next(r for r in check["rows"] if r["organism"] == B)
+    assert held["predicted"] == 0.0 and "washes this organism out while the chemostat holds it" in held["note"]
+
+
+def test_a_package_with_no_bounded_state_is_not_scored():
+    """A positive diagonal (A limits nothing, it promotes itself) has no stable state at all: A alone has no
+    positive state at A_AA x = -(0.4 - 0.04), B alone at 9e8... is invaded by A, and nothing settles. It used
+    to be scored as A washing out, which is the opposite of what a simulation of it does."""
+    client = _client({(1, A): _flat(3.0e8), (1, B): _flat(3.0e8)})
+    seen = steady.observed(client, [_chemostat("E1", "no perturbations", [A, B], [(1, "V1")])])
     got = _package()
     block = got["matrices"][0]
     here = block["organisms"].index(A)
-    block["matrix"][here][here] = 4.0e-10                   # a positive diagonal: no bounded state
+    block["matrix"][here][here] = 4.0e-10
     (check,) = steady.check(got, RATES, seen)
-    row = next(r for r in check["rows"] if r["organism"] == A)
-    assert row["ratio"] is None and "washes this organism out and the chemostat did too" in row["note"]
+    assert not check["used"] and "no stable steady state" in check["why_not"]
+    assert "oscillates or grows without bound" in steady.as_text([check])
 
 
 def test_nothing_is_scored_across_abundance_units_or_media():
@@ -485,14 +502,16 @@ def test_a_matrix_of_no_cell_whose_arcs_record_no_medium_says_so():
 
 def test_a_matrix_with_a_cell_recording_no_medium_is_scored_with_a_note():
     """Round 23 of the review: a matrix of a WC cell and a cell recording no medium was scored against a WC
-    chemostat with no note, so the unrecorded cell was taken as measured in WC."""
+    chemostat with no note, so the unrecorded cell was taken as measured in WC. The two effects are
+    inhibitions, (0.3 - 0.4) / 2e8 = -5e-10 each: two facilitations stronger than each organism's own
+    limitation have no bounded state, and such a package is not scored at all (2026-11-13)."""
     WC = "Wilkins-Chalgren Anaerobe Broth (WC)"
 
     def arc(src, tgt, medium):
         return {"source": _gs(src), "target": _gs(tgt), "source_name": src, "target_name": tgt,
-                "effect": "facilitation", "strength": 0.5, "status": "present", "outcome": "quantified",
+                "effect": "inhibition", "strength": -0.5, "status": "present", "outcome": "quantified",
                 "study_id": "S1", "metric": "growth_rate:easylinear:5", "evidence": "biculture",
-                "medium": medium, "partner_abundance": 2.0e8, "metric_with": 0.6, "metric_without": 0.4,
+                "medium": medium, "partner_abundance": 2.0e8, "metric_with": 0.3, "metric_without": 0.4,
                 "partner_abundance_unit": "Cells/mL", "partner_abundance_n": 3}
     got = matrix.coefficients(records_to_network([arc(B, A, WC), arc(A, B, None)]), RATES)
     (block,) = got["matrices"]
@@ -513,3 +532,104 @@ def test_studies_not_read_are_named_beside_the_chemostats_that_were():
     assert "A8 control (SMGDB00000005): not scored, because this run measures OD." in text
     assert "1 study(ies) the search named could not be read, so any chemostat of theirs is not here: " \
            "SMGDB00000009 (HTTP 503)." in text
+
+
+# ---- where the package settles when the full solution is not a state (2026-11-13) ----------------
+
+# Study 7's batch package for three gut organisms, as its report printed it on 2026-11-13 (rows affected,
+# columns actor, order BT, BH, RI; rates in 1/h). The check called BH and RI washed out at D = 0.04 because
+# the solution of A x = -(r - D) with all three present puts both below zero.
+BT, BH, RI = "BT", "BH", "RI"
+STUDY7 = [[-8.543e-10, 0.0, -5.572e-10],
+          [-4.27e-10, -2.351e-10, -2.086e-10],
+          [0.0, 2.198e-09, -7.502e-10]]
+STUDY7_RATES = {"bt": {"rate": 0.7618}, "bh": {"rate": 0.2763}, "ri": {"rate": 0.5806}}
+
+
+def _study7(names=(BT, BH, RI)):
+    keep = [(BT, BH, RI).index(name) for name in names]
+    return {"organisms": list(names), "ids": [name.lower() for name in names], "abundance_unit": "Cells/mL",
+            "media": ["Wilkins-Chalgren Anaerobe Broth (WC)"], "cells": 5,
+            "matrix": [[STUDY7[i][j] for j in keep] for i in keep]}
+
+
+def _seen_study7(values):
+    return [{"name": "A8 control", "study_id": "S5", "experiment": "E8", "medium":
+             "Wilkins-Chalgren Anaerobe Broth", "dilution": 0.04, "vessels": 1, "window": (300.0, 400.0),
+             "why_not": "", "unit": "Cells/mL", "organisms": {k: {"value": v} for k, v in values.items()}}]
+
+
+def test_the_package_settles_on_the_boundary_state_no_lost_organism_can_invade():
+    """By hand, at D = 0.04: g = r - D = (0.7218, 0.2363, 0.5406).
+    With BH absent, RI's row is -7.502e-10 x_RI = -0.5406, so x_RI = 7.206e8, and BT's row is
+    -8.543e-10 x_BT - 5.572e-10 * 7.206e8 = -0.7218, so x_BT = (0.7218 - 0.4015) / 8.543e-10 = 3.749e8.
+    BH's rate there is 0.2363 - 4.27e-10 * 3.749e8 - 2.086e-10 * 7.206e8 = 0.2363 - 0.1601 - 0.1503 =
+    -0.0741 /h, so it cannot grow back in. The Jacobian of BT and RI there is triangular, with eigenvalues
+    3.749e8 * -8.543e-10 = -0.320 and 7.206e8 * -7.502e-10 = -0.541: stable. So BT and RI persist and only BH
+    is lost, while the solution with all three present puts BH at -2.45e9 and RI at -6.45e9."""
+    where = steady.settled(STUDY7, [r - 0.04 for r in (0.7618, 0.2763, 0.5806)])
+    assert where["why_not"] == "" and where["kept"] == [0, 2] and where["lost"] == [1]
+    assert where["state"][0] == pytest.approx(3.749e8, rel=1e-3)
+    assert where["state"][1] == 0.0
+    assert where["state"][2] == pytest.approx(7.206e8, rel=1e-3)
+    assert where["invasion"][1] == pytest.approx(-0.0741, abs=1e-4)
+    assert len(where["states"]) == 1
+
+    got = steady.predicted(_study7(), STUDY7_RATES, 0.04)
+    assert got["lost"] == [BH]
+    assert got["values"][RI] == pytest.approx(7.206e8, rel=1e-3)
+    assert got["interior"][BH] == pytest.approx(-2.446e9, rel=1e-3)
+    assert got["interior"][RI] == pytest.approx(-6.446e9, rel=1e-3)
+
+
+def test_the_check_names_only_the_organism_the_package_loses():
+    """The same package against a chemostat holding all three (observed numbers made up): RI gets a ratio,
+    7.206e8 / 4e8 = 1.80, and only BH is called washed out by the fit. The full solution is printed as the
+    reason solve(A, -(r - D)) disagrees, not as the prediction."""
+    package = {"matrices": [_study7()]}
+    (check,) = steady.check(package, STUDY7_RATES, _seen_study7({BT: 2.0e8, BH: 1.0e8, RI: 4.0e8}))
+    assert check["used"]
+    rows = {row["organism"]: row for row in check["rows"]}
+    assert rows[RI]["ratio"] == pytest.approx(1.8015, rel=1e-3) and not rows[RI]["lost"]
+    assert rows[BT]["ratio"] == pytest.approx(1.8745, rel=1e-3)
+    assert rows[BH]["lost"] and rows[BH]["predicted"] == 0.0
+    assert "washes this organism out while the chemostat holds it" in rows[BH]["note"]
+    assert "cannot grow back in where the package settles, with BT, RI" in rows[BH]["note"]
+    assert "grow at -0.074 /h" in rows[BH]["note"]
+    text = steady.as_text([check])
+    assert "the package settles with BT, RI, and loses BH" in text
+    assert "RI: predicted 7.206e+08, observed 4e+08, 1.802x observed" in text
+    assert "puts BH at -2.446e+09, RI at -6.446e+09, which is no state" in text
+    assert "RI: predicted" in text and "RI: predicted -" not in text
+
+
+def test_a_feasible_full_solution_is_where_it_settles_and_nothing_changes():
+    """BT and RI alone: the full solution of A x = -(r - D) is (3.749e8, 7.206e8), the same numbers as above,
+    both above zero and stable, so the search returns exactly that solution, nothing is lost, and the check
+    prints the ratios with no line about a lost organism or the full solution."""
+    block = _study7((BT, RI))
+    rhs = [-(0.7618 - 0.04), -(0.5806 - 0.04)]
+    full = steady.solve([row[:] for row in block["matrix"]], rhs)
+    where = steady.settled(block["matrix"], [-value for value in rhs])
+    assert where["lost"] == [] and where["state"] == pytest.approx(full, rel=1e-12)
+    (check,) = steady.check({"matrices": [block]}, STUDY7_RATES, _seen_study7({BT: 2.0e8, RI: 4.0e8}))
+    assert [row["ratio"] for row in check["rows"]] == pytest.approx([1.8745, 1.8015], rel=1e-3)
+    text = steady.as_text([check])
+    assert "and loses" not in text and "every organism present" not in text and "washes" not in text
+
+
+def test_two_stable_states_are_named_rather_than_one_chosen():
+    """Two competitors each inhibiting the other twice as hard as itself: A = [[-1, -2], [-2, -1]], g = (1, 1).
+    Each alone settles at 1 and the other then grows at 1 - 2 = -1, so both are stable; the interior state
+    (1/3, 1/3) has eigenvalues (1/3)(-1 +/- 2), one positive. Where it settles depends on the start."""
+    where = steady.settled([[-1.0, -2.0], [-2.0, -1.0]], [1.0, 1.0])
+    assert where["state"] is None and len(where["states"]) == 2
+    assert "2 stable steady states" in where["why_not"] and "where it starts" in where["why_not"]
+
+
+def test_mutual_facilitation_stronger_than_self_limitation_has_no_state():
+    """A = [[-1, 2], [2, -1]], g = (1, 1): either alone settles at 1 and the other then grows at 1 + 2 = 3,
+    and the full solution is (-1, -1), so nothing settles: the system grows without bound."""
+    where = steady.settled([[-1.0, 2.0], [2.0, -1.0]], [1.0, 1.0])
+    assert where["state"] is None and where["states"] == []
+    assert "no stable steady state" in where["why_not"]

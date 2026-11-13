@@ -15,6 +15,20 @@ Rules for this file:
 
 ## Current state
 
+- 2026-11-13: **where a gLV package settles is `steady.settled`, not the solution with everyone present.**
+  The check and the README solved `A x = -(r - D)` with all organisms and called every negative entry washed
+  out. Study 7's package (BT, BH, RI) at D 0.04 puts BH and RI below zero there, while the system settles,
+  stably, at BT 3.75e8 and RI 7.21e8 with only BH lost; a deterministic miaSim run from study 5's A8
+  inoculum reaches the same state. `settled` tries every sub-community (2^n, capped at
+  `MAX_SETTLED` = 12): positive on its own system, no outsider with a positive rate there, and stable by
+  Routh-Hurwitz on `diag(x) A_SS` (standard library only, so no eigenvalue routine). One such state is the
+  prediction; two (bistability) or none (unbounded growth, oscillation) are said and the chemostat is not
+  scored. The full solution survives only as supporting text and in the payload's `equilibrium` and
+  `not_above_zero`, whose meaning did not change, so the format id did not move. Adding the settled state to
+  the payload would be a format change and is not done. A side effect worth knowing: test fixtures with
+  mutual facilitation stronger than self-limitation used to be scored (with negative predictions) and now
+  are not, because they have no bounded state.
+
 - 2026-10-11 (#255 item 2): **a derived quantity is collected where it is measured, not rebuilt from what
   survived.** `_widen_by_rate_selection` rebuilt its rate table from `pending`, the arcs that became
   records, keyed by `id(got)`. Both are wrong for the quantity: the spread is how much stage 1 moves when

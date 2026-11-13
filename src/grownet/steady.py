@@ -10,7 +10,8 @@ test of it. A continuous culture holds
     dx_i/dt = x_i ( r_i + sum_j A_ij x_j ) - D x_i
 
 so at steady state `A x* = -(r - D)`, with D the dilution rate mGrowthDB records on the compartment. This
-module reads the observed steady states, solves that system for the package's own numbers, and reports
+module reads the observed steady states, finds the stable state the package's own numbers settle in
+(`settled`: the organisms it keeps satisfy that system, and none it loses can grow back in), and reports
 both with their ratio. It only reports: no coefficient, rate or network changes because of a check.
 
 The rules it applies, stated once:
@@ -20,7 +21,7 @@ The rules it applies, stated once:
   * **a perturbed run is named**, not used, since what Karoline asked for is the unperturbed state, and a
     run whose records say neither way is scored with that said;
   * **nothing is compared across abundance units or media**, as nothing is converted anywhere else;
-  * **an organism the fit gives no positive state**, observed at or near zero, agrees in direction, and
+  * **an organism the package loses**, observed at or near zero, agrees in direction, and
     the check says so rather than printing a ratio.
 """
 from __future__ import annotations
@@ -301,12 +302,123 @@ def solve(rows: list, rhs: list):
     return [work[i][n] / work[i][i] for i in range(n)]
 
 
-def predicted(block: dict, rates: dict, dilution: float, organisms: list = None) -> dict:
-    """The steady state the package predicts: the solution of `A x = -(r - D)`.
+# How many organisms `settled` searches by trying every sub-community: 2^12 = 4096 small solves take about a
+# second in pure Python, and a chemostat or a package matrix holds far fewer organisms than that.
+MAX_SETTLED = 12
 
-    {"values": {organism: x}, "notes": {organism: why it is not a state}, "why_not": ""}. `organisms`
-    restricts the system to a sub-community, which is what a chemostat holding some of the matrix's
-    organisms needs; the others are reported rather than silently set to anything.
+
+def _determinant(rows: list) -> float:
+    """The determinant by Gaussian elimination with partial pivoting."""
+    n, work, sign = len(rows), [list(row) for row in rows], 1.0
+    for col in range(n):
+        pivot = max(range(col, n), key=lambda r: abs(work[r][col]))
+        if work[pivot][col] == 0.0:
+            return 0.0
+        if pivot != col:
+            work[col], work[pivot], sign = work[pivot], work[col], -sign
+        for r in range(col + 1, n):
+            factor = work[r][col] / work[col][col]
+            for k in range(col, n):
+                work[r][k] -= factor * work[col][k]
+    product = sign
+    for i in range(n):
+        product *= work[i][i]
+    return product
+
+
+def _hurwitz_stable(rows: list) -> bool:
+    """Whether every eigenvalue of `rows` has a negative real part, by the Routh-Hurwitz criterion.
+
+    The characteristic polynomial comes from the Faddeev-LeVerrier recursion, and the polynomial is stable
+    exactly when every leading principal minor of its Hurwitz matrix is positive. Standard library only, and
+    the matrices are as small as `MAX_SETTLED` allows.
+    """
+    n = len(rows)
+    if n == 0:
+        return True
+    # p(l) = l^n + a[1] l^(n-1) + ... + a[n]
+    a, power = [1.0] + [0.0] * n, [[0.0] * n for _ in range(n)]
+    for k in range(1, n + 1):
+        # power = rows @ (power + a[k-1] I), then a[k] = -trace(power) / k
+        shifted = [[power[i][j] + (a[k - 1] if i == j else 0.0) for j in range(n)] for i in range(n)]
+        power = [[sum(rows[i][m] * shifted[m][j] for m in range(n)) for j in range(n)] for i in range(n)]
+        a[k] = -sum(power[i][i] for i in range(n)) / k
+
+    def coefficient(index):
+        return a[index] if 0 <= index <= n else 0.0
+    hurwitz = [[coefficient(2 * (j + 1) - (i + 1)) for j in range(n)] for i in range(n)]
+    return all(_determinant([row[:size] for row in hurwitz[:size]]) > 0 for size in range(1, n + 1))
+
+
+def settled(matrix: list, growth: list) -> dict:
+    """Where dx_i/dt = x_i (g_i + sum_j A_ij x_j) settles: the state a simulation ends in.
+
+    The solution of `A x = -g` with every organism present is only that state when all of it is above zero.
+    When it is not, the system settles on a sub-community, and solving with everyone present says nothing
+    about which: on study 7's package at a dilution of 0.04 /h the full solution puts two of its three
+    organisms below zero, while the system settles with one of those two present (2026-11-13). So every
+    sub-community S is tried, and a state is one where
+      * every organism of S is above zero at the solution of `A_SS x_S = -g_S`,
+      * no organism outside S can grow back in: its rate there, g_j + sum_k A_jk x_k, is not positive, and
+      * it is stable: every eigenvalue of diag(x_S) A_SS has a negative real part.
+    Those are the eigenvalues of the whole Jacobian at that state together with the outsiders' rates.
+
+    {"state": [x_i] or None, "kept": [i], "lost": [i], "invasion": {i: rate of a lost organism},
+     "states": every such state, "why_not": ""}. Exactly one state gives `state`; none, or several (where
+    it settles then depends on where it starts), or a system too large to search gives `why_not`.
+    """
+    n = len(growth)
+    out = {"state": None, "kept": [], "lost": [], "invasion": {}, "states": [], "why_not": ""}
+    if n > MAX_SETTLED:
+        out["why_not"] = (f"it holds {n} organisms, and this tool finds where a system settles by trying "
+                          f"every sub-community of at most {MAX_SETTLED}")
+        return out
+    scale = max((abs(g) for g in growth), default=0.0) or 1.0
+    found = []
+    for mask in range(1 << n):
+        kept = [i for i in range(n) if mask >> i & 1]
+        x = [0.0] * n
+        if kept:
+            part = solve([[matrix[i][j] for j in kept] for i in kept], [-growth[i] for i in kept])
+            if part is None or any(value <= 0 for value in part):
+                continue
+            for i, value in zip(kept, part, strict=True):
+                x[i] = value
+        invasion = {j: growth[j] + sum(matrix[j][k] * x[k] for k in kept) for j in range(n) if j not in kept}
+        # an outsider at a rate of 0 to rounding grows neither way; 1e-9 of the largest rate is rounding
+        if any(rate > 1e-9 * scale for rate in invasion.values()):
+            continue
+        if not _hurwitz_stable([[x[i] * matrix[i][j] for j in kept] for i in kept]):
+            continue
+        found.append({"state": x, "kept": kept, "lost": [j for j in range(n) if j not in kept],
+                      "invasion": invasion})
+    out["states"] = found
+    if len(found) == 1:
+        out.update(found[0])
+        condition = condition_of([[matrix[i][j] for j in found[0]["kept"]] for i in found[0]["kept"]])
+        if found[0]["kept"] and condition > MAX_EQUILIBRIUM_CONDITION:
+            out["state"] = None
+            out["why_not"] = (f"the sub-community it settles on is too ill-conditioned to solve: its condition "
+                              f"number is {condition:.3g}, above the {MAX_EQUILIBRIUM_CONDITION:.0e} this tool "
+                              "will stand behind")
+    elif found:
+        out["why_not"] = (f"it has {len(found)} stable steady states, so where it settles depends on where it "
+                          "starts")
+    else:
+        out["why_not"] = ("it has no stable steady state: a simulation of it oscillates or grows without "
+                          "bound")
+    return out
+
+
+def predicted(block: dict, rates: dict, dilution: float, organisms: list = None) -> dict:
+    """The steady state the package predicts: where `dx/dt = x (r - D + A x)` settles (`settled`).
+
+    {"values": {organism: x}, "notes": {organism: why it is lost}, "lost": [organisms],
+     "interior": {organism: x}, "why_not": ""}. An organism the package loses has the value 0, and its
+    note says what it cannot grow back into. `interior` is the solution of `A x = -(r - D)` with every
+    organism present, which is only the state when nothing is lost. `organisms` restricts the system to a
+    sub-community, which is what a chemostat holding some of the matrix's organisms needs; the others are
+    reported rather than silently set to anything.
     """
     names, ids = block["organisms"], block["ids"]
     keep = [i for i, name in enumerate(names) if organisms is None or name in organisms]
@@ -317,20 +429,26 @@ def predicted(block: dict, rates: dict, dilution: float, organisms: list = None)
     for i in keep:
         rate = rates.get(ids[i]) or {}
         rhs.append(-((rate.get("rate") or 0.0) - dilution))
-    answer = solve(rows, rhs)
-    if answer is None:
-        return {"values": {}, "notes": {},
-                "why_not": "the matrix of this sub-community is singular, so it has no single steady state"}
-    values = {names[i]: answer[k] for k, i in enumerate(keep)}
-    notes = {name: "not positive, so the fit gives this organism no steady state above zero"
-             for name, value in values.items() if value <= 0}
+    answer = solve([row[:] for row in rows], rhs)
+    interior = {names[i]: answer[k] for k, i in enumerate(keep)} if answer is not None else {}
+    where = settled(rows, [-value for value in rhs])
+    if where["state"] is None:
+        return {"values": {}, "notes": {}, "lost": [], "interior": interior,
+                "why_not": f"the package has no single state to compare here: {where['why_not']}"}
+    values = {names[i]: where["state"][k] for k, i in enumerate(keep)}
+    lost = [names[keep[k]] for k in where["lost"]]
+    held = ", ".join(names[keep[k]] for k in where["kept"]) or "no organism"
+    notes = {names[keep[k]]: (f"it cannot grow back in where the package settles, with {held}: a few cells "
+                              f"of it added there grow at {where['invasion'][k]:.2g} /h")
+             for k in where["lost"]}
     # the same prediction with every off-diagonal set to 0, which is each organism on its own at
     # -r_i / A_ii. It says how much of the prediction the fitted interactions are responsible for, and
     # without it a check of the whole package reads as a check of the interactions (found 2026-10-06)
     alone = solve([[rows[a][b] if a == b else 0.0 for b in range(len(keep))] for a in range(len(keep))],
                   list(rhs))
     without = {names[i]: alone[k] for k, i in enumerate(keep)} if alone is not None else {}
-    return {"values": values, "notes": notes, "why_not": "", "without_interactions": without}
+    return {"values": values, "notes": notes, "lost": lost, "interior": interior, "why_not": "",
+            "without_interactions": without}
 
 
 def _environment(block: dict) -> list:
@@ -425,12 +543,13 @@ def check(coefficients: dict, rates: dict, seen: list) -> list:
         for name in shared:
             value, seen_here = got["values"][name], entry["organisms"][name]["value"]
             row = {"organism": name, "predicted": value, "observed": seen_here, "ratio": None, "note": "",
-                   "without_interactions": (got.get("without_interactions") or {}).get(name)}
+                   "without_interactions": (got.get("without_interactions") or {}).get(name),
+                   "lost": name in got["lost"]}
             gone = _washed_out(seen_here, biggest)
-            if value <= 0 and gone:
+            if name in got["lost"] and gone:
                 row["note"] = ("the fit washes this organism out and the chemostat did too, so the two "
                                "agree in direction")
-            elif value <= 0:
+            elif name in got["lost"]:
                 row["note"] = ("the fit washes this organism out while the chemostat holds it: "
                                + got["notes"].get(name, ""))
             elif gone:
@@ -439,6 +558,10 @@ def check(coefficients: dict, rates: dict, seen: list) -> list:
                 row["ratio"] = value / seen_here
             result["rows"].append(row)
         result["used"] = True
+        # the solution with every organism present, named only where it is not the state: a reader who
+        # solves A x = -(r - D) in R finds these numbers, and is told why they are not the prediction
+        result["interior_not_above_zero"] = {name: value for name, value in (got.get("interior") or {}).items()
+                                             if got["lost"] and value <= 0}
         result["left_out"] = [name for name in entry["organisms"] if name not in shared]
         if not _environment(block):
             # what records no medium: this matrix's effects, or the arcs between its organisms when it holds
@@ -485,8 +608,9 @@ def as_text(checks: list) -> str:
                 + (" in the studies that could be read" if unread else "")
                 + ", so there is nothing to score this package against.\n" + skipped)
     lines = ["steady-state check: what this package predicts for a chemostat, against what the chemostat",
-             "held. A continuous culture satisfies A x = -(r - D) at steady state, so these numbers come",
-             "from the package alone and the observations were never used to make it.", ""]
+             "held. The prediction is the stable state dx/dt = x (r - D + A x) settles in: the organisms it",
+             "keeps satisfy A x = -(r - D), and none it loses can grow back in. These numbers come from the",
+             "package alone and the observations were never used to make it.", ""]
     for check_one in checks:
         head = f"  {check_one['name']} ({check_one['study_id'] or check_one['experiment']})"
         if not check_one["used"]:
@@ -499,6 +623,16 @@ def as_text(checks: list) -> str:
                          "(grownet.media.WORD_ALIASES and NAME_ALIASES, curated by hand)")
         if check_one.get("note"):
             lines.append(f"      note: {check_one['note']}")
+        lost = [row["organism"] for row in check_one["rows"] if row.get("lost")]
+        if lost:
+            kept = [row["organism"] for row in check_one["rows"] if row["organism"] not in lost]
+            lines.append(f"      the package settles with {', '.join(kept) or 'no organism'}, and loses "
+                         f"{', '.join(lost)}")
+        below = check_one.get("interior_not_above_zero") or {}
+        if below:
+            lines.append("      (solving A x = -(r - D) with every organism present puts "
+                         + ", ".join(f"{name} at {_number(value)}" for name, value in below.items())
+                         + ", which is no state: the system settles with fewer organisms)")
         for row in check_one["rows"]:
             if row["ratio"] is not None:
                 alone = row.get("without_interactions")
