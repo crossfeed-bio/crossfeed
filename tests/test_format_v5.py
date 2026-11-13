@@ -183,3 +183,24 @@ def test_a_genus_node_lists_its_strains_from_every_arc_of_the_genus():
     assert len(net.edges) == 2
     assert net.nodes["Alpha"].merged_nodes == ("ncbi:1", "ncbi:3")
     assert (net.nodes["Beta"].merged_nodes, net.nodes["Gamma"].merged_nodes) == (("ncbi:2",), ("ncbi:4",))
+
+
+def test_a_steady_state_arc_records_how_its_runs_were_measured():
+    """The steady-state derivation's arcs carry the technique of their chemostat group, as every arc of
+    /v5 does: they had an empty one (found in review). The invented runs are all qPCR."""
+    from test_steady_derivation import _derive
+    records, _ = _derive()
+    assert records and {r["technique"] for r in records} == {"qpcr"}
+
+
+def test_a_steady_state_arc_records_its_own_target_s_technique():
+    """a read by qPCR and b by flow cytometry throughout: one fit, and each arc records how its TARGET was
+    measured, as every arc of /v5 does, not the group's set of techniques."""
+    from test_subcommunity_inputs import _retag, _runs
+
+    from grownet.subcommunity import SteadyStateDeriver
+    client, exps = _runs()
+    _retag(client, "b", "fc")
+    records, _ = SteadyStateDeriver(client=client).derive({"id": "S1", "name": "x"}, exps)
+    by_target = {r["target_name"]: r["technique"] for r in records}
+    assert by_target == {"a": "qpcr", "b": "fc"}

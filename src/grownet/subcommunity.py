@@ -400,7 +400,7 @@ def _still_changing(reps, washed) -> list:
     return out
 
 
-def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
+def chemostat_groups(client, exps: list, spike_factor: float = None, key_of=None, study_of=None) -> list:
     """The continuous cultures among `exps` as estimator input, one group per medium, abundance unit and
     dilution rate (decision 1 of #310): {"medium", "unit", "dilution", "communities", "scales", "left_out"}.
 
@@ -409,6 +409,10 @@ def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
     unperturbed and records its dilution rate; a member below the check's wash-out share is 0; a run with an
     inoculated member that could not be read is left out, since its effect on the others is unknown. The
     scales come from the monoculture runs' start-up (`row_scale`), the median over their vessels.
+
+    `key_of(exp, name)` is what an organism is keyed by in the communities and the scales, its name unless
+    given: the derivation keys it by its identity in its own study, so runs of several studies pool by
+    identity (Karoline, 2026-11-11). `study_of(exp)` names each community's study, for the reasons.
     """
     from .adapter import replicates_for_experiment
     from .derive import media_identity
@@ -458,24 +462,27 @@ def chemostat_groups(client, exps: list, spike_factor: float = None) -> list:
             # one it gave wrong coefficients with nothing flagged (found in a fourth review)
             group["left_out"].append((name, "not at a steady state: " + "; ".join(moving)))
             continue
+        def k(m, exp=exp):
+            return key_of(exp, m) if key_of else m
         indices = sorted({i for o in entry["organisms"].values() for i in o.get("per_vessel", {})})
-        vessels = [{m: (0.0 if m in washed else o["per_vessel"][i])
+        vessels = [{k(m): (0.0 if m in washed else o["per_vessel"][i])
                     for m, o in entry["organisms"].items() if i in o.get("per_vessel", {})} for i in indices]
         # the mean over vessels, the statistic the bootstrap over vessels draws (`_resample`); the chemostat
         # check's median is the same for two vessels and near it for three
-        abundance = {m: (0.0 if m in washed else
+        abundance = {k(m): (0.0 if m in washed else
                          statistics.fmean(o["per_vessel"].values()) if o.get("per_vessel") else o["value"])
                      for m, o in entry["organisms"].items()}
         taken = {c["name"] for c in group["communities"]}
         group["communities"].append({"name": name if name not in taken else f"{name} ({entry['experiment']})",
                                      "abundance": abundance, "vessels": vessels,
                                      "experiment": entry["experiment"],
-                                     "techniques": {m: "; ".join(sorted(t)) for m, t in techniques.items()}})
+                                     "study": study_of(exp) if study_of else "",
+                                     "techniques": {k(m): "; ".join(sorted(t)) for m, t in techniques.items()}})
         if len(members) == 1:
             period = batch_period(exp)
             # every monoculture run's vessels are gathered first: the scale was set from each run in turn, so
             # with two runs of one organism it was the last one read (found in a fifth review)
-            group.setdefault("readings", {}).setdefault(members[0], []).extend(
+            group.setdefault("readings", {}).setdefault(k(members[0]), []).extend(
                 row_scale(c, entry["dilution"], period) for rep in reps if (c := rep.curve(members[0])) is not None)
     for group in groups.values():
         for organism, got in (group.pop("readings", None) or {}).items():
@@ -533,13 +540,22 @@ def _by_technique(groups) -> list:
                 tally[1] += len(c.get("vessels") or [None])
         chosen = {m: min(ts, key=lambda t: (-ts[t][0], -ts[t][1], t)) for m, ts in runs.items()}
         final = []
+
+        def where(m, c, kept=kept, chosen=chosen):
+            # the studies whose runs set the technique kept, where they are not only this run's own: the fit
+            # spans the studies of a search, and the reason did not say a run was left out because of another
+            # study's (raised in review of the pooling)
+            studies = sorted({d.get("study") for d in kept if d.get("techniques", {}).get(m) == chosen[m]
+                              and d.get("study")})
+            return f" (in {', '.join(studies)})" if studies and studies != [c.get("study")] else ""
+
         for c in kept:
             other = sorted(m for m, t in c.get("techniques", {}).items() if t != chosen[m])
             if other:
                 left.append((c["name"], "left out: it reads " + ", ".join(
                     f"{m} by {c['techniques'][m]}, where the other runs of this medium and dilution rate read it "
-                    f"by {chosen[m]}" for m in other) + "; one technique per organism in a fit, the one most runs "
-                    "use"))
+                    f"by {chosen[m]}{where(m, c)}" for m in other) + "; one technique per organism in a fit, the "
+                    "one most runs use"))
             else:
                 final.append(c)
         techniques = {m: chosen[m] for m in sorted({m for c in final for m in c.get("techniques", {})})}
@@ -556,8 +572,8 @@ def _communities(k: int) -> str:
 
 NEEDS = ("An organism's row has one unknown for its own limitation and one per partner it met at a steady "
          "state, so it needs at least that many communities holding it: its monoculture and a pair with each "
-         "partner, or the monocultures and every community missing one member, at one medium and dilution rate "
-         "in one study.")
+         "partner, or the monocultures and every community missing one member, at one medium and dilution rate, "
+         "in any of the studies searched.")
 
 
 def _group_summary(communities: list, got: dict) -> str:
@@ -639,7 +655,8 @@ def empty_reason(skipped: list, command_line: bool = False) -> str:
 
 METHOD = ("steady state v1: at a chemostat steady state every member present satisfies 1 + sum_j B_ij N_j = 0 "
           "with B = A / (r_i - D); each row solved by least squares over every unperturbed sub-community of "
-          "one study, medium, abundance unit and dilution rate, each organism read by one technique (EPICS, Ansari "
+          "one medium composition, abundance unit and dilution rate across the studies searched, each organism "
+          "read by one technique (EPICS, Ansari "
           "et al. 2021, generalized)")
 METRIC = "steady_state:subcommunities"
 
@@ -680,8 +697,8 @@ class SteadyStateDeriver:
         "Each interaction is an effective generalized Lotka-Volterra coefficient fitted from chemostat steady "
         "states: at a steady state every organism present satisfies 1 + sum_j B_ij N_j = 0 with B = A / (r_i "
         "- D), and each organism's row is the least-squares solution over every unperturbed community of one "
-        "study, medium, abundance unit and dilution rate it was present in, each organism read by one technique "
-        "there. Effective means that an effect needing "
+        "medium composition, abundance unit and dilution rate it was present in, across the studies "
+        "searched, each organism read by one technique there. Effective means that an effect needing "
         "a third organism is folded into the pairs that carry it, so a coefficient describes the communities "
         "it was fitted from. The strength beside it is log2(1 + B_ij x_j) at the partner's abundance in the "
         "largest community holding both. An interaction is reported when |strength| is at least k standard "
@@ -704,26 +721,123 @@ class SteadyStateDeriver:
         self.draws = draws
         self.selection = selection
 
+    # A search hands every study to `derive_many` at once, so runs of several studies in one medium are fitted
+    # together (Karoline, 2026-11-06: "for the new chemostat inference mode, the medium composition has to
+    # match but other than that, I don't see why not"); `derive` is one study, for the command line's study
+    # path and `derive_interactions`.
+    pools_studies = True
+
     def derive(self, study: dict, exps: list):
+        return self.derive_many([(study, exps)])
+
+    def derive_many(self, studies: list):
+        """(records, skipped) from the chemostat runs of every study given, [(study, experiments)], fitted
+        together where the medium composition (`media_identity`), the abundance unit and the dilution rate
+        match. An arc names every study its communities come from."""
         import math
 
         from .derive import _identity, select_experiments, strain_identities
         from .integrated import _log2_effect
         if self.client is None:
             raise ValueError("SteadyStateDeriver needs a client: it reads each vessel's measured series")
-        study_id = study.get("id", "")
-        study_meta = {"study_citation": study.get("name") or study_id, "study_license": "",
-                      "study_url": study.get("url", "")}
-        # identities over the whole study, as the other derivations judge an ambiguous taxon id, then the
-        # experiments the second box asks for, with the monocultures under the same conditions
-        identities = strain_identities(exps, [])
-        records, skipped = [], []
-        exps = select_experiments(exps, self.selection, skipped, study_id=study_id)
-        for group in chemostat_groups(self.client, exps, self.spike_factor):
+        metas, of_exp, by_study, published, records, skipped = {}, {}, {}, {}, [], []
+        for study, exps in sorted(studies, key=lambda s: s[0].get("id", "")):
+            study_id = study.get("id", "")
+            metas[study_id] = {"id": study_id, "citation": study.get("name") or study_id, "license": "",
+                               "url": study.get("url", "")}
+            published[study_id] = study.get("publishedAt") or study.get("uploadedAt") or ""
+            # a strain's identity is judged within its own study, as every derivation judges it, over the whole
+            # study (a taxon id given to two strain names there is refused as before); then the experiments the
+            # second box asks for, with the monocultures under the same conditions. Runs of several studies are
+            # pooled by that identity, so a strain whose trusted taxon id agrees pools under two names (Karoline,
+            # 2026-11-11: "option A, but if taxon ids agree and names differ, the studies can still be pooled
+            # (since a taxon name may change, as in the case of F. prausnitzii A2-165 and F. duncaniae A2-165).
+            # Name conflicts within a study can be treated as before."). Judged over every study of the search,
+            # one unrelated study could demote a strain everywhere (raised in review of the pooling).
+            by_study[study_id] = strain_identities(exps, [])
+            for exp in select_experiments(exps, self.selection, skipped, study_id=study_id):
+                of_exp[exp.get("id")] = (study_id, exp)
+
+        def study_of(exp):
+            return of_exp.get(exp.get("id"), ("", None))[0]
+
+        # each organism key's identity as each study gives it, with the name it goes by there
+        identity_of: dict = {}
+        names_of: dict = {}
+
+        def key_of(exp, name):
+            got = _identity(by_study.get(study_of(exp), {}), name)
+            identity_of.setdefault(got["id"], {}).setdefault(study_of(exp), {**got, "name": name})
+            names_of.setdefault(name, set()).add(got["id"])
+            return got["id"]
+
+        def shown(key, arc_studies):
+            # an arc names its organism as one of the studies the arc rests on does, the most recently
+            # published, so a renamed strain goes by its later name; the first study of the whole search named
+            # it, which could be a study the arc does not rest on and, for A2-165, the superseded name
+            # (raised in review of the pooling)
+            per_study = identity_of[key]
+            # an arc rests on studies holding each of its organisms, so `ours` is empty only where there is no
+            # arc (a group whose runs were all left out, `say(..., [])`): there the whole search names it
+            ours = [s for s in arc_studies if s in per_study] or sorted(per_study)
+            return per_study[max(ours, key=lambda s: (published.get(s, ""), s))]
+
+        def other_names(key, arc_studies):
+            # the latest study's name is a guess at the current one, so where the arc's studies name the
+            # organism differently the others are said, and so is a choice no date could make (Karoline,
+            # 2026-11-12, on the review's point that undated studies were named by study id)
+            per_study = identity_of[key]
+            ours = [s for s in arc_studies if s in per_study]
+            chosen = shown(key, arc_studies)
+            others = {}
+            for s in ours:
+                if per_study[s]["name"] != chosen["name"]:
+                    others.setdefault(per_study[s]["name"], []).append(s)
+            if not others:
+                return None
+            picked = max(ours, key=lambda s: (published.get(s, ""), s))
+            rivals = [s for s in ours if per_study[s]["name"] != chosen["name"]]
+            undated = [s for s in rivals if not published.get(s)]
+            # a date chose only where the shown study has one and every dated rival is earlier; an undated
+            # rival is said, since "most recently published" overclaims about a study with no date (raised in
+            # review of the pooling)
+            if published.get(picked) and all(published.get(s, "") < published[picked] for s in rivals):
+                how = "the name in the most recently published of them" + (
+                    f", as {', '.join(undated)} carries no publication date" if undated else "")
+            else:
+                how = "the name in the study whose id sorts last, as no publication date tells them apart"
+            # no "; " inside: notes are written joined by "; ", and a note holding it splits into fragments
+            # (raised in review of the pooling). It opens with the key, which `say` turns into the name shown,
+            # with the key where two identities share that name, as every other line of the arc
+            return (f"{key} is named differently in studies this arc rests on, "
+                    + ", ".join(f"{n} (in {', '.join(ss)})" for n, ss in sorted(others.items()))
+                    + f", and is shown by {how}")
+
+        exps = [exp for _, exp in of_exp.values()]
+        groups = chemostat_groups(self.client, exps, self.spike_factor, key_of=key_of, study_of=study_of)
+        # one name that stands for two identities in two studies (its taxon id trusted in one and refused in the
+        # other, say) is two organisms here, so its runs are not pooled; said once
+        skipped += [(name, f"identified differently in the studies searched ({', '.join(sorted(ids))}), so its "
+                           "runs are fitted as different organisms rather than pooled")
+                    for name, ids in sorted(names_of.items()) if len(ids) > 1]
+        def say(lines, in_studies):
+            # the fit is keyed by identity, so its reasons name "ncbi:226186" where a reader wants the strain:
+            # each key is put back as the name it goes by in the group's studies (with the key where two
+            # identities share a name), in one pass so a name put in is not read again
+            keys = sorted(identity_of, key=len, reverse=True)
+            if not keys:
+                return list(lines)
+            names = {k: shown(k, in_studies)["name"] for k in keys}
+            twice = {n for n in names.values() if list(names.values()).count(n) > 1}
+            names = {k: (f"{n} ({k})" if n in twice else n) for k, n in names.items()}
+            pattern = re.compile(r"(?<![\w:])(" + "|".join(map(re.escape, keys)) + r")(?![\w:])")
+            return [tuple(pattern.sub(lambda m: names[m.group(1)], part) for part in line) for line in lines]
+
+        for group in groups:
             label = (f"chemostat, D {group['dilution']:g} per h, {group['medium']}, {group['unit']}"
                      + (f", {group['technique']}" if group.get("technique") else ""))
             if not group["communities"]:
-                skipped += [(f"{what} [{label}]", why) for what, why in group["left_out"]]
+                skipped += say([(f"{what} [{label}]", why) for what, why in group["left_out"]], [])
                 continue
             # runs of the same members are one equation (`pool`), here as in the fit, so an arc's community,
             # its experiments and its leave-one-out note name what the fit used
@@ -735,13 +849,15 @@ class SteadyStateDeriver:
             # than once per coefficient, which was n^2 lines of the same sentence (Karoline, 2026-11-06: "Is
             # the error message in this case informative?")
             setting = label[len("chemostat, "):]
-            # fitted within one study, as every derivation reads one study at a time: named, so two groups of the
-            # same setting in two studies are not read as one contradicting itself (found in a fifth review)
-            skipped += [(f"chemostat group at {setting} in {study_id}", _group_summary(communities, got))]
-            skipped += [(f"{what} [{label}]", why) for what, why in group["left_out"]]
-            skipped += [(f"{species} in {community} [{label}]", "washed out: no steady-state equation")
-                        for community, species in got["washed_out"]]
-            skipped += [(f"{i} [{label}]", why) for i, why in _row_reasons(got)]
+            # the studies the group's runs come from, named, since one fit may span several
+            in_studies = sorted({of_exp[e][0] for c in group["communities"]
+                                 for e in (c.get("experiments") or [c.get("experiment", "")]) if e in of_exp})
+            skipped += say([(f"chemostat group at {setting} in {', '.join(in_studies)}",
+                             _group_summary(communities, got))]
+                           + [(f"{what} [{label}]", why) for what, why in group["left_out"]]
+                           + [(f"{species} in {community} [{label}]", "washed out: no steady-state equation")
+                              for community, species in got["washed_out"]]
+                           + [(f"{i} [{label}]", why) for i, why in _row_reasons(got)], in_studies)
             predictions = {p["community"]: p for p in leave_one_out_predictions(communities)}
             for i, row in got["rows"].items():
                 if row["status"] != "identified":
@@ -750,6 +866,20 @@ class SteadyStateDeriver:
                 s_i = scale["scale"]
                 unit_coefficient = (f"1/(h x {group['unit']})" if s_i is not None
                                     else f"1/{group['unit']}, in units of r_i - D")
+                # every study the row was fitted from: the coefficient rests on all of the row's equations, not
+                # only on the communities holding the pair
+                row_experiments = {e for c in communities if (c["abundance"].get(i) or 0) > 0
+                                   for e in (c.get("experiments") or [c.get("experiment", "")])}
+                untraced = sorted(e or "(no id)" for e in row_experiments if e not in of_exp)
+                if untraced:
+                    # a row that cannot name every study it rests on is not reported: it was credited to the
+                    # first study of the search, a plausible citation and a wrong one (raised in review of the
+                    # pooling). Not reached today, since every run is read from a study; said if it ever is
+                    skipped.append((f"{shown(i, in_studies)['name']} [{label}]",
+                                    f"its row rests on runs not traced to a study ({', '.join(untraced)}), so the "
+                                    "study it would cite is unknown and its arcs are not reported"))
+                    continue
+                arc_studies = sorted({of_exp[e][0] for e in row_experiments})
                 for j, b in row["values"].items():
                     if j == i:
                         continue
@@ -763,6 +893,8 @@ class SteadyStateDeriver:
                     sd_b = (row["sd"] or {}).get(j) if row["sd"] is not None else None
                     sd = (None if sd_b is None or strength is None
                           else abs(x / ((1 + b * x) * math.log(2))) * sd_b)
+                    arc_experiments = sorted({e for c in holding
+                                              for e in (c.get("experiments") or [c.get("experiment", "")])} - {""})
                     check = predictions.get(largest["name"], {})
                     notes = [f"row scale: {scale['how']}"]
                     if check.get("status") == "predicted" and i in check["predicted"]:
@@ -770,12 +902,20 @@ class SteadyStateDeriver:
                                      f"{check['predicted'][i]:.3g}, observed {check['observed'][i]:.3g}")
                     elif check.get("status"):
                         notes.append(f"{largest['name']} {check['status']}")
-                    source, target = _identity(identities, j), _identity(identities, i)
+                    notes += [n for n in (other_names(j, arc_studies), other_names(i, arc_studies)) if n]
+                    notes = [line for (line,) in say([(n,) for n in notes], arc_studies)]
+                    # the communities are keyed by identity (`key_of`); each is shown as one of the arc's studies
+                    # gives it (`shown`)
+                    source, target = shown(j, arc_studies), shown(i, arc_studies)
                     records.append({
-                        "source": source["id"], "target": target["id"], "source_name": j, "target_name": i,
+                        "source": source["id"], "target": target["id"],
+                        "source_name": source["name"], "target_name": target["name"],
                         "source_taxon_id": source["taxon_id"], "target_taxon_id": target["taxon_id"],
                         "source_species": source["species"], "target_species": target["species"],
                         "source_identity": source["identity"], "target_identity": target["identity"],
+                        # why a strain lost its taxon id, where it did, as the other derivations write it
+                        "source_taxon_id_refused": source.get("taxon_id_refused", ""),
+                        "target_taxon_id_refused": target.get("taxon_id_refused", ""),
                         "effect": "facilitation" if b > 0 else "inhibition",
                         "strength": None if strength is None else round(strength, 4),
                         # |strength|, as every derivation's arcs carry it for widths and layouts (it was null
@@ -788,10 +928,11 @@ class SteadyStateDeriver:
                         "metric": METRIC, "method": METHOD, "evidence": "steady_state",
                         "quality": [], "cautions": [], "notes": notes,
                         "cultivation_mode": "chemostat", "medium": group["medium"], "condition": label,
+                        # how the target was measured: one technique per organism within a fit (`_by_technique`)
+                        "technique": group.get("techniques", {}).get(i) or "unrecorded",
                         # the members present: one inoculated and washed out is not in the community
-                        "community": sorted(_identity(identities, m)["id"] for m in _present(largest)),
-                        "experiments": sorted({e for c in holding
-                                               for e in (c.get("experiments") or [c.get("experiment", "")])} - {""}),
+                        "community": sorted(_present(largest)),
+                        "experiments": arc_experiments,
                         "n_with": len(largest.get("vessels") or []) or None, "n_without": None,
                         "sd": None if sd is None else round(sd, 4), "se": None,
                         "p_value": None, "q_value": None, "significance": None,
@@ -813,6 +954,11 @@ class SteadyStateDeriver:
                         "fitted_self_technique": group["techniques"].get(i, ""),
                         "partner_abundance": x, "partner_abundance_unit": group["unit"],
                         "partner_abundance_n": len(largest.get("vessels") or []),
-                        "study_id": study_id, **study_meta,
+                        # every study the communities behind the arc come from, as a merged arc names them
+                        # the fit the row comes from, which may span studies: a row counts once in the rates
+                        "fitted_group": f"{label} in {', '.join(in_studies)}",
+                        "study_id": arc_studies[0], "study_citation": metas[arc_studies[0]]["citation"],
+                        "study_license": "", "study_url": metas[arc_studies[0]]["url"],
+                        "studies": [metas[s] for s in arc_studies],
                     })
         return records, skipped

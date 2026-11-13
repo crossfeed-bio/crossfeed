@@ -40,7 +40,9 @@ from dataclasses import asdict, dataclass, field, fields
 # a v3 field means changes, so a v3 reader reads a v4 file with five fields it ignores.
 # v5 (Karoline, 2026-11-06, #305: "Is the measurement technique recorded as an arc attribute? If not, please
 # add."): one edge field, `technique`, and in the same move one node field, `merged_nodes`, the strains a
-# genus node stands for. Nothing a v4 field means changes.
+# genus node stands for, and in the same release one value of `evidence`, `steady_state`, for the arcs of the
+# steady-state derivation, which a v4 reader's enum does not hold (found in a second review: this comment
+# said only the two fields). Nothing a v4 field means changes for the values it had.
 SCHEMA = "grownet.interaction_network/v5"
 # Older ids a reader still accepts, newest first. A v0 document is valid: its `significance` means what v0
 # said it means, which is why `grownet validate` names the version it read.

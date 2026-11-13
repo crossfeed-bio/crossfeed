@@ -110,8 +110,10 @@ content.
 
 - **The format id moves to `grownet.interaction_network/v5`** (Karoline, 2026-11-06, #305: "Is the
   measurement technique recorded as an arc attribute? If not, please add."), for one arc field,
-  `technique`, and one node field, `merged_nodes`. Nothing a `/v4` field means changes; `/v4` and older files still read and validate. The
-  daily All network is also published as `all_result.v4.json` for installed 0.5.x copies, beside
+  `technique`, and one node field, `merged_nodes`, and one value of `evidence`, `steady_state`, for the arcs
+  of the steady-state derivation (0.5.0's validator refuses it, as it refuses a `/v5` file). Nothing a `/v4`
+  field means changes for the values it had; `/v4` and older files still read and validate. The daily All
+  network is also published as `all_result.v4.json` for installed 0.5.x copies, beside
   `all_result.json` for 0.3.x and 0.4.x.
 
 ### Added
@@ -184,6 +186,16 @@ content.
   the replicate comparison's sentences about co-cultures and drop-out designs. The `--derivation` help,
   the command-line examples and the README describe the third derivation.
 
+- **The steady-state derivation fits the runs of every study a search reads together**, where the medium
+  composition, the abundance unit and the dilution rate match (Karoline, 2026-11-06: "for the new chemostat
+  inference mode, the medium composition has to match but other than that, I don't see why not"), so a
+  pair measured in one study and the monocultures in another determine a row that neither does alone. An
+  arc names every study its row was fitted from. Runs are pooled by each strain's identity as its own study
+  judges it, so a strain renamed between studies pools where its taxon id agrees (Karoline, 2026-11-11: "if
+  taxon ids agree and names differ, the studies can still be pooled"), and a strain whose taxon id one
+  study refuses is not pooled with its runs elsewhere, which is said. A pooled organism goes by the name the
+  most recently published of the arc's own studies gives it, so a renamed strain shows its later name. Every
+  other derivation still reads one study at a time.
 - **The steady-state derivation, hardened before release.** Runs that end with the same organisms present
   are one community, since they reach one steady state, and its bootstrap draws whole runs: kept apart, two
   noisy runs of one pair made rows look determined from noise alone. A row whose own term is not negative
@@ -209,9 +221,22 @@ content.
 - **An empty network from the command line is announced under the study's name again.** `derive STUDY`
   printed "NO interactions were derived for" the last reason it had listed, since the loop printing the
   reasons reused the name of the study's label; on every derivation.
-  monocultures and pairs it recovers 126 of the 132 coefficients exactly; with 5% noise over three vessels
-  the bootstrap spread covers the truth for 93% of them. The numbers are in METHOD_NOTES.
 
+### Changed
+
+- **The About page says what the next release brings while it is in development** (Karoline, 2026-11-06: "is
+  the About section updated?"), under "Next release", above the log of released versions. The release check
+  refuses a tag while that list is not empty, so it moves under the version at release.
+
+### Fixed
+
+- **The second box now applies under the integrated derivation too.** Media, experiments and studies named
+  there reached the default derivation alone, so in gLV mode naming a medium changed nothing, although the
+  mode's own message says it keeps a simulation to one environment. Measured live: Bacteroides and
+  Roseburia with every partner, `--conditions EMGDB000000024 --derivation integrated` gave 7 arcs from 12
+  experiments, now the 2 arcs of that co-culture and its 2 monocultures, which is what the default
+  derivation gives; with `--conditions mucin`, 7 arcs became 0, as with the default derivation. A
+  derivation plugged in with `--deriver` is now given the selected experiments only.
 
 ## [0.5.0] (2026-10-14)
 
