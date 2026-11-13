@@ -60,7 +60,7 @@ NEXT = (
     "rate, which its rates name. mGrowthDB holds no "
     "such design yet, and it says what each organism lacks; on a published 12-species model, monocultures "
     "and pairs give 126 of its 132 coefficients.",
-    # branch settles-on-boundary, its pull request not yet open (where a package settles)
+    # #337 (where a package settles)
     "The chemostat check and a gLV package's README name the state the package settles in, with the "
     "organisms it keeps and the ones it loses, where they named every organism that the solution with all "
     "of them present put at or below zero, including ones a simulation keeps.",
