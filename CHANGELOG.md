@@ -26,7 +26,8 @@ content.
   and only *B. hydrogenotrophica* lost (it shrinks there at -0.074 /h), while the check called both of the
   latter washed out. The prediction is now the stable state found by trying each sub-community: the
   organisms it keeps satisfy the system, none it loses can grow back in, and every eigenvalue there is
-  negative. Two stable states, or none (a package that grows without bound), are said rather than scored.
+  negative. Two stable states, none the check can stand behind, or a candidate too ill-conditioned to judge are
+  said rather than scored.
   The full solution stays in the text as the reason a reader's own `solve(A, -r)` differs. The package
   payload's `equilibrium` and `not_above_zero` fields are unchanged: they still hold the full solution.
 

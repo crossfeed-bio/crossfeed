@@ -160,8 +160,10 @@ def test_a_package_with_no_bounded_state_is_not_scored():
     here = block["organisms"].index(A)
     block["matrix"][here][here] = 4.0e-10
     (check,) = steady.check(got, RATES, seen)
-    assert not check["used"] and "no stable steady state" in check["why_not"]
-    assert "oscillates or grows without bound" in steady.as_text([check])
+    assert not check["used"]
+    assert "no sub-community of it has a stable steady state this check can stand behind" in check["why_not"]
+    # what the search established, and no claim about the dynamics it did not establish (Craig's agent)
+    assert "oscillates" not in steady.as_text([check])
 
 
 def test_nothing_is_scored_across_abundance_units_or_media():
@@ -632,4 +634,35 @@ def test_mutual_facilitation_stronger_than_self_limitation_has_no_state():
     and the full solution is (-1, -1), so nothing settles: the system grows without bound."""
     where = steady.settled([[-1.0, 2.0], [2.0, -1.0]], [1.0, 1.0])
     assert where["state"] is None and where["states"] == []
-    assert "no stable steady state" in where["why_not"]
+    assert "no sub-community of it has a stable steady state this check can stand behind" in where["why_not"]
+
+
+def test_an_ill_conditioned_candidate_is_refused_before_its_stability_is_judged():
+    """Craig's agent, reviewing: the conditioning gate ran once, after the loop, so a candidate whose
+    stability was judged on an ill-conditioned A_SS could silently decide the verdict.
+
+    Species 1 and 2 nearly duplicate each other: A_12 = A_21 = -1, A_11 = -1, A_22 = -(1 + 1e-8), and
+    g = (1, 1 + 5e-9), so their pair solves to x_1 = x_2 = 0.5 (5e-9 / 1e-8 = 0.5) with a condition number
+    of about 4e8, above the 1e8 limit. Species 3 competes with both at -2 and alone settles at 1, where 1 and
+    2 grow at 1 - 2 = -1: a well-conditioned stable state. At the pair's state species 3 grows at
+    1 - 2 * (0.5 + 0.5) = -1, so the pair is a candidate too. The search used to call this two stable
+    states; it now says one candidate could not be judged, and names no state."""
+    eps, delta = 1e-8, 5e-9
+    matrix = [[-1.0, -1.0, -2.0], [-1.0, -(1.0 + eps), -2.0], [-2.0, -2.0, -1.0]]
+    where = steady.settled(matrix, [1.0, 1.0 + delta, 1.0])
+    assert where["state"] is None
+    assert "too ill-conditioned to judge" in where["why_not"] and "of 2 organism(s)" in where["why_not"]
+    assert "no state is named" in where["why_not"]
+    # the well-conditioned state is still found, so the refusal is the pair's doing and not a lost search
+    assert [state["kept"] for state in where["states"]] == [[2]]
+
+
+def test_a_state_on_the_edge_is_found_once():
+    """Craig's agent, reviewing: feasibility was strict and invasion relative, so a state on the edge
+    between S and S without k could count twice. A = [[-1, 0], [-1, -1]], g = (1, 1 + 1e-13): species 1
+    alone settles at 1, where species 2 grows at 1e-13, rounding (under 1e-9 of the largest rate), so it
+    does not grow back in. The pair solves to x_2 = 1e-13, the same point, and used to be admitted too, which
+    reported two stable states. Both boundaries now treat 1e-9 of the largest value as zero: one state."""
+    where = steady.settled([[-1.0, 0.0], [-1.0, -1.0]], [1.0, 1.0 + 1e-13])
+    assert where["why_not"] == "" and where["kept"] == [0] and where["lost"] == [1]
+    assert where["state"][0] == pytest.approx(1.0)

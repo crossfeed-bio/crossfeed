@@ -305,6 +305,10 @@ def solve(rows: list, rhs: list):
 # How many organisms `settled` searches by trying every sub-community: 2^12 = 4096 small solves take about a
 # second in pure Python, and a chemostat or a package matrix holds far fewer organisms than that.
 MAX_SETTLED = 12
+# A value this share of the largest of its kind, or less, is zero to rounding: an organism of a candidate
+# state at that size is not above zero, and an outsider growing at that rate does not grow back in. The
+# same share on both boundaries, so a state on the edge is found once (Craig's agent, reviewing).
+SETTLED_TOLERANCE = 1e-9
 
 
 def _determinant(rows: list) -> float:
@@ -363,9 +367,20 @@ def settled(matrix: list, growth: list) -> dict:
       * it is stable: every eigenvalue of diag(x_S) A_SS has a negative real part.
     Those are the eigenvalues of the whole Jacobian at that state together with the outsiders' rates.
 
+    Two rules keep the search from deciding on numbers it cannot stand behind (Craig's agent, reviewing):
+      * **one tolerance on both boundaries.** A value within `SETTLED_TOLERANCE` of the largest of its kind
+        counts as zero: an organism of S at that size is not above zero, and an outsider growing at that
+        rate does not grow back in. So a state on the edge between S and S without k is found once, as the
+        smaller community, rather than once on each side of a rounding error.
+      * **every candidate's conditioning is checked before its stability is judged**, since the
+        characteristic polynomial behind `_hurwitz_stable` loses its digits exactly where `A_SS` is
+        ill-conditioned. One such candidate is enough to refuse: it could be a state or not, and either
+        way the verdict over all candidates would rest on it.
+
     {"state": [x_i] or None, "kept": [i], "lost": [i], "invasion": {i: rate of a lost organism},
-     "states": every such state, "why_not": ""}. Exactly one state gives `state`; none, or several (where
-    it settles then depends on where it starts), or a system too large to search gives `why_not`.
+     "states": every such state, "why_not": ""}. Exactly one state gives `state`; none, several (where it
+    settles then depends on where it starts), an ill-conditioned candidate, or a system too large to search
+    gives `why_not`, which says what the search established and no more.
     """
     n = len(growth)
     out = {"state": None, "kept": [], "lost": [], "invasion": {}, "states": [], "why_not": ""}
@@ -374,39 +389,46 @@ def settled(matrix: list, growth: list) -> dict:
                           f"every sub-community of at most {MAX_SETTLED}")
         return out
     scale = max((abs(g) for g in growth), default=0.0) or 1.0
-    found = []
+    found, unjudged = [], []
     for mask in range(1 << n):
         kept = [i for i in range(n) if mask >> i & 1]
         x = [0.0] * n
         if kept:
             part = solve([[matrix[i][j] for j in kept] for i in kept], [-growth[i] for i in kept])
-            if part is None or any(value <= 0 for value in part):
+            if part is None:
+                continue
+            size = max(abs(value) for value in part) or 1.0
+            if any(value <= SETTLED_TOLERANCE * size for value in part):
                 continue
             for i, value in zip(kept, part, strict=True):
                 x[i] = value
         invasion = {j: growth[j] + sum(matrix[j][k] * x[k] for k in kept) for j in range(n) if j not in kept}
-        # an outsider at a rate of 0 to rounding grows neither way; 1e-9 of the largest rate is rounding
-        if any(rate > 1e-9 * scale for rate in invasion.values()):
+        if any(rate > SETTLED_TOLERANCE * scale for rate in invasion.values()):
             continue
+        if kept:
+            condition = condition_of([[matrix[i][j] for j in kept] for i in kept])
+            if condition > MAX_EQUILIBRIUM_CONDITION:
+                unjudged.append((len(kept), condition))
+                continue
         if not _hurwitz_stable([[x[i] * matrix[i][j] for j in kept] for i in kept]):
             continue
         found.append({"state": x, "kept": kept, "lost": [j for j in range(n) if j not in kept],
                       "invasion": invasion})
     out["states"] = found
-    if len(found) == 1:
+    if unjudged:
+        members, worst = max(unjudged, key=lambda item: item[1])
+        worst_text = "infinite" if worst == float("inf") else format(worst, ".3g")
+        out["why_not"] = (f"{len(unjudged)} sub-community(ies) it could settle on are too ill-conditioned to "
+                          f"judge (the worst, of {members} organism(s), has a condition number of "
+                          f"{worst_text}, above the {MAX_EQUILIBRIUM_CONDITION:.0e} this tool will stand "
+                          "behind), so no state is named")
+    elif len(found) == 1:
         out.update(found[0])
-        condition = condition_of([[matrix[i][j] for j in found[0]["kept"]] for i in found[0]["kept"]])
-        if found[0]["kept"] and condition > MAX_EQUILIBRIUM_CONDITION:
-            out["state"] = None
-            out["why_not"] = (f"the sub-community it settles on is too ill-conditioned to solve: its condition "
-                              f"number is {condition:.3g}, above the {MAX_EQUILIBRIUM_CONDITION:.0e} this tool "
-                              "will stand behind")
     elif found:
         out["why_not"] = (f"it has {len(found)} stable steady states, so where it settles depends on where it "
                           "starts")
     else:
-        out["why_not"] = ("it has no stable steady state: a simulation of it oscillates or grows without "
-                          "bound")
+        out["why_not"] = ("no sub-community of it has a stable steady state this check can stand behind")
     return out
 
 
