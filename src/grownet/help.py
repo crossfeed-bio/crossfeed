@@ -1301,8 +1301,9 @@ hands over a plain matrix and a plain vector, with a helper that shapes them for
 <a href="https://bioconductor.org/packages/release/bioc/html/miaSim.html">miaSim</a>, whose
 <code>simulateGLV</code> solves dx/dt = x(b + Ax), the order this matrix is written in.</p>
 <p><strong>This route carries the same numbers as the zip</strong> (the payload is
-<code>grownet.glv/v2</code>, which grownet 0.5.0's R package reads, as it does the v1 and v0 of
-earlier versions): fitted coefficients, one matrix per abundance unit, with the rates and what
+<code>grownet.glv/v3</code>, whose rates say the dilution rate a steady-state rate is at; grownet
+0.6.0's R package reads it as it does the v2, v1 and v0 of earlier versions, and 0.5.0's reads it with a
+warning that it is newer): fitted coefficients, one matrix per abundance unit, with the rates and what
 each one is made of beside them, and every caveat as a field rather than as prose. So nothing there needs
 scaling, and <code>glv_scale()</code> warns when it is called on them and says why: their cells are
 already in the units of the diagonal they sit beside, and a fit whose cells outweigh the organisms' own
@@ -1385,9 +1386,9 @@ monocultures, pairs, larger communities and the full one all contribute.</p>
 <li><strong>What it reads.</strong> Continuous cultures known to be unperturbed, at the steady state the
 chemostat check reads (the mean over the last quarter of each vessel; a run in which an organism still
 changes by more than a tenth between the two halves of that quarter is not at a steady state, and is left
-out and named), one fit per study, medium, abundance
-unit and dilution rate (runs of two studies are never fitted together, as every derivation reads one study
-at a time), each organism read by one technique within it: where an organism is read one way in some
+out and named), one fit per medium composition, abundance unit and dilution rate, across every study the
+search reads (runs of different studies in the same medium are fitted together, and an arc names every study
+it rests on), each organism read by one technique within it: where an organism is read one way in some
 runs and another way in others, the runs using its more common technique are kept and the others left out
 and named, and so is a run whose vessels read one organism two ways. A run whose description does not say
 it is unperturbed is left out and named, and so is a run with a member that could not be read. Runs that

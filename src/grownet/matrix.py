@@ -746,7 +746,8 @@ OFF_DIAGONAL = {
         "  An off-diagonal cell is A[i][j] = (r_i - D) B[i][j], fitted from chemostat steady states, not",
         "      from a growth curve: at a steady state every organism present satisfies",
         "      1 + sum_j B[i][j] N_j = 0, with B = A / (r_i - D) and D the dilution rate, so every",
-        "      unperturbed community of one study, medium, abundance unit and dilution rate (each organism read",
+        "      unperturbed community of one medium composition, abundance unit and dilution rate, in any",
+        "      of the studies searched (each organism read",
         "      by one technique there) gives one equation per organism in it, and each row is their least",
         "      squares; runs that end with the same organisms are one community. The coefficients are",
         "      EFFECTIVE: an effect that needs a third organism is folded into the pairs that carry it.",
@@ -856,7 +857,10 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
     writer.writerow(["organism", "growth_rate", "unit", "replicates", "studies", "method", "lag",
                      "lag_method", "carrying_capacity", "capacity_unit", "capacity_curves",
                      "capacity_curves_left_out", "capacity_fall_from_peak", "capacity_medium",
-                     "capacity_source", "doubling_time", "capacity_technique"])
+                     "capacity_source", "doubling_time", "capacity_technique",
+                     # last, so a reader of the earlier columns finds them where they were (Karoline,
+                     # 2026-11-06: "yes to the dilution column")
+                     "dilution"])
     order = labels(net) if net is not None else sorted(rates)
     for nid in order:
         rate = rates.get(nid)
@@ -898,7 +902,9 @@ def rates_csv(rates: dict, net: InteractionNetwork | None = None) -> str:
                           is None else f"{double:.4g}"),
                          # the technique the plateau was measured by: plateaus are compared only within one
                          # technique and unit (Karoline, 2026-10-14, #292)
-                         rate.get("capacity_technique", "") if capacity is not None else ""])
+                         rate.get("capacity_technique", "") if capacity is not None else "",
+                         # the dilution rate, per h, a steady-state rate r_i - D is at; empty otherwise
+                         "" if rate.get("dilution") is None else f"{rate['dilution']:g}"])
     return out.getvalue()
 
 
@@ -1813,7 +1819,8 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         "  growth_rates.csv        one growth rate per organism, with the estimator, the lag and the",
         "                          monoculture carrying capacity behind it (under the steady-state",
         "                          derivation: r_i - D, no lag, and the capacity its row implies), and",
-        "                          ln(2) / r, in the time unit of the rate",
+        "                          ln(2) / r, in the time unit of the rate; last, the dilution rate per",
+        "                          h a steady-state rate r_i - D is at (empty for every other derivation)",
         "  MATCH THE TWO BY THE ORGANISM COLUMN, NEVER BY POSITION. growth_rates.csv holds every",
         "      organism with a rate, in one order; each matrix holds only its own unit's organisms, in",
         "      its own order. Rows 1 to n of the rates file are not the rates of an n x n matrix, and a",
@@ -1984,8 +1991,12 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
 # cells_with_unrecorded_medium) and `matrices[].media` narrowed from the media of every arc between the
 # matrix's organisms to those of the cells it holds, so a reader trusting v1 would read the new `media`
 # as the old quantity, which is the line the format id is drawn at.
-GLV_FORMAT = "grownet.glv/v2"
-PREVIOUS_GLV_FORMATS = ("grownet.glv/v1", "grownet.glv/v0")
+# It moved to v3 for 0.6.0 (Karoline, 2026-11-06: "yes to the dilution column"): each growth_rate_detail
+# entry gains `dilution`, the dilution rate per h its rate r_i - D is at under the steady-state derivation
+# (None under every other), a new field, so the id moves. A v2 reader reads a v3 payload with that key
+# unknown; R's package warns that it reads a newer format and reads it.
+GLV_FORMAT = "grownet.glv/v3"
+PREVIOUS_GLV_FORMATS = ("grownet.glv/v2", "grownet.glv/v1", "grownet.glv/v0")
 
 
 def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dict:
@@ -2048,6 +2059,8 @@ def glv_payload(net: InteractionNetwork, rates: dict, extra: dict = None) -> dic
              "replicates": rates[nid]["replicates"] if rates[nid].get("replicates") is not None
              else rates[nid].get("n"),
              "studies": list(rates[nid].get("studies", ())),
+             # the dilution rate, per h, a steady-state rate r_i - D is at; None for every other derivation
+             "dilution": rates[nid].get("dilution"),
              "per_study": dict(rates[nid].get("per_study", {})),
              "method": rates[nid].get("method", ""), "lag": rates[nid].get("lag"),
              "lag_method": rates[nid].get("lag_method", ""),

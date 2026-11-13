@@ -485,7 +485,8 @@ cannot identify, and a community of three or more members, are reported rather t
 **The derivation from chemostat steady states.** `--derivation steady`, off by default and meant for gLV
 mode, fits the rows from steady states instead of growth curves. At a chemostat steady state every organism
 present satisfies `1 + sum_j B_ij N_j = 0` with `B = A / (r_i - D)`, so every unperturbed community of one
-study, medium, abundance unit and dilution rate (each organism read by one technique there) gives one equation per
+medium composition, abundance unit and dilution rate, across the studies searched (each organism read by one
+technique there), gives one equation per
 organism in it, and each row is their least squares: the idea of EPICS (Ansari et al. 2021), which reads only the monocultures and the communities
 missing one member, with every measured sub-community counted here. The row scale `r_i - D` is read from the
 organism's own monoculture chemostat start-up (the larger of the rise inside a batch period the description
