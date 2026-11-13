@@ -8,6 +8,13 @@ content.
 
 ### Changed
 
+- **The help says which standard deviation the absence threshold uses** (Karoline, 2026-11-13: "it is not
+  clear which standard deviation"). Under the comparison of replicate sets the two sets are not paired, so
+  there is no strength per replicate: `sd` is `sqrt(var_with + var_without)` of the per-replicate log2 values,
+  the spread between one replicate with the source and one without it, and `se` is the standard error of the
+  log2 mean. Under the integrated form `sd` is the standard deviation of the per-co-culture-replicate
+  strengths. The help and the `sd` attribute description say so; no number changes.
+
 - **Every arc of the default derivation says what each side started at** (#297), as the integrated form's
   arcs did: "started at X in the co-culture and Y in the monocultures" (or "in the full community and Y
   without R" for a drop-out arc), with the factor between them, and a warning above 3 times. Reported, never

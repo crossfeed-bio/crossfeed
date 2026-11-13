@@ -409,8 +409,10 @@ EDGE_ATTRIBUTES = {
                 "the two are near and not equal, and it is this field the absence threshold acts on. Under "
                 "the steady-state derivation it is log2(1 + B_ij x_j), the fitted row's net growth with the "
                 "partner at its abundance in the largest community holding both over without it",
-    "sd": "standard deviation of the strength, the spread of the comparison (under the steady-state "
-          "derivation, from the bootstrap over vessels, or over runs where runs were pooled)",
+    "sd": "standard deviation of the strength: sqrt(var_with + var_without) of the per-replicate log2 "
+          "values under the comparison of replicate sets, whose sets are not paired; the standard deviation "
+          "of the per-co-culture-replicate strengths under the integrated form; and under the steady-state "
+          "derivation, from the bootstrap over vessels, or over runs where runs were pooled",
     "se": "standard error of the strength",
     "n_with": "replicates with the source present",
     "n_without": "replicates with the source absent",
@@ -1074,8 +1076,14 @@ their own CSV, and <strong>Get gLV parameters</strong>
 <h2 id="statistics">How an interaction is decided</h2>
 <p><strong>The effect.</strong> For each arc, the target's growth (the chosen measure) is compared between
 the replicates with the source and the replicates without it: the log2 of each replicate's value, the mean
-on each side, and their difference, the log2 mean. Its standard deviation is its spread over the
-replicates.</p>
+on each side, and their difference, the log2 mean. The two sets are grown separately, so no replicate
+pairs with another and there is no strength per replicate. The <strong>standard deviation</strong>
+(<code>sd</code>) is therefore <code>sqrt(var_with + var_without)</code>, from the sample variances of the
+per-replicate log2 values on each side: the spread expected between one replicate with the source and one
+without it, which does not shrink as replicates are added. The standard error of the log2 mean, which does,
+is <code>se</code>, <code>sqrt(var_with / n_with + var_without / n_without)</code>. The integrated form fits
+a strength for each co-culture replicate, so its sd is the standard deviation of those strengths; under the
+steady-state derivation it comes from a bootstrap over vessels.</p>
 <p><strong>The call.</strong> An interaction is present when |log2 mean| is at least k standard deviations
 (the absence threshold, default 1: the mean plus or minus its sd stays on one side of zero), and absent
 otherwise. It is undetermined when one side has a single replicate, since there is then no spread; it is
