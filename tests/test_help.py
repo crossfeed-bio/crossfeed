@@ -3,6 +3,7 @@ import argparse
 import dataclasses
 import datetime
 import json
+import math
 import re
 from xml.etree import ElementTree as ET
 
@@ -505,6 +506,39 @@ def test_the_help_says_the_adjusted_p_value_is_the_q_value():
     assert "the p-value adjusted for multiple testing: the two names mean the same number" in \
         help.SETTINGS["max_adjusted_p"][2]
     assert help.SETTINGS["max_adjusted_p"][0] == "Filter on the q-value"
+
+
+def test_the_help_says_which_standard_deviation_the_threshold_uses():
+    """Karoline, 2026-11-13, reading "Its standard deviation is its spread over the replicates": "it is not
+    clear which standard deviation". The sets are unpaired, so it is sqrt(var_with + var_without), and the
+    help now says so and matches the code; the integrated form's sd is the replicate spread with the
+    monoculture stage's and the rate selection's variances added, as `_arc_statistics` computes it.
+    Hand computed: with log2 values [1, 3] and without [0, 2], each sample variance is 2, so
+    sd = sqrt(2 + 2) = 2 and se = sqrt(2/2 + 2/2) = 1.414, around a log2 mean of 2 - 1 = 1."""
+    text = visible(PAGE)
+    # the section alone, ending at the next heading, so the attribute table further down cannot satisfy
+    # what this paragraph has to say (Craig's agent, reviewing)
+    # the title also appears in the contents and in links, so the heading is the one right before the
+    # section's first paragraph
+    start = text.rindex("How an interaction is decided", 0, text.index("The effect. For each arc"))
+    decided = text[start:text.index("The matrix, the growth rates and gLV", start)]
+    assert "The call." in decided and "Benjamini-Hochberg" in decided and "Arc attributes" not in decided
+    assert "sqrt(var_with + var_without)" in decided and "no strength per replicate" in decided
+    assert "sqrt(var_with / n_with + var_without / n_without)" in decided
+    assert "Its standard deviation is its spread over the replicates" not in decided
+    # the integrated form's published sd is not the replicate spread alone: _arc_statistics adds the
+    # monoculture stage's variance and the rate selection variance (Craig's agent, reviewing)
+    assert "sqrt(sd_replicates^2 + var_stage + var_selection)" in decided
+    assert "only where neither was measured" in decided
+    assert "over runs where runs were pooled" in decided
+    attribute = help.EDGE_ATTRIBUTES["sd"]
+    assert "sqrt(var_with + var_without)" in attribute
+    assert "sqrt(sd_replicates^2 + var_stage + var_selection)" in attribute
+    assert "over runs where runs were pooled" in attribute
+    got = interaction._compare([1.0, 3.0], [0.0, 2.0])
+    assert got["mean"] == pytest.approx(1.0)
+    assert got["sd"] == pytest.approx(2.0)
+    assert got["se"] == pytest.approx(math.sqrt(2.0))
 
 
 def test_the_first_advanced_setting_is_called_growth_property():

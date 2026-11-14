@@ -8,6 +8,15 @@ content.
 
 ### Changed
 
+- **The help says which standard deviation the absence threshold uses** (Karoline, 2026-11-13: "it is not
+  clear which standard deviation"). Under the comparison of replicate sets the two sets are not paired, so
+  there is no strength per replicate: `sd` is `sqrt(var_with + var_without)` of the per-replicate log2 values,
+  the spread between one replicate with the source and one without it, and `se` is the standard error of the
+  log2 mean. Under the integrated form `sd` is `sqrt(sd_replicates^2 + var_stage + var_selection)`: the
+  spread of the per-co-culture-replicate strengths with the monoculture stage's variance and the rate
+  selection variance added. Under the steady-state derivation it is a bootstrap over vessels, or over runs
+  where runs were pooled. The help and the `sd` attribute description say so; no number changes.
+
 - **Every arc of the default derivation says what each side started at** (#297), as the integrated form's
   arcs did: "started at X in the co-culture and Y in the monocultures" (or "in the full community and Y
   without R" for a drop-out arc), with the factor between them, and a warning above 3 times. Reported, never
