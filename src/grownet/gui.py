@@ -645,7 +645,9 @@ def matrix_images(result: dict) -> list:
     do not compare growth rates has no coefficients, which the gLV button already says, so it shows the
     adjacency matrix alone."""
     net = result["network"]
-    out = [("Adjacency matrix", f"{TITLE}_matrix.svg", matrix_image.adjacency_svg(net))]
+    # the arcs below the absence threshold the search left out of the file: those pairs were compared, so
+    # the image draws them as 0, as the file's own description of a 0 says, not as pairs never compared
+    out = [("Adjacency matrix", f"{TITLE}_matrix.svg", matrix_image.adjacency_svg(net, result.get("absent")))]
     organism_rates = result.get("rates") or {}
     if organism_rates and glv_mode_on(result.get("settings") or {}):
         try:

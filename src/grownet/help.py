@@ -69,6 +69,12 @@ NEXT = (
     # #303 (merged arcs and nodes), #309 (italics, readability), #307 (no issue numbers), #322 (R summary)
     "The help explains what a merged arc and a merged node carry, sets species names in italics, and reads "
     "more easily, with no issue numbers, and the R package's summary of a gLV package reads more cleanly.",
+    # #341, #342 (the matrix as an image)
+    "The result shows the adjacency matrix as an image, and in gLV mode each matrix of fitted coefficients: "
+    "green for a positive effect, orange-red for a negative one, with a legend, and a hover on each cell that "
+    "names the studies and experiments behind it. Each image downloads as SVG.",
+    # #338 (which standard deviation the absence threshold uses)
+    "The help says which standard deviation the absence threshold uses under each derivation.",
 )
 
 # What changed in each release, a few lines each, newest first (Karoline, 2026-10-04: "a small log of what
@@ -1175,14 +1181,15 @@ NA mean, the pairs left at 0, and the studies to cite. The command line writes i
 <p><strong>The matrix as an image.</strong> Below the outputs, <strong>Matrix image</strong> opens the
 adjacency matrix drawn as a grid, one square per ordered pair, rows affected and columns the actor as in
 the table. Green is a positive effect and orange-red a negative one, stronger with the size of the value
-on a scale whose two ends the legend gives; a pair judged absent is the pale middle of the scale, an
-<strong>NA</strong> cell is hatched, a pair whose arcs disagree in sign is cross-hatched, and a pair with
-no arc is white. Hover a square and the panel under the legend shows its value and the studies and
-experiments it is derived from. In
-gLV mode the box also draws each matrix of fitted coefficients, where the hover of a diagonal square names
-the growth rate and carrying capacity its self-limitation comes from. <strong>Download the image
-(.svg)</strong> saves each one as an SVG file, which keeps the hover when opened in a browser and scales
-for print. For a PNG, open the file in a browser and take a screenshot, or export it from a vector editor
+on a scale whose two ends the legend gives; a pair compared and judged absent is the pale middle of the
+scale, an <strong>NA</strong> cell is hatched, a pair whose arcs disagree in sign is cross-hatched, a pair
+with arcs but no coefficient is dotted, and a pair with no arc is white. Hover a square and a box beside it
+shows its value and the studies and experiments it is derived from, with any arc of the pair that is not in
+the value named apart. In gLV mode the box also draws each matrix of fitted coefficients, where the hover of
+a diagonal square says how its self-limitation was fitted and names the studies of its growth rate.
+<strong>Download the image (.svg)</strong> saves each one as an SVG file, which keeps the hover when
+opened in a browser and scales for print.
+For a PNG, open the file in a browser and take a screenshot, or export it from a vector editor
 such as Inkscape.</p>
 <p><strong>A bound on an area is weaker than a bound on a rate.</strong> A culture that did not grow
 still carries the area of its own inoculum for the whole window, so on the default growth property, the

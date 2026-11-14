@@ -20,10 +20,13 @@ Rules for this file:
   disagree, and names every arc of the pair. For the gLV image, `_pair_values` now keeps the arcs whose
   numbers entered a cell (`edges`, per unit), and `coefficients` puts them in each block as `behind`,
   so a hover names exactly the arcs of the cell's own abundance unit, not every arc of the pair. The
-  payload and the CSV copy named keys, so neither carries `behind`. **The hover is a panel inside the
-  SVG**, under the legend: each cell's group holds its text in a `.tip` group that a CSS `:hover` rule
-  inside the SVG shows, so it needs no script, the page stays free of JavaScript, and the downloaded
-  file keeps it. A `<title>` alone was the first build and failed in use (Karoline: "the hover does not
+  payload and the CSV copy named keys, so neither carries `behind`. **The hover is a box inside the
+  SVG**, beside its cell: every box is drawn after every cell (so no cell covers it) and hidden until its
+  cell is hovered, by one `svg:has(#c:hover) #t` rule per cell inside the SVG, so it needs no script, the
+  page stays free of JavaScript, and the downloaded file keeps it. A panel under the legend was tried and
+  was off screen for a third of the All network's cells. `brand._LITERAL` holds `svg`, since the prose
+  filter put markup inside a `<text>` and closed the image early. The gLV diagonal's hover follows
+  `derivation_of`: the integrated form fits the diagonal and implies K, the opposite of -r/K. A `<title>` alone was the first build and failed in use (Karoline: "the hover does not
   work"): the app's browser pane, like some others, never draws the native tooltip. The `<title>` stays
   for screen readers. A PNG was declined for now (Karoline: "SVG only for now"): the standard library cannot
   draw its text.

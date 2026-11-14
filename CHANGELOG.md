@@ -14,9 +14,11 @@ content.
   negative and positive entries". The page's result has a **Matrix image** box: the adjacency matrix as
   a grid, green for a positive effect and orange-red for a negative one on a scale symmetric about 0,
   with NA hatched, a pair whose arcs disagree in sign cross-hatched and a pair with no arc white, and a
-  legend for all of them with the scale's two ends. Hovering a cell shows, in a panel under the legend, its value
-  and the studies (with their titles) and experiments of every arc behind it. In gLV mode the box also draws each matrix
-  of fitted coefficients, where a diagonal's hover names the rate and carrying capacity behind it. Each
+  legend for all of them with the scale's two ends. Hovering a cell shows, in a box beside it, its value
+  and the studies (with their titles) and experiments of the arcs the value is taken over, with any other arc of
+  the pair named apart. In gLV mode the box also draws each matrix of fitted coefficients, where a pair with arcs
+  and no coefficient is dotted and says why, and a diagonal's hover says how it was fitted under the
+  derivation. Each
   image downloads as SVG, which keeps the hover in a browser; SVG only, by her choice, since the page has
   no JavaScript and the standard library cannot draw a PNG's text. No number changes.
 
