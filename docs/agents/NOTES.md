@@ -33,6 +33,21 @@ Rules for this file:
   mutual facilitation stronger than self-limitation used to be scored (with negative predictions) and now
   are not, because they have no bounded state.
 
+- 2026-11-06: **a union merge can put back text a branch had correctly deleted, and the squash hides
+  it.** `docs/METHOD_NOTES.md` carried the pre-re-derivation validation section under a second
+  `## Open decisions` heading for two merges, with the superseded coverage of 93% standing against the
+  live 85% to 94% in the same file. The branch of #321 was clean: one heading, and only the re-derived
+  table. `main` still held the original from #320. A merge of `main` into that branch resolved the hunk
+  as a union, so the result had both tables and both headings, and the squash's diff against `main`
+  could not show the deletion, because `main` still held the copy being deleted. Two paragraphs in this
+  file were finished twice by the same mechanism, one of them saying strain ids survive only on arcs six
+  lines under the text saying a genus node lists them in `merged_nodes`. **If you re-derive numbers in a
+  branch while `main` holds the old ones, read the merge rather than the squash: counting a section's
+  headings is the cheapest test, and no check in this repository catches a duplicated heading or a
+  stranded block.** One thing went with the stale block and is not replaced: the worked example under
+  the coverage bullet, naming which coefficient was worst. Its numbers came from the run the #321
+  review repudiated, so they could not be kept, and the surviving sentence states the generalization
+  with no instance behind it.
 - 2026-10-11 (#255 item 2): **a derived quantity is collected where it is measured, not rebuilt from what
   survived.** `_widen_by_rate_selection` rebuilt its rate table from `pending`, the arcs that became
   records, keyed by `id(got)`. Both are wrong for the quantity: the spread is how much stage 1 moves when
@@ -871,9 +886,6 @@ an arc (`members` in `merge_genus`), sorted. A drop-out member on no arc is name
 `community`, and the help's "What a merged node carries" says so. `live_check` flags a genus node with an
 empty `merged_nodes` and an arc with an empty `technique`. A merged arc's `technique` is sorted, as
 `techniques_of` sorts a single arc's.
-2026-11-06) taxon_id_refused onto the arc, and `records_to_network` builds the genus node from those; a
-side field it does not reset reaches the genus node from the first strain's arc. Strain ids survive only on
-arcs (`merged_pairs` by name, `community` by id), which the help's "What a merged node carries" says.
 
 ## Reading only what a search needs (2026-09-27)
 
@@ -1313,6 +1325,3 @@ the coefficient from their difference over x like any fitted arc; `FITTED_METRIC
 `model_assumptions(derivation)`. A row with no scale has no `metric_with`, gives no cell, and is named
 (`its row is in units of ... r_i - D`). `gui.STEADY_CHECK_CIRCULAR` replaces the steady-state check under
 this derivation. Checked in the R package: the payload loads, `solve(A, -r)` is the observed pair.
-chosen and `glv_mode_on` accepts it. The gLV package from it (matrix.py, which branches on
-"integrated"/"replicate" in many places) is a separate task.
-`derive.media_identity` instead, as the rest of the tool does.
