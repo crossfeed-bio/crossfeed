@@ -20,9 +20,12 @@ Rules for this file:
   disagree, and names every arc of the pair. For the gLV image, `_pair_values` now keeps the arcs whose
   numbers entered a cell (`edges`, per unit), and `coefficients` puts them in each block as `behind`,
   so a hover names exactly the arcs of the cell's own abundance unit, not every arc of the pair. The
-  payload and the CSV copy named keys, so neither carries `behind`. The hover is each cell's SVG
-  `<title>`, which needs no script, so the page stays free of JavaScript and the downloaded file keeps
-  the hover. A PNG was declined for now (Karoline: "SVG only for now"): the standard library cannot
+  payload and the CSV copy named keys, so neither carries `behind`. **The hover is a panel inside the
+  SVG**, under the legend: each cell's group holds its text in a `.tip` group that a CSS `:hover` rule
+  inside the SVG shows, so it needs no script, the page stays free of JavaScript, and the downloaded
+  file keeps it. A `<title>` alone was the first build and failed in use (Karoline: "the hover does not
+  work"): the app's browser pane, like some others, never draws the native tooltip. The `<title>` stays
+  for screen readers. A PNG was declined for now (Karoline: "SVG only for now"): the standard library cannot
   draw its text.
 - 2026-11-13: **where a gLV package settles is `steady.settled`, not the solution with everyone present.**
   The check and the README solved `A x = -(r - D)` with all organisms and called every negative entry washed

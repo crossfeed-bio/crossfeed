@@ -215,7 +215,13 @@ def glv_cells(net: InteractionNetwork, rates: dict, block: dict, got: dict) -> t
 def svg(names: list, grid: dict, title: str, subtitle: str, value_name: str, slug: str = "m") -> str:
     """The matrix as a standalone SVG: title, column labels, row labels, the cells with their hover, and a
     legend with the scale's two ends and every kind of cell that occurs. `slug` keeps the pattern ids of
-    two images on one page apart."""
+    two images on one page apart.
+
+    The hover is drawn in the image itself: a panel under the legend shows the hovered cell's text, by a
+    CSS `:hover` rule inside the SVG, so it needs no script and works on the page and in the downloaded
+    file alike. A `<title>` alone was not enough: a browser's native tooltip for it does not appear in
+    every browser (Karoline, 2026-11-14: "the hover does not work"). The `<title>` stays, for screen
+    readers and for the browsers that do show it."""
     n = len(names)
     size = _cell(n)
     finite = [abs(c["value"]) for c in grid.values() if c["kind"] == "value" and c["value"] is not None
@@ -224,12 +230,19 @@ def svg(names: list, grid: dict, title: str, subtitle: str, value_name: str, slu
     longest = max((len(s) for s in names), default=4)
     left = 12 + longest * CHAR
     top_labels = longest * CHAR * math.sin(math.radians(50)) + 14
-    width = max(left + n * size + 24, 560)
+    width = max(left + n * size + 24, 720)
     sub = _lines(subtitle, int((width - 24) / CHAR))
     top = 40 + 16 * len(sub) + top_labels
     kinds = [k for k in KINDS if any(c["kind"] == k for c in grid.values())]
     legend_h = 64 + 20 * len(kinds)
-    height = top + n * size + 28 + legend_h
+    ly = top + n * size + 40
+    # the hover panel, under the legend, as tall as the longest hover text wrapped to its width
+    per_line = int((width - 48) / CHAR)
+    wrapped = {key: [piece for line in cell["hover"].splitlines() for piece in (_lines(line, per_line) or [""])]
+               for key, cell in grid.items()}
+    panel_y = ly + legend_h - 4
+    panel_h = 24 + 16 * max((len(lines) for lines in wrapped.values()), default=1)
+    height = panel_y + panel_h + 12
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0f}" height="{height:.0f}" '
            f'viewBox="0 0 {width:.0f} {height:.0f}" font-family="system-ui, -apple-system, Segoe UI, sans-serif" '
            f'role="img" aria-label="{_esc(title)}">',
@@ -246,6 +259,8 @@ def svg(names: list, grid: dict, title: str, subtitle: str, value_name: str, slu
            f'<stop offset="0" stop-color="{brand.INHIBITION}"/><stop offset="0.5" stop-color="{NEUTRAL}"/>'
            f'<stop offset="1" stop-color="{brand.GROWTH}"/></linearGradient>'
            "</defs>",
+           "<style>.tip{visibility:hidden}.cell:hover .tip{visibility:visible}"
+           f".cell:hover>rect{{stroke:{brand.INK};stroke-width:2}}</style>",
            f'<rect width="{width:.0f}" height="{height:.0f}" fill="#FFFFFF"/>',
            f'<text x="12" y="24" font-size="15" font-weight="600" fill="{brand.INK}">{_esc(title)}</text>',
            *(f'<text x="12" y="{44 + 16 * k}" font-size="12" fill="{brand.MUTED}">{_esc(line)}</text>'
@@ -259,21 +274,31 @@ def svg(names: list, grid: dict, title: str, subtitle: str, value_name: str, slu
         y = top + i * size + size / 2 + FONT * 0.35
         out.append(f'<text x="{left - 8:.1f}" y="{y:.1f}" font-size="{FONT}" text-anchor="end" '
                    f'fill="{brand.INK}">{_label_svg(name)}</text>')
+    # the panel's frame and its resting text, drawn before the cells so a hovered cell's text covers it
+    out += [f'<rect x="12" y="{panel_y:.1f}" width="{width - 24:.0f}" height="{panel_h}" rx="4" '
+            f'fill="{brand.PANEL}" stroke="{brand.LINE}"/>',
+            f'<text x="24" y="{panel_y + 20:.1f}" font-size="12" fill="{brand.MUTED}">Hover a cell: its value '
+            "and the studies and experiments behind it appear here.</text>"]
     fills = {"zero": NEUTRAL, "na": f"url(#{slug}-na)", "conflict": f"url(#{slug}-conflict)", "empty": EMPTY,
              "diagonal": brand.LINE}
     for (i, j), cell in sorted(grid.items()):
         fill = (color_of(cell["value"], scale) if cell["kind"] == "value" and cell["value"] is not None
                 else fills.get(cell["kind"], EMPTY))
         x, y = left + j * size, top + i * size
-        out.append(f'<g><title>{_esc(cell["hover"])}</title>'
+        # the first line names the pair, in bold, as a heading for the rest
+        tip = "".join(f'<text x="24" y="{panel_y + 20 + 16 * k:.1f}" font-size="12" fill="{brand.INK}"'
+                      + (' font-weight="600"' if k == 0 else "") + f">{_esc(line)}</text>"
+                      for k, line in enumerate(wrapped[(i, j)]))
+        out.append(f'<g class="cell"><title>{_esc(cell["hover"])}</title>'
                    f'<rect x="{x + GAP / 2:.1f}" y="{y + GAP / 2:.1f}" '
                    f'width="{size - GAP:.1f}" height="{size - GAP:.1f}" '
-                   f'rx="2" fill="{fill}" stroke="{brand.LINE}" stroke-width="0.6"/></g>')
+                   f'rx="2" fill="{fill}" stroke="{brand.LINE}" stroke-width="0.6"/>'
+                   f'<g class="tip"><rect x="13" y="{panel_y + 1:.1f}" width="{width - 26:.0f}" '
+                   f'height="{panel_h - 2}" rx="4" fill="{brand.PANEL}"/>{tip}</g></g>')
     # axis captions
     out.append(f'<text x="{left:.1f}" y="{top + n * size + 18:.1f}" font-size="11" fill="{brand.MUTED}">'
                "rows: the affected organism; columns: the actor</text>")
     # the legend: the scale with its two ends, then each kind of cell that occurs here
-    ly = top + n * size + 40
     bar = 220
     number = (lambda v: f"{v:+.3g}") if scale else (lambda v: "0")
     out += [f'<text x="12" y="{ly:.1f}" font-size="12" font-weight="600" fill="{brand.INK}">{_esc(value_name)}</text>',

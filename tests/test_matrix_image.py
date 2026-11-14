@@ -48,6 +48,11 @@ NET = records_to_network([
 ])
 
 
+def _cells(root):
+    """The groups that are cells: each holds its square, its `<title>` and its hover panel."""
+    return [g for g in root.iter(f"{SVG}g") if g.get("class") == "cell"]
+
+
 def test_each_cell_is_the_kind_and_value_the_csv_holds():
     names, grid = matrix_image.adjacency_cells(NET)
     assert names == ["A", "B", "C"]
@@ -84,7 +89,7 @@ def test_the_colors_carry_the_sign_and_the_legend_says_which_is_which():
     image = matrix_image.adjacency_svg(NET)
     root = ET.fromstring(image)
     cells = {g.find(f"{SVG}title").text.splitlines()[0]: g.find(f"{SVG}rect").get("fill")
-             for g in root.iter(f"{SVG}g")}
+             for g in _cells(root)}
     # +2 is the end of the scale, so the full signal color
     assert cells["Effect of A on B"] == brand.GROWTH == "#1A7F5A"
     # -0.5 is a quarter of the scale: a share of 0.2 + 0.8 x 0.25 = 0.4 of #C2410C mixed into #F3F4F1,
@@ -100,7 +105,27 @@ def test_the_colors_carry_the_sign_and_the_legend_says_which_is_which():
     for kind in ("zero", "na", "conflict", "empty", "diagonal"):
         assert matrix_image.KINDS[kind] in text, kind
     # one hover per cell, nine cells
-    assert len(list(root.iter(f"{SVG}g"))) == 9
+    assert len(list(_cells(root))) == 9
+
+
+def test_the_hover_shows_in_the_image_itself_without_a_script():
+    """Karoline, 2026-11-14: "the hover does not work". A `<title>` is shown only by browsers that draw its
+    native tooltip, which the app's browser pane does not. So each cell carries its text in a panel under
+    the legend, hidden until the cell is hovered by a CSS rule inside the SVG, which works on the page and
+    in the downloaded file, with no script."""
+    image = matrix_image.adjacency_svg(NET)
+    root = ET.fromstring(image)
+    style = root.find(f"{SVG}style").text
+    assert ".tip{visibility:hidden}" in style and ".cell:hover .tip{visibility:visible}" in style
+    assert "<script" not in image
+    for g in _cells(root):
+        tip = g.find(f"{SVG}g[@class='tip']")
+        shown = [("".join(t.itertext())) for t in tip.iter(f"{SVG}text")]
+        # the panel holds the same lines as the title, wrapped to the panel's width but never cut
+        assert " ".join(shown).split() == g.find(f"{SVG}title").text.split()
+    # the panel at rest says what to do
+    resting = [t for t in root.findall(f"{SVG}text") if (t.text or "").startswith("Hover a cell")]
+    assert len(resting) == 1
 
 
 def test_a_species_name_is_in_italics_and_its_strain_is_not():
@@ -149,7 +174,7 @@ def test_the_page_shows_the_image_and_serves_it_as_a_file(server):  # noqa: F811
         assert "attachment" in r.headers["Content-Disposition"] and ".svg" in r.headers["Content-Disposition"]
         root = ET.fromstring(r.read().decode("utf-8"))
     assert root.find(f"{SVG}title").text == "Adjacency matrix"
-    assert any(g.find(f"{SVG}title").text.startswith("Effect of") for g in root.iter(f"{SVG}g"))
+    assert any(g.find(f"{SVG}title").text.startswith("Effect of") for g in _cells(root))
     with pytest.raises(urllib.error.HTTPError):
         _get(f"{base}/matrix.svg?token={token}&which=9")
 

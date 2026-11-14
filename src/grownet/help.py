@@ -1177,7 +1177,8 @@ adjacency matrix drawn as a grid, one square per ordered pair, rows affected and
 the table. Green is a positive effect and orange-red a negative one, stronger with the size of the value
 on a scale whose two ends the legend gives; a pair judged absent is the pale middle of the scale, an
 <strong>NA</strong> cell is hatched, a pair whose arcs disagree in sign is cross-hatched, and a pair with
-no arc is white. Hover a square to see its value and the studies and experiments it is derived from. In
+no arc is white. Hover a square and the panel under the legend shows its value and the studies and
+experiments it is derived from. In
 gLV mode the box also draws each matrix of fitted coefficients, where the hover of a diagonal square names
 the growth rate and carrying capacity its self-limitation comes from. <strong>Download the image
 (.svg)</strong> saves each one as an SVG file, which keeps the hover when opened in a browser and scales
