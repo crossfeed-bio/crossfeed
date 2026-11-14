@@ -1800,6 +1800,9 @@ def _settled_lines(block: dict, rates: dict) -> list:
         out += ["          The solution of A x = -r with every organism present, " + interior + ",",
                 "          puts " + ", ".join(block["not_above_zero"]) + " at or below zero, so it is not "
                 "a state of this matrix."]
+    elif block.get("equilibrium") is not None:
+        out += ["          The solution of A x = -r with every organism present, " + interior + ",",
+                "          is positive but not stable, so a simulation started near it leaves it."]
     return out
 
 
@@ -1874,7 +1877,11 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
             lines.append("      where it settles: NOT COMPUTED. "
                          + (block.get("equilibrium_why_not")
                             or "an organism here has no rate"))
-        elif block.get("not_above_zero") or (block.get("settled") or {}).get("state") is None:
+        elif (block.get("not_above_zero") or (block.get("settled") or {}).get("state") is None
+              or (block.get("settled") or {}).get("lost")):
+            # the full solution is where it settles only when the settled state keeps every organism: a
+            # positive interior can be unstable, and the README printed it as where the matrix settles
+            # while the chemostat check, reading `settled`, predicted another state (found in review)
             lines += _settled_lines(block, rates)
         else:
             condition = block.get("equilibrium_condition")

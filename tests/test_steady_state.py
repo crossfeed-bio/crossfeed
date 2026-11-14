@@ -666,3 +666,65 @@ def test_a_state_on_the_edge_is_found_once():
     where = steady.settled([[-1.0, 0.0], [-1.0, -1.0]], [1.0, 1.0 + 1e-13])
     assert where["why_not"] == "" and where["kept"] == [0] and where["lost"] == [1]
     assert where["state"][0] == pytest.approx(1.0)
+
+
+def test_a_positive_but_unstable_full_solution_is_not_where_the_readme_says_it_settles():
+    """The README printed the solution with every organism present as "where it settles" whenever all of it
+    was above zero, while the chemostat check, reading `settled`, predicted another state. Three organisms
+    with r = 0.4 /h and K = 1e9 and A / (r / K) =
+        [[-1, -1.68, -0.8], [-0.44, -1, -1.58], [-2.49, -1.03, -1]]
+    have the positive full solution (1.027e8, 3.526e8, 3.811e8), which is unstable: miaSim's simulateGLV
+    started 1% beside it ends at t = 2000 with B at 1.00e9 and A and C under 1e-2. `settled` finds that state
+    alone; the README now names it and says why the full solution is not it."""
+    import math as _math
+
+    from test_glv_coefficients import _arc, _net, _rate
+
+    from grownet import matrix
+    scaled = [[-1.0, -1.68, -0.8], [-0.44, -1.0, -1.58], [-2.49, -1.03, -1.0]]
+    ids, rate, partner, capacity = ["a", "b", "c"], 0.4, 2.0e8, 1.0e9
+    arcs = [_arc(ids[j], ids[i], _math.log2(1 + scaled[i][j] * partner / capacity), x_j=partner,
+                 metric_without=rate, metric_with=rate * (1 + scaled[i][j] * partner / capacity))
+            for i in range(3) for j in range(3) if i != j]
+    rates = {k: _rate(k.upper(), rate, capacity) for k in ids}
+    net = _net(arcs)
+    got = matrix.coefficients(net, rates)
+    (block,) = got["matrices"]
+    assert block["not_above_zero"] == [] and block["settled"]["kept"] == [1]
+    readme = matrix.readme_from(got, net, rates)
+    assert "where it settles (in Cells/mL): B 1e+09, with A, C lost" in readme
+    assert "is positive but not stable, so a simulation started near it leaves it" in readme
+    assert "where it settles (the solution of A x = -r" not in readme
+
+
+def test_a_three_organism_state_unstable_only_by_its_last_hurwitz_condition_is_refused():
+    """A = [[-1, -1.707, -0.664], [-1.709, -1, 0.568], [-0.996, -0.475, -1]], g = (1, 1, 1). The full solution
+    (0.6417, 0.0853, 0.3204) is positive and no outsider is left to invade, so only stability can refuse it.
+    R's eigen() of diag(x) A there gives (-1, -0.2439, +0.1966); its characteristic polynomial is
+    1, 1.0473, -0.00062, -0.04796, and the last coefficient is negative, which only the third Hurwitz
+    condition sees. The two stable states are {1, 3} at (0.9922, 0.0118) and {2, 3} at (1.2348, 0.4135),
+    eigenvalues (-1, -0.00397) and (-1, -0.6483) by eigen()."""
+    matrix_a = [[-1.0, -1.707, -0.664], [-1.709, -1.0, 0.568], [-0.996, -0.475, -1.0]]
+    where = steady.settled(matrix_a, [1.0, 1.0, 1.0])
+    assert sorted(state["kept"] for state in where["states"]) == [[0, 2], [1, 2]]
+    assert "2 stable steady states" in where["why_not"]
+
+
+def test_a_system_larger_than_the_search_says_so_rather_than_guess():
+    """Every sub-community of n organisms is 2^n systems; past MAX_SETTLED the search says it did not run."""
+    n = steady.MAX_SETTLED + 1
+    matrix_a = [[-1.0 if i == j else -0.1 for j in range(n)] for i in range(n)]
+    where = steady.settled(matrix_a, [1.0] * n)
+    assert where["state"] is None and where["states"] == []
+    assert f"it holds {n} organisms" in where["why_not"] and f"at most {steady.MAX_SETTLED}" in where["why_not"]
+    assert steady.MAX_SETTLED == 12
+    assert steady.settled([row[:12] for row in matrix_a[:12]], [1.0] * 12)["state"] is not None
+
+
+def test_a_state_on_the_edge_is_found_once_at_the_scale_of_a_real_package():
+    """The edge case above at the scale a package carries: abundances near 1e9 and coefficients near 1e-9.
+    The tolerance is relative to the largest value of its kind, so x_2 = 1e-4, a ten-billionth of x_1, is
+    zero, and one state is found; an absolute tolerance of 1e-9 would admit the pair and report two."""
+    where = steady.settled([[-1e-9, 0.0], [-1e-9, -1e-9]], [1.0, 1.0 + 1e-13])
+    assert where["why_not"] == "" and where["kept"] == [0] and where["lost"] == [1]
+    assert where["state"][0] == pytest.approx(1e9)

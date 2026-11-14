@@ -15,6 +15,13 @@ Rules for this file:
 
 ## Current state
 
+- 2026-11-14: **the README's "where it settles" follows `settled`, not the sign of the full solution.**
+  It used the full solution whenever no entry was at or below zero, but a positive interior can be
+  unstable: three organisms with A / (r / K) = [[-1, -1.68, -0.8], [-0.44, -1, -1.58], [-2.49,
+  -1.03, -1]] settle with B alone (miaSim from 1% beside the interior ends at B 1e9), and the check
+  said so while the README did not. It now defers to `settled` whenever that state loses anyone. The
+  tests for `settled` now include a 3-organism state refused only by the third Hurwitz condition
+  (checked against R's eigen), the 12-organism cap, and the tolerances at package scale.
 - 2026-11-13: **where a gLV package settles is `steady.settled`, not the solution with everyone present.**
   The check and the README solved `A x = -(r - D)` with all organisms and called every negative entry washed
   out. Study 7's package (BT, BH, RI) at D 0.04 puts BH and RI below zero there, while the system settles,

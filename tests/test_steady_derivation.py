@@ -1105,3 +1105,19 @@ def test_a_row_whose_runs_cannot_be_traced_to_a_study_is_not_credited_to_one(mon
     records, skipped = SteadyStateDeriver(client=client).derive_many(studies)
     assert records == []
     assert sum("not traced to a study (E404)" in why for _, why in skipped) == 2
+
+
+def test_runs_counted_in_different_abundance_units_are_not_fitted_together():
+    """One group per medium, abundance unit and dilution rate: the same split as the one-medium case, with the
+    monocultures read in OD600 instead of Cells/mL, gives two groups and no row, where one unit gives both."""
+    from test_subcommunity_inputs import _runs
+    client, exps = _runs()
+    for bid in (1, 2, 3, 4):                     # the monocultures' replicates, as `_runs` numbers them
+        for context in client.bioreplicates[bid]["measurementContexts"]:
+            context["techniqueUnits"] = "OD600"
+    records, skipped = SteadyStateDeriver(client=client).derive_many([({"id": "S1", "name": "x"}, [exps[2]]),
+                                                                      ({"id": "S2", "name": "y"},
+                                                                       [exps[0], exps[1]])])
+    assert records == []
+    groups = [what for what, _ in skipped if what.startswith("chemostat group at")]
+    assert any("OD600" in what for what in groups) and any("Cells/mL" in what for what in groups), groups
