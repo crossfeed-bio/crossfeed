@@ -1693,7 +1693,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         images = matrix_images(result) if result["network"].edges else []
         try:
-            _heading, name, image = images[int(query.get("which", ["0"])[0])]
+            which = int(query.get("which", ["0"])[0])
+            if which < 0:                       # a negative index served the last image
+                raise IndexError(which)
+            _heading, name, image = images[which]
         except (ValueError, IndexError):
             self.send_error(404, "no such matrix image")
             return

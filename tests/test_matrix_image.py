@@ -8,6 +8,7 @@ in gLV mode each matrix of coefficients), on the local page's result, as SVG onl
 Every expected number is computed by hand in the test that uses it.
 """
 import math
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -310,16 +311,22 @@ def test_the_page_shows_the_image_and_serves_it_as_a_file(server):  # noqa: F811
                                    "derivation": "replicate"}).encode()
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
         page = r.read().decode("utf-8")
-    assert "Matrix image" in page and "<svg" in page and "Download the image (.svg)" in page
-    assert "Hover a cell" in page
+    assert "Matrix image" in page and "Download the image (.svg)" in page
+    # the image itself, inside its box: "<svg" alone also matches the page's logo, and the hint paragraph
+    # holds "Hover a cell", so those two assertions passed with no image on the page
+    found = re.search(r'<div class="matrix-image"[^>]*>(<svg.*?</svg>)', page, re.S)
+    assert found, "no image inside the matrix-image box"
+    inline = ET.fromstring(found.group(1))
+    assert inline.find(f"{SVG}title").text == "Adjacency matrix" and _cells(inline)
     with urllib.request.urlopen(f"{base}/matrix.svg?token={token}&which=0", timeout=10) as r:
         assert r.headers["Content-Type"].startswith("image/svg+xml")
         assert "attachment" in r.headers["Content-Disposition"] and ".svg" in r.headers["Content-Disposition"]
         root = ET.fromstring(r.read().decode("utf-8"))
     assert root.find(f"{SVG}title").text == "Adjacency matrix"
     assert any(g.find(f"{SVG}title").text.startswith("Effect of") for g in _cells(root))
-    with pytest.raises(urllib.error.HTTPError):
-        _get(f"{base}/matrix.svg?token={token}&which=9")
+    for which in ("9", "-1", "x"):          # out of range, negative (served the last image) and not a number
+        with pytest.raises(urllib.error.HTTPError):
+            _get(f"{base}/matrix.svg?token={token}&which={which}")
 
 
 
@@ -380,3 +387,61 @@ def test_a_long_hover_wraps_inside_its_box():
     lines = ["".join(x.itertext()) for x in tip.iter(f"{SVG}text")]
     assert len(lines) > 3
     assert all(len(line) * matrix_image.TIP_CHAR <= width - 20 for line in lines)
+
+
+def test_glv_mode_puts_each_coefficient_matrix_on_the_page_after_the_adjacency_matrix():
+    """The page's list of images: the adjacency matrix, and in gLV mode one image per matrix of the package,
+    in the order `/matrix.svg?which=` serves them. Out of gLV mode, or where no coefficient can be fitted,
+    the adjacency matrix alone."""
+    from grownet import gui
+    net = _glv_net([_glv_arc("b", "a", 1.0, x_j=2.0e8), _glv_arc("a", "b", -1.0, x_j=4.0e8)])
+    rates = {"a": _rate("A", 0.4, 1.0e9), "b": _rate("B", 0.2, 5.0e8)}
+    on = gui.glv_mode(dict(gui.DEFAULTS))
+    images = gui.matrix_images({"network": net, "rates": rates, "settings": on})
+    assert [heading for heading, _, _ in images] == ["Adjacency matrix", "gLV coefficients in Cells/mL"]
+    assert images[1][1].endswith("glv_matrix.Cells_per_mL.svg")
+    assert ET.fromstring(images[1][2]).find(f"{SVG}title").text == "gLV coefficients in Cells/mL"
+    off = gui.matrix_images({"network": net, "rates": rates, "settings": dict(gui.DEFAULTS)})
+    assert [heading for heading, _, _ in off] == ["Adjacency matrix"]
+
+
+def test_each_legend_swatch_is_the_fill_of_the_cells_it_names():
+    """Each legend line's swatch has the fill of the cells of that kind, read off the drawn cells by their
+    kind in the grid, so a swatch in the wrong pattern or color fails (white alone would match "no arc")."""
+    _, grid = matrix_image.adjacency_cells(NET)
+    root = ET.fromstring(matrix_image.adjacency_svg(NET))
+    by_kind = {}
+    for g in _cells(root):
+        i, j = (int(k) for k in g.get("id").split("-c")[1].split("-"))
+        by_kind.setdefault(grid[(i, j)]["kind"], set()).add(g.find(f"{SVG}rect").get("fill"))
+    children = list(root)
+    checked = 0
+    for kind, sentence in matrix_image.KINDS.items():
+        label = [x for x in children if x.tag == f"{SVG}text" and x.text == sentence]
+        if kind not in by_kind:
+            assert not label, kind                  # the legend lists only kinds that occur
+            continue
+        swatch = children[children.index(label[0]) - 1]
+        assert swatch.tag == f"{SVG}rect" and by_kind[kind] == {swatch.get("fill")}, (kind, swatch.get("fill"))
+        checked += 1
+    assert checked == 5                             # zero, na, conflict, empty, diagonal in NET
+    stops = [s.get("stop-color") for s in root.iter(f"{SVG}stop")]
+    assert stops[0] == brand.INHIBITION and stops[-1] == brand.GROWTH and matrix_image.NEUTRAL in stops
+
+
+def test_the_drawn_labels_set_species_in_italics():
+    net = records_to_network([{**_arc("a", "b", 1.0, "S1", ["E1"]), "source_name": "Bacteroides fragilis NCTC 9343",
+                               "target_name": "Escherichia coli LF82"}])
+    root = ET.fromstring(matrix_image.adjacency_svg(net))
+    italic = ["".join(s.itertext()) for s in root.iter(f"{SVG}tspan") if s.get("font-style") == "italic"]
+    # each name twice, as a row label and as a column label
+    assert italic.count("Bacteroides fragilis") == 2 and italic.count("Escherichia coli") == 2
+
+
+def test_arcs_judged_absent_beside_a_value_are_named_with_their_sources():
+    net = records_to_network([_arc("a", "b", 1.0, "S1", ["E1"]),
+                              {**_arc("a", "b", 0.1, "S3", ["E5"]), "status": "absent", "effect": "neutral"}])
+    lines = matrix_image.adjacency_cells(net)[1][(1, 0)]["hover"].splitlines()
+    assert lines[1] == "log2 strength +1 (from 1 arc)" and lines[3] == "Experiments: E1"
+    assert lines[4] == "Also 1 arc judged absent, not in the value"
+    assert lines[5] == "Studies: S3" and lines[6] == "Experiments: E5"

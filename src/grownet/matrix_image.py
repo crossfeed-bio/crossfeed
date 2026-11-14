@@ -156,6 +156,13 @@ def _how(edges) -> str:
     return base + (f", {len(merged)} of them merged arcs" if merged else "")
 
 
+def _absent_lines(edges, net: InteractionNetwork) -> list:
+    """The arcs of a pair judged absent beside a value or a conflict: not in the number, named with theirs."""
+    if not edges:
+        return []
+    return [f"Also {_arcs(len(edges))} judged absent, not in the value", *provenance(edges, net)]
+
+
 def _bound_line(bound) -> str:
     if bound is None:
         return "The no-growth rule bounds nothing away from zero here, so no bound is given"
@@ -201,7 +208,7 @@ def adjacency_cells(net: InteractionNetwork, absent: InteractionNetwork | None =
             censored = [e for e in present if matrix._censored(e)]
             if pair in conflicts:
                 lines = [head, f"Not merged: the {_arcs(len(present))} of this pair disagree in sign, so the "
-                               "file holds 0", *provenance(present, net)]
+                               "file holds 0", *provenance(present, net), *_absent_lines(judged_absent, net)]
                 grid[(i, j)] = {"kind": "conflict", "value": 0.0, "hover": "\n".join(lines)}
             elif pair in values and values[pair] is None:
                 lines = [head, f"NA: one side did not grow, so no ratio exists ({_arcs(len(censored))})",
@@ -216,8 +223,7 @@ def adjacency_cells(net: InteractionNetwork, absent: InteractionNetwork | None =
                     # of the median (register item 14), so they are named apart from the number
                     lines += [f"Also {_arcs(len(censored))} where one side did not grow, same direction, not "
                               "in the value", *provenance(censored, net)]
-                if judged_absent:
-                    lines.append(f"{_arcs(len(judged_absent))} of this pair judged absent, not in the value")
+                lines += _absent_lines(judged_absent, net)
                 grid[(i, j)] = {"kind": kind, "value": value, "hover": "\n".join(lines)}
             elif judged_absent:
                 lines = [head, f"0: compared, and judged no interaction ({_arcs(len(judged_absent))}, absent)",
