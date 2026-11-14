@@ -68,6 +68,15 @@ NEXT = (
     # #303 (merged arcs and nodes), #309 (italics, readability), #307 (no issue numbers), #322 (R summary)
     "The help explains what a merged arc and a merged node carry, sets species names in italics, and reads "
     "more easily, with no issue numbers, and the R package's summary of a gLV package reads more cleanly.",
+    # #341, #342 (the matrix as an image)
+    "The result shows the adjacency matrix as an image, and in gLV mode each matrix of fitted coefficients: "
+    "green for a positive effect, orange-red for a negative one, with a legend, and a hover on each cell that "
+    "names the studies and experiments behind it. Each image downloads as SVG.",
+    # #338 (which standard deviation the absence threshold uses)
+    "The help says which standard deviation the absence threshold uses under each derivation.",
+    # #344 (the papers behind the integrated form)
+    "The help and the README cite the two papers the integrated form rests on: Kloppers and Greeff (2013) for "
+    "the Log Integral equation it fits, and Dattner and Klaassen (2015) for the cumulative integral estimator.",
 )
 
 # What changed in each release, a few lines each, newest first (Karoline, 2026-10-04: "a small log of what
@@ -375,6 +384,9 @@ CLI_ONLY = {
                "--report-rates)",
     "--glv": "write the parameters of a generalized Lotka-Volterra simulation to a zip file, the page's "
              "gLV parameters, Download (needs --report-rates)",
+    "--matrix-image": "write the adjacency matrix as an SVG image, the page's Matrix image, with its legend and "
+                      "each cell's sources on hover in a browser; with growth rates, each matrix of fitted gLV "
+                      "coefficients beside it, its name ending in _glv_matrix and the abundance unit",
     "--steady-check": "score those parameters against the chemostat steady states mGrowthDB holds for "
                       "these organisms, since a continuous culture satisfies A x = -(r - D) at steady "
                       "state and was never used to fit them: the report gets the comparison and the zip "
@@ -1169,6 +1181,21 @@ carries that <strong>measured bound</strong> (<code>strength_bound</code>) and t
 <p>The table itself carries no settings, version or date, so the menu entry below it, <em>Adjacency
 matrix: what it is</em>, writes a text file to keep beside it: how it was made, every setting, what 0 and
 NA mean, the pairs left at 0, and the studies to cite. The command line writes it beside the CSV.</p>
+<p><strong>The matrix as an image.</strong> Below the outputs, <strong>Matrix image</strong> opens the
+adjacency matrix drawn as a grid, one square per ordered pair, rows affected and columns the actor as in
+the table. Green is a positive effect and orange-red a negative one, stronger with the size of the value
+on a scale whose two ends the legend gives, and a negative value also carries a minus sign. A pair compared
+and judged absent is the pale middle of the scale with a 0 in it, an <strong>NA</strong> cell is hatched, a
+pair whose arcs disagree in sign is cross-hatched, a value that is not a finite number holds a question mark,
+a pair with no arc is white, and the diagonal, which is not part of the matrix, is gray. Hover a square, or
+move to it with the Tab key, and a box against it shows its value and the studies and experiments it is
+derived from, with any arc of the pair that is not in the value named apart. In gLV mode the Matrix image
+section also draws each matrix of fitted coefficients, where a pair with arcs but no coefficient is dotted and
+its box says why, and the box of a diagonal square says how its self-limitation was fitted and names the
+studies of its growth rate. Each image has its own download button, which saves it as an SVG file that keeps
+the hover when opened in a browser and scales for print.
+For a PNG, open the file in a browser and take a screenshot, or export it from a vector editor
+such as Inkscape.</p>
 <p><strong>A bound on an area is weaker than a bound on a rate.</strong> A culture that did not grow
 still carries the area of its own inoculum for the whole window, so on the default growth property, the
 area under the curve, the area the rule allows it can be as large as the growing side's, and the bound says

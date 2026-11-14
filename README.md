@@ -172,7 +172,8 @@ python -m grownet schema [--out FILE]
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the three built-in ones (see below).
 - The command line does everything the local page does: every advanced setting has its option, and the
   page's outputs are `--out FILE` (with `--format`), `--to-cytoscape`, `--report FILE` (the same report the
-  page shows), and, with `--report-rates`, `--rates FILE` and `--glv FILE`. `grownet derive --help` lists
+  page shows), `--matrix-image FILE` (the Matrix image, as SVG), and, with `--report-rates`, `--rates FILE`
+  and `--glv FILE`. `grownet derive --help` lists
   every option in the page's words, with examples.
 - `--format graphml` emits GraphML (for Cytoscape, igraph, networkx, Gephi) instead of the neutral JSON.
 - `--conditions NAME ...` is the page's second box: media, experiment ids or study ids. A study id given
@@ -243,7 +244,8 @@ switches back when pressed again. Every setting sits
 behind "Advanced settings", with the same defaults the command line uses.
 
 **The result** carries the network in JSON, GraphML or the adjacency matrix, Send to Cytoscape, the
-report, and, with growth rates on, their own CSV and Get gLV parameters. A Help page introduces the idea
+report, the matrix as an SVG image whose cells name the studies and experiments behind them (and in gLV
+mode each matrix of fitted coefficients), and, with growth rates on, their own CSV and Get gLV parameters. A Help page introduces the idea
 (after Gause, with a figure) and explains the boxes, every setting and arc attribute, the gLV files and
 the R package, the main design decisions, the command line, and what to do when no network comes back; an
 About page says who built it and links this repository.
