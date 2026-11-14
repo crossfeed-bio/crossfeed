@@ -15,6 +15,25 @@ Rules for this file:
 
 ## Current state
 
+- 2026-11-14 (#329, and #330's last paragraph): **CI runs once per branch, and the suite leaves the tree
+  as it found it on Windows.** In `ci.yml`, a `push` run on a branch other than `main` first asks the API
+  whether the branch has an open pull request in this repository that GitHub will test (the `duplicate`
+  job): matched on the exact branch with the name passed as a query parameter, since `#`, `&` or `+` in
+  a raw URL changed the filter and an empty one matched every pull request, and only when every such
+  pull request has `mergeable` true, since GitHub runs no `pull_request` workflow on one with a conflict.
+  Only an answer about the pushed commit counts (`head.sha == GITHUB_SHA`, still open). Then every job is
+  skipped and the pull request's run tests the commit merged into its base. GitHub reports a skipped job
+  as success; a skipped push run cannot satisfy a required check only because the skipped matrix job
+  reports as plain `test` while the ruleset requires the expanded names, so **no job without a matrix may
+  be made a required check**. Tags never ask. Every doubt runs the jobs: no
+  answer, an error (`gh api` writes its error JSON to stdout, so `$(...) || echo 0` never gave 0), or
+  `mergeable` still null after five tries. A `concurrency` group that canceled the older copy was tried
+  first and dropped: GitHub counts a canceled required check as a failure in the pull request's status.
+  Separately, a test that edits a committed file to provoke a check puts it back with
+  `read_bytes`/`write_bytes`, never as text: text mode on Windows writes `\r\n`, which is how
+  `schema/format_fields.json` came back 419 lines different after every run there. `.gitattributes` checks JSON
+  out with LF everywhere, so a Windows checkout matches the committed bytes and the test's byte check can
+  fail on the Windows CI leg (with `autocrlf` the file was CRLF there already and the round trip hid it).
 - 2026-11-14: **the integrated form cites Kloppers & Greeff 2013 and Dattner & Klaassen 2015**, in the help,
   the README and `integrated.py`'s docstring, because Karoline supplied both PDFs and asked for exactly those
   two. She read their abstracts; her agent read their full text. Do not write that a human read a paper
