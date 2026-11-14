@@ -729,7 +729,11 @@ pooled into one equation (`subcommunity.pool`), numpy 2.2.6 and scipy 1.13.0:
 
 ## Open decisions
 
-- **OPEN, 2026-10-11 (#266): one format bump to `/v4`, or none.** Three things a reader who did not run
+- **Settled 2026-10-12 (#266): one format bump to `/v4`.** Karoline: "for 1-6, go with your
+  recommendations", which for this item was one bump to `grownet.interaction_network/v4` with
+  `metric_unit`, `window` and `window_unit` on the edge, and a node field `taxon_id_refused` beside
+  `taxon_id` as mGrowthDB gives it (option b). All of it shipped in `/v4`; the current format is `/v5`, which
+  adds `technique`. The question as it was put on 2026-10-11 follows. Three things a reader who did not run
   the tool cannot establish from the file need a field the format does not have: `metric_unit`, because
   all 223 corpus arcs carry a `metric_with`/`metric_without` pair and 190 of them carry no unit field of
   any kind while the All network mixes three units (#214); `window` and `window_unit`, because the

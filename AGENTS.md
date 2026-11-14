@@ -85,7 +85,10 @@ derivation method). Labels are created by a maintainer; if one is missing, say s
    side's pull requests and leave the button to them, and they do the same for yours. A green check and
    "Closes #N" mean ready to review, not ready to merge.
    `main` already requires one approving review and GitHub never lets an author approve their own pull
-   request, so this costs one click and nothing else. If a pull request is finished and its author is
+   request, so this costs one click and nothing else. That floor binds accounts without admin only: the
+   ruleset lets the admin role bypass it (Craig's agent, 2026-11-07; the bypass list is visible to admins
+   alone, so write access cannot confirm it), so for an admin the approval is this rule and not a
+   mechanism. If a pull request is finished and its author is
    away, say so on it and merge; the rule is about not landing work someone is still writing.
    Step 7 is the mechanism and this is the default: drafting closes the window from the side that knows,
    and this closes the gap between a decision arriving and the draft flag going on.
@@ -208,7 +211,8 @@ them as a dated bullet with who gave them. Keep one-off requests out.
   draft is still not merged (step 7), and a release is still published by the humans, not by an agent.
   The mechanical floor also still applies: `main` requires one approving review and GitHub never lets an
   author approve their own pull request, so an agent's own pull request still needs one approval from the
-  other side before the button works. Reviewing `main` afterward is in addition to that, not instead.
+  other side before the button works (for an account without admin; see step 8). Reviewing `main`
+  afterward is in addition to that, not instead.
 - 2026-11-06 (Karoline): **The help is written for its readers.** No "(Karoline, 2026-10-07)"-style
   attribution beside its text ("please remove all such entries from the help, they are not useful for
   readers"): who decided what, and when, belongs in code comments, docs/METHOD_NOTES.md and the issues.
