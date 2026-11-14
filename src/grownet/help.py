@@ -1050,9 +1050,7 @@ in steady state is the dilution rate the experimenter chose, not a property of t
 experiment must share to be compared, so a chemostat co-culture is compared only with chemostat
 monocultures, never with a batch one.</li>
 </ul>
-<p>An experiment whose mode mGrowthDB does not record counts as not batch. No study in mGrowthDB holds a
-continuous culture that forms a pair or a drop-out design today, so this changes no network yet; it
-decides what happens when one arrives.</p>
+<p>An experiment whose mode mGrowthDB does not record counts as not batch.</p>
 
 <h2 id="example">Try the example</h2>
 <p>The Example button fills the species box with {_e(pair)}, a pair with enough data to show a result: the
