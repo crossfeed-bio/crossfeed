@@ -37,13 +37,13 @@ content.
   organisms it keeps satisfy the system, none it loses can grow back in, and every eigenvalue there is
   negative. Two stable states, none the check can stand behind, or a candidate too ill-conditioned to judge are
   said rather than scored.
-  The full solution stays in the text as the reason a reader's own `solve(A, -r)` differs. The package
-  payload's `equilibrium` and `not_above_zero` fields are unchanged: they still hold the full solution.
   The README also names the settled state where the full solution is above zero and unstable, which it
   printed as where the matrix settles while the check predicted another state, and says when a stable full
   solution is one of several states. Stability is judged from eigenvalues computed directly: the test on
   the characteristic polynomial misjudged states whose abundances span many orders, and named one state
   of a bistable system. The check refuses an organism with no growth rate, as the README does.
+  The full solution stays in the text as the reason a reader's own `solve(A, -r)` differs. The package
+  payload's `equilibrium` and `not_above_zero` fields are unchanged: they still hold the full solution.
 
 - **The method notes and the agent notes no longer carry stale copies of text they also carry current
   versions of.** Three merge resolutions unioned conflict hunks whose base was not empty, so each kept
