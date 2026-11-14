@@ -524,3 +524,25 @@ def test_a_glv_pair_judged_absent_is_0_as_in_the_adjacency_image():
     cell = grid[(names.index("C"), names.index("A"))]
     assert cell["kind"] == "zero" and "judged no interaction" in cell["hover"] and "E7" in cell["hover"]
     assert matrix_image.glv_cells(net, rates, block, got)[1][(names.index("C"), names.index("A"))]["kind"] == "empty"
+
+
+def test_the_command_line_writes_the_same_image_as_the_page(tmp_path, capsys):
+    """The README says the command line does everything the page does; the Matrix image was the page's
+    alone. `--matrix-image FILE` writes the adjacency matrix as the page draws it, hovers included."""
+    import json
+
+    from grownet.__main__ import main
+    records = [_arc("a", "b", 1.0, "S1", ["E1"]), _arc("c", "a", -0.5, "S1", ["E4"])]
+    fixture, image, net_file = tmp_path / "records.json", tmp_path / "m.svg", tmp_path / "net.json"
+    fixture.write_text(json.dumps(records), encoding="utf-8")
+    assert main(["derive", "S1", "--fixture", str(fixture), "--out", str(net_file),
+                 "--matrix-image", str(image)]) == 0
+    assert "as an image to" in capsys.readouterr().err
+    root = ET.fromstring(image.read_text(encoding="utf-8"))
+    assert root.find(f"{SVG}title").text == "Adjacency matrix"
+    hovers = [g.find(f"{SVG}title").text for g in _cells(root)]
+    assert any("Experiments: E1" in h for h in hovers) and any("Experiments: E4" in h for h in hovers)
+    # the same picture the page would draw for that network
+    from grownet.model import InteractionNetwork
+    written = InteractionNetwork.from_dict(json.loads(net_file.read_text(encoding="utf-8")))
+    assert image.read_text(encoding="utf-8") == matrix_image.adjacency_svg(written)

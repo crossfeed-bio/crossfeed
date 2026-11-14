@@ -172,7 +172,8 @@ python -m grownet schema [--out FILE]
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the three built-in ones (see below).
 - The command line does everything the local page does: every advanced setting has its option, and the
   page's outputs are `--out FILE` (with `--format`), `--to-cytoscape`, `--report FILE` (the same report the
-  page shows), and, with `--report-rates`, `--rates FILE` and `--glv FILE`. `grownet derive --help` lists
+  page shows), `--matrix-image FILE` (the Matrix image, as SVG), and, with `--report-rates`, `--rates FILE`
+  and `--glv FILE`. `grownet derive --help` lists
   every option in the page's words, with examples.
 - `--format graphml` emits GraphML (for Cytoscape, igraph, networkx, Gephi) instead of the neutral JSON.
 - `--conditions NAME ...` is the page's second box: media, experiment ids or study ids. A study id given

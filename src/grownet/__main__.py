@@ -366,6 +366,9 @@ def _derive_run(a):
             # property of the organism, so it must not move with --include-absent or the q-value filter
             # (Karoline, 2026-10-12, on #204: option 1)
             fitted_rows = list(records)
+            # the arcs below the threshold that the file leaves out, kept for the matrix image, which draws
+            # a pair compared and judged absent as 0, as the page does (#341)
+            absent_records = [] if a.include_absent else [r for r in records if r.get("status") == "absent"]
             records, extra = output_meta(records, a.include_low_quality, a.correction, a.absence_threshold,
                                          a.no_growth_alpha, a.no_growth_factor, a.merge_arcs, a.min_studies,
                                          a.merge_genera, max_adjusted_p=a.max_adjusted_p,
@@ -411,6 +414,7 @@ def _derive_run(a):
             net.meta["errors"] = list(errors)
             net.meta["complete"] = False
     result = {"study": a.study, "entries": [], "resolved": [], "unresolved": [], "studies": [a.study],
+              "absent": records_to_network(absent_records) if a.live and absent_records else None,
               "rates": organism_rates, "client": client if a.live else None,
               "skipped": skipped, "errors": errors, "network": net, "notes": _report_notes(a, organism_rates)}
     code = _emit(a, net, skipped, extra, a.study, result)
@@ -665,6 +669,25 @@ def _emit(a, net, skipped, extra, label, result):
             f.write(glv_package(net, organism_rates, extra_files))
         print(f"wrote the gLV parameters to {a.glv}: the interaction matrix, the growth rates and a README",
               file=sys.stderr)
+
+    if a.matrix_image:
+        # the page's Matrix image (#341): the adjacency matrix to FILE and, with growth rates, one image per
+        # matrix of fitted coefficients beside it, named as the page names its downloads
+        from . import matrix_image
+        from .matrix import CannotConvert
+        images = [(a.matrix_image, "the adjacency matrix", matrix_image.adjacency_svg(net, result.get("absent")))]
+        if organism_rates:
+            stem = os.path.splitext(a.matrix_image)[0]
+            try:
+                images += [(f"{stem}_{name}", f"the gLV coefficients in {unit}", image)
+                           for unit, name, image in matrix_image.glv_svgs(net, organism_rates,
+                                                                          result.get("absent"))]
+            except CannotConvert as e:
+                print(f"no image of gLV coefficients: {e}", file=sys.stderr)
+        for path, what, image in images:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(image)
+            print(f"wrote {what} as an image to {path}", file=sys.stderr)
 
     if a.to_r and organism_rates:
         from .matrix import glv_payload
@@ -1019,6 +1042,12 @@ def build_parser() -> argparse.ArgumentParser:
                               "also needs --metric growth_rate, which the integrated form does not, and "
                               "--glv-mode sets all of them and selects the integrated form, unless "
                               "--derivation names another)")
+    outputs.add_argument("--matrix-image", metavar="FILE",
+                         help="write the adjacency matrix as an SVG image to FILE, the page's Matrix image: "
+                              "green for a positive effect, orange-red for a negative one, a legend, and each "
+                              "cell's value with the studies and experiments behind it shown on hover in a "
+                              "browser. With --report-rates on growth rates, each matrix of fitted gLV "
+                              "coefficients is written beside it as FILE's name plus _glv_matrix.<unit>.svg")
     outputs.add_argument("--steady-check", action="store_true",
                          help="score the gLV parameters against the chemostat steady states mGrowthDB "
                               "holds for these organisms: the report gets the comparison and the zip a "

@@ -75,6 +75,9 @@ NEXT = (
     "names the studies and experiments behind it. Each image downloads as SVG.",
     # #338 (which standard deviation the absence threshold uses)
     "The help says which standard deviation the absence threshold uses under each derivation.",
+    # #344 (the papers behind the integrated form)
+    "The help and the README cite the two papers the integrated form rests on: Kloppers and Greeff (2013) for "
+    "the Log Integral equation it fits, and Dattner and Klaassen (2015) for the cumulative integral estimator.",
 )
 
 # What changed in each release, a few lines each, newest first (Karoline, 2026-10-04: "a small log of what
@@ -382,6 +385,9 @@ CLI_ONLY = {
                "--report-rates)",
     "--glv": "write the parameters of a generalized Lotka-Volterra simulation to a zip file, the page's "
              "gLV parameters, Download (needs --report-rates)",
+    "--matrix-image": "write the adjacency matrix as an SVG image, the page's Matrix image, with its legend and "
+                      "each cell's sources on hover in a browser; with growth rates, each matrix of fitted gLV "
+                      "coefficients beside it, its name ending in _glv_matrix and the abundance unit",
     "--steady-check": "score those parameters against the chemostat steady states mGrowthDB holds for "
                       "these organisms, since a continuous culture satisfies A x = -(r - D) at steady "
                       "state and was never used to fit them: the report gets the comparison and the zip "

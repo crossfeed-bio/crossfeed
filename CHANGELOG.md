@@ -22,7 +22,8 @@ content.
   and no coefficient is dotted and says why, and a diagonal's hover says how it was fitted under the
   derivation. Each
   image downloads as SVG, which keeps the hover in a browser; SVG only, by her choice, since the page has
-  no JavaScript and the standard library cannot draw a PNG's text. No number changes.
+  no JavaScript and the standard library cannot draw a PNG's text. The command line writes the same images
+  with `--matrix-image FILE`. No number changes.
 
 ### Changed
 
