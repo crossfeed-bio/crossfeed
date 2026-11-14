@@ -10,9 +10,13 @@ permissions:
 jobs:
   # A push to a branch with an open pull request fired this workflow twice on the same commit, once for
   # `push` and once for `pull_request`, and the slower copy gated the branch (#329). So a push run first
-  # asks whether its branch has an open pull request in this repository that GitHub will test, and if so
-  # every job below is skipped and the pull request's run tests the commit. A skipped job reads as neutral,
-  # where canceling the duplicate instead marked every pull request failed. The jobs still run on a push
+  # asks whether its branch has an open pull request in this repository that GitHub will test, at this very
+  # commit, and if so every job below is skipped and the pull request's run tests the commit merged into its
+  # base. GitHub reports a job skipped by its `if` as success, where canceling the duplicate marked every
+  # pull request failed. A skipped push run cannot stand in for a required check: a matrix job skipped this
+  # way is never expanded, so it reports as plain `test`, while the ruleset requires the expanded names
+  # (`test (ubuntu-latest, 3.10)` and the rest). So no job without a matrix may be made a required check, or
+  # a skip would satisfy it. The jobs still run on a push
   # to `main`; on a branch with no pull request; when the pull request has a merge conflict, since GitHub
   # runs no `pull_request` workflow then (its docs: "Workflows will not run on pull_request activity if the
   # pull request has a merge conflict"); while GitHub has not yet computed whether it can merge; and when
@@ -20,7 +24,7 @@ jobs:
   # The branch name is passed as a query parameter (`-f`), so `#`, `&` or `+` in it cannot change the
   # filter, and the answer is matched on the exact branch and repository.
   duplicate:
-    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
@@ -42,7 +46,11 @@ jobs:
           for n in ${numbers}; do
             mergeable=""
             for attempt in 1 2 3 4 5; do
-              mergeable=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${n}" --jq '.mergeable' 2>/dev/null) || mergeable=error
+              # only an answer about this commit counts: a pull request not yet at it, or closed meanwhile,
+              # reads "stale" and is asked again, then runs the jobs
+              mergeable=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${n}" \
+                --jq 'if .state == "open" and .head.sha == env.GITHUB_SHA then .mergeable else "stale" end' \
+                2>/dev/null) || mergeable=error
               [ "${mergeable}" = "true" ] || [ "${mergeable}" = "false" ] || [ "${mergeable}" = "error" ] && break
               sleep 3
             done

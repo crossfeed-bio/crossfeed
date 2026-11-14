@@ -21,7 +21,11 @@ Rules for this file:
   job): matched on the exact branch with the name passed as a query parameter, since `#`, `&` or `+` in
   a raw URL changed the filter and an empty one matched every pull request, and only when every such
   pull request has `mergeable` true, since GitHub runs no `pull_request` workflow on one with a conflict.
-  Then every job is skipped and the pull request's run tests the commit. Every doubt runs the jobs: no
+  Only an answer about the pushed commit counts (`head.sha == GITHUB_SHA`, still open). Then every job is
+  skipped and the pull request's run tests the commit merged into its base. GitHub reports a skipped job
+  as success; a skipped push run cannot satisfy a required check only because the skipped matrix job
+  reports as plain `test` while the ruleset requires the expanded names, so **no job without a matrix may
+  be made a required check**. Tags never ask. Every doubt runs the jobs: no
   answer, an error (`gh api` writes its error JSON to stdout, so `$(...) || echo 0` never gave 0), or
   `mergeable` still null after five tries. A `concurrency` group that canceled the older copy was tried
   first and dropped: GitHub counts a canceled required check as a failure in the pull request's status.
