@@ -728,3 +728,28 @@ def test_a_state_on_the_edge_is_found_once_at_the_scale_of_a_real_package():
     where = steady.settled([[-1e-9, 0.0], [-1e-9, -1e-9]], [1.0, 1.0 + 1e-13])
     assert where["why_not"] == "" and where["kept"] == [0] and where["lost"] == [1]
     assert where["state"][0] == pytest.approx(1e9)
+
+
+def test_a_stable_interior_the_search_did_not_reach_is_not_called_unstable():
+    """Craig's agent, reviewing: 13 organisms with -1 on the diagonal and -0.01 off it, r all 1, are past the
+    search's limit, so `settled` names no state. The interior, every entry 1 / (1 + 12 x 0.01) = 0.8929, is
+    positive, and diag(x) A has eigenvalues -0.8929 x (1 - 0.01) = -0.884 (twelve times) and
+    -0.8929 x (1 + 12 x 0.01) = -1.0, all negative: stable. The README said "positive but not stable" from the
+    search's reason alone; it now judges the interior itself and says it is stable."""
+    from test_glv_coefficients import _arc, _net, _rate
+
+    from grownet import matrix
+    n, rate, partner, capacity = 13, 1.0, 1.0e8, 1.0e9
+    ids = [f"o{k:02d}" for k in range(n)]
+    # each arc's ratio form gives A_ij = r (2^L - 1) / x_j = -0.01 r / K: 2^L = 1 - 0.01 x_j / K
+    arcs = [_arc(ids[j], ids[i], math.log2(1 - 0.01 * partner / capacity), x_j=partner, metric_without=rate,
+                 metric_with=rate * (1 - 0.01 * partner / capacity)) for i in range(n) for j in range(n) if i != j]
+    rates = {k: _rate(k.upper(), rate, capacity) for k in ids}
+    net = _net(arcs)
+    got = matrix.coefficients(net, rates)
+    (block,) = got["matrices"]
+    assert block["settled"]["state"] is None and "13 organisms" in block["settled"]["why_not"]
+    assert block["interior_stable"] is True
+    assert block["equilibrium"][0] == pytest.approx(capacity / 1.12)
+    readme = matrix.readme_from(got, net, rates)
+    assert "is positive and stable" in readme and "is positive but not stable" not in readme

@@ -1646,11 +1646,11 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
     # computed inside the loop above it described the block before the removal, so a block that dropped a
     # row carried an equilibrium of the wrong length, which named an organism it does not hold and raised
     # on the package's own README (found 2026-10-06, round 2 of the review).
-    from .steady import MAX_EQUILIBRIUM_CONDITION, condition_of, settled, solve
+    from .steady import MAX_EQUILIBRIUM_CONDITION, _hurwitz_stable, condition_of, settled, solve
     for block in matrices:
         rate_of = [(rates.get(nid) or {}).get("rate") for nid in block["ids"]]
         block["equilibrium"], block["not_above_zero"], block["equilibrium_why_not"] = None, [], ""
-        block["equilibrium_condition"], block["settled"] = None, None
+        block["equilibrium_condition"], block["settled"], block["interior_stable"] = None, None, None
         if not all(r is not None for r in rate_of):
             block["equilibrium_why_not"] = "not every organism in this matrix has a growth rate"
             continue
@@ -1677,6 +1677,13 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
         # zero: with an entry at or below zero the system settles on a sub-community, and the README named
         # every such organism as lost when the state it settles in keeps some of them (2026-11-13)
         block["settled"] = settled(block["matrix"], rate_of)
+        # whether the full solution, where it is above zero, is itself stable, judged here on the matrix whose
+        # conditioning was just accepted, so the README says only what was established: `settled` names no
+        # state for reasons that say nothing about it (too many organisms to search), and the README called
+        # a stable interior unstable on that reason alone (Craig's agent, reviewing)
+        if not block["not_above_zero"]:
+            block["interior_stable"] = _hurwitz_stable(
+                [[answer[i] * value for value in row] for i, row in enumerate(block["matrix"])])
     # the cells the matrices hold: a pair left at 0, or in no matrix, has no cell to describe, and was
     # listed as one taken from the ratio, from merged arcs, or from a comparison where one side did not
     # grow (found in review; #211 item 2 fixed the last for organisms in no matrix only)
@@ -1800,9 +1807,13 @@ def _settled_lines(block: dict, rates: dict) -> list:
         out += ["          The solution of A x = -r with every organism present, " + interior + ",",
                 "          puts " + ", ".join(block["not_above_zero"]) + " at or below zero, so it is not "
                 "a state of this matrix."]
-    elif block.get("equilibrium") is not None:
+    elif block.get("interior_stable") is False:
         out += ["          The solution of A x = -r with every organism present, " + interior + ",",
                 "          is positive but not stable, so a simulation started near it leaves it."]
+    elif block.get("interior_stable"):
+        out += ["          The solution of A x = -r with every organism present, " + interior + ",",
+                "          is positive and stable, so a simulation started near it stays there; the search",
+                "          above did not establish whether it is the only state the system can settle in."]
     return out
 
 
