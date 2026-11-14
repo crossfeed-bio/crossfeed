@@ -30,6 +30,25 @@ Rules for this file:
   work"): the app's browser pane, like some others, never draws the native tooltip. The `<title>` stays
   for screen readers. A PNG was declined for now (Karoline: "SVG only for now"): the standard library cannot
   draw its text.
+- 2026-11-14 (#329, and #330's last paragraph): **CI runs once per branch, and the suite leaves the tree
+  as it found it on Windows.** In `ci.yml`, a `push` run on a branch other than `main` first asks the API
+  whether the branch has an open pull request in this repository that GitHub will test (the `duplicate`
+  job): matched on the exact branch with the name passed as a query parameter, since `#`, `&` or `+` in
+  a raw URL changed the filter and an empty one matched every pull request, and only when every such
+  pull request has `mergeable` true, since GitHub runs no `pull_request` workflow on one with a conflict.
+  Only an answer about the pushed commit counts (`head.sha == GITHUB_SHA`, still open). Then every job is
+  skipped and the pull request's run tests the commit merged into its base. GitHub reports a skipped job
+  as success; a skipped push run cannot satisfy a required check only because the skipped matrix job
+  reports as plain `test` while the ruleset requires the expanded names, so **no job without a matrix may
+  be made a required check**. Tags never ask. Every doubt runs the jobs: no
+  answer, an error (`gh api` writes its error JSON to stdout, so `$(...) || echo 0` never gave 0), or
+  `mergeable` still null after five tries. A `concurrency` group that canceled the older copy was tried
+  first and dropped: GitHub counts a canceled required check as a failure in the pull request's status.
+  Separately, a test that edits a committed file to provoke a check puts it back with
+  `read_bytes`/`write_bytes`, never as text: text mode on Windows writes `\r\n`, which is how
+  `schema/format_fields.json` came back 419 lines different after every run there. `.gitattributes` checks JSON
+  out with LF everywhere, so a Windows checkout matches the committed bytes and the test's byte check can
+  fail on the Windows CI leg (with `autocrlf` the file was CRLF there already and the round trip hid it).
 - 2026-11-14: **the integrated form cites Kloppers & Greeff 2013 and Dattner & Klaassen 2015**, in the help,
   the README and `integrated.py`'s docstring, because Karoline supplied both PDFs and asked for exactly those
   two. She read their abstracts; her agent read their full text. Do not write that a human read a paper
@@ -69,8 +88,9 @@ Rules for this file:
   headings is the cheapest test, and no check in this repository catches a duplicated heading or a
   stranded block.** One thing went with the stale block and is not replaced: the worked example under
   the coverage bullet, naming which coefficient was worst. Its numbers came from the run the #321
-  review repudiated, so they could not be kept, and the surviving sentence states the generalization
-  with no instance behind it.
+  review repudiated, so they could not be kept, and the surviving sentence stated the generalization
+  with no instance behind it. Karoline, 2026-11-14 (#331): "drop the sentence", so it is gone too; a
+  claim about which coefficients are worst comes back only with a measurement behind it.
 - 2026-10-11 (#255 item 2): **a derived quantity is collected where it is measured, not rebuilt from what
   survived.** `_widen_by_rate_selection` rebuilt its rate table from `pending`, the arcs that became
   records, keyed by `id(got)`. Both are wrong for the quantity: the spread is how much stage 1 moves when

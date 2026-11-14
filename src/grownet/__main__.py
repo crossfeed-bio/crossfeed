@@ -32,8 +32,8 @@ DERIVE_EXAMPLES = """examples:
   every species in one medium, with every partner (the page with only the second box filled):
     grownet derive --live --conditions "Wilkins-Chalgren" --out wc_all.json
 
-  the gLV rows from the chemostat steady states of sub-communities (no study in mGrowthDB holds such a
-  design yet, so this says what each organism lacks):
+  the gLV rows from the chemostat steady states of sub-communities (a study whose design determines no
+  row gives none, and the report says what each organism lacks):
     grownet derive SMGDB00000011 --live --glv-mode --derivation steady --glv chemostat_glv.zip
 
   the local page's Example, written to a file, with its report, and sent to Cytoscape:
