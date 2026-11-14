@@ -799,7 +799,8 @@ def _names_missing_from_the_lists(body: str) -> list:
 def test_the_help_and_the_readme_cite_the_two_papers_behind_the_integrated_form():
     """Karoline, 2026-11-14: "please cite the 2 articles where you've seen the pdf, also in the help".
     The two are Kloppers & Greeff 2013 (the Log Integral method for Lotka-Volterra) and Dattner & Klaassen
-    2015 (the integral estimator's identifiability and consistency), both read in full before citing. The
+    2015 (the integral estimator's identifiability and consistency); she read their abstracts and her agent
+    their full text before citing. The
     citation sits in the integrated form's own paragraph, and it says how far the convergence result
     reaches, since grownet holds the first fitted point fixed where Dattner and Klaassen estimate it."""
     text = visible(PAGE)

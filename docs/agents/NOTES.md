@@ -35,9 +35,11 @@ Rules for this file:
   out with LF everywhere, so a Windows checkout matches the committed bytes and the test's byte check can
   fail on the Windows CI leg (with `autocrlf` the file was CRLF there already and the round trip hid it).
 - 2026-11-14: **the integrated form cites Kloppers & Greeff 2013 and Dattner & Klaassen 2015**, in the help,
-  the README and `integrated.py`'s docstring, because Karoline read both PDFs and asked for exactly those
-  two. Do not add Himmelblau, Jones & Bischoff 1967 (the chemical engineering origin Dattner and Klaassen
-  cite) unless someone has read it: she could not obtain it. What each supports and where grownet departs
+  the README and `integrated.py`'s docstring, because Karoline supplied both PDFs and asked for exactly those
+  two. She read their abstracts; her agent read their full text. Do not write that a human read a paper
+  because they supplied it: that is how this entry, the docstring, a test and METHOD_NOTES first came to
+  say she had read both in full. Do not add Himmelblau, Jones & Bischoff 1967 (the chemical engineering
+  origin Dattner and Klaassen cite) unless someone has read it: she could not obtain it. What each supports and where grownet departs
   (cumulative rows against their intervals; raw points and a fixed x(0) against their smoothed states and
   estimated x(0)) is in the docstring and in docs/METHOD_NOTES.md, "What the integrated form cites".
 - 2026-11-13: **where a gLV package settles is `steady.settled`, not the solution with everyone present.**
