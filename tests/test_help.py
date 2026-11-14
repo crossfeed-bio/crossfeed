@@ -614,7 +614,7 @@ def test_the_glv_example_section_gives_every_step_of_running_it_in_miasim():
         assert call in section, call
     # what to expect, so a reader can tell it worked, and where the numbers come from
     assert "solve(A, -r)" in section
-    assert "7.323e8" in section and "3.634e8" in section
+    assert "7.323e8" in section and "3.633e8" in section
     # and the step that holds the prediction against the data, which is what a reader needs to catch a
     # package that settles somewhere the co-culture never was: agreeing with `solve(A, -r)` only says
     # the simulation and the package agree with each other

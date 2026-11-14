@@ -23,7 +23,7 @@ From a terminal, in a clone, `R CMD INSTALL r` does the same without remotes.
 
 ## Receiving the parameters
 
-Run grow**net**'s local page (`grownet gui`), press **gLV mode** beside All, search, and then, in R:
+Run grow**net**'s local page (`grownet gui`), press **gLV mode** beside gLV example, search, and then, in R:
 
 ```r
 library(grownet)

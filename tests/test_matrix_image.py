@@ -686,3 +686,17 @@ def test_a_glv_pair_with_no_coefficient_is_drawn_dotted_not_white():
     assert fill == "url(#glv0-unfitted)" and fill != "#FFFFFF"
     pattern = next(p for p in root.iter(f"{SVG}pattern") if p.get("id") == "glv0-unfitted")
     assert len(list(pattern.iter(f"{SVG}circle"))) == 1
+
+
+def test_output_meta_marks_absent_arcs_on_the_records_it_is_given():
+    """The command line's study path collects the arcs judged absent for the matrix image from its own list
+    of records after `output_meta`, which sets each record's status in place and drops the absent ones from
+    what it returns. Read before the call, no record was absent yet and the image drew those pairs as never
+    compared; this pins the in-place status the command line relies on."""
+    from grownet.derive import output_meta
+    records = [_arc("a", "b", 2.0, "S1", ["E1"], sd=0.1, n_with=3, n_without=3),
+               _arc("c", "b", 0.05, "S1", ["E2"], sd=1.0, n_with=3, n_without=3)]
+    rows = list(records)
+    kept, _ = output_meta(records)
+    assert [r["status"] for r in rows] == ["present", "absent"]
+    assert all(r["status"] != "absent" for r in kept)

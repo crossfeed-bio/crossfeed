@@ -275,7 +275,7 @@ def _settings_block(settings: dict, token: str = "", job: str = "") -> str:
   Cytoscape on the effect_over_sd column without searching again</span></div>
 <div class="row"><label><input type="checkbox" name="include_non_batch" value="1"{non_batch}>
   Include chemostat and serial dilution experiments</label>
-  <span class="muted">with the growth measure max they are derived anyway, since the level a continuous
+  <span class="muted">with the growth property max they are derived anyway, since the level a continuous
   culture settles at is comparable with and without a partner; with auc or a growth rate they are left out
   unless this is ticked, and such arcs are then marked low quality</span></div>
 <div class="row"><label>Absence threshold k
@@ -746,6 +746,14 @@ def _empty_reason(result: dict, command_line: bool = False) -> str:
         studies = len(result.get("studies", ()))
         reason = (f"The second box left out {unmatched} of the {studies} study(ies) searched: no experiment "
                   f"there matches {_esc(s['conditions'])}. " + reason)
+    if command_line:
+        # the page's controls by their options: the command line printed "untick Only interactions between
+        # the species entered", which it has no box for (found in review)
+        for page, option in (("Add the partners, or untick Only interactions between the species entered.",
+                              "Add the partners, or add --all-partners."),
+                             ("Untick it in Advanced settings to see them.",
+                              "Leave out --max-adjusted-p to see them.")):
+            reason = reason.replace(page, option)
     return reason + _settings_to_try(s)
 
 
@@ -842,7 +850,7 @@ def _empty_reason_core(result: dict) -> str:
     if only_monocultures and len(only_monocultures) == len(result["studies"]):
         return (f"{studies.capitalize()} grew {'their species' if result.get('all') else 'them'} only alone, "
                 "in monocultures, so there is no co-culture or community to compare with.")
-    non_batch = [r for r in reasons if "excluded by default with the growth measure" in r]
+    non_batch = [r for r in reasons if "excluded by default with the growth property" in r]
     if non_batch and len(non_batch) == len(reasons) and not s.get("include_non_batch"):
         return ("These studies are chemostat or serial dilution experiments. Their area under the curve and "
                 "growth rate are not comparable with a batch run, so they are left out; set the growth "
