@@ -20,7 +20,7 @@ not identified is named rather
 than published as a number.
 
 What it cites, and how far (Karoline, 2026-11-14: "please cite the 2 articles where you've seen the pdf,
-also in the help"; both were read in full before citing):
+also in the help"; she read their abstracts, and her agent read their full text before citing):
 
   * Kloppers PH, Greeff JC (2013), Applied Mathematics and Computation 224:817-825,
     doi:10.1016/j.amc.2013.08.093. Their "Log Integral method" is this equation, fitted without an
