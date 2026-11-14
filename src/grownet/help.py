@@ -60,6 +60,10 @@ NEXT = (
     "rate, which its rates name. mGrowthDB holds no "
     "such design yet, and it says what each organism lacks; on a published 12-species model, monocultures "
     "and pairs give 126 of its 132 coefficients.",
+    # #337 (where a package settles)
+    "The chemostat check and a gLV package's README name the state the package settles in, with the "
+    "organisms it keeps and the ones it loses, where they named every organism that the solution with all "
+    "of them present put at or below zero, including ones a simulation keeps.",
     # #299 (Baranyi damping)
     "The Baranyi growth-rate fit reaches its best fit where a lag collapses; nothing changes by default.",
     # #303 (merged arcs and nodes), #309 (italics, readability), #307 (no issue numbers), #322 (R summary)
@@ -1285,7 +1289,11 @@ the carrying capacities of such a run come from the same fit, the capacity being
 <p><strong>Scoring the package against a chemostat.</strong> A package is built from batch co-cultures,
 and mGrowthDB also holds continuous cultures, where a community sits at a steady state that satisfies
 <code>A x = -(r - D)</code> with D the dilution rate. Those numbers were never used to fit the parameters, so they test
-them. <strong>Check against chemostat steady states</strong> in Advanced settings (or
+them. The prediction is the stable state a simulation of the package settles in: the organisms it keeps
+satisfy that system, and none it loses can grow back in. Solving it with every organism present gives that
+state only when all of it is above zero; otherwise the system settles on fewer organisms, which the check
+finds by trying each sub-community, and it names the organisms the package loses rather than every one the
+full solution puts below zero. <strong>Check against chemostat steady states</strong> in Advanced settings (or
 <code>--steady-check</code>) puts the comparison in the report and a <code>steady_state_check.txt</code>
 in the package: predicted against observed, per organism, with every chemostat it could not use and why
 (a run with no dilution rate recorded, a perturbed run, another abundance unit, another medium, or no

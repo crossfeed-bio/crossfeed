@@ -15,6 +15,24 @@ Rules for this file:
 
 ## Current state
 
+- 2026-11-13: **where a gLV package settles is `steady.settled`, not the solution with everyone present.**
+  The check and the README solved `A x = -(r - D)` with all organisms and called every negative entry washed
+  out. Study 7's package (BT, BH, RI) at D 0.04 puts BH and RI below zero there, while the system settles,
+  stably, at BT 3.75e8 and RI 7.21e8 with only BH lost; a deterministic miaSim run from study 5's A8
+  inoculum reaches the same state. `settled` tries every sub-community (2^n, capped at
+  `MAX_SETTLED` = 12): positive on its own system, no outsider with a positive rate there, and stable by
+  Routh-Hurwitz on `diag(x) A_SS` (standard library only, so no eigenvalue routine). One such state is the
+  prediction; two (bistability), none, or a candidate whose `A_SS` is too ill-conditioned to judge are
+  said and the chemostat is not scored. Conditioning is checked per candidate, before stability, because
+  the characteristic polynomial behind the Routh-Hurwitz test loses its digits where `A_SS` is
+  ill-conditioned; and one relative tolerance (`SETTLED_TOLERANCE`) covers both boundaries, so an edge
+  state is found once (Craig's agent's review). A "none" says only that no sub-community passed, never
+  that the system oscillates or diverges, which the search does not establish. The full solution survives only as supporting text and in the payload's `equilibrium` and
+  `not_above_zero`, whose meaning did not change, so the format id did not move. Adding the settled state to
+  the payload would be a format change and is not done. A side effect worth knowing: test fixtures with
+  mutual facilitation stronger than self-limitation used to be scored (with negative predictions) and now
+  are not, because they have no bounded state.
+
 - 2026-11-06: **a union merge can put back text a branch had correctly deleted, and the squash hides
   it.** `docs/METHOD_NOTES.md` carried the pre-re-derivation validation section under a second
   `## Open decisions` heading for two merges, with the superseded coverage of 93% standing against the

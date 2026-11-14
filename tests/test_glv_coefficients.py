@@ -271,13 +271,21 @@ def test_the_readme_says_where_each_matrix_settles():
     PAIR gives A_AA = -0.4/1e9 = -4e-10, A_AB = (0.8 - 0.4)/2e8 = +2e-9, A_BB = -0.2/5e8 = -4e-10 and
     A_BA = (0.1 - 0.2)/4e8 = -2.5e-10. By hand, B's row gives x_A = 8e8 - 1.6 x_B, and A's row then gives
     2.64e-9 x_B = -0.08, so x_B = -3.03e7: B sits below zero, because A inhibits B just hard enough at
-    A's own plateau to cancel B's rate. So this matrix settles nowhere with every organism above zero,
-    and the README has to say so.
+    A's own plateau to cancel B's rate. So this matrix settles nowhere with every organism above zero.
+
+    It settles with A alone, though (2026-11-13: the README used to stop at naming B): A at its plateau,
+    -0.4 / -4e-10 = 1e9, and B's rate there is 0.2 - 2.5e-10 * 1e9 = -0.05 /h, so B cannot grow back in.
+    The README names that state and B as lost, with the full solution only as why solve(A, -r) differs.
     """
     got, block = _one(_net(PAIR), RATES)
     assert block["not_above_zero"] == ["B"]
     assert block["equilibrium"][1] == pytest.approx(-3.0303e7, rel=1e-3)
-    assert "NOWHERE WITH EVERY ORGANISM ABOVE ZERO" in matrix.readme_from(got, _net(PAIR), RATES)
+    assert block["settled"]["kept"] == [0] and block["settled"]["lost"] == [1]
+    assert block["settled"]["state"][0] == pytest.approx(1.0e9)
+    text = matrix.readme_from(got, _net(PAIR), RATES)
+    assert "where it settles (in Cells/mL): A 1e+09, with B lost" in text
+    assert "(B at -0.05 1/h)" in text
+    assert "A 8.485e+08, B -3.03e+07," in text and "puts B at or below zero, so it is not a state" in text
 
     # a weaker inhibition of B by A does have a positive equilibrium, and then the README prints it:
     # A_BA = (0.15 - 0.2)/4e8 = -1.25e-10 gives x_A = 1.6e9 - 3.2 x_B, then 3.28e-9 x_B = 0.24, so

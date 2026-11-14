@@ -27,6 +27,19 @@ content.
 
 ### Fixed
 
+- **The chemostat check and the gLV package's README name the state a package settles in.** Both solved
+  `A x = -(r - D)` (or `A x = -r`) with every organism present and called each organism with a negative entry
+  washed out. When the system settles on a sub-community that keeps some of those, that was wrong: study 7's
+  package for *B. thetaiotaomicron*, *B. hydrogenotrophica* and *R. intestinalis* at study 5's dilution of
+  0.04 /h settles with *B. thetaiotaomicron* at 3.75e8 and *R. intestinalis* at 7.21e8 Cells/mL, stable,
+  and only *B. hydrogenotrophica* lost (it shrinks there at -0.074 /h), while the check called both of the
+  latter washed out. The prediction is now the stable state found by trying each sub-community: the
+  organisms it keeps satisfy the system, none it loses can grow back in, and every eigenvalue there is
+  negative. Two stable states, none the check can stand behind, or a candidate too ill-conditioned to judge are
+  said rather than scored.
+  The full solution stays in the text as the reason a reader's own `solve(A, -r)` differs. The package
+  payload's `equilibrium` and `not_above_zero` fields are unchanged: they still hold the full solution.
+
 - **The method notes and the agent notes no longer carry stale copies of text they also carry current
   versions of.** Three merge resolutions unioned conflict hunks whose base was not empty, so each kept
   both the new text and the old. `docs/METHOD_NOTES.md` held the pre-re-derivation validation section
