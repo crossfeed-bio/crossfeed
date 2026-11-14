@@ -8,6 +8,14 @@ content.
 
 ### Changed
 
+- **The integrated form cites the two papers it rests on, in the help and the README** (Karoline,
+  2026-11-14: "please cite the 2 articles where you've seen the pdf, also in the help"). Kloppers and Greeff
+  (2013, *Applied Mathematics and Computation* 224: 817-825) gave the Log Integral method this equation is;
+  Dattner and Klaassen (2015, *Electronic Journal of Statistics* 9: 1939-1973) treat the cumulative integral
+  estimator's identifiability and rate of convergence. The text says that their convergence result smooths
+  or averages the curve and estimates the starting abundance, which grownet does not, so it describes the
+  method rather than each estimate. No number changes.
+
 - **The help says which standard deviation the absence threshold uses** (Karoline, 2026-11-13: "it is not
   clear which standard deviation"). Under the comparison of replicate sets the two sets are not paired, so
   there is no strength per replicate: `sd` is `sqrt(var_with + var_without)` of the per-replicate log2 values,
