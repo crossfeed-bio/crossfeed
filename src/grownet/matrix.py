@@ -1081,7 +1081,8 @@ def _steady_dilutions(edge) -> set:
 
 
 def _pair_values(net: InteractionNetwork, rates: dict = None, home: dict = None) -> tuple:
-    """({pair: {"value", "unit", "censored", "arcs"}}, conflicts, unfitted).
+    """({pair: {"value", "unit", "censored", "arcs", "edges", ...}}, conflicts, unfitted). `edges` are the arcs
+    whose numbers entered the cell.
 
     One entry per ordered pair: the median of the coefficients its arcs give, which is Karoline's merge
     rule (register item 14) applied to the converted numbers, and only within one abundance unit. A pair
@@ -1169,6 +1170,8 @@ def _pair_values(net: InteractionNetwork, rates: dict = None, home: dict = None)
                 f"the rates behind this arc were not recorded (metric {edge.metric or 'unknown'})")
             continue
         entry["by_unit"].setdefault(unit, []).append(value)
+        # the arcs behind each unit's numbers, which the matrix image names on hover (#341)
+        entry.setdefault("edges", {}).setdefault(unit, []).append(edge)
         # the media behind the numbers of each unit: an arc that gives no number, or one in another unit,
         # is not in the cell, and its medium was said to be pooled into it (found in review)
         unit_media = entry["media"].setdefault(unit, [])
@@ -1232,6 +1235,7 @@ def _pair_values(net: InteractionNetwork, rates: dict = None, home: dict = None)
                         "media": list(entry["media"].get(unit, [])),
                         "unrecorded_arc": unit in entry.get("unrecorded", ()),
                         "dropout_arcs": entry.get("dropout", {}).get(unit, 0),
+                        "edges": list(entry.get("edges", {}).get(unit, [])),
                         "how": ("ratio" if "ratio" in entry["how"][unit] else
                                 "merged" if "merged" in entry["how"][unit] else "rates")}
     return values, conflicts, unfitted
@@ -1359,7 +1363,8 @@ def _block_media(filled, values: dict) -> list:
 def coefficients(net: InteractionNetwork, rates: dict) -> dict:
     """The network and its rates as fitted gLV coefficients, one matrix per abundance unit (#119).
 
-    {"matrices": [{"abundance_unit", "unit", "organisms", "ids", "matrix", "cells", "conflicts"}],
+    {"matrices": [{"abundance_unit", "unit", "organisms", "ids", "matrix", "cells", "conflicts",
+                   "behind": {(affected id, actor id): [the arcs that cell is the median of]}}],
      "left_out": [(organism, why)], "pairs_left_out": [(affected, actor, why)],
      "across_units": [(affected, actor, why)], "arcs_left_out": [(affected, actor, why)],
      "obligate_rows": [(organism, partner)],
@@ -1495,6 +1500,7 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
             keep.append(nid)
         names = [_label(net.nodes[nid]) for nid in keep]
         table, filled = [], []
+        behind: dict = {}
         pooled: list = []
         for i, affected in enumerate(keep):
             rate = rates.get(affected) or {}
@@ -1512,6 +1518,7 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                 # `_pair_values` (#292): the arcs in another unit are named there
                 row.append(entry["value"])
                 filled.append((affected, actor))
+                behind[(affected, actor)] = entry["edges"]
                 if len(entry.get("media") or ()) > 1:
                     pooled.append((*label_pair, ", ".join(entry["media"])))
             if rate.get("rate") is not None and rate.get("capacity"):
@@ -1543,7 +1550,8 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
                          "arc_media": _arc_media(net, keep),
                          "unit": coefficient_unit(rate_unit, abundance_unit),
                          "rate_unit": rate_unit, "organisms": names, "ids": keep, "matrix": table,
-                         "cells": len(filled), "filled": filled, "pooled_media": pooled, "conflicts": [],
+                         "cells": len(filled), "filled": filled, "behind": behind, "pooled_media": pooled,
+                         "conflicts": [],
                          "unrecorded": sum(1 for pair in filled if values[pair].get("unrecorded_arc")),
                          "file": f"interaction_matrix.{unit_file(abundance_unit)}.csv"})
 

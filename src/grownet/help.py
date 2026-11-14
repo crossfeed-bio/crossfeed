@@ -49,16 +49,15 @@ NEXT = (
     "merged arc as a median with its range.",
     # #323 (starting-density notes)
     "Every arc of the default derivation whose two sides have a first value says what they started at, "
-    "and warns where they differ more than 3 times, as 61 of the 190 drop-out arcs in mGrowthDB do, "
+    "and warns where they differ more than 3 times, as 61 of the 190 drop-out arcs in mGrowthDB did on 2026-11-06, "
     "counting those below the absence threshold, up to 117 times.",
-    # #315, #316, #318, #319 (merged), #320 (validation), #321 (messages and every later fix to the
-    # derivation); the dilution rate in the rates file and the package: branch dilution-column, its pull
-    # request not yet open; runs of several studies fitted together: branch steady-across-studies, its pull
-    # request not yet open
+    # #315, #316, #318, #319, #320 (validation), #321 (messages and every later fix to the derivation),
+    # #327 (the dilution rate in the rates file and the package), #326 (runs of several studies fitted
+    # together). No claim about what mGrowthDB holds: it goes stale the day such data is published
+    # (Karoline, 2026-11-14)
     "A third derivation, for gLV mode: the rows fitted from the chemostat steady states of sub-communities, "
     "every sub-community counting, across studies where the medium matches, its package at one dilution "
-    "rate, which its rates name. mGrowthDB holds no "
-    "such design yet, and it says what each organism lacks; on a published 12-species model, monocultures "
+    "rate, which its rates name. It says what each organism lacks; on a published 12-species model, monocultures "
     "and pairs give 126 of its 132 coefficients.",
     # #337 (where a package settles)
     "The chemostat check and a gLV package's README name the state the package settles in, with the "
@@ -69,6 +68,15 @@ NEXT = (
     # #303 (merged arcs and nodes), #309 (italics, readability), #307 (no issue numbers), #322 (R summary)
     "The help explains what a merged arc and a merged node carry, sets species names in italics, and reads "
     "more easily, with no issue numbers, and the R package's summary of a gLV package reads more cleanly.",
+    # #341, #342 (the matrix as an image)
+    "The result shows the adjacency matrix as an image, and in gLV mode each matrix of fitted coefficients: "
+    "green for a positive effect, orange-red for a negative one, with a legend, and a hover on each cell that "
+    "names the studies and experiments behind it. Each image downloads as SVG.",
+    # #338 (which standard deviation the absence threshold uses)
+    "The help says which standard deviation the absence threshold uses under each derivation.",
+    # #344 (the papers behind the integrated form)
+    "The help and the README cite the two papers the integrated form rests on: Kloppers and Greeff (2013) for "
+    "the Log Integral equation it fits, and Dattner and Klaassen (2015) for the cumulative integral estimator.",
 )
 
 # What changed in each release, a few lines each, newest first (Karoline, 2026-10-04: "a small log of what
@@ -376,6 +384,9 @@ CLI_ONLY = {
                "--report-rates)",
     "--glv": "write the parameters of a generalized Lotka-Volterra simulation to a zip file, the page's "
              "gLV parameters, Download (needs --report-rates)",
+    "--matrix-image": "write the adjacency matrix as an SVG image, the page's Matrix image, with its legend and "
+                      "each cell's sources on hover in a browser; with growth rates, each matrix of fitted gLV "
+                      "coefficients beside it, its name ending in _glv_matrix and the abundance unit",
     "--steady-check": "score those parameters against the chemostat steady states mGrowthDB holds for "
                       "these organisms, since a continuous culture satisfies A x = -(r - D) at steady "
                       "state and was never used to fit them: the report gets the comparison and the zip "
@@ -1051,9 +1062,7 @@ in steady state is the dilution rate the experimenter chose, not a property of t
 experiment must share to be compared, so a chemostat co-culture is compared only with chemostat
 monocultures, never with a batch one.</li>
 </ul>
-<p>An experiment whose mode mGrowthDB does not record counts as not batch. No study in mGrowthDB holds a
-continuous culture that forms a pair or a drop-out design today, so this changes no network yet; it
-decides what happens when one arrives.</p>
+<p>An experiment whose mode mGrowthDB does not record counts as not batch.</p>
 
 <h2 id="example">Try the example</h2>
 <p>The Example button fills the species box with {_e(pair)}, a pair with enough data to show a result: the
@@ -1172,6 +1181,21 @@ carries that <strong>measured bound</strong> (<code>strength_bound</code>) and t
 <p>The table itself carries no settings, version or date, so the menu entry below it, <em>Adjacency
 matrix: what it is</em>, writes a text file to keep beside it: how it was made, every setting, what 0 and
 NA mean, the pairs left at 0, and the studies to cite. The command line writes it beside the CSV.</p>
+<p><strong>The matrix as an image.</strong> Below the outputs, <strong>Matrix image</strong> opens the
+adjacency matrix drawn as a grid, one square per ordered pair, rows affected and columns the actor as in
+the table. Green is a positive effect and orange-red a negative one, stronger with the size of the value
+on a scale whose two ends the legend gives, and a negative value also carries a minus sign. A pair compared
+and judged absent is the pale middle of the scale with a 0 in it, an <strong>NA</strong> cell is hatched, a
+pair whose arcs disagree in sign is cross-hatched, a value that is not a finite number holds a question mark,
+a pair with no arc is white, and the diagonal, which is not part of the matrix, is gray. Hover a square, or
+move to it with the Tab key, and a box against it shows its value and the studies and experiments it is
+derived from, with any arc of the pair that is not in the value named apart. In gLV mode the Matrix image
+section also draws each matrix of fitted coefficients, where a pair with arcs but no coefficient is dotted and
+its box says why, and the box of a diagonal square says how its self-limitation was fitted and names the
+studies of its growth rate. Each image has its own download button, which saves it as an SVG file that keeps
+the hover when opened in a browser and scales for print.
+For a PNG, open the file in a browser and take a screenshot, or export it from a vector editor
+such as Inkscape.</p>
 <p><strong>A bound on an area is weaker than a bound on a rate.</strong> A culture that did not grow
 still carries the area of its own inoculum for the whole window, so on the default growth property, the
 area under the curve, the area the rule allows it can be as large as the growing side's, and the bound says
@@ -1458,8 +1482,6 @@ those communities was read in a single vessel, the row has no spread, so its arc
 vessels of one run share its inoculum and its history, so a community read in one run has a spread from
 within that run only, narrower than the difference between runs would make it.</li>
 </ul>
-<p>mGrowthDB holds no design of this kind yet: its chemostat studies each run one community, which
-determines no row. The derivation is there for the data to come.</p>
 
 <h2 id="glv-walkthrough">The gLV example, step by step</h2>
 <p><strong>gLV example</strong> beside Example fills both boxes and every setting a package needs, as

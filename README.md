@@ -172,7 +172,8 @@ python -m grownet schema [--out FILE]
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the three built-in ones (see below).
 - The command line does everything the local page does: every advanced setting has its option, and the
   page's outputs are `--out FILE` (with `--format`), `--to-cytoscape`, `--report FILE` (the same report the
-  page shows), and, with `--report-rates`, `--rates FILE` and `--glv FILE`. `grownet derive --help` lists
+  page shows), `--matrix-image FILE` (the Matrix image, as SVG), and, with `--report-rates`, `--rates FILE`
+  and `--glv FILE`. `grownet derive --help` lists
   every option in the page's words, with examples.
 - `--format graphml` emits GraphML (for Cytoscape, igraph, networkx, Gephi) instead of the neutral JSON.
 - `--conditions NAME ...` is the page's second box: media, experiment ids or study ids. A study id given
@@ -243,7 +244,8 @@ switches back when pressed again. Every setting sits
 behind "Advanced settings", with the same defaults the command line uses.
 
 **The result** carries the network in JSON, GraphML or the adjacency matrix, Send to Cytoscape, the
-report, and, with growth rates on, their own CSV and Get gLV parameters. A Help page introduces the idea
+report, the matrix as an SVG image whose cells name the studies and experiments behind them (and in gLV
+mode each matrix of fitted coefficients), and, with growth rates on, their own CSV and Get gLV parameters. A Help page introduces the idea
 (after Gause, with a figure) and explains the boxes, every setting and arc attribute, the gLV files and
 the R package, the main design decisions, the command line, and what to do when no network comes back; an
 About page says who built it and links this repository.
@@ -506,7 +508,7 @@ states, less D, and the rise after the pump started; or the rise from inoculatio
 rate, so the package's rates are `r_i - D` and it simulates the
 chemostat. What a design cannot determine is said once per chemostat group and once per organism: a row has
 one unknown for its own limitation and one per partner, and needs at least that many communities holding the
-organism. No study in mGrowthDB holds such a design yet; on the fitted 12-species gLV of Venturelli et al.
+organism. On the fitted 12-species gLV of Venturelli et al.
 2018, monocultures and pairs recover 126 of its 132 coefficients of B exactly, and `A = (r_i - D) B`, formed
 from them and the start-up scales, within 2% of each organism's self-limitation without measurement noise
 (`packaging/validate_steady_state.py`).
@@ -711,12 +713,12 @@ rule, so there are no **censored** arcs, no measured bounds and no `NA` cells. O
 the comparison gives 145 arcs, 122 of them drop-out, with 12 censored bounds; the integrated form gives
 12 arcs and no bounds (measured 2026-10-09). That is why it is not the default.
 
-**What the steady-state form needs** is a design mGrowthDB does not hold yet: several unperturbed
+**What the steady-state form needs** is a design of several unperturbed
 chemostat communities of one medium and dilution rate per organism, at least as many as the organism has
 unknowns (its own limitation and one per partner it met). Its coefficients are effective, an effect that
 needs a third organism being folded into the pairs that carry it, and each community is predicted by a fit
-made without it so a reader can see where that matters. Today it derives nothing, and says what each
-organism lacks.
+made without it so a reader can see where that matters. A design that determines no row derives
+nothing, and the report says what each organism lacks.
 
 It was the default for one release, 0.3.0. The comparison that chose it was run in gLV mode, where
 drop-out communities are off on both sides, so it measured the two forms on the question gLV mode asks

@@ -6,6 +6,25 @@ content.
 
 ## [Unreleased]
 
+### Added
+
+- **The interaction matrix as an image, with a hover that names its sources** (#341). Karoline: "provide
+  the interaction matrix as an image, with a hover function that says from which studies/experiments each
+  entry is derived. the image can be downloaded. the image would need a legend to know the colors of
+  negative and positive entries". The page's result has a **Matrix image** box: the adjacency matrix as
+  a grid, green for a positive effect and orange-red for a negative one on a scale symmetric about 0,
+  with NA hatched, a pair whose arcs disagree in sign cross-hatched and a pair with no arc white, and a
+  legend for all of them with the scale's two ends; a judged-absent cell also holds a 0 and a negative value
+  a minus sign, so the image reads without its colors. Hovering a cell, or moving to it with the Tab key,
+  shows, in a box against it, its value
+  and the studies (with their titles) and experiments of the arcs the value is taken over, with any other arc of
+  the pair named apart. In gLV mode the box also draws each matrix of fitted coefficients, where a pair with arcs
+  and no coefficient is dotted and says why, and a diagonal's hover says how it was fitted under the
+  derivation. Each
+  image downloads as SVG, which keeps the hover in a browser; SVG only, by her choice, since the page has
+  no JavaScript and the standard library cannot draw a PNG's text. The command line writes the same images
+  with `--matrix-image FILE`. No number changes.
+
 ### Changed
 
 - **The integrated form cites the two papers it rests on, in the help and the README** (Karoline,
@@ -60,7 +79,8 @@ content.
   live 85% to 94% in the same file and against this changelog; `docs/agents/NOTES.md` held two
   paragraphs finished twice, one of them saying strain ids survive only on arcs six lines under the
   text saying a genus node lists them in `merged_nodes`. 33 deletions, no wording changed and no
-  number re-derived. The three real entries under `## Open decisions` are untouched.
+  number re-derived. The three real entries under `## Open decisions` are untouched by that fix; the first
+  of them is since marked settled.
 - **The R package's summary of a gLV package reads cleanly** (#296). "fitted:" no longer starts every line
   of the organisms left out of the matrices; the organisms without a rate are not listed a second time on
   the next line; and a one-organism matrix reads "1 organism", not "1 organisms". No number changes.
