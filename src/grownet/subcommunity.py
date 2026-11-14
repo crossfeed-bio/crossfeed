@@ -421,6 +421,7 @@ def chemostat_groups(client, exps: list, spike_factor: float = None, key_of=None
     spike = SPIKE_FACTOR if spike_factor is None else spike_factor
     by_id = {exp.get("id"): exp for exp in exps}
     groups: dict = {}
+    unrecorded: dict = {}          # runs that record no dilution rate, by medium and unit
     for entry in observed(client, exps, spike):
         name = entry["name"]
         exp = by_id.get(entry["experiment"]) or {}
@@ -433,10 +434,21 @@ def chemostat_groups(client, exps: list, spike_factor: float = None, key_of=None
         for rep in reps:
             for c in rep.curves:
                 techniques.setdefault(c.species, set()).add(c.technique or "unrecorded")
+        medium_key = media_identity(exp)["key"] if exp else (entry["medium"] or "").lower()
+        if entry["dilution"] is None:
+            # a run that records no dilution rate belongs to no fit, and is named under a group of its own;
+            # it reached the key below and crashed every search that read such a study, All included (found
+            # in review: SMGDB00000001's chemostats record none)
+            alone = unrecorded.setdefault((medium_key, entry["unit"]), {
+                "medium": entry["medium"], "unit": entry["unit"], "dilution": None, "communities": [],
+                "scales": {}, "technique": "", "left_out": []})
+            alone["left_out"] += entry["left_out"]
+            alone["left_out"].append((name, entry["why_not"] or "no dilution rate is recorded on its "
+                                                               "compartments, so it belongs to no fit"))
+            continue
         # the dilution rate to the six digits a condition writes it with, so 0.04 and 0.0400000001 are one
         # group rather than two too small to determine anything (raised in review of the inputs)
-        key = (media_identity(exp)["key"] if exp else (entry["medium"] or "").lower(), entry["unit"],
-               float(f"{entry['dilution']:.6g}"))
+        key = (medium_key, entry["unit"], float(f"{entry['dilution']:.6g}"))
         group = groups.setdefault(key, {"medium": entry["medium"], "unit": entry["unit"],
                                         "dilution": entry["dilution"], "communities": [], "scales": {},
                                         "left_out": []})
@@ -506,7 +518,7 @@ def chemostat_groups(client, exps: list, spike_factor: float = None, key_of=None
     # a group with no usable run is kept for its reasons: dropped, a lone still-rising or perturbed run was
     # named nowhere (found in a sixth review); the derivation reports it and fits nothing
     return sorted((g for g in settled if g["communities"] or g["left_out"]),
-                  key=lambda g: (g["dilution"], g["medium"], g["technique"]))
+                  key=lambda g: (g["dilution"], g["medium"], g["technique"])) + list(unrecorded.values())
 
 
 def _by_technique(groups) -> list:
@@ -552,10 +564,15 @@ def _by_technique(groups) -> list:
         for c in kept:
             other = sorted(m for m, t in c.get("techniques", {}).items() if t != chosen[m])
             if other:
+                # how many other runs set the technique kept, so one run against one is not "the other runs",
+                # and the tie-break by vessels is said where it decided (found in review)
+                def others(m, c=c, kept=kept, chosen=chosen):
+                    n = sum(1 for d in kept if d is not c and d.get("techniques", {}).get(m) == chosen[m])
+                    return "the other run" if n == 1 else "the other runs"
                 left.append((c["name"], "left out: it reads " + ", ".join(
-                    f"{m} by {c['techniques'][m]}, where the other runs of this medium and dilution rate read it "
+                    f"{m} by {c['techniques'][m]}, where {others(m)} of this medium and dilution rate read it "
                     f"by {chosen[m]}{where(m, c)}" for m in other) + "; one technique per organism in a fit, the "
-                    "one most runs use"))
+                    "one most runs use, then the one most vessels use"))
             else:
                 final.append(c)
         techniques = {m: chosen[m] for m in sorted({m for c in final for m in c.get("techniques", {})})}
@@ -841,7 +858,8 @@ class SteadyStateDeriver:
             return [tuple(put_back(part) for part in line) for line in lines]
 
         for group in groups:
-            label = (f"chemostat, D {group['dilution']:g} per h, {group['medium']}, {group['unit']}"
+            dilution = "D not recorded" if group["dilution"] is None else f"D {group['dilution']:g} per h"
+            label = (f"chemostat, {dilution}, {group['medium']}, {group['unit']}"
                      + (f", {group['technique']}" if group.get("technique") else ""))
             if not group["communities"]:
                 skipped += say([(f"{what} [{label}]", why) for what, why in group["left_out"]], [])

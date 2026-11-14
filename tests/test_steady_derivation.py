@@ -1134,3 +1134,17 @@ def test_the_fixed_sentence_of_what_a_row_needs_is_not_rewritten_by_an_organism_
     reasons = [why for _, why in skipped]
     assert any(NEEDS in why for why in reasons), reasons
     assert not any("one Unknown" in why for why in reasons)
+
+
+def test_a_chemostat_that_records_no_dilution_rate_is_named_not_a_crash():
+    """SMGDB00000001's chemostats record no dilution rate, and the grouping formatted it as a number, so
+    every steady-state search that read that study (All included) stopped with a TypeError. Such a run
+    belongs to no fit: it is named under "D not recorded" with its reason, and the others are fitted."""
+    client, studies = _split()
+    stray = _chemostat("E77", "unrecorded", [THETA], [(3, "V1"), (4, "V2")], description=RUN, dilution=None)
+    stray["compartments"][0].pop("dilutionRate", None)
+    studies[1] = (studies[1][0], [*studies[1][1], stray])
+    records, skipped = SteadyStateDeriver(client=client).derive_many(studies)
+    assert records                                            # the pair and monocultures still fit
+    named = [(what, why) for what, why in skipped if "D not recorded" in what]
+    assert named and all("no dilution rate is recorded" in why or "perturb" in why for _, why in named), named

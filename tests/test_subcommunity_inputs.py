@@ -218,7 +218,7 @@ def test_an_organism_read_by_two_techniques_keeps_the_runs_of_one_and_names_the_
     assert group["techniques"] == {"a": "qpcr", "b": "fc"}
     assert sorted(c["name"] for c in group["communities"]) == ["a alone", "b alone"]
     said = " ".join(why for _, why in group["left_out"])
-    assert "reads b by qpcr, where the other runs of this medium and dilution rate read it by fc" in said
+    assert "reads b by qpcr, where the other run of this medium and dilution rate read it by fc" in said
 
 def test_runs_reading_the_same_organisms_by_swapped_techniques_are_fitted_apart():
     """One run of a with b reads a by fc and b by qPCR, a second the other way round: splitting by the run's
