@@ -1297,7 +1297,18 @@ every A_ij, so one least-squares fit per organism returns its whole row: no grow
 plateau to certify, and no partner abundance to divide by, since the regressor is the partner's own time
 integral. The monocultures identify r_i and its own limitation A_ii, which are then held fixed while the
 co-cultures give the partners, because inside one experiment those columns rise too nearly together to
-be told apart.</p>
+be told apart.
+The equation is the Log Integral method that Kloppers and Greeff (2013) gave for Lotka-Volterra models.
+Its rows here run from the first fitted point to each later one, not over each sampling interval, which
+makes it the integral estimator whose identifiability and rate of convergence Dattner and Klaassen (2015)
+treat. Their convergence result smooths or averages the curve before integrating and estimates the
+starting abundance as a parameter; grownet integrates each replicate's measured points and holds the
+first fitted point fixed, so that result describes the method and is not a guarantee for each estimate.</p>
+<p class="muted">Kloppers PH, Greeff JC (2013) Lotka-Volterra model parameter estimation using experiential
+data. Applied Mathematics and Computation 224: 817-825. doi:10.1016/j.amc.2013.08.093<br>
+Dattner I, Klaassen CAJ (2015) Optimal rate of direct estimators in systems of ordinary differential
+equations linear in functions of the parameters. Electronic Journal of Statistics 9: 1939-1973.
+doi:10.1214/15-EJS1053</p>
 <p>The model has <strong>no lag term and no death term</strong>, so the rows start where growth starts
 (the lag the Baranyi fit reports) and stop where it ends (the plateau rule the Baranyi fit uses). Without
 those cuts a culture that sits at its inoculum, or declines after its peak, makes the fit pay in the rate,

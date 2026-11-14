@@ -482,6 +482,18 @@ model has no lag term and no death term, so the rows start where growth starts a
 Every arc carries the coefficient, the condition number of its fit, its R2 and the R2 of the same row
 with every interaction set to zero; a row the design
 cannot identify, and a community of three or more members, are reported rather than derived.
+The equation is the Log Integral method of Kloppers and Greeff (2013) for Lotka-Volterra models, with rows
+that run from the first fitted point to each later one, which is the integral estimator whose
+identifiability and rate of convergence Dattner and Klaassen (2015) treat. Their convergence result
+smooths or averages the curve and estimates the starting abundance; grow**net** integrates each replicate's
+measured points and holds the first fitted point fixed, so the result describes the method and is not a
+guarantee for each estimate.
+
+- Kloppers PH, Greeff JC (2013) Lotka-Volterra model parameter estimation using experiential data.
+  *Applied Mathematics and Computation* 224: 817-825. doi:10.1016/j.amc.2013.08.093
+- Dattner I, Klaassen CAJ (2015) Optimal rate of direct estimators in systems of ordinary differential
+  equations linear in functions of the parameters. *Electronic Journal of Statistics* 9: 1939-1973.
+  doi:10.1214/15-EJS1053
 
 **The derivation from chemostat steady states.** `--derivation steady`, off by default and meant for gLV
 mode, fits the rows from steady states instead of growth curves. At a chemostat steady state every organism

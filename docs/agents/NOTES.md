@@ -30,6 +30,12 @@ Rules for this file:
   work"): the app's browser pane, like some others, never draws the native tooltip. The `<title>` stays
   for screen readers. A PNG was declined for now (Karoline: "SVG only for now"): the standard library cannot
   draw its text.
+- 2026-11-14: **the integrated form cites Kloppers & Greeff 2013 and Dattner & Klaassen 2015**, in the help,
+  the README and `integrated.py`'s docstring, because Karoline read both PDFs and asked for exactly those
+  two. Do not add Himmelblau, Jones & Bischoff 1967 (the chemical engineering origin Dattner and Klaassen
+  cite) unless someone has read it: she could not obtain it. What each supports and where grownet departs
+  (cumulative rows against their intervals; raw points and a fixed x(0) against their smoothed states and
+  estimated x(0)) is in the docstring and in docs/METHOD_NOTES.md, "What the integrated form cites".
 - 2026-11-13: **where a gLV package settles is `steady.settled`, not the solution with everyone present.**
   The check and the README solved `A x = -(r - D)` with all organisms and called every negative entry washed
   out. Study 7's package (BT, BH, RI) at D 0.04 puts BH and RI below zero there, while the system settles,
