@@ -1646,7 +1646,7 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
     # computed inside the loop above it described the block before the removal, so a block that dropped a
     # row carried an equilibrium of the wrong length, which named an organism it does not hold and raised
     # on the package's own README (found 2026-10-06, round 2 of the review).
-    from .steady import MAX_EQUILIBRIUM_CONDITION, _hurwitz_stable, condition_of, settled, solve
+    from .steady import MAX_EQUILIBRIUM_CONDITION, _stable, condition_of, settled, solve
     for block in matrices:
         rate_of = [(rates.get(nid) or {}).get("rate") for nid in block["ids"]]
         block["equilibrium"], block["not_above_zero"], block["equilibrium_why_not"] = None, [], ""
@@ -1657,6 +1657,10 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
         # how well the system is conditioned decides whether its solution is worth printing at all: a
         # near-singular block used to return a number like 1e24 and have it reported as a steady state,
         # and a change of 0.05 percent in one coefficient flipped the verdict (#142 item 9)
+        # where it settles is searched sub-community by sub-community, each judged on its own conditioning,
+        # so it is known even where the full system is too ill-conditioned to solve: the check names that
+        # state, and the README said only NOT COMPUTED (found in review)
+        block["settled"] = settled(block["matrix"], rate_of)
         condition = condition_of(block["matrix"])
         block["equilibrium_condition"] = None if condition == float("inf") else condition
         if condition > MAX_EQUILIBRIUM_CONDITION:
@@ -1673,17 +1677,19 @@ def coefficients(net: InteractionNetwork, rates: dict) -> dict:
         block["equilibrium"] = answer
         block["not_above_zero"] = [name for name, value
                                    in zip(block["organisms"], answer, strict=True) if value <= 0]
-        # where a simulation of it settles, which is the equilibrium above only when all of it is above
+        # where a simulation of it settles (`settled`, above) is the equilibrium only when all of it is above
         # zero: with an entry at or below zero the system settles on a sub-community, and the README named
         # every such organism as lost when the state it settles in keeps some of them (2026-11-13)
-        block["settled"] = settled(block["matrix"], rate_of)
         # whether the full solution, where it is above zero, is itself stable, judged here on the matrix whose
         # conditioning was just accepted, so the README says only what was established: `settled` names no
         # state for reasons that say nothing about it (too many organisms to search), and the README called
         # a stable interior unstable on that reason alone (Craig's agent, reviewing)
         if not block["not_above_zero"]:
-            block["interior_stable"] = _hurwitz_stable(
-                [[answer[i] * value for value in row] for i, row in enumerate(block["matrix"])])
+            try:
+                block["interior_stable"] = _stable(
+                    [[answer[i] * value for value in row] for i, row in enumerate(block["matrix"])])
+            except ArithmeticError:
+                block["interior_stable"] = None
     # the cells the matrices hold: a pair left at 0, or in no matrix, has no cell to describe, and was
     # listed as one taken from the ratio, from merged arcs, or from a comparison where one side did not
     # grow (found in review; #211 item 2 fixed the last for organisms in no matrix only)
@@ -1789,7 +1795,7 @@ def _settled_lines(block: dict, rates: dict) -> list:
     units = {(rates.get(nid) or {}).get("unit", RATE_UNIT) for nid in block["ids"]}
     per = units.pop() if len(units) == 1 else "in the unit of its growth rate"
     interior = ", ".join(f"{name} {value:.4g}" for name, value
-                         in zip(names, block["equilibrium"], strict=True))
+                         in zip(names, block.get("equilibrium") or [], strict=False))
     if where.get("state") is None:
         out = ["      where it settles: NOT FOUND, because " + (where.get("why_not") or "it was not searched")
                + "."]
@@ -1810,6 +1816,10 @@ def _settled_lines(block: dict, rates: dict) -> list:
     elif block.get("interior_stable") is False:
         out += ["          The solution of A x = -r with every organism present, " + interior + ",",
                 "          is positive but not stable, so a simulation started near it leaves it."]
+    elif block.get("interior_stable") and any(len(state["kept"]) == len(names)
+                                                for state in (where.get("states") or ())):
+        out += ["          The solution of A x = -r with every organism present, " + interior + ",",
+                "          is one of those stable states."]
     elif block.get("interior_stable"):
         out += ["          The solution of A x = -r with every organism present, " + interior + ",",
                 "          is positive and stable, so a simulation started near it stays there; the search",
@@ -1885,9 +1895,11 @@ def readme_from(got: dict, net: InteractionNetwork, rates: dict) -> str:
         # the equilibrium of this matrix, worked out here rather than left to the reader
         if block.get("equilibrium") is None:
             # the reason, not a bare "not computed": too ill-conditioned, singular, or a missing rate
-            lines.append("      where it settles: NOT COMPUTED. "
+            lines.append("      the solution of A x = -r with every organism present: NOT COMPUTED. "
                          + (block.get("equilibrium_why_not")
                             or "an organism here has no rate"))
+            if (block.get("settled") or {}).get("state") is not None:
+                lines += _settled_lines(block, rates)
         elif (block.get("not_above_zero") or (block.get("settled") or {}).get("state") is None
               or (block.get("settled") or {}).get("lost")):
             # the full solution is where it settles only when the settled state keeps every organism: a

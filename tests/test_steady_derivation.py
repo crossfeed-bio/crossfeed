@@ -1121,3 +1121,16 @@ def test_runs_counted_in_different_abundance_units_are_not_fitted_together():
     assert records == []
     groups = [what for what, _ in skipped if what.startswith("chemostat group at")]
     assert any("OD600" in what for what in groups) and any("Cells/mL" in what for what in groups), groups
+
+
+def test_the_fixed_sentence_of_what_a_row_needs_is_not_rewritten_by_an_organism_s_key():
+    """An organism whose curves are named "Unknown" is keyed "unknown", and the pass that puts names back
+    for keys rewrote the tool's own sentence "one unknown for its own limitation" into "one Unknown". Only
+    the monocultures here, so no row is determined and the reasons quote that sentence."""
+    from grownet.subcommunity import NEEDS
+    client, studies = _split(a_in_s2="Unknown", taxa=False)
+    monocultures_only = [(studies[1][0], studies[1][1])]
+    records, skipped = SteadyStateDeriver(client=client).derive_many(monocultures_only)
+    reasons = [why for _, why in skipped]
+    assert any(NEEDS in why for why in reasons), reasons
+    assert not any("one Unknown" in why for why in reasons)

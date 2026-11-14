@@ -753,3 +753,88 @@ def test_a_stable_interior_the_search_did_not_reach_is_not_called_unstable():
     assert block["equilibrium"][0] == pytest.approx(capacity / 1.12)
     readme = matrix.readme_from(got, net, rates)
     assert "is positive and stable" in readme and "is positive but not stable" not in readme
+
+
+CASE_1533_A = [[-1.5644657075932109e-09, 3.685535044679989e-09, 0, -2.614694627373095e-10, 2.5466337085787376e-09],
+               [-3.1080612121694585e-09, -2.553077041655804e-09, 6.692778644877354e-09, -7.94673604688787e-10, 0],
+               [0, 0, -4.917811586053946e-10, -6.694688668382147e-11, -3.0794785514338433e-10],
+               [-7.140126204778039e-11, 2.9199654720606344e-10, 1.826703665435828e-10, -6.354990967151219e-10, 0],
+               [-9.9770857340064e-11, -6.161008263148293e-11, 8.990334768103348e-11, -6.457742959183805e-10,
+                -4.4378303134960364e-10]]
+CASE_1533_R = [0.44385349964023496, 1.350159118624411, 0.11422638336543481, 1.0816340504868598, 1.0992983909745944]
+
+
+def test_a_stable_state_whose_abundances_span_many_orders_is_found():
+    """Five organisms at package scale whose full state is stable while its abundances span about six
+    orders: R's eigen() gives a largest real part of -2.6e-6 there, and miaSim started 1% beside it stays,
+    while from 1e7 each it goes to {3, 4, 5}. So there are two stable states. The Routh-Hurwitz test on the
+    characteristic polynomial lost its digits here (condition numbers in the hundreds, so the conditioning
+    gate did not see it), refused the full state, and named {3, 4, 5} alone: a confident single prediction
+    for a bistable system. The eigenvalues are now computed directly."""
+    where = steady.settled(CASE_1533_A, CASE_1533_R)
+    assert sorted(state["kept"] for state in where["states"]) == [[0, 1, 2, 3, 4], [2, 3, 4]]
+    assert where["state"] is None and "2 stable steady states" in where["why_not"]
+
+
+def test_the_eigenvalues_are_those_of_known_matrices():
+    """A rotation has +/- i; a triangular matrix its diagonal; the 3-organism case above, by R's eigen(),
+    -1, -0.2439 and +0.1966 for diag(x) A at x = (0.6417, 0.0853, 0.3204)."""
+    def close(got, want):
+        return all(min(abs(complex(*g) - w) for g in got) < 1e-9 for w in want)
+    assert close(steady._eigenvalues([[0.0, -1.0], [1.0, 0.0]]), [1j, -1j])
+    assert close(steady._eigenvalues([[2.0, 5.0, 7.0], [0.0, -3.0, 1.0], [0.0, 0.0, 0.5]]), [2.0, -3.0, 0.5])
+    matrix_a = [[-1.0, -1.707, -0.664], [-1.709, -1.0, 0.568], [-0.996, -0.475, -1.0]]
+    x = steady.solve([row[:] for row in matrix_a], [-1.0, -1.0, -1.0])
+    values = steady._eigenvalues([[x[i] * matrix_a[i][j] for j in range(3)] for i in range(3)])
+    assert sorted(round(re, 4) for re, _ in values) == [-1.0, -0.2439, 0.1966]
+    assert steady._stable([[-1.0, 0.0], [0.0, -2.0]]) and not steady._stable([[-1.0, 0.0], [0.0, 0.0]])
+
+
+def test_the_readme_says_a_stable_interior_is_one_of_the_states_when_the_search_names_it():
+    """Bistable, with the full community one of the two stable states: the README said "positive but not
+    stable" of it. It now says it is one of the states named."""
+    from grownet import matrix
+    where = steady.settled(CASE_1533_A, CASE_1533_R)
+    interior = steady.solve([row[:] for row in CASE_1533_A], [-r for r in CASE_1533_R])
+    block = {"organisms": list("ABCDE"), "ids": list("abcde"), "equilibrium": interior, "not_above_zero": [],
+             "settled": where, "interior_stable": True, "abundance_unit": "Cells/mL"}
+    text = "\n".join(matrix._settled_lines(block, {k: {"unit": "1/h"} for k in "abcde"}))
+    assert "NOT FOUND, because it has 2 stable steady states" in text
+    assert "is one of those stable states" in text and "not stable" not in text
+
+
+def test_the_check_refuses_an_organism_without_a_rate_as_the_readme_does():
+    """An organism that grows only with a partner stays in its matrix with no growth rate. The README says
+    the equilibrium is NOT COMPUTED for that reason; the check entered the rate as 0 without a word and
+    scored the package. It now refuses with the README's reason."""
+    block = {"organisms": ["A", "B"], "ids": ["a", "b"], "matrix": [[-5e-9, 4e-9], [3e-10, -4e-10]]}
+    got = steady.predicted(block, {"a": {"rate": None}, "b": {"rate": 0.2}}, 0.0)
+    assert got["values"] == {} and "not every organism in it has a growth rate (A)" in got["why_not"]
+    assert steady.predicted(block, {"a": {"rate": 0.1}, "b": {"rate": 0.2}}, 0.0)["why_not"] != got["why_not"]
+
+
+def test_an_ill_conditioned_package_still_says_where_it_settles_as_the_check_does():
+    """A and B nearly duplicate each other, so the full system's condition number is about 4e12 and the
+    README refuses to solve it, while the check named a state from `settled`, which judges each
+    sub-community on its own conditioning, and printed the full solution the README refused (B at -5e20).
+    Both now say A 8.163e8 and C 9.184e8 with B lost (simulations from several starts in R end there), and
+    the check prints no full solution for the ill-conditioned system."""
+    from test_glv_coefficients import _arc, _net, _rate
+
+    from grownet import matrix
+    a_matrix = [[-1e-9, -1e-9, -2e-10], [-1e-9, -1.000000000001e-9, -2e-10], [-1e-10, -1e-10, -1e-9]]
+    r, capacity = [1.0, 0.5, 1.0], [1e9, 499999999.9995, 1e9]
+    ids, partner = ["a", "b", "c"], 2.0e8
+    arcs = [_arc(ids[j], ids[i], math.log2(1 + a_matrix[i][j] * partner / r[i]), x_j=partner,
+                 metric_without=r[i], metric_with=r[i] * (1 + a_matrix[i][j] * partner / r[i]))
+            for i in range(3) for j in range(3) if i != j]
+    rates = {ids[k]: _rate(ids[k].upper(), r[k], capacity[k]) for k in range(3)}
+    net = _net(arcs)
+    got = matrix.coefficients(net, rates)
+    (block,) = got["matrices"]
+    readme = matrix.readme_from(got, net, rates)
+    assert "too ill-conditioned to solve" in readme
+    assert "where it settles (in Cells/mL): A 8.163e+08, C 9.184e+08, with B lost" in readme
+    where = steady.predicted(block, rates, 0.0)
+    assert where["values"]["A"] == pytest.approx(8.163e8, rel=1e-3) and where["values"]["B"] == 0.0
+    assert where["interior"] == {}

@@ -831,7 +831,14 @@ class SteadyStateDeriver:
             twice = {n for n in names.values() if list(names.values()).count(n) > 1}
             names = {k: (f"{n} ({k})" if n in twice else n) for k, n in names.items()}
             pattern = re.compile(r"(?<![\w:])(" + "|".join(map(re.escape, keys)) + r")(?![\w:])")
-            return [tuple(pattern.sub(lambda m: names[m.group(1)], part) for part in line) for line in lines]
+
+            def put_back(part):
+                # the fixed sentence of what a row needs is the tool's own text, not a reason naming an
+                # organism: an organism keyed "unknown" turned its "one unknown" into "one Unknown" (found in
+                # review)
+                pieces = part.split(NEEDS)
+                return NEEDS.join(pattern.sub(lambda m: names[m.group(1)], piece) for piece in pieces)
+            return [tuple(put_back(part) for part in line) for line in lines]
 
         for group in groups:
             label = (f"chemostat, D {group['dilution']:g} per h, {group['medium']}, {group['unit']}"

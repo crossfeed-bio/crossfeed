@@ -19,20 +19,26 @@ Rules for this file:
   It used the full solution whenever no entry was at or below zero, but a positive interior can be
   unstable: three organisms with A / (r / K) = [[-1, -1.68, -0.8], [-0.44, -1, -1.58], [-2.49,
   -1.03, -1]] settle with B alone (miaSim from 1% beside the interior ends at B 1e9), and the check
-  said so while the README did not. It now defers to `settled` whenever that state loses anyone. The
-  tests for `settled` now include a 3-organism state refused only by the third Hurwitz condition
-  (checked against R's eigen), the 12-organism cap, and the tolerances at package scale.
+  said so while the README did not. It now defers to `settled` whenever that state loses anyone, and judges
+  the full solution's own stability before calling it stable or not (past the 12-organism limit the search
+  says nothing about it). **Stability is now judged from eigenvalues** (`steady._eigenvalues`, EISPACK's
+  elmhes and hqr in plain Python, `_stable`): the Routh-Hurwitz test on the Faddeev-LeVerrier polynomial
+  judged 23 of 3000 random package-scale states wrongly against R's eigen() where abundances spanned many
+  orders, with condition numbers in the hundreds, so the conditioning gate never saw them; one of them
+  turned a bistable system into a confident single prediction. The routine matches R's eigenvalues to
+  7.7e-13 on 2000 random matrices of 1 to 12 rows. The check refuses an organism with no growth rate, as
+  the README does, instead of taking r = 0. Left as they are, and Low: states exactly on the edge between
+  S and S plus k, where the two relative tolerances use different scales, can be found twice or not at all.
 - 2026-11-13: **where a gLV package settles is `steady.settled`, not the solution with everyone present.**
   The check and the README solved `A x = -(r - D)` with all organisms and called every negative entry washed
   out. Study 7's package (BT, BH, RI) at D 0.04 puts BH and RI below zero there, while the system settles,
   stably, at BT 3.75e8 and RI 7.21e8 with only BH lost; a deterministic miaSim run from study 5's A8
   inoculum reaches the same state. `settled` tries every sub-community (2^n, capped at
-  `MAX_SETTLED` = 12): positive on its own system, no outsider with a positive rate there, and stable by
-  Routh-Hurwitz on `diag(x) A_SS` (standard library only, so no eigenvalue routine). One such state is the
+  `MAX_SETTLED` = 12): positive on its own system, no outsider with a positive rate there, and stable
+  (every eigenvalue of `diag(x) A_SS` with a negative real part; see 2026-11-14 for how it is computed). One such state is the
   prediction; two (bistability), none, or a candidate whose `A_SS` is too ill-conditioned to judge are
   said and the chemostat is not scored. Conditioning is checked per candidate, before stability, because
-  the characteristic polynomial behind the Routh-Hurwitz test loses its digits where `A_SS` is
-  ill-conditioned; and one relative tolerance (`SETTLED_TOLERANCE`) covers both boundaries, so an edge
+  the eigenvalues of an ill-conditioned `A_SS` carry fewer digits than the verdict needs; and one relative tolerance (`SETTLED_TOLERANCE`) covers both boundaries, so an edge
   state is found once (Craig's agent's review). A "none" says only that no sub-community passed, never
   that the system oscillates or diverges, which the search does not establish. The full solution survives only as supporting text and in the payload's `equilibrium` and
   `not_above_zero`, whose meaning did not change, so the format id did not move. Adding the settled state to

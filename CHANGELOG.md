@@ -40,7 +40,10 @@ content.
   The full solution stays in the text as the reason a reader's own `solve(A, -r)` differs. The package
   payload's `equilibrium` and `not_above_zero` fields are unchanged: they still hold the full solution.
   The README also names the settled state where the full solution is above zero and unstable, which it
-  printed as where the matrix settles while the check predicted another state.
+  printed as where the matrix settles while the check predicted another state, and says when a stable full
+  solution is one of several states. Stability is judged from eigenvalues computed directly: the test on
+  the characteristic polynomial misjudged states whose abundances span many orders, and named one state
+  of a bistable system. The check refuses an organism with no growth rate, as the README does.
 
 - **The method notes and the agent notes no longer carry stale copies of text they also carry current
   versions of.** Three merge resolutions unioned conflict hunks whose base was not empty, so each kept
@@ -244,7 +247,8 @@ content.
   command line's report says so; the package takes one dilution rate for every organism, the one most rows
   were fitted at, whatever the order the studies were read in. An empty result after the second box or the
   Technique setting no longer says the studies hold no chemostat. A run that is still changing in the
-  window its steady state is read in is left out and named, rather than fitted as one. The validation script no longer lets
+  window its steady state is read in is left out and named, rather than fitted as one; a window of fewer
+  than four points cannot be split in two and is not judged. The validation script no longer lets
   absent organisms invade from solver noise, reports six noise draws and the start-up's noise bias, and
   its numbers in METHOD_NOTES were re-derived.
 
