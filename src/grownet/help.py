@@ -60,6 +60,10 @@ NEXT = (
     "rate, which its rates name. mGrowthDB holds no "
     "such design yet, and it says what each organism lacks; on a published 12-species model, monocultures "
     "and pairs give 126 of its 132 coefficients.",
+    # #337 (where a package settles)
+    "The chemostat check and a gLV package's README name the state the package settles in, with the "
+    "organisms it keeps and the ones it loses, where they named every organism that the solution with all "
+    "of them present put at or below zero, including ones a simulation keeps.",
     # #299 (Baranyi damping)
     "The Baranyi growth-rate fit reaches its best fit where a lag collapses; nothing changes by default.",
     # #303 (merged arcs and nodes), #309 (italics, readability), #307 (no issue numbers), #322 (R summary)
@@ -409,8 +413,12 @@ EDGE_ATTRIBUTES = {
                 "the two are near and not equal, and it is this field the absence threshold acts on. Under "
                 "the steady-state derivation it is log2(1 + B_ij x_j), the fitted row's net growth with the "
                 "partner at its abundance in the largest community holding both over without it",
-    "sd": "standard deviation of the strength, the spread of the comparison (under the steady-state "
-          "derivation, from the bootstrap over vessels, or over runs where runs were pooled)",
+    "sd": "standard deviation of the strength: sqrt(var_with + var_without) of the per-replicate log2 "
+          "values under the comparison of replicate sets, whose sets are not paired; under the integrated "
+          "form sqrt(sd_replicates^2 + var_stage + var_selection), the spread of the per-co-culture-replicate "
+          "strengths with the monoculture stage's variance and, where more than one monoculture set was "
+          "matched, the rate selection variance added; and under the steady-state "
+          "derivation, from the bootstrap over vessels, or over runs where runs were pooled",
     "se": "standard error of the strength",
     "n_with": "replicates with the source present",
     "n_without": "replicates with the source absent",
@@ -1074,8 +1082,18 @@ their own CSV, and <strong>Get gLV parameters</strong>
 <h2 id="statistics">How an interaction is decided</h2>
 <p><strong>The effect.</strong> For each arc, the target's growth (the chosen measure) is compared between
 the replicates with the source and the replicates without it: the log2 of each replicate's value, the mean
-on each side, and their difference, the log2 mean. Its standard deviation is its spread over the
-replicates.</p>
+on each side, and their difference, the log2 mean. The two sets are grown separately, so no replicate
+pairs with another and there is no strength per replicate. The <strong>standard deviation</strong>
+(<code>sd</code>) is therefore <code>sqrt(var_with + var_without)</code>, from the sample variances of the
+per-replicate log2 values on each side: the spread expected between one replicate with the source and one
+without it, which does not shrink as replicates are added. The standard error of the log2 mean, which does,
+is <code>se</code>, <code>sqrt(var_with / n_with + var_without / n_without)</code>. The integrated form fits
+a strength for each co-culture replicate, and its sd is the spread of one such strength with every source of
+error in it: <code>sqrt(sd_replicates^2 + var_stage + var_selection)</code>, the standard deviation of those
+strengths with two variances added, the monoculture stage's (from resampling its replicates) and, where the
+study matched the organism to more than one monoculture set, the one that choice adds. It is the plain
+spread of the replicate strengths only where neither was measured. Under the steady-state derivation the sd
+comes from a bootstrap over vessels, or over runs where runs were pooled.</p>
 <p><strong>The call.</strong> An interaction is present when |log2 mean| is at least k standard deviations
 (the absence threshold, default 1: the mean plus or minus its sd stays on one side of zero), and absent
 otherwise. It is undetermined when one side has a single replicate, since there is then no spread; it is
@@ -1271,7 +1289,11 @@ the carrying capacities of such a run come from the same fit, the capacity being
 <p><strong>Scoring the package against a chemostat.</strong> A package is built from batch co-cultures,
 and mGrowthDB also holds continuous cultures, where a community sits at a steady state that satisfies
 <code>A x = -(r - D)</code> with D the dilution rate. Those numbers were never used to fit the parameters, so they test
-them. <strong>Check against chemostat steady states</strong> in Advanced settings (or
+them. The prediction is the stable state a simulation of the package settles in: the organisms it keeps
+satisfy that system, and none it loses can grow back in. Solving it with every organism present gives that
+state only when all of it is above zero; otherwise the system settles on fewer organisms, which the check
+finds by trying each sub-community, and it names the organisms the package loses rather than every one the
+full solution puts below zero. <strong>Check against chemostat steady states</strong> in Advanced settings (or
 <code>--steady-check</code>) puts the comparison in the report and a <code>steady_state_check.txt</code>
 in the package: predicted against observed, per organism, with every chemostat it could not use and why
 (a run with no dilution rate recorded, a perturbed run, another abundance unit, another medium, or no

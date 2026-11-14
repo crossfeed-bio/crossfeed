@@ -502,7 +502,9 @@ from them and the start-up scales, within 2% of each organism's self-limitation 
 **Scoring the package against a chemostat.** `--steady-check` (with `--report-rates --live`) scores the
 gLV parameters against the steady states mGrowthDB holds for these organisms in continuous culture: a
 chemostat satisfies `A x = -(r - D)` at steady state with D the dilution rate it records, and those
-numbers were never used to fit the parameters. The comparison goes into the report and into the package as
+numbers were never used to fit the parameters. The prediction is the stable state the package settles in,
+found by trying each sub-community: the organisms it keeps satisfy that system and none it loses can grow
+back in, so an organism the full solution puts below zero can still persist. The comparison goes into the report and into the package as
 `steady_state_check.txt`, predicted against observed per organism, with every chemostat it could not use
 and why. It is off by default, since it reads curves a search does not otherwise need.
 
