@@ -506,7 +506,7 @@ states, less D, and the rise after the pump started; or the rise from inoculatio
 rate, so the package's rates are `r_i - D` and it simulates the
 chemostat. What a design cannot determine is said once per chemostat group and once per organism: a row has
 one unknown for its own limitation and one per partner, and needs at least that many communities holding the
-organism. No study in mGrowthDB holds such a design yet; on the fitted 12-species gLV of Venturelli et al.
+organism. On the fitted 12-species gLV of Venturelli et al.
 2018, monocultures and pairs recover 126 of its 132 coefficients of B exactly, and `A = (r_i - D) B`, formed
 from them and the start-up scales, within 2% of each organism's self-limitation without measurement noise
 (`packaging/validate_steady_state.py`).
@@ -711,12 +711,12 @@ rule, so there are no **censored** arcs, no measured bounds and no `NA` cells. O
 the comparison gives 145 arcs, 122 of them drop-out, with 12 censored bounds; the integrated form gives
 12 arcs and no bounds (measured 2026-10-09). That is why it is not the default.
 
-**What the steady-state form needs** is a design mGrowthDB does not hold yet: several unperturbed
+**What the steady-state form needs** is a design of several unperturbed
 chemostat communities of one medium and dilution rate per organism, at least as many as the organism has
 unknowns (its own limitation and one per partner it met). Its coefficients are effective, an effect that
 needs a third organism being folded into the pairs that carry it, and each community is predicted by a fit
-made without it so a reader can see where that matters. Today it derives nothing, and says what each
-organism lacks.
+made without it so a reader can see where that matters. A design that determines no row derives
+nothing, and the report says what each organism lacks.
 
 It was the default for one release, 0.3.0. The comparison that chose it was run in gLV mode, where
 drop-out communities are off on both sides, so it measured the two forms on the question gLV mode asks

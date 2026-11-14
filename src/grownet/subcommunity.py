@@ -803,7 +803,8 @@ class SteadyStateDeriver:
             # review of the pooling)
             if published.get(picked) and all(published.get(s, "") < published[picked] for s in rivals):
                 how = "the name in the most recently published of them" + (
-                    f", as {', '.join(undated)} carries no publication date" if undated else "")
+                    f", as {', '.join(undated)} {'carries' if len(undated) == 1 else 'carry'} no publication date"
+                    if undated else "")
             else:
                 how = "the name in the study whose id sorts last, as no publication date tells them apart"
             # no "; " inside: notes are written joined by "; ", and a note holding it splits into fragments
