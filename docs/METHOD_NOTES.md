@@ -633,7 +633,11 @@ parameter they had. No R2 comparison is quoted above for that reason.
 
 ### What the integrated form cites (2026-11-14)
 
-Karoline: "please cite the 2 articles where you've seen the pdf, also in the help". Both were read in full.
+Karoline: "please cite the 2 articles where you've seen the pdf, also in the help". Karoline read the
+abstracts of both; her agent read the full text of both (every page of the PDFs she supplied, as text,
+not the figures). So what follows about their content beyond the abstracts rests on the agent's reading
+alone. The first version of this entry said both were read in full by both, which was the agent's
+assumption from her supplying the PDFs, and wrong (corrected 2026-11-14).
 
 - **Kloppers PH, Greeff JC (2013)**, *Applied Mathematics and Computation* 224: 817-825,
   doi:10.1016/j.amc.2013.08.093. Their Log Integral method (section 4) divides the LV equation by x,
