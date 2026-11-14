@@ -977,6 +977,14 @@ def test_an_arc_says_the_other_names_its_studies_give_an_organism():
     on_a = [r for r in records if r["target"] == "ncbi:411483"]
     assert on_a and all(f"{PRAUSNITZII} (in S1), {third} (in S0)" in n and "; " not in n
                         for r in on_a for n in r["notes"] if "is named differently" in n)
+    # two undated rivals take the plural verb ("as S1, S2 carries" was raised in review of the pooling):
+    # S1 and S0 have no date, S2 has one and is shown
+    client, studies = _split(a_in_s2=DUNCANIAE, published=("", "2024-02-01"),
+                             extra_curves={(i, third): _startup(0.5, 0.04, 4.0, UNIT) for i in (31, 32)})
+    records, _ = SteadyStateDeriver(client=client).derive_many(
+        studies + [({"id": "S0", "name": "z", "publishedAt": ""}, [s3])])
+    notes = [n for r in records if r["target"] == "ncbi:411483" for n in r["notes"] if "is named differently" in n]
+    assert notes and all(n.endswith(" carry no publication date") and "carries" not in n for n in notes), notes
     client, studies = _split()
     records, _ = SteadyStateDeriver(client=client).derive_many(studies)
     assert records and not [n for r in records for n in r["notes"] if "is named differently" in n]
