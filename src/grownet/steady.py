@@ -337,14 +337,41 @@ def _sign(a, b):
 
 def _eigenvalues(rows: list) -> list:
     """[(real, imaginary)]: the eigenvalues of a real square matrix, by reduction to upper Hessenberg form
-    with stabilized elementary similarity transformations and then the shifted QR algorithm (EISPACK's
-    elmhes and hqr, as Numerical Recipes, 2nd ed., sections 11.5 and 11.6, write them). Standard library
+    with stabilized elementary similarity transformations and then the shifted QR algorithm, after
+    balancing (EISPACK's balanc, elmhes and hqr, as Numerical Recipes, 2nd ed., sections 11.5 and 11.6, write
+    them, with the iteration limit raised from 30 to 60 and an exceptional shift every 10). Standard library
     only. Raises ArithmeticError if the iteration does not converge."""
     n = len(rows)
     if n == 0:
         return []
     # 1-indexed copy, as the published algorithm is written
     a = [[0.0] * (n + 1)] + [[0.0] + [float(v) for v in row] for row in rows]
+    # balanc: scale rows and columns by powers of 2 so each row and its column have similar norms, without
+    # rounding, as Numerical Recipes and LAPACK do before the reduction. A state's Jacobian diag(x) A is
+    # graded (x from 1e3 to 1e9 gives entries from 1e-7 to 1e9), and without this the eigenvalues were off by
+    # up to 6e-6 of the largest, more than STABLE_MARGIN, so an unstable state was judged stable (found in
+    # review: 20 verdicts of 6000 near-edge states differed from R's eigen(), none with it)
+    radix, converged = 2.0, False
+    while not converged:
+        converged = True
+        for i in range(1, n + 1):
+            c = sum(abs(a[j][i]) for j in range(1, n + 1) if j != i)
+            r = sum(abs(a[i][j]) for j in range(1, n + 1) if j != i)
+            if c and r:
+                g, f, s = r / radix, 1.0, c + r
+                while c < g:
+                    f *= radix
+                    c *= radix * radix
+                g = r * radix
+                while c > g:
+                    f /= radix
+                    c /= radix * radix
+                if (c + r) / f < 0.95 * s:
+                    converged = False
+                    for j in range(1, n + 1):
+                        a[i][j] /= f
+                    for j in range(1, n + 1):
+                        a[j][i] *= f
     # elmhes: Gaussian elimination with pivoting to upper Hessenberg form
     for m in range(2, n):
         x, i = 0.0, m
@@ -489,7 +516,9 @@ def _stable(rows: list) -> bool:
     Faddeev-LeVerrier recursion did this before and lost its digits where a state's abundances span many
     orders: on 3000 random states with abundances from 1e3 to 3e9 it judged 23 wrongly against R's eigen()
     (22 stable states refused, 1 unstable accepted), with condition numbers of 19 to 536, so the
-    conditioning gate did not catch them; this routine judged all 3000 as R did (found in review).
+    conditioning gate did not catch them; this routine judges all 3000 as R does. Without balancing it still
+    differed from R on 20 of 6000 states whose rightmost eigenvalue sits within 3e-7 of zero, where diag(x) A
+    is graded; balanced, on none (both found in review).
     """
     values = _eigenvalues(rows)
     if not values:
@@ -533,7 +562,7 @@ def settled(matrix: list, growth: list) -> dict:
                           f"every sub-community of at most {MAX_SETTLED}")
         return out
     scale = max((abs(g) for g in growth), default=0.0) or 1.0
-    found, unjudged = [], []
+    found, unjudged, unconverged = [], [], []
     for mask in range(1 << n):
         kept = [i for i in range(n) if mask >> i & 1]
         x = [0.0] * n
@@ -557,7 +586,7 @@ def settled(matrix: list, growth: list) -> dict:
         try:
             stable = _stable([[x[i] * matrix[i][j] for j in kept] for i in kept])
         except ArithmeticError:            # the QR iteration did not converge: not judged, never a verdict
-            unjudged.append((len(kept), float("inf")))
+            unconverged.append(len(kept))
             continue
         if not stable:
             continue
@@ -571,6 +600,11 @@ def settled(matrix: list, growth: list) -> dict:
                           f"judge (the worst, of {members} organism(s), has a condition number of "
                           f"{worst_text}, above the {MAX_EQUILIBRIUM_CONDITION:.0e} this tool will stand "
                           "behind), so no state is named")
+    elif unconverged:
+        # its own sentence: such a candidate passed the conditioning gate, and was reported as having an
+        # infinite condition number (found in review)
+        out["why_not"] = (f"the stability of {len(unconverged)} sub-community(ies) it could settle on could not "
+                          "be computed (the eigenvalue iteration did not converge), so no state is named")
     elif len(found) == 1:
         out.update(found[0])
     elif found:

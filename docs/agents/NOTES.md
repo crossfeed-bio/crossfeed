@@ -22,11 +22,12 @@ Rules for this file:
   said so while the README did not. It now defers to `settled` whenever that state loses anyone, and judges
   the full solution's own stability before calling it stable or not (past the 12-organism limit the search
   says nothing about it). **Stability is now judged from eigenvalues** (`steady._eigenvalues`, EISPACK's
-  elmhes and hqr in plain Python, `_stable`): the Routh-Hurwitz test on the Faddeev-LeVerrier polynomial
+  balanc, elmhes and hqr in plain Python, `_stable`; balancing matters, since diag(x) A is graded and
+  without it 20 of 6000 near-edge verdicts differed from R's): the Routh-Hurwitz test on the Faddeev-LeVerrier polynomial
   judged 23 of 3000 random package-scale states wrongly against R's eigen() where abundances spanned many
   orders, with condition numbers in the hundreds, so the conditioning gate never saw them; one of them
   turned a bistable system into a confident single prediction. The routine matches R's eigenvalues to
-  7.7e-13 on 2000 random matrices of 1 to 12 rows. The check refuses an organism with no growth rate, as
+  6.3e-15 on 2000 random matrices of 1 to 12 rows (balanced). The check refuses an organism with no growth rate, as
   the README does, instead of taking r = 0. Left as they are, and Low: states exactly on the edge between
   S and S plus k, where the two relative tolerances use different scales, can be found twice or not at all.
 - 2026-11-14: **the integrated form cites Kloppers & Greeff 2013 and Dattner & Klaassen 2015**, in the help,

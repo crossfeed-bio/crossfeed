@@ -838,3 +838,56 @@ def test_an_ill_conditioned_package_still_says_where_it_settles_as_the_check_doe
     where = steady.predicted(block, rates, 0.0)
     assert where["values"]["A"] == pytest.approx(8.163e8, rel=1e-3) and where["values"]["B"] == 0.0
     assert where["interior"] == {}
+
+
+GRADED_J = [[0.23348292914801738, -4.0724786724608233e-07, 1.8213748549354252e-06],
+            [-217220.06224432815, -0.38315103537673567, -1.2484793574748145],
+            [-90752.11294211698, 0.031059117176109843, -0.3833000564389171]]
+INT7 = [[2.0, -2.0, 1.0, 0.0, 2.0, 0.0, 1.0], [1.0, 1.0, 0.0, -1.0, -1.0, -2.0, 0.0],
+        [-1.0, 1.0, -2.0, 2.0, 0.0, -1.0, -1.0], [1.0, 1.0, 2.0, 1.0, -2.0, -2.0, 0.0],
+        [1.0, -1.0, 2.0, 0.0, 2.0, 1.0, -2.0], [1.0, 1.0, 0.0, 2.0, -2.0, 2.0, 0.0],
+        [0.0, -1.0, 0.0, -2.0, 2.0, 1.0, 2.0]]
+INT7_R = [(2.1708756236356797, 3.836666782978507), (2.1708756236356797, -3.836666782978507),
+          (-3.270461902338345, 0.0), (2.820024681854635, 0.8982222776504858),
+          (2.820024681854635, -0.8982222776504858), (0.6443306456788594, 0.9494985119371734),
+          (0.6443306456788594, -0.9494985119371734)]
+
+
+def test_eigenvalues_through_every_path_of_the_qr_iteration():
+    """The cyclic permutation needs about fifteen iterations, so it goes through the exceptional shift, and
+    has 1 and -1/2 +/- (sqrt 3)/2 i; a 7x7 integer matrix's seven eigenvalues are those R's eigen() gives,
+    to 1e-12. Together they fail a port that drops the shift, the shift's running total, the sign flip of
+    a Householder step or the total at a 1x1 deflation (found in review: each survived the earlier tests)."""
+    def close(got, want, tol=1e-12):
+        return len(got) == len(want) and all(min(abs(complex(*g) - complex(*w)) for g in got) < tol for w in want)
+    s = 3 ** 0.5 / 2
+    assert close(steady._eigenvalues([[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
+                 [(1.0, 0.0), (-0.5, s), (-0.5, -s)])
+    assert close(steady._eigenvalues(INT7), INT7_R, tol=1e-10)
+
+
+def test_a_graded_jacobian_is_balanced_before_its_eigenvalues_are_judged():
+    """A state's Jacobian diag(x) A with x from 1.2e3 to 2e9 has entries from 4e-7 to 2e5. R's eigen()
+    gives -0.53297 and +1.470e-8 +/- 0.28899i: unstable. Without balancing the port gave -1.35e-6 for the
+    pair and called it stable; balanced, it gives R's eigenvalues."""
+    values = steady._eigenvalues(GRADED_J)
+    assert max(re for re, _ in values) == pytest.approx(1.470052830e-08, rel=1e-6)
+    assert not steady._stable(GRADED_J)
+
+
+def test_an_eigenvalue_that_is_zero_to_rounding_is_not_stable():
+    """STABLE_MARGIN: a real part of -1e-13 against a largest eigenvalue of 1 is zero to rounding."""
+    assert not steady._stable([[-1.0, 0.0], [0.0, -1e-13]])
+    assert steady._stable([[-1.0, 0.0], [0.0, -1e-6]])
+
+
+def test_an_iteration_that_does_not_converge_is_said_not_scored(monkeypatch):
+    """No case found in review makes the QR iteration fail, so it is forced here: the candidate is not
+    judged, the reason says the computation did not converge rather than citing a condition number, and the
+    package README says nothing about the full solution's stability rather than guessing."""
+    def fail(rows):
+        raise ArithmeticError("forced")
+    monkeypatch.setattr(steady, "_eigenvalues", fail)
+    where = steady.settled([[-1.0, -0.5], [-0.3, -1.0]], [1.0, 1.0])
+    assert where["state"] is None and "did not converge" in where["why_not"]
+    assert "condition number" not in where["why_not"]
