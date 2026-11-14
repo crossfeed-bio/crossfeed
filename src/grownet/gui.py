@@ -24,7 +24,7 @@ import urllib.parse
 import webbrowser
 from collections import Counter
 
-from . import __version__, brand, integrated, interaction, matrix, rates, rbridge, steady
+from . import __version__, brand, integrated, interaction, matrix, matrix_image, rates, rbridge, steady
 from . import help as help_page
 from . import published as daily
 from . import selection as selecting
@@ -632,9 +632,47 @@ def _outputs(token: str, result: dict, has_edges: bool) -> str:
               f"same parameters in R with <code>glv &lt;- grownet_glv(&quot;{_esc(_glv_url(token, result))}"
               f"&quot;)</code>.</p>") if organism_rates and has_edges else ""
     missing_rate = _without_a_rate(result)
+    images = _matrix_images(token, result) if has_edges else ""
     return (f"<div class=\"bar outputs\">{download if has_edges else ''}{cytoscape if has_edges else ''}"
             f"{report}{rates_file}{glv}</div>{hint if has_edges else ''}{rate_hint}{unit_hint}{r_hint}"
-            f"{missing_rate}")
+            f"{missing_rate}{images}")
+
+
+def matrix_images(result: dict) -> list:
+    """[(heading, file name, SVG)]: the adjacency matrix as an image, and in gLV mode one image per matrix
+    of fitted coefficients (Karoline, 2026-11-14, #341: "provide the interaction matrix as an image, with a
+    hover function that says from which studies/experiments each entry is derived"). A search whose arcs
+    do not compare growth rates has no coefficients, which the gLV button already says, so it shows the
+    adjacency matrix alone."""
+    net = result["network"]
+    out = [("Adjacency matrix", f"{TITLE}_matrix.svg", matrix_image.adjacency_svg(net))]
+    organism_rates = result.get("rates") or {}
+    if organism_rates and glv_mode_on(result.get("settings") or {}):
+        try:
+            for unit, name, image in matrix_image.glv_svgs(net, organism_rates):
+                out.append((f"gLV coefficients in {unit}", f"{TITLE}_{name}", image))
+        except matrix.CannotConvert:
+            pass
+    return out
+
+
+def _matrix_images(token: str, result: dict) -> str:
+    """The images in a box that opens like the report, each with its download."""
+    t = _esc(token)
+    job = _esc(result.get("job", ""))
+    tail = f"&amp;job={job}" if job else ""
+    parts = []
+    for k, (heading, _name, image) in enumerate(matrix_images(result)):
+        # the image carries its own title, so the page adds no heading above it
+        parts.append(f"<div class=\"matrix-image\" aria-label=\"{_esc(heading)}\">{image}</div>"
+                     f"<p><a class=\"btn\" href=\"/matrix.svg?token={t}{tail}&amp;which={k}\">"
+                     "Download the image (.svg)</a></p>")
+    return ("<details class=\"report matrix-images\"><summary class=\"btn\">Matrix image</summary>"
+            "<p class=\"hint\">Hover a cell to see its value and the studies and experiments it is derived "
+            "from; the downloaded file keeps the hover when opened in a browser. Green is a positive effect, "
+            "orange-red a negative one, stronger with the size of the value. For a PNG, open the file in a "
+            "browser and take a screenshot, or export it from a vector editor such as Inkscape.</p>"
+            + "".join(parts) + "</details>")
 
 
 def _glv_url(token: str, result: dict) -> str:
@@ -1629,6 +1667,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._download("matrix", query)
         elif parsed.path in ("/rates.csv", "/glv.zip", "/glv.json"):
             self._rates(parsed.path, query)
+        elif parsed.path == "/matrix.svg":
+            self._matrix_image(query)
         elif parsed.path == "/grownet_style.xml":
             # the Cytoscape style as a file, the same as `grownet style` writes, so a downloaded GraphML can
             # take it without the command line (Karoline, 2026-09-28); XML, the one form Cytoscape imports
@@ -1642,6 +1682,20 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._send(report_text(result), "text/plain; charset=utf-8", f"{TITLE}_report.txt")
         else:
             self.send_error(404, "no such page")
+
+    def _matrix_image(self, query: dict):
+        """One matrix image as a file: `which` is its place in the list the result page shows."""
+        result = self._result(query)
+        if result is None:
+            self._send(render_form(self.token, message=self._gone(query, "No matrix yet: run a search first.")))
+            return
+        images = matrix_images(result) if result["network"].edges else []
+        try:
+            _heading, name, image = images[int(query.get("which", ["0"])[0])]
+        except (ValueError, IndexError):
+            self.send_error(404, "no such matrix image")
+            return
+        self._send(image, "image/svg+xml; charset=utf-8", name)
 
     def _rates(self, path: str, query: dict):
         """The growth rates on their own, and the gLV package: both need a search that reported rates."""

@@ -181,5 +181,8 @@ form.inline {{ display: inline-flex; gap: .4rem; align-items: center; margin: 0;
 summary.btn {{ list-style: none; display: inline-block; font-weight: normal; }}
 summary.btn::-webkit-details-marker {{ display: none; }}
 .report pre {{ max-height: 26rem; overflow: auto; font-size: .82rem; margin-top: .6rem; }}
+.matrix-image {{ overflow: auto; max-height: 42rem; margin-top: .4rem; border: 1px solid var(--line);
+                 border-radius: 6px; background: #FFFFFF; }}
+.matrix-image svg {{ display: block; }}
 progress {{ width: 100%; height: 10px; accent-color: var(--grow); }}
 """

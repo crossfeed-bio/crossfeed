@@ -1172,6 +1172,17 @@ carries that <strong>measured bound</strong> (<code>strength_bound</code>) and t
 <p>The table itself carries no settings, version or date, so the menu entry below it, <em>Adjacency
 matrix: what it is</em>, writes a text file to keep beside it: how it was made, every setting, what 0 and
 NA mean, the pairs left at 0, and the studies to cite. The command line writes it beside the CSV.</p>
+<p><strong>The matrix as an image.</strong> Below the outputs, <strong>Matrix image</strong> opens the
+adjacency matrix drawn as a grid, one square per ordered pair, rows affected and columns the actor as in
+the table. Green is a positive effect and orange-red a negative one, stronger with the size of the value
+on a scale whose two ends the legend gives; a pair judged absent is the pale middle of the scale, an
+<strong>NA</strong> cell is hatched, a pair whose arcs disagree in sign is cross-hatched, and a pair with
+no arc is white. Hover a square to see its value and the studies and experiments it is derived from. In
+gLV mode the box also draws each matrix of fitted coefficients, where the hover of a diagonal square names
+the growth rate and carrying capacity its self-limitation comes from. <strong>Download the image
+(.svg)</strong> saves each one as an SVG file, which keeps the hover when opened in a browser and scales
+for print. For a PNG, open the file in a browser and take a screenshot, or export it from a vector editor
+such as Inkscape.</p>
 <p><strong>A bound on an area is weaker than a bound on a rate.</strong> A culture that did not grow
 still carries the area of its own inoculum for the whole window, so on the default growth property, the
 area under the curve, the area the rule allows it can be as large as the growing side's, and the bound says

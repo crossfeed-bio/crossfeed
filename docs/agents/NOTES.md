@@ -15,6 +15,15 @@ Rules for this file:
 
 ## Current state
 
+- 2026-11-14 (#341): **the matrix image is `matrix_image.py`, and its gLV hover reads `block["behind"]`.**
+  `adjacency_cells` takes each cell's value from `matrix.cells`, so the image and the CSV cannot
+  disagree, and names every arc of the pair. For the gLV image, `_pair_values` now keeps the arcs whose
+  numbers entered a cell (`edges`, per unit), and `coefficients` puts them in each block as `behind`,
+  so a hover names exactly the arcs of the cell's own abundance unit, not every arc of the pair. The
+  payload and the CSV copy named keys, so neither carries `behind`. The hover is each cell's SVG
+  `<title>`, which needs no script, so the page stays free of JavaScript and the downloaded file keeps
+  the hover. A PNG was declined for now (Karoline: "SVG only for now"): the standard library cannot
+  draw its text.
 - 2026-11-13: **where a gLV package settles is `steady.settled`, not the solution with everyone present.**
   The check and the README solved `A x = -(r - D)` with all organisms and called every negative entry washed
   out. Study 7's package (BT, BH, RI) at D 0.04 puts BH and RI below zero there, while the system settles,
