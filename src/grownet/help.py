@@ -74,9 +74,8 @@ NEXT = (
     "names the studies and experiments behind it. Each image downloads as SVG.",
     # #338 (which standard deviation the absence threshold uses)
     "The help says which standard deviation the absence threshold uses under each derivation.",
-    # #344 (the papers behind the integrated form)
-    "The help and the README cite the two papers the integrated form rests on: Kloppers and Greeff (2013) for "
-    "the Log Integral equation it fits, and Dattner and Klaassen (2015) for the cumulative integral estimator.",
+    # #344 (the papers behind the integrated form) is left out on purpose (Karoline, 2026-11-14: "the about
+    # page doesn't need to mention the new references - this is too much detail"); the help cites them
 )
 
 # What changed in each release, a few lines each, newest first (Karoline, 2026-10-04: "a small log of what
