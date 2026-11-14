@@ -311,3 +311,14 @@ def test_a_spread_says_how_many_draws_it_rests_on():
     (group,) = chemostat_groups(client, exps)
     rows = fit(group["communities"], draws=50)["rows"]
     assert rows["a"]["draws"] == 50 and rows["a"]["sd"] is not None
+
+
+def test_two_spellings_of_one_medium_are_one_group():
+    """The tool's one medium rule (`media.identity`, Karoline, 2026-10-07): "Wilkins-Chalgren Anaerobe Broth"
+    and "Wilkins-Chalgren Anaerobe Broth (WC)" key alike, so the pair run under the second spelling joins
+    the monocultures under the first, as in the dilution test above: one group of three communities, not
+    two groups too small to determine anything (found in review: the raw lowercased names passed)."""
+    client, exps = _runs()
+    exps[2]["compartments"][0]["mediumName"] = "Wilkins-Chalgren Anaerobe Broth (WC)"
+    (group,) = chemostat_groups(client, exps)
+    assert len(group["communities"]) == 3

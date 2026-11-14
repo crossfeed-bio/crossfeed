@@ -891,3 +891,90 @@ def test_an_iteration_that_does_not_converge_is_said_not_scored(monkeypatch):
     where = steady.settled([[-1.0, -0.5], [-0.3, -1.0]], [1.0, 1.0])
     assert where["state"] is None and "did not converge" in where["why_not"]
     assert "condition number" not in where["why_not"]
+
+
+def test_the_check_prints_every_line_of_a_scored_chemostat():
+    """Each line a reader of steady_state_check.txt gets, in full (found in review: the without-interactions
+    clause, the organism left out, the dilution and the vessel count could each change unseen).
+
+    The package of `_package`: A_AA = A_BB = -4e-10, A_AB = 0.4 x (2^1 - 1) / 2e8 = 2e-9, A_BA = 0. Under
+    D = 0.04: B = (0.2 - 0.04) / 4e-10 = 4e8; A = (0.36 + 2e-9 x 4e8) / 4e-10 = 2.9e9, and with the
+    interaction set to 0, A = 0.36 / 4e-10 = 9e8. Observed in two vessels: A 1.45e9 (2x, and 9e8 / 1.45e9 =
+    0.6207x without interactions), B 2e8 (2x, and 4e8 / 2e8 = 2x). C is in the chemostat only."""
+    from test_growth_rates import _client as client_of
+    other = "Bacteroides thetaiotaomicron VPI-5482"
+    client = client_of({(v, name): _flat(value) for v in (1, 2)
+                        for name, value in ((A, 1.45e9), (B, 2.0e8), (other, 1.0e7))})
+    exp = _chemostat("E1", "no perturbations", [A, B, other], [(1, "V1"), (2, "V2")])
+    (check,) = steady.check(_package(), RATES, steady.observed(client, [exp]))
+    lines = steady.as_text([check]).splitlines()
+    block = lines[lines.index("  no perturbations (E1), dilution rate 0.04 /h, 2 vessel(s):"):]
+    assert block[1:4] == [
+        f"      {B}: predicted 4e+08, observed 2e+08, 2x observed, and 2x with every interaction set to 0",
+        f"      {A}: predicted 2.9e+09, observed 1.45e+09, 2x observed, and 0.6207x with every interaction "
+        "set to 0",
+        f"      {other}: in the chemostat and not in the package, so not scored"]
+
+
+def test_an_organism_within_rounding_of_zero_is_lost_once_not_kept_as_a_second_state():
+    """One tolerance on both boundaries, the member side here (the invasion side is pinned above). With
+    A = diag(-1, -1) and r = (1, 5e-10), the second organism's own state is 5e-10, which is zero to the
+    tolerance: one state, {1} at 1 with the second lost, not two stable states differing by 5e-10."""
+    where = steady.settled([[-1.0, 0.0], [0.0, -1.0]], [1.0, 5e-10])
+    assert where["kept"] == [0] and where["state"] == pytest.approx([1.0, 0.0])
+
+
+def test_an_eigenvalue_within_the_margin_of_zero_is_not_called_stable():
+    """A = [[-e, 1], [-1, -e]] with e = 1e-12 and r chosen so the full state is (1, 1): diag(x) A has
+    eigenvalues -1e-12 +/- i, negative only by rounding's width. Without `STABLE_MARGIN` that state was named
+    as where the system settles."""
+    eps = 1e-12
+    where = steady.settled([[-eps, 1.0], [-1.0, -eps]], [eps - 1.0, 1.0 + eps])
+    assert where["state"] is None
+
+
+def test_the_readme_says_every_organism_lost_and_the_whole_sentence_on_an_unsearched_stable_interior():
+    """Two README sentences pinned in full: a settled state that keeps nobody says so, and a stable interior
+    the search did not name says that the search did not establish it is the only state."""
+    from grownet import matrix
+    rates = {k: {"unit": "1/h"} for k in "ab"}
+    gone = {"organisms": ["A", "B"], "ids": ["a", "b"], "equilibrium": [-1.0, -2.0], "not_above_zero": ["A", "B"],
+            "settled": {"state": [0.0, 0.0], "kept": [], "lost": [0, 1], "invasion": [-0.1, -0.2]},
+            "abundance_unit": "Cells/mL"}
+    assert matrix._settled_lines(gone, rates)[0] == "      where it settles (in Cells/mL): every organism lost"
+    unsearched = {"organisms": ["A", "B"], "ids": ["a", "b"], "equilibrium": [1.0, 2.0], "not_above_zero": [],
+                  "settled": {"state": None, "why_not": "it was not searched"}, "interior_stable": True,
+                  "abundance_unit": "Cells/mL"}
+    assert matrix._settled_lines(unsearched, rates)[1:] == [
+        "          The solution of A x = -r with every organism present, A 1, B 2,",
+        "          is positive and stable, so a simulation started near it stays there; the search",
+        "          above did not establish whether it is the only state the system can settle in."]
+
+
+def test_the_readme_says_nothing_of_stability_it_could_not_compute_and_gives_the_condition_number(
+        monkeypatch):
+    """The feasible package of `_package` (A at 1e9 and B at 5e8 with r - D = r): its README gives the
+    condition number beside where it settles. With the stability computation failing, the README must not
+    call the full solution "positive but not stable": nothing was established."""
+    from grownet import matrix
+    got = _package()
+    readme = matrix.readme_from(got, records_to_network([]), RATES)
+    assert "[condition number " in readme
+    monkeypatch.setattr(steady, "_stable", lambda rows: (_ for _ in ()).throw(ArithmeticError("forced")))
+    got = _package()
+    (block,) = got["matrices"]
+    assert block["interior_stable"] is None
+    assert "not stable" not in matrix.readme_from(got, records_to_network([]), RATES)
+
+
+def test_the_refusal_names_the_worst_ill_conditioned_candidate_and_says_infinite_in_words(monkeypatch):
+    """The three-organism case of the conditioning test above brings three candidates to the gate: {1, 2},
+    {3} and {2, 3}. With each one-organism candidate set to a condition number of 2e8 and each pair to 5e8,
+    all above the 1e8 limit, the reason counts all three and names the worst: a pair, at 5e+08 (the best
+    would be the single organism at 2e+08). A singular one is "infinite", not "inf"."""
+    matrix = [[-1.0, -1.0, -2.0], [-1.0, -(1.0 + 1e-8), -2.0], [-2.0, -2.0, -1.0]]
+    for pair, said in ((5.0e8, "5e+08"), (float("inf"), "infinite")):
+        monkeypatch.setattr(steady, "condition_of", lambda rows, pair=pair: 2.0e8 if len(rows) == 1 else pair)
+        why = steady.settled(matrix, [1.0, 1.0 + 5e-9, 1.0])["why_not"]
+        assert why.startswith("3 sub-community(ies) it could settle on are too ill-conditioned")
+        assert f"(the worst, of 2 organism(s), has a condition number of {said}, above" in why
