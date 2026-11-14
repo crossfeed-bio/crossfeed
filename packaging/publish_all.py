@@ -6,9 +6,11 @@ Writes all_result.<format>.json (what the page and `grownet derive --all` read),
 the older format installed copies read), all_network.json and all_report.txt,
 and, when given NOTES_FILE, the release description for this run, which the workflow sets on every run.
 """
+import http.client
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -134,30 +136,73 @@ NETWORK, REPORT = "all_network.json", "all_report.txt"
 # at the defaults until the next run.
 MIN_SHARE_OF_PREVIOUS = 0.5
 
+# GitHub serves a release asset through a redirect to its CDN, and a gateway answer from there clears on
+# its own. Run 42471472131 refused a whole day's publish on ONE HTTP 504, and the floor's own advice,
+# "run the workflow again", had to be carried out by hand six hours later, with every 0.3.x and 0.4.x
+# copy already deriving All live. So an answer that waiting fixes is read again before it is believed.
+# This takes nothing off the fail-closed floor (#275): every read failing still refuses, and a code that
+# waiting does not fix, or a body that is not the artifact, still refuses on the first read. What stops
+# is one unlucky read costing every installed copy a day of freshness.
+WAITS_OUT = frozenset({408, 425, 429, 500, 502, 503, 504})
+READS = 4
+BACKOFF = 2.0
 
-def previous_arcs(opener=urllib.request.urlopen) -> int | str | None:
+
+def previous_arcs(opener=urllib.request.urlopen, sleep=time.sleep) -> int | str | None:
     """How many arcs the artifact being replaced carries; None when there is none (GitHub answers 404,
     which is the first run); or, as a string, why it could not be read.
 
     The floor fails CLOSED on the last (Craig's agent, on #275): a timeout, a 503 or a truncated body is
     not "no previous artifact" but "cannot tell whether this run collapsed", and it used to switch the
     half check off on exactly the night it might be needed.
+
+    An answer that waiting fixes is read up to READS times before that refusal stands. A 404, a code
+    that waiting does not fix, and a body that parses but is not a network are each answered on the
+    first read, so the retry is the transient case alone and not a blanket.
     """
     # the first run under a new format id has no file of its own yet, so it compares with the legacy file;
     # and with both deleted, which is the emergency procedure, it compares with `all_network.json`, which
     # that procedure leaves in place, rather than treating the night as a first run (found in review)
     base = URL.rsplit("/", 1)[0]
     for url in (URL, LEGACY_URL, f"{base}/{NETWORK}"):
-        try:
-            with opener(url, timeout=TIMEOUT) as response:
-                doc = json.loads(response.read().decode("utf-8"))
-                return len((doc.get("network") or doc)["edges"])
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                continue
-            return f"GitHub answered HTTP {e.code}"
-        except Exception as e:     # noqa: BLE001 - every other failure is reported, and refuses below
-            return f"{type(e).__name__}: {e}"
+        absent, reason = False, ""
+        for read in range(1, READS + 1):
+            try:
+                with opener(url, timeout=TIMEOUT) as response:
+                    doc = json.loads(response.read().decode("utf-8"))
+                    return len((doc.get("network") or doc)["edges"])
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    absent = True
+                    break
+                reason = f"GitHub answered HTTP {e.code}"
+                if e.code not in WAITS_OUT:
+                    return reason
+            except (TimeoutError, json.JSONDecodeError, http.client.IncompleteRead, OSError) as e:
+                # URLError and ConnectionError are OSError. A BODY CUT SHORT TAKES TWO FORMS, and the
+                # first version of this named only the second one (Karoline's agent, reviewing, who
+                # reproduced it against a local socket promising 100 bytes and sending 10). When the
+                # server sent a Content-Length, `read()` notices the shortfall itself and raises
+                # http.client.IncompleteRead, which derives from HTTPException and NOT from OSError, so
+                # it fell through to the blanket clause below and refused on the FIRST read: the one
+                # transient case this function exists for. JSONDecodeError is the other form, where
+                # there was no length (chunked or close-delimited) and the short bytes reach
+                # json.loads. A release asset from the CDN normally carries a length, so IncompleteRead
+                # is the likely one. Each of these is the network between here and the asset, so each
+                # is read again.
+                #
+                # NARROWER THAN HTTPException ON PURPOSE, which was offered and is the author's call.
+                # HTTPException would also retry a malformed status line or malformed headers. Those are
+                # a broken response rather than a short one, waiting does not obviously fix them, and
+                # retrying them would turn a server defect into four slow server defects behind a delay.
+                # The rule this function keeps is that only an answer waiting fixes is read again.
+                reason = f"{type(e).__name__}: {e}"
+            except Exception as e:     # noqa: BLE001 - every other failure is reported, and refuses below
+                return f"{type(e).__name__}: {e}"
+            if read < READS:
+                sleep(BACKOFF ** read)
+        if not absent:
+            return f"{reason}, on every one of {READS} reads"
     return None
 
 

@@ -18,6 +18,20 @@ content.
 
 ### Fixed
 
+- **One unreachable read of the published artifact no longer costs a day of freshness** (#275, instance
+  in #333). The daily All publish reads the artifact it would replace, so that a derivation which
+  collapsed is refused, and it fails closed when that read does not succeed. It read once: on 2026-11-08
+  a single HTTP 504 refused the whole day's publish (run 42471472131), and a re-run with nothing changed
+  went green, so the answer had cleared by itself. By then every 0.3.x and 0.4.x copy had been deriving
+  All live for six hours, their day having ended twelve minutes before the failure was reported. An
+  answer that waiting fixes is now read up to four times, two seconds apart and then four and then
+  eight, before the refusal stands. A body cut short is read again in both of the forms it arrives in:
+  with a length, where the read itself notices the shortfall, and without one, where the short bytes
+  reach the parser. The refusal itself is unchanged, and so is every case that waiting does not fix: a
+  404 is still the first run, a 403 still answers on the first read, a body that parses and is not a
+  network is still a format defect rather than a network one, and every read failing still refuses. No
+  number changes.
+
 - **The method notes and the agent notes no longer carry stale copies of text they also carry current
   versions of.** Three merge resolutions unioned conflict hunks whose base was not empty, so each kept
   both the new text and the old. `docs/METHOD_NOTES.md` held the pre-re-derivation validation section

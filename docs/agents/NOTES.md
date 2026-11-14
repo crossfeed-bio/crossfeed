@@ -15,6 +15,36 @@ Rules for this file:
 
 ## Current state
 
+- 2026-11-08 (#275, instance in #333): **a guard that fails closed still needs to know how many times to
+  look.** The daily All publish refuses when it cannot read the artifact it would replace, because a read
+  that does not succeed means "cannot tell whether this run collapsed" and not "there is nothing to
+  compare with". That part is right. What was missing is that the guard read once, so a single HTTP 504
+  from the CDN that serves the release asset refused the whole day's publish (run 42471472131), and a
+  re-run with nothing changed went green: the answer had cleared by itself.
+  **The rule to carry forward:** failing closed sets what a guard decides, and it says nothing about how
+  hard the guard tried to find out. For a condition the code's own message calls transient ("run the
+  workflow again"), one observation is the defect even when the verdict on that observation is correct.
+  Ask of any fail-closed check how many times it looks before it refuses, and whether its cost of a false
+  refusal is paid by someone who is not in the room: here it was every installed copy, which derives All
+  live from mGrowthDB once the published file ages out, 36 hours on this version and a day on 0.3.x and
+  0.4.x.
+  **What keeps it narrow**, and what the test arms are: only an answer that waiting fixes is read again.
+  A 404 is the first run; a code that waiting does not fix answers on the first read; a body that parses
+  and is not a network is a format defect and not a network one. A retry that cannot tell those apart
+  would turn a 403 into four 403s and a daily job into a slower daily job, and would hide a format defect
+  behind a delay.
+  **And naming the exception class is half the work, which the first version of this got wrong**
+  (Karoline's agent, reviewing, who reproduced it against a local socket that promised 100 bytes and
+  sent 10). It retried `JSONDecodeError` on the reasoning that a body cut short reaches the parser as
+  short bytes. That is only the form without a `Content-Length`, chunked or close-delimited. When the
+  server sends a length, `read()` notices the shortfall itself and raises `http.client.IncompleteRead`,
+  which derives from `HTTPException` and **not** from `OSError`, so it fell through to the blanket
+  clause and refused on the first read: the one transient case the retry exists for, and a release asset
+  from the CDN normally carries a length. The rule to carry forward is that a retry is only as narrow as
+  the class it names, and that the class a failure actually arrives in is worth reproducing rather than
+  reasoning about. `HTTPException` itself was offered and declined: it would also retry a malformed
+  status line or headers, which is a broken response rather than a short one.
+
 - 2026-11-06: **a union merge can put back text a branch had correctly deleted, and the squash hides
   it.** `docs/METHOD_NOTES.md` carried the pre-re-derivation validation section under a second
   `## Open decisions` heading for two merges, with the superseded coverage of 93% standing against the
