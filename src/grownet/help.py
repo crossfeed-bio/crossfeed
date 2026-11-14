@@ -51,14 +51,13 @@ NEXT = (
     "Every arc of the default derivation whose two sides have a first value says what they started at, "
     "and warns where they differ more than 3 times, as 61 of the 190 drop-out arcs in mGrowthDB do, "
     "counting those below the absence threshold, up to 117 times.",
-    # #315, #316, #318, #319 (merged), #320 (validation), #321 (messages and every later fix to the
-    # derivation); the dilution rate in the rates file and the package: branch dilution-column, its pull
-    # request not yet open; runs of several studies fitted together: branch steady-across-studies, its pull
-    # request not yet open
+    # #315, #316, #318, #319, #320 (validation), #321 (messages and every later fix to the derivation),
+    # #327 (the dilution rate in the rates file and the package), #326 (runs of several studies fitted
+    # together). No claim about what mGrowthDB holds: it goes stale the day such data is published
+    # (Karoline, 2026-11-14)
     "A third derivation, for gLV mode: the rows fitted from the chemostat steady states of sub-communities, "
     "every sub-community counting, across studies where the medium matches, its package at one dilution "
-    "rate, which its rates name. mGrowthDB holds no "
-    "such design yet, and it says what each organism lacks; on a published 12-species model, monocultures "
+    "rate, which its rates name. It says what each organism lacks; on a published 12-species model, monocultures "
     "and pairs give 126 of its 132 coefficients.",
     # #337 (where a package settles)
     "The chemostat check and a gLV package's README name the state the package settles in, with the "
@@ -1446,8 +1445,6 @@ those communities was read in a single vessel, the row has no spread, so its arc
 vessels of one run share its inoculum and its history, so a community read in one run has a spread from
 within that run only, narrower than the difference between runs would make it.</li>
 </ul>
-<p>mGrowthDB holds no design of this kind yet: its chemostat studies each run one community, which
-determines no row. The derivation is there for the data to come.</p>
 
 <h2 id="glv-walkthrough">The gLV example, step by step</h2>
 <p><strong>gLV example</strong> beside Example fills both boxes and every setting a package needs, as
