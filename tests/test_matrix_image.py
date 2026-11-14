@@ -141,7 +141,7 @@ def test_the_hover_shows_in_the_image_itself_without_a_script():
         assert " ".join(shown).split() == g.find(f"{SVG}title").text.split()
         box = tip.find(f"{SVG}rect")
         bx, by, bw, bh = (float(box.get(k)) for k in ("x", "y", "width", "height"))
-        assert all(len(line) * matrix_image.TIP_CHAR <= bw - 20 for line in shown), shown
+        assert all(len(line) * 7.2 <= bw - 20 for line in shown), shown
         assert 0 <= bx and bx + bw <= width and 0 <= by and by + bh <= height
         # drawn after every cell, so no cell covers it
         assert children.index(tip) > max(children.index(c) for c in cells)
@@ -388,7 +388,7 @@ def test_a_long_hover_wraps_inside_its_box():
     width = float(tip.find(f"{SVG}rect").get("width"))
     lines = ["".join(x.itertext()) for x in tip.iter(f"{SVG}text")]
     assert len(lines) > 3
-    assert all(len(line) * matrix_image.TIP_CHAR <= width - 20 for line in lines)
+    assert all(len(line) * 7.2 <= width - 20 for line in lines)
 
 
 def test_glv_mode_puts_each_coefficient_matrix_on_the_page_after_the_adjacency_matrix():
@@ -546,3 +546,143 @@ def test_the_command_line_writes_the_same_image_as_the_page(tmp_path, capsys):
     from grownet.model import InteractionNetwork
     written = InteractionNetwork.from_dict(json.loads(net_file.read_text(encoding="utf-8")))
     assert image.read_text(encoding="utf-8") == matrix_image.adjacency_svg(written)
+
+
+def _positions(root):
+    """{cell id: (row label, column label)} read off where the cell is drawn, by the nearest row label
+    (by height) and column label (by the x where its slanted text starts), so a transposed grid or
+    reversed labels show."""
+    texts = list(root.iter(f"{SVG}text"))
+    rows = [(float(t.get("y")), "".join(t.itertext())) for t in texts if t.get("text-anchor") == "end"]
+    cols = [(float(t.get("x")), "".join(t.itertext())) for t in texts
+            if (t.get("transform") or "").startswith("rotate(-50")]
+    out = {}
+    for g in _cells(root):
+        rect = g.find(f"{SVG}rect")
+        cx = float(rect.get("x")) + float(rect.get("width")) / 2
+        cy = float(rect.get("y")) + float(rect.get("height")) / 2
+        row = min(rows, key=lambda r: abs(r[0] - cy))[1]
+        col = min(cols, key=lambda c: abs(c[0] - cx))[1]
+        out[g.get("id")] = (row, col, g.find(f"{SVG}title").text.splitlines()[0])
+    return out
+
+
+def test_each_cell_sits_in_the_row_of_the_affected_organism_and_the_column_of_the_actor():
+    """Rows affected and columns the actor, read off where each cell is drawn against the labels, so a grid
+    drawn transposed, or labels in another order than the cells, fails."""
+    root = ET.fromstring(matrix_image.adjacency_svg(NET))
+    checked = 0
+    for row, col, head in _positions(root).values():
+        if row == col:
+            assert head.startswith(f"{row}: the diagonal")
+        else:
+            assert head == f"Effect of {col} on {row}", (row, col, head)
+            checked += 1
+    assert checked == 6
+
+
+def test_the_page_links_each_image_to_its_own_download_and_draws_absent_pairs():
+    """Each download button serves the image beside it (`which` is its place in the list), and the page's
+    adjacency image gets the arcs judged absent that the search left out of the file."""
+    from grownet import gui
+    present = records_to_network([_arc("a", "b", 1.0, "S1", ["E1"]), _arc("c", "b", 1.0, "S1", ["E2"])])
+    absent = records_to_network([{**_arc("c", "a", 0.1, "S3", ["E5"]), "status": "absent",
+                                  "effect": "neutral"}])
+    net = _glv_net([_glv_arc("b", "a", 1.0, x_j=2.0e8), _glv_arc("a", "b", -1.0, x_j=4.0e8)])
+    rates = {"a": _rate("A", 0.4, 1.0e9), "b": _rate("B", 0.2, 5.0e8)}
+    result = {"network": net, "rates": rates, "settings": gui.glv_mode(dict(gui.DEFAULTS)), "job": "j1"}
+    html = gui._matrix_images("tok", result)
+    hrefs = re.findall(r'href="(/matrix\.svg\?[^"]+)"', html)
+    assert [re.search(r"which=(\d+)", h).group(1) for h in hrefs] == ["0", "1"]
+    assert "Download the adjacency matrix (.svg)" in html and "Download the gLV coefficients in Cells/mL" in html
+    image = gui.matrix_images({"network": present, "absent": absent, "settings": dict(gui.DEFAULTS)})[0][2]
+    kinds = {g.get("id"): g.find(f"{SVG}rect").get("fill") for g in _cells(ET.fromstring(image))}
+    names = matrix_image.adjacency_cells(present)[0]
+    assert kinds[f"adj-c{names.index('A')}-{names.index('C')}"] == "#F3F4F1"   # judged absent: 0
+
+
+def test_the_fills_and_patterns_are_the_ones_the_legend_describes():
+    """No arc is white, 0 the pale neutral, and the patterns are what the help names them: NA hatched (one
+    line), a sign conflict cross-hatched (two lines), unfitted dotted (a circle). Literal values, so a
+    constant changed in the module cannot pass by being compared with itself."""
+    assert matrix_image.EMPTY == "#FFFFFF" and matrix_image.NEUTRAL == "#F3F4F1"
+    root = ET.fromstring(matrix_image.adjacency_svg(NET))
+    patterns = {p.get("id"): p for p in root.iter(f"{SVG}pattern")}
+    assert len(list(patterns["adj-na"].iter(f"{SVG}line"))) == 1
+    assert len(list(patterns["adj-conflict"].iter(f"{SVG}line"))) == 2
+    assert len(list(patterns["adj-unfitted"].iter(f"{SVG}circle"))) == 1
+    _, grid = matrix_image.adjacency_cells(NET)
+    fills = {}
+    for g in _cells(root):
+        i, j = (int(k) for k in g.get("id").split("-c")[1].split("-"))
+        fills.setdefault(grid[(i, j)]["kind"], set()).add(g.find(f"{SVG}rect").get("fill"))
+    non_value = {kind: next(iter(f)) for kind, f in fills.items() if kind != "value"}
+    assert len(set(non_value.values())) == len(non_value), non_value      # every kind its own look
+    assert set(matrix_image.KINDS) == {"zero", "na", "conflict", "unfitted", "nonfinite", "empty", "diagonal"}
+
+
+def test_the_scale_is_symmetric_when_the_largest_effect_is_negative():
+    net = records_to_network([_arc("a", "b", -2.0, "S1", ["E1"]), _arc("c", "a", 0.5, "S1", ["E2"])])
+    root = ET.fromstring(matrix_image.adjacency_svg(net))
+    text = " ".join("".join(t.itertext()) for t in root.iter(f"{SVG}text"))
+    assert "-2 negative" in text and "positive +2" in text
+    fill = {g.find(f"{SVG}title").text.splitlines()[0]: g.find(f"{SVG}rect").get("fill") for g in _cells(root)}
+    assert fill["Effect of A on B"] == "#C2410C"             # the full inhibition color at the scale's end
+
+
+def test_slanted_labels_stay_inside_the_image_at_the_top():
+    names = [f"Organism{k} with a long strain designation CC55_001C" for k in range(5)]
+    grid = {(i, j): {"kind": "empty", "value": None, "hover": "x"} for i in range(5) for j in range(5)}
+    root = ET.fromstring(matrix_image.svg(names, grid, "t", "s", "v"))
+    for t in root.iter(f"{SVG}text"):
+        if (t.get("transform") or "").startswith("rotate(-50"):
+            top = float(t.get("y")) - len("".join(t.itertext())) * 6.6 * math.sin(math.radians(50))
+            assert top >= 0, top
+
+
+def test_hovers_say_their_value_and_every_arc_in_full():
+    """Whole hover lines, so a value, a rounding, a left-out arc or a bound's direction that changes fails."""
+    net = records_to_network([_arc("a", "b", 0.12345, "S1", ["E1"])])
+    assert matrix_image.adjacency_cells(net)[1][(1, 0)]["hover"].splitlines()[1] == "log2 strength +0.123 (from 1 arc)"
+    abolished = records_to_network([{**_arc("a", "b", None, "S1", ["E1"]), "outcome": "abolished",
+                                     "effect": "inhibition", "strength_bound": -0.5,
+                                     "bound_rule": "the no-growth factor"}])
+    assert "Measured bound: log2 at most -0.5" in matrix_image.adjacency_cells(abolished)[1][(1, 0)]["hover"]
+    conflict = records_to_network([_arc("c", "b", 1.0, "S1", ["E7"]), _arc("c", "b", -1.0, "S2", ["E8"]),
+                                   {**_arc("c", "b", 0.1, "S3", ["E9"]), "status": "absent", "effect": "neutral"}])
+    lines = matrix_image.adjacency_cells(conflict)[1][(0, 1)]["hover"].splitlines()
+    assert lines[-3:] == ["Also 1 arc judged absent, not in the value", "Studies: S3", "Experiments: E9"]
+    # gLV: the value line, and an arc in another abundance unit named apart, not among the cell's arcs
+    glv = _glv_net([_glv_arc("b", "a", 1.0, x_j=2.0e8, experiments=["E1"]),
+                    _glv_arc("b", "a", 1.0, x_j=2.0e8, unit="OD600", experiments=["E2"], study_id="S2"),
+                    _glv_arc("a", "b", -1.0, x_j=4.0e8, experiments=["E3"])])
+    rates = {"a": _rate("A", 0.4, 1.0e9), "b": _rate("B", 0.2, 5.0e8)}
+    got = matrix.coefficients(glv, rates)
+    block = next(b for b in got["matrices"] if b["abundance_unit"] == "Cells/mL")
+    names, grid = matrix_image.glv_cells(glv, rates, block, got)
+    lines = grid[(names.index("A"), names.index("B"))]["hover"].splitlines()
+    assert lines[1].startswith("+2e-09 1/(h x Cells/mL) (from 1 arc)"), lines
+    assert lines[3] == "Experiments: E1"                       # not E2, which is in OD600
+    assert any(line.startswith("Left out of it: ") and "OD600" in line for line in lines), lines
+
+
+def test_each_image_on_a_page_has_ids_of_its_own():
+    net = _glv_net([_glv_arc("b", "a", 1.0, x_j=2.0e8), _glv_arc("a", "b", -1.0, x_j=4.0e8)])
+    rates = {"a": _rate("A", 0.4, 1.0e9), "b": _rate("B", 0.2, 5.0e8)}
+    ids_adj = {g.get("id") for g in ET.fromstring(matrix_image.adjacency_svg(net)).iter() if g.get("id")}
+    ids_glv = {g.get("id") for g in ET.fromstring(matrix_image.glv_svgs(net, rates)[0][2]).iter() if g.get("id")}
+    assert ids_adj and ids_glv and not ids_adj & ids_glv
+
+
+def test_a_glv_pair_with_no_coefficient_is_drawn_dotted_not_white():
+    """The dotted pattern is the gLV image's alone, so it is checked on one: the unfitted cell's fill is the
+    dotted pattern, which holds a circle, and is not the white of a pair with no arc."""
+    net = _glv_net([_glv_arc("b", "a", 1.0, x_j=None, experiments=["E1"]), _glv_arc("a", "b", -1.0, x_j=4.0e8)])
+    rates = {"a": _rate("A", 0.4, 1.0e9), "b": _rate("B", 0.2, 5.0e8)}
+    ((_, _, image),) = matrix_image.glv_svgs(net, rates)
+    root = ET.fromstring(image)
+    cell = next(g for g in _cells(root) if "No coefficient" in g.find(f"{SVG}title").text)
+    fill = cell.find(f"{SVG}rect").get("fill")
+    assert fill == "url(#glv0-unfitted)" and fill != "#FFFFFF"
+    pattern = next(p for p in root.iter(f"{SVG}pattern") if p.get("id") == "glv0-unfitted")
+    assert len(list(pattern.iter(f"{SVG}circle"))) == 1
