@@ -8,8 +8,34 @@ permissions:
   contents: read
 
 jobs:
+  # A push to a branch with an open pull request fired this workflow twice on the same commit, once for
+  # `push` and once for `pull_request`, and the slower copy gated the branch (#329). So a push run first
+  # asks whether its branch has an open pull request in this repository, and if it does, every job below is
+  # skipped and the pull request's run is the one that tests the commit. A skipped job reads as neutral,
+  # where canceling the duplicate instead marked every pull request failed. A push to `main`, and a push
+  # to a branch with no pull request yet, are tested as before. If the question cannot be answered, the
+  # jobs run: testing twice is the safe direction.
+  duplicate:
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      skip: ${{ steps.ask.outputs.skip }}
+    steps:
+      - id: ask
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          open=$(gh api "repos/${GITHUB_REPOSITORY}/pulls?state=open&head=${GITHUB_REPOSITORY_OWNER}:${BRANCH}" --jq length || echo 0)
+          echo "open pull requests from ${BRANCH}: ${open}"
+          if [ "${open}" -gt 0 ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; fi
+
   test:
     # Windows and macOS too: a Windows-only failure (a test connecting to itself) was found by hand on #70
+    needs: duplicate
+    if: ${{ !cancelled() && needs.duplicate.outputs.skip != 'true' }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -45,6 +71,8 @@ jobs:
 
   package:
     # the wheel and the source archive build, pass PyPI's checks, and a clean install serves the page (#27)
+    needs: duplicate
+    if: ${{ !cancelled() && needs.duplicate.outputs.skip != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -74,6 +102,8 @@ jobs:
     # the R companion package in r/, checked the way CRAN does (#112). R and its two dependencies come from
     # Ubuntu's own packages, so this adds no third-party action and nothing is compiled: r-cran-jsonlite is
     # what the package imports, r-cran-testthat is what runs its tests inside the check.
+    needs: duplicate
+    if: ${{ !cancelled() && needs.duplicate.outputs.skip != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -106,6 +136,8 @@ jobs:
   windows-app:
     # the self-contained Windows program: a one-folder build in a zip (Karoline, on #63), built and started
     # on a Windows machine, so every change proves it still works (#26)
+    needs: duplicate
+    if: ${{ !cancelled() && needs.duplicate.outputs.skip != 'true' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
