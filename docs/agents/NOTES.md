@@ -29,6 +29,14 @@ Rules for this file:
   7.7e-13 on 2000 random matrices of 1 to 12 rows. The check refuses an organism with no growth rate, as
   the README does, instead of taking r = 0. Left as they are, and Low: states exactly on the edge between
   S and S plus k, where the two relative tolerances use different scales, can be found twice or not at all.
+- 2026-11-14: **the integrated form cites Kloppers & Greeff 2013 and Dattner & Klaassen 2015**, in the help,
+  the README and `integrated.py`'s docstring, because Karoline supplied both PDFs and asked for exactly those
+  two. She read their abstracts; her agent read their full text. Do not write that a human read a paper
+  because they supplied it: that is how this entry, the docstring, a test and METHOD_NOTES first came to
+  say she had read both in full. Do not add Himmelblau, Jones & Bischoff 1967 (the chemical engineering
+  origin Dattner and Klaassen cite) unless someone has read it: she could not obtain it. What each supports and where grownet departs
+  (cumulative rows against their intervals; raw points and a fixed x(0) against their smoothed states and
+  estimated x(0)) is in the docstring and in docs/METHOD_NOTES.md, "What the integrated form cites".
 - 2026-11-13: **where a gLV package settles is `steady.settled`, not the solution with everyone present.**
   The check and the README solved `A x = -(r - D)` with all organisms and called every negative entry washed
   out. Study 7's package (BT, BH, RI) at D 0.04 puts BH and RI below zero there, while the system settles,

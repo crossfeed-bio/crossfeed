@@ -631,6 +631,37 @@ honest note on method: the first comparison of R2 between the two variants was i
 predictor that scores a fit omitted the fitted constant, so the intercept's fits were scored without the
 parameter they had. No R2 comparison is quoted above for that reason.
 
+### What the integrated form cites (2026-11-14)
+
+Karoline: "please cite the 2 articles where you've seen the pdf, also in the help". Karoline read the
+abstracts of both; her agent read the full text of both (every page of the PDFs she supplied, as text,
+not the figures). So what follows about their content beyond the abstracts rests on the agent's reading
+alone. The first version of this entry said both were read in full by both, which was the agent's
+assumption from her supplying the PDFs, and wrong (corrected 2026-11-14).
+
+- **Kloppers PH, Greeff JC (2013)**, *Applied Mathematics and Computation* 224: 817-825,
+  doi:10.1016/j.amc.2013.08.093. Their Log Integral method (section 4) divides the LV equation by x,
+  integrates, applies the trapezoid rule and fits by least squares without an intercept, one equation per
+  species: the equation grownet fits. Their rows are consecutive sampling intervals, grownet's are
+  cumulative from the first fitted point. They report no uncertainty and no identifiability analysis, and
+  their example is not identified: the data are three market shares summing to 1 (0.99 to 1.01), so the
+  columns 1, x, y, z are nearly collinear. Computed from their Table 1, the design is conditioned at about
+  1000 with unit columns, 1e6 on the normal equations, above the 1e4 `integrated.MAX_CONDITION` refuses.
+  That is why their three methods give "completely different estimates" that fit equally well.
+- **Dattner I, Klaassen CAJ (2015)**, *Electronic Journal of Statistics* 9: 1939-1973,
+  doi:10.1214/15-EJS1053. The cumulative integral estimator `x(t) = xi + integral(g(x)) theta` for ODEs
+  linear in their parameters, an identifiability condition (Proposition 1) and sqrt(n) consistency
+  (Theorems 3 and 4). Three departures, stated in the help: they smooth (local polynomials) or average
+  repeated measures before integrating, where grownet integrates each replicate's raw points; they
+  estimate the initial value, and note that plugging in the first noisy measurement does not reach the
+  best rate (p. 1952), where grownet holds `ln x(0)` at the first fitted point (the free constant measured
+  and declined above); and they work on x, where grownet works on ln x, which their framework covers by
+  the change of variable `u = ln x`, `u' = r + A exp(u)`. Their own LV tables also show finite sample
+  bias (theta2 = 0.7 estimated near 0.55 at J = 30), so consistency is not unbiasedness on short curves.
+- **Not cited:** Himmelblau, Jones and Bischoff (1967), the direct integral method's origin in chemical
+  engineering, which Dattner and Klaassen cite; nobody on the project has read it. The two stage design
+  (monocultures first) is grownet's own and is cited to neither.
+
 ### A third derivation, from chemostat steady states of sub-communities (2026-11-06, #310)
 
 Karoline: "can we have a third inference method just for gLV mode and chemostat, off by default ... The

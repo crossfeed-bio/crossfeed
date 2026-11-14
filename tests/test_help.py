@@ -5,6 +5,7 @@ import datetime
 import json
 import math
 import re
+from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import pytest
@@ -793,3 +794,24 @@ def _names_missing_from_the_lists(body: str) -> list:
     plain = " ".join(re.sub(r"<[^>]+>", " ", plain).split())
     whole = re.findall(rf"\b[A-Z][a-z]{{3,}} [a-z]{{4,}}{LATIN}\b", plain)
     return half + whole
+
+
+def test_the_help_and_the_readme_cite_the_two_papers_behind_the_integrated_form():
+    """Karoline, 2026-11-14: "please cite the 2 articles where you've seen the pdf, also in the help".
+    The two are Kloppers & Greeff 2013 (the Log Integral method for Lotka-Volterra) and Dattner & Klaassen
+    2015 (the integral estimator's identifiability and consistency); she read their abstracts and her agent
+    their full text before citing. The
+    citation sits in the integrated form's own paragraph, and it says how far the convergence result
+    reaches, since grownet holds the first fitted point fixed where Dattner and Klaassen estimate it."""
+    text = visible(PAGE)
+    start = text.index("Integrating dx_i/dt")
+    # one space for every line break, since the help wraps its paragraphs
+    section = " ".join(text[start:text.index("The model has no lag term", start)].split())
+    for needed in ("Kloppers and Greeff (2013)", "Dattner and Klaassen (2015)",
+                   "doi:10.1016/j.amc.2013.08.093", "doi:10.1214/15-EJS1053",
+                   "holds the first fitted point fixed"):
+        assert needed in section, needed
+    readme = " ".join((Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8").split())
+    for needed in ("Kloppers and Greeff (2013)", "Dattner and Klaassen (2015)",
+                   "doi:10.1016/j.amc.2013.08.093", "doi:10.1214/15-EJS1053"):
+        assert needed in readme, needed
