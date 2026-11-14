@@ -124,15 +124,17 @@ def test_the_hover_shows_in_the_image_itself_without_a_script():
     root = ET.fromstring(image)
     assert "<script" not in image
     style = root.find(f"{SVG}style").text
-    assert ".tip{visibility:hidden;" in style
+    assert ".tip{visibility:hidden}" in style
     cells, tips = _cells(root), _tips(root)
     width, height = float(root.get("width")), float(root.get("height"))
     children = list(root)
     for g in cells:
         i, j = g.get("id").split("-c")[1].split("-")
         tip = tips[f"adj-t{i}-{j}"]
-        # the rule that shows this cell's box names this cell and this box
-        assert f"svg:has(#adj-c{i}-{j}:hover) #adj-t{i}-{j}{{visibility:visible}}" in style
+        # the rule that shows this cell's box: the cell hovered or focused, or the box itself hovered
+        assert (f"svg:has(#adj-c{i}-{j}:hover,#adj-c{i}-{j}:focus,#adj-t{i}-{j}:hover) "
+                f"#adj-t{i}-{j}{{visibility:visible}}") in style
+        assert g.get("tabindex") == "0"
         # the box holds the title's words, every line fits the box at the widest hover character width, and
         # the box lies inside the image
         shown = ["".join(x.itertext()) for x in tip.iter(f"{SVG}text")]
@@ -147,7 +149,7 @@ def test_the_hover_shows_in_the_image_itself_without_a_script():
         cell = g.find(f"{SVG}rect")
         cx, cy, cw = (float(cell.get(k)) for k in ("x", "y", "width"))
         assert bx >= cx + cw or bx + bw <= cx or by >= cy + cw or by + bh <= cy, (g.get("id"), bx, by)
-    assert "pointer-events:none" in style
+    assert root.get("role") == "group"           # an img's children are presentational, so its titles hidden
 
 
 def test_no_box_covers_its_own_cell_in_a_wide_matrix():
@@ -311,7 +313,7 @@ def test_the_page_shows_the_image_and_serves_it_as_a_file(server):  # noqa: F811
                                    "derivation": "replicate"}).encode()
     with urllib.request.urlopen(f"{base}/run?token={token}", data=data, timeout=10) as r:
         page = r.read().decode("utf-8")
-    assert "Matrix image" in page and "Download the image (.svg)" in page
+    assert "Matrix image" in page and "Download the adjacency matrix (.svg)" in page
     # the image itself, inside its box: "<svg" alone also matches the page's logo, and the hint paragraph
     # holds "Hover a cell", so those two assertions passed with no image on the page
     found = re.search(r'<div class="matrix-image"[^>]*>(<svg.*?</svg>)', page, re.S)
@@ -421,8 +423,9 @@ def test_each_legend_swatch_is_the_fill_of_the_cells_it_names():
         if kind not in by_kind:
             assert not label, kind                  # the legend lists only kinds that occur
             continue
-        swatch = children[children.index(label[0]) - 1]
-        assert swatch.tag == f"{SVG}rect" and by_kind[kind] == {swatch.get("fill")}, (kind, swatch.get("fill"))
+        before = children[:children.index(label[0])]
+        swatch = next(x for x in reversed(before) if x.tag == f"{SVG}rect")
+        assert by_kind[kind] == {swatch.get("fill")}, (kind, swatch.get("fill"))
         checked += 1
     assert checked == 5                             # zero, na, conflict, empty, diagonal in NET
     stops = [s.get("stop-color") for s in root.iter(f"{SVG}stop")]
@@ -445,3 +448,79 @@ def test_arcs_judged_absent_beside_a_value_are_named_with_their_sources():
     assert lines[1] == "log2 strength +1 (from 1 arc)" and lines[3] == "Experiments: E1"
     assert lines[4] == "Also 1 arc judged absent, not in the value"
     assert lines[5] == "Studies: S3" and lines[6] == "Experiments: E5"
+
+
+def test_cells_carry_marks_besides_color():
+    """A judged-absent cell and a cell with no arc were 1.1:1 apart in contrast, and the sign was carried by
+    hue alone, the two signal colors being of equal lightness. So a judged-absent cell holds 0, a negative
+    value a minus sign, and a value that is not finite a question mark; a positive value, no arc and the
+    others hold none."""
+    net = records_to_network([_arc("a", "b", 1.0, "S1", ["E1"]), _arc("c", "a", -0.5, "S1", ["E4"]),
+                              {**_arc("b", "c", 0.1, "S3", ["E5"]), "status": "absent", "effect": "neutral"},
+                              _arc("c", "b", float("nan"), "S1", ["E9"])])
+    _, grid = matrix_image.adjacency_cells(net)
+    root = ET.fromstring(matrix_image.adjacency_svg(net))
+    marks = {}
+    for g in _cells(root):
+        i, j = (int(k) for k in g.get("id").split("-c")[1].split("-"))
+        glyph = [x.text for x in g.iter(f"{SVG}text") if x.get("class") == "mark"]
+        marks[(i, j)] = glyph[0] if glyph else ""
+    assert marks[(1, 0)] == "" and grid[(1, 0)]["value"] == 1.0        # positive: color only
+    assert marks[(0, 2)] == "-"                                       # c on a, negative
+    assert marks[(2, 1)] == "0" and grid[(2, 1)]["kind"] == "zero"    # b on c, judged absent
+    assert marks[(1, 2)] == "?" and grid[(1, 2)]["kind"] == "nonfinite"
+    assert marks[(0, 1)] == "" and grid[(0, 1)]["kind"] == "empty"
+
+
+def test_each_box_opens_toward_the_middle_and_touches_its_cell():
+    """Right of a cell in the left half and left of one in the right half, flush with the cell so the
+    pointer can move onto the box; level with the cell's top in the upper half and its bottom in the lower."""
+    n = 60                                       # wide enough that many cells have room on both sides
+    names = [f"Organism{k:02d}" for k in range(n)]
+    grid = {(i, j): {"kind": "empty", "value": None, "hover": "a\nb\nc\nd"} for i in range(n) for j in range(n)}
+    root = ET.fromstring(matrix_image.svg(names, grid, "t", "s", "v"))
+    width = float(root.get("width"))
+    tips = {g.get("id"): g.find(f"{SVG}rect") for g in root.iter(f"{SVG}g") if g.get("class") == "tip"}
+    opened = set()
+    for g in _cells(root):
+        i, j = (int(k) for k in g.get("id").split("-c")[1].split("-"))
+        cell, box = g.find(f"{SVG}rect"), tips[f"m-t{i}-{j}"]
+        x, y = float(cell.get("x")) - matrix_image.GAP / 2, float(cell.get("y")) - matrix_image.GAP / 2
+        size = float(cell.get("width")) + matrix_image.GAP
+        bx, by, bw, bh = (float(box.get(k)) for k in ("x", "y", "width", "height"))
+        sideways = True
+        room_right, room_left = x + size + bw <= width - 4, x - bw >= 4
+        if bx + bw <= x + 0.05:                  # opened to the left
+            assert (j >= n / 2 or not room_right) and room_left, (i, j)
+            assert abs(bx + bw - x) < 0.1
+        elif bx >= x + size - 0.05:              # opened to the right
+            assert (j < n / 2 or not room_left) and room_right, (i, j)
+            assert abs(bx - (x + size)) < 0.1
+        else:                                    # no room on either side: below the row or above it
+            sideways = False
+            assert abs(by - (y + size)) < 0.1 or abs(by + bh - y) < 0.1, (i, j)
+        opened.add("left" if sideways and bx < x else "right" if sideways else "below or above")
+        height = float(root.get("height"))
+        clamped = by <= 4.1 or by + bh >= height - 4.1
+        if sideways and not clamped and i < n / 2:
+            assert abs(by - y) < 0.1, (i, j)                 # level with the cell's top
+        elif sideways and not clamped:
+            assert abs(by + bh - (y + size)) < 0.1, (i, j)   # level with the cell's bottom
+    # both sides occur, so each branch above was exercised (below or above is the narrow matrix's case,
+    # `test_no_box_covers_its_own_cell_in_a_wide_matrix`)
+    assert opened == {"left", "right"}, opened
+
+
+def test_a_glv_pair_judged_absent_is_0_as_in_the_adjacency_image():
+    """A pair whose only arc was judged absent and left out of the file: the adjacency image drew it as 0,
+    the gLV image as "No arc in this search", while the package README says such a pair is 0."""
+    net = _glv_net([_glv_arc("b", "a", 1.0, x_j=2.0e8), _glv_arc("a", "b", -1.0, x_j=4.0e8),
+                    _glv_arc("c", "a", 0.5, x_j=2.0e8)])
+    absent = _glv_net([{**_glv_arc("a", "c", 0.05, x_j=2.0e8, experiments=["E7"]), "status": "absent"}])
+    rates = {"a": _rate("A", 0.4, 1.0e9), "b": _rate("B", 0.2, 5.0e8), "c": _rate("C", 0.3, 5.0e8)}
+    got = matrix.coefficients(net, rates)
+    (block,) = got["matrices"]
+    names, grid = matrix_image.glv_cells(net, rates, block, got, absent)
+    cell = grid[(names.index("C"), names.index("A"))]
+    assert cell["kind"] == "zero" and "judged no interaction" in cell["hover"] and "E7" in cell["hover"]
+    assert matrix_image.glv_cells(net, rates, block, got)[1][(names.index("C"), names.index("A"))]["kind"] == "empty"

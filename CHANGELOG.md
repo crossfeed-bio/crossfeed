@@ -14,7 +14,9 @@ content.
   negative and positive entries". The page's result has a **Matrix image** box: the adjacency matrix as
   a grid, green for a positive effect and orange-red for a negative one on a scale symmetric about 0,
   with NA hatched, a pair whose arcs disagree in sign cross-hatched and a pair with no arc white, and a
-  legend for all of them with the scale's two ends. Hovering a cell shows, in a box beside it, its value
+  legend for all of them with the scale's two ends; a judged-absent cell also holds a 0 and a negative value
+  a minus sign, so the image reads without its colors. Hovering a cell, or moving to it with the Tab key,
+  shows, in a box against it, its value
   and the studies (with their titles) and experiments of the arcs the value is taken over, with any other arc of
   the pair named apart. In gLV mode the box also draws each matrix of fitted coefficients, where a pair with arcs
   and no coefficient is dotted and says why, and a diagonal's hover says how it was fitted under the

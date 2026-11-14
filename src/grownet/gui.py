@@ -651,7 +651,7 @@ def matrix_images(result: dict) -> list:
     organism_rates = result.get("rates") or {}
     if organism_rates and glv_mode_on(result.get("settings") or {}):
         try:
-            for unit, name, image in matrix_image.glv_svgs(net, organism_rates):
+            for unit, name, image in matrix_image.glv_svgs(net, organism_rates, result.get("absent")):
                 out.append((f"gLV coefficients in {unit}", f"{TITLE}_{name}", image))
         except matrix.CannotConvert:
             pass
@@ -666,14 +666,15 @@ def _matrix_images(token: str, result: dict) -> str:
     parts = []
     for k, (heading, _name, image) in enumerate(matrix_images(result)):
         # the image carries its own title, so the page adds no heading above it
-        parts.append(f"<div class=\"matrix-image\" aria-label=\"{_esc(heading)}\">{image}</div>"
+        parts.append(f"<div class=\"matrix-image\" role=\"figure\" aria-label=\"{_esc(heading)}\">{image}</div>"
                      f"<p><a class=\"btn\" href=\"/matrix.svg?token={t}{tail}&amp;which={k}\">"
-                     "Download the image (.svg)</a></p>")
+                     f"Download the {_esc(heading[0].lower() + heading[1:])} (.svg)</a></p>")
     return ("<details class=\"report matrix-images\"><summary class=\"btn\">Matrix image</summary>"
-            "<p class=\"hint\">Hover a cell to see its value and the studies and experiments it is derived "
-            "from; the downloaded file keeps the hover when opened in a browser. Green is a positive effect, "
-            "orange-red a negative one, stronger with the size of the value. For a PNG, open the file in a "
-            "browser and take a screenshot, or export it from a vector editor such as Inkscape.</p>"
+            "<p class=\"hint\">Hover a cell, or move to it with the Tab key, to see its value and the studies "
+            "and experiments it is derived from; the downloaded file keeps this when opened in a browser. Green "
+            "is a positive effect, orange-red a negative one, stronger with the size of the value, and a "
+            "negative value also carries a minus sign. For a PNG, open the file in a browser and take a "
+            "screenshot, or export it from a vector editor such as Inkscape.</p>"
             + "".join(parts) + "</details>")
 
 

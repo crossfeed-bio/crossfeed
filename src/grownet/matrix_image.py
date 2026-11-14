@@ -259,13 +259,16 @@ def _diagonal_source(derivation: str, rate: dict) -> list:
     return lines
 
 
-def glv_cells(net: InteractionNetwork, rates: dict, block: dict, got: dict) -> tuple:
+def glv_cells(net: InteractionNetwork, rates: dict, block: dict, got: dict,
+              absent: InteractionNetwork | None = None) -> tuple:
     """(names, {(row, column): cell}) for one matrix of fitted gLV coefficients (`matrix.coefficients`).
 
     An off-diagonal cell names the arcs its coefficient is the median of, and any arc of the pair the
     package left out with why; a diagonal says how it was fitted under this network's derivation and names
     the studies of the organism's own growth rate. A pair with arcs and no coefficient says why, and a pair
-    whose arcs disagree in sign says so, as the package's README does.
+    whose arcs disagree in sign says so, as the package's README does. A pair whose only arcs were judged
+    absent (in the network, or left out of the file in `absent`) is 0, as the README says of it, not a pair
+    never compared.
     """
     from . import matrix
     derivation = matrix.derivation_of(net)
@@ -279,9 +282,9 @@ def glv_cells(net: InteractionNetwork, rates: dict, block: dict, got: dict) -> t
     for affected, actor, why in got.get("arcs_left_out") or ():
         left_out.setdefault((affected, actor), why)
     arcs: dict = {}
-    for edge in net.edges:
-        if edge.status != "absent":
-            arcs.setdefault((edge.target, edge.source), []).append(edge)
+    judged: dict = {}
+    for edge in [*net.edges, *(absent.edges if absent else ())]:
+        (judged if edge.status == "absent" else arcs).setdefault((edge.target, edge.source), []).append(edge)
     grid = {}
     for i, affected in enumerate(ids):
         for j, actor in enumerate(ids):
@@ -312,6 +315,11 @@ def glv_cells(net: InteractionNetwork, rates: dict, block: dict, got: dict) -> t
                 why = why_not.get(label_pair) or left_out.get(label_pair) or "no arc of this pair gave a number"
                 lines = [head, f"No coefficient: {why}", *provenance(pair_arcs, net)]
                 grid[(i, j)] = {"kind": "unfitted", "value": None, "hover": "\n".join(lines)}
+            elif judged.get((affected, actor)):
+                absent_arcs = judged[(affected, actor)]
+                lines = [head, f"0: compared, and judged no interaction ({_arcs(len(absent_arcs))}, absent)",
+                         *provenance(absent_arcs, net)]
+                grid[(i, j)] = {"kind": "zero", "value": 0.0, "hover": "\n".join(lines)}
             else:
                 grid[(i, j)] = {"kind": "empty", "value": None, "hover": f"{head}\nNo arc in this search"}
     return names, grid
@@ -322,9 +330,14 @@ def svg(names: list, grid: dict, title: str, subtitle: str, value_name: str, slu
     scale's two ends and every kind of cell that occurs. `slug` keeps the ids of two images on one page
     apart.
 
-    Each cell's hover is a box drawn beside the cell in a layer above every cell, hidden until that cell is
-    hovered by a `:has()` rule inside the SVG. Beside the cell, it is in view wherever the cell is, which a
-    panel under the legend was not on a large matrix; above every cell, no later cell covers it."""
+    Each cell's hover is a box drawn against the cell, toward the middle of the matrix, in a layer above
+    every cell, shown by a `:has()` rule inside the SVG while the cell is hovered or has the keyboard focus,
+    and while the pointer is on the box itself, so it can be read and moved onto (WCAG 2.1.1, 1.4.13).
+    Opening toward the middle keeps it inside the image and mostly inside the scroll box around it, where a
+    panel under the legend was off screen on a large matrix; a page scrolled so the cell sits at the box's
+    edge can still hide part of it. Marks other than color: a judged-absent cell holds a 0, a negative value
+    a minus sign, and a value that is not finite a question mark, so the image reads without its colors
+    (WCAG 1.4.1, 1.4.11)."""
     n = len(names)
     size = _cell(n)
     finite = [abs(c["value"]) for c in grid.values() if c["kind"] == "value" and c["value"] is not None
@@ -348,10 +361,11 @@ def svg(names: list, grid: dict, title: str, subtitle: str, value_name: str, slu
     height = max(ly + 64 + 20 * len(kinds), tallest + 16)
     stops = [(0, brand.INHIBITION), (0.4999, _mix(brand.INHIBITION, FLOOR)), (0.5, NEUTRAL),
              (0.5001, _mix(brand.GROWTH, FLOOR)), (1, brand.GROWTH)]
-    rules = "".join(f"svg:has(#{slug}-c{i}-{j}:hover) #{slug}-t{i}-{j}{{visibility:visible}}" for i, j in grid)
+    rules = "".join(f"svg:has(#{slug}-c{i}-{j}:hover,#{slug}-c{i}-{j}:focus,#{slug}-t{i}-{j}:hover) "
+                    f"#{slug}-t{i}-{j}{{visibility:visible}}" for i, j in grid)
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0f}" height="{height:.0f}" '
            f'viewBox="0 0 {width:.0f} {height:.0f}" font-family="system-ui, -apple-system, Segoe UI, sans-serif" '
-           f'role="img" aria-label="{_esc(title)}">',
+           f'role="group" aria-label="{_esc(title)}">',
            f"<title>{_esc(title)}</title>",
            "<defs>"
            f'<pattern id="{slug}-na" width="6" height="6" patternUnits="userSpaceOnUse" '
@@ -364,13 +378,12 @@ def svg(names: list, grid: dict, title: str, subtitle: str, value_name: str, slu
            f'<pattern id="{slug}-unfitted" width="6" height="6" patternUnits="userSpaceOnUse">'
            f'<rect width="6" height="6" fill="#FFFFFF"/><circle cx="3" cy="3" r="1.1" fill="{brand.MUTED}"/>'
            "</pattern>"
-           f'<pattern id="{slug}-nonfinite" width="8" height="8" patternUnits="userSpaceOnUse">'
-           f'<rect width="8" height="8" fill="{brand.PANEL}"/><text x="1" y="7" font-size="7" '
-           f'fill="{brand.MUTED}">?</text></pattern>'
            f'<linearGradient id="{slug}-scale" x1="0" x2="1" y1="0" y2="0">'
            + "".join(f'<stop offset="{o}" stop-color="{c}"/>' for o, c in stops) +
            "</linearGradient></defs>",
-           f"<style>.tip{{visibility:hidden;pointer-events:none}}.cell:hover>rect{{stroke:{brand.INK};stroke-width:2}}{rules}</style>",
+           f"<style>.tip{{visibility:hidden}}.cell{{outline:none}}"
+           f".cell:hover>rect,.cell:focus>rect{{stroke:{brand.INK};stroke-width:2}}"
+           f".mark{{pointer-events:none}}{rules}</style>",
            f'<rect width="{width:.0f}" height="{height:.0f}" fill="#FFFFFF"/>',
            f'<text x="12" y="24" font-size="15" font-weight="600" fill="{brand.INK}">{_esc(title)}</text>',
            *(f'<text x="12" y="{44 + 16 * k}" font-size="12" fill="{brand.MUTED}">{_esc(line)}</text>'
@@ -385,29 +398,50 @@ def svg(names: list, grid: dict, title: str, subtitle: str, value_name: str, slu
         out.append(f'<text x="{left - 8:.1f}" y="{y:.1f}" font-size="{FONT}" text-anchor="end" '
                    f'fill="{brand.INK}">{_label_svg(name)}</text>')
     fills = {"zero": NEUTRAL, "na": f"url(#{slug}-na)", "conflict": f"url(#{slug}-conflict)",
-             "unfitted": f"url(#{slug}-unfitted)", "nonfinite": f"url(#{slug}-nonfinite)", "empty": EMPTY,
+             "unfitted": f"url(#{slug}-unfitted)", "nonfinite": brand.PANEL, "empty": EMPTY,
              "diagonal": brand.LINE}
+    glyphs = {"zero": "0", "nonfinite": "?"}
+
+    def mark(kind, value, x, y, side, share=0.0):
+        """The glyph a cell or a legend swatch carries beside its color: 0, ?, or a minus sign, white on a
+        dark fill and ink on a light one."""
+        glyph = glyphs.get(kind) or ("-" if kind == "value" and value is not None and value < 0 else "")
+        if not glyph:
+            return ""
+        ink = "#FFFFFF" if share > 0.6 else (brand.MUTED if kind in glyphs else brand.INK)
+        return (f'<text class="mark" x="{x + side / 2:.1f}" y="{y + side * 0.68:.1f}" text-anchor="middle" '
+                f'font-size="{side * 0.55:.1f}" font-weight="600" fill="{ink}">{glyph}</text>')
     tips = []
     for (i, j), cell in sorted(grid.items()):
         fill = (color_of(cell["value"], scale) if cell["kind"] == "value" and cell["value"] is not None
                 else fills.get(cell["kind"], EMPTY))
         x, y = left + j * size, top + i * size
-        out.append(f'<g class="cell" id="{slug}-c{i}-{j}"><title>{_esc(cell["hover"])}</title>'
+        value = cell["value"]
+        share = (FLOOR + (1 - FLOOR) * min(abs(value) / scale, 1.0)
+                 if cell["kind"] == "value" and value and scale and math.isfinite(value) else 0.0)
+        out.append(f'<g class="cell" id="{slug}-c{i}-{j}" tabindex="0"><title>{_esc(cell["hover"])}</title>'
                    f'<rect x="{x + GAP / 2:.1f}" y="{y + GAP / 2:.1f}" '
                    f'width="{size - GAP:.1f}" height="{size - GAP:.1f}" '
-                   f'rx="2" fill="{fill}" stroke="{brand.LINE}" stroke-width="0.6"/></g>')
-        # the box beside the cell, never over it: to its right where it fits, else to its left, else below
-        # its row (above it at the bottom edge). A box clamped over its own cell took the pointer from the
-        # cell, hid, gave it back and flickered (found reviewing in the pane).
+                   f'rx="2" fill="{fill}" stroke="{brand.LINE}" stroke-width="0.6"/>'
+                   + mark(cell["kind"], value, x, y, size, share) + "</g>")
+        # the box against the cell and never over it, opening toward the middle of the matrix: right of a
+        # cell in the left half, left of one in the right half, level with its top in the upper half and
+        # with its bottom in the lower half; where neither side has room, below the row or above it. Flush
+        # with the cell, so the pointer can move from the cell onto the box without leaving both. A box
+        # clamped over its own cell took the pointer from the cell, hid and flickered (found in the pane).
         lines = wrapped[(i, j)]
         box_h = 16 + 16 * len(lines)
-        if x + size + 6 + tip_w <= width - 4:
-            bx, by = x + size + 6, min(max(y, 4), height - box_h - 4)
-        elif x - 6 - tip_w >= 4:
-            bx, by = x - 6 - tip_w, min(max(y, 4), height - box_h - 4)
+        right, left_side = x + size, x - tip_w
+        level = y if i < n / 2 else y + size - box_h
+        level = min(max(level, 4), height - box_h - 4)
+        fits_right, fits_left = right + tip_w <= width - 4, left_side >= 4
+        if fits_right and (j < n / 2 or not fits_left):
+            bx, by = right, level
+        elif fits_left:
+            bx, by = left_side, level
         else:
             bx = min(max(x + size / 2 - tip_w / 2, 4), width - tip_w - 4)
-            by = y + size + 6 if y + size + 6 + box_h <= height - 4 else max(y - 6 - box_h, 4)
+            by = y + size if y + size + box_h <= height - 4 else max(y - box_h, 4)
         text = "".join(f'<text x="{bx + 10:.1f}" y="{by + 20 + 16 * k:.1f}" font-size="12" fill="{brand.INK}"'
                        + (' font-weight="600"' if k == 0 else "") + f">{_esc(line)}</text>"
                        for k, line in enumerate(lines))
@@ -419,7 +453,8 @@ def svg(names: list, grid: dict, title: str, subtitle: str, value_name: str, slu
     # the legend: the scale with its two ends, then each kind of cell that occurs here
     bar = 220
     number = (lambda v: f"{v:+.3g}") if scale else (lambda v: "0")
-    out += [f'<text x="12" y="{ly:.1f}" font-size="12" font-weight="600" fill="{brand.INK}">{_esc(value_name)}</text>',
+    out += [f'<text x="12" y="{ly:.1f}" font-size="12" font-weight="600" fill="{brand.INK}">{_esc(value_name)}'
+            "; a negative value is also marked with a minus sign</text>",
             f'<rect x="12" y="{ly + 8:.1f}" width="{bar}" height="12" rx="2" fill="url(#{slug}-scale)" '
             f'stroke="{brand.LINE}" stroke-width="0.6"/>',
             f'<text x="12" y="{ly + 34:.1f}" font-size="11" fill="{brand.INK}">{number(-scale)} negative</text>',
@@ -430,7 +465,7 @@ def svg(names: list, grid: dict, title: str, subtitle: str, value_name: str, slu
     for k, kind in enumerate(kinds):
         y = ly + 50 + 20 * k
         out.append(f'<rect x="12" y="{y:.1f}" width="14" height="14" rx="2" fill="{fills[kind]}" '
-                   f'stroke="{brand.LINE}" stroke-width="0.6"/>'
+                   f'stroke="{brand.LINE}" stroke-width="0.6"/>' + mark(kind, None, 12, y, 14) +
                    f'<text x="34" y="{y + 11:.1f}" font-size="11" fill="{brand.INK}">{_esc(KINDS[kind])}</text>')
     # the hover boxes last, so each is drawn above every cell
     out += tips
@@ -445,14 +480,14 @@ def adjacency_svg(net: InteractionNetwork, absent: InteractionNetwork | None = N
                "the studies and experiments behind it.", "log2 strength", slug="adj")
 
 
-def glv_svgs(net: InteractionNetwork, rates: dict) -> list:
+def glv_svgs(net: InteractionNetwork, rates: dict, absent: InteractionNetwork | None = None) -> list:
     """[(abundance unit, file name, SVG)]: one image per matrix of the gLV package. Raises
     `matrix.CannotConvert` as the package does, when the arcs do not compare growth rates."""
     from . import matrix
     got = matrix.coefficients(net, rates)
     out = []
     for k, block in enumerate(got["matrices"]):
-        names, grid = glv_cells(net, rates, block, got)
+        names, grid = glv_cells(net, rates, block, got, absent)
         out.append((block["abundance_unit"], f"glv_matrix.{matrix.unit_file(block['abundance_unit'])}.svg",
                     svg(names, grid, f"gLV coefficients in {block['abundance_unit']}",
                         f"A[i, j], the per-capita effect of the column organism j on the row organism i, in "
