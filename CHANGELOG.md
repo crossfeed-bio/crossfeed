@@ -47,7 +47,8 @@ content.
   live 85% to 94% in the same file and against this changelog; `docs/agents/NOTES.md` held two
   paragraphs finished twice, one of them saying strain ids survive only on arcs six lines under the
   text saying a genus node lists them in `merged_nodes`. 33 deletions, no wording changed and no
-  number re-derived. The three real entries under `## Open decisions` are untouched.
+  number re-derived. The three real entries under `## Open decisions` are untouched by that fix; the first
+  of them is since marked settled.
 - **The R package's summary of a gLV package reads cleanly** (#296). "fitted:" no longer starts every line
   of the organisms left out of the matrices; the organisms without a rate are not listed a second time on
   the next line; and a one-organism matrix reads "1 organism", not "1 organisms". No number changes.

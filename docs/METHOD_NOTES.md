@@ -764,7 +764,7 @@ pooled into one equation (`subcommunity.pool`), numpy 2.2.6 and scipy 1.13.0:
   probes that answer 404**. A 404 is never cached, so those 29 are paid on every run however warm the
   cache, and they appear in neither counter the report prints: that gap is its own defect (#234). This
   said "3738 ... 54 studies, so an unchanged corpus costs the 54 study records and nothing else", from a
-  corpus of 54 studies; mGrowthDB holds 25 today, and the 54 that remain are a coincidence of two
+  corpus of 54 studies; mGrowthDB held 25 on 2026-10-11, and the 54 that remain are a coincidence of two
   different quantities.
   Three things are deliberate. A response whose study cannot be told is never served, since nothing can say
   whether it is current, which is why each kept file carries its study and stamp rather than an index that

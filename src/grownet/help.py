@@ -49,7 +49,7 @@ NEXT = (
     "merged arc as a median with its range.",
     # #323 (starting-density notes)
     "Every arc of the default derivation whose two sides have a first value says what they started at, "
-    "and warns where they differ more than 3 times, as 61 of the 190 drop-out arcs in mGrowthDB do, "
+    "and warns where they differ more than 3 times, as 61 of the 190 drop-out arcs in mGrowthDB did on 2026-11-06, "
     "counting those below the absence threshold, up to 117 times.",
     # #315, #316, #318, #319, #320 (validation), #321 (messages and every later fix to the derivation),
     # #327 (the dilution rate in the rates file and the package), #326 (runs of several studies fitted
