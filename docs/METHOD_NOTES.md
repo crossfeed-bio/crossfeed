@@ -717,9 +717,7 @@ pooled into one equation (`subcommunity.pool`), numpy 2.2.6 and scipy 1.13.0:
   does (18% too narrow for three), and draws whole runs where runs were pooled, since vessels of one run are
   not independent of each other. A community read in one run has only its own vessels to draw, which share
   that run's inoculum and history, so its spread is within-run and narrower than run-to-run differences
-  would make it; the simulation draws vessels independently, so its coverage does not measure that. The
-  worst coefficients are those whose partner is scarce in every
-  community beside the organism.
+  would make it; the simulation draws vessels independently, so its coverage does not measure that.
 - Only 7 of the 12 coexist in the full community at this D, so the strict leave-one-out design determines
   nothing; the pairs are what make the model identifiable, which is Karoline's decision 2.
 - Switching the 1% wash-out rule off changes nothing for monocultures and pairs. On the design with every

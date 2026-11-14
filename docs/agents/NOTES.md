@@ -28,8 +28,9 @@ Rules for this file:
   headings is the cheapest test, and no check in this repository catches a duplicated heading or a
   stranded block.** One thing went with the stale block and is not replaced: the worked example under
   the coverage bullet, naming which coefficient was worst. Its numbers came from the run the #321
-  review repudiated, so they could not be kept, and the surviving sentence states the generalization
-  with no instance behind it.
+  review repudiated, so they could not be kept, and the surviving sentence stated the generalization
+  with no instance behind it. Karoline, 2026-11-14 (#331): "drop the sentence", so it is gone too; a
+  claim about which coefficients are worst comes back only with a measurement behind it.
 - 2026-10-11 (#255 item 2): **a derived quantity is collected where it is measured, not rebuilt from what
   survived.** `_widen_by_rate_selection` rebuilt its rate table from `pending`, the arcs that became
   records, keyed by `id(got)`. Both are wrong for the quantity: the spread is how much stage 1 moves when
