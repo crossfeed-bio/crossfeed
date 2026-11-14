@@ -7,6 +7,20 @@ on:
 permissions:
   contents: read
 
+# One run per branch at a time. A push to a branch with an open pull request fired this workflow twice on
+# the same commit, once for `push` and once for `pull_request`, and the slower copy gated the branch (#329).
+# The group is the branch's repository and name, which both events share: `github.ref` would not do, since
+# a pull request run's ref is `refs/pull/N/merge`, and the repository keeps a fork's branch of the same name
+# apart. A newer run on a branch cancels the older one. `main` is the exception: each of its runs is a group
+# of its own, so every merge is tested to the end, since a group holds one waiting run and a third would
+# replace the second untested.
+concurrency:
+  group: >-
+    ${{ github.ref == 'refs/heads/main' && format('ci-main-{0}', github.run_id)
+    || format('ci-{0}-{1}', github.event.pull_request.head.repo.full_name || github.repository,
+    github.head_ref || github.ref_name) }}
+  cancel-in-progress: true
+
 jobs:
   test:
     # Windows and macOS too: a Windows-only failure (a test connecting to itself) was found by hand on #70
