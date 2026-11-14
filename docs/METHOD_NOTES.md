@@ -638,8 +638,15 @@ idea here is to parameterize the gLV from steady-state abundances of sub-communi
 2021, Nature Computational Science 1:619). Her decisions, on #310:
 
 1. **Chemostat steady states only** ("Yes on 1"): unperturbed runs, at the chemostat check's tail mean, one
-   fit per medium (by `media_identity`), abundance unit and dilution rate, within one study (every derivation
-   reads one study at a time; pooling runs across studies would be a further choice, not taken).
+   fit per medium (by `media_identity`, the strict rule, so the medium composition matches), abundance unit
+   and dilution rate, across the studies of a search: asked, Karoline answered "for the new chemostat
+   inference mode, the medium composition has to match but other than that, I don't see why not"
+   (2026-11-06). Every other derivation still reads one study at a time. Runs are pooled by identity, judged
+   within each study as every derivation judges it, so a taxon id one study gives to two strains is refused
+   there and not elsewhere. Asked how, Karoline chose "option A, but if taxon ids agree and names differ, the
+   studies can still be pooled (since a taxon name may change, as in the case of F. prausnitzii A2-165 and F.
+   duncaniae A2-165). Name conflicts within a study can be treated as before." (2026-11-11). One name that
+   is two identities in two studies is two organisms, and is named.
 2. **Every sub-community, not only leave-one-out** ("EPICS is a strict scheme on leave-one-out [...] could we
    have something more flexible that would try parameterisation on all available sub-communities?"). Each
    community gives `1 + sum_j B_ij N_j = 0` per member present, `B = A / (r_i - D)`; each row is a least
@@ -719,33 +726,6 @@ pooled into one equation (`subcommunity.pool`), numpy 2.2.6 and scipy 1.13.0:
   community it is the rule's own cost that is measured: off, the largest B error falls from 0.0018 to 2e-14
   and the full community is predicted exactly, since an organism under 1% of its run's largest is still
   there.
-
-## Open decisions
-
-    uv run --no-project --with numpy --with scipy python packaging/validate_steady_state.py twelveSpeciesT4.xml
-
-Errors are on the scale of each row's own `|B_ii|`, since the published fit sets many coefficients to exactly
-0 (it was L1-regularized), where an error relative to the true value means nothing.
-
-| design | off-diagonal identified | error | signs (true not 0) |
-|---|---|---|---|
-| EPICS: monocultures, 12 leave-one-out, full (2 never settle) | 0 of 132 | | |
-| bottom-up: monocultures and 66 pairs | 126 of 132 | max 7e-14 | 96 of 96 |
-| all of the above (2 never settle) | 128 of 132 | max 0.0018 | 98 of 98 |
-| all, 3 vessels with 5% noise | 128 of 132 | median 0.022, max 3.4 | 96% |
-
-- The row scales read from the start-up are within 1.6% of the true `u - D` (median 0.7%), slightly low,
-  since self-limitation already slows the batch period; that is most of the package's error, `A = scale x B`
-  within 2% of the true `a_ij` on the `|a_ii|` scale (median 0.18%).
-- The full community, predicted by a fit made without it, is within 0.22% (18% with the noise).
-- With the noise, the bootstrap over vessels puts the true coefficient within 2 sd for 93% of them, close to
-  the nominal 95%. The worst coefficients are those whose partner is scarce in every community beside the
-  organism: PC on BT, off by 3.4 times BT's `|B_ii|`, has PC at no more than 0.007 OD beside BT (the median
-  over all coefficients is 0.23), and its spread is 1.8 times `|B_ii|`, so the arc says it is uncertain; the
-  next five worst all have their partner at 0.06 or less.
-- Only 7 of the 12 coexist in the full community at this D, so the strict leave-one-out design determines
-  nothing; the pairs are what make the model identifiable, which is Karoline's decision 2.
-- Switching the 1% wash-out rule off changes nothing here.
 
 ## Open decisions
 

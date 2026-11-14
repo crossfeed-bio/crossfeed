@@ -32,6 +32,14 @@ content.
   network is still a format defect rather than a network one, and every read failing still refuses. No
   number changes.
 
+- **The method notes and the agent notes no longer carry stale copies of text they also carry current
+  versions of.** Three merge resolutions unioned conflict hunks whose base was not empty, so each kept
+  both the new text and the old. `docs/METHOD_NOTES.md` held the pre-re-derivation validation section
+  under a second `## Open decisions` heading, with the superseded coverage of 93% standing against the
+  live 85% to 94% in the same file and against this changelog; `docs/agents/NOTES.md` held two
+  paragraphs finished twice, one of them saying strain ids survive only on arcs six lines under the
+  text saying a genus node lists them in `merged_nodes`. 33 deletions, no wording changed and no
+  number re-derived. The three real entries under `## Open decisions` are untouched.
 - **The R package's summary of a gLV package reads cleanly** (#296). "fitted:" no longer starts every line
   of the organisms left out of the matrices; the organisms without a rate are not listed a second time on
   the next line; and a one-organism matrix reads "1 organism", not "1 organisms". No number changes.
@@ -115,6 +123,13 @@ content.
       (-0.1124 to -0.1139, at the threshold).
 ### Upgrading
 
+- **The gLV payload moves to `grownet.glv/v3`** (Karoline, 2026-11-06: "yes to the dilution column"): each
+  `growth_rate_detail` entry gains `dilution`, the dilution rate per h a steady-state rate `r_i - D` is at,
+  null under every other derivation. grownet 0.5.0's R package reads a v3 payload with a warning that the
+  format is newer than it knows, and the extra key does not reach its rates; this release's reads v3, v2,
+  v1 and v0. `growth_rates.csv` gains a `dilution` column, appended last, empty except under the
+  steady-state derivation, so a reader of the earlier columns finds them where they were.
+
 - **The format id moves to `grownet.interaction_network/v5`** (Karoline, 2026-11-06, #305: "Is the
   measurement technique recorded as an arc attribute? If not, please add."), for one arc field,
   `technique`, and one node field, `merged_nodes`, and one value of `evidence`, `steady_state`, for the arcs
@@ -193,6 +208,16 @@ content.
   the replicate comparison's sentences about co-cultures and drop-out designs. The `--derivation` help,
   the command-line examples and the README describe the third derivation.
 
+- **The steady-state derivation fits the runs of every study a search reads together**, where the medium
+  composition, the abundance unit and the dilution rate match (Karoline, 2026-11-06: "for the new chemostat
+  inference mode, the medium composition has to match but other than that, I don't see why not"), so a
+  pair measured in one study and the monocultures in another determine a row that neither does alone. An
+  arc names every study its row was fitted from. Runs are pooled by each strain's identity as its own study
+  judges it, so a strain renamed between studies pools where its taxon id agrees (Karoline, 2026-11-11: "if
+  taxon ids agree and names differ, the studies can still be pooled"), and a strain whose taxon id one
+  study refuses is not pooled with its runs elsewhere, which is said. A pooled organism goes by the name the
+  most recently published of the arc's own studies gives it, so a renamed strain shows its later name. Every
+  other derivation still reads one study at a time.
 - **The steady-state derivation, hardened before release.** Runs that end with the same organisms present
   are one community, since they reach one steady state, and its bootstrap draws whole runs: kept apart, two
   noisy runs of one pair made rows look determined from noise alone. A row whose own term is not negative

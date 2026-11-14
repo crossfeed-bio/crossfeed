@@ -88,6 +88,42 @@ RETIRED_CLAIMS = [
         "derivation states its own statistics and provisional note, and text that mentions Welch has to "
         "say which derivation runs it.",
     ),
+    # The three below retire the steady-state validation numbers that #321's review replaced. They are
+    # here because the replaced numbers sat on `main` inside `docs/METHOD_NOTES.md` for two merges while
+    # this gate was green on every pull request that carried them: a merge resolution kept both the new
+    # text and the old, and nothing in the repository can see a duplicated section or a stranded block.
+    # Retiring them through this list rather than only deleting them keeps the record of what was once
+    # published, which is the point of #223, and makes a restatement fail instead of passing quietly.
+    (
+        re.compile(r"(?:within 2 sd|covers the truth) for 93%", re.I),
+        re.compile(r"85% to 94%|six (?:noise )?draws|one noise draw|somewhat\s+narrow", re.I),
+        "the bootstrap's coverage was given as 93% of coefficients within 2 sd, against a nominal 95%. "
+        "That came from ONE noise draw, and from a run in which organisms that were never inoculated "
+        "invaded from solver noise over 20,000 h. Corrected 2026-11-06 (#321): non-members are held at "
+        "exactly 0, runs that end with the same organisms are pooled into one equation, each draw is "
+        "widened by sqrt(n / (n - 1)) because a bootstrap of a mean of n spreads only sqrt((n - 1) / n) "
+        "as far as the mean does, and the coverage over six draws is 85% to 94% (94, 87, 90, 85, 85, "
+        "91). The replaced figures from the same run were median error 0.022 and max 3.4, signs 96%, "
+        "and the full community predicted within 0.22%.",
+    ),
+    (
+        re.compile(r"\d+ never settle", re.I),
+        re.compile(r"[Ee]very community settles|none is left out|held at 0|never inoculated", re.I),
+        "two designs were recorded as having communities that never settle. They failed to settle only "
+        "because organisms that were never inoculated grew in from solver noise, which the leave-out "
+        "communities then carried. Corrected 2026-11-06 (#321): the derivative of a non-member is "
+        "masked to 0 so it stays at exactly 0, and every community settles, with every member present "
+        "growing at under 1e-6 per h after 20,000 h. None is left out.",
+    ),
+    (
+        re.compile(r"[Ss]train ids survive only on\s+arcs", re.I),
+        re.compile(r"merged_nodes|lists its strains", re.I),
+        "a genus node was said to keep no strain ids, so strain ids survived only on arcs and a reader "
+        "who wanted them had to derive again with Merge to genus off. Corrected 2026-11-06 (#306): "
+        "since /v5 a genus node lists every strain of that genus that is the source or target of an arc "
+        "in `merged_nodes`, sorted, and `live_check` flags a genus node whose `merged_nodes` is empty. "
+        "A drop-out member on no arc is still named only in the arc's `community`.",
+    ),
 ]
 
 

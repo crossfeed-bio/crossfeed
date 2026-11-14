@@ -819,10 +819,15 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
     # with the most scaled rows (an organism's row in one study at one D, however many partners it has: it
     # counted arcs, found in a third review) is the package's, the lowest on a tie; the others are named,
     # and an organism fitted only at another D is named with that reason. The other derivations record
-    # none, so this never fires for them.
+    # none, so this never fires for them. A row pooled across studies counts once in each study it rests
+    # on: that is the count's own unit, an organism's row in one study at one D, and it gives the count the
+    # same rows fitted apart give, so pooling does not move the package's dilution rate; a row that exists
+    # only pooled counts the same way, for each study whose runs it rests on (raised in review of the
+    # pooling, when a pooled row counted once).
     by_dilution: dict = {}
-    for d in {(r.get("target"), r.get("study_id"), r["fitted_rate_dilution"]) for r in records
-              if r.get("fitted_rate") is not None and r.get("fitted_rate_dilution") is not None}:
+    for d in {(r.get("target"), s, r["fitted_rate_dilution"]) for r in records
+              if r.get("fitted_rate") is not None and r.get("fitted_rate_dilution") is not None
+              for s in ([st.get("id", "") for st in r.get("studies") or []] or [r.get("study_id")])}:
         by_dilution[d[2]] = by_dilution.get(d[2], 0) + 1
     package_dilution = (min(by_dilution, key=lambda d: (-by_dilution[d], d)) if by_dilution else None)
     seen_rows: set = set()
@@ -838,7 +843,9 @@ def fitted_rates(records: list, method: str = METRIC) -> dict:
             # keyed by study, dilution rate, medium, and the unit and technique of its own term: two fits that
             # differ in those are two rows, and the capacity rule chooses between them (dropping the unit kept
             # the first one read, found in a sixth review)
-            row = (nid, record.get("study_id", ""), record.get("fitted_rate_dilution"), record.get("medium", ""),
+            # a fit pooled across studies is one row, whichever study each of its arcs names
+            row = (nid, record.get("fitted_group") or record.get("study_id", ""), record.get("fitted_rate_dilution"),
+                   record.get("medium", ""),
                    record.get("fitted_self_unit", ""), record.get("fitted_self_technique", ""))
             if row in seen_rows:
                 continue
