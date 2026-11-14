@@ -700,3 +700,73 @@ def test_output_meta_marks_absent_arcs_on_the_records_it_is_given():
     kept, _ = output_meta(records)
     assert [r["status"] for r in rows] == ["present", "absent"]
     assert all(r["status"] != "absent" for r in kept)
+
+
+def test_the_command_line_draws_a_pair_judged_absent_as_0_on_the_study_path(tmp_path, monkeypatch):
+    """Found in review: on `derive STUDY --live`, the arcs below the absence threshold were collected before
+    `output_meta` set their status, so the list was always empty and `--matrix-image` drew such a pair as
+    "No arc in this search", unlike the page. Here b on c has |0.1| < 1 x sd 1.0, so it is absent: its cell
+    is 0 and its hover names its study and experiment."""
+    import grownet.derive as derive
+    import grownet.mgrowthdb as mgrowthdb
+    from grownet.__main__ import main
+    records = [{**_arc("a", "b", 1.0, "S1", ["E1"]), "status": None, "sd": 0.1},
+               {**_arc("c", "a", -1.0, "S1", ["E4"]), "status": None, "sd": 0.1},
+               {**_arc("b", "c", 0.1, "S3", ["E5"]), "status": None, "sd": 1.0}]
+    monkeypatch.setattr(derive, "derive_interactions", lambda *a, **k: ([dict(r) for r in records], []))
+    monkeypatch.setattr(mgrowthdb, "MGrowthDBClient", lambda *a, **k: object())
+    monkeypatch.setattr(mgrowthdb, "data_versions", lambda *a, **k: {})
+    image = tmp_path / "m.svg"
+    assert main(["derive", "S1", "--live", "--out", str(tmp_path / "n.json"),
+                 "--matrix-image", str(image)]) == 0
+    hovers = {g.find(f"{SVG}title").text.splitlines()[0]: g.find(f"{SVG}title").text
+              for g in _cells(ET.fromstring(image.read_text(encoding="utf-8")))}
+    assert hovers["Effect of B on C"].splitlines()[1:] == [
+        "0: compared, and judged no interaction (1 arc, absent)", "Studies: S3", "Experiments: E5"]
+
+
+def test_the_command_line_writes_each_glv_image_beside_the_file_in_glv_mode_only(tmp_path, monkeypatch,
+                                                                                  capsys):
+    """The help promises "FILE's name plus _glv_matrix.<unit>.svg", and the page draws those only in gLV
+    mode. The pair of the gLV image test above, with its rates handed over as the rates stage would."""
+    import grownet.__main__ as cli
+    import grownet.derive as derive
+    import grownet.mgrowthdb as mgrowthdb
+    records = [_glv_arc("b", "a", 1.0, x_j=2.0e8, experiments=["E1"]),
+               _glv_arc("a", "b", -1.0, x_j=4.0e8, experiments=["E2"], study_id="S2")]
+    rates = {"a": _rate("A", 0.4, 1.0e9), "b": _rate("B", 0.2, 5.0e8)}
+    monkeypatch.setattr(derive, "derive_interactions", lambda *a, **k: ([dict(r) for r in records], []))
+    monkeypatch.setattr(mgrowthdb, "MGrowthDBClient", lambda *a, **k: object())
+    monkeypatch.setattr(mgrowthdb, "data_versions", lambda *a, **k: {})
+    monkeypatch.setattr(cli, "_rates_of", lambda a, client, ids, net, skipped, recs: (rates, skipped))
+    common = ["derive", "S1", "--live", "--out", str(tmp_path / "n.json"), "--report-rates",
+              "--metric", "growth_rate"]
+    assert cli.main(common + ["--matrix-image", str(tmp_path / "plain.svg")]) == 0
+    assert sorted(p.name for p in tmp_path.glob("plain*")) == ["plain.svg"]
+    assert cli.main(common + ["--glv-mode", "--derivation", "replicate",
+                              "--matrix-image", str(tmp_path / "m.svg")]) == 0
+    assert sorted(p.name for p in tmp_path.glob("m*.svg")) == ["m.svg", "m_glv_matrix.Cells_per_mL.svg"]
+    glv = ET.fromstring((tmp_path / "m_glv_matrix.Cells_per_mL.svg").read_text(encoding="utf-8"))
+    assert glv.find(f"{SVG}title").text == "gLV coefficients in Cells/mL"
+    capsys.readouterr()
+    # no rates in a convertible unit: said, and the adjacency image is still written
+    monkeypatch.setattr(matrix_image, "glv_svgs",
+                        lambda *a, **k: (_ for _ in ()).throw(matrix.CannotConvert("no unit")))
+    assert cli.main(common + ["--glv-mode", "--derivation", "replicate",
+                              "--matrix-image", str(tmp_path / "x.svg")]) == 0
+    assert "no image of gLV coefficients: no unit" in capsys.readouterr().err
+    assert (tmp_path / "x.svg").exists()
+
+
+def test_each_download_link_names_its_search_and_the_file_is_named_as_the_page_says(server):  # noqa: F811
+    """With two searches open, a link without its `job` served the latest one's image (`_result` must never
+    do that), and the served name was not checked: the adjacency image is grownet_matrix.svg, each gLV one
+    grownet_glv_matrix.<unit>.svg."""
+    from grownet import gui
+    net = _glv_net([_glv_arc("b", "a", 1.0, x_j=2.0e8), _glv_arc("a", "b", -1.0, x_j=4.0e8)])
+    rates = {"a": _rate("A", 0.4, 1.0e9), "b": _rate("B", 0.2, 5.0e8)}
+    result = {"network": net, "rates": rates, "settings": gui.glv_mode(dict(gui.DEFAULTS)), "job": "j7"}
+    hrefs = re.findall(r'href="(/matrix\.svg\?[^"]+)"', gui._matrix_images("tok", result))
+    assert len(hrefs) == 2 and all("&amp;job=j7&amp;" in h for h in hrefs)
+    assert [name for _, name, _ in gui.matrix_images(result)] == [
+        "grownet_matrix.svg", "grownet_glv_matrix.Cells_per_mL.svg"]
