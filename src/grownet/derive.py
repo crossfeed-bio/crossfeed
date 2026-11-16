@@ -217,9 +217,9 @@ def _batch_only(exps, include_non_batch: bool, skipped, metric: str = "auc") -> 
             kept.append(exp)
         else:
             skipped.append((exp.get("name", "") or _exp_id(exp),
-                            f"{mode}, excluded by default with the growth measure {metric}: an area under "
+                            f"{mode}, excluded by default with the growth property {metric}: an area under "
                             "the curve or a growth rate of a continuous culture is not comparable with a "
-                            f"batch one. Use the growth measure max, which it suits, or the advanced "
+                            f"batch one. Use the growth property max, which it suits, or the advanced "
                             "setting"))
     return kept
 
@@ -251,7 +251,7 @@ def select_experiments(exps, selection, skipped, before=None, study_id="") -> li
                         + ": the comparisons you named are made against them"))
     if not kept:
         # `exps` has already been narrowed by the cultivation-mode filter, so "no experiment matches"
-        # can name the selection when the growth measure is the cause: naming A6 of SMGDB00000005, a
+        # can name the selection when the growth property is the cause: naming A6 of SMGDB00000005, a
         # chemostat, said the box matched nothing while `--metric max` proves it matches, and the
         # refusal a reader acts on sent them to retype the box (found reviewing round 9). `before` is
         # the unfiltered list, used for the diagnosis only. And `study_ids_of` falls back to the words

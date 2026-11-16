@@ -32,8 +32,8 @@ DERIVE_EXAMPLES = """examples:
   every species in one medium, with every partner (the page with only the second box filled):
     grownet derive --live --conditions "Wilkins-Chalgren" --out wc_all.json
 
-  the gLV rows from the chemostat steady states of sub-communities (no study in mGrowthDB holds such a
-  design yet, so this says what each organism lacks):
+  the gLV rows from the chemostat steady states of sub-communities (a study whose design determines no
+  row gives none, and the report says what each organism lacks):
     grownet derive SMGDB00000011 --live --glv-mode --derivation steady --glv chemostat_glv.zip
 
   the local page's Example, written to a file, with its report, and sent to Cytoscape:
@@ -54,7 +54,7 @@ DERIVE_EXAMPLES = """examples:
     grownet derive SMGDB00000004 --live --absence-threshold 2 --out study4.json
 
   one medium only, which is what a gLV simulation wants (the page's second box):
-    grownet derive --live --species Blautia --conditions "Wilkins-Chalgren" --out wc.json
+    grownet derive --live --species Blautia --conditions "Wilkins-Chalgren" --all-partners --out wc.json
 
   one named comparison, with the monocultures it is made against:
     grownet derive --live --species Bacteroides Roseburia --conditions EMGDB000000024 --out one_arc.json
@@ -372,6 +372,11 @@ def _derive_run(a):
                                          include_absent=a.include_absent,
                                          # the derivation says what it tests (#142 item 5)
                                          deriver=deriver)
+            # the arcs below the threshold that the file leaves out, kept for the matrix image, which draws
+            # a pair compared and judged absent as 0, as the page does (#341). `output_meta` sets each
+            # record's status in place, so they are read after it: read before, none was absent yet, and the
+            # image drew those pairs as never compared (found in review)
+            absent_records = [] if a.include_absent else [r for r in fitted_rows if r.get("status") == "absent"]
             extra["settings"] = _settings_of(a)
         except MGrowthDBError as e:
             print(f"live fetch failed: {e}", file=sys.stderr)
@@ -411,6 +416,7 @@ def _derive_run(a):
             net.meta["errors"] = list(errors)
             net.meta["complete"] = False
     result = {"study": a.study, "entries": [], "resolved": [], "unresolved": [], "studies": [a.study],
+              "absent": records_to_network(absent_records) if a.live and absent_records else None,
               "rates": organism_rates, "client": client if a.live else None,
               "skipped": skipped, "errors": errors, "network": net, "notes": _report_notes(a, organism_rates)}
     code = _emit(a, net, skipped, extra, a.study, result)
@@ -665,6 +671,26 @@ def _emit(a, net, skipped, extra, label, result):
             f.write(glv_package(net, organism_rates, extra_files))
         print(f"wrote the gLV parameters to {a.glv}: the interaction matrix, the growth rates and a README",
               file=sys.stderr)
+
+    if a.matrix_image:
+        # the page's Matrix image (#341): the adjacency matrix to FILE and, in gLV mode, one image per matrix
+        # of fitted coefficients beside it, named as the page names its downloads. The page draws those only
+        # in gLV mode (Karoline's choice), and this wrote them whenever there were rates (found in review)
+        from . import matrix_image
+        from .matrix import CannotConvert
+        images = [(a.matrix_image, "the adjacency matrix", matrix_image.adjacency_svg(net, result.get("absent")))]
+        if organism_rates and getattr(a, "glv_mode", False):
+            stem = os.path.splitext(a.matrix_image)[0]
+            try:
+                images += [(f"{stem}_{name}", f"the gLV coefficients in {unit}", image)
+                           for unit, name, image in matrix_image.glv_svgs(net, organism_rates,
+                                                                          result.get("absent"))]
+            except CannotConvert as e:
+                print(f"no image of gLV coefficients: {e}", file=sys.stderr)
+        for path, what, image in images:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(image)
+            print(f"wrote {what} as an image to {path}", file=sys.stderr)
 
     if a.to_r and organism_rates:
         from .matrix import glv_payload
@@ -1019,6 +1045,12 @@ def build_parser() -> argparse.ArgumentParser:
                               "also needs --metric growth_rate, which the integrated form does not, and "
                               "--glv-mode sets all of them and selects the integrated form, unless "
                               "--derivation names another)")
+    outputs.add_argument("--matrix-image", metavar="FILE",
+                         help="write the adjacency matrix as an SVG image to FILE, the page's Matrix image: "
+                              "green for a positive effect, orange-red for a negative one, a legend, and each "
+                              "cell's value with the studies and experiments behind it shown on hover in a "
+                              "browser. With --glv-mode, as on the page, each matrix of fitted gLV coefficients is "
+                              "written beside it as FILE's name plus _glv_matrix.<unit>.svg")
     outputs.add_argument("--steady-check", action="store_true",
                          help="score the gLV parameters against the chemostat steady states mGrowthDB "
                               "holds for these organisms: the report gets the comparison and the zip a "

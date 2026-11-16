@@ -218,7 +218,7 @@ def test_an_organism_read_by_two_techniques_keeps_the_runs_of_one_and_names_the_
     assert group["techniques"] == {"a": "qpcr", "b": "fc"}
     assert sorted(c["name"] for c in group["communities"]) == ["a alone", "b alone"]
     said = " ".join(why for _, why in group["left_out"])
-    assert "reads b by qpcr, where the other runs of this medium and dilution rate read it by fc" in said
+    assert "reads b by qpcr, where the other run of this medium and dilution rate read it by fc" in said
 
 def test_runs_reading_the_same_organisms_by_swapped_techniques_are_fitted_apart():
     """One run of a with b reads a by fc and b by qPCR, a second the other way round: splitting by the run's
@@ -311,3 +311,14 @@ def test_a_spread_says_how_many_draws_it_rests_on():
     (group,) = chemostat_groups(client, exps)
     rows = fit(group["communities"], draws=50)["rows"]
     assert rows["a"]["draws"] == 50 and rows["a"]["sd"] is not None
+
+
+def test_two_spellings_of_one_medium_are_one_group():
+    """The tool's one medium rule (`media.identity`, Karoline, 2026-10-07): "Wilkins-Chalgren Anaerobe Broth"
+    and "Wilkins-Chalgren Anaerobe Broth (WC)" key alike, so the pair run under the second spelling joins
+    the monocultures under the first, as in the dilution test above: one group of three communities, not
+    two groups too small to determine anything (found in review: the raw lowercased names passed)."""
+    client, exps = _runs()
+    exps[2]["compartments"][0]["mediumName"] = "Wilkins-Chalgren Anaerobe Broth (WC)"
+    (group,) = chemostat_groups(client, exps)
+    assert len(group["communities"]) == 3

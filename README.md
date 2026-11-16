@@ -172,7 +172,8 @@ python -m grownet schema [--out FILE]
 - `derive STUDY --live --deriver MODULE:CLASS` runs your own method instead of the three built-in ones (see below).
 - The command line does everything the local page does: every advanced setting has its option, and the
   page's outputs are `--out FILE` (with `--format`), `--to-cytoscape`, `--report FILE` (the same report the
-  page shows), and, with `--report-rates`, `--rates FILE` and `--glv FILE`. `grownet derive --help` lists
+  page shows), `--matrix-image FILE` (the Matrix image, as SVG), and, with `--report-rates`, `--rates FILE`
+  and `--glv FILE`. `grownet derive --help` lists
   every option in the page's words, with examples.
 - `--format graphml` emits GraphML (for Cytoscape, igraph, networkx, Gephi) instead of the neutral JSON.
 - `--conditions NAME ...` is the page's second box: media, experiment ids or study ids. A study id given
@@ -205,7 +206,7 @@ A `grownet` console command is installed too, so `grownet derive ...` works afte
 ## The legend
 
 One picture of what every arc, head, dash and flag means: [docs/legend.svg](https://raw.githubusercontent.com/crossfeed-bio/crossfeed/main/docs/legend.svg). The local
-page links to it ("What the arcs mean"), and the same vocabulary is what the Cytoscape style draws.
+page links to it ("Legend"), and the same vocabulary is what the Cytoscape style draws.
 It is generated from the code (`make legend`), and a test requires it to name every effect, outcome,
 quality flag, caution, evidence and status the model defines, so it cannot fall behind them.
 
@@ -233,7 +234,7 @@ media, because a medium with a sugar added or a carbon source left out is anothe
 mGrowthDB states that only in the description: those are told apart, never pooled, and the report names
 every medium a search read, so name an experiment id to read one of them alone.
 
-**Four buttons.** Find interactions; Example, which fills the first box with a pair that gives a result;
+**Four buttons.** Find interactions; Example, which fills the first box with species that give a result;
 gLV example, which fills both boxes and the settings for a
 package that simulates, ready for Find interactions (the help walks that package through miaSim step by
 step); and the gLV
@@ -243,7 +244,8 @@ switches back when pressed again. Every setting sits
 behind "Advanced settings", with the same defaults the command line uses.
 
 **The result** carries the network in JSON, GraphML or the adjacency matrix, Send to Cytoscape, the
-report, and, with growth rates on, their own CSV and Get gLV parameters. A Help page introduces the idea
+report, the matrix as an SVG image whose cells name the studies and experiments behind them (and in gLV
+mode each matrix of fitted coefficients), and, with growth rates on, their own CSV and Get gLV parameters. A Help page introduces the idea
 (after Gause, with a figure) and explains the boxes, every setting and arc attribute, the gLV files and
 the R package, the main design decisions, the command line, and what to do when no network comes back; an
 About page says who built it and links this repository.
@@ -254,11 +256,11 @@ stay there.
 
 ## Simulate it in R
 
-Press the **gLV mode** switch beside gLV example and the two settings a simulation needs are set in Advanced
-settings: **Report growth rates** on and **Include drop-out communities** off, since a drop-out arc may act
-through a third species (`--glv-mode` on the command line, which also sets the growth property and the
-derivation a coefficient needs; `--report-rates --no-dropout` sets two of the four and gives a different
-network). The result section's **gLV parameters** control then
+Press the **gLV mode** switch beside gLV example and the four settings a simulation needs are set in
+Advanced settings: **Report growth rates** on, **Include drop-out communities** off (a drop-out arc may act
+through a third species), the growth property on the growth rate, and the integrated derivation
+(`--glv-mode` on the command line sets the same four; `--report-rates --no-dropout` sets two of them and
+gives a different network). The result section's **gLV parameters** control then
 either downloads the zip or sends the parameters straight into a running R session. The companion package is in [`r/`](https://github.com/crossfeed-bio/crossfeed/tree/main/r), and it
 assumes no simulator: it hands over a plain matrix and a plain vector, with a helper that shapes them for
 [miaSim](https://bioconductor.org/packages/release/bioc/html/miaSim.html).
@@ -420,8 +422,9 @@ of one source and target were merged, and the lowest and highest log2 mean among
 (strain pairs when only taxon ids were entered) a genus arc rests on, and which. `outcome` says what the comparison could establish: `quantified`, `obligate` (the
 target's without-set did not grow in that comparison, by the no-growth rule), `abolished` (its with-set
 did not grow), or `no_growth`. These are scoped to one comparison and are not claims about the organism:
-one pair in the corpus is obligate in two conditions of a study and quantified in six others of the same
-study, once with the target reaching 3.5 times more without the source than with it. For an
+one pair in the corpus is obligate in two conditions of SMGDB00000013 and quantified in six others, one of
+them in that study and five in SMGDB00000014, once with the target reaching 3.5 times more without the
+source than with it (2026-11-14). For an
 obligate or abolished edge, the count on the side without growth is its replicates without growth. A
 comparison whose set was emptied by exclusions (every replicate spiked, for example) says nothing about
 growth; it is skipped with a reason rather than read as obligate. `evidence`
@@ -481,6 +484,18 @@ model has no lag term and no death term, so the rows start where growth starts a
 Every arc carries the coefficient, the condition number of its fit, its R2 and the R2 of the same row
 with every interaction set to zero; a row the design
 cannot identify, and a community of three or more members, are reported rather than derived.
+The equation is the Log Integral method of Kloppers and Greeff (2013) for Lotka-Volterra models, with rows
+that run from the first fitted point to each later one, which is the integral estimator whose
+identifiability and rate of convergence Dattner and Klaassen (2015) treat. Their convergence result
+smooths or averages the curve and estimates the starting abundance; grow**net** integrates each replicate's
+measured points and holds the first fitted point fixed, so the result describes the method and is not a
+guarantee for each estimate.
+
+- Kloppers PH, Greeff JC (2013) Lotka-Volterra model parameter estimation using experiential data.
+  *Applied Mathematics and Computation* 224: 817-825. doi:10.1016/j.amc.2013.08.093
+- Dattner I, Klaassen CAJ (2015) Optimal rate of direct estimators in systems of ordinary differential
+  equations linear in functions of the parameters. *Electronic Journal of Statistics* 9: 1939-1973.
+  doi:10.1214/15-EJS1053
 
 **The derivation from chemostat steady states.** `--derivation steady`, off by default and meant for gLV
 mode, fits the rows from steady states instead of growth curves. At a chemostat steady state every organism
@@ -494,7 +509,7 @@ states, less D, and the rise after the pump started; or the rise from inoculatio
 rate, so the package's rates are `r_i - D` and it simulates the
 chemostat. What a design cannot determine is said once per chemostat group and once per organism: a row has
 one unknown for its own limitation and one per partner, and needs at least that many communities holding the
-organism. No study in mGrowthDB holds such a design yet; on the fitted 12-species gLV of Venturelli et al.
+organism. On the fitted 12-species gLV of Venturelli et al.
 2018, monocultures and pairs recover 126 of its 132 coefficients of B exactly, and `A = (r_i - D) B`, formed
 from them and the start-up scales, within 2% of each organism's self-limitation without measurement noise
 (`packaging/validate_steady_state.py`).
@@ -502,7 +517,9 @@ from them and the start-up scales, within 2% of each organism's self-limitation 
 **Scoring the package against a chemostat.** `--steady-check` (with `--report-rates --live`) scores the
 gLV parameters against the steady states mGrowthDB holds for these organisms in continuous culture: a
 chemostat satisfies `A x = -(r - D)` at steady state with D the dilution rate it records, and those
-numbers were never used to fit the parameters. The comparison goes into the report and into the package as
+numbers were never used to fit the parameters. The prediction is the stable state the package settles in,
+found by trying each sub-community: the organisms it keeps satisfy that system and none it loses can grow
+back in, so an organism the full solution puts below zero can still persist. The comparison goes into the report and into the package as
 `steady_state_check.txt`, predicted against observed per organism, with every chemostat it could not use
 and why. It is off by default, since it reads curves a search does not otherwise need.
 
@@ -617,7 +634,7 @@ with `derive STUDY`, every study a search reads with `--species`, `--all` or the
 low-quality arcs included (`meta.statistics`). Single-replicate, obligate, abolished and merged arcs have
 no test. The test supports an edge when significant and decides nothing, by default: with few
 replicates, any of these results may change with more experiments. `--max-adjusted-p Q` (the page's
-"Filter on adjusted p-value") also leaves out interactions whose adjusted p-value is above Q; arcs
+"Filter on the q-value, at most") also leaves out interactions whose adjusted p-value is above Q; arcs
 without a p-value are kept with the caution `untested`, and `meta.hidden.not_significant` counts what was
 left out. It is off by default because with two or three replicates the test misses many real effects,
 and because an adjusted p-value depends on the other comparisons in the same derivation, so the same arc
@@ -697,12 +714,12 @@ rule, so there are no **censored** arcs, no measured bounds and no `NA` cells. O
 the comparison gives 145 arcs, 122 of them drop-out, with 12 censored bounds; the integrated form gives
 12 arcs and no bounds (measured 2026-10-09). That is why it is not the default.
 
-**What the steady-state form needs** is a design mGrowthDB does not hold yet: several unperturbed
+**What the steady-state form needs** is a design of several unperturbed
 chemostat communities of one medium and dilution rate per organism, at least as many as the organism has
 unknowns (its own limitation and one per partner it met). Its coefficients are effective, an effect that
 needs a third organism being folded into the pairs that carry it, and each community is predicted by a fit
-made without it so a reader can see where that matters. Today it derives nothing, and says what each
-organism lacks.
+made without it so a reader can see where that matters. A design that determines no row derives
+nothing, and the report says what each organism lacks.
 
 It was the default for one release, 0.3.0. The comparison that chose it was run in gLV mode, where
 drop-out communities are off on both sides, so it measured the two forms on the question gLV mode asks

@@ -33,45 +33,45 @@ ABOUT = (f"{NAME} was built by Karoline Faust (KU Leuven) and Craig Heilmann (Sy
 # Each line names, in the comment above it, the pull request(s) it describes, so the release pull request can
 # drop the line of any that did not merge before tagging (RELEASING.md step 1). Numbers stay in these
 # comments, never in the strings: the page is read by users.
-NEXT = (
-    # #301 (empty species box, All button removed), #308 (gLV example fills and waits)
-    "Leave the species box empty to search every species in the media or studies of the second box; leave "
-    "both boxes empty for the All network. The All button is gone, and gLV example fills the page and waits "
-    "for Find interactions, as Example does.",
-    # #325 (the second box under every derivation)
-    "The second box applies under every derivation: naming a medium, an experiment or a study narrows a "
-    "gLV-mode search too, where only the default derivation read it before, so a gLV-mode result changes "
-    "when one is named.",
-    # #306 (technique, merged_nodes, format /v5, merging across techniques), #304 (a merged arc on the page)
-    "Every arc records how its target was measured (fc, qpcr, plates, ...), and a genus node lists the "
-    "strains it stands for: the network format moves to /v5, and the daily All network is still published "
-    "for earlier versions. Merging parallel arcs crosses techniques and names them, and the page shows a "
-    "merged arc as a median with its range.",
-    # #323 (starting-density notes)
-    "Every arc of the default derivation whose two sides have a first value says what they started at, "
-    "and warns where they differ more than 3 times, as 61 of the 190 drop-out arcs in mGrowthDB do, "
-    "counting those below the absence threshold, up to 117 times.",
-    # #315, #316, #318, #319 (merged), #320 (validation), #321 (messages and every later fix to the
-    # derivation); the dilution rate in the rates file and the package: branch dilution-column, its pull
-    # request not yet open; runs of several studies fitted together: branch steady-across-studies, its pull
-    # request not yet open
-    "A third derivation, for gLV mode: the rows fitted from the chemostat steady states of sub-communities, "
-    "every sub-community counting, across studies where the medium matches, its package at one dilution "
-    "rate, which its rates name. mGrowthDB holds no "
-    "such design yet, and it says what each organism lacks; on a published 12-species model, monocultures "
-    "and pairs give 126 of its 132 coefficients.",
-    # #299 (Baranyi damping)
-    "The Baranyi growth-rate fit reaches its best fit where a lag collapses; nothing changes by default.",
-    # #303 (merged arcs and nodes), #309 (italics, readability), #307 (no issue numbers), #322 (R summary)
-    "The help explains what a merged arc and a merged node carry, sets species names in italics, and reads "
-    "more easily, with no issue numbers, and the R package's summary of a gLV package reads more cleanly.",
-)
+NEXT = ()
 
 # What changed in each release, a few lines each, newest first (Karoline, 2026-10-04: "a small log of what
 # happened in each new release"). The changelog in the repository is the full record; this is the summary a
 # user of the page wants, so each line says what they can now do rather than what moved in the code. A test
 # requires the newest entry to be this version, so a release cannot forget it.
 RELEASES = (
+    ("0.6.0", "2026-11-16", (
+        "On the whole of mGrowthDB, the All network is the same as 0.5.0's in every arc and every number, by "
+        "default, under the integrated form and in gLV mode: its arcs gain the technique, and the default "
+        "derivation's a note on their starting densities.",
+        "Leave the species box empty to search every species in the media or studies of the second box; leave "
+        "both boxes empty for the All network. The All button is gone, and gLV example fills the page and "
+        "waits for Find interactions, as Example does.",
+        "The second box applies under every derivation: naming a medium, an experiment or a study narrows a "
+        "gLV-mode search too, where only the default derivation read it before, so a gLV-mode result changes "
+        "when one is named.",
+        "Every arc records how its target was measured (fc, qpcr, plates, ...), and a genus node lists the "
+        "strains it stands for: the network format moves to /v5, and the daily All network is still published "
+        "for earlier versions. Merging parallel arcs crosses techniques and names them, and the page shows a "
+        "merged arc as a median with its range.",
+        "Every arc of the default derivation whose two sides have a first value says what they started at, and "
+        "warns where they differ more than 3 times, as 61 of the 190 drop-out arcs in mGrowthDB did on "
+        "2026-11-06, counting those below the absence threshold, up to 117 times.",
+        "A third derivation, for gLV mode: the rows fitted from the chemostat steady states of "
+        "sub-communities, every sub-community counting, across studies where the medium matches, its package "
+        "at one dilution rate, which its rates name. It says what each organism lacks; on a published "
+        "12-species model, monocultures and pairs give 126 of its 132 coefficients.",
+        "The chemostat check and a gLV package's README name the state the package settles in, with the "
+        "organisms it keeps and the ones it loses, where they named every organism that the solution with all "
+        "of them present put at or below zero, including ones a simulation keeps.",
+        "The Baranyi growth-rate fit reaches its best fit where a lag collapses; nothing changes by default.",
+        "The help explains what a merged arc and a merged node carry, sets species names in italics, and reads "
+        "more easily, with no issue numbers, and the R package's summary of a gLV package reads more cleanly.",
+        "The result shows the adjacency matrix as an image, and in gLV mode each matrix of fitted "
+        "coefficients: green for a positive effect, orange-red for a negative one, with a legend, and a hover "
+        "on each cell that names the studies and experiments behind it. Each image downloads as SVG.",
+        "The help says which standard deviation the absence threshold uses under each derivation.",
+    )),
     ("0.5.0", "2026-10-14", (
         "No arc and no number of a derived network changes: measured on the whole of mGrowthDB against "
         "0.4.0, by default, with growth rates and in gLV mode. What changes is what the files say.",
@@ -236,7 +236,7 @@ SETTINGS = {
                         "selects: that one refuses a community of three or more members, since fitting a "
                         "row inside one is a new kind of evidence and needs a decision first."),
     "include_non_batch": ("Include chemostat and serial dilution experiments", "--include-non-batch",
-                          "What a continuous culture can be compared on depends on the growth measure. With "
+                          "What a continuous culture can be compared on depends on the growth property. With "
                           "max it is derived without this setting: the level such a culture settles at is "
                           "comparable with and without a partner, and those arcs are shown with the caution "
                           "continuous_culture. With auc or a growth rate it is left out, because the area "
@@ -250,7 +250,8 @@ SETTINGS = {
                           "|log2 mean| < k times the standard deviation. The default 1 means the mean plus "
                           "or minus its sd crosses zero. Raise k for a stricter network, where fewer "
                           "interactions count as present; 0 marks only a mean of exactly zero absent. Absent "
-                          "interactions stay in the downloads with status absent."),
+                          "interactions are reported, and kept in the downloads with status absent when "
+                          "Include arcs below the absence threshold is on."),
     "correction": ("Multiple testing correction", "--correction bh|by",
                    "How the p-values of the test the derivation ran are adjusted for multiple testing, over every "
                    "comparison one search tests (every arc of every study it reads, absent and low-quality "
@@ -366,12 +367,16 @@ SETTINGS = {
 
 # command line options of `derive` that are not advanced settings -> what they do
 CLI_ONLY = {
-    "--glv-mode": "the page's gLV mode button, from the command line: --report-rates, --no-dropout and "
-                  "--metric growth_rate together, which is what a fitted coefficient needs",
+    "--glv-mode": "the page's gLV mode button, from the command line: --report-rates, --no-dropout, "
+                  "--metric growth_rate and the integrated derivation together, which is what a fitted "
+                  "coefficient needs",
     "--rates": "write the growth rates to a CSV file, the page's Download the growth rates (needs "
                "--report-rates)",
     "--glv": "write the parameters of a generalized Lotka-Volterra simulation to a zip file, the page's "
              "gLV parameters, Download (needs --report-rates)",
+    "--matrix-image": "write the adjacency matrix as an SVG image, the page's Matrix image, with its legend and "
+                      "each cell's sources on hover in a browser; with --glv-mode, as on the page, each matrix of "
+                      "fitted gLV coefficients beside it, its name ending in _glv_matrix and the abundance unit",
     "--steady-check": "score those parameters against the chemostat steady states mGrowthDB holds for "
                       "these organisms, since a continuous culture satisfies A x = -(r - D) at steady "
                       "state and was never used to fit them: the report gets the comparison and the zip "
@@ -389,7 +394,8 @@ CLI_ONLY = {
     "--live": "fetch from the mGrowthDB API (the normal case)",
     "--fixture": "derive from a JSON list of interaction records instead (offline, for testing)",
     "--deriver": "plug in your own derivation method, given as module:ClassName (one study at a time)",
-    "--format": "json (the neutral format, default) or graphml (Cytoscape, igraph, networkx, Gephi)",
+    "--format": "json (the neutral format, default), graphml (Cytoscape, igraph, networkx, Gephi) or matrix "
+               "(the adjacency matrix as CSV, with a file beside it saying what it is)",
     "--out": "write the network to a file instead of the screen",
     "--report": "write the report of the search to a file, as the page's Report button downloads it",
     "--to-cytoscape": "also send the network into a running Cytoscape on this machine, with the legend's style",
@@ -409,8 +415,12 @@ EDGE_ATTRIBUTES = {
                 "the two are near and not equal, and it is this field the absence threshold acts on. Under "
                 "the steady-state derivation it is log2(1 + B_ij x_j), the fitted row's net growth with the "
                 "partner at its abundance in the largest community holding both over without it",
-    "sd": "standard deviation of the strength, the spread of the comparison (under the steady-state "
-          "derivation, from the bootstrap over vessels, or over runs where runs were pooled)",
+    "sd": "standard deviation of the strength: sqrt(var_with + var_without) of the per-replicate log2 "
+          "values under the comparison of replicate sets, whose sets are not paired; under the integrated "
+          "form sqrt(sd_replicates^2 + var_stage + var_selection), the spread of the per-co-culture-replicate "
+          "strengths with the monoculture stage's variance and, where more than one monoculture set was "
+          "matched, the rate selection variance added; and under the steady-state "
+          "derivation, from the bootstrap over vessels, or over runs where runs were pooled",
     "se": "standard error of the strength",
     "n_with": "replicates with the source present",
     "n_without": "replicates with the source absent",
@@ -499,7 +509,7 @@ EDGE_ATTRIBUTES = {
                       "measured, and under auc or max the set did grow and failed a rule about how "
                       "much, so the number it reached is not 0. How far from 0 it was is usually on "
                       "the same arc, as strength_bound with the rule that gave it: on the corpus those "
-                      "bounds put the without-side at up to 65 per cent of the with-side. On 3 of the "
+                      "bounds put the without-side at up to 85 per cent of the with-side (2026-11-14). On 3 of the "
                       "15 censored arcs there is NO bound and strength_bound is empty, because the rule "
                       "bounds nothing away from zero or the set is zero from its first point; bound_rule "
                       "says which, and the matrix leaves those cells NA like the rest",
@@ -693,8 +703,8 @@ DECISIONS = (
      "support and does not decide. The absence threshold k does: |mean| of at least k sd."),
     # #54
     ("A measured absence is kept, as status absent.",
-     "\"We looked and found nothing\" is a result, so absent edges stay in the downloads and are hidden "
-     "from view, not deleted."),
+     "\"We looked and found nothing\" is a result, so absent edges are reported, and kept in the downloads "
+     "with status absent when Include arcs below the absence threshold is on."),
     # #40
     ("Low quality is not absence.",
      "An edge with a quality flag keeps the sign of its mean and is hidden by default; it is never called "
@@ -828,7 +838,7 @@ def _table(head, rows) -> str:
     return f"<table><tr>{th}</tr>" + "".join(rows) + "</table>"
 
 
-SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"), ("measures", "Which growth measure"),
+SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"), ("measures", "Which growth property"),
             ("where", "Choosing where to look"),
             ("example", "Try the example"), ("reading", "Reading the result"),
             ("statistics", "How an interaction is decided"),
@@ -1001,7 +1011,7 @@ of yeast volume as <i>S. cerevisiae</i>.</p>
 two species of yeast. Journal of Experimental Biology 9: 389-402.<br>
 Gause GF (1934) The Struggle for Existence. Williams and Wilkins, Baltimore.</p>
 
-<h2 id="measures">Which growth measure</h2>
+<h2 id="measures">Which growth property</h2>
 <p>Each measure answers a different question, so an arc can differ between them: on all of mGrowthDB (September 2026)
 the area and the maximum agree on the sign of every arc both find, while the area and the growth rate agree on
 18 of 23, since a partner can, for example, lower a species' final yield while speeding up its early growth.
@@ -1043,12 +1053,10 @@ in steady state is the dilution rate the experimenter chose, not a property of t
 experiment must share to be compared, so a chemostat co-culture is compared only with chemostat
 monocultures, never with a batch one.</li>
 </ul>
-<p>An experiment whose mode mGrowthDB does not record counts as not batch. No study in mGrowthDB holds a
-continuous culture that forms a pair or a drop-out design today, so this changes no network yet; it
-decides what happens when one arrives.</p>
+<p>An experiment whose mode mGrowthDB does not record counts as not batch.</p>
 
 <h2 id="example">Try the example</h2>
-<p>The Example button fills the species box with {_e(pair)}, a pair with enough data to show a result: the
+<p>The Example button fills the species box with {_e(pair)}, species with enough data to show a result: the
 <a href="#cli">command line</a> section runs the same search.</p>
 
 <h2 id="reading">Reading the result</h2>
@@ -1074,8 +1082,18 @@ their own CSV, and <strong>Get gLV parameters</strong>
 <h2 id="statistics">How an interaction is decided</h2>
 <p><strong>The effect.</strong> For each arc, the target's growth (the chosen measure) is compared between
 the replicates with the source and the replicates without it: the log2 of each replicate's value, the mean
-on each side, and their difference, the log2 mean. Its standard deviation is its spread over the
-replicates.</p>
+on each side, and their difference, the log2 mean. The two sets are grown separately, so no replicate
+pairs with another and there is no strength per replicate. The <strong>standard deviation</strong>
+(<code>sd</code>) is therefore <code>sqrt(var_with + var_without)</code>, from the sample variances of the
+per-replicate log2 values on each side: the spread expected between one replicate with the source and one
+without it, which does not shrink as replicates are added. The standard error of the log2 mean, which does,
+is <code>se</code>, <code>sqrt(var_with / n_with + var_without / n_without)</code>. The integrated form fits
+a strength for each co-culture replicate, and its sd is the spread of one such strength with every source of
+error in it: <code>sqrt(sd_replicates^2 + var_stage + var_selection)</code>, the standard deviation of those
+strengths with two variances added, the monoculture stage's (from resampling its replicates) and, where the
+study matched the organism to more than one monoculture set, the one that choice adds. It is the plain
+spread of the replicate strengths only where neither was measured. Under the steady-state derivation the sd
+comes from a bootstrap over vessels, or over runs where runs were pooled.</p>
 <p><strong>The call.</strong> An interaction is present when |log2 mean| is at least k standard deviations
 (the absence threshold, default 1: the mean plus or minus its sd stays on one side of zero), and absent
 otherwise. It is undetermined when one side has a single replicate, since there is then no spread; it is
@@ -1154,10 +1172,25 @@ carries that <strong>measured bound</strong> (<code>strength_bound</code>) and t
 <p>The table itself carries no settings, version or date, so the menu entry below it, <em>Adjacency
 matrix: what it is</em>, writes a text file to keep beside it: how it was made, every setting, what 0 and
 NA mean, the pairs left at 0, and the studies to cite. The command line writes it beside the CSV.</p>
+<p><strong>The matrix as an image.</strong> Below the outputs, <strong>Matrix image</strong> opens the
+adjacency matrix drawn as a grid, one square per ordered pair, rows affected and columns the actor as in
+the table. Green is a positive effect and orange-red a negative one, stronger with the size of the value
+on a scale whose two ends the legend gives, and a negative value also carries a minus sign. A pair compared
+and judged absent is the pale middle of the scale with a 0 in it, an <strong>NA</strong> cell is hatched, a
+pair whose arcs disagree in sign is cross-hatched, a value that is not a finite number holds a question mark,
+a pair with no arc is white, and the diagonal, which is not part of the matrix, is gray. Hover a square, or
+move to it with the Tab key, and a box against it shows its value and the studies and experiments it is
+derived from, with any arc of the pair that is not in the value named apart. In gLV mode the Matrix image
+section also draws each matrix of fitted coefficients, where a pair with arcs but no coefficient is dotted and
+its box says why, and the box of a diagonal square says how its self-limitation was fitted and names the
+studies of its growth rate. Each image has its own download button, which saves it as an SVG file that keeps
+the hover when opened in a browser and scales for print.
+For a PNG, open the file in a browser and take a screenshot, or export it from a vector editor
+such as Inkscape.</p>
 <p><strong>A bound on an area is weaker than a bound on a rate.</strong> A culture that did not grow
 still carries the area of its own inoculum for the whole window, so on the default growth property, the
 area under the curve, the area the rule allows it can be as large as the growing side's, and the bound says
-nothing beyond zero: that cell stays 0 and the report says so. On the maximum the bound is the factor times
+nothing beyond zero: that cell stays NA and the report says so. On the maximum the bound is the factor times
 the measured start, and on a growth rate it is the rate that would produce the allowed rise over the
 window; both are far under what a growing side reaches. So to size an obligate or abolished interaction,
 search on the growth rate or the maximum. gLV mode already uses the growth rate.</p>
@@ -1258,7 +1291,18 @@ every A_ij, so one least-squares fit per organism returns its whole row: no grow
 plateau to certify, and no partner abundance to divide by, since the regressor is the partner's own time
 integral. The monocultures identify r_i and its own limitation A_ii, which are then held fixed while the
 co-cultures give the partners, because inside one experiment those columns rise too nearly together to
-be told apart.</p>
+be told apart.
+The equation is the Log Integral method that Kloppers and Greeff (2013) gave for Lotka-Volterra models.
+Its rows here run from the first fitted point to each later one, not over each sampling interval, which
+makes it the integral estimator whose identifiability and rate of convergence Dattner and Klaassen (2015)
+treat. Their convergence result smooths or averages the curve before integrating and estimates the
+starting abundance as a parameter; grownet integrates each replicate's measured points and holds the
+first fitted point fixed, so that result describes the method and is not a guarantee for each estimate.</p>
+<p class="muted">Kloppers PH, Greeff JC (2013) Lotka-Volterra model parameter estimation using experiential
+data. Applied Mathematics and Computation 224: 817-825. doi:10.1016/j.amc.2013.08.093<br>
+Dattner I, Klaassen CAJ (2015) Optimal rate of direct estimators in systems of ordinary differential
+equations linear in functions of the parameters. Electronic Journal of Statistics 9: 1939-1973.
+doi:10.1214/15-EJS1053</p>
 <p>The model has <strong>no lag term and no death term</strong>, so the rows start where growth starts
 (the lag the Baranyi fit reports) and stop where it ends (the plateau rule the Baranyi fit uses). Without
 those cuts a culture that sits at its inoculum, or declines after its peak, makes the fit pay in the rate,
@@ -1271,7 +1315,11 @@ the carrying capacities of such a run come from the same fit, the capacity being
 <p><strong>Scoring the package against a chemostat.</strong> A package is built from batch co-cultures,
 and mGrowthDB also holds continuous cultures, where a community sits at a steady state that satisfies
 <code>A x = -(r - D)</code> with D the dilution rate. Those numbers were never used to fit the parameters, so they test
-them. <strong>Check against chemostat steady states</strong> in Advanced settings (or
+them. The prediction is the stable state a simulation of the package settles in: the organisms it keeps
+satisfy that system, and none it loses can grow back in. Solving it with every organism present gives that
+state only when all of it is above zero; otherwise the system settles on fewer organisms, which the check
+finds by trying each sub-community, and it names the organisms the package loses rather than every one the
+full solution puts below zero. <strong>Check against chemostat steady states</strong> in Advanced settings (or
 <code>--steady-check</code>) puts the comparison in the report and a <code>steady_state_check.txt</code>
 in the package: predicted against observed, per organism, with every chemostat it could not use and why
 (a run with no dilution rate recorded, a perturbed run, another abundance unit, another medium, or no
@@ -1378,7 +1426,8 @@ monocultures, pairs, larger communities and the full one all contribute.</p>
 <li><strong>What it reads.</strong> Continuous cultures known to be unperturbed, at the steady state the
 chemostat check reads (the mean over the last quarter of each vessel; a run in which an organism still
 changes by more than a tenth between the two halves of that quarter is not at a steady state, and is left
-out and named), one fit per medium composition, abundance unit and dilution rate, across every study the
+out and named; a quarter of fewer than four points cannot be split in two, and that run is not judged), one fit per
+medium composition, abundance unit and dilution rate, across every study the
 search reads (runs of different studies in the same medium are fitted together, and an arc names every study
 it rests on), each organism read by one technique within it: where an organism is read one way in some
 runs and another way in others, the runs using its more common technique are kept and the others left out
@@ -1424,8 +1473,6 @@ those communities was read in a single vessel, the row has no spread, so its arc
 vessels of one run share its inoculum and its history, so a community read in one run has a spread from
 within that run only, narrower than the difference between runs would make it.</li>
 </ul>
-<p>mGrowthDB holds no design of this kind yet: its chemostat studies each run one community, which
-determines no row. The derivation is there for the data to come.</p>
 
 <h2 id="glv-walkthrough">The gLV example, step by step</h2>
 <p><strong>gLV example</strong> beside Example fills both boxes and every setting a package needs, as
@@ -1474,7 +1521,7 @@ A &lt;- glv_matrix(glv)           # rows are affected, columns are the actor
 r &lt;- glv_rates(glv)
 A                              # B. thetaiotaomicron: -8.74e-10 on itself, -4.351e-10 from R. intestinalis
                                # R. intestinalis: -4.41e-10 from B. thetaiotaomicron, -9.571e-10 on itself
-solve(A, -r)                   # where it settles: 7.323e8 and 3.634e8 Cells/mL, both above zero
+solve(A, -r)                   # where it settles: 7.323e8 and 3.633e8 Cells/mL, both above zero
 
 args &lt;- as_miasim(glv)         # no scaling: these are coefficients, in 1/(time x abundance)
 tse &lt;- do.call(miaSim::simulateGLV,
@@ -1591,7 +1638,7 @@ its report, and the network sent to Cytoscape:</p>
 command. Other uses:</p>
 <pre>{COMMAND} derive --live --all --out all.json
 {COMMAND} derive SMGDB00000004 --live --format graphml --out study4.graphml
-{COMMAND} derive --live --species Blautia --conditions "Wilkins-Chalgren" --out wc.json
+{COMMAND} derive --live --species Blautia --conditions "Wilkins-Chalgren" --all-partners --out wc.json
 {COMMAND} derive --live --conditions "Wilkins-Chalgren" --out wc_all.json
 {COMMAND} derive SMGDB00000004 --live --format matrix --out study4_matrix.csv
 {COMMAND} derive SMGDB00000004 --live --glv-mode --rates study4_rates.csv --glv study4_glv.zip
@@ -1622,7 +1669,7 @@ see <a href="#qa">the first question</a>.</li>
 <li>the study grows the species only in a community that is neither a two-member co-culture nor a
 drop-out design: grownet has no method for it yet;</li>
 <li>no monoculture was grown under the same conditions: nothing to compare with;</li>
-<li>the experiments are chemostats or serial dilutions: set the growth measure to max, which that mode
+<li>the experiments are chemostats or serial dilutions: set the growth property to max, which that mode
 supports, or tick "Include chemostat and serial dilution experiments" to use them with another measure;</li>
 <li>every edge is low quality: tick "Show low-quality edges";</li>
 <li>every edge is below the absence threshold: open that section of the result, or set k to 0;</li>

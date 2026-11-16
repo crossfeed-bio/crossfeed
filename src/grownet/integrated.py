@@ -19,6 +19,24 @@ Every fit reports its condition number and its R2 against the interaction-free n
 not identified is named rather
 than published as a number.
 
+What it cites, and how far (Karoline, 2026-11-14: "please cite the 2 articles where you've seen the pdf,
+also in the help"; she read their abstracts, and her agent read their full text before citing):
+
+  * Kloppers PH, Greeff JC (2013), Applied Mathematics and Computation 224:817-825,
+    doi:10.1016/j.amc.2013.08.093. Their "Log Integral method" is this equation, fitted without an
+    intercept by least squares, for LV in general. Their rows are consecutive sampling intervals; ours
+    are cumulative from the first fitted point. Their worked example (market shares summing to 1) is not
+    identified: its design is conditioned at about 1000, 1e6 on the normal equations, which
+    `MAX_CONDITION` here refuses, and that is why their three fits disagree.
+  * Dattner I, Klaassen CAJ (2015), Electronic Journal of Statistics 9:1939-1973, doi:10.1214/15-EJS1053.
+    The cumulative integral estimator for ODEs linear in their parameters, with an identifiability
+    condition and sqrt(n) consistency. Their estimator smooths or averages the states before integrating
+    and estimates the initial value; this module integrates raw replicate points by the trapezoid rule
+    and holds ln x(0) at the first fitted point (the free constant was measured and declined, see
+    docs/METHOD_NOTES.md), so their rate is not claimed for these estimates. They work on x, not ln x;
+    the log form is covered by the change of variable u = ln x, u' = r + A exp(u), still linear in the
+    parameters.
+
 Standard library only: the normal equations of a design this small are solved by Gaussian elimination.
 """
 from __future__ import annotations
@@ -1275,7 +1293,7 @@ class IntegratedDeriver:
                 skipped.append((exp.get("name") or _exp_id(exp),
                                 f"{len(members)} members: the integrated form can fit a row from a whole "
                                 "community, which is a new kind of evidence and needs a decision first "
-                                "(see the open decisions in docs/METHOD_NOTES.md)"))
+                                "(see the open decisions in docs/METHOD_NOTES.md in the grownet repository)"))
 
         study_id = study.get("id")
         # `name` is what mGrowthDB calls the study's title; it has no `citation` key and never had, so

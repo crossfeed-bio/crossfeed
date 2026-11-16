@@ -111,9 +111,12 @@ def test_the_prediction_is_the_solution_of_a_x_equals_minus_r_minus_d():
     # A on its own: the sub-community of one organism the chemostat would hold
     assert steady.predicted(block, RATES, 0.0, [A])["values"][A] == pytest.approx(1.0e9)
     assert steady.predicted(block, RATES, 0.040, [A])["values"][A] == pytest.approx(9.0e8)
-    # and a dilution rate above the growth rate washes the organism out, which is not a positive state
+    # and a dilution rate above the growth rate washes the organism out: it is lost, at 0, and a few cells
+    # of it shrink at r - D = 0.4 - 0.5 = -0.1 /h, while A x = -(r - D) alone gives -2.5e8, which is no state
     washed = steady.predicted(block, RATES, 0.5, [A])
-    assert washed["values"][A] < 0 and "not positive" in washed["notes"][A]
+    assert washed["values"][A] == 0.0 and washed["lost"] == [A]
+    assert "cannot grow back in" in washed["notes"][A] and "grow at -0.1 /h" in washed["notes"][A]
+    assert washed["interior"][A] == pytest.approx(-2.5e8)
 
 
 def test_the_check_reports_the_ratio_per_organism():
@@ -132,19 +135,35 @@ def test_the_check_reports_the_ratio_per_organism():
 
 
 def test_an_organism_the_fit_washes_out_and_the_chemostat_lost_too_agrees():
-    """SMGDB00000011's Faecalibacterium duncaniae sits at 0 in every vessel. A fit that sends it to zero
-    or below agrees in direction, and the check says so rather than printing a ratio of infinity."""
+    """SMGDB00000011's Faecalibacterium duncaniae sits at 0 in every vessel. A fit that loses it agrees in
+    direction, and the check says so rather than printing a ratio of infinity. Here the dilution, 0.5 /h,
+    is above both rates (A 0.4, B 0.2), so the package settles with neither."""
     client = _client({(1, A): _flat(1.0, start=1.0e7),      # A fell to about nothing
                       (1, B): _flat(3.0e8)})                # while B held 3e8, so A is 3e-9 of the run
-    exp = _chemostat("E1", "no perturbations", [A, B], [(1, "V1")])
+    exp = _chemostat("E1", "no perturbations", [A, B], [(1, "V1")], dilution="0.5")
     seen = steady.observed(client, [exp])
+    (check,) = steady.check(_package(), RATES, seen)
+    row = next(r for r in check["rows"] if r["organism"] == A)
+    assert row["ratio"] is None and "washes this organism out and the chemostat did too" in row["note"]
+    held = next(r for r in check["rows"] if r["organism"] == B)
+    assert held["predicted"] == 0.0 and "washes this organism out while the chemostat holds it" in held["note"]
+
+
+def test_a_package_with_no_bounded_state_is_not_scored():
+    """A positive diagonal (A limits nothing, it promotes itself) has no stable state at all: A alone has no
+    positive state at A_AA x = -(0.4 - 0.04), B alone at 9e8... is invaded by A, and nothing settles. It used
+    to be scored as A washing out, which is the opposite of what a simulation of it does."""
+    client = _client({(1, A): _flat(3.0e8), (1, B): _flat(3.0e8)})
+    seen = steady.observed(client, [_chemostat("E1", "no perturbations", [A, B], [(1, "V1")])])
     got = _package()
     block = got["matrices"][0]
     here = block["organisms"].index(A)
-    block["matrix"][here][here] = 4.0e-10                   # a positive diagonal: no bounded state
+    block["matrix"][here][here] = 4.0e-10
     (check,) = steady.check(got, RATES, seen)
-    row = next(r for r in check["rows"] if r["organism"] == A)
-    assert row["ratio"] is None and "washes this organism out and the chemostat did too" in row["note"]
+    assert not check["used"]
+    assert "no sub-community of it has a stable steady state this check can stand behind" in check["why_not"]
+    # what the search established, and no claim about the dynamics it did not establish (Craig's agent)
+    assert "oscillates" not in steady.as_text([check])
 
 
 def test_nothing_is_scored_across_abundance_units_or_media():
@@ -485,14 +504,16 @@ def test_a_matrix_of_no_cell_whose_arcs_record_no_medium_says_so():
 
 def test_a_matrix_with_a_cell_recording_no_medium_is_scored_with_a_note():
     """Round 23 of the review: a matrix of a WC cell and a cell recording no medium was scored against a WC
-    chemostat with no note, so the unrecorded cell was taken as measured in WC."""
+    chemostat with no note, so the unrecorded cell was taken as measured in WC. The two effects are
+    inhibitions, (0.3 - 0.4) / 2e8 = -5e-10 each: two facilitations stronger than each organism's own
+    limitation have no bounded state, and such a package is not scored at all (2026-11-13)."""
     WC = "Wilkins-Chalgren Anaerobe Broth (WC)"
 
     def arc(src, tgt, medium):
         return {"source": _gs(src), "target": _gs(tgt), "source_name": src, "target_name": tgt,
-                "effect": "facilitation", "strength": 0.5, "status": "present", "outcome": "quantified",
+                "effect": "inhibition", "strength": -0.5, "status": "present", "outcome": "quantified",
                 "study_id": "S1", "metric": "growth_rate:easylinear:5", "evidence": "biculture",
-                "medium": medium, "partner_abundance": 2.0e8, "metric_with": 0.6, "metric_without": 0.4,
+                "medium": medium, "partner_abundance": 2.0e8, "metric_with": 0.3, "metric_without": 0.4,
                 "partner_abundance_unit": "Cells/mL", "partner_abundance_n": 3}
     got = matrix.coefficients(records_to_network([arc(B, A, WC), arc(A, B, None)]), RATES)
     (block,) = got["matrices"]
@@ -513,3 +534,447 @@ def test_studies_not_read_are_named_beside_the_chemostats_that_were():
     assert "A8 control (SMGDB00000005): not scored, because this run measures OD." in text
     assert "1 study(ies) the search named could not be read, so any chemostat of theirs is not here: " \
            "SMGDB00000009 (HTTP 503)." in text
+
+
+# ---- where the package settles when the full solution is not a state (2026-11-13) ----------------
+
+# Study 7's batch package for three gut organisms, as its report printed it on 2026-11-13 (rows affected,
+# columns actor, order BT, BH, RI; rates in 1/h). The check called BH and RI washed out at D = 0.04 because
+# the solution of A x = -(r - D) with all three present puts both below zero.
+BT, BH, RI = "BT", "BH", "RI"
+STUDY7 = [[-8.543e-10, 0.0, -5.572e-10],
+          [-4.27e-10, -2.351e-10, -2.086e-10],
+          [0.0, 2.198e-09, -7.502e-10]]
+STUDY7_RATES = {"bt": {"rate": 0.7618}, "bh": {"rate": 0.2763}, "ri": {"rate": 0.5806}}
+
+
+def _study7(names=(BT, BH, RI)):
+    keep = [(BT, BH, RI).index(name) for name in names]
+    return {"organisms": list(names), "ids": [name.lower() for name in names], "abundance_unit": "Cells/mL",
+            "media": ["Wilkins-Chalgren Anaerobe Broth (WC)"], "cells": 5,
+            "matrix": [[STUDY7[i][j] for j in keep] for i in keep]}
+
+
+def _seen_study7(values):
+    return [{"name": "A8 control", "study_id": "S5", "experiment": "E8", "medium":
+             "Wilkins-Chalgren Anaerobe Broth", "dilution": 0.04, "vessels": 1, "window": (300.0, 400.0),
+             "why_not": "", "unit": "Cells/mL", "organisms": {k: {"value": v} for k, v in values.items()}}]
+
+
+def test_the_package_settles_on_the_boundary_state_no_lost_organism_can_invade():
+    """By hand, at D = 0.04: g = r - D = (0.7218, 0.2363, 0.5406).
+    With BH absent, RI's row is -7.502e-10 x_RI = -0.5406, so x_RI = 7.206e8, and BT's row is
+    -8.543e-10 x_BT - 5.572e-10 * 7.206e8 = -0.7218, so x_BT = (0.7218 - 0.4015) / 8.543e-10 = 3.749e8.
+    BH's rate there is 0.2363 - 4.27e-10 * 3.749e8 - 2.086e-10 * 7.206e8 = 0.2363 - 0.1601 - 0.1503 =
+    -0.0741 /h, so it cannot grow back in. The Jacobian of BT and RI there is triangular, with eigenvalues
+    3.749e8 * -8.543e-10 = -0.320 and 7.206e8 * -7.502e-10 = -0.541: stable. So BT and RI persist and only BH
+    is lost, while the solution with all three present puts BH at -2.45e9 and RI at -6.45e9."""
+    where = steady.settled(STUDY7, [r - 0.04 for r in (0.7618, 0.2763, 0.5806)])
+    assert where["why_not"] == "" and where["kept"] == [0, 2] and where["lost"] == [1]
+    assert where["state"][0] == pytest.approx(3.749e8, rel=1e-3)
+    assert where["state"][1] == 0.0
+    assert where["state"][2] == pytest.approx(7.206e8, rel=1e-3)
+    assert where["invasion"][1] == pytest.approx(-0.0741, abs=1e-4)
+    assert len(where["states"]) == 1
+
+    got = steady.predicted(_study7(), STUDY7_RATES, 0.04)
+    assert got["lost"] == [BH]
+    assert got["values"][RI] == pytest.approx(7.206e8, rel=1e-3)
+    assert got["interior"][BH] == pytest.approx(-2.446e9, rel=1e-3)
+    assert got["interior"][RI] == pytest.approx(-6.446e9, rel=1e-3)
+
+
+def test_the_check_names_only_the_organism_the_package_loses():
+    """The same package against a chemostat holding all three (observed numbers made up): RI gets a ratio,
+    7.206e8 / 4e8 = 1.80, and only BH is called washed out by the fit. The full solution is printed as the
+    reason solve(A, -(r - D)) disagrees, not as the prediction."""
+    package = {"matrices": [_study7()]}
+    (check,) = steady.check(package, STUDY7_RATES, _seen_study7({BT: 2.0e8, BH: 1.0e8, RI: 4.0e8}))
+    assert check["used"]
+    rows = {row["organism"]: row for row in check["rows"]}
+    assert rows[RI]["ratio"] == pytest.approx(1.8015, rel=1e-3) and not rows[RI]["lost"]
+    assert rows[BT]["ratio"] == pytest.approx(1.8745, rel=1e-3)
+    assert rows[BH]["lost"] and rows[BH]["predicted"] == 0.0
+    assert "washes this organism out while the chemostat holds it" in rows[BH]["note"]
+    assert "cannot grow back in where the package settles, with BT, RI" in rows[BH]["note"]
+    assert "grow at -0.074 /h" in rows[BH]["note"]
+    text = steady.as_text([check])
+    assert "the package settles with BT, RI, and loses BH" in text
+    assert "RI: predicted 7.206e+08, observed 4e+08, 1.802x observed" in text
+    assert "puts BH at -2.446e+09, RI at -6.446e+09, which is no state" in text
+    assert "RI: predicted" in text and "RI: predicted -" not in text
+
+
+def test_a_feasible_full_solution_is_where_it_settles_and_nothing_changes():
+    """BT and RI alone: the full solution of A x = -(r - D) is (3.749e8, 7.206e8), the same numbers as above,
+    both above zero and stable, so the search returns exactly that solution, nothing is lost, and the check
+    prints the ratios with no line about a lost organism or the full solution."""
+    block = _study7((BT, RI))
+    rhs = [-(0.7618 - 0.04), -(0.5806 - 0.04)]
+    full = steady.solve([row[:] for row in block["matrix"]], rhs)
+    where = steady.settled(block["matrix"], [-value for value in rhs])
+    assert where["lost"] == [] and where["state"] == pytest.approx(full, rel=1e-12)
+    (check,) = steady.check({"matrices": [block]}, STUDY7_RATES, _seen_study7({BT: 2.0e8, RI: 4.0e8}))
+    assert [row["ratio"] for row in check["rows"]] == pytest.approx([1.8745, 1.8015], rel=1e-3)
+    text = steady.as_text([check])
+    assert "and loses" not in text and "every organism present" not in text and "washes" not in text
+
+
+def test_two_stable_states_are_named_rather_than_one_chosen():
+    """Two competitors each inhibiting the other twice as hard as itself: A = [[-1, -2], [-2, -1]], g = (1, 1).
+    Each alone settles at 1 and the other then grows at 1 - 2 = -1, so both are stable; the interior state
+    (1/3, 1/3) has eigenvalues (1/3)(-1 +/- 2), one positive. Where it settles depends on the start."""
+    where = steady.settled([[-1.0, -2.0], [-2.0, -1.0]], [1.0, 1.0])
+    assert where["state"] is None and len(where["states"]) == 2
+    assert "2 stable steady states" in where["why_not"] and "where it starts" in where["why_not"]
+
+
+def test_mutual_facilitation_stronger_than_self_limitation_has_no_state():
+    """A = [[-1, 2], [2, -1]], g = (1, 1): either alone settles at 1 and the other then grows at 1 + 2 = 3,
+    and the full solution is (-1, -1), so nothing settles: the system grows without bound."""
+    where = steady.settled([[-1.0, 2.0], [2.0, -1.0]], [1.0, 1.0])
+    assert where["state"] is None and where["states"] == []
+    assert "no sub-community of it has a stable steady state this check can stand behind" in where["why_not"]
+
+
+def test_an_ill_conditioned_candidate_is_refused_before_its_stability_is_judged():
+    """Craig's agent, reviewing: the conditioning gate ran once, after the loop, so a candidate whose
+    stability was judged on an ill-conditioned A_SS could silently decide the verdict.
+
+    Species 1 and 2 nearly duplicate each other: A_12 = A_21 = -1, A_11 = -1, A_22 = -(1 + 1e-8), and
+    g = (1, 1 + 5e-9), so their pair solves to x_1 = x_2 = 0.5 (5e-9 / 1e-8 = 0.5) with a condition number
+    of about 4e8, above the 1e8 limit. Species 3 competes with both at -2 and alone settles at 1, where 1 and
+    2 grow at 1 - 2 = -1: a well-conditioned stable state. At the pair's state species 3 grows at
+    1 - 2 * (0.5 + 0.5) = -1, so the pair is a candidate too. The search used to call this two stable
+    states; it now says one candidate could not be judged, and names no state."""
+    eps, delta = 1e-8, 5e-9
+    matrix = [[-1.0, -1.0, -2.0], [-1.0, -(1.0 + eps), -2.0], [-2.0, -2.0, -1.0]]
+    where = steady.settled(matrix, [1.0, 1.0 + delta, 1.0])
+    assert where["state"] is None
+    assert "too ill-conditioned to judge" in where["why_not"] and "of 2 organism(s)" in where["why_not"]
+    assert "no state is named" in where["why_not"]
+    # the well-conditioned state is still found, so the refusal is the pair's doing and not a lost search
+    assert [state["kept"] for state in where["states"]] == [[2]]
+
+
+def test_a_state_on_the_edge_is_found_once():
+    """Craig's agent, reviewing: feasibility was strict and invasion relative, so a state on the edge
+    between S and S without k could count twice. A = [[-1, 0], [-1, -1]], g = (1, 1 + 1e-13): species 1
+    alone settles at 1, where species 2 grows at 1e-13, rounding (under 1e-9 of the largest rate), so it
+    does not grow back in. The pair solves to x_2 = 1e-13, the same point, and used to be admitted too, which
+    reported two stable states. Both boundaries now treat 1e-9 of the largest value as zero: one state."""
+    where = steady.settled([[-1.0, 0.0], [-1.0, -1.0]], [1.0, 1.0 + 1e-13])
+    assert where["why_not"] == "" and where["kept"] == [0] and where["lost"] == [1]
+    assert where["state"][0] == pytest.approx(1.0)
+
+
+def test_a_positive_but_unstable_full_solution_is_not_where_the_readme_says_it_settles():
+    """The README printed the solution with every organism present as "where it settles" whenever all of it
+    was above zero, while the chemostat check, reading `settled`, predicted another state. Three organisms
+    with r = 0.4 /h and K = 1e9 and A / (r / K) =
+        [[-1, -1.68, -0.8], [-0.44, -1, -1.58], [-2.49, -1.03, -1]]
+    have the positive full solution (1.027e8, 3.526e8, 3.811e8), which is unstable: miaSim's simulateGLV
+    started 1% beside it ends at t = 2000 with B at 1.00e9 and A and C under 1e-2. `settled` finds that state
+    alone; the README now names it and says why the full solution is not it."""
+    import math as _math
+
+    from test_glv_coefficients import _arc, _net, _rate
+
+    from grownet import matrix
+    scaled = [[-1.0, -1.68, -0.8], [-0.44, -1.0, -1.58], [-2.49, -1.03, -1.0]]
+    ids, rate, partner, capacity = ["a", "b", "c"], 0.4, 2.0e8, 1.0e9
+    arcs = [_arc(ids[j], ids[i], _math.log2(1 + scaled[i][j] * partner / capacity), x_j=partner,
+                 metric_without=rate, metric_with=rate * (1 + scaled[i][j] * partner / capacity))
+            for i in range(3) for j in range(3) if i != j]
+    rates = {k: _rate(k.upper(), rate, capacity) for k in ids}
+    net = _net(arcs)
+    got = matrix.coefficients(net, rates)
+    (block,) = got["matrices"]
+    assert block["not_above_zero"] == [] and block["settled"]["kept"] == [1]
+    readme = matrix.readme_from(got, net, rates)
+    assert "where it settles (in Cells/mL): B 1e+09, with A, C lost" in readme
+    assert "is positive but not stable, so a simulation started near it leaves it" in readme
+    assert "where it settles (the solution of A x = -r" not in readme
+
+
+def test_a_three_organism_state_unstable_only_by_its_last_hurwitz_condition_is_refused():
+    """A = [[-1, -1.707, -0.664], [-1.709, -1, 0.568], [-0.996, -0.475, -1]], g = (1, 1, 1). The full solution
+    (0.6417, 0.0853, 0.3204) is positive and no outsider is left to invade, so only stability can refuse it.
+    R's eigen() of diag(x) A there gives (-1, -0.2439, +0.1966); its characteristic polynomial is
+    1, 1.0473, -0.00062, -0.04796, and the last coefficient is negative, which only the third Hurwitz
+    condition sees. The two stable states are {1, 3} at (0.9922, 0.0118) and {2, 3} at (1.2348, 0.4135),
+    eigenvalues (-1, -0.00397) and (-1, -0.6483) by eigen()."""
+    matrix_a = [[-1.0, -1.707, -0.664], [-1.709, -1.0, 0.568], [-0.996, -0.475, -1.0]]
+    where = steady.settled(matrix_a, [1.0, 1.0, 1.0])
+    assert sorted(state["kept"] for state in where["states"]) == [[0, 2], [1, 2]]
+    assert "2 stable steady states" in where["why_not"]
+
+
+def test_a_system_larger_than_the_search_says_so_rather_than_guess():
+    """Every sub-community of n organisms is 2^n systems; past MAX_SETTLED the search says it did not run."""
+    n = steady.MAX_SETTLED + 1
+    matrix_a = [[-1.0 if i == j else -0.1 for j in range(n)] for i in range(n)]
+    where = steady.settled(matrix_a, [1.0] * n)
+    assert where["state"] is None and where["states"] == []
+    assert f"it holds {n} organisms" in where["why_not"] and f"at most {steady.MAX_SETTLED}" in where["why_not"]
+    assert steady.MAX_SETTLED == 12
+    assert steady.settled([row[:12] for row in matrix_a[:12]], [1.0] * 12)["state"] is not None
+
+
+def test_a_state_on_the_edge_is_found_once_at_the_scale_of_a_real_package():
+    """The edge case above at the scale a package carries: abundances near 1e9 and coefficients near 1e-9.
+    The tolerance is relative to the largest value of its kind, so x_2 = 1e-4, a ten-billionth of x_1, is
+    zero, and one state is found; an absolute tolerance of 1e-9 would admit the pair and report two."""
+    where = steady.settled([[-1e-9, 0.0], [-1e-9, -1e-9]], [1.0, 1.0 + 1e-13])
+    assert where["why_not"] == "" and where["kept"] == [0] and where["lost"] == [1]
+    assert where["state"][0] == pytest.approx(1e9)
+
+
+def test_a_stable_interior_the_search_did_not_reach_is_not_called_unstable():
+    """Craig's agent, reviewing: 13 organisms with -1 on the diagonal and -0.01 off it, r all 1, are past the
+    search's limit, so `settled` names no state. The interior, every entry 1 / (1 + 12 x 0.01) = 0.8929, is
+    positive, and diag(x) A has eigenvalues -0.8929 x (1 - 0.01) = -0.884 (twelve times) and
+    -0.8929 x (1 + 12 x 0.01) = -1.0, all negative: stable. The README said "positive but not stable" from the
+    search's reason alone; it now judges the interior itself and says it is stable."""
+    from test_glv_coefficients import _arc, _net, _rate
+
+    from grownet import matrix
+    n, rate, partner, capacity = 13, 1.0, 1.0e8, 1.0e9
+    ids = [f"o{k:02d}" for k in range(n)]
+    # each arc's ratio form gives A_ij = r (2^L - 1) / x_j = -0.01 r / K: 2^L = 1 - 0.01 x_j / K
+    arcs = [_arc(ids[j], ids[i], math.log2(1 - 0.01 * partner / capacity), x_j=partner, metric_without=rate,
+                 metric_with=rate * (1 - 0.01 * partner / capacity)) for i in range(n) for j in range(n) if i != j]
+    rates = {k: _rate(k.upper(), rate, capacity) for k in ids}
+    net = _net(arcs)
+    got = matrix.coefficients(net, rates)
+    (block,) = got["matrices"]
+    assert block["settled"]["state"] is None and "13 organisms" in block["settled"]["why_not"]
+    assert block["interior_stable"] is True
+    assert block["equilibrium"][0] == pytest.approx(capacity / 1.12)
+    readme = matrix.readme_from(got, net, rates)
+    assert "is positive and stable" in readme and "is positive but not stable" not in readme
+
+
+CASE_1533_A = [[-1.5644657075932109e-09, 3.685535044679989e-09, 0, -2.614694627373095e-10, 2.5466337085787376e-09],
+               [-3.1080612121694585e-09, -2.553077041655804e-09, 6.692778644877354e-09, -7.94673604688787e-10, 0],
+               [0, 0, -4.917811586053946e-10, -6.694688668382147e-11, -3.0794785514338433e-10],
+               [-7.140126204778039e-11, 2.9199654720606344e-10, 1.826703665435828e-10, -6.354990967151219e-10, 0],
+               [-9.9770857340064e-11, -6.161008263148293e-11, 8.990334768103348e-11, -6.457742959183805e-10,
+                -4.4378303134960364e-10]]
+CASE_1533_R = [0.44385349964023496, 1.350159118624411, 0.11422638336543481, 1.0816340504868598, 1.0992983909745944]
+
+
+def test_a_stable_state_whose_abundances_span_many_orders_is_found():
+    """Five organisms at package scale whose full state is stable while its abundances span about six
+    orders: R's eigen() gives a largest real part of -2.6e-6 there, and miaSim started 1% beside it stays,
+    while from 1e7 each it goes to {3, 4, 5}. So there are two stable states. The Routh-Hurwitz test on the
+    characteristic polynomial lost its digits here (condition numbers in the hundreds, so the conditioning
+    gate did not see it), refused the full state, and named {3, 4, 5} alone: a confident single prediction
+    for a bistable system. The eigenvalues are now computed directly."""
+    where = steady.settled(CASE_1533_A, CASE_1533_R)
+    assert sorted(state["kept"] for state in where["states"]) == [[0, 1, 2, 3, 4], [2, 3, 4]]
+    assert where["state"] is None and "2 stable steady states" in where["why_not"]
+
+
+def test_the_eigenvalues_are_those_of_known_matrices():
+    """A rotation has +/- i; a triangular matrix its diagonal; the 3-organism case above, by R's eigen(),
+    -1, -0.2439 and +0.1966 for diag(x) A at x = (0.6417, 0.0853, 0.3204)."""
+    def close(got, want):
+        return all(min(abs(complex(*g) - w) for g in got) < 1e-9 for w in want)
+    assert close(steady._eigenvalues([[0.0, -1.0], [1.0, 0.0]]), [1j, -1j])
+    assert close(steady._eigenvalues([[2.0, 5.0, 7.0], [0.0, -3.0, 1.0], [0.0, 0.0, 0.5]]), [2.0, -3.0, 0.5])
+    matrix_a = [[-1.0, -1.707, -0.664], [-1.709, -1.0, 0.568], [-0.996, -0.475, -1.0]]
+    x = steady.solve([row[:] for row in matrix_a], [-1.0, -1.0, -1.0])
+    values = steady._eigenvalues([[x[i] * matrix_a[i][j] for j in range(3)] for i in range(3)])
+    assert sorted(round(re, 4) for re, _ in values) == [-1.0, -0.2439, 0.1966]
+    assert steady._stable([[-1.0, 0.0], [0.0, -2.0]]) and not steady._stable([[-1.0, 0.0], [0.0, 0.0]])
+
+
+def test_the_readme_says_a_stable_interior_is_one_of_the_states_when_the_search_names_it():
+    """Bistable, with the full community one of the two stable states: the README said "positive but not
+    stable" of it. It now says it is one of the states named."""
+    from grownet import matrix
+    where = steady.settled(CASE_1533_A, CASE_1533_R)
+    interior = steady.solve([row[:] for row in CASE_1533_A], [-r for r in CASE_1533_R])
+    block = {"organisms": list("ABCDE"), "ids": list("abcde"), "equilibrium": interior, "not_above_zero": [],
+             "settled": where, "interior_stable": True, "abundance_unit": "Cells/mL"}
+    text = "\n".join(matrix._settled_lines(block, {k: {"unit": "1/h"} for k in "abcde"}))
+    assert "NOT FOUND, because it has 2 stable steady states" in text
+    assert "is one of those stable states" in text and "not stable" not in text
+
+
+def test_the_check_refuses_an_organism_without_a_rate_as_the_readme_does():
+    """An organism that grows only with a partner stays in its matrix with no growth rate. The README says
+    the equilibrium is NOT COMPUTED for that reason; the check entered the rate as 0 without a word and
+    scored the package. It now refuses with the README's reason."""
+    block = {"organisms": ["A", "B"], "ids": ["a", "b"], "matrix": [[-5e-9, 4e-9], [3e-10, -4e-10]]}
+    got = steady.predicted(block, {"a": {"rate": None}, "b": {"rate": 0.2}}, 0.0)
+    assert got["values"] == {} and "not every organism in it has a growth rate (A)" in got["why_not"]
+    assert steady.predicted(block, {"a": {"rate": 0.1}, "b": {"rate": 0.2}}, 0.0)["why_not"] != got["why_not"]
+
+
+def test_an_ill_conditioned_package_still_says_where_it_settles_as_the_check_does():
+    """A and B nearly duplicate each other, so the full system's condition number is about 4e12 and the
+    README refuses to solve it, while the check named a state from `settled`, which judges each
+    sub-community on its own conditioning, and printed the full solution the README refused (B at -5e20).
+    Both now say A 8.163e8 and C 9.184e8 with B lost (simulations from several starts in R end there), and
+    the check prints no full solution for the ill-conditioned system."""
+    from test_glv_coefficients import _arc, _net, _rate
+
+    from grownet import matrix
+    a_matrix = [[-1e-9, -1e-9, -2e-10], [-1e-9, -1.000000000001e-9, -2e-10], [-1e-10, -1e-10, -1e-9]]
+    r, capacity = [1.0, 0.5, 1.0], [1e9, 499999999.9995, 1e9]
+    ids, partner = ["a", "b", "c"], 2.0e8
+    arcs = [_arc(ids[j], ids[i], math.log2(1 + a_matrix[i][j] * partner / r[i]), x_j=partner,
+                 metric_without=r[i], metric_with=r[i] * (1 + a_matrix[i][j] * partner / r[i]))
+            for i in range(3) for j in range(3) if i != j]
+    rates = {ids[k]: _rate(ids[k].upper(), r[k], capacity[k]) for k in range(3)}
+    net = _net(arcs)
+    got = matrix.coefficients(net, rates)
+    (block,) = got["matrices"]
+    readme = matrix.readme_from(got, net, rates)
+    assert "too ill-conditioned to solve" in readme
+    assert "where it settles (in Cells/mL): A 8.163e+08, C 9.184e+08, with B lost" in readme
+    where = steady.predicted(block, rates, 0.0)
+    assert where["values"]["A"] == pytest.approx(8.163e8, rel=1e-3) and where["values"]["B"] == 0.0
+    assert where["interior"] == {}
+
+
+GRADED_J = [[0.23348292914801738, -4.0724786724608233e-07, 1.8213748549354252e-06],
+            [-217220.06224432815, -0.38315103537673567, -1.2484793574748145],
+            [-90752.11294211698, 0.031059117176109843, -0.3833000564389171]]
+INT7 = [[2.0, -2.0, 1.0, 0.0, 2.0, 0.0, 1.0], [1.0, 1.0, 0.0, -1.0, -1.0, -2.0, 0.0],
+        [-1.0, 1.0, -2.0, 2.0, 0.0, -1.0, -1.0], [1.0, 1.0, 2.0, 1.0, -2.0, -2.0, 0.0],
+        [1.0, -1.0, 2.0, 0.0, 2.0, 1.0, -2.0], [1.0, 1.0, 0.0, 2.0, -2.0, 2.0, 0.0],
+        [0.0, -1.0, 0.0, -2.0, 2.0, 1.0, 2.0]]
+INT7_R = [(2.1708756236356797, 3.836666782978507), (2.1708756236356797, -3.836666782978507),
+          (-3.270461902338345, 0.0), (2.820024681854635, 0.8982222776504858),
+          (2.820024681854635, -0.8982222776504858), (0.6443306456788594, 0.9494985119371734),
+          (0.6443306456788594, -0.9494985119371734)]
+
+
+def test_eigenvalues_through_every_path_of_the_qr_iteration():
+    """The cyclic permutation needs about fifteen iterations, so it goes through the exceptional shift, and
+    has 1 and -1/2 +/- (sqrt 3)/2 i; a 7x7 integer matrix's seven eigenvalues are those R's eigen() gives,
+    to 1e-12. Together they fail a port that drops the shift, the shift's running total, the sign flip of
+    a Householder step or the total at a 1x1 deflation (found in review: each survived the earlier tests)."""
+    def close(got, want, tol=1e-12):
+        return len(got) == len(want) and all(min(abs(complex(*g) - complex(*w)) for g in got) < tol for w in want)
+    s = 3 ** 0.5 / 2
+    assert close(steady._eigenvalues([[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
+                 [(1.0, 0.0), (-0.5, s), (-0.5, -s)])
+    assert close(steady._eigenvalues(INT7), INT7_R, tol=1e-10)
+
+
+def test_a_graded_jacobian_is_balanced_before_its_eigenvalues_are_judged():
+    """A state's Jacobian diag(x) A with x from 1.2e3 to 2e9 has entries from 4e-7 to 2e5. R's eigen()
+    gives -0.53297 and +1.470e-8 +/- 0.28899i: unstable. Without balancing the port gave -1.35e-6 for the
+    pair and called it stable; balanced, it gives R's eigenvalues."""
+    values = steady._eigenvalues(GRADED_J)
+    assert max(re for re, _ in values) == pytest.approx(1.470052830e-08, rel=1e-6)
+    assert not steady._stable(GRADED_J)
+
+
+def test_an_eigenvalue_that_is_zero_to_rounding_is_not_stable():
+    """STABLE_MARGIN: a real part of -1e-13 against a largest eigenvalue of 1 is zero to rounding."""
+    assert not steady._stable([[-1.0, 0.0], [0.0, -1e-13]])
+    assert steady._stable([[-1.0, 0.0], [0.0, -1e-6]])
+
+
+def test_an_iteration_that_does_not_converge_is_said_not_scored(monkeypatch):
+    """No case found in review makes the QR iteration fail, so it is forced here: the candidate is not
+    judged, the reason says the computation did not converge rather than citing a condition number, and the
+    package README says nothing about the full solution's stability rather than guessing."""
+    def fail(rows):
+        raise ArithmeticError("forced")
+    monkeypatch.setattr(steady, "_eigenvalues", fail)
+    where = steady.settled([[-1.0, -0.5], [-0.3, -1.0]], [1.0, 1.0])
+    assert where["state"] is None and "did not converge" in where["why_not"]
+    assert "condition number" not in where["why_not"]
+
+
+def test_the_check_prints_every_line_of_a_scored_chemostat():
+    """Each line a reader of steady_state_check.txt gets, in full (found in review: the without-interactions
+    clause, the organism left out, the dilution and the vessel count could each change unseen).
+
+    The package of `_package`: A_AA = A_BB = -4e-10, A_AB = 0.4 x (2^1 - 1) / 2e8 = 2e-9, A_BA = 0. Under
+    D = 0.04: B = (0.2 - 0.04) / 4e-10 = 4e8; A = (0.36 + 2e-9 x 4e8) / 4e-10 = 2.9e9, and with the
+    interaction set to 0, A = 0.36 / 4e-10 = 9e8. Observed in two vessels: A 1.45e9 (2x, and 9e8 / 1.45e9 =
+    0.6207x without interactions), B 2e8 (2x, and 4e8 / 2e8 = 2x). C is in the chemostat only."""
+    from test_growth_rates import _client as client_of
+    other = "Bacteroides thetaiotaomicron VPI-5482"
+    client = client_of({(v, name): _flat(value) for v in (1, 2)
+                        for name, value in ((A, 1.45e9), (B, 2.0e8), (other, 1.0e7))})
+    exp = _chemostat("E1", "no perturbations", [A, B, other], [(1, "V1"), (2, "V2")])
+    (check,) = steady.check(_package(), RATES, steady.observed(client, [exp]))
+    lines = steady.as_text([check]).splitlines()
+    block = lines[lines.index("  no perturbations (E1), dilution rate 0.04 /h, 2 vessel(s):"):]
+    assert block[1:4] == [
+        f"      {B}: predicted 4e+08, observed 2e+08, 2x observed, and 2x with every interaction set to 0",
+        f"      {A}: predicted 2.9e+09, observed 1.45e+09, 2x observed, and 0.6207x with every interaction "
+        "set to 0",
+        f"      {other}: in the chemostat and not in the package, so not scored"]
+
+
+def test_an_organism_within_rounding_of_zero_is_lost_once_not_kept_as_a_second_state():
+    """One tolerance on both boundaries, the member side here (the invasion side is pinned above). With
+    A = diag(-1, -1) and r = (1, 5e-10), the second organism's own state is 5e-10, which is zero to the
+    tolerance: one state, {1} at 1 with the second lost, not two stable states differing by 5e-10."""
+    where = steady.settled([[-1.0, 0.0], [0.0, -1.0]], [1.0, 5e-10])
+    assert where["kept"] == [0] and where["state"] == pytest.approx([1.0, 0.0])
+
+
+def test_an_eigenvalue_within_the_margin_of_zero_is_not_called_stable():
+    """A = [[-e, 1], [-1, -e]] with e = 1e-12 and r chosen so the full state is (1, 1): diag(x) A has
+    eigenvalues -1e-12 +/- i, negative only by rounding's width. Without `STABLE_MARGIN` that state was named
+    as where the system settles."""
+    eps = 1e-12
+    where = steady.settled([[-eps, 1.0], [-1.0, -eps]], [eps - 1.0, 1.0 + eps])
+    assert where["state"] is None
+
+
+def test_the_readme_says_every_organism_lost_and_the_whole_sentence_on_an_unsearched_stable_interior():
+    """Two README sentences pinned in full: a settled state that keeps nobody says so, and a stable interior
+    the search did not name says that the search did not establish it is the only state."""
+    from grownet import matrix
+    rates = {k: {"unit": "1/h"} for k in "ab"}
+    gone = {"organisms": ["A", "B"], "ids": ["a", "b"], "equilibrium": [-1.0, -2.0], "not_above_zero": ["A", "B"],
+            "settled": {"state": [0.0, 0.0], "kept": [], "lost": [0, 1], "invasion": [-0.1, -0.2]},
+            "abundance_unit": "Cells/mL"}
+    assert matrix._settled_lines(gone, rates)[0] == "      where it settles (in Cells/mL): every organism lost"
+    unsearched = {"organisms": ["A", "B"], "ids": ["a", "b"], "equilibrium": [1.0, 2.0], "not_above_zero": [],
+                  "settled": {"state": None, "why_not": "it was not searched"}, "interior_stable": True,
+                  "abundance_unit": "Cells/mL"}
+    assert matrix._settled_lines(unsearched, rates)[1:] == [
+        "          The solution of A x = -r with every organism present, A 1, B 2,",
+        "          is positive and stable, so a simulation started near it stays there; the search",
+        "          above did not establish whether it is the only state the system can settle in."]
+
+
+def test_the_readme_says_nothing_of_stability_it_could_not_compute_and_gives_the_condition_number(
+        monkeypatch):
+    """The feasible package of `_package` (A at 1e9 and B at 5e8 with r - D = r): its README gives the
+    condition number beside where it settles. With the stability computation failing, the README must not
+    call the full solution "positive but not stable": nothing was established."""
+    from grownet import matrix
+    got = _package()
+    readme = matrix.readme_from(got, records_to_network([]), RATES)
+    assert "[condition number " in readme
+    monkeypatch.setattr(steady, "_stable", lambda rows: (_ for _ in ()).throw(ArithmeticError("forced")))
+    got = _package()
+    (block,) = got["matrices"]
+    assert block["interior_stable"] is None
+    assert "not stable" not in matrix.readme_from(got, records_to_network([]), RATES)
+
+
+def test_the_refusal_names_the_worst_ill_conditioned_candidate_and_says_infinite_in_words(monkeypatch):
+    """The three-organism case of the conditioning test above brings three candidates to the gate: {1, 2},
+    {3} and {2, 3}. With each one-organism candidate set to a condition number of 2e8 and each pair to 5e8,
+    all above the 1e8 limit, the reason counts all three and names the worst: a pair, at 5e+08 (the best
+    would be the single organism at 2e+08). A singular one is "infinite", not "inf"."""
+    matrix = [[-1.0, -1.0, -2.0], [-1.0, -(1.0 + 1e-8), -2.0], [-2.0, -2.0, -1.0]]
+    for pair, said in ((5.0e8, "5e+08"), (float("inf"), "infinite")):
+        monkeypatch.setattr(steady, "condition_of", lambda rows, pair=pair: 2.0e8 if len(rows) == 1 else pair)
+        why = steady.settled(matrix, [1.0, 1.0 + 5e-9, 1.0])["why_not"]
+        assert why.startswith("3 sub-community(ies) it could settle on are too ill-conditioned")
+        assert f"(the worst, of 2 organism(s), has a condition number of {said}, above" in why

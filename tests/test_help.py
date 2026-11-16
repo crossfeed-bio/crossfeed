@@ -3,7 +3,9 @@ import argparse
 import dataclasses
 import datetime
 import json
+import math
 import re
+from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import pytest
@@ -507,6 +509,39 @@ def test_the_help_says_the_adjusted_p_value_is_the_q_value():
     assert help.SETTINGS["max_adjusted_p"][0] == "Filter on the q-value"
 
 
+def test_the_help_says_which_standard_deviation_the_threshold_uses():
+    """Karoline, 2026-11-13, reading "Its standard deviation is its spread over the replicates": "it is not
+    clear which standard deviation". The sets are unpaired, so it is sqrt(var_with + var_without), and the
+    help now says so and matches the code; the integrated form's sd is the replicate spread with the
+    monoculture stage's and the rate selection's variances added, as `_arc_statistics` computes it.
+    Hand computed: with log2 values [1, 3] and without [0, 2], each sample variance is 2, so
+    sd = sqrt(2 + 2) = 2 and se = sqrt(2/2 + 2/2) = 1.414, around a log2 mean of 2 - 1 = 1."""
+    text = visible(PAGE)
+    # the section alone, ending at the next heading, so the attribute table further down cannot satisfy
+    # what this paragraph has to say (Craig's agent, reviewing)
+    # the title also appears in the contents and in links, so the heading is the one right before the
+    # section's first paragraph
+    start = text.rindex("How an interaction is decided", 0, text.index("The effect. For each arc"))
+    decided = text[start:text.index("The matrix, the growth rates and gLV", start)]
+    assert "The call." in decided and "Benjamini-Hochberg" in decided and "Arc attributes" not in decided
+    assert "sqrt(var_with + var_without)" in decided and "no strength per replicate" in decided
+    assert "sqrt(var_with / n_with + var_without / n_without)" in decided
+    assert "Its standard deviation is its spread over the replicates" not in decided
+    # the integrated form's published sd is not the replicate spread alone: _arc_statistics adds the
+    # monoculture stage's variance and the rate selection variance (Craig's agent, reviewing)
+    assert "sqrt(sd_replicates^2 + var_stage + var_selection)" in decided
+    assert "only where neither was measured" in decided
+    assert "over runs where runs were pooled" in decided
+    attribute = help.EDGE_ATTRIBUTES["sd"]
+    assert "sqrt(var_with + var_without)" in attribute
+    assert "sqrt(sd_replicates^2 + var_stage + var_selection)" in attribute
+    assert "over runs where runs were pooled" in attribute
+    got = interaction._compare([1.0, 3.0], [0.0, 2.0])
+    assert got["mean"] == pytest.approx(1.0)
+    assert got["sd"] == pytest.approx(2.0)
+    assert got["se"] == pytest.approx(math.sqrt(2.0))
+
+
 def test_the_first_advanced_setting_is_called_growth_property():
     """Karoline, 2026-10-03: "Growth measure (the first entry) should be Growth property"."""
     assert help.SETTINGS["metric"][0] == "Growth property"
@@ -579,7 +614,7 @@ def test_the_glv_example_section_gives_every_step_of_running_it_in_miasim():
         assert call in section, call
     # what to expect, so a reader can tell it worked, and where the numbers come from
     assert "solve(A, -r)" in section
-    assert "7.323e8" in section and "3.634e8" in section
+    assert "7.323e8" in section and "3.633e8" in section
     # and the step that holds the prediction against the data, which is what a reader needs to catch a
     # package that settles somewhere the co-culture never was: agreeing with `solve(A, -r)` only says
     # the simulation and the package agree with each other
@@ -759,3 +794,24 @@ def _names_missing_from_the_lists(body: str) -> list:
     plain = " ".join(re.sub(r"<[^>]+>", " ", plain).split())
     whole = re.findall(rf"\b[A-Z][a-z]{{3,}} [a-z]{{4,}}{LATIN}\b", plain)
     return half + whole
+
+
+def test_the_help_and_the_readme_cite_the_two_papers_behind_the_integrated_form():
+    """Karoline, 2026-11-14: "please cite the 2 articles where you've seen the pdf, also in the help".
+    The two are Kloppers & Greeff 2013 (the Log Integral method for Lotka-Volterra) and Dattner & Klaassen
+    2015 (the integral estimator's identifiability and consistency); she read their abstracts and her agent
+    their full text before citing. The
+    citation sits in the integrated form's own paragraph, and it says how far the convergence result
+    reaches, since grownet holds the first fitted point fixed where Dattner and Klaassen estimate it."""
+    text = visible(PAGE)
+    start = text.index("Integrating dx_i/dt")
+    # one space for every line break, since the help wraps its paragraphs
+    section = " ".join(text[start:text.index("The model has no lag term", start)].split())
+    for needed in ("Kloppers and Greeff (2013)", "Dattner and Klaassen (2015)",
+                   "doi:10.1016/j.amc.2013.08.093", "doi:10.1214/15-EJS1053",
+                   "holds the first fitted point fixed"):
+        assert needed in section, needed
+    readme = " ".join((Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8").split())
+    for needed in ("Kloppers and Greeff (2013)", "Dattner and Klaassen (2015)",
+                   "doi:10.1016/j.amc.2013.08.093", "doi:10.1214/15-EJS1053"):
+        assert needed in readme, needed

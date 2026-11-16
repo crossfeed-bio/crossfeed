@@ -333,14 +333,18 @@ def test_a_new_record_field_cannot_ship_under_an_unchanged_format_id():
 
     # and the check is what refuses the three ways this can go wrong, read off the manifest rather than
     # by editing the live dataclasses, which the gate reads from the running package
+    # The committed file is put back byte for byte. Read and written back as text, it came back with
+    # Windows line endings on Windows, which translates "\n" on the way out, so every run of the suite
+    # there left a 419-line diff in the one file whose changes move the format id (Craig's agent, #330).
+    path = root / "schema" / "format_fields.json"
+    committed = path.read_bytes()
+
     def verdict(current, formats):
-        path = root / "schema" / "format_fields.json"
-        kept = path.read_text(encoding="utf-8")
         try:
             path.write_text(json.dumps({"current": current, "formats": formats}), encoding="utf-8")
             return check_format_fields([])
         finally:
-            path.write_text(kept, encoding="utf-8")
+            path.write_bytes(committed)
 
     live = {k: sorted(f.name for f in fields(c))
             for k, c in (("edge", Edge), ("node", Node), ("study", Study))}
@@ -360,6 +364,8 @@ def test_a_new_record_field_cannot_ship_under_an_unchanged_format_id():
     problems = verdict("grownet.interaction_network/v9", {"grownet.interaction_network/v9": live})
     assert any("says the current format is" in p for p in problems), problems
     assert any("has no entry for" in p for p in problems), problems
+    # and the committed manifest is exactly as it was, line endings included
+    assert path.read_bytes() == committed
 
 
 def test_the_format_check_refuses_to_answer_from_stale_bytecode(monkeypatch):

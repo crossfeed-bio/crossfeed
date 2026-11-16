@@ -977,6 +977,14 @@ def test_an_arc_says_the_other_names_its_studies_give_an_organism():
     on_a = [r for r in records if r["target"] == "ncbi:411483"]
     assert on_a and all(f"{PRAUSNITZII} (in S1), {third} (in S0)" in n and "; " not in n
                         for r in on_a for n in r["notes"] if "is named differently" in n)
+    # two undated rivals take the plural verb ("as S1, S2 carries" was raised in review of the pooling):
+    # S1 and S0 have no date, S2 has one and is shown
+    client, studies = _split(a_in_s2=DUNCANIAE, published=("", "2024-02-01"),
+                             extra_curves={(i, third): _startup(0.5, 0.04, 4.0, UNIT) for i in (31, 32)})
+    records, _ = SteadyStateDeriver(client=client).derive_many(
+        studies + [({"id": "S0", "name": "z", "publishedAt": ""}, [s3])])
+    notes = [n for r in records if r["target"] == "ncbi:411483" for n in r["notes"] if "is named differently" in n]
+    assert notes and all(n.endswith(" carry no publication date") and "carries" not in n for n in notes), notes
     client, studies = _split()
     records, _ = SteadyStateDeriver(client=client).derive_many(studies)
     assert records and not [n for r in records for n in r["notes"] if "is named differently" in n]
@@ -1105,3 +1113,46 @@ def test_a_row_whose_runs_cannot_be_traced_to_a_study_is_not_credited_to_one(mon
     records, skipped = SteadyStateDeriver(client=client).derive_many(studies)
     assert records == []
     assert sum("not traced to a study (E404)" in why for _, why in skipped) == 2
+
+
+def test_runs_counted_in_different_abundance_units_are_not_fitted_together():
+    """One group per medium, abundance unit and dilution rate: the same split as the one-medium case, with the
+    monocultures read in OD600 instead of Cells/mL, gives two groups and no row, where one unit gives both."""
+    from test_subcommunity_inputs import _runs
+    client, exps = _runs()
+    for bid in (1, 2, 3, 4):                     # the monocultures' replicates, as `_runs` numbers them
+        for context in client.bioreplicates[bid]["measurementContexts"]:
+            context["techniqueUnits"] = "OD600"
+    records, skipped = SteadyStateDeriver(client=client).derive_many([({"id": "S1", "name": "x"}, [exps[2]]),
+                                                                      ({"id": "S2", "name": "y"},
+                                                                       [exps[0], exps[1]])])
+    assert records == []
+    groups = [what for what, _ in skipped if what.startswith("chemostat group at")]
+    assert any("OD600" in what for what in groups) and any("Cells/mL" in what for what in groups), groups
+
+
+def test_the_fixed_sentence_of_what_a_row_needs_is_not_rewritten_by_an_organism_s_key():
+    """An organism whose curves are named "Unknown" is keyed "unknown", and the pass that puts names back
+    for keys rewrote the tool's own sentence "one unknown for its own limitation" into "one Unknown". Only
+    the monocultures here, so no row is determined and the reasons quote that sentence."""
+    from grownet.subcommunity import NEEDS
+    client, studies = _split(a_in_s2="Unknown", taxa=False)
+    monocultures_only = [(studies[1][0], studies[1][1])]
+    records, skipped = SteadyStateDeriver(client=client).derive_many(monocultures_only)
+    reasons = [why for _, why in skipped]
+    assert any(NEEDS in why for why in reasons), reasons
+    assert not any("one Unknown" in why for why in reasons)
+
+
+def test_a_chemostat_that_records_no_dilution_rate_is_named_not_a_crash():
+    """SMGDB00000001's chemostats record no dilution rate, and the grouping formatted it as a number, so
+    every steady-state search that read that study (All included) stopped with a TypeError. Such a run
+    belongs to no fit: it is named under "D not recorded" with its reason, and the others are fitted."""
+    client, studies = _split()
+    stray = _chemostat("E77", "unrecorded", [THETA], [(3, "V1"), (4, "V2")], description=RUN, dilution=None)
+    stray["compartments"][0].pop("dilutionRate", None)
+    studies[1] = (studies[1][0], [*studies[1][1], stray])
+    records, skipped = SteadyStateDeriver(client=client).derive_many(studies)
+    assert records                                            # the pair and monocultures still fit
+    named = [(what, why) for what, why in skipped if "D not recorded" in what]
+    assert named and all("no dilution rate is recorded" in why or "perturb" in why for _, why in named), named

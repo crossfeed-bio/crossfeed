@@ -59,7 +59,8 @@ WORDMARK = '<span class="word">grow<b>net</b></span>'
 NAME_HTML = '<span class="name">grow<b>net</b></span>'
 # elements whose text is a command, a path, a document title or a link label: the name stays plain there.
 # A link is already colored, so the name's own green inside one reads as a smudge rather than a name.
-_LITERAL = ("code", "pre", "title", "script", "style", "textarea", "option", "a")
+# `svg`: an inline image's text is drawn, not prose, and markup put inside its `<text>` closes the image
+_LITERAL = ("code", "pre", "title", "script", "style", "textarea", "option", "a", "svg")
 # Both patterns are bounded so that neither can be made slow by a long run of "<" or of spaces: a tag
 # cannot contain another "<", and the whitespace a tag may carry before its name is a few characters at
 # most (CodeQL flagged the unbounded forms as polynomial on uncontrolled data, 2026-10-04). The page
@@ -181,5 +182,8 @@ form.inline {{ display: inline-flex; gap: .4rem; align-items: center; margin: 0;
 summary.btn {{ list-style: none; display: inline-block; font-weight: normal; }}
 summary.btn::-webkit-details-marker {{ display: none; }}
 .report pre {{ max-height: 26rem; overflow: auto; font-size: .82rem; margin-top: .6rem; }}
+.matrix-image {{ overflow: auto; max-height: 42rem; margin-top: .4rem; border: 1px solid var(--line);
+                 border-radius: 6px; background: #FFFFFF; }}
+.matrix-image svg {{ display: block; }}
 progress {{ width: 100%; height: 10px; accent-color: var(--grow); }}
 """

@@ -15,6 +15,79 @@ Rules for this file:
 
 ## Current state
 
+- 2026-11-14: **the README's "where it settles" follows `settled`, not the sign of the full solution.**
+  It used the full solution whenever no entry was at or below zero, but a positive interior can be
+  unstable: three organisms with A / (r / K) = [[-1, -1.68, -0.8], [-0.44, -1, -1.58], [-2.49,
+  -1.03, -1]] settle with B alone (miaSim from 1% beside the interior ends at B 1e9), and the check
+  said so while the README did not. It now defers to `settled` whenever that state loses anyone, and judges
+  the full solution's own stability before calling it stable or not (past the 12-organism limit the search
+  says nothing about it). **Stability is now judged from eigenvalues** (`steady._eigenvalues`, EISPACK's
+  balanc, elmhes and hqr in plain Python, `_stable`; balancing matters, since diag(x) A is graded and
+  without it 20 of 6000 near-edge verdicts differed from R's): the Routh-Hurwitz test on the Faddeev-LeVerrier polynomial
+  judged 23 of 3000 random package-scale states wrongly against R's eigen() where abundances spanned many
+  orders, with condition numbers in the hundreds, so the conditioning gate never saw them; one of them
+  turned a bistable system into a confident single prediction. The routine matches R's eigenvalues to
+  6.3e-15 on 2000 random matrices of 1 to 12 rows (balanced). The check refuses an organism with no growth rate, as
+  the README does, instead of taking r = 0. Left as they are, and Low: states exactly on the edge between
+  S and S plus k, where the two relative tolerances use different scales, can be found twice or not at all.
+- 2026-11-14 (#341): **the matrix image is `matrix_image.py`, and its gLV hover reads `block["behind"]`.**
+  `adjacency_cells` takes each cell's value from `matrix.cells`, so the image and the CSV cannot
+  disagree, and names every arc of the pair. For the gLV image, `_pair_values` now keeps the arcs whose
+  numbers entered a cell (`edges`, per unit), and `coefficients` puts them in each block as `behind`,
+  so a hover names exactly the arcs of the cell's own abundance unit, not every arc of the pair. The
+  payload and the CSV copy named keys, so neither carries `behind`. **The hover is a box inside the
+  SVG**, beside its cell: every box is drawn after every cell (so no cell covers it) and hidden until its
+  cell is hovered, by one `svg:has(#c:hover) #t` rule per cell inside the SVG, so it needs no script, the
+  page stays free of JavaScript, and the downloaded file keeps it. A panel under the legend was tried and
+  was off screen for a third of the All network's cells. `brand._LITERAL` holds `svg`, since the prose
+  filter put markup inside a `<text>` and closed the image early. The gLV diagonal's hover follows
+  `derivation_of`: the integrated form fits the diagonal and implies K, the opposite of -r/K. A `<title>` alone was the first build and failed in use (Karoline: "the hover does not
+  work"): the app's browser pane, like some others, never draws the native tooltip. The `<title>` stays
+  for screen readers. A PNG was declined for now (Karoline: "SVG only for now"): the standard library cannot
+  draw its text.
+- 2026-11-14 (#329, and #330's last paragraph): **CI runs once per branch, and the suite leaves the tree
+  as it found it on Windows.** In `ci.yml`, a `push` run on a branch other than `main` first asks the API
+  whether the branch has an open pull request in this repository that GitHub will test (the `duplicate`
+  job): matched on the exact branch with the name passed as a query parameter, since `#`, `&` or `+` in
+  a raw URL changed the filter and an empty one matched every pull request, and only when every such
+  pull request has `mergeable` true, since GitHub runs no `pull_request` workflow on one with a conflict.
+  Only an answer about the pushed commit counts (`head.sha == GITHUB_SHA`, still open). Then every job is
+  skipped and the pull request's run tests the commit merged into its base. GitHub reports a skipped job
+  as success; a skipped push run cannot satisfy a required check only because the skipped matrix job
+  reports as plain `test` while the ruleset requires the expanded names, so **no job without a matrix may
+  be made a required check**. Tags never ask. Every doubt runs the jobs: no
+  answer, an error (`gh api` writes its error JSON to stdout, so `$(...) || echo 0` never gave 0), or
+  `mergeable` still null after five tries. A `concurrency` group that canceled the older copy was tried
+  first and dropped: GitHub counts a canceled required check as a failure in the pull request's status.
+  Separately, a test that edits a committed file to provoke a check puts it back with
+  `read_bytes`/`write_bytes`, never as text: text mode on Windows writes `\r\n`, which is how
+  `schema/format_fields.json` came back 419 lines different after every run there. `.gitattributes` checks JSON
+  out with LF everywhere, so a Windows checkout matches the committed bytes and the test's byte check can
+  fail on the Windows CI leg (with `autocrlf` the file was CRLF there already and the round trip hid it).
+- 2026-11-14: **the integrated form cites Kloppers & Greeff 2013 and Dattner & Klaassen 2015**, in the help,
+  the README and `integrated.py`'s docstring, because Karoline supplied both PDFs and asked for exactly those
+  two. She read their abstracts; her agent read their full text. Do not write that a human read a paper
+  because they supplied it: that is how this entry, the docstring, a test and METHOD_NOTES first came to
+  say she had read both in full. Do not add Himmelblau, Jones & Bischoff 1967 (the chemical engineering
+  origin Dattner and Klaassen cite) unless someone has read it: she could not obtain it. What each supports and where grownet departs
+  (cumulative rows against their intervals; raw points and a fixed x(0) against their smoothed states and
+  estimated x(0)) is in the docstring and in docs/METHOD_NOTES.md, "What the integrated form cites".
+- 2026-11-13: **where a gLV package settles is `steady.settled`, not the solution with everyone present.**
+  The check and the README solved `A x = -(r - D)` with all organisms and called every negative entry washed
+  out. Study 7's package (BT, BH, RI) at D 0.04 puts BH and RI below zero there, while the system settles,
+  stably, at BT 3.75e8 and RI 7.21e8 with only BH lost; a deterministic miaSim run from study 5's A8
+  inoculum reaches the same state. `settled` tries every sub-community (2^n, capped at
+  `MAX_SETTLED` = 12): positive on its own system, no outsider with a positive rate there, and stable
+  (every eigenvalue of `diag(x) A_SS` with a negative real part; see 2026-11-14 for how it is computed). One such state is the
+  prediction; two (bistability), none, or a candidate whose `A_SS` is too ill-conditioned to judge are
+  said and the chemostat is not scored. Conditioning is checked per candidate, before stability, because
+  the eigenvalues of an ill-conditioned `A_SS` carry fewer digits than the verdict needs; and one relative tolerance (`SETTLED_TOLERANCE`) covers both boundaries, so an edge
+  state is found once (Craig's agent's review). A "none" says only that no sub-community passed, never
+  that the system oscillates or diverges, which the search does not establish. The full solution survives only as supporting text and in the payload's `equilibrium` and
+  `not_above_zero`, whose meaning did not change, so the format id did not move. Adding the settled state to
+  the payload would be a format change and is not done. A side effect worth knowing: test fixtures with
+  mutual facilitation stronger than self-limitation used to be scored (with negative predictions) and now
+  are not, because they have no bounded state.
 - 2026-11-08 (#275, instance in #333): **a guard that fails closed still needs to know how many times to
   look.** The daily All publish refuses when it cannot read the artifact it would replace, because a read
   that does not succeed means "cannot tell whether this run collapsed" and not "there is nothing to
@@ -58,8 +131,9 @@ Rules for this file:
   headings is the cheapest test, and no check in this repository catches a duplicated heading or a
   stranded block.** One thing went with the stale block and is not replaced: the worked example under
   the coverage bullet, naming which coefficient was worst. Its numbers came from the run the #321
-  review repudiated, so they could not be kept, and the surviving sentence states the generalization
-  with no instance behind it.
+  review repudiated, so they could not be kept, and the surviving sentence stated the generalization
+  with no instance behind it. Karoline, 2026-11-14 (#331): "drop the sentence", so it is gone too; a
+  claim about which coefficients are worst comes back only with a measurement behind it.
 - 2026-10-11 (#255 item 2): **a derived quantity is collected where it is measured, not rebuilt from what
   survived.** `_widen_by_rate_selection` rebuilt its rate table from `pending`, the arcs that became
   records, keyed by `id(got)`. Both are wrong for the quantity: the spread is how much stage 1 moves when
@@ -1298,7 +1372,8 @@ and the README: that is the one mistake this style can make.
 `derive.start_note` wraps `integrated.starting_densities` (the median first value of each side, never
 matched on, #172) and the replicate form now writes it on biculture arcs (co-culture against the target's
 monocultures) and drop-out arcs (full community against the community without R), in the integrated form's
-wording. A side with no positive first value gives no note. Live: every one of the 190 drop-out arcs of All
+wording. A side with no positive first value, or sides in different units, gives a note saying so
+(silence read as "the densities matched"). Live: every one of the 190 drop-out arcs of All
 (with absences) carries it; 32 of 33 bicultures.
 
 
