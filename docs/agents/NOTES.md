@@ -88,6 +88,59 @@ Rules for this file:
   the payload would be a format change and is not done. A side effect worth knowing: test fixtures with
   mutual facilitation stronger than self-limitation used to be scored (with negative predictions) and now
   are not, because they have no bounded state.
+- 2026-11-08 (#275, instance in #333): **a guard that fails closed still needs to know how many times to
+  look.** The daily All publish refuses when it cannot read the artifact it would replace, because a read
+  that does not succeed means "cannot tell whether this run collapsed" and not "there is nothing to
+  compare with". That part is right. What was missing is that the guard read once, so a single HTTP 504
+  from the CDN that serves the release asset refused the whole day's publish (run 42471472131), and a
+  re-run with nothing changed went green: the answer had cleared by itself.
+  **The rule to carry forward:** failing closed sets what a guard decides, and it says nothing about how
+  hard the guard tried to find out. For a condition the code's own message calls transient ("run the
+  workflow again"), one observation is the defect even when the verdict on that observation is correct.
+  Ask of any fail-closed check how many times it looks before it refuses, and whether its cost of a false
+  refusal is paid by someone who is not in the room: here it was every installed copy, which derives All
+  live from mGrowthDB once the published file ages out, 36 hours on this version and a day on 0.3.x and
+  0.4.x.
+  **What keeps it narrow**, and what the test arms are: only an answer that waiting fixes is read again.
+  A 404 is the first run; a code that waiting does not fix answers on the first read; a body that parses
+  and is not a network is a format defect and not a network one. A retry that cannot tell those apart
+  would turn a 403 into four 403s and a daily job into a slower daily job, and would hide a format defect
+  behind a delay.
+  **And naming the exception class is half the work, which the first version of this got wrong**
+  (Karoline's agent, reviewing, who reproduced it against a local socket that promised 100 bytes and
+  sent 10). It retried `JSONDecodeError` on the reasoning that a body cut short reaches the parser as
+  short bytes. That is only the form without a `Content-Length`, chunked or close-delimited. When the
+  server sends a length, `read()` notices the shortfall itself and raises `http.client.IncompleteRead`,
+  which derives from `HTTPException` and **not** from `OSError`, so it fell through to the blanket
+  clause and refused on the first read: the one transient case the retry exists for, and a release asset
+  from the CDN normally carries a length. The rule to carry forward is that a retry is only as narrow as
+  the class it names, and that the class a failure actually arrives in is worth reproducing rather than
+  reasoning about. `HTTPException` itself was offered and declined: it would also retry a malformed
+  status line or headers, which is a broken response rather than a short one.
+  **And it was the THIRD form, not the second, and the `Content-Length` is what sorts them** (same
+  reviewer, after approving, findings 2 and 3; each reproduced here against the shipping code before
+  anything changed). `all_network.json` is written with `ensure_ascii=False`, so a body can carry
+  multi-byte characters, and one cut INSIDE a character reaches `decode` rather than `json.loads` and
+  raises `UnicodeDecodeError`, which derives from `ValueError` and so was not retried either: one read,
+  no wait, while this entry and the changelog both said both forms of a short body were read again. The
+  other direction is the same question answered the other way: a parse failure is a short read ONLY
+  where no length was sent, because where one was sent a short body makes `read()` raise
+  `IncompleteRead` instead, so a parse failure WITH a length means the body arrived whole and is not the
+  artifact. A complete HTML error page was read four times over fourteen seconds and refused anyway, and
+  so was a certificate that will never verify, which arrives as `URLError` and so as `OSError`.
+  **The rule to carry forward:** a retry's narrowness is a property of the DISCRIMINATOR it has, not of
+  the class list alone. Until there was a length to test, "short body" and "wrong body" were the same
+  exception and no list of classes could separate them.
+  **And the tests guarded less than their docstrings said**, which is the half worth keeping. Four
+  changes left the file at 26 passed: `BACKOFF = 1.0`, `READS = 10`, a linear `sleep(BACKOFF * read)`,
+  and `WAITS_OUT` shrunk to two codes. Three things hid them. The oracle was the SUBJECT: the assertion
+  read `waited == [publish_all.BACKOFF, publish_all.BACKOFF ** 2]`, so changing the constant changed
+  what was expected as well as what happened. The happy paths succeed on the third read and so take only
+  two waits, and 2*1 and 2*2 equal 2**1 and 2**2, so linear and exponential are indistinguishable until
+  the third wait, which only the all-fail path reaches. And one code of seven was ever driven. All three
+  are closed: literals instead of constants, the schedule pinned on the all-fail path, every member of
+  `WAITS_OUT` driven, and the set's own membership asserted so it cannot shrink unnoticed. All seven
+  mutations, the four above and one per new clause, were run and every one now fails.
 
 - 2026-11-06: **a union merge can put back text a branch had correctly deleted, and the squash hides
   it.** `docs/METHOD_NOTES.md` carried the pre-re-derivation validation section under a second
