@@ -26,6 +26,7 @@ The rules it applies, stated once:
 """
 from __future__ import annotations
 
+import math
 import re
 import statistics
 
@@ -330,28 +331,200 @@ def _determinant(rows: list) -> float:
     return product
 
 
-def _hurwitz_stable(rows: list) -> bool:
-    """Whether every eigenvalue of `rows` has a negative real part, by the Routh-Hurwitz criterion.
+def _sign(a, b):
+    return abs(a) if b >= 0 else -abs(a)
 
-    The characteristic polynomial comes from the Faddeev-LeVerrier recursion, and the polynomial is stable
-    exactly when every leading principal minor of its Hurwitz matrix is positive. Standard library only, and
-    the matrices are as small as `MAX_SETTLED` allows.
-    """
+
+def _eigenvalues(rows: list) -> list:
+    """[(real, imaginary)]: the eigenvalues of a real square matrix, by reduction to upper Hessenberg form
+    with stabilized elementary similarity transformations and then the shifted QR algorithm, after
+    balancing (EISPACK's balanc, elmhes and hqr, as Numerical Recipes, 2nd ed., sections 11.5 and 11.6, write
+    them, with the iteration limit raised from 30 to 60 and an exceptional shift every 10). Standard library
+    only. Raises ArithmeticError if the iteration does not converge."""
     n = len(rows)
     if n == 0:
-        return True
-    # p(l) = l^n + a[1] l^(n-1) + ... + a[n]
-    a, power = [1.0] + [0.0] * n, [[0.0] * n for _ in range(n)]
-    for k in range(1, n + 1):
-        # power = rows @ (power + a[k-1] I), then a[k] = -trace(power) / k
-        shifted = [[power[i][j] + (a[k - 1] if i == j else 0.0) for j in range(n)] for i in range(n)]
-        power = [[sum(rows[i][m] * shifted[m][j] for m in range(n)) for j in range(n)] for i in range(n)]
-        a[k] = -sum(power[i][i] for i in range(n)) / k
+        return []
+    # 1-indexed copy, as the published algorithm is written
+    a = [[0.0] * (n + 1)] + [[0.0] + [float(v) for v in row] for row in rows]
+    # balanc: scale rows and columns by powers of 2 so each row and its column have similar norms, without
+    # rounding, as Numerical Recipes and LAPACK do before the reduction. A state's Jacobian diag(x) A is
+    # graded (x from 1e3 to 1e9 gives entries from 1e-7 to 1e9), and without this the eigenvalues were off by
+    # up to 6e-6 of the largest, more than STABLE_MARGIN, so an unstable state was judged stable (found in
+    # review: 20 verdicts of 6000 near-edge states differed from R's eigen(), none with it)
+    radix, converged = 2.0, False
+    while not converged:
+        converged = True
+        for i in range(1, n + 1):
+            c = sum(abs(a[j][i]) for j in range(1, n + 1) if j != i)
+            r = sum(abs(a[i][j]) for j in range(1, n + 1) if j != i)
+            if c and r:
+                g, f, s = r / radix, 1.0, c + r
+                while c < g:
+                    f *= radix
+                    c *= radix * radix
+                g = r * radix
+                while c > g:
+                    f /= radix
+                    c /= radix * radix
+                if (c + r) / f < 0.95 * s:
+                    converged = False
+                    for j in range(1, n + 1):
+                        a[i][j] /= f
+                    for j in range(1, n + 1):
+                        a[j][i] *= f
+    # elmhes: Gaussian elimination with pivoting to upper Hessenberg form
+    for m in range(2, n):
+        x, i = 0.0, m
+        for j in range(m, n + 1):
+            if abs(a[j][m - 1]) > abs(x):
+                x, i = a[j][m - 1], j
+        if i != m:
+            for j in range(m - 1, n + 1):
+                a[i][j], a[m][j] = a[m][j], a[i][j]
+            for j in range(1, n + 1):
+                a[j][i], a[j][m] = a[j][m], a[j][i]
+        if x != 0.0:
+            for i in range(m + 1, n + 1):
+                y = a[i][m - 1]
+                if y != 0.0:
+                    y /= x
+                    a[i][m - 1] = y
+                    for j in range(m, n + 1):
+                        a[i][j] -= y * a[m][j]
+                    for j in range(1, n + 1):
+                        a[j][m] += y * a[j][i]
+    for i in range(3, n + 1):              # the multipliers left below the subdiagonal are not part of it
+        for j in range(1, i - 1):
+            a[i][j] = 0.0
+    # hqr
+    wr, wi = [0.0] * (n + 1), [0.0] * (n + 1)
+    anorm = sum(abs(a[i][j]) for i in range(1, n + 1) for j in range(max(i - 1, 1), n + 1))
+    nn, t = n, 0.0
+    while nn >= 1:
+        its = 0
+        while True:
+            low = nn
+            while low >= 2:
+                s = abs(a[low - 1][low - 1]) + abs(a[low][low])
+                if s == 0.0:
+                    s = anorm
+                if abs(a[low][low - 1]) + s == s:
+                    a[low][low - 1] = 0.0
+                    break
+                low -= 1
+            x = a[nn][nn]
+            if low == nn:
+                wr[nn], wi[nn] = x + t, 0.0
+                nn -= 1
+            else:
+                y = a[nn - 1][nn - 1]
+                w = a[nn][nn - 1] * a[nn - 1][nn]
+                if low == nn - 1:
+                    p = 0.5 * (y - x)
+                    q = p * p + w
+                    z = math.sqrt(abs(q))
+                    x += t
+                    if q >= 0.0:
+                        z = p + _sign(z, p)
+                        wr[nn - 1] = wr[nn] = x + z
+                        if z:
+                            wr[nn] = x - w / z
+                        wi[nn - 1] = wi[nn] = 0.0
+                    else:
+                        wr[nn - 1] = wr[nn] = x + p
+                        wi[nn - 1], wi[nn] = -z, z
+                    nn -= 2
+                else:
+                    if its == 60:
+                        raise ArithmeticError("the QR iteration did not converge")
+                    if its in (10, 20, 30, 40, 50):
+                        t += x
+                        for i in range(1, nn + 1):
+                            a[i][i] -= x
+                        s = abs(a[nn][nn - 1]) + abs(a[nn - 1][nn - 2])
+                        y = x = 0.75 * s
+                        w = -0.4375 * s * s
+                    its += 1
+                    m = nn - 2
+                    while m >= low:
+                        z = a[m][m]
+                        r = x - z
+                        s = y - z
+                        p = (r * s - w) / a[m + 1][m] + a[m][m + 1]
+                        q = a[m + 1][m + 1] - z - r - s
+                        r = a[m + 2][m + 1]
+                        s = abs(p) + abs(q) + abs(r)
+                        p, q, r = p / s, q / s, r / s
+                        if m == low:
+                            break
+                        u = abs(a[m][m - 1]) * (abs(q) + abs(r))
+                        v = abs(p) * (abs(a[m - 1][m - 1]) + abs(z) + abs(a[m + 1][m + 1]))
+                        if u + v == v:
+                            break
+                        m -= 1
+                    for i in range(m + 2, nn + 1):
+                        a[i][i - 2] = 0.0
+                        if i != m + 2:
+                            a[i][i - 3] = 0.0
+                    k = m
+                    while k <= nn - 1:
+                        if k != m:
+                            p = a[k][k - 1]
+                            q = a[k + 1][k - 1]
+                            r = a[k + 2][k - 1] if k != nn - 1 else 0.0
+                            x = abs(p) + abs(q) + abs(r)
+                            if x != 0.0:
+                                p, q, r = p / x, q / x, r / x
+                        s = _sign(math.sqrt(p * p + q * q + r * r), p)
+                        if s != 0.0:
+                            if k == m:
+                                if low != m:
+                                    a[k][k - 1] = -a[k][k - 1]
+                            else:
+                                a[k][k - 1] = -s * x
+                            p += s
+                            x, y, z = p / s, q / s, r / s
+                            q, r = q / p, r / p
+                            for j in range(k, nn + 1):
+                                p = a[k][j] + q * a[k + 1][j]
+                                if k != nn - 1:
+                                    p += r * a[k + 2][j]
+                                    a[k + 2][j] -= p * z
+                                a[k + 1][j] -= p * y
+                                a[k][j] -= p * x
+                            for i in range(low, min(nn, k + 3) + 1):
+                                p = x * a[i][k] + y * a[i][k + 1]
+                                if k != nn - 1:
+                                    p += z * a[i][k + 2]
+                                    a[i][k + 2] -= p * r
+                                a[i][k + 1] -= p * q
+                                a[i][k] -= p
+                        k += 1
+            if not low < nn - 1:
+                break
+    return [(wr[i], wi[i]) for i in range(1, n + 1)]
 
-    def coefficient(index):
-        return a[index] if 0 <= index <= n else 0.0
-    hurwitz = [[coefficient(2 * (j + 1) - (i + 1)) for j in range(n)] for i in range(n)]
-    return all(_determinant([row[:size] for row in hurwitz[:size]]) > 0 for size in range(1, n + 1))
+
+STABLE_MARGIN = 1e-10   # a real part above -1e-10 of the largest eigenvalue's size is not counted as negative
+
+
+def _stable(rows: list) -> bool:
+    """Whether every eigenvalue of `rows` has a negative real part, at least STABLE_MARGIN of the largest
+    eigenvalue's size below zero, so an eigenvalue that is zero to rounding does not count as stable.
+
+    The eigenvalues are computed directly. A Routh-Hurwitz test on the characteristic polynomial from the
+    Faddeev-LeVerrier recursion did this before and lost its digits where a state's abundances span many
+    orders: on 3000 random states with abundances from 1e3 to 3e9 it judged 23 wrongly against R's eigen()
+    (22 stable states refused, 1 unstable accepted), with condition numbers of 19 to 536, so the
+    conditioning gate did not catch them; this routine judges all 3000 as R does. Without balancing it still
+    differed from R on 20 of 6000 states whose rightmost eigenvalue sits within 3e-7 of zero, where diag(x) A
+    is graded; balanced, on none (both found in review).
+    """
+    values = _eigenvalues(rows)
+    if not values:
+        return True
+    size = max(math.hypot(re, im) for re, im in values)
+    return all(re < -STABLE_MARGIN * size for re, _ in values)
 
 
 def settled(matrix: list, growth: list) -> dict:
@@ -373,9 +546,9 @@ def settled(matrix: list, growth: list) -> dict:
         rate does not grow back in. So a state on the edge between S and S without k is found once, as the
         smaller community, rather than once on each side of a rounding error.
       * **every candidate's conditioning is checked before its stability is judged**, since the
-        characteristic polynomial behind `_hurwitz_stable` loses its digits exactly where `A_SS` is
-        ill-conditioned. One such candidate is enough to refuse: it could be a state or not, and either
-        way the verdict over all candidates would rest on it.
+        eigenvalues of an ill-conditioned `A_SS` carry fewer digits than the verdict needs. One such
+        candidate is enough to refuse: it could be a state or not, and either way the verdict over all
+        candidates would rest on it.
 
     {"state": [x_i] or None, "kept": [i], "lost": [i], "invasion": {i: rate of a lost organism},
      "states": every such state, "why_not": ""}. Exactly one state gives `state`; none, several (where it
@@ -389,7 +562,7 @@ def settled(matrix: list, growth: list) -> dict:
                           f"every sub-community of at most {MAX_SETTLED}")
         return out
     scale = max((abs(g) for g in growth), default=0.0) or 1.0
-    found, unjudged = [], []
+    found, unjudged, unconverged = [], [], []
     for mask in range(1 << n):
         kept = [i for i in range(n) if mask >> i & 1]
         x = [0.0] * n
@@ -410,7 +583,12 @@ def settled(matrix: list, growth: list) -> dict:
             if condition > MAX_EQUILIBRIUM_CONDITION:
                 unjudged.append((len(kept), condition))
                 continue
-        if not _hurwitz_stable([[x[i] * matrix[i][j] for j in kept] for i in kept]):
+        try:
+            stable = _stable([[x[i] * matrix[i][j] for j in kept] for i in kept])
+        except ArithmeticError:            # the QR iteration did not converge: not judged, never a verdict
+            unconverged.append(len(kept))
+            continue
+        if not stable:
             continue
         found.append({"state": x, "kept": kept, "lost": [j for j in range(n) if j not in kept],
                       "invasion": invasion})
@@ -422,6 +600,11 @@ def settled(matrix: list, growth: list) -> dict:
                           f"judge (the worst, of {members} organism(s), has a condition number of "
                           f"{worst_text}, above the {MAX_EQUILIBRIUM_CONDITION:.0e} this tool will stand "
                           "behind), so no state is named")
+    elif unconverged:
+        # its own sentence: such a candidate passed the conditioning gate, and was reported as having an
+        # infinite condition number (found in review)
+        out["why_not"] = (f"the stability of {len(unconverged)} sub-community(ies) it could settle on could not "
+                          "be computed (the eigenvalue iteration did not converge), so no state is named")
     elif len(found) == 1:
         out.update(found[0])
     elif found:
@@ -447,11 +630,18 @@ def predicted(block: dict, rates: dict, dilution: float, organisms: list = None)
     if not keep:
         return {"values": {}, "notes": {}, "why_not": "no organism in common"}
     rows = [[block["matrix"][i][j] for j in keep] for i in keep]
-    rhs = []
-    for i in keep:
-        rate = rates.get(ids[i]) or {}
-        rhs.append(-((rate.get("rate") or 0.0) - dilution))
-    answer = solve([row[:] for row in rows], rhs)
+    # an organism with no growth rate is refused, as the package README refuses it ("not every organism in
+    # this matrix has a growth rate"): it used to enter as r = 0 without a word, so the check scored a
+    # package whose README said its equilibrium was not computed (found in review)
+    missing = [names[i] for i in keep if (rates.get(ids[i]) or {}).get("rate") is None]
+    if missing:
+        return {"values": {}, "notes": {}, "lost": [], "interior": {},
+                "why_not": "not every organism in it has a growth rate (" + ", ".join(missing) + ")"}
+    rhs = [-((rates.get(ids[i]) or {})["rate"] - dilution) for i in keep]
+    # the full solution only where it is worth printing, as the README decides it: on an ill-conditioned
+    # system it printed numbers like -5e+20 that the README refused (found in review)
+    answer = (solve([row[:] for row in rows], rhs) if condition_of(rows) <= MAX_EQUILIBRIUM_CONDITION
+              else None)
     interior = {names[i]: answer[k] for k, i in enumerate(keep)} if answer is not None else {}
     where = settled(rows, [-value for value in rhs])
     if where["state"] is None:
