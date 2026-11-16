@@ -195,9 +195,9 @@ the second box changes, since that box now applies under every derivation.
   said rather than scored.
   The README also names the settled state where the full solution is above zero and unstable, which it
   printed as where the matrix settles while the check predicted another state, and says when a stable full
-  solution is one of several states. Stability is judged from eigenvalues computed directly: the test on
-  the characteristic polynomial misjudged states whose abundances span many orders, and named one state
-  of a bistable system. The check refuses an organism with no growth rate, as the README does.
+  solution is one of several states. Stability is judged from eigenvalues computed directly. 0.5.0 judged
+  no stability at all, so no result made with it has a stability verdict to redo. The check refuses an
+  organism with no growth rate, as the README does.
   The full solution stays in the text as the reason a reader's own `solve(A, -r)` differs. The package
   payload's `equilibrium` and `not_above_zero` fields are unchanged: they still hold the full solution.
 - **The second box now applies under the integrated derivation too.** Media, experiments and studies named
@@ -214,8 +214,10 @@ the second box changes, since that box now applies under every derivation.
   Found by the foodnet project, whose fit was the same code. On 40 monoculture curves fitted by R
   `growthrates` with the same objective, starts and guards, R found a lower residual on 13 before this
   fix and on none after it. Measured live on all of mGrowthDB against 0.5.0 on 2026-11-04:
-  - **Nothing changes by default**: the 223 arcs of All, gLV mode with either rate method, and
-    `--metric growth_rate` (39 arcs) are identical.
+  - **Nothing changes by default**: the 223 arcs of All, the 16 of gLV mode with either rate method, and
+    the 39 of `--metric growth_rate` are identical. These counts include the 78, 6 and 10 arcs below the
+    absence threshold, which a file holds only with `--include-absent`, so the networks reported have 145,
+    10 and 29 arcs. Derived again on 2026-11-16, all three counts are unchanged.
   - **Lags (`--report-rates`)**: *Bacteroides thetaiotaomicron VPI-5482*'s goes from 0.667 to 0.703 h.
     Two lags that were already zero stay zero (below 1e-11 h), and one moves by 1e-4 h.
   - **With `--rate-method baranyi`**, four of six organisms' rates move:
