@@ -33,56 +33,45 @@ ABOUT = (f"{NAME} was built by Karoline Faust (KU Leuven) and Craig Heilmann (Sy
 # Each line names, in the comment above it, the pull request(s) it describes, so the release pull request can
 # drop the line of any that did not merge before tagging (RELEASING.md step 1). Numbers stay in these
 # comments, never in the strings: the page is read by users.
-NEXT = (
-    # #301 (empty species box, All button removed), #308 (gLV example fills and waits)
-    "Leave the species box empty to search every species in the media or studies of the second box; leave "
-    "both boxes empty for the All network. The All button is gone, and gLV example fills the page and waits "
-    "for Find interactions, as Example does.",
-    # #325 (the second box under every derivation)
-    "The second box applies under every derivation: naming a medium, an experiment or a study narrows a "
-    "gLV-mode search too, where only the default derivation read it before, so a gLV-mode result changes "
-    "when one is named.",
-    # #306 (technique, merged_nodes, format /v5, merging across techniques), #304 (a merged arc on the page)
-    "Every arc records how its target was measured (fc, qpcr, plates, ...), and a genus node lists the "
-    "strains it stands for: the network format moves to /v5, and the daily All network is still published "
-    "for earlier versions. Merging parallel arcs crosses techniques and names them, and the page shows a "
-    "merged arc as a median with its range.",
-    # #323 (starting-density notes)
-    "Every arc of the default derivation whose two sides have a first value says what they started at, "
-    "and warns where they differ more than 3 times, as 61 of the 190 drop-out arcs in mGrowthDB did on 2026-11-06, "
-    "counting those below the absence threshold, up to 117 times.",
-    # #315, #316, #318, #319, #320 (validation), #321 (messages and every later fix to the derivation),
-    # #327 (the dilution rate in the rates file and the package), #326 (runs of several studies fitted
-    # together). No claim about what mGrowthDB holds: it goes stale the day such data is published
-    # (Karoline, 2026-11-14)
-    "A third derivation, for gLV mode: the rows fitted from the chemostat steady states of sub-communities, "
-    "every sub-community counting, across studies where the medium matches, its package at one dilution "
-    "rate, which its rates name. It says what each organism lacks; on a published 12-species model, monocultures "
-    "and pairs give 126 of its 132 coefficients.",
-    # #337 (where a package settles)
-    "The chemostat check and a gLV package's README name the state the package settles in, with the "
-    "organisms it keeps and the ones it loses, where they named every organism that the solution with all "
-    "of them present put at or below zero, including ones a simulation keeps.",
-    # #299 (Baranyi damping)
-    "The Baranyi growth-rate fit reaches its best fit where a lag collapses; nothing changes by default.",
-    # #303 (merged arcs and nodes), #309 (italics, readability), #307 (no issue numbers), #322 (R summary)
-    "The help explains what a merged arc and a merged node carry, sets species names in italics, and reads "
-    "more easily, with no issue numbers, and the R package's summary of a gLV package reads more cleanly.",
-    # #341, #342 (the matrix as an image)
-    "The result shows the adjacency matrix as an image, and in gLV mode each matrix of fitted coefficients: "
-    "green for a positive effect, orange-red for a negative one, with a legend, and a hover on each cell that "
-    "names the studies and experiments behind it. Each image downloads as SVG.",
-    # #338 (which standard deviation the absence threshold uses)
-    "The help says which standard deviation the absence threshold uses under each derivation.",
-    # #344 (the papers behind the integrated form) is left out on purpose (Karoline, 2026-11-14: "the about
-    # page doesn't need to mention the new references - this is too much detail"); the help cites them
-)
+NEXT = ()
 
 # What changed in each release, a few lines each, newest first (Karoline, 2026-10-04: "a small log of what
 # happened in each new release"). The changelog in the repository is the full record; this is the summary a
 # user of the page wants, so each line says what they can now do rather than what moved in the code. A test
 # requires the newest entry to be this version, so a release cannot forget it.
 RELEASES = (
+    ("0.6.0", "2026-11-16", (
+        "On the whole of mGrowthDB, the All network is the same as 0.5.0's in every arc and every number, by "
+        "default, under the integrated form and in gLV mode: its arcs gain the technique, and the default "
+        "derivation's a note on their starting densities.",
+        "Leave the species box empty to search every species in the media or studies of the second box; leave "
+        "both boxes empty for the All network. The All button is gone, and gLV example fills the page and "
+        "waits for Find interactions, as Example does.",
+        "The second box applies under every derivation: naming a medium, an experiment or a study narrows a "
+        "gLV-mode search too, where only the default derivation read it before, so a gLV-mode result changes "
+        "when one is named.",
+        "Every arc records how its target was measured (fc, qpcr, plates, ...), and a genus node lists the "
+        "strains it stands for: the network format moves to /v5, and the daily All network is still published "
+        "for earlier versions. Merging parallel arcs crosses techniques and names them, and the page shows a "
+        "merged arc as a median with its range.",
+        "Every arc of the default derivation whose two sides have a first value says what they started at, and "
+        "warns where they differ more than 3 times, as 61 of the 190 drop-out arcs in mGrowthDB did on "
+        "2026-11-06, counting those below the absence threshold, up to 117 times.",
+        "A third derivation, for gLV mode: the rows fitted from the chemostat steady states of "
+        "sub-communities, every sub-community counting, across studies where the medium matches, its package "
+        "at one dilution rate, which its rates name. It says what each organism lacks; on a published "
+        "12-species model, monocultures and pairs give 126 of its 132 coefficients.",
+        "The chemostat check and a gLV package's README name the state the package settles in, with the "
+        "organisms it keeps and the ones it loses, where they named every organism that the solution with all "
+        "of them present put at or below zero, including ones a simulation keeps.",
+        "The Baranyi growth-rate fit reaches its best fit where a lag collapses; nothing changes by default.",
+        "The help explains what a merged arc and a merged node carry, sets species names in italics, and reads "
+        "more easily, with no issue numbers, and the R package's summary of a gLV package reads more cleanly.",
+        "The result shows the adjacency matrix as an image, and in gLV mode each matrix of fitted "
+        "coefficients: green for a positive effect, orange-red for a negative one, with a legend, and a hover "
+        "on each cell that names the studies and experiments behind it. Each image downloads as SVG.",
+        "The help says which standard deviation the absence threshold uses under each derivation.",
+    )),
     ("0.5.0", "2026-10-14", (
         "No arc and no number of a derived network changes: measured on the whole of mGrowthDB against "
         "0.4.0, by default, with growth rates and in gLV mode. What changes is what the files say.",
