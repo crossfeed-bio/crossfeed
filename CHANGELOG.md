@@ -6,6 +6,32 @@ content.
 
 ## [Unreleased]
 
+## [0.6.0] (2026-11-16)
+
+**Read this before upgrading: the formats move, the networks do not.** Measured on the whole of mGrowthDB
+against 0.5.0 on 2026-11-16: every arc of the All network, and every number on it, is the same by default
+(145 arcs), under the integrated form (10) and in gLV mode (10). The arcs gain `technique`, the nodes
+`merged_nodes`, and the default derivation's arcs a note on their starting densities. The network format
+moves to `/v5` and the gLV payload to `grownet.glv/v3`; the daily All network is still published for 0.5.x
+(`/v4`) and for 0.3.x and 0.4.x (`/v3`). A gLV-mode search that names a medium, an experiment or a study in
+the second box changes, since that box now applies under every derivation.
+
+### Upgrading
+
+- **The gLV payload moves to `grownet.glv/v3`** (Karoline, 2026-11-06: "yes to the dilution column"): each
+  `growth_rate_detail` entry gains `dilution`, the dilution rate per h a steady-state rate `r_i - D` is at,
+  null under every other derivation. grownet 0.5.0's R package reads a v3 payload with a warning that the
+  format is newer than it knows, and the extra key does not reach its rates; this release's reads v3, v2,
+  v1 and v0. `growth_rates.csv` gains a `dilution` column, appended last, empty except under the
+  steady-state derivation, so a reader of the earlier columns finds them where they were.
+- **The format id moves to `grownet.interaction_network/v5`** (Karoline, 2026-11-06, #305: "Is the
+  measurement technique recorded as an arc attribute? If not, please add."), for one arc field,
+  `technique`, and one node field, `merged_nodes`, and one value of `evidence`, `steady_state`, for the arcs
+  of the steady-state derivation (0.5.0's validator refuses it, as it refuses a `/v5` file). Nothing a `/v4`
+  field means changes for the values it had; `/v4` and older files still read and validate. The daily All
+  network is also published as `all_result.v4.json` for installed 0.5.x copies, beside
+  `all_result.json` for 0.3.x and 0.4.x.
+
 ### Added
 
 - **The interaction matrix as an image, with a hover that names its sources** (#341). Karoline: "provide
@@ -24,17 +50,116 @@ content.
   image downloads as SVG, which keeps the hover in a browser; SVG only, by her choice, since the page has
   no JavaScript and the standard library cannot draw a PNG's text. The command line writes the same images
   with `--matrix-image FILE`. No number changes.
+- **A third derivation, `steady`: gLV rows from the chemostat steady states of sub-communities** (Karoline,
+  2026-11-06, #310: "parameterize the gLV from steady-state abundances of sub-communities", from every
+  available sub-community rather than only the leave-one-out ones of EPICS; #312, #313, #317, #314, #321,
+  #326, #327). Derivation in Advanced settings and `--derivation steady`, off by default, kept by gLV mode
+  when chosen. The help has a section on it, and the `--derivation` help, the command-line examples and the
+  README describe it.
+  - **The estimator**, `grownet.subcommunity.fit`, solves each row of `A / (r_i - D)` by least squares over
+    one steady-state equation per member present, names every row and coefficient the design leaves
+    undetermined, and predicts each community from a fit made without it.
+  - **Its inputs**: `subcommunity.chemostat_groups` turns continuous cultures into communities, one fit per
+    medium, unit and dilution rate, from runs known to be unperturbed. Runs that end with the same
+    organisms present are one community, since they reach one steady state, and its bootstrap draws whole
+    runs. A run that is still changing in the window its steady state is read in is left out and named; a
+    window of fewer than four points cannot be split in two and is not judged. Each organism is read by
+    one technique within a fit: the runs using its more common technique are kept and the others named.
+  - **Across studies**, where the medium composition, the abundance unit and the dilution rate match
+    (Karoline, 2026-11-06: "for the new chemostat inference mode, the medium composition has to match but
+    other than that, I don't see why not"), so a pair measured in one study and the monocultures in
+    another determine a row that neither does alone. An arc names every study its row was fitted from.
+    Runs are pooled by each strain's identity as its own study judges it, so a strain renamed between
+    studies pools where its taxon id agrees (Karoline, 2026-11-11: "if taxon ids agree and names differ,
+    the studies can still be pooled"), and a strain whose taxon id one study refuses is not pooled with its
+    runs elsewhere, which is said. A pooled organism goes by the name the most recently published of the
+    arc's own studies gives it. Every other derivation still reads one study at a time.
+  - **The row scale** `r_i - D` is read from a monoculture chemostat's own start-up, per hour whatever the
+    curve's time unit, as the larger of two readings: the batch period's rise less D, and the rise after
+    the pump started, so a lag in a short batch period does not halve it. When the pump started is read
+    from the experiment's description (Karoline: "chemostat is not always switched on directly, so it
+    would mean checking experiment description for a batch period"); where it does not say, the row stays
+    in units of `r_i - D`. It is an estimate, which noise pulls high, and the help says so.
+  - **Its arcs**: every identified coefficient becomes an arc with evidence `steady_state` (a new value of
+    `evidence`), strength `log2(1 + B_ij x_j)`, its coefficient (in 1/(time x abundance) where the row
+    scale is known), the row's bootstrap spread (drawing the mean the fit uses, widened for few
+    replicates), and notes saying where the scale came from and how the largest community is predicted by
+    a fit made without it. A row whose own term is not negative is named, not reported, since its sign
+    depends on whether the organism's growth rate is below the dilution rate.
+  - **Its gLV package**: rates `r_i - D` (the dilution folded in, so the package simulates the chemostat)
+    and the matrix `(r_i - D) B`, whose equilibrium is the community the chemostats held, at one dilution
+    rate for every organism, the one most rows were fitted at, which the rates name. The README and the
+    payload's caveats state its formula and its own model assumptions (effective coefficients, fitted from
+    communities of every size). A row whose scale was not read stays out of the matrix, named, rather than
+    mixing units; with no row scaled, no batch rate is read in place of the rates. The steady-state check
+    is not run under it, since it would score the package against the chemostats it was fitted to and
+    subtract D twice.
+  - **When the design is insufficient, it says what is missing** (Karoline, 2026-11-06: "There will be
+    cases when the available sub-communities are insufficient to make the derivation (the current state of
+    mGrowthDB). Is the error message in this case informative?"): one line per chemostat group (how many
+    communities were at a steady state, how many rows that determines, and what a row needs) and one per
+    organism, and the page and the command line lead with that.
+  - **A local validation**: `packaging/validate_steady_state.py` runs it on the fitted 12-species gLV of
+    Venturelli et al. 2018 (download their Code EV1; nothing of theirs is in the repository). From
+    monocultures and pairs it recovers 126 of the 132 coefficients of B exactly; with 5% noise over three
+    vessels the bootstrap spread covers the truth for 85% to 94% of them over six noise draws. The numbers
+    are in METHOD_NOTES.
+- **Every arc records how its target was measured, `technique`** (#305): the mGrowthDB technique (fc, qpcr,
+  plates, 16s, ...) of the target's curves on both sides, in JSON, GraphML, Cytoscape and the help. An arc
+  of the comparison has one, since a species is never compared across techniques; the integrated form
+  names two if the co-culture and the monocultures its rate comes from differ; a merged arc names every
+  technique of its arcs. Live on 2026-11-06: 145 arcs in All, qpcr 117, plates 15, fc 13, none with two.
+  Merge parallel arcs merges arcs of different techniques and names them all (Karoline, 2026-11-06:
+  "Yes, allow it"); no merge in today's All network crosses techniques, so this moves no live arc.
+- **A genus node lists the strains it stands for, `merged_nodes`** (Karoline, 2026-11-06, asked whether a
+  genus node should list its strain ids: "Yes, add it"): their node ids, sorted, in JSON, GraphML (joined
+  by "; ") and Cytoscape; empty on every node without Merge to genus. It kept none before. Live, All with
+  Merge to genus: 17 genus nodes list the 24 strains of the unmerged network, each once (*Bacteroides* 5).
+- **The help says what each arc attribute becomes on a merged arc** (Karoline, 2026-11-06, #302: "please
+  document this in the help in the context of the arc attributes"), under Arc and node attributes: which
+  arcs Merge parallel arcs and Merge to genus merge, a table of every attribute's rule (a median, a union,
+  kept only where all merged arcs agree, or empty), and four consequences for reading one: the median is
+  unweighted, obligate and abolished arcs count without entering it, a merged arc is present when any of
+  its arcs is, and a pair with arcs of both signs is not merged. Arcs merge as before.
+- **The help says what a merged node carries** (Karoline, 2026-11-06: "for a merged node on genus level, are
+  strain ids kept? please document merging in nodes as well"), under its own header, Node attributes, with
+  the node table: a genus node keeps no strain id, and the arcs' `merged_pairs`, `supporting_pairs` and
+  `community` are where the strains behind it are named.
 
 ### Changed
 
-- **The integrated form cites the two papers it rests on, in the help and the README** (Karoline,
-  2026-11-14: "please cite the 2 articles where you've seen the pdf, also in the help"). Kloppers and Greeff
-  (2013, *Applied Mathematics and Computation* 224: 817-825) gave the Log Integral method this equation is;
-  Dattner and Klaassen (2015, *Electronic Journal of Statistics* 9: 1939-1973) treat the cumulative integral
-  estimator's identifiability and rate of convergence. The text says that their convergence result smooths
-  or averages the curve and estimates the starting abundance, which grownet does not, so it describes the
-  method rather than each estimate. No number changes.
-
+- **Find interactions with the species box empty searches every species in the media, experiments or
+  studies of the second box, with every partner, and with both boxes empty it is the whole of mGrowthDB;
+  the All button is gone** (Karoline, 2026-11-04, #300: "allow the species field to be empty when the
+  second field (media/studies) has content", and on the button, "Remove it"). This is the search the All
+  button ran, so nothing about its result changes: at the default settings it is the network derived once
+  a day, and any changed setting derives it live. The page no longer answers an empty box with "Type at
+  least one species". On the command line, `derive --live --conditions NAME ...` without `--species` or
+  a study does the same; `--all` is unchanged. The species box is marked optional, and one sentence under
+  the buttons, the help page, `grownet --help` and `grownet derive --help` say how to get the All network.
+  An empty result of such a search speaks of "the studies searched", not "the studies holding these
+  species".
+- **gLV example fills the page and waits, as Example does** (Karoline, 2026-11-06: "The Example button fills
+  the input fields, but gLV example fills the fields and launches the search. Please change the gLV example
+  behavior to be in line with 'Example'."). It fills both boxes and switches gLV mode on, and Find
+  interactions runs it.
+- **Every arc of the default derivation says what each side started at** (#297), as the integrated form's
+  arcs did: "started at X in the co-culture and Y in the monocultures" (or "in the full community and Y
+  without R" for a drop-out arc), with the factor between them, and a warning above 3 times. Reported, never
+  matched on (Karoline, 2026-10-08). It matters most for drop-out arcs, where each deletion was a separate
+  vessel: live on 2026-11-06, 61 of the 190 drop-out arcs of All (with absences) start more than 3 times
+  apart, 24 more than 10 times, up to 117. Where a side has no positive first value, the arc says the
+  starting density could not be compared. No arc, strength or status changes; only the notes.
+- **The help reads more easily** (Karoline, 2026-11-06). It no longer prints who decided what and when
+  beside its text ("they are not useful for readers"), names study SMGDB00000026 in full in the alias
+  table, sets genus and species names in italics, and its gLV sections are split into shorter parts and
+  lists with every formula kept. Three passages were also wrong or unclear and are corrected: gLV mode sets
+  four settings, not three (the derivation was missing); an undefined "ratio L" and "x_j_star" are now
+  r_with, r_without and x_j; and the R package's handling of +10 and -10 cells is said to concern parameters
+  from grownet 0.2.0 and earlier only.
+- **No GitHub issue numbers in what a user sees** (Karoline, 2026-11-06: "in general: users don't need to see
+  github issue numbers anywhere"). They are gone from the page, the help, the command line's help and
+  messages, the R package's help and the README, and a test keeps new ones out.
 - **The help says which standard deviation the absence threshold uses** (Karoline, 2026-11-13: "it is not
   clear which standard deviation"). Under the comparison of replicate sets the two sets are not paired, so
   there is no strength per replicate: `sd` is `sqrt(var_with + var_without)` of the per-replicate log2 values,
@@ -43,14 +168,18 @@ content.
   spread of the per-co-culture-replicate strengths with the monoculture stage's variance and the rate
   selection variance added. Under the steady-state derivation it is a bootstrap over vessels, or over runs
   where runs were pooled. The help and the `sd` attribute description say so; no number changes.
-
-- **Every arc of the default derivation says what each side started at** (#297), as the integrated form's
-  arcs did: "started at X in the co-culture and Y in the monocultures" (or "in the full community and Y
-  without R" for a drop-out arc), with the factor between them, and a warning above 3 times. Reported, never
-  matched on (Karoline, 2026-10-08). It matters most for drop-out arcs, where each deletion was a separate
-  vessel: live on 2026-11-06, 61 of the 190 drop-out arcs of All (with absences) start more than 3 times
-  apart, 24 more than 10 times, up to 117. Where a side has no positive first value, the arc says the
-  starting density could not be compared. No arc, strength or status changes; only the notes.
+- **The integrated form cites the two papers it rests on, in the help and the README** (Karoline,
+  2026-11-14: "please cite the 2 articles where you've seen the pdf, also in the help"). Kloppers and Greeff
+  (2013, *Applied Mathematics and Computation* 224: 817-825) gave the Log Integral method this equation is;
+  Dattner and Klaassen (2015, *Electronic Journal of Statistics* 9: 1939-1973) treat the cumulative integral
+  estimator's identifiability and rate of convergence. The text says that their convergence result smooths
+  or averages the curve and estimates the starting abundance, which grownet does not, so it describes the
+  method rather than each estimate. No number changes.
+- **The help calls the setting by its name on the page, "Growth property"**, not "growth measure". The
+  wording changed in its messages and in the help section "Which growth property".
+- **The About page says what the next release brings while it is in development** (Karoline, 2026-11-06: "is
+  the About section updated?"), under "Next release", above the log of released versions. The release check
+  refuses a tag while that list is not empty, so it moves under the version at release.
 
 ### Fixed
 
@@ -71,73 +200,13 @@ content.
   of a bistable system. The check refuses an organism with no growth rate, as the README does.
   The full solution stays in the text as the reason a reader's own `solve(A, -r)` differs. The package
   payload's `equilibrium` and `not_above_zero` fields are unchanged: they still hold the full solution.
-
-- **The method notes and the agent notes no longer carry stale copies of text they also carry current
-  versions of.** Three merge resolutions unioned conflict hunks whose base was not empty, so each kept
-  both the new text and the old. `docs/METHOD_NOTES.md` held the pre-re-derivation validation section
-  under a second `## Open decisions` heading, with the superseded coverage of 93% standing against the
-  live 85% to 94% in the same file and against this changelog; `docs/agents/NOTES.md` held two
-  paragraphs finished twice, one of them saying strain ids survive only on arcs six lines under the
-  text saying a genus node lists them in `merged_nodes`. 33 deletions, no wording changed and no
-  number re-derived. The three real entries under `## Open decisions` are untouched by that fix; the first
-  of them is since marked settled.
-- **The R package's summary of a gLV package reads cleanly** (#296). "fitted:" no longer starts every line
-  of the organisms left out of the matrices; the organisms without a rate are not listed a second time on
-  the next line; and a one-organism matrix reads "1 organism", not "1 organisms". No number changes.
-
-### Changed
-
-- **The help reads more easily** (Karoline, 2026-11-06). It no longer prints who decided what and when
-  beside its text ("they are not useful for readers"), names study SMGDB00000026 in full in the alias
-  table, sets genus and species names in italics, and its gLV sections are split into shorter parts and
-  lists with every formula kept. Three passages were also wrong or unclear and are corrected: gLV mode sets
-  four settings, not three (the derivation was missing); an undefined "ratio L" and "x_j_star" are now
-  r_with, r_without and x_j; and the R package's handling of +10 and -10 cells is said to concern parameters
-  from grownet 0.2.0 and earlier only.
-
-### Changed
-
-- **No GitHub issue numbers in what a user sees** (Karoline, 2026-11-06: "in general: users don't need to see
-  github issue numbers anywhere"). They are gone from the page, the help, the command line's help and
-  messages, the R package's help and the README, and a test keeps new ones out.
-
-### Fixed
-
-- **The page says when an arc is merged, and writes a changed setting as the report does** (found checking
-  Merge parallel arcs on the live page, 2026-11-06; Karoline: "Yes, fix both"). A merged arc's strength
-  showed as a bare median, "-1.49", like any arc; it now reads "3 merged arcs: median, range -2.59 to -1.30"
-  under it. The line naming the settings off their defaults said "Merge parallel arcs = True"; it now says
-  "on", and joins the second box's lines with "; ", as the report does.
-
-### Changed
-
-- **gLV example fills the page and waits, as Example does** (Karoline, 2026-11-06: "The Example button fills
-  the input fields, but gLV example fills the fields and launches the search. Please change the gLV example
-  behavior to be in line with 'Example'."). It fills both boxes and switches gLV mode on, and Find
-  interactions runs it.
-
-### Changed
-
-- **Find interactions with the species box empty searches every species in the media, experiments or
-  studies of the second box, with every partner, and with both boxes empty it is the whole of mGrowthDB;
-  the All button is gone** (Karoline, 2026-11-04, #300: "allow the species field to be empty when the
-  second field (media/studies) has content", and on the button, "Remove it"). This is the search the All
-  button ran, so nothing about its result changes: at the default settings it is the network derived once
-  a day, and any changed setting derives it live. The page no longer answers an empty box with "Type at
-  least one species". On the command line, `derive --live --conditions NAME ...` without `--species` or
-  a study does the same; `--all` is unchanged. The species box is marked optional, and one sentence under
-  the buttons, the help page, `grownet --help` and `grownet derive --help` say how to get the All network.
-  An empty result of such a search speaks of "the studies searched", not "the studies holding these
-  species".
-
-### Fixed
-
-- **The report of a search with no species entered no longer says only their interactions were kept.**
-  All printed "Only interactions between the species entered (--all-partners): on" beside "with every
-  partner"; the line now says the setting was not read in that run. The page counts "1 study", not "1
-  studies".
-### Fixed
-
+- **The second box now applies under the integrated derivation too.** Media, experiments and studies named
+  there reached the default derivation alone, so in gLV mode naming a medium changed nothing, although the
+  mode's own message says it keeps a simulation to one environment. Measured live: Bacteroides and
+  Roseburia with every partner, `--conditions EMGDB000000024 --derivation integrated` gave 7 arcs from 12
+  experiments, now the 2 arcs of that co-culture and its 2 monocultures, which is what the default
+  derivation gives; with `--conditions mucin`, 7 arcs became 0, as with the default derivation. A
+  derivation plugged in with `--deriver` is now given the selected experiments only.
 - **The Baranyi fit reaches its optimum when the lag collapses** (#298). Its Levenberg-Marquardt loop damped
   each step by the current diagonal of J'J. When a fit drives the lag toward zero, that column of the
   Jacobian vanishes, the damped system stayed singular, and the fit stopped short of the best fit, with no
@@ -162,154 +231,32 @@ content.
       on the one monoculture curve left after the two refusals above.
     - Of the rest, the largest change is -0.55 to -0.35, and one arc moves from absent to present
       (-0.1124 to -0.1139, at the threshold).
-### Upgrading
-
-- **The gLV payload moves to `grownet.glv/v3`** (Karoline, 2026-11-06: "yes to the dilution column"): each
-  `growth_rate_detail` entry gains `dilution`, the dilution rate per h a steady-state rate `r_i - D` is at,
-  null under every other derivation. grownet 0.5.0's R package reads a v3 payload with a warning that the
-  format is newer than it knows, and the extra key does not reach its rates; this release's reads v3, v2,
-  v1 and v0. `growth_rates.csv` gains a `dilution` column, appended last, empty except under the
-  steady-state derivation, so a reader of the earlier columns finds them where they were.
-
-- **The format id moves to `grownet.interaction_network/v5`** (Karoline, 2026-11-06, #305: "Is the
-  measurement technique recorded as an arc attribute? If not, please add."), for one arc field,
-  `technique`, and one node field, `merged_nodes`, and one value of `evidence`, `steady_state`, for the arcs
-  of the steady-state derivation (0.5.0's validator refuses it, as it refuses a `/v5` file). Nothing a `/v4`
-  field means changes for the values it had; `/v4` and older files still read and validate. The daily All
-  network is also published as `all_result.v4.json` for installed 0.5.x copies, beside
-  `all_result.json` for 0.3.x and 0.4.x.
-
-### Added
-
-- **The help says what each arc attribute becomes on a merged arc** (Karoline, 2026-11-06, #302: "please
-  document this in the help in the context of the arc attributes"), under Arc and node attributes: which
-  arcs Merge parallel arcs and Merge to genus merge, a table of every attribute's rule (a median, a union,
-  kept only where all merged arcs agree, or empty), and four consequences for reading one: the median is
-  unweighted, obligate and abolished arcs count without entering it, a merged arc is present when any of
-  its arcs is, and a pair with arcs of both signs is not merged. Arcs merge as before.
-- **The help says what a merged node carries** (Karoline, 2026-11-06: "for a merged node on genus level, are
-  strain ids kept? please document merging in nodes as well"), under its own header, Node attributes, with
-  the node table: a genus node keeps no strain id, and the arcs' `merged_pairs`, `supporting_pairs` and
-  `community` are where the strains behind it are named.
-
-- **Every arc records how its target was measured, `technique`** (#305): the mGrowthDB technique (fc, qpcr,
-  plates, 16s, ...) of the target's curves on both sides, in JSON, GraphML, Cytoscape and the help. An arc
-  of the comparison has one, since a species is never compared across techniques; the integrated form
-  names two if the co-culture and the monocultures its rate comes from differ; a merged arc names every
-  technique of its arcs. Live on 2026-11-06: 145 arcs in All, qpcr 117, plates 15, fc 13, none with two.
-  Merge parallel arcs merges arcs of different techniques and names them all (Karoline, 2026-11-06:
-  "Yes, allow it"); no merge in today's All network crosses techniques, so this moves no live arc.
-- **A genus node lists the strains it stands for, `merged_nodes`** (Karoline, 2026-11-06, asked whether a
-  genus node should list its strain ids: "Yes, add it"): their node ids, sorted, in JSON, GraphML (joined
-  by "; ") and Cytoscape; empty on every node without Merge to genus. It kept none before. Live, All with
-  Merge to genus: 17 genus nodes list the 24 strains of the unmerged network, each once (*Bacteroides* 5).
-
-### Fixed
-
+- **The page says when an arc is merged, and writes a changed setting as the report does** (found checking
+  Merge parallel arcs on the live page, 2026-11-06; Karoline: "Yes, fix both"). A merged arc's strength
+  showed as a bare median, "-1.49", like any arc; it now reads "3 merged arcs: median, range -2.59 to -1.30"
+  under it. The line naming the settings off their defaults said "Merge parallel arcs = True"; it now says
+  "on", and joins the second box's lines with "; ", as the report does.
+- **The report of a search with no species entered no longer says only their interactions were kept.**
+  All printed "Only interactions between the species entered (--all-partners): on" beside "with every
+  partner"; the line now says the setting was not read in that run. The page counts "1 study", not "1
+  studies".
 - **A genus node no longer carries one of its strains' `taxon_id_refused`.** With Merge to genus on, the
   live Lachnoclostridium node said taxon id 1506553 was refused, a statement about one strain on a node that
   carries no taxon id. A network saved with Merge to genus on by an earlier version carries that wrong
   field; derive it again to correct it.
-
-- **Groundwork for a third derivation: gLV rows from the steady states of sub-communities** (Karoline,
-  2026-11-06, #310: "parameterize the gLV from steady-state abundances of sub-communities", from every
-  available sub-community rather than only the leave-one-out ones of EPICS). The estimator,
-  `grownet.subcommunity.fit`, solves each row of `A / (r_i - D)` by least squares over one steady-state
-  equation per member present, names every row and coefficient the design leaves undetermined, and
-  predicts each community from a fit made without it. It is not selectable yet; the chemostat inputs and
-  the setting follow.
-- **The chemostat inputs for it** (#312): `subcommunity.chemostat_groups` turns continuous cultures into
-  communities, one fit per medium, unit and dilution rate, from runs known to be unperturbed, and reads each
-  row's scale `r_i - D` from a monoculture chemostat's own start-up. When the pump started is read from the
-  experiment's description (Karoline: "chemostat is not always switched on directly, so it would mean
-  checking experiment description for a batch period"); where it does not say, the row stays in units of
-  `r_i - D`. Live today: two studies each give one community, so nothing is derived.
-- **The derivation itself, `steady`** (#313): Derivation in Advanced settings and `--derivation steady`,
-  off by default, kept by gLV mode when chosen. Every identified coefficient becomes an arc with strength
-  `log2(1 + B_ij x_j)`, its coefficient (in 1/(time x abundance) where the row scale is known), the row's
-  bootstrap spread, and notes saying where the scale came from and how the largest community is predicted
-  by a fit made without it. What the design leaves undetermined is in the reasons. The help has a section
-  on it.
-- **The gLV package from it** (#317): rates `r_i - D` (the dilution folded in, so the package simulates the
-  chemostat) and the matrix `(r_i - D) B`, whose equilibrium is the community the chemostats held. The
-  README and the payload's caveats state its formula and its own model assumptions (effective
-  coefficients, fitted from communities of every size). A row whose scale was not read stays out of the
-  matrix, named, rather than mixing units. The steady-state check is not run under it, since it would score
-  the package against the chemostats it was fitted to and subtract D twice.
-- **A local validation of it** (#314): `packaging/validate_steady_state.py` runs it on the fitted 12-species
-  gLV of Venturelli et al. 2018 (download their Code EV1; nothing of theirs is in the repository). From
-  monocultures and pairs it recovers 126 of the 132 coefficients of B exactly; with 5% noise over three
-  vessels the bootstrap spread covers the truth for 85% to 94% of them over six noise draws. The numbers
-  are in METHOD_NOTES.
-- **When the design is insufficient, it says what is missing** (Karoline, 2026-11-06: "There will be cases
-  when the available sub-communities are insufficient to make the derivation (the current state of
-  mGrowthDB). Is the error message in this case informative?"). One line per chemostat group (how many
-  communities were at a steady state, how many rows that determines, and what a row needs) and one per
-  organism, where it was one per coefficient; and the page and the command line lead with that, instead of
-  the replicate comparison's sentences about co-cultures and drop-out designs. The `--derivation` help,
-  the command-line examples and the README describe the third derivation.
-
-- **The steady-state derivation fits the runs of every study a search reads together**, where the medium
-  composition, the abundance unit and the dilution rate match (Karoline, 2026-11-06: "for the new chemostat
-  inference mode, the medium composition has to match but other than that, I don't see why not"), so a
-  pair measured in one study and the monocultures in another determine a row that neither does alone. An
-  arc names every study its row was fitted from. Runs are pooled by each strain's identity as its own study
-  judges it, so a strain renamed between studies pools where its taxon id agrees (Karoline, 2026-11-11: "if
-  taxon ids agree and names differ, the studies can still be pooled"), and a strain whose taxon id one
-  study refuses is not pooled with its runs elsewhere, which is said. A pooled organism goes by the name the
-  most recently published of the arc's own studies gives it, so a renamed strain shows its later name. Every
-  other derivation still reads one study at a time.
-- **The steady-state derivation, hardened before release.** Runs that end with the same organisms present
-  are one community, since they reach one steady state, and its bootstrap draws whole runs: kept apart, two
-  noisy runs of one pair made rows look determined from noise alone. A row whose own term is not negative
-  is named, not reported, since its sign depends on whether the organism's growth rate is below the
-  dilution rate (an obligate cross-feeder's feeders were called inhibitors). Its arcs carry evidence
-  `steady_state` (a new value of `evidence`), not `biculture`, and the gLV package no longer says every arc
-  compares two organisms directly. The row scale is per hour whatever the curve's time unit, and is the
-  larger of two readings, the batch period's rise less D and the rise after the pump started, so a lag in
-  a short batch period no longer halves it; it is an estimate, which noise pulls high, and the help says
-  so. The bootstrap draws the statistic the fit uses (the mean) and is widened for few replicates. Each
-  organism is read by one technique within a fit: the runs using its more common technique are kept and
-  the others named. The rates say they are `r_i - D` from a chemostat
-  start-up rather than batch rates; with no row scaled, no batch rate is read in their place, and the
-  command line's report says so; the package takes one dilution rate for every organism, the one most rows
-  were fitted at, whatever the order the studies were read in. An empty result after the second box or the
-  Technique setting no longer says the studies hold no chemostat. A run that is still changing in the
-  window its steady state is read in is left out and named, rather than fitted as one; a window of fewer
-  than four points cannot be split in two and is not judged. The validation script no longer lets
-  absent organisms invade from solver noise, reports six noise draws and the start-up's noise bias, and
-  its numbers in METHOD_NOTES were re-derived.
-
-### Fixed
-
 - **An empty network from the command line is announced under the study's name again.** `derive STUDY`
   printed "NO interactions were derived for" the last reason it had listed, since the loop printing the
   reasons reused the name of the study's label; on every derivation.
-
-### Changed
-
-- **The About page says what the next release brings while it is in development** (Karoline, 2026-11-06: "is
-  the About section updated?"), under "Next release", above the log of released versions. The release check
-  refuses a tag while that list is not empty, so it moves under the version at release.
-
-### Fixed
-
-- **The second box now applies under the integrated derivation too.** Media, experiments and studies named
-  there reached the default derivation alone, so in gLV mode naming a medium changed nothing, although the
-  mode's own message says it keeps a simulation to one environment. Measured live: Bacteroides and
-  Roseburia with every partner, `--conditions EMGDB000000024 --derivation integrated` gave 7 arcs from 12
-  experiments, now the 2 arcs of that co-culture and its 2 monocultures, which is what the default
-  derivation gives; with `--conditions mucin`, 7 arcs became 0, as with the default derivation. A
-  derivation plugged in with `--deriver` is now given the selected experiments only.
-- **R's `glv_write` writes the `capacity_technique` column** that the download's `growth_rates.csv` has,
-  so the new `dilution` column is the 18th in both files. Before, R's file lacked that column.
+- **An empty result on the command line names the command-line options.** Before, it pointed at the
+  page's controls: "Only interactions between the species entered" and "Advanced settings".
 - **The Wilkins-Chalgren example in the help gives a network.** It now runs with `--all-partners`. Without
   it, the example wrote 0 nodes and 0 edges, because the partners are not among the species entered.
   Measured live: 3 nodes, 9 edges.
-- **An empty result on the command line names the command-line options.** Before, it pointed at the
-  page's controls: "Only interactions between the species entered" and "Advanced settings".
-- **The help calls the setting by its name on the page, "Growth property"**, not "growth measure". The
-  wording changed in its messages and in the help section "Which growth property".
+- **The R package's summary of a gLV package reads cleanly** (#296). "fitted:" no longer starts every line
+  of the organisms left out of the matrices; the organisms without a rate are not listed a second time on
+  the next line; and a one-organism matrix reads "1 organism", not "1 organisms". No number changes.
+- **R's `glv_write` writes the `capacity_technique` column** that the download's `growth_rates.csv` has,
+  so the new `dilution` column is the 18th in both files. Before, R's file lacked that column.
 
 ## [0.5.0] (2026-10-14)
 
