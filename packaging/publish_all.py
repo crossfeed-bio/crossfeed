@@ -9,6 +9,7 @@ and, when given NOTES_FILE, the release description for this run, which the work
 import http.client
 import json
 import os
+import ssl
 import sys
 import time
 import urllib.error
@@ -156,9 +157,15 @@ def previous_arcs(opener=urllib.request.urlopen, sleep=time.sleep) -> int | str 
     not "no previous artifact" but "cannot tell whether this run collapsed", and it used to switch the
     half check off on exactly the night it might be needed.
 
-    An answer that waiting fixes is read up to READS times before that refusal stands. A 404, a code
-    that waiting does not fix, and a body that parses but is not a network are each answered on the
-    first read, so the retry is the transient case alone and not a blanket.
+    An answer that waiting fixes is read up to READS times before that refusal stands. Everything else
+    is answered on the FIRST read, so the retry is the transient case alone and not a blanket: a 404,
+    a code that waiting does not fix, a body that parses but is not a network, a body that arrived WHOLE
+    (a length was sent) and is not JSON, and a certificate that does not verify.
+
+    A body cut short is read again in all three of the forms it arrives in, which took two reviews to
+    enumerate: with a length, where `read()` raises IncompleteRead; without one, where the short bytes
+    reach `json.loads`; and without one and cut inside a multi-byte character, where they reach
+    `decode` instead and raise UnicodeDecodeError. The clauses below say which is which and why.
     """
     # the first run under a new format id has no file of its own yet, so it compares with the legacy file;
     # and with both deleted, which is the emergency procedure, it compares with `all_network.json`, which
@@ -167,9 +174,15 @@ def previous_arcs(opener=urllib.request.urlopen, sleep=time.sleep) -> int | str 
     for url in (URL, LEGACY_URL, f"{base}/{NETWORK}"):
         absent, reason = False, ""
         for read in range(1, READS + 1):
+            # the length this read was promised, or None where the server sent none. Set INSIDE the `with`
+            # and reset each read, because the parse clause below decides on it and a value left over from
+            # a previous read would decide the wrong way.
+            length = None
             try:
                 with opener(url, timeout=TIMEOUT) as response:
-                    doc = json.loads(response.read().decode("utf-8"))
+                    raw = response.read()
+                    length = (getattr(response, "headers", None) or {}).get("Content-Length")
+                    doc = json.loads(raw.decode("utf-8"))
                     return len((doc.get("network") or doc)["edges"])
             except urllib.error.HTTPError as e:
                 if e.code == 404:
@@ -178,7 +191,27 @@ def previous_arcs(opener=urllib.request.urlopen, sleep=time.sleep) -> int | str 
                 reason = f"GitHub answered HTTP {e.code}"
                 if e.code not in WAITS_OUT:
                     return reason
-            except (TimeoutError, json.JSONDecodeError, http.client.IncompleteRead, OSError) as e:
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                # A PARSE FAILURE IS A SHORT READ ONLY WHERE NO LENGTH WAS SENT, and both of these are
+                # parse failures (Karoline's agent, reviewing, findings 2 and 3). Two things were wrong
+                # before. UnicodeDecodeError was not retried at all, so a body cut INSIDE a multi-byte
+                # character refused on the first read: `all_network.json` is written with
+                # `ensure_ascii=False`, so non-ASCII bytes are possible, and that error derives from
+                # ValueError rather than OSError, which is how it fell through. Reproduced: one read, no
+                # wait. And JSONDecodeError was retried unconditionally, so a COMPLETE 200 whose body is
+                # an HTML error page was read four times over fourteen seconds before refusing anyway.
+                # Reproduced: four reads, waits of 2.0, 4.0 and 8.0 seconds.
+                #
+                # The length tells the two apart, and it is the only thing that can. Where a length was
+                # sent, a body that falls short makes `read()` itself raise IncompleteRead, which is
+                # handled below; so a parse failure WITH a length means the body arrived whole and
+                # simply is not the artifact, which is a format defect and waiting does not fix it.
+                # Where no length was sent (chunked or close-delimited) the short bytes reach the parser,
+                # and that is the transient case this retry exists for.
+                reason = f"{type(e).__name__}: {e}"
+                if length is not None:
+                    return reason
+            except (TimeoutError, http.client.IncompleteRead, OSError) as e:
                 # URLError and ConnectionError are OSError. A BODY CUT SHORT TAKES TWO FORMS, and the
                 # first version of this named only the second one (Karoline's agent, reviewing, who
                 # reproduced it against a local socket promising 100 bytes and sending 10). When the
@@ -197,6 +230,16 @@ def previous_arcs(opener=urllib.request.urlopen, sleep=time.sleep) -> int | str 
                 # retrying them would turn a server defect into four slow server defects behind a delay.
                 # The rule this function keeps is that only an answer waiting fixes is read again.
                 reason = f"{type(e).__name__}: {e}"
+                # AND A CERTIFICATE THAT DOES NOT VERIFY IS NOT AN ANSWER WAITING FIXES (same review,
+                # finding 3). It arrives here because URLError is an OSError, and it was read four times
+                # over fourteen seconds before refusing anyway; reproduced. Retrying the same chain gives
+                # the same verdict, so it answers on the first read like any other case waiting cannot
+                # fix. BOTH SHAPES ARE CHECKED, which is where the first attempt at this would have gone
+                # wrong: urlopen wraps it, so `URLError.reason` holds the SSLCertVerificationError, while
+                # a directly raised one IS the exception and its own `.reason` is a plain string.
+                wrapped = e.reason if isinstance(getattr(e, "reason", None), BaseException) else e
+                if isinstance(wrapped, ssl.SSLCertVerificationError):
+                    return reason
             except Exception as e:     # noqa: BLE001 - every other failure is reported, and refuses below
                 return f"{type(e).__name__}: {e}"
             if read < READS:

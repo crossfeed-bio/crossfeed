@@ -90,7 +90,11 @@ def test_a_gateway_answer_that_clears_is_read_again_and_one_that_cannot_clear_is
         return Response(body)
     assert previous_arcs(clears_on_the_third, sleep=waited.append) == 5, "the day publishes"
     assert len(reads) == 3, reads
-    assert waited == [publish_all.BACKOFF, publish_all.BACKOFF ** 2], "and waits longer each time"
+    # LITERALS, NOT THE CONSTANTS. This line read `[publish_all.BACKOFF, publish_all.BACKOFF ** 2]`,
+    # which takes its expected value from the thing it is testing: setting BACKOFF to 1.0 moved the
+    # oracle with the subject and the assertion still passed (Karoline's agent, reviewing, finding 1).
+    # An oracle derived from the subject tests nothing. See the pinning test below for the rest of it.
+    assert waited == [2.0, 4.0], "and waits longer each time"
 
     # The other direction, which is what keeps this a transient case and not a blanket retry: a code
     # that waiting does not fix, and a body that parses and is not a network, are each answered on the
@@ -152,12 +156,171 @@ def test_a_body_cut_short_is_read_again_in_both_of_the_forms_it_arrives_in():
             return cut(url, timeout) if len(reads) < 3 else Response(body)
         assert previous_arcs(clears_on_the_third, sleep=waited.append) == 5, "the day publishes"
         assert len(reads) == 3, reads
-        assert waited == [publish_all.BACKOFF, publish_all.BACKOFF ** 2], waited
+        assert waited == [2.0, 4.0], waited        # literals, for the reason the test above gives
 
     # and it still fails closed when every read is cut short, which is the floor this never lifts
     reason = previous_arcs(lambda url, timeout: Truncated(), sleep=lambda s: None)
     assert "IncompleteRead" in reason and f"every one of {publish_all.READS} reads" in reason, reason
     assert floor(145, reason) and "could not be read" in floor(145, reason)[0]
+
+
+def _plain(body=b"", length=None):
+    """A response object: `headers` carries a Content-Length only when one is given, because that header
+    is what tells a short body from a complete one that is not JSON."""
+    class Response(io.BytesIO):
+        headers = {} if length is None else {"Content-Length": str(length)}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+    return Response(body)
+
+
+def test_the_waits_and_the_read_count_are_pinned_to_literals_on_the_all_fail_path():
+    """Four changes to `publish_all.py` left this file at 26 passed, every one of them a silent change to
+    what the retry does (Karoline's agent, reviewing, finding 1): `BACKOFF = 1.0`, `READS = 10`,
+    a linear `sleep(BACKOFF * read)`, and `WAITS_OUT` shrunk to {503, 504}.
+
+    Three things hid them, and this test removes all three.
+
+    FIRST, the oracle was the subject. The old assertions read `waited == [publish_all.BACKOFF,
+    publish_all.BACKOFF ** 2]`, so changing BACKOFF changed what was expected as well as what happened.
+    Everything below is a literal.
+
+    SECOND, the happy paths succeed on the third read, so they take only TWO waits, and 2*1 and 2*2 equal
+    2**1 and 2**2. Linear and exponential are indistinguishable until the third wait. The all-fail path
+    takes all three, where 6 and 8 differ, so the schedule is pinned here and not there.
+
+    THIRD, only 504 was ever exercised, so dropping five codes from `WAITS_OUT` changed nothing visible.
+    Every member is driven below, and the set's own membership is asserted so it cannot shrink unnoticed.
+
+    Hand computed: READS is 4, so reads 1, 2 and 3 each wait and read 4 does not, giving waits of 2**1,
+    2**2 and 2**3 against a BACKOFF of 2.0. The function returns after the first url on this path,
+    because its refusal is returned inside the url loop, so the counts are per url and not times three.
+    """
+    import urllib.error
+
+    assert publish_all.READS == 4, "the literals below are computed for four reads"
+    assert publish_all.BACKOFF == 2.0, "the literals below are computed for a BACKOFF of 2.0"
+    # the whole set, not a sample: a code quietly removed from it stops being retried in production
+    assert publish_all.WAITS_OUT == frozenset({408, 425, 429, 500, 502, 503, 504}), publish_all.WAITS_OUT
+
+    for code in sorted(publish_all.WAITS_OUT):
+        reads, waited = [], []
+
+        def always(url, timeout, code=code, reads=reads):
+            reads.append(url)
+            raise urllib.error.HTTPError(url, code, "nope", {}, None)
+        reason = previous_arcs(always, sleep=waited.append)
+        assert len(reads) == 4, (code, reads)
+        assert waited == [2.0, 4.0, 8.0], (code, waited)
+        assert f"HTTP {code}" in reason and "every one of 4 reads" in reason, (code, reason)
+        assert floor(145, reason), "and it still refuses the publish"
+
+    # the other side of the same set: a code NOT in it answers on the first read with no wait at all
+    for code in (400, 401, 403, 410, 501):
+        reads, waited = [], []
+
+        def once(url, timeout, code=code, reads=reads):
+            reads.append(url)
+            raise urllib.error.HTTPError(url, code, "nope", {}, None)
+        reason = previous_arcs(once, sleep=waited.append)
+        assert len(reads) == 1 and waited == [], (code, reads, waited)
+        assert f"HTTP {code}" in reason, (code, reason)
+
+
+def test_a_body_cut_inside_a_character_is_read_again_and_a_whole_body_that_is_not_json_is_not():
+    """Findings 2 and 3 of the same review, which are one question: WHICH parse failures are short reads.
+
+    `all_network.json` is written with `ensure_ascii=False`, so a body can carry multi-byte characters,
+    and a cut inside one reaches `decode` rather than `json.loads` and raises UnicodeDecodeError. That
+    derives from ValueError and not from OSError, so it was not retried: reproduced against the shipping
+    code at one read and no waits, while the changelog claimed both forms of a short body were read
+    again. It was the third form.
+
+    The other direction is finding 3, and the Content-Length is what separates them. Where a length was
+    sent, a body that falls short makes `read()` raise IncompleteRead, so a parse failure WITH a length
+    means the body arrived whole and is not the artifact. That is a format defect: it was read four
+    times over fourteen seconds and refused anyway, reproduced, and now answers on the first read.
+    """
+    cut = '{"network": {"edges": [], "note": "café"}}'.encode()      # utf-8, which is the default
+    cut = cut[:cut.index(b"\xc3") + 1]        # ends on a utf-8 lead byte, so decode raises, not json
+    whole = json.dumps({"network": {"edges": [{}, {}, {}, {}, {}]}}).encode()
+
+    reads, waited = [], []
+
+    def clears_on_the_third(url, timeout):
+        reads.append(url)
+        return _plain(cut) if len(reads) < 3 else _plain(whole)
+    assert previous_arcs(clears_on_the_third, sleep=waited.append) == 5, "the day publishes"
+    assert len(reads) == 3 and waited == [2.0, 4.0], (reads, waited)
+
+    # and all four reads cut the same way still refuses, naming the class so the next reader can find it
+    reason = previous_arcs(lambda url, timeout: _plain(cut), sleep=lambda s: None)
+    assert "UnicodeDecodeError" in reason and "every one of 4 reads" in reason, reason
+    assert floor(145, reason) and "could not be read" in floor(145, reason)[0]
+
+    # THE OTHER DIRECTION: a complete body that is not JSON, with a length, is answered on the first read
+    html = b"<!doctype html><title>502 Bad Gateway</title>"
+    reads, waited = [], []
+
+    def error_page(url, timeout):
+        reads.append(url)
+        return _plain(html, length=len(html))
+    reason = previous_arcs(error_page, sleep=waited.append)
+    assert len(reads) == 1 and waited == [], (reads, waited)
+    assert "JSONDecodeError" in reason, reason
+    assert floor(145, reason), "a format defect still refuses the publish"
+
+    # and WITHOUT a length the same bytes are a possible short read, so they are read again
+    reads, waited = [], []
+
+    def no_length(url, timeout):
+        reads.append(url)
+        return _plain(html)
+    reason = previous_arcs(no_length, sleep=waited.append)
+    assert len(reads) == 4 and waited == [2.0, 4.0, 8.0], (reads, waited)
+
+
+def test_a_certificate_that_does_not_verify_is_answered_on_the_first_read():
+    """Finding 3 of the same review. It arrives as URLError, which is an OSError, so it was retried:
+    four reads and fourteen seconds before refusing anyway, reproduced. Retrying the same chain gives
+    the same verdict, so waiting cannot fix it and it belongs with the 403 rather than with the 504.
+
+    BOTH SHAPES ARE DRIVEN, because naming the exception class is half the work and this is the second
+    time that has been the finding on this function: `urlopen` wraps the error, so `URLError.reason`
+    holds the SSLCertVerificationError, while a directly raised one IS the exception and its own
+    `.reason` is a plain string. A fix that checked only the wrapper would pass a test that drove only
+    the wrapper.
+    """
+    import ssl
+    import urllib.error
+
+    bad = ssl.SSLCertVerificationError(1, "certificate verify failed: unable to get local issuer")
+    wrapped, direct = urllib.error.URLError(bad), bad
+    for raising in (wrapped, direct):
+        reads, waited = [], []
+
+        def refuses(url, timeout, raising=raising, reads=reads):
+            reads.append(url)
+            raise raising
+        reason = previous_arcs(refuses, sleep=waited.append)
+        assert len(reads) == 1 and waited == [], (type(raising).__name__, reads, waited)
+        assert "certificate verify failed" in reason, reason
+        assert floor(145, reason) and "could not be read" in floor(145, reason)[0]
+
+    # CONTROL, so this does not quietly become "no OSError is retried": a plain connection reset is
+    # still the transient case, read four times with the full schedule
+    reads, waited = [], []
+
+    def reset(url, timeout):
+        reads.append(url)
+        raise ConnectionResetError("connection reset by peer")
+    reason = previous_arcs(reset, sleep=waited.append)
+    assert len(reads) == 4 and waited == [2.0, 4.0, 8.0], (reads, waited)
+    assert "ConnectionResetError" in reason, reason
 
 
 def _result():
