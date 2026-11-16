@@ -71,6 +71,12 @@ def check(tag: str, root: Path = ROOT, releasing: bool = True, today=None) -> tu
     dated = re.search(r"^date-released: *\"?([0-9]{4}-[0-9]{2}-[0-9]{2})\"?$", citation, re.M)
     if not dated:
         problems.append("CITATION.cff has no date-released")
+    # from here on the checks are about the release the tag names: with the tag and pyproject.toml
+    # disagreeing, the messages below named pyproject's version, an older one, and sent the reader to
+    # move the entries into the section of a release already out (found in review)
+    declared = version
+    if tag.startswith("v") and tag[1:] != version:
+        version = tag[1:]
     changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
     # RELEASING.md leaves [Unreleased] empty at a tag: an entry left there is missing from the release's
     # notes, which come from the version's section, and the tagged tree calls it unreleased (found in
@@ -162,9 +168,9 @@ def check(tag: str, root: Path = ROOT, releasing: bool = True, today=None) -> tu
     r_version = re.search(r"^Version: *(.+)$", description, re.M)
     if not r_version:
         problems.append("r/DESCRIPTION has no Version")
-    elif r_version.group(1).strip() != version:
+    elif r_version.group(1).strip() != declared:
         problems.append(f"r/DESCRIPTION says Version {r_version.group(1).strip()}, pyproject.toml says "
-                        f"{version}")
+                        f"{declared}")
     # A version is a promise about content and a tag is never reused, so a tag that already names another
     # commit is a release that has happened: the check said `v0.3.0 is ready` on a tree whose v0.3.0 was
     # tagged and on PyPI (#236). The tag naming THIS commit is the release workflow itself, which runs on

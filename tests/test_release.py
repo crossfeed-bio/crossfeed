@@ -549,3 +549,18 @@ def test_a_kind_of_change_under_two_headings_is_refused_at_a_tag(tmp_path):
     # not without a tag: [Unreleased] collects each branch's entries until the release merges them
     assert not any("more than one" in p for p in check("v0.1.0", repo, releasing=False,
                                                        today=FIXTURE_DAY)[0])
+
+
+def test_a_tag_ahead_of_pyproject_is_told_about_its_own_version(tmp_path):
+    """Found in review before 0.6.0: tagging v0.6.0 on a tree still at 0.5.0 said "move them into the
+    section for 0.5.0", the section of a release already out. The messages after the mismatch name the
+    tag's release; the R package is still compared with pyproject.toml, which it has to match."""
+    repo = _repo(tmp_path)
+    changelog = repo / "CHANGELOG.md"
+    changelog.write_text(changelog.read_text().replace(
+        "## [0.1.0]", "## [Unreleased]\n\n### Added\n- **Left behind**\n\n## [0.1.0]", 1))
+    problems = check("v0.2.0", repo, today=FIXTURE_DAY)[0]
+    assert any("does not match pyproject.toml's version 0.1.0" in p for p in problems)
+    assert any("move them into the section for 0.2.0" in p for p in problems), problems
+    assert any("has no section for 0.2.0" in p for p in problems), problems
+    assert not any("r/DESCRIPTION" in p for p in problems), problems

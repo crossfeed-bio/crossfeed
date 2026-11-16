@@ -1343,7 +1343,8 @@ and the README: that is the one mistake this style can make.
 `derive.start_note` wraps `integrated.starting_densities` (the median first value of each side, never
 matched on, #172) and the replicate form now writes it on biculture arcs (co-culture against the target's
 monocultures) and drop-out arcs (full community against the community without R), in the integrated form's
-wording. A side with no positive first value gives no note. Live: every one of the 190 drop-out arcs of All
+wording. A side with no positive first value, or sides in different units, gives a note saying so
+(silence read as "the densities matched"). Live: every one of the 190 drop-out arcs of All
 (with absences) carries it; 32 of 33 bicultures.
 
 

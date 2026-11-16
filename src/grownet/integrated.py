@@ -1293,7 +1293,7 @@ class IntegratedDeriver:
                 skipped.append((exp.get("name") or _exp_id(exp),
                                 f"{len(members)} members: the integrated form can fit a row from a whole "
                                 "community, which is a new kind of evidence and needs a decision first "
-                                "(see the open decisions in docs/METHOD_NOTES.md)"))
+                                "(see the open decisions in docs/METHOD_NOTES.md in the grownet repository)"))
 
         study_id = study.get("id")
         # `name` is what mGrowthDB calls the study's title; it has no `citation` key and never had, so

@@ -74,9 +74,8 @@ NEXT = (
     "names the studies and experiments behind it. Each image downloads as SVG.",
     # #338 (which standard deviation the absence threshold uses)
     "The help says which standard deviation the absence threshold uses under each derivation.",
-    # #344 (the papers behind the integrated form)
-    "The help and the README cite the two papers the integrated form rests on: Kloppers and Greeff (2013) for "
-    "the Log Integral equation it fits, and Dattner and Klaassen (2015) for the cumulative integral estimator.",
+    # #344 (the papers behind the integrated form) is left out on purpose (Karoline, 2026-11-14: "the about
+    # page doesn't need to mention the new references - this is too much detail"); the help cites them
 )
 
 # What changed in each release, a few lines each, newest first (Karoline, 2026-10-04: "a small log of what
@@ -248,7 +247,7 @@ SETTINGS = {
                         "selects: that one refuses a community of three or more members, since fitting a "
                         "row inside one is a new kind of evidence and needs a decision first."),
     "include_non_batch": ("Include chemostat and serial dilution experiments", "--include-non-batch",
-                          "What a continuous culture can be compared on depends on the growth measure. With "
+                          "What a continuous culture can be compared on depends on the growth property. With "
                           "max it is derived without this setting: the level such a culture settles at is "
                           "comparable with and without a partner, and those arcs are shown with the caution "
                           "continuous_culture. With auc or a growth rate it is left out, because the area "
@@ -262,7 +261,8 @@ SETTINGS = {
                           "|log2 mean| < k times the standard deviation. The default 1 means the mean plus "
                           "or minus its sd crosses zero. Raise k for a stricter network, where fewer "
                           "interactions count as present; 0 marks only a mean of exactly zero absent. Absent "
-                          "interactions stay in the downloads with status absent."),
+                          "interactions are reported, and kept in the downloads with status absent when "
+                          "Include arcs below the absence threshold is on."),
     "correction": ("Multiple testing correction", "--correction bh|by",
                    "How the p-values of the test the derivation ran are adjusted for multiple testing, over every "
                    "comparison one search tests (every arc of every study it reads, absent and low-quality "
@@ -378,15 +378,16 @@ SETTINGS = {
 
 # command line options of `derive` that are not advanced settings -> what they do
 CLI_ONLY = {
-    "--glv-mode": "the page's gLV mode button, from the command line: --report-rates, --no-dropout and "
-                  "--metric growth_rate together, which is what a fitted coefficient needs",
+    "--glv-mode": "the page's gLV mode button, from the command line: --report-rates, --no-dropout, "
+                  "--metric growth_rate and the integrated derivation together, which is what a fitted "
+                  "coefficient needs",
     "--rates": "write the growth rates to a CSV file, the page's Download the growth rates (needs "
                "--report-rates)",
     "--glv": "write the parameters of a generalized Lotka-Volterra simulation to a zip file, the page's "
              "gLV parameters, Download (needs --report-rates)",
     "--matrix-image": "write the adjacency matrix as an SVG image, the page's Matrix image, with its legend and "
-                      "each cell's sources on hover in a browser; with growth rates, each matrix of fitted gLV "
-                      "coefficients beside it, its name ending in _glv_matrix and the abundance unit",
+                      "each cell's sources on hover in a browser; with --glv-mode, as on the page, each matrix of "
+                      "fitted gLV coefficients beside it, its name ending in _glv_matrix and the abundance unit",
     "--steady-check": "score those parameters against the chemostat steady states mGrowthDB holds for "
                       "these organisms, since a continuous culture satisfies A x = -(r - D) at steady "
                       "state and was never used to fit them: the report gets the comparison and the zip "
@@ -404,7 +405,8 @@ CLI_ONLY = {
     "--live": "fetch from the mGrowthDB API (the normal case)",
     "--fixture": "derive from a JSON list of interaction records instead (offline, for testing)",
     "--deriver": "plug in your own derivation method, given as module:ClassName (one study at a time)",
-    "--format": "json (the neutral format, default) or graphml (Cytoscape, igraph, networkx, Gephi)",
+    "--format": "json (the neutral format, default), graphml (Cytoscape, igraph, networkx, Gephi) or matrix "
+               "(the adjacency matrix as CSV, with a file beside it saying what it is)",
     "--out": "write the network to a file instead of the screen",
     "--report": "write the report of the search to a file, as the page's Report button downloads it",
     "--to-cytoscape": "also send the network into a running Cytoscape on this machine, with the legend's style",
@@ -518,7 +520,7 @@ EDGE_ATTRIBUTES = {
                       "measured, and under auc or max the set did grow and failed a rule about how "
                       "much, so the number it reached is not 0. How far from 0 it was is usually on "
                       "the same arc, as strength_bound with the rule that gave it: on the corpus those "
-                      "bounds put the without-side at up to 65 per cent of the with-side. On 3 of the "
+                      "bounds put the without-side at up to 85 per cent of the with-side (2026-11-14). On 3 of the "
                       "15 censored arcs there is NO bound and strength_bound is empty, because the rule "
                       "bounds nothing away from zero or the set is zero from its first point; bound_rule "
                       "says which, and the matrix leaves those cells NA like the rest",
@@ -712,8 +714,8 @@ DECISIONS = (
      "support and does not decide. The absence threshold k does: |mean| of at least k sd."),
     # #54
     ("A measured absence is kept, as status absent.",
-     "\"We looked and found nothing\" is a result, so absent edges stay in the downloads and are hidden "
-     "from view, not deleted."),
+     "\"We looked and found nothing\" is a result, so absent edges are reported, and kept in the downloads "
+     "with status absent when Include arcs below the absence threshold is on."),
     # #40
     ("Low quality is not absence.",
      "An edge with a quality flag keeps the sign of its mean and is hidden by default; it is never called "
@@ -847,7 +849,7 @@ def _table(head, rows) -> str:
     return f"<table><tr>{th}</tr>" + "".join(rows) + "</table>"
 
 
-SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"), ("measures", "Which growth measure"),
+SECTIONS = (("what", "What grownet does"), ("idea", "The idea behind it"), ("measures", "Which growth property"),
             ("where", "Choosing where to look"),
             ("example", "Try the example"), ("reading", "Reading the result"),
             ("statistics", "How an interaction is decided"),
@@ -1020,7 +1022,7 @@ of yeast volume as <i>S. cerevisiae</i>.</p>
 two species of yeast. Journal of Experimental Biology 9: 389-402.<br>
 Gause GF (1934) The Struggle for Existence. Williams and Wilkins, Baltimore.</p>
 
-<h2 id="measures">Which growth measure</h2>
+<h2 id="measures">Which growth property</h2>
 <p>Each measure answers a different question, so an arc can differ between them: on all of mGrowthDB (September 2026)
 the area and the maximum agree on the sign of every arc both find, while the area and the growth rate agree on
 18 of 23, since a partner can, for example, lower a species' final yield while speeding up its early growth.
@@ -1065,7 +1067,7 @@ monocultures, never with a batch one.</li>
 <p>An experiment whose mode mGrowthDB does not record counts as not batch.</p>
 
 <h2 id="example">Try the example</h2>
-<p>The Example button fills the species box with {_e(pair)}, a pair with enough data to show a result: the
+<p>The Example button fills the species box with {_e(pair)}, species with enough data to show a result: the
 <a href="#cli">command line</a> section runs the same search.</p>
 
 <h2 id="reading">Reading the result</h2>
@@ -1199,7 +1201,7 @@ such as Inkscape.</p>
 <p><strong>A bound on an area is weaker than a bound on a rate.</strong> A culture that did not grow
 still carries the area of its own inoculum for the whole window, so on the default growth property, the
 area under the curve, the area the rule allows it can be as large as the growing side's, and the bound says
-nothing beyond zero: that cell stays 0 and the report says so. On the maximum the bound is the factor times
+nothing beyond zero: that cell stays NA and the report says so. On the maximum the bound is the factor times
 the measured start, and on a growth rate it is the rate that would produce the allowed rise over the
 window; both are far under what a growing side reaches. So to size an obligate or abolished interaction,
 search on the growth rate or the maximum. gLV mode already uses the growth rate.</p>
@@ -1530,7 +1532,7 @@ A &lt;- glv_matrix(glv)           # rows are affected, columns are the actor
 r &lt;- glv_rates(glv)
 A                              # B. thetaiotaomicron: -8.74e-10 on itself, -4.351e-10 from R. intestinalis
                                # R. intestinalis: -4.41e-10 from B. thetaiotaomicron, -9.571e-10 on itself
-solve(A, -r)                   # where it settles: 7.323e8 and 3.634e8 Cells/mL, both above zero
+solve(A, -r)                   # where it settles: 7.323e8 and 3.633e8 Cells/mL, both above zero
 
 args &lt;- as_miasim(glv)         # no scaling: these are coefficients, in 1/(time x abundance)
 tse &lt;- do.call(miaSim::simulateGLV,
@@ -1647,7 +1649,7 @@ its report, and the network sent to Cytoscape:</p>
 command. Other uses:</p>
 <pre>{COMMAND} derive --live --all --out all.json
 {COMMAND} derive SMGDB00000004 --live --format graphml --out study4.graphml
-{COMMAND} derive --live --species Blautia --conditions "Wilkins-Chalgren" --out wc.json
+{COMMAND} derive --live --species Blautia --conditions "Wilkins-Chalgren" --all-partners --out wc.json
 {COMMAND} derive --live --conditions "Wilkins-Chalgren" --out wc_all.json
 {COMMAND} derive SMGDB00000004 --live --format matrix --out study4_matrix.csv
 {COMMAND} derive SMGDB00000004 --live --glv-mode --rates study4_rates.csv --glv study4_glv.zip
@@ -1678,7 +1680,7 @@ see <a href="#qa">the first question</a>.</li>
 <li>the study grows the species only in a community that is neither a two-member co-culture nor a
 drop-out design: grownet has no method for it yet;</li>
 <li>no monoculture was grown under the same conditions: nothing to compare with;</li>
-<li>the experiments are chemostats or serial dilutions: set the growth measure to max, which that mode
+<li>the experiments are chemostats or serial dilutions: set the growth property to max, which that mode
 supports, or tick "Include chemostat and serial dilution experiments" to use them with another measure;</li>
 <li>every edge is low quality: tick "Show low-quality edges";</li>
 <li>every edge is below the absence threshold: open that section of the result, or set k to 0;</li>
