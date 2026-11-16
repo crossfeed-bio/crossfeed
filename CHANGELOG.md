@@ -295,6 +295,15 @@ content.
   experiments, now the 2 arcs of that co-culture and its 2 monocultures, which is what the default
   derivation gives; with `--conditions mucin`, 7 arcs became 0, as with the default derivation. A
   derivation plugged in with `--deriver` is now given the selected experiments only.
+- **R's `glv_write` writes the `capacity_technique` column** that the download's `growth_rates.csv` has,
+  so the new `dilution` column is the 18th in both files. Before, R's file lacked that column.
+- **The Wilkins-Chalgren example in the help gives a network.** It now runs with `--all-partners`. Without
+  it, the example wrote 0 nodes and 0 edges, because the partners are not among the species entered.
+  Measured live: 3 nodes, 9 edges.
+- **An empty result on the command line names the command-line options.** Before, it pointed at the
+  page's controls: "Only interactions between the species entered" and "Advanced settings".
+- **The help calls the setting by its name on the page, "Growth property"**, not "growth measure". The
+  wording changed in its messages and in the help section "Which growth property".
 
 ## [0.5.0] (2026-10-14)
 

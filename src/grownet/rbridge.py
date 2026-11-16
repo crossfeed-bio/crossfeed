@@ -124,5 +124,5 @@ def unreachable(port: int = DEFAULT_PORT, reason: object = "") -> str:
     detail = f" ({reason})" if reason else ""
     return (f"no R session is listening on port {port}{detail}. In R: "
             f"install.packages(\"remotes\"); {INSTALL_R}; library(grownet); glv <- grownet_listen(). "
-            "Or fetch the same parameters from R without a listener, with grownet_glv(url), where url is "
-            "the gLV address shown under this control.")
+            "Or, from the local page, fetch the same parameters from R without a listener, with "
+            "grownet_glv(url), where url is the gLV address the page shows under its gLV control.")

@@ -206,7 +206,7 @@ A `grownet` console command is installed too, so `grownet derive ...` works afte
 ## The legend
 
 One picture of what every arc, head, dash and flag means: [docs/legend.svg](https://raw.githubusercontent.com/crossfeed-bio/crossfeed/main/docs/legend.svg). The local
-page links to it ("What the arcs mean"), and the same vocabulary is what the Cytoscape style draws.
+page links to it ("Legend"), and the same vocabulary is what the Cytoscape style draws.
 It is generated from the code (`make legend`), and a test requires it to name every effect, outcome,
 quality flag, caution, evidence and status the model defines, so it cannot fall behind them.
 
@@ -234,7 +234,7 @@ media, because a medium with a sugar added or a carbon source left out is anothe
 mGrowthDB states that only in the description: those are told apart, never pooled, and the report names
 every medium a search read, so name an experiment id to read one of them alone.
 
-**Four buttons.** Find interactions; Example, which fills the first box with a pair that gives a result;
+**Four buttons.** Find interactions; Example, which fills the first box with species that give a result;
 gLV example, which fills both boxes and the settings for a
 package that simulates, ready for Find interactions (the help walks that package through miaSim step by
 step); and the gLV
@@ -256,11 +256,11 @@ stay there.
 
 ## Simulate it in R
 
-Press the **gLV mode** switch beside gLV example and the two settings a simulation needs are set in Advanced
-settings: **Report growth rates** on and **Include drop-out communities** off, since a drop-out arc may act
-through a third species (`--glv-mode` on the command line, which also sets the growth property and the
-derivation a coefficient needs; `--report-rates --no-dropout` sets two of the four and gives a different
-network). The result section's **gLV parameters** control then
+Press the **gLV mode** switch beside gLV example and the four settings a simulation needs are set in
+Advanced settings: **Report growth rates** on, **Include drop-out communities** off (a drop-out arc may act
+through a third species), the growth property on the growth rate, and the integrated derivation
+(`--glv-mode` on the command line sets the same four; `--report-rates --no-dropout` sets two of them and
+gives a different network). The result section's **gLV parameters** control then
 either downloads the zip or sends the parameters straight into a running R session. The companion package is in [`r/`](https://github.com/crossfeed-bio/crossfeed/tree/main/r), and it
 assumes no simulator: it hands over a plain matrix and a plain vector, with a helper that shapes them for
 [miaSim](https://bioconductor.org/packages/release/bioc/html/miaSim.html).
@@ -422,8 +422,9 @@ of one source and target were merged, and the lowest and highest log2 mean among
 (strain pairs when only taxon ids were entered) a genus arc rests on, and which. `outcome` says what the comparison could establish: `quantified`, `obligate` (the
 target's without-set did not grow in that comparison, by the no-growth rule), `abolished` (its with-set
 did not grow), or `no_growth`. These are scoped to one comparison and are not claims about the organism:
-one pair in the corpus is obligate in two conditions of a study and quantified in six others of the same
-study, once with the target reaching 3.5 times more without the source than with it. For an
+one pair in the corpus is obligate in two conditions of SMGDB00000013 and quantified in six others, one of
+them in that study and five in SMGDB00000014, once with the target reaching 3.5 times more without the
+source than with it (2026-11-14). For an
 obligate or abolished edge, the count on the side without growth is its replicates without growth. A
 comparison whose set was emptied by exclusions (every replicate spiked, for example) says nothing about
 growth; it is skipped with a reason rather than read as obligate. `evidence`
@@ -633,7 +634,7 @@ with `derive STUDY`, every study a search reads with `--species`, `--all` or the
 low-quality arcs included (`meta.statistics`). Single-replicate, obligate, abolished and merged arcs have
 no test. The test supports an edge when significant and decides nothing, by default: with few
 replicates, any of these results may change with more experiments. `--max-adjusted-p Q` (the page's
-"Filter on adjusted p-value") also leaves out interactions whose adjusted p-value is above Q; arcs
+"Filter on the q-value, at most") also leaves out interactions whose adjusted p-value is above Q; arcs
 without a p-value are kept with the caution `untested`, and `meta.hidden.not_significant` counts what was
 left out. It is off by default because with two or three replicates the test misses many real effects,
 and because an adjusted p-value depends on the other comparisons in the same derivation, so the same arc
