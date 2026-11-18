@@ -649,9 +649,12 @@ def two_stage(target: str, monocultures: list, cocultures: list, organisms: list
     partners = [name for name in organisms if name != target]
     # Stage 1 gives one (r, A_ii) per monoculture replicate, and stage 2 used to treat their median as
     # exact, so a partner coefficient carried no uncertainty at all and an error in stage 1 reached it
-    # unannounced. Both are fixed by fitting stage 2 once per co-culture replicate and once per
-    # leave-one-out of the monoculture replicates: the spread over that set carries the co-culture
-    # replicate spread and stage 1's together, and the median over it is the estimate (2026-10-06).
+    # unannounced (2026-10-06). Stage 2 is now fitted once per co-culture replicate at stage 1's
+    # estimate, the median over those replicates is the coefficient, and each replicate's exact
+    # derivative with respect to (r, A_ii) is kept. Stage 1's own error comes from resampling its
+    # monoculture replicates (`_stage_one_draws`: a bootstrap of the median, or a delete-one jackknife of
+    # the pooled regression), and `_arc_statistics` adds the two parts. This said "once per leave-one-out
+    # of the monoculture replicates" until 2026-11-18, the method #142 item 3 replaced for the median.
     draws = _stage_one_draws(target, rates, selfs, usable, pooled_only, max_condition)
 
     per_replicate: list = []          # one {partner: value} per co-culture replicate, at (rate, own)
@@ -1498,9 +1501,10 @@ class IntegratedDeriver:
                         "q_value": None, "significance": None,
                         "effect_over_sd": (None if (sd is None or not sd or strength is None)
                                            else round(abs(strength) / sd, 4)),
-                        # the coefficient's own spread, in the coefficient's units: over co-culture
-                        # replicates and over leave-one-out of the monoculture replicates together, with
-                        # the part that comes from the monoculture stage alone beside it
+                        # the coefficient's own spread, in the coefficient's units, as two separate
+                        # parts: `coefficient_sd` over the co-culture replicates at stage 1's estimate,
+                        # and `coefficient_sd_from_rate_stage` from resampling the monoculture stage
+                        # (how it was resampled is `rate_stage_method`)
                         "coefficient_sd": stats_here["coefficient_sd"],
                         "coefficient_n": n_reps,
                         "coefficient_sd_from_rate_stage": stats_here["coefficient_sd_from_rate_stage"],
